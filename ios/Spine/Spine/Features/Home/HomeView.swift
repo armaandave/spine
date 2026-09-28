@@ -617,7 +617,8 @@ private struct HomeInProgressPoster: View {
     }
 
     private var progressDelta: ProgressChangeDisplay? {
-        item.tracking.latestProgressChange?.compactDisplayParts(
+        guard item.media.ref.mediaType != "game" else { return nil }
+        return item.tracking.latestProgressChange?.compactDisplayParts(
             preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
         )
     }

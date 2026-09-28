@@ -1610,7 +1610,7 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(repository.requests, [
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked", query: "Halo"),
-            LibraryTrackingRequest(mediaType: "game", page: nil, status: "tracked", query: "Halo"),
+            LibraryTrackingRequest(mediaType: "game", page: nil, status: "In progress", query: "Halo"),
             LibraryTrackingRequest(mediaType: "game", page: nil, status: "Planning", query: "Halo")
         ])
     }
@@ -3642,12 +3642,12 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(missing.homeProgressText(preferredMode: nil), "58%")
     }
 
-    func testPreferredPercentageDisplayTreatsGameMinuteProgressAsPercent() {
+    func testMinuteProgressDoesNotInventPercentage() {
         let progress = ProgressState(kind: "progress", value: Decimal(58), max: nil, unit: "minutes")
 
-        XCTAssertEqual(progress.value(in: .percentage), 58)
-        XCTAssertEqual(progress.compactDisplayText(preferredMode: .percentage), "58%")
-        XCTAssertEqual(progress.detailDisplayText(preferredMode: .percentage), "58%")
+        XCTAssertNil(progress.value(in: .percentage))
+        XCTAssertEqual(progress.compactDisplayText(preferredMode: .percentage), "58 minutes")
+        XCTAssertEqual(progress.detailDisplayText(preferredMode: .percentage), "58 minutes")
     }
 
     func testZeroProgressDisplaysAsStartedOnHome() {
@@ -3967,8 +3967,8 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(entries.map(\.id), [1, 2])
         XCTAssertEqual(requestedURLs, [
-            "https://example.com/api/v1/diary/?tag=comfort",
-            "https://example.com/api/v1/diary/?tag=comfort&page=2",
+            "https://example.com/api/v1/diary/?tag=comfort&page_size=100",
+            "https://example.com/api/v1/diary/?tag=comfort&page=2&page_size=100",
         ])
         client.tokenProvider.clear()
     }
@@ -6066,12 +6066,12 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testMediaDetailGameFinishedQuickActionUsesConsume() async {
+    func testMediaDetailGameFinishedQuickActionUsesUndatedCompletion() async {
         let detail = TestFixtures.logDetail(mediaType: "game")
         let tracking = RecordingTrackingRepository()
         let viewModel = MediaDetailViewModel(
             ref: detail.ref,
-            mediaRepository: FakeMediaRepository(),
+            mediaRepository: MediaDetailFixtureRepository(),
             trackingRepository: tracking,
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
@@ -6081,8 +6081,11 @@ final class SpineTests: XCTestCase {
         let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt)
 
         XCTAssertTrue(didSave)
-        XCTAssertEqual(tracking.consumedRefs.first?.ref, detail.ref)
-        XCTAssertEqual(tracking.consumedRefs.first?.consumedAt, completedAt)
+        XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
+        XCTAssertEqual(tracking.gameActions.first?.action, "mark_completed")
+        XCTAssertNil(tracking.gameActions.first?.request.startDate)
+        XCTAssertNil(tracking.gameActions.first?.request.endDate)
+        XCTAssertEqual(tracking.consumedRefs.count, 0)
         XCTAssertEqual(tracking.completedBooks.count, 0)
     }
 
@@ -6139,7 +6142,7 @@ final class SpineTests: XCTestCase {
         let tracking = RecordingTrackingRepository()
         let viewModel = MediaDetailViewModel(
             ref: detail.ref,
-            mediaRepository: FakeMediaRepository(),
+            mediaRepository: MediaDetailFixtureRepository(),
             trackingRepository: tracking,
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
@@ -6148,8 +6151,9 @@ final class SpineTests: XCTestCase {
         let didSave = await viewModel.performQuickAction(.stopped, for: detail)
 
         XCTAssertTrue(didSave)
-        XCTAssertEqual(tracking.updateRequests.first?.ref, detail.ref)
-        XCTAssertEqual(tracking.updateRequests.first?.request.status, "Dropped")
+        XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
+        XCTAssertEqual(tracking.gameActions.first?.action, "drop")
+        XCTAssertEqual(tracking.updateRequests.count, 0)
     }
 
     @MainActor
@@ -6197,7 +6201,7 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testProgressUpdateGameUsesSavedPercentModeForMinuteProgress() {
+    func testLegacyGameEditorDoesNotConvertMinutesToPercentage() {
         let detail = TestFixtures.logDetail(mediaType: "game")
         ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
         defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
@@ -6209,9 +6213,9 @@ final class SpineTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.mode, .percentage)
-        XCTAssertEqual(viewModel.lastValue, 58)
-        XCTAssertEqual(viewModel.currentValue, 58)
-        XCTAssertEqual(viewModel.lastValueText, "58%")
+        XCTAssertNil(viewModel.lastValue)
+        XCTAssertNil(viewModel.currentValue)
+        XCTAssertEqual(viewModel.lastValueText, "--")
     }
 
     @MainActor
@@ -6307,7 +6311,7 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testMediaDetailGameProgressSaveUsesGenericTrackingUpdateWithoutCompleting() async {
+    func testMediaDetailGameRejectsLegacyScalarProgressWithoutChangingState() async {
         let detail = TestFixtures.logDetail(mediaType: "game")
         let tracking = RecordingTrackingRepository()
         let viewModel = MediaDetailViewModel(
@@ -6323,14 +6327,13 @@ final class SpineTests: XCTestCase {
             for: detail
         )
 
-        XCTAssertTrue(didSave)
-        XCTAssertEqual(tracking.updateRequests.first?.ref, detail.ref)
-        XCTAssertEqual(tracking.updateRequests.first?.request.status, "In progress")
-        XCTAssertEqual(tracking.updateRequests.first?.request.progress, 100)
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(tracking.updateRequests.count, 0)
         XCTAssertEqual(tracking.bookProgressRequests.count, 0)
         XCTAssertEqual(tracking.consumedRefs.count, 0)
         XCTAssertEqual(tracking.completedBooks.count, 0)
-        XCTAssertEqual(viewModel.tracking?.progress?.compactDisplayText, "100%")
+        XCTAssertNotNil(viewModel.progressErrorMessage)
+        XCTAssertNil(viewModel.tracking)
     }
 
     @MainActor
@@ -6365,6 +6368,46 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(fallbackViewModel.entry?.id, 1)
         XCTAssertNil(fallbackViewModel.mediaDetail)
         XCTAssertNil(fallbackViewModel.errorMessage)
+    }
+
+    @MainActor
+    func testDiaryDeleteFailureKeepsEntryAndAllowsRetry() async {
+        let diary = DiaryLogFixtureDiaryRepository(entry: TestFixtures.diaryEntry)
+        diary.deleteError = APIError.httpStatus(503, nil)
+        let model = DiaryLogDetailViewModel(entryId: 1, diaryRepository: diary,
+            mediaRepository: DiaryLogFixtureMediaRepository(result: .success(TestFixtures.movieDetail)), onUnauthorized: {})
+        await model.load()
+        let failed = await model.delete()
+        XCTAssertFalse(failed)
+        XCTAssertEqual(model.entry?.id, 1)
+        XCTAssertNotNil(model.deleteErrorMessage)
+        XCTAssertFalse(model.isDeleting)
+        model.isDeleting = true
+        let duplicate = await model.delete()
+        XCTAssertFalse(duplicate)
+        XCTAssertEqual(diary.deletedIds, [1])
+        model.isDeleting = false
+        diary.deleteError = nil
+        let retried = await model.delete()
+        XCTAssertTrue(retried)
+        XCTAssertNil(model.deleteErrorMessage)
+        XCTAssertEqual(diary.deletedIds, [1, 1])
+    }
+
+    @MainActor
+    func testGameActionKeepsMutationWhenCanonicalRefreshFails() async {
+        let detail = TestFixtures.logDetail(mediaType: "game")
+        let tracking = RecordingTrackingRepository()
+        let model = MediaDetailViewModel(ref: detail.ref,
+            mediaRepository: MediaDetailFixtureRepository(detailError: APIError.httpStatus(503, nil)),
+            trackingRepository: tracking, diaryRepository: RecordingDiaryRepository(), onUnauthorized: {})
+        let first = await model.performGameAction("restart", for: detail)
+        let second = await model.performGameAction("restart", for: detail)
+        XCTAssertFalse(first)
+        XCTAssertFalse(second)
+        XCTAssertNotNil(model.quickActionErrorMessage)
+        XCTAssertEqual(tracking.gameActions.count, 2)
+        XCTAssertEqual(tracking.gameActions[0].request.mutationId, tracking.gameActions[1].request.mutationId)
     }
 
     @MainActor
@@ -8289,6 +8332,12 @@ private struct LikeFixtureDiaryRepository: DiaryRepository {
 private final class DiaryLogFixtureDiaryRepository: DiaryRepository {
     let entry: DiaryEntry
     var requestedIds: [Int] = []
+    var deleteError: Error?
+    var deletedIds: [Int] = []
+    func delete(id: Int) async throws {
+        deletedIds.append(id)
+        if let deleteError { throw deleteError }
+    }
 
     init(entry: DiaryEntry) {
         self.entry = entry
@@ -8407,6 +8456,10 @@ private final class TaggedDiaryFixtureRepository: DiaryRepository {
 }
 
 private final class RecordingTrackingRepository: TrackingRepository {
+    var gameActions: [(ref: MediaRef, action: String, request: BookActionRequest)] = []
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws {
+        gameActions.append((ref, action, request))
+    }
     var detailRequests: [MediaRef] = []
     var detailResponse = TestFixtures.trackingState
     var updateRequests: [(ref: MediaRef, request: TrackingWriteRequest)] = []

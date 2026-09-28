@@ -22,7 +22,7 @@ from app.tasks import update_daily_statistics
 
 
 MEDIA_TYPES = {MediaTypes.MOVIE.value, MediaTypes.MUSIC.value}
-HALF_STAR_MEDIA_TYPES = {*MEDIA_TYPES, MediaTypes.BOOK.value}
+HALF_STAR_MEDIA_TYPES = {*MEDIA_TYPES, MediaTypes.BOOK.value, MediaTypes.GAME.value}
 WIRE_RATINGS = {Decimal(step) / 2 for step in range(1, 11)}
 STORAGE_RATINGS = {Decimal(step) for step in range(1, 11)}
 UNSET = object()

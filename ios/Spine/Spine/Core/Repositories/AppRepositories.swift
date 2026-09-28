@@ -136,9 +136,17 @@ protocol TrackingRepository {
     func updateBookJourney(source: String, mediaId: String, journeyId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
     func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws
+    func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws
+    func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse
 }
 
 extension TrackingRepository {
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws { fatalError("Not implemented") }
+    func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws { fatalError("Not implemented") }
+    func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse { fatalError("Not implemented") }
     func delete(ref _: MediaRef) async throws {
         fatalError("Not implemented")
     }
@@ -827,6 +835,26 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws {
+        let _: EmptyResponse = try await client.post("/tracking/\(ref.source)/game/\(ref.mediaId)/actions/\(action)/", body: request, authenticated: true)
+    }
+
+    func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState {
+        try await client.patch("/tracking/\(ref.source)/game/\(ref.mediaId)/playthroughs/\(playthroughId)/", body: request, authenticated: true)
+    }
+
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws {
+        do {
+            let _: EmptyResponse = try await client.delete("/tracking/\(ref.source)/game/\(ref.mediaId)/playthroughs/\(playthroughId)/", authenticated: true)
+        } catch APIError.httpStatus(404, _) {
+            // A retry after a lost response can find the playthrough already deleted.
+        }
+    }
+
+    func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse {
+        try await client.post("/tracking/\(ref.source)/game/\(ref.mediaId)/complete/", body: request, authenticated: true)
+    }
+
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState {
         try await client.post(
             "/tracking/\(source)/book/\(mediaId)/progress/",
@@ -924,7 +952,11 @@ struct APIDiaryRepository: DiaryRepository {
     }
 
     func delete(id: Int) async throws {
-        let _: EmptyResponse = try await client.delete("/diary/\(id)/", authenticated: true)
+        do {
+            let _: EmptyResponse = try await client.delete("/diary/\(id)/", authenticated: true)
+        } catch APIError.httpStatus(404, _) {
+            // A retry after a lost response has already achieved the requested state.
+        }
     }
 
     func setLike(entryId: Int, liked: Bool) async throws -> LikeState {

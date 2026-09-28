@@ -88,7 +88,7 @@ def cleanup_existing_media(to_delete, user):
         # Single-weight imports reconcile through their domain service. Deleting
         # tracking here could violate the universal diary-history guard and is
         # unnecessary because canonical tracking is unique per user/title.
-        if single_weight.supports(media_type):
+        if single_weight.supports(media_type) or media_type == MediaTypes.GAME.value:
             continue
 
         for source, media_ids in sources.items():
@@ -186,6 +186,10 @@ def bulk_create_media(bulk_media_list, user):
             _import_single_weight_rows(bulk_media, user, model)
             continue
 
+        if media_type == MediaTypes.GAME.value:
+            _import_game_rows(bulk_media, user)
+            continue
+
         # Update references for seasons and episodes
         if media_type == MediaTypes.SEASON.value:
             logger.info("Updating references for season to existing TV shows")
@@ -231,6 +235,28 @@ def _import_single_weight_rows(rows, user, model):
         if notes and tracking.notes != notes:
             tracking.notes = notes
             tracking.save(update_fields=["notes"])
+
+
+def _import_game_rows(rows, user):
+    """Reconcile explicit imported game states without deleting playthroughs."""
+    from app import game_tracking
+
+    # Multiple rows for one title describe current title state, not new attempts.
+    rows_by_item = {row.item_id: row for row in rows}
+    for row in rows_by_item.values():
+        game_tracking.import_title_state(
+            user,
+            row.item,
+            status=row.status,
+            rating=row.score if row.score is not None else game_tracking.UNSET,
+            progress=row.progress,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            notes=row.notes,
+            history_date=getattr(row, "_history_date", None),
+            imported_lifetime_minutes=row.imported_lifetime_minutes,
+            imported_lifetime_source=row.imported_lifetime_source,
+        )
 
 
 def bulk_update_media(bulk_media_list, fields_by_media_type, user):

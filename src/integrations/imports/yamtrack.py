@@ -152,6 +152,24 @@ class YamtrackImporter:
         )
 
         if form.is_valid():
+            if media_type == MediaTypes.GAME.value:
+                # CSV progress is retained as legacy data, never a new attempt.
+                value = str(row["progress"]).replace("h ", ":").removesuffix("min")
+                if ":" in value:
+                    hours, minutes = (int(part) for part in value.split(":"))
+                    if hours < 0 or not 0 <= minutes < 60:
+                        raise ValueError("Game playtime must contain non-negative hours and 0-59 minutes.")
+                    value = hours * 60 + minutes
+                value = int(value)
+                if value < 0:
+                    raise ValueError("Game playtime cannot be negative.")
+                form.instance.progress = value
+                if row.get("imported_lifetime_minutes"):
+                    lifetime = int(row["imported_lifetime_minutes"])
+                    if lifetime < 0:
+                        raise ValueError("Imported lifetime playtime cannot be negative.")
+                    form.instance.imported_lifetime_minutes = lifetime
+                    form.instance.imported_lifetime_source = row.get("imported_lifetime_source", "")
             progressed_at = row.get("progressed_at")
             if progressed_at:
                 form.instance._history_date = parse_datetime(progressed_at)

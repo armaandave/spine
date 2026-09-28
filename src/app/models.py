@@ -2259,41 +2259,97 @@ class Movie(Media):
         ]
 
 
+class GameManager(MediaManager):
+    """Expose the current row while retaining ambiguous legacy duplicates."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(legacy_archived=False)
+
+
 class Game(Media):
-    """Model for games."""
+    """Canonical game status; progress belongs to individual playthroughs."""
 
     tracker = FieldTracker()
+    objects = GameManager()
+    all_objects = models.Manager()
+    legacy_archived = models.BooleanField(default=False)
+    current_session = models.ForeignKey("GameSession", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    completed_manually = models.BooleanField(default=False)
+    rating_source = models.ForeignKey("DiaryEntry", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    like_source = models.ForeignKey("DiaryEntry", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    like_is_independent = models.BooleanField(default=False)
+    status_history = models.JSONField(default=list, blank=True)
+    imported_lifetime_minutes = models.PositiveIntegerField(null=True, blank=True)
+    imported_lifetime_source = models.CharField(max_length=50, blank=True, default="")
+
+    class Meta:
+        ordering = ["user", "item", "-created_at"]
+        base_manager_name = "all_objects"
+        default_manager_name = "objects"
+        constraints = [
+            UniqueConstraint(fields=["user", "item"], condition=Q(legacy_archived=False), name="app_game_unique_current_tracking"),
+        ]
 
     @property
     def formatted_progress(self):
-        """Return progress in hours:minutes format."""
-        return app.helpers.minutes_to_hhmm(self.progress)
+        """Keep the legacy display usable without treating unknown as zero."""
+        if self.current_session_id:
+            minutes = self.current_session.total_minutes
+            return app.helpers.minutes_to_hhmm(minutes) if minutes is not None else ""
+        return ""
 
-    @tracker  # postpone field reset until after the save
+    @tracker
     def save(self, *args, **kwargs):
-        """Save the media instance."""
+        """Save explicit state without inventing dates or completion progress."""
+        status_changed = self.tracker.has_changed("status")
         super(Media, self).save(*args, **kwargs)
-
-        if self.tracker.has_changed("status"):
-            if self.status == Status.COMPLETED.value:
-                # Ensure end_date is set when completing
-                if not self.end_date:
-                    self.end_date = timezone.now()
-                    self.save(update_fields=["end_date"])
-
-            elif self.status == Status.IN_PROGRESS.value:
-                # Set start_date if not already set
-                if not self.start_date:
-                    self.start_date = timezone.now()
-                    self.save(update_fields=["start_date"])
-
-            elif self.status == Status.DROPPED.value:
-                # Clear end_date if set (game was dropped, not completed)
-                if self.end_date:
-                    self.end_date = None
-                    self.save(update_fields=["end_date"])
-
+        if status_changed:
             self.item.fetch_releases(delay=True)
+
+    def mark_consumed(self):
+        """Route compatibility callers through the game completion rules."""
+        from app.game_tracking import mark_completed
+
+        return mark_completed(self.user, self.item)
+
+
+class GameSession(models.Model):
+    """One playthrough, its optional totals, and completion-field provenance."""
+
+    class Origin(models.TextChoices):
+        LIVE = "live", "Tracked playthrough"
+        DIRECT_LOG = "direct_log", "Direct completion"
+
+    related_game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="playthroughs")
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=Status)
+    origin = models.CharField(max_length=20, choices=Origin, default=Origin.LIVE)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    total_minutes = models.PositiveIntegerField(null=True, blank=True)
+    percentage = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(100)])
+    first_progress_on = models.DateField(null=True, blank=True)
+    minutes_updated_on = models.DateField(null=True, blank=True)
+    percentage_updated_on = models.DateField(null=True, blank=True)
+    minutes_linked = models.BooleanField(default=False)
+    percentage_linked = models.BooleanField(default=False)
+    completion_diary_entry = models.OneToOneField("DiaryEntry", null=True, blank=True, on_delete=models.SET_NULL, related_name="game_playthrough")
+    mutation_id = models.UUIDField(null=True, blank=True)
+    completion_mutation_id = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["related_game", "-created_at", "-id"]
+        constraints = [
+            UniqueConstraint(fields=["related_game"], condition=Q(status__in=[Status.IN_PROGRESS.value, Status.PAUSED.value]), name="app_game_one_open_playthrough"),
+            UniqueConstraint(fields=["related_game", "mutation_id"], condition=Q(mutation_id__isnull=False), name="app_game_unique_start_mutation"),
+            UniqueConstraint(fields=["related_game", "completion_mutation_id"], condition=Q(completion_mutation_id__isnull=False), name="app_game_unique_log_mutation"),
+            CheckConstraint(condition=Q(percentage__isnull=True) | Q(percentage__lte=100), name="app_game_percentage_range"),
+            CheckConstraint(condition=Q(start_date__isnull=True) | Q(end_date__isnull=True) | Q(end_date__gte=F("start_date")), name="app_game_dates_ordered"),
+            CheckConstraint(condition=~Q(origin="live") | Q(start_date__isnull=False), name="app_game_live_start_required"),
+        ]
+
+    def __str__(self):
+        return f"{self.related_game.item.title} — playthrough {self.pk}"
 
 
 class Book(Media):

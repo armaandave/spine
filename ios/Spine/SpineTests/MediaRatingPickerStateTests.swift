@@ -37,6 +37,18 @@ final class MediaRatingPickerStateTests: XCTestCase {
         XCTAssertEqual(state.draftHalfSteps, 7)
     }
 
+    func testRatingOnlyDraftDoesNotImplyConsumptionOrChangeConfirmedOpinion() {
+        var state = MediaRatingPickerState()
+        state.syncConfirmed(7)
+        state.open(markLocallyWatched: false)
+        state.draftHalfSteps = 9
+        XCTAssertFalse(state.hasLocallyWatched)
+        state.dismiss()
+        XCTAssertFalse(state.hasLocallyWatched)
+        XCTAssertEqual(state.confirmedHalfSteps, 7)
+        XCTAssertEqual(state.draftHalfSteps, 7)
+    }
+
     func testSuccessfulUnwatchClearsOptimisticEyeAndRatingForNextToggle() {
         var state = MediaRatingPickerState()
 

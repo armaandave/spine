@@ -89,16 +89,18 @@ class ImportSteam(TestCase):
         self.assertEqual(games.count(), 3)
 
         cs2_game = games.get(item__title="Counter-Strike 2")
-        self.assertEqual(cs2_game.status, Status.IN_PROGRESS.value)
-        self.assertEqual(cs2_game.progress, 1250)
+        self.assertEqual(cs2_game.status, Status.PLANNING.value)
+        self.assertEqual(cs2_game.progress, 0)
+        self.assertEqual(cs2_game.imported_lifetime_minutes, 1250)
 
         dota_game = games.get(item__title="Dota 2")
         self.assertEqual(dota_game.status, Status.PLANNING.value)
         self.assertEqual(dota_game.progress, 0)
 
         tf2_game = games.get(item__title="Team Fortress 2")
-        self.assertEqual(tf2_game.status, Status.PAUSED.value)
-        self.assertEqual(tf2_game.progress, 500)
+        self.assertEqual(tf2_game.status, Status.PLANNING.value)
+        self.assertEqual(tf2_game.progress, 0)
+        self.assertEqual(tf2_game.imported_lifetime_minutes, 500)
 
     @patch("integrations.imports.steam.services.api_request")
     def test_import_steam_private_profile(self, mock_api_request):
@@ -147,22 +149,6 @@ class ImportSteam(TestCase):
         self.assertIn(f"Couldn't find a match in {Sources.IGDB.label}", warnings)
 
         self.assertEqual(Game.objects.filter(user=self.user).count(), 0)
-
-    def test_determine_game_status_logic(self):
-        """Test the status determination logic."""
-        importer_instance = steam.SteamImporter("76561198000000000", self.user, "new")
-
-        status = importer_instance._determine_game_status(0, 0)
-        self.assertEqual(status, Status.PLANNING.value)
-
-        status = importer_instance._determine_game_status(100, 50)
-        self.assertEqual(status, Status.IN_PROGRESS.value)
-
-        status = importer_instance._determine_game_status(100, 0)
-        self.assertEqual(status, Status.PAUSED.value)
-
-        status = importer_instance._determine_game_status(100, 0)
-        self.assertEqual(status, Status.PAUSED.value)
 
     @patch("integrations.imports.steam.services.api_request")
     def test_import_steam_no_api_key(self, _mock_api_request):

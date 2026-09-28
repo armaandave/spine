@@ -373,7 +373,7 @@ struct DiaryStarRating: View {
 
     private var value: Double {
         guard let raw = Double(rating) else { return 0 }
-        return max(0, min(5, ["movie", "music", "book"].contains(mediaType) ? raw : raw / 2))
+        return max(0, min(5, ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2))
     }
 
     private var displayValue: String {

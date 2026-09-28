@@ -134,6 +134,7 @@ final class MediaDetailViewModel {
             tracking = nil
             return
         }
+        if detail.ref.mediaType == "game" { tracking = nil }
         do {
             tracking = try await trackingRepository.detail(ref: detail.ref)
         } catch APIError.httpStatus(404, _) {
@@ -246,6 +247,17 @@ final class MediaDetailViewModel {
     }
 
     func performQuickAction(_ action: MediaDetailQuickAction, for detail: MediaDetail, completedAt: Date = Date()) async -> Bool {
+        if detail.ref.mediaType == "game", action != .planning {
+            let name: String
+            switch action {
+            case .currently: name = "start"
+            case .paused: name = "pause"
+            case .stopped: name = "drop"
+            case .finished: name = "mark_completed"
+            case .planning: name = "planning"
+            }
+            return await performGameAction(name, for: detail)
+        }
         guard !isSavingQuickAction else { return false }
         isSavingQuickAction = true
         quickActionErrorMessage = nil
@@ -393,6 +405,10 @@ final class MediaDetailViewModel {
     }
 
     func saveProgress(_ request: ProgressUpdateSaveRequest, for detail: MediaDetail) async -> Bool {
+        guard detail.ref.mediaType != "game" else {
+            progressErrorMessage = "Update hours and percentage through the game's playthrough."
+            return false
+        }
         guard !isSavingProgress else { return false }
         isSavingProgress = true
         progressErrorMessage = nil
@@ -510,6 +526,74 @@ final class MediaDetailViewModel {
         }
     }
 
+    private var gameActionMutationIds: [String: UUID] = [:]
+
+    func performGameAction(_ action: String, for detail: MediaDetail) async -> Bool {
+        guard !isSavingQuickAction else { return false }
+        isSavingQuickAction = true
+        quickActionErrorMessage = nil
+        defer { isSavingQuickAction = false }
+        let mutation = gameActionMutationIds[action] ?? UUID()
+        gameActionMutationIds[action] = mutation
+        do {
+            try await trackingRepository.performGameAction(ref: detail.ref, action: action, request: BookActionRequest(
+                mutationId: mutation,
+                startDate: ["start", "restart", "resume"].contains(action) ? CalendarDateCodec.string(from: Date()) : nil,
+                endDate: ["drop", "restart"].contains(action) ? CalendarDateCodec.string(from: Date()) : nil
+            ))
+            await load()
+            MediaStateChange.post(ref: detail.ref)
+            guard errorMessage == nil else {
+                quickActionErrorMessage = "The change was saved, but refresh failed. Try again to reload it."
+                return false
+            }
+            gameActionMutationIds[action] = nil
+            return true
+        } catch {
+            quickActionErrorMessage = error.localizedDescription
+            if case APIError.unauthorized = error { onUnauthorized() }
+            return false
+        }
+    }
+
+    func updateGamePlaythrough(_ playthrough: GamePlaythroughState, request: GamePlaythroughWriteRequest, for detail: MediaDetail) async -> Bool {
+        guard !isSavingQuickAction else { return false }
+        isSavingQuickAction = true
+        quickActionErrorMessage = nil
+        defer { isSavingQuickAction = false }
+        do {
+            tracking = try await trackingRepository.updateGamePlaythrough(ref: detail.ref, playthroughId: playthrough.id, request: request)
+            await load()
+            MediaStateChange.post(ref: detail.ref)
+            return true
+        } catch {
+            quickActionErrorMessage = error.localizedDescription
+            if case APIError.unauthorized = error { onUnauthorized() }
+            return false
+        }
+    }
+
+    func deleteGamePlaythrough(_ playthrough: GamePlaythroughState, for detail: MediaDetail) async -> Bool {
+        guard !isSavingQuickAction else { return false }
+        isSavingQuickAction = true
+        quickActionErrorMessage = nil
+        defer { isSavingQuickAction = false }
+        do {
+            try await trackingRepository.deleteGamePlaythrough(ref: detail.ref, playthroughId: playthrough.id)
+            await load()
+            MediaStateChange.post(ref: detail.ref)
+            guard errorMessage == nil else {
+                quickActionErrorMessage = "The playthrough was deleted, but refresh failed. Try again to reload it."
+                return false
+            }
+            return true
+        } catch {
+            quickActionErrorMessage = error.localizedDescription
+            if case APIError.unauthorized = error { onUnauthorized() }
+            return false
+        }
+    }
+
     private func progressState(
         for request: ProgressUpdateSaveRequest,
         detail: MediaDetail,
@@ -561,9 +645,9 @@ struct MediaRatingPickerState: Equatable {
 
     var showsConfirm: Bool { draftHalfSteps != confirmedHalfSteps }
 
-    mutating func open() {
+    mutating func open(markLocallyWatched: Bool = true) {
         draftHalfSteps = confirmedHalfSteps
-        hasLocallyWatched = true
+        if markLocallyWatched { hasLocallyWatched = true }
         isPresented = true
     }
 
@@ -591,6 +675,13 @@ struct MediaRatingPickerState: Equatable {
     mutating func resetAfterUnwatch() {
         self = MediaRatingPickerState()
     }
+}
+
+private struct GameCompletionPresentation: Identifiable {
+    let id = UUID()
+    let playthroughId: Int?
+    let liked: Bool?
+    let ratingSteps: Int?
 }
 
 private enum MediaDetailSheet: Identifiable {
@@ -1025,6 +1116,7 @@ struct MediaDetailView: View {
                                             topSafeAreaInset: safeAreaProxy.safeAreaInsets.top
                                         )
                                         .containerRelativeFrame(.horizontal)
+                                        .accessibilityHidden(pageRef.id != selectedID)
                                         .id(pageRef.id)
                                     }
                                 }
@@ -1138,6 +1230,10 @@ private struct MediaDetailPageView: View {
     @State private var completionRatingSteps: Int?
     @State private var progressUpdateDetail: MediaDetail?
     @State private var editingBookJourney: BookJourneyState?
+    @State private var editingGamePlaythrough: GamePlaythroughState?
+    @State private var pendingGameProgress: GamePlaythroughState?
+    @State private var pendingGameCompletion: GameCompletionPresentation?
+    @State private var gameCompletionPresentation: GameCompletionPresentation?
     @State private var isQuickActionAlertPresented = false
     @State private var isLikeAlertPresented = false
     @State private var showsTitleLogo = true
@@ -1266,7 +1362,7 @@ private struct MediaDetailPageView: View {
             }
         }
         .onPreferenceChange(TopSafeAreaInsetKey.self) { topSafeAreaInset = $0 }
-        .sheet(item: $presentedSheet) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: presentPendingGameSheet) { sheet in
             switch sheet {
             case .posterMenu:
                 PosterMenuSheet(
@@ -1316,6 +1412,14 @@ private struct MediaDetailPageView: View {
                 .presentationDragIndicator(.visible)
             case .bookGameActions:
                 if let detail = viewModel.detail {
+                    if detail.ref.mediaType == "game" {
+                        GameActionSheet(status: currentStatus(detail), game: gameState(detail), isSaving: viewModel.isSavingQuickAction, errorMessage: viewModel.quickActionErrorMessage,
+                            onAction: { await performQuickAction($0, for: detail, dismissSheet: true) },
+                            onLog: { openBookCompletion(for: detail) },
+                            onProgress: { openProgressUpdate(for: detail) },
+                            onRemove: { if await viewModel.removeTracking(for: detail) { presentedSheet = nil; await viewModel.load() } })
+                            .presentationDetents([.medium, .large])
+                    } else {
                     BookGameActionSheet(
                         mediaType: detail.ref.mediaType,
                         status: currentStatus(detail),
@@ -1347,6 +1451,7 @@ private struct MediaDetailPageView: View {
                     )
                     .presentationDetents(detail.ref.mediaType == "book" ? [.medium, .large] : [.height(detail.ref.mediaType == "music" ? 292 : 224)])
                     .presentationDragIndicator(.visible)
+                    }
                 }
             case .addToList:
                 if let detail = viewModel.detail {
@@ -1359,6 +1464,16 @@ private struct MediaDetailPageView: View {
                         onUnauthorized: onUnauthorized
                     )
                 }
+            }
+        }
+        .sheet(item: $editingGamePlaythrough, onDismiss: presentPendingGameSheet) { playthrough in
+            if let detail = viewModel.detail {
+                GamePlaythroughEditor(playthrough: playthrough,
+                    onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail) },
+                    onAction: { await viewModel.performGameAction($0, for: detail) },
+                    onDelete: { await viewModel.deleteGamePlaythrough(playthrough, for: detail) },
+                    onFinish: { openBookCompletion(for: detail) },
+                    errorMessage: { viewModel.quickActionErrorMessage })
             }
         }
         .sheet(item: $editingBookJourney) { journey in
@@ -1423,6 +1538,18 @@ private struct MediaDetailPageView: View {
                     pendingLogoSave = response
                     presentedSheet = nil
                 }
+            }
+        }
+        .fullScreenCover(item: $gameCompletionPresentation, onDismiss: restoreCanonicalGameRating) { presentation in
+            if let detail = viewModel.detail {
+                MediaLogView(detail: detail, trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository, tracking: viewModel.tracking,
+                    completionJourneyId: presentation.playthroughId,
+                    preselectedLiked: presentation.liked,
+                    preselectedRatingSteps: presentation.ratingSteps,
+                    onUnauthorized: onUnauthorized) {
+                        Task { await viewModel.load() }
+                    }
             }
         }
         .fullScreenCover(isPresented: $isLogPresented) {
@@ -1898,6 +2025,19 @@ private struct MediaDetailPageView: View {
             }
             return
         }
+        if detail.ref.mediaType == "game" {
+            if gameState(detail)?.hasLivePlaythrough == true {
+                openBookCompletion(for: detail)
+            } else {
+                let action = isEyeCompleted(detail) ? "undo_completed" : "mark_completed"
+                Task {
+                    if await viewModel.performGameAction(action, for: detail) {
+                        if action == "undo_completed" { ratingPicker.resetAfterUnwatch() }
+                    } else { isQuickActionAlertPresented = true }
+                }
+            }
+            return
+        }
         if detail.ref.mediaType == "book" {
             if bookState(detail)?.hasLiveJourney == true {
                 openBookCompletion(for: detail)
@@ -1959,9 +2099,9 @@ private struct MediaDetailPageView: View {
     }
 
     private func likeAction(for detail: MediaDetail) {
-        if detail.ref.mediaType == "book",
+        if ["book", "game"].contains(detail.ref.mediaType),
            detail.userState?.hasLiked != true,
-           bookState(detail)?.hasLiveJourney == true {
+           (bookState(detail)?.hasLiveJourney == true || gameState(detail)?.hasLivePlaythrough == true) {
             openBookCompletion(for: detail, liked: true)
             return
         }
@@ -1975,8 +2115,10 @@ private struct MediaDetailPageView: View {
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
-        guard detail.ref.isSingleWeight || detail.ref.mediaType == "book" else { return }
-        if detail.ref.mediaType == "book", bookState(detail)?.hasLiveJourney == true {
+        guard detail.ref.usesFiveStarRatingScale else { return }
+        if halfSteps > 0, bookState(detail)?.hasLiveJourney == true || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
+            ratingPicker.syncConfirmed(ratingHalfSteps(detail.userState?.rating))
+            ratingPicker.rollbackWatch()
             openBookCompletion(for: detail, ratingSteps: halfSteps)
             return
         }
@@ -1994,11 +2136,26 @@ private struct MediaDetailPageView: View {
         return NSDecimalNumber(decimal: steps).intValue
     }
 
+    private func gameState(_ detail: MediaDetail) -> GameTrackingState? {
+        viewModel.tracking?.game ?? detail.userState?.game
+    }
+
     private func bookState(_ detail: MediaDetail) -> BookTrackingState? {
         viewModel.tracking?.book ?? detail.userState?.book
     }
 
     private func openBookCompletion(for detail: MediaDetail, liked: Bool? = nil, ratingSteps: Int? = nil) {
+        if detail.ref.mediaType == "game" {
+            let presentation = GameCompletionPresentation(
+                playthroughId: gameState(detail)?.hasLivePlaythrough == true ? gameState(detail)?.currentPlaythrough?.id : nil,
+                liked: liked, ratingSteps: ratingSteps)
+            if presentedSheet != nil || editingGamePlaythrough != nil {
+                pendingGameCompletion = presentation
+                presentedSheet = nil
+                editingGamePlaythrough = nil
+            } else { gameCompletionPresentation = presentation }
+            return
+        }
         completionJourneyId = bookState(detail)?.currentJourney?.id
         completionLiked = liked
         completionRatingSteps = ratingSteps
@@ -2009,8 +2166,32 @@ private struct MediaDetailPageView: View {
 
     private func openProgressUpdate(for detail: MediaDetail) {
         viewModel.progressErrorMessage = nil
-        presentedSheet = nil
-        progressUpdateDetail = detail
+        if detail.ref.mediaType == "game" {
+            let playthrough = gameState(detail)?.currentPlaythrough
+            if presentedSheet != nil {
+                pendingGameProgress = playthrough
+                presentedSheet = nil
+            } else { editingGamePlaythrough = playthrough }
+        } else {
+            presentedSheet = nil
+            progressUpdateDetail = detail
+        }
+    }
+
+    private func restoreCanonicalGameRating() {
+        ratingPicker.dismiss()
+        ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.detail?.userState?.rating))
+        ratingPicker.rollbackWatch()
+    }
+
+    private func presentPendingGameSheet() {
+        if let playthrough = pendingGameProgress {
+            pendingGameProgress = nil
+            editingGamePlaythrough = playthrough
+        } else if let presentation = pendingGameCompletion {
+            pendingGameCompletion = nil
+            gameCompletionPresentation = presentation
+        }
     }
 
     private func openPosterPicker(for detail: MediaDetail) {
@@ -2045,9 +2226,10 @@ private struct MediaDetailPageView: View {
             isTracked: isEpisode ? isWatched : currentStatus(detail) != nil,
             isLiked: detail.userState?.hasLiked ?? false,
             showsEye: true,
-            showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || detail.ref.mediaType == "book",
+            showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || ["book", "game"].contains(detail.ref.mediaType),
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
-                || (detail.ref.mediaType == "book" && bookState(detail)?.hasLiveJourney != true),
+                || (detail.ref.mediaType == "book" && bookState(detail)?.hasLiveJourney != true)
+                || (detail.ref.mediaType == "game" && gameState(detail)?.hasLivePlaythrough != true),
             trackLabel: isEpisode ? "Log episode" : (usesQuickActions ? "Track" : nil),
             eyeLabel: isEpisode
                 ? (isWatched ? "Episode watched" : "Mark episode watched")
@@ -2636,6 +2818,11 @@ private struct MediaDetailPageView: View {
             VStack(alignment: .leading, spacing: 28) {
                 SynopsisText(text: synopsisPreview(detail))
                 trackingSummarySection(detail)
+                if detail.ref.mediaType == "game", let game = gameState(detail) {
+                    GamePlayHistorySection(game: game,
+                        onEdit: { editingGamePlaythrough = $0 },
+                        onDeleteUndated: { Task { if !(await viewModel.performGameAction("delete_undated_completion", for: detail)) { isQuickActionAlertPresented = true } } })
+                }
                 if detail.ref.mediaType == "book", let book = bookState(detail) {
                     BookReadingHistorySection(
                         book: book,
@@ -4400,11 +4587,12 @@ private struct ActionRail: View {
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white.opacity(0.9))
-                        .frame(width: 60, height: 60)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(isEyeLoading || isLikeLoading)
-                .offset(x: 71.25)
+                .offset(x: 86)
                 .transition(.offset(x: 23.75).combined(with: .opacity))
                 .accessibilityLabel("Confirm rating")
                 .accessibilityIdentifier("media-detail.rating-confirm")
@@ -4457,7 +4645,7 @@ private struct ActionRail: View {
         if ratingPicker.isPresented {
             animate { ratingPicker.dismiss() }
         } else {
-            animate { ratingPicker.open() }
+            animate { ratingPicker.open(markLocallyWatched: false) }
         }
     }
 
@@ -4555,20 +4743,13 @@ private struct StarRatingPill: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 15)
         .onAppear { haptics.prepare() }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Your rating")
-        .accessibilityValue(halfSteps == 0 ? "Not rated" : "\(Double(halfSteps) / 2) out of 5")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment:
-                setRating(min(halfSteps + 1, 10))
-            case .decrement:
-                setRating(max(halfSteps - 1, 0))
-            @unknown default:
-                break
+        .accessibilityRepresentation {
+            Slider(value: Binding(get: { Double(halfSteps) }, set: { setRating(Int($0)) }), in: 0...10, step: 1) {
+                Text("Your rating")
             }
+            .accessibilityValue(Text(verbatim: halfSteps == 0 ? "Not rated" : "\(Double(halfSteps) / 2) out of 5"))
+            .accessibilityIdentifier("media-detail.star-rating")
         }
-        .accessibilityIdentifier("media-detail.star-rating")
     }
 
     private func starSymbol(for value: Int) -> String {
@@ -5067,7 +5248,7 @@ private struct TrackingSummarySection: View {
     var body: some View {
         if hasState {
             VStack(alignment: .leading, spacing: 14) {
-                SectionLabel(title: "Your Tracking")
+                SectionLabel(title: detail.ref.mediaType == "game" ? "Your Progress" : "Your Tracking")
                 HStack(alignment: .top, spacing: 10) {
                     if detail.ref.mediaType != "episode" {
                         MediaArtwork(
@@ -5077,9 +5258,10 @@ private struct TrackingSummarySection: View {
                             mediaType: detail.ref.mediaType,
                             orientation: detail.posterOrientation
                         )
-                        .onTapGesture(perform: onOpenDiaryEntry)
-                        .accessibilityLabel("View diary log for \(detail.title)")
-                        .accessibilityAddTraits(.isButton)
+                        .onTapGesture { if hasLogs { onOpenDiaryEntry() } }
+                        .allowsHitTesting(hasLogs)
+                        .accessibilityLabel(hasLogs ? "View diary log for \(detail.title)" : "\(detail.title) cover")
+                        .accessibilityAddTraits(hasLogs ? .isButton : [])
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -5132,9 +5314,11 @@ private struct TrackingSummarySection: View {
     }
     private var hasState: Bool { status != nil || !lines.isEmpty }
     private var showsUpdateProgressButton: Bool {
-        (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused"))
+        if detail.ref.mediaType == "game" { return (tracking?.game ?? userState?.game)?.canUpdateProgress == true }
+        return (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused"))
             && ["book", "game"].contains(detail.ref.mediaType)
     }
+    private var hasLogs: Bool { (userState?.diaryCount ?? 0) > 0 || userState?.diaryEntryId != nil }
     private var hasMultipleLogs: Bool {
         (userState?.diaryCount ?? 0) > 1
     }
@@ -5145,7 +5329,11 @@ private struct TrackingSummarySection: View {
 
     private var lines: [String] {
         var values: [String] = []
-        if (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused")),
+        if detail.ref.mediaType == "game", let game = tracking?.game ?? userState?.game,
+           let text = game.currentPlaythrough?.progress.summary, !text.isEmpty {
+            values.append(text)
+        }
+        if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused")),
            detail.ref.mediaType != "movie",
             let progressText = (tracking?.progress ?? userState?.progress)?.detailDisplayText(preferredMode: ProgressDisplayPreferences.mode(for: detail.ref)) {
             values.append(progressText)
@@ -5153,7 +5341,7 @@ private struct TrackingSummarySection: View {
         if let logLine {
             values.append(logLine)
         }
-        if let rating = userState?.diaryRating ?? tracking?.rating ?? userState?.rating {
+        if let rating = tracking?.rating ?? userState?.rating {
             values.append("Rated \(rating.starRatingLabel(mediaType: detail.ref.mediaType))")
         }
         if !hasMultipleLogs, let consumedAt = userState?.diaryConsumedAt {
@@ -7394,19 +7582,19 @@ private extension String {
 
     func starRatingLabel(mediaType: String) -> String {
         guard let raw = Double(self) else { return self }
-        let stars = ["movie", "music", "book"].contains(mediaType) ? raw : raw / 2
+        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
         return "\(Self.cleanRating(stars))/5"
     }
 
     func starRatingValue(mediaType: String) -> String {
         guard let raw = Double(self) else { return self }
-        let stars = ["movie", "music", "book"].contains(mediaType) ? raw : raw / 2
+        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
         return String(format: "%.1f", stars)
     }
 
     func starRatingStep(mediaType: String) -> Int {
         guard let raw = Double(self) else { return 0 }
-        let step = ["movie", "music", "book"].contains(mediaType) ? raw * 2 : raw
+        let step = ["movie", "music", "book", "game"].contains(mediaType) ? raw * 2 : raw
         return min(max(Int(round(step)), 1), 10)
     }
 

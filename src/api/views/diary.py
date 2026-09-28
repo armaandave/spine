@@ -114,7 +114,7 @@ class DiaryDetailView(APIView):
         if entry.user != request.user:
             if not can_view_user_profile(request.user, entry.user):
                 return Response(status=status.HTTP_404_NOT_FOUND)
-            if not single_weight.supports(entry.item) and entry.visibility == "private":
+            if not single_weight.uses_half_star_rating(entry.item) and entry.visibility == "private":
                 return Response(status=status.HTTP_404_NOT_FOUND)
         exposure.require_media_type(entry.item.media_type)
         return Response(diary_service.diary_payload(entry, request=request, viewer=request.user))

@@ -72,7 +72,7 @@ class SteamImporter:
         helpers.bulk_create_media(self.bulk_media, self.user)
         helpers.bulk_update_media(
             self.bulk_media_updates,
-            {MediaTypes.GAME.value: ["progress", "status"]},
+            {MediaTypes.GAME.value: ["imported_lifetime_minutes", "imported_lifetime_source"]},
             self.user,
         )
 
@@ -163,9 +163,10 @@ class SteamImporter:
         appid = str(game_data["appid"])
         name = game_data.get("name", f"Unknown Game {appid}")
         playtime_forever = game_data.get("playtime_forever", 0)  # in minutes
-        playtime_2weeks = game_data.get("playtime_2weeks", 0)  # in minutes
 
         try:
+            if type(playtime_forever) is not int or playtime_forever < 0:
+                raise ValueError("Steam lifetime playtime must be non-negative whole minutes.")
             # Try to match with IGDB
             igdb_game = self._match_with_igdb(name, appid)
 
@@ -190,7 +191,6 @@ class SteamImporter:
                 self._queue_existing_game_update(
                     existing_game,
                     playtime_forever,
-                    playtime_2weeks,
                 )
                 return
 
@@ -215,16 +215,14 @@ class SteamImporter:
                 },
             )
 
-            # Determine status based on playtime
-            status = self._determine_game_status(playtime_forever, playtime_2weeks)
-
             # Create game object
             game = app.models.Game(
                 item=item,
                 user=self.user,
-                status=status,
+                status=Status.PLANNING.value,
                 score=None,
-                progress=playtime_forever,
+                imported_lifetime_minutes=playtime_forever,
+                imported_lifetime_source="steam",
                 notes="Imported from Steam",
                 start_date=None,
                 end_date=None,
@@ -253,51 +251,16 @@ class SteamImporter:
             logger.warning("Failed to process Steam game %s (%s): %s", name, appid, e)
             self.warnings.append(f"{name} ({appid}): {e!s}")
 
-    def _queue_existing_game_update(self, game, playtime_forever, playtime_2weeks):
-        """Queue updates for an existing game when Steam overwrite is used."""
-        changed = False
-
-        if game.progress != playtime_forever:
-            game.progress = playtime_forever
-            changed = True
-
-        new_status = self._determine_game_status(playtime_forever, playtime_2weeks)
+    def _queue_existing_game_update(self, game, playtime_forever):
+        """Refresh provider lifetime playtime without changing user tracking."""
         if (
-            game.status
-            in [
-                Status.PLANNING.value,
-                Status.IN_PROGRESS.value,
-                Status.PAUSED.value,
-            ]
-            and game.status != new_status
+            game.imported_lifetime_minutes != playtime_forever
+            or game.imported_lifetime_source != "steam"
         ):
-            game.status = new_status
-            changed = True
-
-        if changed:
+            game.imported_lifetime_minutes = playtime_forever
+            game.imported_lifetime_source = "steam"
             self.bulk_media_updates[MediaTypes.GAME.value].append(game)
-            logger.debug("Queued Steam update for existing game %s", game)
-
-    def _determine_game_status(self, playtime_forever, playtime_2weeks):
-        """Determine game status based on Steam playtime data.
-
-        Args:
-            playtime_forever (int): Total playtime in minutes
-            playtime_2weeks (int): Playtime in last 2 weeks in minutes
-
-        Returns:
-            str: Status value from Status choices
-        """
-        # Games with no playtime are considered "Planning"
-        if playtime_forever == 0:
-            return Status.PLANNING.value
-
-        # Games played in the last 2 weeks are "In Progress"
-        if playtime_2weeks > 0:
-            return Status.IN_PROGRESS.value
-
-        # Games with total playtime but no recent activity are "On Hold"
-        return Status.PAUSED.value
+            logger.debug("Queued Steam playtime update for existing game %s", game)
 
     def _match_with_igdb(self, game_name, steam_appid):
         """Try to match Steam game with IGDB using External Game endpoint."""
@@ -315,19 +278,6 @@ class SteamImporter:
             Sources.IGDB.value,
         )
 
-        logger.debug(
-            "Matched Steam game %s (appid: %s) with IGDB ID %s via external_game",
-            game_name,
-            steam_appid,
-            igdb_game_id,
-        )
-        return {
-            "media_id": igdb_game_id,
-            "source": Sources.IGDB.value,
-            "media_type": MediaTypes.GAME.value,
-            "title": game_details.get("title", game_name),
-            "image": game_details["image"],
-        }
         logger.debug(
             "Matched Steam game %s (appid: %s) with IGDB ID %s via external_game",
             game_name,

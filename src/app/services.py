@@ -60,7 +60,10 @@ def update_diary_entry_tags(entry, tag_names):
 
 def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True):
     """Set the canonical user/title like."""
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
+
+    if game_tracking.supports(item):
+        return game_tracking.set_like(user, item, liked, audit=audit)
 
     if book_tracking.supports(item):
         return book_tracking.set_like(user, item, liked)
@@ -111,6 +114,8 @@ def create_diary_entry(
     import_source_order=None,
     emit_activity=True,
     update_current=True,
+    mutation_id=None,
+    **game_fields,
 ) -> DiaryEntry:
     """
     Create a diary entry for a media item.
@@ -131,7 +136,18 @@ def create_diary_entry(
     """
     from uuid import uuid4
 
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
+
+    if game_tracking.supports(item):
+        _, entry = game_tracking.complete(
+            user, item, completion_date=consumed_at,
+            rating=rating, review=review, liked=liked, is_rewatch=is_rewatch,
+            tags=tags, review_title=review_title, contains_spoilers=contains_spoilers,
+            mutation_id=mutation_id, import_source=import_source,
+            import_source_id=import_source_id, import_source_order=import_source_order,
+            emit_activity=emit_activity, update_current=update_current, **game_fields,
+        )
+        return entry
 
     if book_tracking.supports(item):
         _, entry = book_tracking.complete(
@@ -261,9 +277,9 @@ def create_diary_entry(
 
 def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
     """Sync completed tracking dates from a diary entry date edit."""
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
 
-    if book_tracking.supports(entry.item):
+    if game_tracking.supports(entry.item) or book_tracking.supports(entry.item):
         return
 
     if single_weight.supports(entry.item):
@@ -298,7 +314,12 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
 
 def update_diary_entry(entry, data, *, tags=None):
     """Update a diary entry and keep title-level state in sync."""
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
+
+    if game_tracking.supports(entry.item):
+        if tags is None:
+            return game_tracking.update_completion(entry, data)
+        return game_tracking.update_completion(entry, data, tags=tags)
 
     if book_tracking.supports(entry.item):
         if tags is None:
@@ -364,7 +385,10 @@ def update_diary_entry(entry, data, *, tags=None):
 
 def delete_diary_entry(user, entry):
     """Delete a diary entry and mirror web tracking side effects."""
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
+
+    if game_tracking.supports(entry.item):
+        return game_tracking.delete_completion(user, entry)
 
     if book_tracking.supports(entry.item):
         return book_tracking.delete_completion(user, entry)
@@ -435,7 +459,10 @@ def mark_consumed(user, media_instance: Media, when=None):
         media_instance: The Media instance to mark
         when: Optional datetime for when it was consumed (defaults to now)
     """
-    from app import book_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight
+
+    if game_tracking.supports(media_instance.item):
+        return game_tracking.mark_completed(user, media_instance.item)
 
     if book_tracking.supports(media_instance.item):
         return book_tracking.mark_read(user, media_instance.item)

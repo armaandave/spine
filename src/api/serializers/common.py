@@ -448,7 +448,7 @@ def media_summary_from_provider(
         "roles": payload.get("roles") or [],
         "credit_roles": payload.get("credit_roles") or payload.get("roles") or [],
         "default_source": source,
-        "position": payload.get("position"),
+        **({"position": payload["position"]} if payload.get("position") is not None else {}),
         "custom_poster_url": custom_poster_url_for_user(
             user,
             media_ref_from_item(item),
@@ -837,6 +837,10 @@ def user_state_for_item(user, item):
         from app import book_tracking
 
         state["book"] = book_tracking.state_payload(media)
+    if media.item.media_type == MediaTypes.GAME.value:
+        from app import game_tracking
+
+        state["game"] = game_tracking.state_payload(media)
     return state
 
 
@@ -865,7 +869,10 @@ def progress_for_media(media):  # noqa: PLR0911 - media kinds are intentionally 
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         return {"kind": "episodes", "value": value, "max": max_progress, "unit": "episode"}
     if media_type == MediaTypes.GAME.value:
-        return {"kind": "minutes", "value": value, "max": max_progress, "unit": "minute"}
+        session = media.current_session
+        if session and session.percentage is not None:
+            return {"kind": "percentage", "value": session.percentage, "max": 100, "unit": "percent"}
+        return {"kind": "minutes", "value": session.total_minutes if session else None, "max": None, "unit": "minute"}
     if media_type == MediaTypes.BOOK.value:
         snapshot = getattr(media, "progress_snapshot", None)
         if snapshot and snapshot.has_percentage and not snapshot.has_pages:
@@ -968,6 +975,10 @@ def tracking_state(media):
         from app import book_tracking
 
         state["book"] = book_tracking.state_payload(media)
+    if media.item.media_type == MediaTypes.GAME.value:
+        from app import game_tracking
+
+        state["game"] = game_tracking.state_payload(media)
     return state
 
 

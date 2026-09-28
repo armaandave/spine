@@ -180,7 +180,7 @@ def _can_view_diary_entry(viewer, entry):
         return True
     from app import single_weight
 
-    if single_weight.supports(entry.item):
+    if single_weight.uses_half_star_rating(entry.item):
         return True
     if entry.visibility == Visibility.PUBLIC:
         return True

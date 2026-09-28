@@ -11,6 +11,7 @@ final class DiaryLogDetailViewModel {
     var mediaDetail: MediaDetail?
     var isLoading = true
     var isDeleting = false
+    var deleteErrorMessage: String?
     var errorMessage: String?
     var isReviewRevealed = false
 
@@ -72,9 +73,10 @@ final class DiaryLogDetailViewModel {
     }
 
     func delete() async -> Bool {
-        guard let entry else { return false }
+        guard !isDeleting, let entry else { return false }
         isDeleting = true
         errorMessage = nil
+        deleteErrorMessage = nil
         defer { isDeleting = false }
 
         do {
@@ -85,6 +87,7 @@ final class DiaryLogDetailViewModel {
             return true
         } catch {
             errorMessage = error.localizedDescription
+            deleteErrorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
             }
@@ -187,6 +190,7 @@ struct DiaryLogDetailView: View {
                     Button("Edit") {
                         isEditing = true
                     }
+                    .disabled(viewModel.isDeleting)
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13)
@@ -205,6 +209,7 @@ struct DiaryLogDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Delete")
+                    .disabled(viewModel.isDeleting)
                 }
             }
             .padding(.horizontal, 16)
@@ -230,11 +235,18 @@ struct DiaryLogDetailView: View {
         }
         .sheet(isPresented: $isEditing) {
             if let entry = viewModel.entry {
-                DiaryLogEditSheet(entry: entry, diaryRepository: diaryRepository) { request in
+                DiaryLogEditSheet(entry: entry, diaryRepository: diaryRepository, errorMessage: { viewModel.errorMessage }) { request in
                     await viewModel.save(request)
                 }
             }
         }
+        .alert("Could not delete log", isPresented: Binding(
+            get: { viewModel.deleteErrorMessage != nil },
+            set: { if !$0 { viewModel.deleteErrorMessage = nil } }
+        )) {
+            Button("Try Again") { Task { if await viewModel.delete() { dismiss() } } }
+            Button("Cancel", role: .cancel) { viewModel.deleteErrorMessage = nil }
+        } message: { Text(viewModel.deleteErrorMessage ?? "Could not delete the log.") }
         .confirmationDialog("Delete this diary entry?", isPresented: $isDeleteConfirmationPresented, titleVisibility: .visible) {
             Button("Delete Entry", role: .destructive) {
                 Task {
@@ -245,7 +257,9 @@ struct DiaryLogDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This cannot be undone.")
+            Text(viewModel.entry?.media.ref.mediaType == "game"
+                 ? "A direct or older completion also deletes its playthrough and all progress. Deleting the current tracked completion reopens it with latest progress. This cannot be undone."
+                 : "This cannot be undone.")
         }
     }
 
@@ -328,6 +342,10 @@ struct DiaryLogDetailView: View {
                         }
                     }
 
+                    if entry.media.ref.mediaType == "game" {
+                        let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.percentage).summary
+                        if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
+                    }
                     let parts = titleParts(entry.media.displayTitle)
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         if let detail = viewModel.mediaDetail {
@@ -600,6 +618,8 @@ private struct DiaryLogHeroArtwork: View {
 private final class DiaryLogEditViewModel {
     let entry: DiaryEntry
     var consumedAt: Date
+    var gameProgress: GameProgressDraft
+    let initialGameProgress: GameProgressDraft
     var ratingSteps: Int
     var reviewTitle: String
     var review: String
@@ -620,6 +640,8 @@ private final class DiaryLogEditViewModel {
         self.entry = entry
         self.diaryRepository = diaryRepository
         consumedAt = CalendarDateCodec.date(from: entry.consumedAt) ?? Date()
+        gameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
+        initialGameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
         let rating = entry.rating.flatMap { Decimal(string: $0) }
         ratingSteps = rating.map {
             entry.media.ref.usesFiveStarRatingScale
@@ -676,8 +698,9 @@ private final class DiaryLogEditViewModel {
         tags.removeAll { $0 == tag }
     }
 
-    func request() -> DiaryEntryUpdateRequest {
-        DiaryEntryUpdateRequest(
+    func request() throws -> DiaryEntryUpdateRequest {
+        let progress = try gameProgress.request(comparedTo: initialGameProgress)
+        return DiaryEntryUpdateRequest(
             consumedAt: consumedAt,
             rating: ratingSteps > 0
                 ? entry.media.ref.usesFiveStarRatingScale ? Decimal(ratingSteps) / 2 : Decimal(ratingSteps)
@@ -690,7 +713,10 @@ private final class DiaryLogEditViewModel {
             containsSpoilers: containsSpoilers,
             visibility: entry.media.ref.isSingleWeight ? nil : visibility,
             calendarDateOnly: entry.media.ref.usesCalendarConsumptionDate,
-            includesRating: true
+            includesRating: true,
+            totalMinutes: progress.totalMinutes, percentage: progress.percentage,
+            includesMinutes: entry.media.ref.mediaType == "game" && progress.includesMinutes,
+            includesPercentage: entry.media.ref.mediaType == "game" && progress.includesPercentage
         )
     }
 }
@@ -699,10 +725,12 @@ private struct DiaryLogEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: DiaryLogEditViewModel
     let onSave: (DiaryEntryUpdateRequest) async -> Bool
+    let errorMessage: () -> String?
 
-    init(entry: DiaryEntry, diaryRepository: DiaryRepository, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
+    init(entry: DiaryEntry, diaryRepository: DiaryRepository, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
         _viewModel = State(initialValue: DiaryLogEditViewModel(entry: entry, diaryRepository: diaryRepository))
         self.onSave = onSave
+        self.errorMessage = errorMessage
     }
 
     var body: some View {
@@ -712,8 +740,8 @@ private struct DiaryLogEditSheet: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     header
-                    fields
-                    tagEditor
+                    fields.disabled(viewModel.isSaving)
+                    tagEditor.disabled(viewModel.isSaving)
                     if let error = viewModel.errorMessage {
                         Text(error)
                             .font(.system(size: 13, weight: .semibold))
@@ -726,6 +754,9 @@ private struct DiaryLogEditSheet: View {
                 .padding(.bottom, 34)
             }
         }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled(viewModel.isSaving)
+        .scrollDismissesKeyboard(.interactively)
         .task {
             await viewModel.loadTags()
         }
@@ -734,7 +765,7 @@ private struct DiaryLogEditSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Button { dismiss() } label: {
+                Button { if !viewModel.isSaving { dismiss() } } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
@@ -782,6 +813,9 @@ private struct DiaryLogEditSheet: View {
                     .datePickerStyle(.compact)
                     .colorScheme(.dark)
                 ratingPicker
+                if viewModel.entry.media.ref.mediaType == "game" {
+                    GameProgressFields(draft: $viewModel.gameProgress)
+                }
             }
             fieldGroup {
                 TextField("Review title", text: $viewModel.reviewTitle)
@@ -790,7 +824,7 @@ private struct DiaryLogEditSheet: View {
                     .lineLimit(5...9)
             }
             fieldGroup {
-                if !viewModel.entry.media.ref.isSingleWeight {
+                if !viewModel.entry.media.ref.usesCalendarConsumptionDate {
                     Picker("Visibility", selection: $viewModel.visibility) {
                         ForEach(APIConstants.visibilityChoices, id: \.self) { value in
                             Text(value.capitalized).tag(value)
@@ -821,18 +855,12 @@ private struct DiaryLogEditSheet: View {
                     })
                 }
                 .frame(width: 189, height: 42)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Rating")
-                .accessibilityValue(viewModel.ratingLabel())
-                .accessibilityAdjustableAction { direction in
-                    switch direction {
-                    case .increment:
-                        viewModel.ratingSteps = min(10, viewModel.ratingSteps + 1)
-                    case .decrement:
-                        viewModel.ratingSteps = max(0, viewModel.ratingSteps - 1)
-                    default:
-                        break
+                .accessibilityRepresentation {
+                    Slider(value: Binding(get: { Double(viewModel.ratingSteps) }, set: { viewModel.ratingSteps = Int($0) }), in: 0...10, step: 1) {
+                        Text("Rating")
                     }
+                    .accessibilityValue(viewModel.ratingLabel())
+                    .accessibilityIdentifier("diary-log.rating")
                 }
 
                 Spacer(minLength: 0)
@@ -921,9 +949,10 @@ private struct DiaryLogEditSheet: View {
             Task {
                 viewModel.isSaving = true
                 defer { viewModel.isSaving = false }
-                if await onSave(viewModel.request()) {
-                    dismiss()
-                }
+                do {
+                    if await onSave(try viewModel.request()) { dismiss() }
+                    else { viewModel.errorMessage = errorMessage() ?? "Could not save. Try again." }
+                } catch { viewModel.errorMessage = error.localizedDescription }
             }
         } label: {
             HStack {

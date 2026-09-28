@@ -46,6 +46,7 @@ struct TrackingState: Codable, Equatable {
     let likeIsIndependent: Bool?
     let diaryCount: Int?
     let book: BookTrackingState?
+    let game: GameTrackingState?
 
     init(
         trackingId: Int,
@@ -64,7 +65,8 @@ struct TrackingState: Codable, Equatable {
         likeSourceDiaryEntryId: Int? = nil,
         likeIsIndependent: Bool? = nil,
         diaryCount: Int? = nil,
-        book: BookTrackingState? = nil
+        book: BookTrackingState? = nil,
+        game: GameTrackingState? = nil
     ) {
         self.trackingId = trackingId
         self.status = status
@@ -83,6 +85,7 @@ struct TrackingState: Codable, Equatable {
         self.likeIsIndependent = likeIsIndependent
         self.diaryCount = diaryCount
         self.book = book
+        self.game = game
     }
 
     func replacingProgress(_ progress: ProgressState?) -> TrackingState {
@@ -103,11 +106,16 @@ struct TrackingState: Codable, Equatable {
             likeSourceDiaryEntryId: likeSourceDiaryEntryId,
             likeIsIndependent: likeIsIndependent,
             diaryCount: diaryCount,
-            book: book
+            book: book,
+            game: game
         )
     }
 
     func homeProgressText(preferredMode: ProgressUpdateMode?) -> String {
+        if let game {
+            let text = game.currentPlaythrough?.progress.summary ?? ""
+            return text.isEmpty ? (status == "In progress" ? "Playing" : status ?? "Playing") : text
+        }
         if let changeText = latestProgressChange?.compactDisplayText(preferredMode: preferredMode) {
             return changeText
         }
@@ -360,9 +368,6 @@ extension ProgressState {
         let intValue = Int(NSDecimalNumber(decimal: value).doubleValue.rounded())
         guard mode != requestedMode else { return intValue }
         guard let maxValue = max.map({ NSDecimalNumber(decimal: $0).doubleValue }), maxValue > 0 else {
-            if requestedMode == .percentage, isMinuteProgress, (0...100).contains(intValue) {
-                return intValue
-            }
             return nil
         }
         switch (mode, requestedMode) {
@@ -377,11 +382,6 @@ extension ProgressState {
 
     private var isPercentage: Bool {
         mode == .percentage
-    }
-
-    private var isMinuteProgress: Bool {
-        let unit = unit.lowercased()
-        return unit == "min" || unit.contains("minute")
     }
 
     private func pluralizedUnit(for value: Decimal) -> String {

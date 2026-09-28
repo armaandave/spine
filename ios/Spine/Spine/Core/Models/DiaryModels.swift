@@ -13,6 +13,10 @@ struct DiaryEntry: Codable, Identifiable {
     let isRewatch: Bool
     let isTrueReread: Bool?
     let bookJourneyId: Int?
+    var gamePlaythroughId: Int? = nil
+    var totalMinutes: Int? = nil
+    var percentage: Int? = nil
+    var isTrueReplay: Bool? = nil
     let tags: [String]
     let visibility: String
     let likeCount: Int
@@ -155,6 +159,10 @@ struct DiaryEntryUpdateRequest: Encodable {
     let visibility: String?
     let calendarDateOnly: Bool
     let includesRating: Bool
+    let totalMinutes: Int?
+    let percentage: Int?
+    let includesMinutes: Bool
+    let includesPercentage: Bool
 
     init(
         consumedAt: Date?,
@@ -167,7 +175,11 @@ struct DiaryEntryUpdateRequest: Encodable {
         containsSpoilers: Bool?,
         visibility: String?,
         calendarDateOnly: Bool = false,
-        includesRating: Bool = false
+        includesRating: Bool = false,
+        totalMinutes: Int? = nil,
+        percentage: Int? = nil,
+        includesMinutes: Bool = false,
+        includesPercentage: Bool = false
     ) {
         self.consumedAt = consumedAt
         self.rating = rating
@@ -180,6 +192,10 @@ struct DiaryEntryUpdateRequest: Encodable {
         self.visibility = visibility
         self.calendarDateOnly = calendarDateOnly
         self.includesRating = includesRating || rating != nil
+        self.totalMinutes = totalMinutes
+        self.percentage = percentage
+        self.includesMinutes = includesMinutes
+        self.includesPercentage = includesPercentage
     }
 
     enum CodingKeys: String, CodingKey {
@@ -192,6 +208,8 @@ struct DiaryEntryUpdateRequest: Encodable {
         case isRewatch
         case containsSpoilers
         case visibility
+        case totalMinutes
+        case percentage
     }
 
     func encode(to encoder: Encoder) throws {
@@ -213,6 +231,8 @@ struct DiaryEntryUpdateRequest: Encodable {
         try container.encodeIfPresent(isRewatch, forKey: .isRewatch)
         try container.encodeIfPresent(containsSpoilers, forKey: .containsSpoilers)
         try container.encodeIfPresent(visibility, forKey: .visibility)
+        if includesMinutes { try container.encode(totalMinutes, forKey: .totalMinutes) }
+        if includesPercentage { try container.encode(percentage, forKey: .percentage) }
     }
 }
 

@@ -2056,7 +2056,7 @@ private struct ProfileStarRating: View {
 
     private var value: Double? {
         guard let rating, let raw = Double(rating) else { return nil }
-        return ["movie", "music", "book"].contains(mediaType) ? raw : raw / 2
+        return ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
     }
 
     private var symbolNames: [String] {

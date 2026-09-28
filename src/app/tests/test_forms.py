@@ -1,6 +1,11 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
+
+from app import game_tracking
 
 from app.forms import (
     AnimeForm,
@@ -152,6 +157,34 @@ class BasicGameForm(TestCase):
         }
         form = GameForm(data=form_data)
         self.assertFalse(form.is_valid())
+
+    def test_status_and_notes_preserve_unchanged_current_rating_source(self):
+        """A form status change does not submit another rating action."""
+        game, entry = game_tracking.complete(
+            self.user, self.item, completion_date=timezone.localdate(),
+            rating=8, mutation_id=uuid4(),
+        )
+        form = GameForm(instance=game, public_rating_scale=True, data={
+            "media_id": "1", "source": Sources.IGDB.value, "media_type": "game",
+            "score": "4", "status": Status.IN_PROGRESS.value,
+            "notes": "Replay notes",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        game = form.save()
+        self.assertEqual(game.status, Status.IN_PROGRESS.value)
+        self.assertEqual(game.score, 8)
+        self.assertEqual(game.rating_source_id, entry.pk)
+        form = GameForm(instance=game, public_rating_scale=True, data={
+            "media_id": "1", "source": Sources.IGDB.value, "media_type": "game",
+            "score": "4", "status": Status.PAUSED.value,
+            "start_date": game.current_session.start_date.isoformat(),
+            "notes": "Paused notes",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        game = form.save()
+        self.assertEqual(game.status, Status.PAUSED.value)
+        self.assertEqual(game.rating_source_id, entry.pk)
+        self.assertEqual(game.notes, "Paused notes")
 
 
 class ManualItemFormTest(TestCase):
