@@ -62,6 +62,23 @@ class GameTrackingContractTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         return response.data
 
+    def test_legacy_playing_can_start_tracking_without_inventing_old_progress(self):
+        game = Game.objects.create(
+            user=self.user, item=self.item, status=Status.IN_PROGRESS,
+            progress=90,
+            status_history=[{"status": Status.IN_PROGRESS.value, "kind": "direct_status"}],
+        )
+        self.assertIsNone(self.state()["game"]["current_playthrough"])
+        started = self.action("start").data["game"]["current_playthrough"]
+        self.assertEqual(started["start_date"], str(self.today))
+        self.assertIsNone(started["total_minutes"])
+        self.assertIsNone(started["percentage"])
+        self.assertEqual(self.action("start").data["game"]["current_playthrough"]["id"], started["id"])
+        game.refresh_from_db()
+        self.assertEqual(game.progress, 90)
+        self.assertEqual(game.playthroughs.count(), 1)
+        self.assertFalse(DiaryEntry.objects.exists())
+
     def test_g01_status_only_completion_and_g35_retries(self):
         started = self.action("start").data["game"]["current_playthrough"]
         self.assertIsNone(started["total_minutes"])

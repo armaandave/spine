@@ -131,6 +131,25 @@ final class GameTrackingContractTests: XCTestCase {
         XCTAssertEqual(state.game?.lifetimeCompletionCount, 1)
     }
 
+    func testPlayingActionRequiresAnActualPlayingPlaythroughToDisable() throws {
+        let playing = try JSONDecoder.api.decode(TrackingState.self, from: Self.tracking)
+        XCTAssertTrue(playing.game?.hasPlayingPlaythrough == true)
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.tracking) as? [String: Any])
+        var game = try XCTUnwrap(payload["game"] as? [String: Any])
+        var playthrough = try XCTUnwrap(game["current_playthrough"] as? [String: Any])
+        playthrough["status"] = "Paused"
+        game["current_playthrough"] = playthrough
+        payload["game"] = game
+        let paused = try JSONDecoder.api.decode(TrackingState.self, from: JSONSerialization.data(withJSONObject: payload))
+        XCTAssertFalse(paused.game?.hasPlayingPlaythrough == true)
+        game["current_playthrough"] = NSNull()
+        payload["game"] = game
+        let legacy = try JSONDecoder.api.decode(TrackingState.self, from: JSONSerialization.data(withJSONObject: payload))
+        XCTAssertEqual(legacy.status, "In progress")
+        XCTAssertFalse(legacy.game?.hasPlayingPlaythrough == true)
+        XCTAssertFalse(legacy.game?.canUpdateProgress == true)
+    }
+
     func testCompletionDraftUsesVisibleValuesAndOneAtomicRequest() async throws {
         GameTrackingURLProtocol.requests = []
         let model = try makeComposer()

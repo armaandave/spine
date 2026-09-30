@@ -26,8 +26,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Deploy requested branch
+      - name: Back up production before deployment
+        shell: bash
         run: |
-          requested_branch="${{ inputs.branch }}"
-          branch="${requested_branch:-$GITHUB_REF_NAME}"
+          set -euo pipefail
+          if [[ -d "$HOME/projects/spine-deploy/.git" ]]; then
+            git -C "$HOME/projects/spine-deploy" diff --quiet
+            git -C "$HOME/projects/spine-deploy" diff --cached --quiet
+          fi
+          umask 077
+          backup_dir="$HOME/projects/spine-backups"
+          mkdir -p "$backup_dir"
+          backup="$backup_dir/pre-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.dump"
+          set -o noclobber
+          docker exec spine-db pg_dump -U spine -d spine -Fc > "$backup"
+          test -s "$backup"
+          docker exec -i spine-db pg_restore --list < "$backup" > /dev/null
+          echo "Verified database backup: $backup"
+
+      - name: Deploy requested branch
+        env:
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+        run: |
+          branch="${REQUESTED_BRANCH:-$GITHUB_REF_NAME}"
           ./scripts/codex-mobile-deploy-backend.sh "$branch"
+
+      - name: Verify deployment and clear old cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors https://api.spine-api.com/api/v1/health/
+          expected_sha="$(git -C "$HOME/projects/spine-deploy" rev-parse HEAD)"
+          deployed_sha="$(docker exec spine printenv SPINE_COMMIT_SHA)"
+          [[ "$deployed_sha" == "$expected_sha" ]]
+          docker exec spine python manage.py migrate --check
+          docker exec spine python manage.py shell -c 'from django.core.cache import cache; cache.clear()'
+          curl --fail --silent --show-error https://api.spine-api.com/api/v1/health/

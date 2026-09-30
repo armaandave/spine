@@ -44,6 +44,7 @@ struct GameTrackingState: Codable, Hashable {
     let importedLifetimeSource: String?
 
     var hasLivePlaythrough: Bool { currentPlaythrough?.isUnfinished == true }
+    var hasPlayingPlaythrough: Bool { currentPlaythrough?.status == "In progress" }
     var canUpdateProgress: Bool {
         currentPlaythrough.map { $0.isUnfinished || $0.status == "Completed" } ?? false
     }

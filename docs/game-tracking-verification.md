@@ -1,5 +1,20 @@
 # Game tracking verification
 
+## Follow-up verification: 2026-09-30
+
+The maintainer authorized deployment and installation after the original review.
+An existing Playing title without a playthrough now keeps its Playing action enabled.
+That action starts tracking without assigning old progress to an invented attempt.
+New backend and native regression tests cover this case.
+
+The full affected backend suite passed 365 tests on isolated PostgreSQL 16.
+This includes the representative upgrade from migration 0077 through 0079.
+Six deployment workflow tests and Ruff also passed.
+The deployment workflow now verifies a private database backup before replacing the app.
+It checks the deployed commit, pending migrations, and health, then clears old cache.
+
+The sections below retain the original implementation evidence and its earlier limits.
+
 ## Status
 
 Implementation, independent review, automated checks, and real local Simulator verification are complete. All 35 acceptance cases have recorded evidence in the coverage matrix. The limits below distinguish automated checks from observed native actions.

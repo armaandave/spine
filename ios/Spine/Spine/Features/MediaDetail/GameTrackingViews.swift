@@ -173,8 +173,8 @@ struct GameActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress")
-                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: game?.hasLivePlaythrough == true)
+                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
+                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
                     statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
                     Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { Task { await onAction(.stopped) } } } label: {
                         Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
@@ -208,9 +208,9 @@ struct GameActionSheet: View {
         }.preferredColorScheme(.dark)
     }
 
-    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool = false) -> some View {
+    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
         Button { Task { await onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
-            .disabled(selected || disabled)
+            .disabled(disabled ?? selected)
     }
 }
 
