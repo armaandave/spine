@@ -13,6 +13,30 @@ Six deployment workflow tests and Ruff also passed.
 The deployment workflow now verifies a private database backup before replacing the app.
 It checks the deployed commit, pending migrations, and health, then clears old cache.
 
+Final combined native run: 456 unit tests and one live-backend UI test passed.
+No test was skipped. The UI test started from an existing Playing title without a playthrough.
+It verified start, zero progress, clearing time, refetch, rating prefill, validation, and cancellation.
+The old progress value remained stored. Cancelling completion created no diary entry.
+Result: `/Users/armaandave/Library/Developer/XcodeBuildMCP/workspaces/spine-9e3122703ae8/result-bundles/test_sim_2026-09-30T06-14-02-334Z_pid25659_1fc493cd.xcresult`.
+
+The first combined run found a stale fallback-media test after the saved UI changes removed board games.
+Its local expectation now matches those saved changes.
+The UI size assertion now allows 0.001 points for floating-point reporting of a 44-point control.
+One shared-Keychain authentication test failed once, then passed unchanged in the full final run.
+Production login and read-only game-library and game-tracking requests also passed.
+
+Production deployed application commit `4a35d2a4` through workflow run `36676590350`.
+The workflow verified the running commit, completed migrations, cleared cache, and passed health checks.
+Verified backup on the server: `/Users/armaandave/projects/spine-backups/pre-deploy-36676590350-1.dump`.
+
+The signed Debug build installed and launched on Armaans iPhone 14 pro max on 2026-09-30.
+Bundle ID: `com.armaan.Spine`. No uninstall or app-data reset occurred.
+Build log: `/private/tmp/spine-device-game-tracking-end-to-end.log`.
+The build uses the production API default and includes the saved UI changes present at this run's start.
+Those UI changes remain uncommitted in the game worktree. The original checkout was not changed by this task.
+Later, separate authentication edits appeared in the original checkout. This build excludes that unfinished work.
+Installation and launch were verified through device services; physical-screen interaction was not claimed.
+
 The sections below retain the original implementation evidence and its earlier limits.
 
 ## Status

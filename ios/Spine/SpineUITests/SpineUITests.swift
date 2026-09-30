@@ -83,8 +83,8 @@ final class SpineUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Track"].firstMatch.waitForExistence(timeout: 10))
         let track = try XCTUnwrap(app.buttons.matching(identifier: "Track").allElementsBoundByIndex.first { app.frame.contains($0.frame) })
         track.tap()
-        let playing = app.buttons["Playing"]
-        if playing.waitForExistence(timeout: 2) {
+        let playing = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Playing", "Playing ✓")).firstMatch
+        if playing.waitForExistence(timeout: 2), playing.isEnabled {
             playing.tap()
             XCTAssertTrue(app.buttons["Track"].firstMatch.waitForExistence(timeout: 10))
             try visibleTrackButton(app).tap()
@@ -125,8 +125,9 @@ final class SpineUITests: XCTestCase {
         rating.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)).tap()
         XCTAssertEqual(rating.value as? String, "4.5 out of 5")
         let confirmRating = app.buttons["Confirm rating"]
-        XCTAssertGreaterThanOrEqual(confirmRating.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(confirmRating.frame.height, 44)
+        // XCTest can report an exact 44-point frame as 43.99999999999997.
+        XCTAssertGreaterThanOrEqual(confirmRating.frame.width + 0.001, 44)
+        XCTAssertGreaterThanOrEqual(confirmRating.frame.height + 0.001, 44)
         let ratingAttachment = XCTAttachment(screenshot: app.screenshot())
         ratingAttachment.name = "Local API rating before completion"
         ratingAttachment.lifetime = .keepAlways
