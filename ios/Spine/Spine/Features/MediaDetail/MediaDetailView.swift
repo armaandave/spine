@@ -1201,6 +1201,49 @@ struct MediaDetailView: View {
     }
 }
 
+// Keep content evaluation outside the page's presentation-modifier stack.
+// Calling a computed view here eagerly overflowed the 1 MB iPhone main-thread stack.
+private struct MediaDetailScrollContent<Hero: View, Content: View>: View {
+    let viewModel: MediaDetailViewModel
+    let mediaType: String
+    let topSafeAreaInset: CGFloat
+    let hero: (MediaDetail) -> Hero
+    let content: (MediaDetail) -> Content
+
+    var body: some View {
+        Group {
+            if viewModel.isLoading, viewModel.detail == nil {
+                if mediaType == "episode" {
+                    EpisodeDetailLoadingView()
+                } else {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, minHeight: 520)
+                }
+            } else if let detail = viewModel.detail {
+                VStack(spacing: 0) {
+                    hero(detail)
+                        .padding(.top, -topSafeAreaInset)
+                    content(detail)
+                }
+            } else if let error = viewModel.errorMessage, viewModel.detail == nil {
+                VStack(spacing: 18) {
+                    ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
+                        .foregroundStyle(.white)
+                    Button("Try Again") {
+                        Task { await viewModel.load() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white.opacity(0.16))
+                }
+                .padding()
+                .frame(maxWidth: .infinity, minHeight: 520)
+            }
+        }
+        .padding(.bottom, 116)
+    }
+}
+
 private struct MediaDetailPageView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1312,7 +1355,13 @@ private struct MediaDetailPageView: View {
             SpinePageBackground()
 
             ScrollView(showsIndicators: false) {
-                pageScrollContent
+                MediaDetailScrollContent(
+                    viewModel: viewModel,
+                    mediaType: ref.mediaType,
+                    topSafeAreaInset: resolvedTopSafeAreaInset,
+                    hero: hero,
+                    content: content
+                )
                     .spineContentTransition(value: contentPhase)
             }
             .onScrollPhaseChange { _, phase in
@@ -1811,40 +1860,6 @@ private struct MediaDetailPageView: View {
                 }
             )
         }
-    }
-
-    @ViewBuilder
-    private var pageScrollContent: some View {
-        Group {
-            if viewModel.isLoading, viewModel.detail == nil {
-                if ref.mediaType == "episode" {
-                    EpisodeDetailLoadingView()
-                } else {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(maxWidth: .infinity, minHeight: 520)
-                }
-            } else if let detail = viewModel.detail {
-                VStack(spacing: 0) {
-                    hero(detail)
-                        .padding(.top, -resolvedTopSafeAreaInset)
-                    content(detail)
-                }
-            } else if let error = viewModel.errorMessage, viewModel.detail == nil {
-                VStack(spacing: 18) {
-                    ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
-                        .foregroundStyle(.white)
-                    Button("Try Again") {
-                        Task { await viewModel.load() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.white.opacity(0.16))
-                }
-                .padding()
-                .frame(maxWidth: .infinity, minHeight: 520)
-            }
-        }
-        .padding(.bottom, 116)
     }
 
     private var contentPhase: SpineContentPhase {

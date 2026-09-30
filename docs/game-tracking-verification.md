@@ -1,5 +1,31 @@
 # Game tracking verification
 
+## Physical-device crash fix: 2026-09-30
+
+The first phone build crashed when opening media details. Installation success did not catch this defect.
+Two phone reports confirmed a main-thread stack overflow in `MediaDetailPageView` content construction.
+The shared scroll content now has its own SwiftUI view boundary, outside the page's presentation-modifier stack.
+Layout, tracking rules, backend code, and stored data are unchanged.
+The same source fix was applied to the original checkout without replacing its other saved changes.
+
+Validation of the corrected build:
+
+- 456 Simulator unit tests passed, with no failures or skips.
+- The local-backend game UI test passed, including progress saves, refetch, rating prefill, validation, and cancellation.
+- `testLiveMediaDetailNavigation` passed on Armaans iPhone 14 pro max running iOS 27.0.
+- On that phone, the test opened, scrolled, and dismissed Movies, TV, Anime, Manga, Games, Books, Comics, and Music.
+- The phone test used the live production API without changing tracking or diary data.
+- Eight phone screenshots were saved. No new Spine crash report appeared after the test.
+
+Phone result: `/private/tmp/spine-device-media-crash-fix.xcresult`.
+Phone screenshots: `/private/tmp/spine-device-media-crash-fix-attachments/`.
+Simulator unit result: `test_sim_2026-09-30T06-58-57-330Z_pid25659_bb5d4f1a.xcresult`.
+Simulator game UI result: `test_sim_2026-09-30T07-00-56-595Z_pid25659_34460638.xcresult`.
+The Simulator results are under `~/Library/Developer/XcodeBuildMCP/workspaces/spine-9e3122703ae8/result-bundles/`.
+
+Repeat the phone navigation test with `TEST_RUNNER_SPINE_RUN_LIVE_NAVIGATION_TEST=1` and a signed-in phone.
+Select only `SpineUITests/SpineUITests/testLiveMediaDetailNavigation`. The test skips unless explicitly enabled.
+
 ## Follow-up verification: 2026-09-30
 
 The maintainer authorized deployment and installation after the original review.
