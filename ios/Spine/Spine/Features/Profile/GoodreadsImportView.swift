@@ -25,12 +25,8 @@ struct GoodreadsImportView: View {
             instructions: "Export your library from Goodreads, then upload the CSV file here.",
             linkTitle: "Open Goodreads Import/Export",
             linkURL: URL(string: "https://www.goodreads.com/review/import")!,
-            systemName: "books.vertical.fill",
-            tint: Color(red: 0.60, green: 0.75, blue: 0.36),
             mode: $mode,
             modeDetail: modeDetail,
-            fileTitle: "Choose Goodreads CSV",
-            fileSystemName: "doc.text.fill",
             isBusy: isBusy,
             chooseFile: chooseFile
         )
@@ -89,54 +85,5 @@ struct GoodreadsImportView: View {
             isUploadScreenPresented = true
             coordinator.phase = .failed(message: error.localizedDescription)
         }
-    }
-}
-
-private struct MockImportRepository: ImportRepository {
-    func queueLetterboxdImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func queueStoryGraphImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func queueGoodreadsImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        progressHandler?(1)
-        return ImportQueueResponse(taskId: "preview-task", status: "queued")
-    }
-
-    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
-        ImportTaskStatus(
-            taskId: taskId,
-            taskName: "Import from Goodreads",
-            status: "SUCCESS",
-            dateCreated: nil,
-            dateDone: nil,
-            result: "Imported 12 books."
-        )
-    }
-}
-
-#Preview {
-    NavigationStack {
-        GoodreadsImportView(
-            coordinator: GoodreadsImportCoordinator(importRepository: MockImportRepository())
-        )
     }
 }

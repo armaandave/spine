@@ -305,6 +305,7 @@ struct SongDetailView: View {
         .padding(.bottom, 24)
         .background {
             HeroArtwork(artworkURL: URL(string: artworkURL ?? ""))
+                .offset(y: BackdropLayout.topOffset)
         }
     }
 

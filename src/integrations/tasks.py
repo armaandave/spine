@@ -20,6 +20,7 @@ from integrations.imports import (
     kitsu,
     letterboxd,
     mal,
+    mal_export,
     simkl,
     steam,
     storygraph,
@@ -208,3 +209,37 @@ def import_storygraph(file_path, user_id, mode):
             os.unlink(file_path)
         except OSError:
             logger.warning("Could not delete temporary StoryGraph import file: %s", file_path)
+
+
+@shared_task(name="Import from MyAnimeList export")
+def import_mal_export(file_path, user_id, mode):
+    """Celery task for importing anime and manga from a MyAnimeList XML export."""
+    try:
+        with open(file_path, "rb") as export_file:
+            return import_media(mal_export.importer, export_file, user_id, mode)
+    finally:
+        try:
+            os.unlink(file_path)
+        except OSError:
+            logger.warning("Could not delete temporary MyAnimeList import file: %s", file_path)
+
+
+MAL_BACKFILL_CHUNK_SIZE = 20
+MAL_BACKFILL_MAX_ATTEMPTS = 3
+
+
+@shared_task(name="Backfill MyAnimeList metadata", ignore_result=True)
+def backfill_mal_metadata(item_ids, attempt=1):
+    """Fill in posters for imported MAL titles at MAL's paced API rate.
+
+    Works through a small chunk per run and re-queues the rest, so a large
+    import never holds the single import worker for long; failed lookups get
+    a couple of delayed retries before the placeholder is kept.
+    """
+    chunk = item_ids[:MAL_BACKFILL_CHUNK_SIZE]
+    remaining = item_ids[MAL_BACKFILL_CHUNK_SIZE:]
+    failed = mal_export.backfill_metadata(chunk)
+    if remaining:
+        backfill_mal_metadata.apply_async(args=[remaining, attempt], countdown=1)
+    if failed and attempt < MAL_BACKFILL_MAX_ATTEMPTS:
+        backfill_mal_metadata.apply_async(args=[failed, attempt + 1], countdown=120)

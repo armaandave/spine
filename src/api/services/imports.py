@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 from contextlib import suppress
@@ -19,6 +20,14 @@ TASKS_BY_SOURCE = {
     "goodreads": tasks.import_goodreads,
     "letterboxd": tasks.import_letterboxd,
     "storygraph": tasks.import_storygraph,
+    "mal_export": tasks.import_mal_export,
+}
+# Uploads for these sources are spooled to a temp file the task deletes.
+FILE_SUFFIXES = {
+    "letterboxd": ".zip",
+    "storygraph": ".csv",
+    "goodreads": ".csv",
+    "mal_export": ".xml",
 }
 
 
@@ -27,9 +36,9 @@ def queue_import(source, user, data, files=None):
     task = TASKS_BY_SOURCE[source]
     mode = data["mode"]
     username = data.get("username")
-    if source in {"letterboxd", "storygraph", "goodreads"}:
+    if source in FILE_SUFFIXES:
         uploaded_file = data.get("file") or (files.get("file") if files else None)
-        fd, path = tempfile.mkstemp(suffix=".zip" if source == "letterboxd" else ".csv")
+        fd, path = tempfile.mkstemp(suffix=FILE_SUFFIXES[source])
         try:
             with os.fdopen(fd, "wb") as tmp:
                 if hasattr(uploaded_file, "chunks"):
@@ -69,5 +78,35 @@ def task_status(task_id, user):
         "status": task.status,
         "date_created": task.date_created,
         "date_done": task.date_done,
-        "result": task.result,
+        "result": _result_message(task),
     }
+
+
+UNEXPECTED_FAILURE_MESSAGE = "Import failed due to an unexpected error. Please try again later."
+
+
+def _result_message(task):
+    """Return the stored task result as a message clients can show as-is.
+
+    Celery stores results JSON-encoded: a success summary arrives quoted and a
+    failure arrives as an exception payload. Import errors carry a user-facing
+    message; anything else is reported generically so internals never leak.
+    """
+    if task.result is None:
+        return None
+    try:
+        decoded = json.loads(task.result)
+    except (TypeError, ValueError):
+        return task.result
+
+    if task.status == "FAILURE":
+        if isinstance(decoded, dict) and decoded.get("exc_type") == "MediaImportError":
+            message = decoded.get("exc_message")
+            if isinstance(message, list):
+                message = message[0] if message else None
+            if isinstance(message, str) and message.strip():
+                return message
+        return UNEXPECTED_FAILURE_MESSAGE
+    if isinstance(decoded, str):
+        return decoded
+    return task.result

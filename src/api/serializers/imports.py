@@ -17,4 +17,6 @@ class ImportSerializer(serializers.Serializer):
             raise serializers.ValidationError({"file": "A StoryGraph CSV file is required."})
         if source == "goodreads" and "file" not in attrs:
             raise serializers.ValidationError({"file": "A Goodreads CSV file is required."})
+        if source == "mal_export" and "file" not in attrs:
+            raise serializers.ValidationError({"file": "A MyAnimeList XML export file is required."})
         return attrs

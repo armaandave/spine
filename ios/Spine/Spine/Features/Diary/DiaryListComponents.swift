@@ -195,6 +195,7 @@ struct DiaryMonthHeader: View {
             ),
             style: .continuous
         ))
+        .background(SpinePalette.pageBackground)
         .contentShape(Rectangle())
     }
 }

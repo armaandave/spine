@@ -75,7 +75,11 @@ final class EpisodeDetailTests: XCTestCase {
         XCTAssertTrue(MediaExternalRatingPresentation.includes(source: "IMDb", mediaType: "episode"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "TMDB", mediaType: "movie"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "TMDB", mediaType: "tv"))
-        XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "TMDB", mediaType: "season"))
+        XCTAssertTrue(MediaExternalRatingPresentation.includes(source: "TMDB", mediaType: "season"))
+        XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "IMDb", mediaType: "season"))
+        XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "Rotten Tomatoes", mediaType: "season"))
+        XCTAssertTrue(MediaExternalRatingPresentation.includes(source: "IMDb", mediaType: "tv"))
+        XCTAssertTrue(MediaExternalRatingPresentation.includes(source: "Rotten Tomatoes", mediaType: "tv"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "MusicBrainz", mediaType: "music"))
         XCTAssertFalse(MediaExternalRatingPresentation.includes(source: "Google Books", mediaType: "book"))
     }

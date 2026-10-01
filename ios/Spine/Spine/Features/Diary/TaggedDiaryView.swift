@@ -152,6 +152,9 @@ struct TaggedDiaryView: View {
         .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
             Task { await viewModel.load() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
+            Task { await viewModel.load() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
             Task { await viewModel.load() }
         }

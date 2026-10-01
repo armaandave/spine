@@ -486,6 +486,8 @@ private struct ProfileTopSafeAreaInsetKey: PreferenceKey {
     }
 }
 
+private let profileElementSpacing: CGFloat = 8
+
 struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -509,6 +511,7 @@ struct ProfileView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
     private let onOpenDiary: () -> Void
@@ -534,6 +537,7 @@ struct ProfileView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void,
         onOpenDiary: @escaping () -> Void,
@@ -561,6 +565,7 @@ struct ProfileView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
         self.onOpenDiary = onOpenDiary
@@ -601,6 +606,9 @@ struct ProfileView: View {
             .onReceive(NotificationCenter.default.publisher(for: .goodreadsImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
+                Swift.Task<Void, Never> { await viewModel.reload() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
@@ -633,7 +641,10 @@ struct ProfileView: View {
                 )
             }
             .sheet(isPresented: $isSettingsPresented) {
-                if let importCoordinator, let storygraphImportCoordinator, let goodreadsImportCoordinator {
+                if let importCoordinator,
+                   let storygraphImportCoordinator,
+                   let goodreadsImportCoordinator,
+                   let myAnimeListImportCoordinator {
                     ProfileSettingsSheet(
                         profile: viewModel.profile,
                         profileRepository: profileRepository,
@@ -646,6 +657,7 @@ struct ProfileView: View {
                         importCoordinator: importCoordinator,
                         storygraphImportCoordinator: storygraphImportCoordinator,
                         goodreadsImportCoordinator: goodreadsImportCoordinator,
+                        myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                         onLogout: onLogout
                     )
                 }
@@ -697,7 +709,7 @@ struct ProfileView: View {
                             .foregroundStyle(.white)
                             .padding(.top, 120)
                     } else if let profile = viewModel.profile {
-                        VStack(alignment: .leading, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 0) {
                             hero(
                                 profile,
                                 collapseProgress: reduceMotion ? 0 : ProfileHeroCollapse.progress(for: heroScrollOffset),
@@ -706,12 +718,15 @@ struct ProfileView: View {
                             if isOwnProfile {
                                 inProgressSection
                                     .padding(.horizontal, 16)
+                                    .padding(.top, 20)
                             }
                             activitySection
                                 .padding(.horizontal, 16)
+                                .padding(.top, 20)
                             if isOwnProfile {
                                 profileMenuSection(profile.counts)
                                     .padding(.horizontal, 16)
+                                    .padding(.top, 20)
                             }
                         }
                         .padding(.bottom, 100)
@@ -800,105 +815,100 @@ struct ProfileView: View {
             collapseProgress: layoutProgress
         )
         let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + musicClearance
-        let heroMinHeight = ProfileHeroBackdropLayout.heroMinHeight(for: layoutProgress) + musicClearance
-        let crownNameSpacing = ProfileHeroBackdropLayout.crownNameSpacing(for: layoutProgress)
         let backdropContentOffset = backdropURL == nil ? 0 : ProfileHeroBackdropLayout.contentTopOffset
 
-        return ZStack(alignment: .top) {
+        return VStack(spacing: profileElementSpacing) {
+            VStack(spacing: 8) {
+                ZStack(alignment: .top) {
+                    HallOfFameCrownView(
+                        slots: allSlots,
+                        savingSlotIDs: viewModel.savingHallOfFameSlots,
+                        collapseProgress: collapseProgress
+                    ) { slot in
+                        if let item = slot.item {
+                            selectedRef = item.ref
+                        }
+                    } onEmptyTap: { slot in
+                        if isOwnProfile {
+                            hofPickerSlot = slot
+                        }
+                    } onFilledLongPress: { slot in
+                        if isOwnProfile {
+                            hofPickerSlot = slot
+                        }
+                    }
+                    .offset(y: -21 * collapseProgress)
+                    .zIndex(0)
+
+                    avatar(profile)
+                        .zIndex(1)
+                }
+                .padding(.top, musicClearance)
+                .frame(height: crownHeight)
+
+                if allSlots.isEmpty {
+                    Text("No favorites yet")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+            }
+
+            VStack(spacing: 0) {
+                Text(profile.displayName)
+                    .font(.system(size: 34, weight: .black))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.32), radius: 12, y: 6)
+
+                HStack(spacing: 8) {
+                    Text("@\(profile.username)")
+                    if profile.isPrivate {
+                        Label("Private", systemImage: "lock.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.62))
+                .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.26), radius: 8, y: 4)
+            }
+            .padding(.top, 3)
+
+            if let bio = profile.bio?.trimmedNonEmpty {
+                Text(bio)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .padding(.horizontal, 10)
+                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
+            }
+
+            if let location = profile.location?.trimmedNonEmpty {
+                Label(location, systemImage: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
+            }
+
+            statsGrid(profile.counts)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.top, backdropURL == nil ? topSafeAreaInset + 28 : topSafeAreaInset + 74 + backdropContentOffset)
+        .background(alignment: .top) {
             if let backdropURL {
                 ProfileBackdropArtwork(urlString: backdropURL)
                     .frame(height: topSafeAreaInset + ProfileHeroBackdropLayout.backdropHeight)
+                    .offset(y: BackdropLayout.topOffset)
                     .onLongPressGesture {
                         guard isOwnProfile else { return }
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         isProfileBackdropSearchPresented = true
                     }
             }
-
-            VStack(spacing: ProfileHeroBackdropLayout.heroContentSpacing) {
-                VStack(spacing: 8) {
-                    ZStack(alignment: .top) {
-                        HallOfFameCrownView(
-                            slots: allSlots,
-                            savingSlotIDs: viewModel.savingHallOfFameSlots,
-                            collapseProgress: collapseProgress
-                        ) { slot in
-                            if let item = slot.item {
-                                selectedRef = item.ref
-                            }
-                        } onEmptyTap: { slot in
-                            if isOwnProfile {
-                                hofPickerSlot = slot
-                            }
-                        } onFilledLongPress: { slot in
-                            if isOwnProfile {
-                                hofPickerSlot = slot
-                            }
-                        }
-                        .offset(y: -21 * collapseProgress)
-                        .zIndex(0)
-
-                        avatar(profile)
-                            .zIndex(1)
-                    }
-                    .padding(.top, musicClearance)
-                    .frame(height: crownHeight)
-
-                    if allSlots.isEmpty {
-                        Text("No favorites yet")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                }
-
-                VStack(spacing: 6) {
-                    Text(profile.displayName)
-                        .font(.system(size: 34, weight: .black))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.72)
-                        .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.32), radius: 12, y: 6)
-
-                    HStack(spacing: 8) {
-                        Text("@\(profile.username)")
-                        if profile.isPrivate {
-                            Label("Private", systemImage: "lock.fill")
-                                .labelStyle(.titleAndIcon)
-                        }
-                    }
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.26), radius: 8, y: 4)
-                }
-                .padding(.top, crownNameSpacing - ProfileHeroBackdropLayout.heroContentSpacing)
-
-                if let bio = profile.bio?.trimmedNonEmpty {
-                    Text(bio)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(4)
-                        .padding(.horizontal, 10)
-                        .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
-                }
-
-                if let location = profile.location?.trimmedNonEmpty {
-                    Label(location, systemImage: "mappin.and.ellipse")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
-                }
-
-                statsGrid(profile.counts)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 20)
-            .padding(.top, backdropURL == nil ? topSafeAreaInset + 28 : topSafeAreaInset + 74 + backdropContentOffset)
-            .padding(.bottom, backdropURL == nil ? 12 : 22)
         }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: backdropURL == nil ? nil : topSafeAreaInset + heroMinHeight + backdropContentOffset, alignment: .top)
     }
 
     private func profileBackdropURL(from profile: UserProfile) -> String? {
@@ -987,18 +997,9 @@ struct ProfileView: View {
     private enum ProfileHeroBackdropLayout {
         static let backdropHeight: CGFloat = 352.34375
         static let contentTopOffset: CGFloat = 44
-        static let heroContentSpacing: CGFloat = 12
 
         static func crownHeight(for collapseProgress: CGFloat) -> CGFloat {
             286 - 178 * collapseProgress
-        }
-
-        static func crownNameSpacing(for collapseProgress: CGFloat) -> CGFloat {
-            14 - 26 * collapseProgress
-        }
-
-        static func heroMinHeight(for collapseProgress: CGFloat) -> CGFloat {
-            520 - 156 * collapseProgress
         }
     }
 
@@ -1037,6 +1038,7 @@ struct ProfileView: View {
                             importCoordinator: importCoordinator,
                             storygraphImportCoordinator: storygraphImportCoordinator,
                             goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                             currentUserId: currentUserId ?? viewModel.profile?.id,
                             onLogout: onLogout,
                             onOpenDiary: onOpenDiary,
@@ -1164,6 +1166,7 @@ struct ProfileView: View {
                     importCoordinator: importCoordinator,
                     storygraphImportCoordinator: storygraphImportCoordinator,
                     goodreadsImportCoordinator: goodreadsImportCoordinator,
+                    myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                     currentUserId: currentUserId ?? viewModel.profile?.id,
                     onLogout: onLogout,
                     onOpenDiary: onOpenDiary,
@@ -1628,7 +1631,7 @@ private struct ProfileStatChip: View {
         }
         .frame(maxWidth: .infinity, minHeight: 56)
         .background(
-            .white.opacity(0.055),
+            .black.opacity(0.15),
             in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         )
     }
@@ -1730,7 +1733,7 @@ private struct ProfileSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: profileElementSpacing) {
             HStack {
                 if let action {
                     Button(action: action) {
@@ -1861,7 +1864,7 @@ private struct RecentActivityRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: 125)
+        .frame(height: PosterSlot.profileRail.size.height + 7 + 12.5)
     }
 }
 
@@ -1884,7 +1887,7 @@ private struct InProgressRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: 125)
+        .frame(height: PosterSlot.profileRail.size.height)
     }
 }
 
@@ -2091,6 +2094,7 @@ private enum ImportStatusSource: Hashable, Identifiable {
     case letterboxd
     case storygraph
     case goodreads
+    case myAnimeList
 
     var id: Self { self }
 }
@@ -2106,6 +2110,7 @@ private struct ProfileSettingsSheet: View {
     let importCoordinator: LetterboxdImportCoordinator
     let storygraphImportCoordinator: StoryGraphImportCoordinator
     let goodreadsImportCoordinator: GoodreadsImportCoordinator
+    let myAnimeListImportCoordinator: MyAnimeListImportCoordinator
     let onLogout: () -> Void
     private let profileRepository: ProfileRepository
     private let mediaRepository: MediaRepository
@@ -2120,6 +2125,7 @@ private struct ProfileSettingsSheet: View {
         importCoordinator: LetterboxdImportCoordinator,
         storygraphImportCoordinator: StoryGraphImportCoordinator,
         goodreadsImportCoordinator: GoodreadsImportCoordinator,
+        myAnimeListImportCoordinator: MyAnimeListImportCoordinator,
         onLogout: @escaping () -> Void
     ) {
         self.profile = profile
@@ -2127,6 +2133,7 @@ private struct ProfileSettingsSheet: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.onLogout = onLogout
         self.profileRepository = profileRepository
         self.mediaRepository = mediaRepository
@@ -2143,58 +2150,58 @@ private struct ProfileSettingsSheet: View {
             ZStack {
                 SpinePageBackground()
 
-                GeometryReader { proxy in
-                    ScrollView(showsIndicators: false) {
-                        GlassEffectContainer(spacing: 18) {
-                            VStack(alignment: .leading, spacing: 28) {
-                                if let currentProfile {
-                                    settingsHero(currentProfile)
-                                    accountLinks(currentProfile)
-                                }
-
-                                SettingsGroup(title: "Bring your history") {
-                                    SettingsGlassCard {
-                                        importSectionContent
-                                    }
-                                }
-
-                                SettingsGroup(title: "Spine") {
-                                    SettingsGlassCard {
-                                        NavigationLink {
-                                            SettingsAboutView()
-                                        } label: {
-                                            SettingsNavigationRow(
-                                                title: "About Spine",
-                                                detail: "Version, service, and data credits",
-                                                systemName: "info.circle.fill",
-                                                tint: Color(red: 0.43, green: 0.63, blue: 1)
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-
-                                Button(role: .destructive) {
-                                    isLogoutConfirmationPresented = true
-                                } label: {
-                                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                                        .font(.headline)
-                                        .foregroundStyle(.red.opacity(0.9))
-                                        .frame(maxWidth: .infinity, minHeight: 52)
-                                }
-                                .tint(.red.opacity(0.09))
-                                .buttonStyle(.glass)
-
-                                Text("Your library stays on your Spine account.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.38))
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .frame(width: max(0, proxy.size.width - 36), alignment: .leading)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 28) {
+                        if let currentProfile {
+                            settingsHero(currentProfile)
+                            accountLinks(currentProfile)
                         }
-                        .padding(.bottom, 36)
-                        .frame(width: proxy.size.width)
+
+                        SettingsGroup(title: "Imports") {
+                            SettingsCard {
+                                importSectionContent
+                            }
+                        }
+
+                        SettingsGroup(title: "Spine") {
+                            SettingsCard {
+                                NavigationLink {
+                                    SettingsAboutView()
+                                } label: {
+                                    SettingsNavigationRow(
+                                        title: "About Spine",
+                                        detail: "Version, service, and data credits",
+                                        systemName: "info.circle.fill"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Button(role: .destructive) {
+                            isLogoutConfirmationPresented = true
+                        } label: {
+                            Label {
+                                Text("Sign Out")
+                            } icon: {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                                .font(.headline)
+                                .foregroundStyle(.red.opacity(0.9))
+                                .frame(maxWidth: .infinity, minHeight: 24)
+                        }
+                        .tint(.red.opacity(0.09))
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+
+                        Text("Your library stays on your Spine account.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.38))
+                            .frame(maxWidth: .infinity)
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 36)
                 }
             }
             .navigationTitle("Settings")
@@ -2227,6 +2234,11 @@ private struct ProfileSettingsSheet: View {
                         coordinator: goodreadsImportCoordinator,
                         onDone: { importStatusSource = nil }
                     )
+                case .myAnimeList:
+                    MyAnimeListImportUploadView(
+                        coordinator: myAnimeListImportCoordinator,
+                        onDone: { importStatusSource = nil }
+                    )
                 }
             }
             .confirmationDialog(
@@ -2244,6 +2256,7 @@ private struct ProfileSettingsSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .tint(.white)
     }
 
     private var currentProfile: UserProfile? {
@@ -2304,13 +2317,12 @@ private struct ProfileSettingsSheet: View {
         .frame(height: 210)
         .clipShape(shape)
         .overlay { shape.strokeBorder(.white.opacity(0.14), lineWidth: 1) }
-        .shadow(color: .black.opacity(0.32), radius: 24, y: 14)
         .accessibilityElement(children: .combine)
     }
 
     private func accountLinks(_ profile: UserProfile) -> some View {
         SettingsGroup(title: "Your space") {
-            SettingsGlassCard {
+            SettingsCard {
                 VStack(spacing: 0) {
                     NavigationLink {
                         SettingsProfileView(
@@ -2325,8 +2337,7 @@ private struct ProfileSettingsSheet: View {
                         SettingsNavigationRow(
                             title: "Profile",
                             detail: "Photo, name, bio, and privacy",
-                            systemName: "person.crop.circle.fill",
-                            tint: Color(red: 0.64, green: 0.48, blue: 0.98)
+                            systemName: "person.crop.circle.fill"
                         )
                     }
                     .buttonStyle(.plain)
@@ -2338,9 +2349,8 @@ private struct ProfileSettingsSheet: View {
                     } label: {
                         SettingsNavigationRow(
                             title: "Media & preferences",
-                            detail: "Types, dates, and notifications",
-                            systemName: "slider.horizontal.3",
-                            tint: Color(red: 0.21, green: 0.78, blue: 0.72)
+                            detail: "Media types and logging",
+                            systemName: "slider.horizontal.3"
                         )
                     }
                     .buttonStyle(.plain)
@@ -2353,8 +2363,7 @@ private struct ProfileSettingsSheet: View {
                         SettingsNavigationRow(
                             title: "Password",
                             detail: "Update your sign-in password",
-                            systemName: "key.fill",
-                            tint: Color(red: 0.96, green: 0.67, blue: 0.27)
+                            systemName: "key.fill"
                         )
                     }
                     .buttonStyle(.plain)
@@ -2367,15 +2376,26 @@ private struct ProfileSettingsSheet: View {
     private var importSectionContent: some View {
         if importCoordinator.phase == .idle &&
             storygraphImportCoordinator.phase == .idle &&
-            goodreadsImportCoordinator.phase == .idle {
+            goodreadsImportCoordinator.phase == .idle &&
+            myAnimeListImportCoordinator.phase == .idle {
             NavigationLink {
                 LetterboxdImportView(coordinator: importCoordinator)
             } label: {
                 SettingsNavigationRow(
                     title: "Letterboxd",
                     detail: "Movies, diary, lists, and likes",
-                    systemName: "film.stack.fill",
-                    tint: Color(red: 0.96, green: 0.47, blue: 0.20)
+                    importSource: "Letterboxd"
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink {
+                MyAnimeListImportView(coordinator: myAnimeListImportCoordinator)
+            } label: {
+                SettingsNavigationRow(
+                    title: "MyAnimeList",
+                    detail: "Anime, manga, and watch history",
+                    importSource: "MyAnimeList"
                 )
             }
             .buttonStyle(.plain)
@@ -2386,8 +2406,7 @@ private struct ProfileSettingsSheet: View {
                 SettingsNavigationRow(
                     title: "StoryGraph",
                     detail: "Books and reading history",
-                    systemName: "chart.bar.doc.horizontal.fill",
-                    tint: Color(red: 0.34, green: 0.68, blue: 0.98)
+                    importSource: "StoryGraph"
                 )
             }
             .buttonStyle(.plain)
@@ -2398,14 +2417,18 @@ private struct ProfileSettingsSheet: View {
                 SettingsNavigationRow(
                     title: "Goodreads",
                     detail: "Books and reading history",
-                    systemName: "books.vertical.fill",
-                    tint: Color(red: 0.60, green: 0.75, blue: 0.36)
+                    importSource: "Goodreads"
                 )
             }
             .buttonStyle(.plain)
         } else if importCoordinator.phase != .idle {
             VStack(alignment: .leading, spacing: 12) {
                 letterboxdImportStatus
+            }
+            .padding(16)
+        } else if myAnimeListImportCoordinator.phase != .idle {
+            VStack(alignment: .leading, spacing: 12) {
+                myAnimeListImportStatus
             }
             .padding(16)
         } else if storygraphImportCoordinator.phase != .idle {
@@ -2457,12 +2480,12 @@ private struct ProfileSettingsSheet: View {
             }
             letterboxdCheckStatusButton
         case let .succeeded(message):
-            importResultRow(systemName: "checkmark.circle.fill", tint: .green, message: message)
+            importResultRow(systemName: "checkmark.circle.fill", message: message)
             Button("Dismiss") {
                 importCoordinator.clearFinishedJob()
             }
         case let .failed(message):
-            importResultRow(systemName: "exclamationmark.triangle.fill", tint: .red, message: message)
+            importResultRow(systemName: "exclamationmark.triangle.fill", message: message)
             if importCoordinator.canCheckStatus {
                 letterboxdCheckStatusButton
             }
@@ -2473,6 +2496,62 @@ private struct ProfileSettingsSheet: View {
             }
             Button("Dismiss") {
                 importCoordinator.clearFinishedJob()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var myAnimeListImportStatus: some View {
+        switch myAnimeListImportCoordinator.phase {
+        case .idle:
+            EmptyView()
+        case let .uploading(_, progress):
+            Button {
+                importStatusSource = .myAnimeList
+            } label: {
+                HStack(spacing: 12) {
+                    ProgressView(value: progress)
+                        .frame(width: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Uploading...")
+                        Text("Tap for details")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        case let .processing(_, statusLabel, _):
+            Button {
+                importStatusSource = .myAnimeList
+            } label: {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(statusLabel)
+                        Text("Tap for details")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            myAnimeListCheckStatusButton
+        case let .succeeded(message):
+            importResultRow(systemName: "checkmark.circle.fill", message: message)
+            Button("Dismiss") {
+                myAnimeListImportCoordinator.clearFinishedJob()
+            }
+        case let .failed(message):
+            importResultRow(systemName: "exclamationmark.triangle.fill", message: message)
+            if myAnimeListImportCoordinator.canCheckStatus {
+                myAnimeListCheckStatusButton
+            }
+            NavigationLink {
+                MyAnimeListImportView(coordinator: myAnimeListImportCoordinator)
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+            }
+            Button("Dismiss") {
+                myAnimeListImportCoordinator.clearFinishedJob()
             }
         }
     }
@@ -2513,12 +2592,12 @@ private struct ProfileSettingsSheet: View {
             }
             storygraphCheckStatusButton
         case let .succeeded(message):
-            importResultRow(systemName: "checkmark.circle.fill", tint: .green, message: message)
+            importResultRow(systemName: "checkmark.circle.fill", message: message)
             Button("Dismiss") {
                 storygraphImportCoordinator.clearFinishedJob()
             }
         case let .failed(message):
-            importResultRow(systemName: "exclamationmark.triangle.fill", tint: .red, message: message)
+            importResultRow(systemName: "exclamationmark.triangle.fill", message: message)
             if storygraphImportCoordinator.canCheckStatus {
                 storygraphCheckStatusButton
             }
@@ -2569,12 +2648,12 @@ private struct ProfileSettingsSheet: View {
             }
             goodreadsCheckStatusButton
         case let .succeeded(message):
-            importResultRow(systemName: "checkmark.circle.fill", tint: .green, message: message)
+            importResultRow(systemName: "checkmark.circle.fill", message: message)
             Button("Dismiss") {
                 goodreadsImportCoordinator.clearFinishedJob()
             }
         case let .failed(message):
-            importResultRow(systemName: "exclamationmark.triangle.fill", tint: .red, message: message)
+            importResultRow(systemName: "exclamationmark.triangle.fill", message: message)
             if goodreadsImportCoordinator.canCheckStatus {
                 goodreadsCheckStatusButton
             }
@@ -2600,6 +2679,19 @@ private struct ProfileSettingsSheet: View {
             }
         }
         .disabled(importCoordinator.isCheckingStatus)
+    }
+
+    private var myAnimeListCheckStatusButton: some View {
+        Button {
+            myAnimeListImportCoordinator.checkStatusOnce()
+        } label: {
+            if myAnimeListImportCoordinator.isCheckingStatus {
+                Label("Checking Status", systemImage: "clock.arrow.circlepath")
+            } else {
+                Label("Check Status", systemImage: "arrow.clockwise")
+            }
+        }
+        .disabled(myAnimeListImportCoordinator.isCheckingStatus)
     }
 
     private var storygraphCheckStatusButton: some View {
@@ -2628,13 +2720,13 @@ private struct ProfileSettingsSheet: View {
         .disabled(goodreadsImportCoordinator.isCheckingStatus)
     }
 
-    private func importResultRow(systemName: String, tint: Color, message: String) -> some View {
+    private func importResultRow(systemName: String, message: String) -> some View {
         Label {
             Text(message)
                 .lineLimit(2)
         } icon: {
             Image(systemName: systemName)
-                .foregroundStyle(tint)
+                .foregroundStyle(.white)
         }
     }
 }
@@ -2706,15 +2798,17 @@ private struct SettingsProfileView: View {
     }
 
     private var profilePhotoSection: some View {
-        SettingsGroup(title: "How you appear") {
-            SettingsGlassCard {
+        let isSavingAvatar = viewModel.isSavingAvatar
+
+        return SettingsGroup(title: "How you appear") {
+            SettingsCard {
                 VStack(spacing: 18) {
                     HStack(spacing: 16) {
                         SettingsAvatar(profile: profile, size: 82)
 
                         VStack(alignment: .leading, spacing: 10) {
                             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                Label(viewModel.isSavingAvatar ? "Uploading" : "Change Photo", systemImage: "camera.fill")
+                                Label(isSavingAvatar ? "Uploading" : "Change Photo", systemImage: "camera.fill")
                                     .font(.subheadline.weight(.semibold))
                             }
                             .disabled(viewModel.isSavingAvatar)
@@ -2769,26 +2863,29 @@ private struct SettingsProfileView: View {
 
     private var identitySection: some View {
         SettingsGroup(title: "Identity") {
-            SettingsGlassCard {
-                VStack(spacing: 14) {
-                    SettingsTextField(title: "Display name", text: $viewModel.displayName)
-                    SettingsFieldError(viewModel: viewModel, keys: ["display_name", "displayName"])
-                    SettingsTextField(title: "Username", text: $viewModel.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SettingsFieldError(viewModel: viewModel, keys: ["username"])
-
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        SettingsTextField(title: "Display name", text: $viewModel.displayName)
+                        SettingsFieldError(viewModel: viewModel, keys: ["display_name", "displayName"])
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        SettingsTextField(title: "Username", text: $viewModel.username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        SettingsFieldError(viewModel: viewModel, keys: ["username"])
+                    }
                     if let email = profile.email?.trimmedNonEmpty {
                         SettingsReadOnlyField(title: "Email", value: email)
                     }
-
-                    SettingsTextField(title: "Pronouns", text: $viewModel.pronouns)
-                    SettingsFieldError(viewModel: viewModel, keys: ["pronouns"])
-                    SettingsTextField(title: "Location", text: $viewModel.location)
-                    SettingsFieldError(viewModel: viewModel, keys: ["location"])
-                    SettingsTextField(title: "Bio", text: $viewModel.bio, axis: .vertical)
-                        .lineLimit(3...6)
-                    SettingsFieldError(viewModel: viewModel, keys: ["bio"])
+                    VStack(alignment: .leading, spacing: 6) {
+                        SettingsTextField(title: "Location", text: $viewModel.location)
+                        SettingsFieldError(viewModel: viewModel, keys: ["location"])
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        SettingsTextField(title: "Bio", text: $viewModel.bio, axis: .vertical)
+                        SettingsFieldError(viewModel: viewModel, keys: ["bio"])
+                    }
                 }
                 .padding(16)
             }
@@ -2797,16 +2894,15 @@ private struct SettingsProfileView: View {
 
     private var privacySection: some View {
         SettingsGroup(title: "Privacy") {
-            SettingsGlassCard {
+            SettingsCard {
                 Toggle(isOn: $viewModel.isPrivate) {
                     SettingsControlLabel(
                         title: "Private Account",
                         detail: "You approve new followers.",
-                        systemName: "lock.fill",
-                        tint: Color(red: 0.54, green: 0.60, blue: 0.96)
+                        systemName: "lock.fill"
                     )
                 }
-                .tint(.white)
+                .tint(.green)
                 .padding(16)
 
                 SettingsFieldError(viewModel: viewModel, keys: ["is_private", "profile_private"])
@@ -2836,12 +2932,6 @@ private struct SettingsPreferencesView: View {
     @Bindable var viewModel: ProfileSettingsViewModel
     let onProfileUpdated: (UserProfile) -> Void
 
-    private let mediaColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-    ]
-
     var body: some View {
         ZStack {
             SpinePageBackground()
@@ -2849,8 +2939,7 @@ private struct SettingsPreferencesView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     mediaTypesSection
-                    formatsSection
-                    notificationSection
+                    loggingSection
                     SettingsStatusMessage(viewModel: viewModel)
 
                     SettingsSaveButton(
@@ -2875,108 +2964,61 @@ private struct SettingsPreferencesView: View {
 
     private var mediaTypesSection: some View {
         SettingsGroup(title: "Your media") {
-            SettingsGlassCard {
+            SettingsCard {
                 if viewModel.isLoadingOptions {
                     ProgressView("Loading media types")
-                        .frame(maxWidth: .infinity, minHeight: 120)
+                        .frame(maxWidth: .infinity, minHeight: 80)
                 } else {
-                    LazyVGrid(columns: mediaColumns, spacing: 10) {
-                        ForEach(viewModel.mediaTypes, id: \.self) { mediaType in
-                            SettingsMediaTypeButton(
-                                mediaType: mediaType,
-                                isSelected: viewModel.enabledMediaTypes.contains(mediaType)
-                            ) {
-                                toggleMediaType(mediaType)
+                    ForEach(viewModel.mediaTypes, id: \.self) { mediaType in
+                        let theme = MediaTypeTheme.theme(for: mediaType)
+                        Toggle(isOn: Binding(
+                            get: { viewModel.enabledMediaTypes.contains(mediaType) },
+                            set: { enabled in
+                                if enabled {
+                                    viewModel.enabledMediaTypes.insert(mediaType)
+                                } else {
+                                    viewModel.enabledMediaTypes.remove(mediaType)
+                                }
+                            }
+                        )) {
+                            HStack(spacing: 12) {
+                                SettingsIcon(systemName: theme.symbolName)
+                                Text(theme.displayName)
+                                    .foregroundStyle(.white)
                             }
                         }
+                        .tint(.green)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+
+                        if mediaType != viewModel.mediaTypes.last {
+                            SettingsDivider()
+                        }
                     }
-                    .padding(14)
                 }
 
                 SettingsFieldError(viewModel: viewModel, keys: ["enabled_media_types"])
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
             }
         }
     }
 
-    private var formatsSection: some View {
-        SettingsGroup(title: "Dates & logging") {
-            SettingsGlassCard {
-                VStack(spacing: 0) {
-                    SettingsChoicePicker(
-                        title: "Date Format",
-                        systemName: "calendar",
-                        tint: Color(red: 0.37, green: 0.72, blue: 0.98),
-                        selection: $viewModel.dateFormat,
-                        choices: viewModel.settingsOptions.dateFormats
-                    )
-                    SettingsDivider()
-                    SettingsChoicePicker(
-                        title: "Time Format",
-                        systemName: "clock.fill",
-                        tint: Color(red: 0.58, green: 0.51, blue: 0.96),
-                        selection: $viewModel.timeFormat,
-                        choices: viewModel.settingsOptions.timeFormats
-                    )
-                    SettingsDivider()
-                    SettingsChoicePicker(
-                        title: "Week Starts",
-                        systemName: "calendar.badge.clock",
-                        tint: Color(red: 0.96, green: 0.55, blue: 0.30),
-                        selection: $viewModel.weekStartDay,
-                        choices: viewModel.settingsOptions.weekStartDays
-                    )
-                    SettingsDivider()
-                    SettingsChoicePicker(
-                        title: "Quick Log Date",
-                        systemName: "bolt.fill",
-                        tint: Color(red: 0.93, green: 0.74, blue: 0.25),
-                        selection: $viewModel.quickWatchDate,
-                        choices: viewModel.settingsOptions.quickWatchDates
-                    )
-                }
+    private var loggingSection: some View {
+        SettingsGroup(title: "Logging") {
+            SettingsCard {
+                SettingsChoicePicker(
+                    title: "Week starts",
+                    systemName: "calendar",
+                    selection: $viewModel.weekStartDay,
+                    choices: viewModel.settingsOptions.weekStartDays
+                )
+                SettingsDivider()
+                SettingsChoicePicker(
+                    title: "Quick log date",
+                    systemName: "bolt",
+                    selection: $viewModel.quickWatchDate,
+                    choices: viewModel.settingsOptions.quickWatchDates
+                )
             }
-        }
-    }
-
-    private var notificationSection: some View {
-        SettingsGroup(title: "Notifications") {
-            SettingsGlassCard {
-                VStack(spacing: 0) {
-                    Toggle(isOn: $viewModel.releaseNotificationsEnabled) {
-                        SettingsControlLabel(
-                            title: "Release Updates",
-                            detail: "New episodes and release dates",
-                            systemName: "bell.badge.fill",
-                            tint: Color(red: 0.98, green: 0.45, blue: 0.39)
-                        )
-                    }
-                    .tint(.white)
-                    .padding(16)
-
-                    SettingsDivider()
-
-                    Toggle(isOn: $viewModel.dailyDigestEnabled) {
-                        SettingsControlLabel(
-                            title: "Daily Digest",
-                            detail: "One summary of what is coming",
-                            systemName: "sun.max.fill",
-                            tint: Color(red: 0.96, green: 0.72, blue: 0.23)
-                        )
-                    }
-                    .tint(.white)
-                    .padding(16)
-                }
-            }
-        }
-    }
-
-    private func toggleMediaType(_ mediaType: String) {
-        if viewModel.enabledMediaTypes.contains(mediaType) {
-            viewModel.enabledMediaTypes.remove(mediaType)
-        } else {
-            viewModel.enabledMediaTypes.insert(mediaType)
         }
     }
 }
@@ -2994,7 +3036,7 @@ private struct SettingsPasswordView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Image(systemName: "key.fill")
                             .font(.system(size: 30, weight: .semibold))
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(.white)
 
                         Text("Keep your account secure.")
                             .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -3005,7 +3047,7 @@ private struct SettingsPasswordView: View {
                             .foregroundStyle(.white.opacity(0.52))
                     }
 
-                    SettingsGlassCard {
+                    SettingsCard {
                         VStack(spacing: 14) {
                             SettingsSecureField(title: "Current password", text: $viewModel.oldPassword)
                             SettingsFieldError(viewModel: viewModel, keys: ["old_password"])
@@ -3068,7 +3110,7 @@ private struct SettingsAboutView: View {
                     .padding(.vertical, 12)
 
                     SettingsGroup(title: "App") {
-                        SettingsGlassCard {
+                        SettingsCard {
                             VStack(spacing: 0) {
                                 SettingsValueRow(title: "Version", value: "\(version) (\(build))")
                                 SettingsDivider()
@@ -3080,7 +3122,7 @@ private struct SettingsAboutView: View {
                     }
 
                     SettingsGroup(title: "Data sources") {
-                        SettingsGlassCard {
+                        SettingsCard {
                             VStack(spacing: 0) {
                                 SettingsCreditLink(
                                     title: "MusicBrainz",
@@ -3123,9 +3165,8 @@ private struct SettingsGroup<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text(title.uppercased())
-                .font(.system(size: 12, weight: .black))
-                .tracking(1.1)
+            Text(title)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.white.opacity(0.46))
                 .padding(.leading, 3)
 
@@ -3135,30 +3176,33 @@ private struct SettingsGroup<Content: View>: View {
     }
 }
 
-private struct SettingsGlassCard<Content: View>: View {
+private struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.025), in: shape)
-            .glassEffect(.regular.tint(.white.opacity(0.035)), in: shape)
-            .overlay { shape.strokeBorder(.white.opacity(0.09), lineWidth: 1) }
-            .shadow(color: .black.opacity(0.14), radius: 14, y: 7)
+        VStack(spacing: 0) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: shape)
     }
 }
 
 private struct SettingsNavigationRow: View {
     let title: String
     let detail: String
-    let systemName: String
-    let tint: Color
+    var systemName: String = ""
+    var importSource: String?
 
     var body: some View {
-        HStack(spacing: 13) {
-            SettingsIcon(systemName: systemName, tint: tint)
+        HStack(spacing: 12) {
+            if let importSource {
+                SettingsImportLogo(source: importSource)
+            } else {
+                SettingsIcon(systemName: systemName)
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -3190,7 +3234,7 @@ private struct SettingsActionRow: View {
         HStack(spacing: 12) {
             Image(systemName: systemName)
                 .font(.body.weight(.semibold))
-                .foregroundStyle(tint)
+                .foregroundStyle(.white.opacity(0.8))
                 .frame(width: 24)
             Text(title)
                 .font(.body.weight(.semibold))
@@ -3208,11 +3252,10 @@ private struct SettingsControlLabel: View {
     let title: String
     let detail: String
     let systemName: String
-    let tint: Color
 
     var body: some View {
-        HStack(spacing: 13) {
-            SettingsIcon(systemName: systemName, tint: tint)
+        HStack(spacing: 12) {
+            SettingsIcon(systemName: systemName)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.body.weight(.semibold))
@@ -3227,23 +3270,14 @@ private struct SettingsControlLabel: View {
 
 private struct SettingsIcon: View {
     let systemName: String
-    let tint: Color
 
     var body: some View {
         Image(systemName: systemName)
-            .symbolRenderingMode(.hierarchical)
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 40, height: 40)
-            .background(
-                LinearGradient(
-                    colors: [tint.opacity(0.95), tint.opacity(0.58)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .shadow(color: tint.opacity(0.22), radius: 8, y: 4)
+            .symbolRenderingMode(.monochrome)
+            .font(.system(size: 19, weight: .regular))
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(width: 24, height: 28)
+            .accessibilityHidden(true)
     }
 }
 
@@ -3252,7 +3286,7 @@ private struct SettingsDivider: View {
         Rectangle()
             .fill(.white.opacity(0.075))
             .frame(height: 1)
-            .padding(.leading, 66)
+            .padding(.leading, 50)
     }
 }
 
@@ -3275,7 +3309,6 @@ private struct SettingsAvatar: View {
         .background(.white.opacity(0.08), in: Circle())
         .clipShape(Circle())
         .overlay { Circle().strokeBorder(.white.opacity(0.24), lineWidth: 1) }
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 7)
         .accessibilityLabel(profile.displayName)
     }
 }
@@ -3313,6 +3346,7 @@ private struct SettingsTextField: View {
                 .tracking(0.7)
                 .foregroundStyle(.white.opacity(0.42))
             TextField(title, text: $text, axis: axis)
+                .lineLimit(axis == .vertical ? 3...6 : 1...1)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -3401,12 +3435,17 @@ private struct SettingsMessageCard: View {
     let tint: Color
 
     var body: some View {
-        Label(message, systemImage: systemName)
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        Label {
+            Text(message)
+        } icon: {
+            Image(systemName: systemName)
+                .foregroundStyle(.white)
+        }
+        .font(.footnote.weight(.medium))
+        .foregroundStyle(tint)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -3429,58 +3468,48 @@ private struct SettingsSaveButton: View {
             }
             .font(.headline)
             .foregroundStyle(isDisabled ? .white.opacity(0.38) : .black)
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .frame(maxWidth: .infinity, minHeight: 24)
         }
         .tint(isDisabled ? .white.opacity(0.08) : .white)
-        .buttonStyle(.glassProminent)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
         .disabled(isDisabled || isSaving)
-    }
-}
-
-private struct SettingsMediaTypeButton: View {
-    let mediaType: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        let theme = MediaTypeTheme.theme(for: mediaType)
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-
-        Button(action: action) {
-            VStack(spacing: 8) {
-                MediaTypeGlyph(theme: theme, size: 18)
-                    .frame(height: 22)
-                Text(theme.displayName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
-            .frame(maxWidth: .infinity, minHeight: 76)
-            .background(isSelected ? theme.statsColor.opacity(0.22) : .black.opacity(0.18), in: shape)
-            .overlay { shape.strokeBorder(isSelected ? theme.statsColor.opacity(0.7) : .white.opacity(0.07), lineWidth: 1) }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(theme.displayName)
-        .accessibilityValue(isSelected ? "Enabled" : "Disabled")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
 private struct SettingsChoicePicker: View {
     let title: String
     let systemName: String
-    let tint: Color
     @Binding var selection: String
     let choices: [PreferenceChoice]
 
     var body: some View {
-        HStack(spacing: 13) {
-            SettingsIcon(systemName: systemName, tint: tint)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                label
+                Spacer(minLength: 8)
+                menu
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                label
+                menu
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(14)
+    }
+
+    private var label: some View {
+        HStack(spacing: 12) {
+            SettingsIcon(systemName: systemName)
             Text(title)
-                .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-            Spacer()
+                .fixedSize()
+        }
+    }
+
+    private var menu: some View {
+        Menu {
             Picker(title, selection: $selection) {
                 if choices.isEmpty {
                     Text(selection).tag(selection)
@@ -3490,10 +3519,20 @@ private struct SettingsChoicePicker: View {
                     }
                 }
             }
-            .labelsHidden()
-            .tint(.white.opacity(0.72))
+        } label: {
+            HStack(spacing: 5) {
+                Text(choices.first(where: { $0.value == selection })?.label ?? selection)
+                    .fixedSize(horizontal: true, vertical: false)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+            }
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.62))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .padding(14)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel(title)
     }
 }
 

@@ -25,12 +25,8 @@ struct LetterboxdImportView: View {
             instructions: "Export your data from Letterboxd settings, then upload the ZIP file here.",
             linkTitle: "Open Letterboxd Data Settings",
             linkURL: URL(string: "https://letterboxd.com/settings/data/")!,
-            systemName: "film.stack.fill",
-            tint: Color(red: 0.96, green: 0.47, blue: 0.20),
             mode: $mode,
             modeDetail: mode.detail,
-            fileTitle: "Choose Letterboxd Export",
-            fileSystemName: "doc.zipper",
             isBusy: isBusy,
             chooseFile: chooseFile
         )
@@ -89,12 +85,8 @@ struct SettingsImportLandingPage: View {
     let instructions: String
     let linkTitle: String
     let linkURL: URL
-    let systemName: String
-    let tint: Color
     @Binding var mode: ImportMode
     let modeDetail: String
-    let fileTitle: String
-    let fileSystemName: String
     let isBusy: Bool
     let chooseFile: () -> Void
 
@@ -109,13 +101,14 @@ struct SettingsImportLandingPage: View {
                     modeCard
 
                     Button(action: chooseFile) {
-                        Label(fileTitle, systemImage: fileSystemName)
+                        Label("Upload", systemImage: "square.and.arrow.up")
                             .font(.headline)
                             .foregroundStyle(isBusy ? .white.opacity(0.38) : .black)
-                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .frame(maxWidth: .infinity, minHeight: 24)
                     }
                     .tint(isBusy ? .white.opacity(0.08) : .white)
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(isBusy)
                 }
                 .padding(.horizontal, 18)
@@ -127,20 +120,7 @@ struct SettingsImportLandingPage: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: systemName)
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 58, height: 58)
-                .background(
-                    LinearGradient(
-                        colors: [tint, tint.opacity(0.58)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                )
-                .shadow(color: tint.opacity(0.28), radius: 12, y: 7)
+            SettingsImportLogo(source: source, size: 36)
 
             Text(headline)
                 .font(.system(size: 29, weight: .bold, design: .rounded))
@@ -154,7 +134,7 @@ struct SettingsImportLandingPage: View {
     }
 
     private var instructionsCard: some View {
-        importGlassCard {
+        importCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text(instructions)
                     .font(.body)
@@ -185,7 +165,7 @@ struct SettingsImportLandingPage: View {
                 .foregroundStyle(.white.opacity(0.46))
                 .padding(.leading, 3)
 
-            importGlassCard {
+            importCard {
                 VStack(alignment: .leading, spacing: 14) {
                     Picker("Import Mode", selection: $mode) {
                         ForEach(ImportMode.allCases) { mode in
@@ -205,14 +185,12 @@ struct SettingsImportLandingPage: View {
         }
     }
 
-    private func importGlassCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func importCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
         return content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.025), in: shape)
-            .glassEffect(.regular.tint(.white.opacity(0.035)), in: shape)
-            .overlay { shape.strokeBorder(.white.opacity(0.09), lineWidth: 1) }
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: shape)
     }
 }
 
@@ -236,51 +214,32 @@ extension ImportMode {
     }
 }
 
-private struct MockImportRepository: ImportRepository {
-    func queueLetterboxdImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        progressHandler?(1)
-        return ImportQueueResponse(taskId: "preview-task", status: "queued")
-    }
 
-    func queueStoryGraphImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
+struct SettingsImportLogo: View {
+    let source: String
+    var size: CGFloat = 24
 
-    func queueGoodreadsImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
-        ImportTaskStatus(
-            taskId: taskId,
-            taskName: "Import from Letterboxd",
-            status: "SUCCESS",
-            dateCreated: nil,
-            dateDone: nil,
-            result: "Imported 12 movies."
-        )
-    }
-}
-
-#Preview {
-    NavigationStack {
-        LetterboxdImportView(
-            coordinator: LetterboxdImportCoordinator(importRepository: MockImportRepository())
-        )
+    var body: some View {
+        Group {
+            if source == "Letterboxd" {
+                Image("RatingLetterboxd")
+                    .resizable()
+                    .scaledToFit()
+            } else if source == "MyAnimeList" {
+                Image("RatingMAL")
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            } else {
+                // Replace these initials with supplied StoryGraph and Goodreads logo assets.
+                Text(String(source.prefix(1)))
+                    .font(.system(size: size * 0.65, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: size, height: size)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

@@ -24,6 +24,10 @@ SOURCES_CONFIG = {
         "name": "MyAnimeList",
         "logo": static("img/mal-logo.ico"),
     },
+    "mal_export": {
+        "name": "MyAnimeList",
+        "logo": static("img/mal-logo.ico"),
+    },
     "anilist": {
         "name": "AniList",
         "logo": static("img/anilist-logo.svg"),

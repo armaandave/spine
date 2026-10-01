@@ -795,13 +795,16 @@ enum MediaArtworkCustomization {
 enum MediaExternalRatingPresentation {
     static func includes(source: String, mediaType: String) -> Bool {
         let normalizedSource = source.lowercased()
+        if mediaType == "season" {
+            return normalizedSource == "tmdb"
+        }
         if mediaType == "music" || ["spine", "google books", "igdb"].contains(normalizedSource) {
             return false
         }
         if mediaType == "manga", normalizedSource == "mangaupdates" {
             return false
         }
-        if normalizedSource == "tmdb", ["movie", "tv", "season"].contains(mediaType) {
+        if normalizedSource == "tmdb", ["movie", "tv"].contains(mediaType) {
             return false
         }
         return true
@@ -1109,6 +1112,49 @@ struct MediaDetailView: View {
     }
 }
 
+// Keep content evaluation outside the page's presentation-modifier stack.
+// Calling a computed view here eagerly overflowed the 1 MB iPhone main-thread stack.
+private struct MediaDetailScrollContent<Hero: View, Content: View>: View {
+    let viewModel: MediaDetailViewModel
+    let mediaType: String
+    let topSafeAreaInset: CGFloat
+    let hero: (MediaDetail) -> Hero
+    let content: (MediaDetail) -> Content
+
+    var body: some View {
+        Group {
+            if viewModel.isLoading, viewModel.detail == nil {
+                if mediaType == "episode" {
+                    EpisodeDetailLoadingView()
+                } else {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, minHeight: 520)
+                }
+            } else if let detail = viewModel.detail {
+                VStack(spacing: 0) {
+                    hero(detail)
+                        .padding(.top, -topSafeAreaInset)
+                    content(detail)
+                }
+            } else if let error = viewModel.errorMessage, viewModel.detail == nil {
+                VStack(spacing: 18) {
+                    ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
+                        .foregroundStyle(.white)
+                    Button("Try Again") {
+                        Task { await viewModel.load() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white.opacity(0.16))
+                }
+                .padding()
+                .frame(maxWidth: .infinity, minHeight: 520)
+            }
+        }
+        .padding(.bottom, 116)
+    }
+}
+
 private struct MediaDetailPageView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1216,7 +1262,13 @@ private struct MediaDetailPageView: View {
             SpinePageBackground()
 
             ScrollView(showsIndicators: false) {
-                pageScrollContent
+                MediaDetailScrollContent(
+                    viewModel: viewModel,
+                    mediaType: ref.mediaType,
+                    topSafeAreaInset: resolvedTopSafeAreaInset,
+                    hero: hero,
+                    content: content
+                )
                     .spineContentTransition(value: contentPhase)
             }
             .onScrollPhaseChange { _, phase in
@@ -1686,40 +1738,6 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    @ViewBuilder
-    private var pageScrollContent: some View {
-        Group {
-            if viewModel.isLoading, viewModel.detail == nil {
-                if ref.mediaType == "episode" {
-                    EpisodeDetailLoadingView()
-                } else {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(maxWidth: .infinity, minHeight: 520)
-                }
-            } else if let detail = viewModel.detail {
-                VStack(spacing: 0) {
-                    hero(detail)
-                        .padding(.top, -resolvedTopSafeAreaInset)
-                    content(detail)
-                }
-            } else if let error = viewModel.errorMessage, viewModel.detail == nil {
-                VStack(spacing: 18) {
-                    ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
-                        .foregroundStyle(.white)
-                    Button("Try Again") {
-                        Task { await viewModel.load() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.white.opacity(0.16))
-                }
-                .padding()
-                .frame(maxWidth: .infinity, minHeight: 520)
-            }
-        }
-        .padding(.bottom, 116)
-    }
-
     private var contentPhase: SpineContentPhase {
         .resolve(
             isLoading: viewModel.isLoading,
@@ -2094,7 +2112,7 @@ private struct MediaDetailPageView: View {
                             }
                         }
                     }
-                    .offset(y: max(0, resolvedTopSafeAreaInset - 6))
+                    .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
                 }
         }
     }
@@ -2139,6 +2157,7 @@ private struct MediaDetailPageView: View {
             .padding(.bottom, 18)
             .background {
                 HeroArtwork(detail: detail)
+                    .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
             }
 
             MusicStreamingButtons(
@@ -2220,6 +2239,7 @@ private struct MediaDetailPageView: View {
                     title: detail.title
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeAccessibilityArtworkHeight)
+                .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
                 .onLongPressGesture {
                     openBackdropPicker(for: detail)
                 }
@@ -2236,6 +2256,7 @@ private struct MediaDetailPageView: View {
                     title: detail.title
                 )
                 .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeHeroHeight)
+                .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
                 .onLongPressGesture {
                     openBackdropPicker(for: detail)
                 }
@@ -2243,8 +2264,10 @@ private struct MediaDetailPageView: View {
                 episodeHeroContent(detail, overlaysArtwork: true)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
+                    .offset(y: MediaDetailLayout.backdropTopSpacing)
             }
             .frame(height: resolvedTopSafeAreaInset + MediaDetailLayout.episodeHeroHeight)
+            .padding(.bottom, MediaDetailLayout.backdropTopSpacing)
         }
     }
 
@@ -6871,7 +6894,7 @@ private struct EpisodesSection: View {
                 .frame(maxWidth: .infinity, minHeight: 130)
                 .mediaDetailSurface(cornerRadius: 18)
             } else {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: 16) {
                     ForEach(episodes) { episode in
                         EpisodeCard(episode: episode) {
                             onSelect(episode)
@@ -6891,17 +6914,11 @@ private struct EpisodeCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    accessibilityLayout
-                } else {
-                    compactLayout
-                }
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityLayout
+            } else {
+                compactLayout
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(cardBackground)
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -6911,7 +6928,7 @@ private struct EpisodeCard: View {
     }
 
     private var compactLayout: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(spacing: 12) {
             EpisodeCardStill(episode: episode, fillsWidth: false)
 
             episodeCopy
@@ -6921,6 +6938,10 @@ private struct EpisodeCard: View {
                 .foregroundStyle(.white.opacity(0.32))
                 .accessibilityHidden(true)
         }
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, minHeight: 84, maxHeight: 84, alignment: .leading)
+        .background(cardBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var accessibilityLayout: some View {
@@ -6928,29 +6949,32 @@ private struct EpisodeCard: View {
             EpisodeCardStill(episode: episode, fillsWidth: true)
             episodeCopy
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var episodeCopy: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(episode.title)
-                .font(.headline.weight(.bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(.white)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if !metadata.isEmpty {
                 Text(metadata)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.56))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.5))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
 
             if let overview = episode.overview?.nilIfEmpty {
                 Text(overview)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-                    .padding(.top, 1)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
             }
         }
     }
@@ -6976,11 +7000,10 @@ private struct EpisodeCard: View {
     }
 
     private var cardBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         return shape
-            .fill(.white.opacity(0.045))
-            .overlay { shape.stroke(.white.opacity(0.065), lineWidth: 1) }
-            .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
+            .fill(.white.opacity(0.035))
+            .overlay { shape.stroke(.white.opacity(0.055), lineWidth: 0.75) }
     }
 }
 
@@ -6992,8 +7015,8 @@ private struct EpisodeCardStill: View {
         artwork
             .aspectRatio(16 / 9, contentMode: .fill)
             .frame(maxWidth: fillsWidth ? .infinity : nil)
-            .frame(width: fillsWidth ? nil : 116, height: fillsWidth ? nil : 66)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(width: fillsWidth ? nil : 148, height: fillsWidth ? nil : 84)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(alignment: .bottomLeading) {
                 Text("E\(episode.episodeNumber)")
                     .font(.caption2.weight(.black))
@@ -7004,8 +7027,8 @@ private struct EpisodeCardStill: View {
                     .padding(7)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.white.opacity(0.1), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.white.opacity(0.08), lineWidth: 0.75)
             }
             .accessibilityHidden(true)
     }

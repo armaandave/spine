@@ -25,12 +25,8 @@ struct StoryGraphImportView: View {
             instructions: "Export your library from StoryGraph, then upload the CSV file here.",
             linkTitle: "Open StoryGraph",
             linkURL: URL(string: "https://app.thestorygraph.com/")!,
-            systemName: "chart.bar.doc.horizontal.fill",
-            tint: Color(red: 0.34, green: 0.68, blue: 0.98),
             mode: $mode,
             modeDetail: modeDetail,
-            fileTitle: "Choose StoryGraph CSV",
-            fileSystemName: "doc.text.fill",
             isBusy: isBusy,
             chooseFile: chooseFile
         )
@@ -89,54 +85,5 @@ struct StoryGraphImportView: View {
             isUploadScreenPresented = true
             coordinator.phase = .failed(message: error.localizedDescription)
         }
-    }
-}
-
-private struct MockImportRepository: ImportRepository {
-    func queueLetterboxdImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func queueStoryGraphImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        progressHandler?(1)
-        return ImportQueueResponse(taskId: "preview-task", status: "queued")
-    }
-
-    func queueGoodreadsImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
-        ImportTaskStatus(
-            taskId: taskId,
-            taskName: "Import from StoryGraph",
-            status: "SUCCESS",
-            dateCreated: nil,
-            dateDone: nil,
-            result: "Imported 12 books."
-        )
-    }
-}
-
-#Preview {
-    NavigationStack {
-        StoryGraphImportView(
-            coordinator: StoryGraphImportCoordinator(importRepository: MockImportRepository())
-        )
     }
 }

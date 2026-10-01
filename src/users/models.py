@@ -844,6 +844,7 @@ class User(AbstractUser):
             "imdb": "Import from IMDB",
             "goodreads": "Import from GoodReads",
             "storygraph": "Import from StoryGraph",
+            "mal_export": "Import from MyAnimeList export",
         }
 
         # Reverse mapping to get source from task name

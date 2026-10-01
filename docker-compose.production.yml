@@ -3,6 +3,18 @@
 #   cp .env.production.example .env.production
 #   # edit .env.production — set SECRET, DB_PASSWORD, TMDB_API
 #   docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+#
+# The app port is published on 127.0.0.1 only, so a tunnel or reverse proxy
+# running on the same host (cloudflared -> http://127.0.0.1:8000) is the only
+# way in. nginx.conf trusts CF-Connecting-IP based on that; see the comment there.
+
+# Docker's default json-file driver never rotates. Cap every service at
+# 5 files x 10 MB (50 MB per container).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   app:
@@ -12,15 +24,24 @@ services:
         SPINE_COMMIT_SHA: ${SPINE_COMMIT_SHA:-unknown}
     container_name: spine
     restart: unless-stopped
+    logging: *default-logging
+    # Start only once Postgres and Redis answer. With the default service_started the
+    # entrypoint's `migrate` can run before Postgres accepts connections, exit, and
+    # leave the app restart-looping.
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # The app's own healthcheck is the Dockerfile HEALTHCHECK (45 s interval, 30 s start
+    # period). Engine 25+ probes every 5 s during the start period, so
+    # `docker compose up --wait` returns as soon as the app is up.
     env_file:
       - .env.production
     environment:
       MUSIC_ENABLED: "True"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - media_data:/yamtrack/media
 
@@ -28,12 +49,21 @@ services:
     image: postgres:16-alpine
     container_name: spine-db
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.production
     environment:
       POSTGRES_DB: spine
       POSTGRES_USER: spine
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    # Probe over TCP (-h 127.0.0.1) on purpose: while the image initialises a new data
+    # directory it runs a temporary server that only listens on the unix socket.
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "spine", "-d", "spine"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -41,6 +71,14 @@ services:
     image: redis:8-alpine
     container_name: spine-redis
     restart: unless-stopped
+    logging: *default-logging
+    # PING answers -LOADING while the dataset loads, hence the PONG match.
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
     volumes:
       - redis_data:/data
 

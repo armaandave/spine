@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SWCompletionProgressButton: View {
     let progress: CompletionProgress
+    var isCompact = false
 
     @State private var showsCount = false
 
@@ -20,8 +21,8 @@ struct SWCompletionProgressButton: View {
             .fixedSize(horizontal: true, vertical: false)
             .font(.system(size: 11, weight: .heavy))
             .foregroundStyle(.green.opacity(0.9))
-            .padding(.horizontal, 10)
-            .frame(minWidth: 52, minHeight: 30)
+            .padding(.horizontal, isCompact ? 8 : 10)
+            .frame(minWidth: 52, minHeight: isCompact ? 22 : 30)
             .background(.green.opacity(0.11), in: Capsule())
             .overlay {
                 Capsule()

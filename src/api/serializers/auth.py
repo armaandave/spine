@@ -1,8 +1,14 @@
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.serializers.profile import profile_payload
+
+# A refresh token is about 200 characters. Capping the field keeps hostile input away
+# from the JWT decoder: a ~27 KB token whose header nests 10,000 levels of JSON makes
+# PyJWT raise RecursionError, which surfaced as an HTML 500.
+MAX_REFRESH_TOKEN_LENGTH = 2048
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -60,6 +66,12 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("This account is inactive.")
         attrs["user"] = user
         return attrs
+
+
+class RefreshSerializer(TokenRefreshSerializer):
+    """SimpleJWT's refresh serializer with a bounded ``refresh`` field."""
+
+    refresh = serializers.CharField(max_length=MAX_REFRESH_TOKEN_LENGTH)
 
 
 def token_response(user, request=None):

@@ -1,11 +1,21 @@
 import Foundation
 
 protocol AuthRepository {
-    var hasStoredTokens: Bool { get }
+    /// Whether a session is stored. Throws when the Keychain can't be read (the device is locked, say), which
+    /// says nothing either way: callers must not treat it as "signed out".
+    var hasStoredTokens: Bool { get throws }
+    /// The user the stored tokens were issued to, read from the token itself without verifying it. nil when
+    /// there are none, they can't be read, or they carry no user.
+    var storedUserID: Int? { get }
     func login(usernameOrEmail: String, password: String) async throws -> AuthUser
     func register(username: String, email: String, password: String) async throws -> AuthUser
     func refresh() async throws
+    /// Ends the session on this device at once. Revoking it on the server carries on in the background.
     func logout() async
+}
+
+extension AuthRepository {
+    var storedUserID: Int? { nil }
 }
 
 protocol MediaRepository {
@@ -370,6 +380,12 @@ protocol ImportRepository {
         mode: ImportMode,
         progressHandler: (@MainActor @Sendable (Double) -> Void)?
     ) async throws -> ImportQueueResponse
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse
     func importTaskStatus(taskId: String) async throws -> ImportTaskStatus
 }
 
@@ -442,7 +458,25 @@ struct APIAuthRepository: AuthRepository {
     let tokenStore: KeychainTokenStore
 
     var hasStoredTokens: Bool {
-        tokenStore.accessToken != nil || tokenStore.refreshToken != nil
+        get throws {
+            // Either token proves there is a session. A lookup that fails proves nothing, so it only matters
+            // when the other one didn't settle the question.
+            var failure: Error?
+            for load in [tokenStore.loadRefreshToken, tokenStore.loadAccessToken] {
+                do {
+                    if try load() != nil { return true }
+                } catch {
+                    failure = error
+                }
+            }
+            if let failure { throw failure }
+            return false
+        }
+    }
+
+    var storedUserID: Int? {
+        let tokens = [tokenStore.refreshToken, tokenStore.accessToken].compactMap { $0 }
+        return tokens.lazy.compactMap(JWTExpiry.userID(of:)).first
     }
 
     func login(usernameOrEmail: String, password: String) async throws -> AuthUser {
@@ -1316,6 +1350,30 @@ struct APIImportRepository: ImportRepository {
             authenticated: true,
             progressHandler: progressHandler
         )
+    }
+
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)? = nil
+    ) async throws -> ImportQueueResponse {
+        try await client.uploadMultipart(
+            "/imports/mal_export/",
+            formFields: ["mode": mode.rawValue],
+            fileFieldName: "file",
+            fileName: fileName,
+            fileData: fileData,
+            mimeType: Self.myAnimeListMimeType(fileName: fileName),
+            authenticated: true,
+            progressHandler: progressHandler
+        )
+    }
+
+    /// MyAnimeList exports come gzipped (`.xml.gz`) or, once unzipped, as plain `.xml`. The server sniffs the
+    /// bytes either way; the part's type just says which one this is.
+    static func myAnimeListMimeType(fileName: String) -> String {
+        fileName.lowercased().hasSuffix(".gz") ? "application/gzip" : "application/xml"
     }
 
     func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {

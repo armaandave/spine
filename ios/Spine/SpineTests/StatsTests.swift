@@ -10,6 +10,17 @@ final class StatsTests: XCTestCase {
         super.tearDown()
     }
 
+    private static var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        return calendar
+    }
+
+    private static func date(_ value: String) -> Date {
+        StatsActivityDay.parse(value)!
+    }
+
     func testStatsPeriodProvidesStableIdentityTitlesAndQueries() {
         XCTAssertEqual(StatsPeriod.allTime.id, "all-time")
         XCTAssertEqual(StatsPeriod.allTime.title, "All Time")
@@ -276,17 +287,176 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(SWStatsRatingChart.averageRating(from: points), 7.5)
     }
 
-    func testStatsYearChartUsesAdjacentPlotIndicesForSparseYears() {
-        let points = SWStatsYearChart.plotPoints(from: [
+    func testStatsYearChartFillsGapsIntoContinuousTimeline() {
+        let points = SWStatsYearChart.filledPoints(from: [
             SWStatsYearPoint(year: 2022, count: 3),
-            SWStatsYearPoint(year: 1974, count: 1),
+            SWStatsYearPoint(year: 2019, count: 1),
             SWStatsYearPoint(year: 2022, count: 2),
-            SWStatsYearPoint(year: 1999, count: 4),
+            SWStatsYearPoint(year: 2020, count: -4),
         ])
 
-        XCTAssertEqual(points.map(\.index), [0, 1, 2])
-        XCTAssertEqual(points.map(\.year), [1974, 1999, 2022])
-        XCTAssertEqual(points.map(\.count), [1, 4, 5])
+        XCTAssertEqual(points.map(\.year), [2019, 2020, 2021, 2022])
+        XCTAssertEqual(points.map(\.count), [1, 0, 0, 5])
+    }
+
+    func testStatsYearChartKeepsSingleYearAsOnePoint() {
+        let points = SWStatsYearChart.filledPoints(from: [SWStatsYearPoint(year: 2024, count: 4)])
+
+        XCTAssertEqual(points, [SWStatsYearPoint(year: 2024, count: 4)])
+        XCTAssertTrue(SWStatsYearChart.filledPoints(from: []).isEmpty)
+    }
+
+    func testStatsYearChartFindsPeakDecade() {
+        let decade = SWStatsYearChart.peakDecade(from: [
+            SWStatsYearPoint(year: 1974, count: 1),
+            SWStatsYearPoint(year: 1999, count: 4),
+            SWStatsYearPoint(year: 2012, count: 3),
+            SWStatsYearPoint(year: 2018, count: 3),
+        ])
+
+        XCTAssertEqual(decade, StatsDecade(decade: 2010, count: 6))
+        XCTAssertEqual(decade?.title, "2010s")
+        XCTAssertNil(SWStatsYearChart.peakDecade(from: [SWStatsYearPoint(year: 2000, count: 0)]))
+    }
+
+    func testStatsReleaseSeriesGroupsLongHistoriesByDecade() {
+        let series = StatsReleaseSeries.make(points: [
+            SWStatsYearPoint(year: 1946, count: 1),
+            SWStatsYearPoint(year: 1988, count: 5),
+            SWStatsYearPoint(year: 2012, count: 3),
+            SWStatsYearPoint(year: 2018, count: 4),
+            SWStatsYearPoint(year: 2025, count: 6),
+        ])
+
+        XCTAssertEqual(series.granularity, .decade)
+        XCTAssertEqual(series.buckets.map(\.id), ["1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"])
+        XCTAssertEqual(series.buckets.map(\.count), [1, 0, 0, 0, 5, 0, 0, 7, 6])
+        XCTAssertEqual(series.buckets.first?.axisLabel, "’40s")
+        XCTAssertEqual(series.buckets.last?.axisLabel, "’20s")
+        XCTAssertEqual(series.peak?.id, "2010s")
+    }
+
+    func testStatsReleaseSeriesKeepsShortHistoriesYearByYear() {
+        let series = StatsReleaseSeries.make(points: [
+            SWStatsYearPoint(year: 2019, count: 2),
+            SWStatsYearPoint(year: 2025, count: 5),
+            SWStatsYearPoint(year: 2022, count: 5),
+        ])
+
+        XCTAssertEqual(series.granularity, .year)
+        XCTAssertEqual(series.buckets.map(\.id), ["2019", "2020", "2021", "2022", "2023", "2024", "2025"])
+        XCTAssertEqual(series.peak?.id, "2025")
+        XCTAssertNil(StatsReleaseSeries.make(points: []).peak)
+    }
+
+    func testStatsRatingStarBucketsFoldTenPointScaleOntoHalfStars() {
+        let points = SWStatsRatingChart.normalizedPoints(from: [
+            SWStatsRatingPoint(rating: 7.5, count: 2),
+            SWStatsRatingPoint(rating: 8, count: 1),
+            SWStatsRatingPoint(rating: 0.5, count: 1),
+            SWStatsRatingPoint(rating: 0, count: 1),
+            SWStatsRatingPoint(rating: 10, count: 3),
+        ])
+
+        let buckets = SWStatsRatingChart.starBuckets(from: points)
+
+        XCTAssertEqual(buckets.map(\.step), Array(1 ... 10))
+        XCTAssertEqual(buckets[0].count, 2)
+        XCTAssertEqual(buckets[7].count, 3)
+        XCTAssertEqual(buckets[7].stars, 4)
+        XCTAssertEqual(buckets[9].count, 3)
+        XCTAssertEqual(buckets.reduce(0) { $0 + $1.count }, 8)
+    }
+
+    func testStatsActivitySeriesChartsEveryMonthOfASelectedYear() {
+        let range = StatsRange(startDate: "2025-01-01", endDate: "2025-12-31", timezone: "UTC", isAllTime: false)
+        let series = StatsActivitySeries.make(
+            months: [
+                StatsActivityMonth(month: "2025-03", count: 4),
+                StatsActivityMonth(month: "2025-11", count: 9),
+                StatsActivityMonth(month: "2024-11", count: 50),
+            ],
+            range: range,
+            now: Self.date("2026-10-01"),
+            calendar: Self.utcCalendar
+        )
+
+        XCTAssertEqual(series.granularity, .month)
+        XCTAssertEqual(series.buckets.count, 12)
+        XCTAssertEqual(series.buckets.first?.id, "2025-01")
+        XCTAssertEqual(series.buckets.last?.id, "2025-12")
+        XCTAssertEqual(series.buckets[2].count, 4)
+        XCTAssertEqual(series.total, 13)
+        XCTAssertEqual(series.busiest?.id, "2025-11")
+        XCTAssertTrue(series.buckets.allSatisfy { $0.axisLabel != nil })
+    }
+
+    func testStatsActivitySeriesChartsAllTimeByYearThroughCurrentYear() {
+        let series = StatsActivitySeries.make(
+            months: [
+                StatsActivityMonth(month: "2019-02", count: 2),
+                StatsActivityMonth(month: "2019-07", count: 3),
+                StatsActivityMonth(month: "2023-01", count: 7),
+            ],
+            range: .empty,
+            now: Self.date("2026-10-01"),
+            calendar: Self.utcCalendar
+        )
+
+        XCTAssertEqual(series.granularity, .year)
+        XCTAssertEqual(series.buckets.map(\.id), ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"])
+        XCTAssertEqual(series.buckets.map(\.count), [5, 0, 0, 0, 7, 0, 0, 0])
+        XCTAssertEqual(series.buckets.first?.axisLabel, "2019")
+        XCTAssertEqual(series.buckets.last?.axisLabel, "2026")
+        XCTAssertEqual(series.busiest?.id, "2023")
+    }
+
+    func testStatsActivitySeriesUsesTrailingMonthsForShortAllTimeHistory() {
+        let series = StatsActivitySeries.make(
+            months: [
+                StatsActivityMonth(month: "2025-12", count: 2),
+                StatsActivityMonth(month: "2026-10", count: 6),
+            ],
+            range: .empty,
+            now: Self.date("2026-10-01"),
+            calendar: Self.utcCalendar
+        )
+
+        XCTAssertEqual(series.granularity, .month)
+        XCTAssertEqual(series.buckets.count, 12)
+        XCTAssertEqual(series.buckets.first?.id, "2025-11")
+        XCTAssertEqual(series.buckets.last?.id, "2026-10")
+        XCTAssertEqual(series.buckets[1].count, 2)
+        XCTAssertEqual(series.total, 8)
+        XCTAssertTrue(StatsActivitySeries.make(months: [], range: .empty).buckets.isEmpty)
+    }
+
+    func testStatsActivityAxisLabelsKeepEndsAndAvoidCrowding() {
+        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 4, maximumLabels: 5), [0, 1, 2, 3])
+        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 16, maximumLabels: 5), [0, 4, 8, 12, 15])
+        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 8, maximumLabels: 5), [0, 2, 4, 7])
+        XCTAssertTrue(StatsActivitySeries.axisLabelIndices(count: 0, maximumLabels: 5).isEmpty)
+    }
+
+    func testStatsWeekdayDistributionCountsActiveDaysMondayFirst() {
+        let counts = StatsWeekdayDistribution.activeDays(from: [
+            StatsActivityDay(date: "2026-09-28", count: 3),
+            StatsActivityDay(date: "2026-10-04", count: 1),
+            StatsActivityDay(date: "2026-10-05", count: 2),
+            StatsActivityDay(date: "2026-10-02", count: 0),
+            StatsActivityDay(date: "not-a-date", count: 4),
+        ])
+
+        XCTAssertEqual(counts, [2, 0, 0, 0, 0, 0, 1])
+    }
+
+    func testStatsMixBarKeepsTinySlicesVisibleWithinWidth() {
+        let widths = StatsMixBar.widths(for: [761, 2, 216], totalWidth: 306, spacing: 3, minimum: 5)
+
+        XCTAssertEqual(widths[1], 5)
+        XCTAssertEqual(widths.reduce(0, +), 300, accuracy: 0.001)
+        XCTAssertGreaterThan(widths[0], widths[2])
+        XCTAssertEqual(StatsMixBar.widths(for: [0, 0], totalWidth: 100, spacing: 3, minimum: 5), [0, 0])
     }
 
     func testStatsChartSelectionRoundsAndClampsPlotIndices() {

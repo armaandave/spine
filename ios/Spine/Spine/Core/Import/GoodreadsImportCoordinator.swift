@@ -21,6 +21,9 @@ final class GoodreadsImportCoordinator {
     var isCheckingStatus = false
 
     @ObservationIgnored var onUnauthorized: (() -> Void)?
+    /// Consulted before a running import is resumed. The session says no until a request has got through, because
+    /// a resumed import that polls an unreachable server would just flip to failed. nil means always.
+    @ObservationIgnored var canResume: (() -> Bool)?
 
     @ObservationIgnored private let importRepository: ImportRepository
     @ObservationIgnored private let defaults: UserDefaults
@@ -80,6 +83,7 @@ final class GoodreadsImportCoordinator {
     }
 
     func resumeIfNeeded() {
+        guard canResume?() ?? true else { return }
         if case let .processing(taskId, _, startedAt) = phase, pollingTask == nil {
             startPolling(taskId: taskId, startedAt: startedAt)
             return
@@ -105,6 +109,9 @@ final class GoodreadsImportCoordinator {
             do {
                 let task = try await importRepository.importTaskStatus(taskId: job.taskId)
                 handle(task: task, taskId: job.taskId, startedAt: job.startedAt)
+            } catch is CancellationError {
+                // Not a failure of the import: the request was cancelled, or belonged to a session that has ended.
+                return
             } catch {
                 phase = .failed(message: error.localizedDescription)
                 if case APIError.unauthorized = error {
@@ -149,6 +156,10 @@ final class GoodreadsImportCoordinator {
             persist(taskId: response.taskId, mode: mode, startedAt: startedAt)
             phase = .processing(taskId: response.taskId, statusLabel: Self.statusLabel(for: response.status), startedAt: startedAt)
             startPolling(taskId: response.taskId, startedAt: startedAt)
+        } catch is CancellationError {
+            // Whoever cancelled the upload (a restarted import, `cancelUploadFailure`, `clearFinishedJob`) has
+            // already put the phase where it wants it; a cancellation isn't an import that failed.
+            return
         } catch {
             phase = .failed(message: error.localizedDescription)
             if case APIError.unauthorized = error {
@@ -178,6 +189,9 @@ final class GoodreadsImportCoordinator {
                     pollingTask = nil
                     return
                 }
+            } catch is CancellationError {
+                // Cancelled by `clearFinishedJob` or a newer poll: the phase and `pollingTask` are theirs now.
+                return
             } catch {
                 phase = .failed(message: error.localizedDescription)
                 pollingTask = nil

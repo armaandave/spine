@@ -641,6 +641,7 @@ struct ProfileListsView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
     private let onOpenDiary: () -> Void
@@ -660,6 +661,7 @@ struct ProfileListsView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void = {},
         onOpenDiary: @escaping () -> Void = {},
@@ -678,6 +680,7 @@ struct ProfileListsView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
         self.onOpenDiary = onOpenDiary
@@ -799,6 +802,7 @@ struct ProfileListsView: View {
                             importCoordinator: importCoordinator,
                             storygraphImportCoordinator: storygraphImportCoordinator,
                             goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                             currentUserId: currentUserId,
                             onLogout: onLogout,
                             onOpenDiary: onOpenDiary,
@@ -843,6 +847,7 @@ struct ProfileListsView: View {
             importCoordinator: importCoordinator,
             storygraphImportCoordinator: storygraphImportCoordinator,
             goodreadsImportCoordinator: goodreadsImportCoordinator,
+            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
             currentUserId: currentUserId,
             onLogout: onLogout,
             onOpenDiary: onOpenDiary,
@@ -1356,6 +1361,7 @@ struct ProfileListDetailView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
     private let onOpenDiary: () -> Void
@@ -1376,6 +1382,7 @@ struct ProfileListDetailView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void = {},
         onOpenDiary: @escaping () -> Void = {},
@@ -1394,6 +1401,7 @@ struct ProfileListDetailView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
         self.onOpenDiary = onOpenDiary
@@ -1684,6 +1692,7 @@ struct ProfileListDetailView: View {
                     importCoordinator: importCoordinator,
                     storygraphImportCoordinator: storygraphImportCoordinator,
                     goodreadsImportCoordinator: goodreadsImportCoordinator,
+                    myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                     currentUserId: currentUserId,
                     onLogout: onLogout,
                     onOpenDiary: onOpenDiary,
@@ -1753,7 +1762,7 @@ struct ProfileListDetailView: View {
                 if list.listType == .media,
                    let completion = list.completion,
                    completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
+                    SWCompletionProgressButton(progress: completion, isCompact: true)
                         .accessibilityLabel("\(list.name) completion")
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
                 }
@@ -1963,7 +1972,7 @@ enum CustomListHeaderLayout {
 
     static func topPadding(hasBackdrop: Bool, topSafeAreaInset: CGFloat) -> CGFloat {
         hasBackdrop
-            ? -(topSafeAreaInset + 32)
+            ? BackdropLayout.topOffset
             : topSafeAreaInset + topControlTopPadding + topControlSize
     }
 }

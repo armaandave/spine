@@ -235,8 +235,14 @@ final class SpineTests: XCTestCase {
         )
         XCTAssertEqual(
             CustomListHeaderLayout.topPadding(hasBackdrop: true, topSafeAreaInset: 59),
-            -91
+            -6
         )
+    }
+
+    func testBackdropLayoutKeepsSixPointTopBleedAcrossSafeAreas() {
+        XCTAssertEqual(BackdropLayout.topOffset, -6)
+        XCTAssertEqual(BackdropLayout.safeAreaCompensation(for: 59), 53)
+        XCTAssertEqual(BackdropLayout.safeAreaCompensation(for: 0), -6)
     }
 
     func testPeopleListGridUsesFourColumnsAtStandardSizesAndTwoForAccessibility() {
@@ -2680,6 +2686,241 @@ final class SpineTests: XCTestCase {
 
         XCTAssertNil(repository.queuedFileName)
         XCTAssertTrue(repository.statusRequests.isEmpty)
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorUploadsGzippedExportAndTransitionsToSuccess() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorTransitions")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [
+            ImportTaskStatus(taskId: "mal-task-1", taskName: nil, status: "STARTED", dateCreated: nil, dateDone: nil, result: nil),
+            ImportTaskStatus(taskId: "mal-task-1", taskName: nil, status: "SUCCESS", dateCreated: nil, dateDone: nil, result: "Imported 45 anime and 15 diary entries.")
+        ])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        let fileURL = try makeTemporaryMyAnimeListExport(named: ".xml.gz")
+        var notifiedTaskId: String?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .myAnimeListImportDidSucceed,
+            object: nil,
+            queue: nil,
+        ) { notification in
+            notifiedTaskId = notification.userInfo?["taskId"] as? String
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        coordinator.startImport(fileURL: fileURL, mode: .new)
+
+        try await waitUntil {
+            if case let .uploading(fileName, progress) = coordinator.phase {
+                return fileName == fileURL.lastPathComponent && progress == 1
+            }
+            return false
+        }
+
+        try await waitUntil {
+            if case let .processing(taskId, _, _) = coordinator.phase {
+                return taskId == "mal-task-1"
+            }
+            return false
+        }
+        XCTAssertEqual(defaults.string(forKey: "myAnimeListImport.taskId"), "mal-task-1", "a running import is remembered")
+
+        try await waitUntil {
+            if case let .processing(_, statusLabel, _) = coordinator.phase {
+                return statusLabel == "Importing anime and manga..."
+            }
+            return false
+        }
+
+        try await waitUntil {
+            coordinator.phase == .succeeded(message: "Imported 45 anime and 15 diary entries.")
+        }
+
+        XCTAssertEqual(repository.queuedFileName, fileURL.lastPathComponent)
+        XCTAssertEqual(repository.queuedFileData, try Data(contentsOf: fileURL), "the export is uploaded as it is, still gzipped")
+        XCTAssertEqual(repository.queuedMode, .new)
+        XCTAssertEqual(repository.statusRequests, ["mal-task-1", "mal-task-1"])
+        XCTAssertEqual(notifiedTaskId, "mal-task-1")
+        XCTAssertNil(defaults.string(forKey: "myAnimeListImport.taskId"), "a finished import is forgotten")
+        XCTAssertFalse(coordinator.canCheckStatus)
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorAcceptsUnzippedXMLExport() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorXML")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [
+            ImportTaskStatus(taskId: "mal-task-xml", taskName: nil, status: "SUCCESS", dateCreated: nil, dateDone: nil, result: nil)
+        ])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        let fileURL = try makeTemporaryMyAnimeListExport(named: ".xml")
+
+        coordinator.startImport(fileURL: fileURL, mode: .overwrite)
+
+        try await waitUntil {
+            coordinator.phase == .succeeded(message: "MyAnimeList import complete.")
+        }
+
+        XCTAssertEqual(repository.queuedFileName, fileURL.lastPathComponent)
+        XCTAssertEqual(repository.queuedMode, .overwrite)
+    }
+
+    func testMyAnimeListImportAcceptsXMLAndGzipExportsOnly() {
+        for name in [
+            "animelist_1727800000_-_12345.xml.gz",
+            "mangalist_1727800000_-_12345.xml.gz",
+            "ANIMELIST.XML.GZ",
+            "animelist.xml",
+            "mangalist.XML",
+            "export.gz",
+        ] {
+            XCTAssertTrue(MyAnimeListImportCoordinator.isAcceptedExportFileName(name), name)
+        }
+        for name in ["animelist.csv", "animelist.zip", "animelist.xml.zip", "animelist", "xml", ""] {
+            XCTAssertFalse(MyAnimeListImportCoordinator.isAcceptedExportFileName(name), name)
+        }
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorRejectsOtherFiles() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorInvalidExtension")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+
+        for fileURL in [try makeTemporaryZip(), try makeTemporaryCSV()] {
+            coordinator.clearFinishedJob()
+            coordinator.startImport(fileURL: fileURL, mode: .new)
+
+            try await waitUntil {
+                coordinator.phase == .failed(message: "Please upload the .xml or .xml.gz export from MyAnimeList.")
+            }
+        }
+
+        XCTAssertEqual(MyAnimeListImportCoordinator.unsupportedFileMessage, "Please upload the .xml or .xml.gz export from MyAnimeList.")
+        XCTAssertNil(repository.queuedFileName)
+        XCTAssertTrue(repository.statusRequests.isEmpty)
+        XCTAssertNil(defaults.string(forKey: "myAnimeListImport.taskId"))
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorSurfacesTaskFailure() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorFailure")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [
+            ImportTaskStatus(taskId: "mal-task-failure", taskName: nil, status: "FAILURE", dateCreated: nil, dateDone: nil, result: "That file isn't a MyAnimeList export.")
+        ])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        var didNotify = false
+        let observer = NotificationCenter.default.addObserver(
+            forName: .myAnimeListImportDidSucceed,
+            object: coordinator,
+            queue: nil,
+        ) { _ in
+            didNotify = true
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        coordinator.startImport(fileURL: try makeTemporaryMyAnimeListExport(), mode: .new)
+
+        try await waitUntil {
+            coordinator.phase == .failed(message: "That file isn't a MyAnimeList export.")
+        }
+
+        XCTAssertEqual(repository.statusRequests, ["mal-task-failure"])
+        XCTAssertFalse(coordinator.canCheckStatus)
+        XCTAssertNil(defaults.string(forKey: "myAnimeListImport.taskId"))
+        XCTAssertFalse(didNotify)
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorFallsBackToGenericFailureMessage() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorFailureFallback")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [
+            ImportTaskStatus(taskId: "mal-task-failure-2", taskName: nil, status: "FAILURE", dateCreated: nil, dateDone: nil, result: "  ")
+        ])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+
+        coordinator.startImport(fileURL: try makeTemporaryMyAnimeListExport(), mode: .new)
+
+        try await waitUntil {
+            coordinator.phase == .failed(message: "MyAnimeList import failed.")
+        }
+    }
+
+    @MainActor
+    func testMyAnimeListImportCoordinatorPersistsAndResumesTask() async throws {
+        let defaults = isolatedDefaults("MyAnimeListImportCoordinatorPersistence")
+        let repository = ScriptedMyAnimeListImportRepository(statuses: [
+            ImportTaskStatus(taskId: "mal-task-2", taskName: nil, status: "PENDING", dateCreated: nil, dateDone: nil, result: nil)
+        ])
+        let coordinator = MyAnimeListImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .seconds(60),
+            timeout: 5
+        )
+
+        coordinator.startImport(fileURL: try makeTemporaryMyAnimeListExport(), mode: .overwrite)
+
+        try await waitUntil {
+            if case let .processing(taskId, _, _) = coordinator.phase {
+                return taskId == "mal-task-2"
+            }
+            return false
+        }
+        XCTAssertEqual(defaults.string(forKey: "myAnimeListImport.taskId"), "mal-task-2")
+        XCTAssertEqual(defaults.string(forKey: "myAnimeListImport.mode"), ImportMode.overwrite.rawValue)
+
+        let resumed = MyAnimeListImportCoordinator(
+            importRepository: ScriptedMyAnimeListImportRepository(statuses: []),
+            defaults: defaults,
+            pollInterval: .seconds(60),
+            timeout: 5
+        )
+        resumed.resumeIfNeeded()
+
+        guard case let .processing(taskId, _, _) = resumed.phase else {
+            XCTFail("Expected persisted task to resume.")
+            return
+        }
+        XCTAssertEqual(taskId, "mal-task-2")
+        XCTAssertTrue(resumed.canCheckStatus)
+
+        coordinator.clearFinishedJob()
+        resumed.clearFinishedJob()
+        XCTAssertNil(defaults.string(forKey: "myAnimeListImport.taskId"))
+    }
+
+    func testMyAnimeListUploadTypeFollowsTheFileExtension() {
+        XCTAssertEqual(APIImportRepository.myAnimeListMimeType(fileName: "animelist_1727800000_-_12345.xml.gz"), "application/gzip")
+        XCTAssertEqual(APIImportRepository.myAnimeListMimeType(fileName: "MANGALIST.XML.GZ"), "application/gzip")
+        XCTAssertEqual(APIImportRepository.myAnimeListMimeType(fileName: "animelist.xml"), "application/xml")
     }
 
     func testMultipartBodyIncludesFieldsAndFile() {
@@ -5351,6 +5592,14 @@ final class SpineTests: XCTestCase {
             )
         }
 
+        // The login stores its tokens in the real Keychain, which the host app shares: put back what was there.
+        let store = KeychainTokenStore.shared
+        let (savedAccess, savedRefresh) = (store.accessToken, store.refreshToken)
+        defer {
+            store.accessToken = savedAccess
+            store.refreshToken = savedRefresh
+        }
+
         let service = AuthService(client: client)
         let user = try await service.login(usernameOrEmail: "mobile", password: "password")
         XCTAssertEqual(user.username, "mobile")
@@ -5436,9 +5685,10 @@ final class SpineTests: XCTestCase {
         var paths: [String] = []
         RequestCaptureURLProtocol.handler = { request in
             paths.append(request.url?.path ?? "")
+            // Only the API's own JSON error envelope counts as the server rejecting the refresh token.
             return (
                 HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!,
-                Data()
+                #"{"error":{"code":"token_not_valid","message":"Token is blacklisted","fields":null,"request_id":null}}"#.data(using: .utf8)!
             )
         }
 
@@ -5926,7 +6176,7 @@ final class SpineTests: XCTestCase {
     @MainActor
     func testAuthGateSignsOutWithoutTokens() async {
         let auth = FakeAuthRepository(hasStoredTokens: false)
-        let session = AppSession(repositories: fakeRepositories(auth: auth))
+        let session = AppSession(repositories: fakeRepositories(auth: auth), defaults: isolatedDefaults("AppSessionAuthGateSignsOutWithoutTokens"))
 
         await session.start()
 
@@ -5939,7 +6189,7 @@ final class SpineTests: XCTestCase {
     @MainActor
     func testAuthGateRefreshesStoredTokens() async {
         let auth = FakeAuthRepository(hasStoredTokens: true)
-        let session = AppSession(repositories: fakeRepositories(auth: auth))
+        let session = AppSession(repositories: fakeRepositories(auth: auth), defaults: isolatedDefaults("AppSessionAuthGateRefreshesStoredTokens"))
 
         await session.start()
 
@@ -5953,7 +6203,7 @@ final class SpineTests: XCTestCase {
     @MainActor
     func testAuthGateLogsOutAfterRefreshFailure() async {
         let auth = FakeAuthRepository(hasStoredTokens: true, refreshError: APIError.unauthorized)
-        let session = AppSession(repositories: fakeRepositories(auth: auth))
+        let session = AppSession(repositories: fakeRepositories(auth: auth), defaults: isolatedDefaults("AppSessionAuthGateLogsOutAfterRefreshFailure"))
 
         await session.start()
 
@@ -5967,7 +6217,7 @@ final class SpineTests: XCTestCase {
     @MainActor
     func testLoginEntersHome() async {
         let auth = FakeAuthRepository(hasStoredTokens: false)
-        let session = AppSession(repositories: fakeRepositories(auth: auth))
+        let session = AppSession(repositories: fakeRepositories(auth: auth), defaults: isolatedDefaults("AppSessionLoginEntersHome"))
 
         await session.login(usernameOrEmail: "reader", password: "password")
 
@@ -5981,7 +6231,7 @@ final class SpineTests: XCTestCase {
     @MainActor
     func testRegistrationEntersSearchOnce() async {
         let auth = FakeAuthRepository(hasStoredTokens: false)
-        let session = AppSession(repositories: fakeRepositories(auth: auth))
+        let session = AppSession(repositories: fakeRepositories(auth: auth), defaults: isolatedDefaults("AppSessionRegistrationEntersSearchOnce"))
 
         await session.register(username: "reader", email: "reader@example.com", password: "long-enough")
 
@@ -8033,6 +8283,13 @@ private struct FakeImportRepository: ImportRepository {
         progressHandler: (@MainActor @Sendable (Double) -> Void)?
     ) async throws -> ImportQueueResponse { fatalError("Not used") }
 
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse { fatalError("Not used") }
+
     func importTaskStatus(taskId: String) async throws -> ImportTaskStatus { fatalError("Not used") }
 }
 
@@ -8069,6 +8326,15 @@ private final class ScriptedLetterboxdImportRepository: ImportRepository {
     }
 
     func queueGoodreadsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMyAnimeListImport(
         fileData: Data,
         fileName: String,
         mode: ImportMode,
@@ -8128,6 +8394,15 @@ private final class ScriptedStoryGraphImportRepository: ImportRepository {
         fatalError("Not used")
     }
 
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
     func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
         statusRequests.append(taskId)
         try await Task.sleep(for: .milliseconds(40))
@@ -8177,6 +8452,77 @@ private final class ScriptedGoodreadsImportRepository: ImportRepository {
         progressHandler?(1)
         try await Task.sleep(for: .milliseconds(40))
         return ImportQueueResponse(taskId: statuses.first?.taskId ?? "goodreads-task-2", status: "queued")
+    }
+
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
+        statusRequests.append(taskId)
+        try await Task.sleep(for: .milliseconds(40))
+        if statuses.count > 1 {
+            return statuses.removeFirst()
+        }
+        return statuses.first ?? ImportTaskStatus(taskId: taskId, taskName: nil, status: "PENDING", dateCreated: nil, dateDone: nil, result: nil)
+    }
+}
+
+private final class ScriptedMyAnimeListImportRepository: ImportRepository {
+    private(set) var queuedFileName: String?
+    private(set) var queuedFileData: Data?
+    private(set) var queuedMode: ImportMode?
+    private(set) var statusRequests: [String] = []
+    private var statuses: [ImportTaskStatus]
+
+    init(statuses: [ImportTaskStatus]) {
+        self.statuses = statuses
+    }
+
+    func queueLetterboxdImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueStoryGraphImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueGoodreadsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        queuedFileName = fileName
+        queuedFileData = fileData
+        queuedMode = mode
+        progressHandler?(1)
+        try await Task.sleep(for: .milliseconds(40))
+        return ImportQueueResponse(taskId: statuses.first?.taskId ?? "mal-task-2", status: "queued")
     }
 
     func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
@@ -8235,6 +8581,18 @@ private func makeTemporaryGoodreadsCSV() throws -> URL {
         .appendingPathComponent("goodreads-\(UUID().uuidString)")
         .appendingPathExtension("csv")
     try Data("Book Id,Title,Author\n123,Book,Author\n".utf8).write(to: url)
+    return url
+}
+
+/// A MyAnimeList export as it downloads (`animelist_<...>.xml.gz`) or once unzipped (`.xml`). The bytes only need
+/// to round-trip: the server, not the app, reads them.
+private func makeTemporaryMyAnimeListExport(named suffix: String = ".xml.gz") throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("animelist_\(UUID().uuidString)\(suffix)")
+    let bytes: Data = suffix.lowercased().hasSuffix(".gz")
+        ? Data([0x1F, 0x8B, 0x08, 0x00]) // the gzip magic number the server sniffs
+        : Data("<?xml version=\"1.0\"?><myanimelist></myanimelist>".utf8)
+    try bytes.write(to: url)
     return url
 }
 

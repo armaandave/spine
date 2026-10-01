@@ -545,6 +545,7 @@ struct PersonDetailView: View {
                 ZStack(alignment: .top) {
                     PersonHeroArtwork(urlString: detail.profileUrl)
                         .frame(height: topSafeAreaInset + 390)
+                        .offset(y: BackdropLayout.topOffset)
                         .allowsHitTesting(false)
 
                     VStack(alignment: .leading, spacing: 26) {

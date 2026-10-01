@@ -34,6 +34,56 @@ final class SpineUITests: XCTestCase {
     }
 
     @MainActor
+    func testLiveMediaDetailNavigation() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["SPINE_RUN_LIVE_NAVIGATION_TEST"] == "1" else {
+            throw XCTSkip("Opt in on a signed-in device to test read-only live media navigation.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        let search = app.tabBars.buttons["Search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 20), "Sign in before running this read-only test.")
+        search.tap()
+
+        for (type, title) in [
+            ("Movies", "Inception"), ("TV", "Breaking Bad"),
+            ("Anime", "Death Note"), ("Manga", "Berserk"),
+            ("Games", "Hades"), ("Books", "The Hobbit"),
+            ("Comics", "Watchmen"), ("Music", "Random Access Memories")
+        ] {
+            let clear = app.buttons["Clear search"]
+            if clear.exists { clear.tap() }
+            let lens = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Media type, ")).firstMatch
+            XCTAssertTrue(lens.waitForExistence(timeout: 10))
+            lens.tap()
+            let typeButton = app.buttons[type]
+            let rail = app.scrollViews["Media type picker"]
+            for _ in 0..<5 where !typeButton.isHittable { rail.swipeLeft() }
+            XCTAssertTrue(typeButton.isHittable, "Missing search type: \(type)")
+            typeButton.tap()
+            let field = app.textFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(title + "\n")
+            let result = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", title)).firstMatch
+            XCTAssertTrue(result.waitForExistence(timeout: 45), "No live \(type) result for \(title)")
+            result.tap()
+            let poster = app.buttons["media-detail.poster"].firstMatch
+            XCTAssertTrue(poster.waitForExistence(timeout: 45), "\(type) detail failed to render")
+            XCTAssertTrue(app.buttons["More"].firstMatch.exists)
+            app.swipeUp()
+            XCTAssertEqual(app.state, .runningForeground, "\(type) detail crashed while scrolling")
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "Live \(type) detail"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            app.buttons["Back"].firstMatch.tap()
+            XCTAssertTrue(field.waitForExistence(timeout: 10), "\(type) detail failed to dismiss")
+        }
+    }
+
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

@@ -207,6 +207,9 @@ def create_diary_entry(
             review_title=review_title,
             contains_spoilers=contains_spoilers,
             visibility=visibility,
+            import_source=import_source,
+            import_source_id=import_source_id,
+            import_source_order=import_source_order,
         )
 
         if liked:

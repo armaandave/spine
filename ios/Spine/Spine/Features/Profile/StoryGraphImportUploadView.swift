@@ -48,7 +48,7 @@ struct StoryGraphImportUploadView: View {
         case let .succeeded(message):
             resultContent(
                 systemName: "checkmark.circle.fill",
-                tint: .green,
+                tint: .white,
                 title: "Import complete",
                 message: message
             )
@@ -59,7 +59,7 @@ struct StoryGraphImportUploadView: View {
                 systemName: "square.and.arrow.down",
                 tint: .white.opacity(0.7),
                 title: "StoryGraph Import",
-                message: "Choose a StoryGraph export to start."
+                message: "Upload a StoryGraph export to start."
             )
         }
     }
@@ -95,7 +95,7 @@ struct StoryGraphImportUploadView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: progress)
-                    .tint(.green)
+                    .tint(.white)
 
                 HStack {
                     Text("\(Int((progress * 100).rounded()))%")
@@ -115,7 +115,7 @@ struct StoryGraphImportUploadView: View {
         VStack(spacing: 18) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64, weight: .bold))
-                .foregroundStyle(.green)
+                .foregroundStyle(.white)
 
             Text("Upload complete")
                 .font(.system(size: 34, weight: .black))
@@ -168,7 +168,7 @@ struct StoryGraphImportUploadView: View {
         VStack(spacing: 18) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 58, weight: .bold))
-                .foregroundStyle(.red)
+                .foregroundStyle(.white)
 
             Text("Import needs attention")
                 .font(.system(size: 32, weight: .black))
@@ -204,7 +204,7 @@ struct StoryGraphImportUploadView: View {
                 .foregroundStyle(.black)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(.green, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -216,46 +216,5 @@ struct StoryGraphImportUploadView: View {
 
     private func updateIdleTimer() {
         UIApplication.shared.isIdleTimerDisabled = coordinator.isUploadBlockingDismiss
-    }
-}
-
-#Preview("Uploading") {
-    let coordinator = StoryGraphImportCoordinator(importRepository: MockUploadImportRepository())
-    coordinator.phase = .uploading(fileName: "storygraph-export.csv", progress: 0.42)
-    coordinator.uploadFileSize = 24_000_000
-    return StoryGraphImportUploadView(coordinator: coordinator, onDone: {})
-}
-
-private struct MockUploadImportRepository: ImportRepository {
-    func queueLetterboxdImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func queueStoryGraphImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        progressHandler?(1)
-        return ImportQueueResponse(taskId: "preview-task", status: "queued")
-    }
-
-    func queueGoodreadsImport(
-        fileData: Data,
-        fileName: String,
-        mode: ImportMode,
-        progressHandler: (@MainActor @Sendable (Double) -> Void)?
-    ) async throws -> ImportQueueResponse {
-        fatalError("Not used")
-    }
-
-    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
-        ImportTaskStatus(taskId: taskId, taskName: nil, status: "PENDING", dateCreated: nil, dateDone: nil, result: nil)
     }
 }

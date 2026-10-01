@@ -290,6 +290,7 @@ struct DiaryLogDetailView: View {
         ZStack(alignment: .bottomLeading) {
             DiaryLogHeroArtwork(entry: entry, detail: viewModel.mediaDetail)
                 .frame(height: 420)
+                .offset(y: BackdropLayout.topOffset)
 
             HStack(alignment: .bottom, spacing: 14) {
                 MediaArtwork(

@@ -7,7 +7,7 @@ struct AppShellView: View {
     @State private var searchFocusRequest = 0
     @State private var requestedLibraryShelf: LibraryShelf?
     @State private var mediaLensStore = MediaLensStore()
-    @State private var profileTabImage: UIImage?
+    @State private var profileTabImage = ProfileTabImage.fallback
     @State private var appNavigationState = AppNavigationState()
 
     let session: AppSession
@@ -60,9 +60,10 @@ struct AppShellView: View {
                 onUnauthorized: unauthorized
             )
             .ignoresSafeArea(.container, edges: .bottom)
+            .background { TabBarImageConfigurator() }
             .tabItem {
                 Image(systemName: "house")
-                    .environment(\.symbolVariants, selectedTab == .home ? .fill : .none)
+                    .environment(\.symbolVariants, .none)
                     .accessibilityLabel("Home")
             }
             .tag(AppTab.home)
@@ -83,16 +84,10 @@ struct AppShellView: View {
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
+            .background { TabBarImageConfigurator() }
             .tabItem {
-                Group {
-                    if selectedTab == .search {
-                        Image("TabSearchFilled")
-                            .renderingMode(.template)
-                    } else {
-                        Image(systemName: "magnifyingglass")
-                    }
-                }
-                .accessibilityLabel("Search")
+                Image(systemName: "magnifyingglass")
+                    .accessibilityLabel("Search")
             }
             .tag(AppTab.search)
 
@@ -111,9 +106,10 @@ struct AppShellView: View {
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
+            .background { TabBarImageConfigurator() }
             .tabItem {
                 Image(systemName: "books.vertical")
-                    .environment(\.symbolVariants, selectedTab == .library ? .fill : .none)
+                    .environment(\.symbolVariants, .none)
                     .accessibilityLabel("Library")
             }
             .tag(AppTab.library)
@@ -130,6 +126,7 @@ struct AppShellView: View {
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
+            .background { TabBarImageConfigurator() }
             .tabItem {
                 Image(systemName: "calendar")
                     .environment(\.symbolVariants, .none)
@@ -149,6 +146,7 @@ struct AppShellView: View {
                     importCoordinator: session.letterboxdImportCoordinator,
                     storygraphImportCoordinator: session.storygraphImportCoordinator,
                     goodreadsImportCoordinator: session.goodreadsImportCoordinator,
+                    myAnimeListImportCoordinator: session.myAnimeListImportCoordinator,
                     currentUserId: currentUserId,
                     onLogout: {
                         Task { await session.logout() }
@@ -166,17 +164,10 @@ struct AppShellView: View {
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
+            .background { TabBarImageConfigurator() }
             .tabItem {
-                Group {
-                    if let profileTabImage {
-                        Image(uiImage: profileTabImage)
-                            .renderingMode(.original)
-                    } else {
-                        Image(systemName: selectedTab == .profile ? "circle" : "person.crop.circle")
-                            .environment(\.symbolVariants, .none)
-                    }
-                }
-                .accessibilityLabel("Profile")
+                Image(uiImage: profileTabImage)
+                    .accessibilityLabel("Profile")
             }
             .tag(AppTab.profile)
         }
@@ -187,14 +178,12 @@ struct AppShellView: View {
         .onChange(of: appNavigationState.returnHomeRequest) {
             selectedTab = .home
         }
-        .background {
-            TabBarSelectionObserver()
-        }
         .onChange(of: scenePhase) {
             guard scenePhase == .active else { return }
             session.letterboxdImportCoordinator.resumeIfNeeded()
             session.storygraphImportCoordinator.resumeIfNeeded()
             session.goodreadsImportCoordinator.resumeIfNeeded()
+            session.myAnimeListImportCoordinator.resumeIfNeeded()
         }
         .task {
             guard session.signedInEntryPoint == .search else { return }
@@ -208,24 +197,54 @@ struct AppShellView: View {
     }
 
     private func loadProfileTabImage(from url: URL?) async {
-        profileTabImage = nil
-        guard let url,
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = UIImage(data: data) else { return }
+        profileTabImage = ProfileTabImage.fallback
+        guard let url else { return }
 
-        let renderer = ImageRenderer(content:
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 30, height: 30)
-                .clipShape(Circle())
-        )
-        renderer.scale = displayScale
-        profileTabImage = renderer.uiImage?.withRenderingMode(.alwaysOriginal)
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            try Task.checkCancellation()
+            guard let response = response as? HTTPURLResponse,
+                  (200 ... 299).contains(response.statusCode),
+                  let image = ProfileTabImage.avatar(from: data, scale: displayScale) else { return }
+            profileTabImage = image
+        } catch is CancellationError {
+            return
+        } catch {
+            return
+        }
     }
 
     private func unauthorized() {
         Task { await session.logout() }
+    }
+}
+
+enum ProfileTabImage {
+    static let fallback = UIImage(systemName: "person.crop.circle")!
+        .withRenderingMode(.alwaysTemplate)
+
+    static func avatar(from data: Data, scale: CGFloat) -> UIImage? {
+        guard let source = UIImage(data: data),
+              source.size.width > 0,
+              source.size.height > 0 else { return nil }
+
+        let size = CGSize(width: 30, height: 30)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = max(scale, 1)
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).addClip()
+            let ratio = max(size.width / source.size.width, size.height / source.size.height)
+            let drawSize = CGSize(width: source.size.width * ratio, height: source.size.height * ratio)
+            source.draw(in: CGRect(
+                x: (size.width - drawSize.width) / 2,
+                y: (size.height - drawSize.height) / 2,
+                width: drawSize.width,
+                height: drawSize.height
+            ))
+        }
+        guard image.cgImage != nil else { return nil }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 }
 
@@ -235,96 +254,60 @@ enum AppTab: Hashable {
     case library
     case diary
     case profile
-
-    init?(tabBarIndex: Int) {
-        switch tabBarIndex {
-        case 0: self = .home
-        case 1: self = .search
-        case 2: self = .library
-        case 3: self = .diary
-        case 4: self = .profile
-        default: return nil
-        }
-    }
 }
 
-private struct TabBarSelectionObserver: UIViewControllerRepresentable {
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+struct TabBarImageConfigurator: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> ImageViewController {
+        ImageViewController()
     }
 
-    func makeUIViewController(context: Context) -> ObserverViewController {
-        let controller = ObserverViewController()
-        controller.onAttach = { [weak controller] in
-            guard let tabBarController = controller?.tabBarController else { return }
-            context.coordinator.observe(tabBarController)
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ controller: ObserverViewController, context: Context) {
-        controller.onAttach = { [weak controller] in
-            guard let tabBarController = controller?.tabBarController else { return }
-            context.coordinator.observe(tabBarController)
-        }
-
-        DispatchQueue.main.async {
-            guard let tabBarController = controller.tabBarController else { return }
-            context.coordinator.observe(tabBarController)
+    func updateUIViewController(_ controller: ImageViewController, context: Context) {
+        DispatchQueue.main.async { [weak controller] in
+            controller?.configureImages()
         }
     }
 
-    static func dismantleUIViewController(_ controller: ObserverViewController, coordinator: Coordinator) {
-        coordinator.stopObserving()
-    }
-
-    final class Coordinator: NSObject, UITabBarControllerDelegate {
-        weak var tabBarController: UITabBarController?
-        weak var previousDelegate: UITabBarControllerDelegate?
-
-        func observe(_ tabBarController: UITabBarController) {
-            if self.tabBarController === tabBarController {
-                if tabBarController.delegate !== self {
-                    previousDelegate = tabBarController.delegate
-                    tabBarController.delegate = self
-                }
-                return
-            }
-
-            self.tabBarController = tabBarController
-            previousDelegate = tabBarController.delegate
-            tabBarController.delegate = self
+    final class ImageViewController: UIViewController {
+        func configureImages() {
+            // SwiftUI must retain its delegate to update selection and load lazy tabs.
+            guard let tabBarController else { return }
+            NativeTabImages.configure(items: tabBarController.tabBar.items ?? [])
         }
-
-        func stopObserving() {
-            guard let tabBarController,
-                  tabBarController.delegate === self else { return }
-            tabBarController.delegate = previousDelegate
-        }
-
-        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-            previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
-
-            guard let index = tabBarController.viewControllers?.firstIndex(of: viewController) else { return }
-            if AppTab(tabBarIndex: index) == .profile {
-                tabBarController.tabBar.items?[index].selectedImage = tabBarController.tabBar.items?[index].image
-            }
-        }
-    }
-
-    final class ObserverViewController: UIViewController {
-        var onAttach: (() -> Void)?
 
         override func didMove(toParent parent: UIViewController?) {
             super.didMove(toParent: parent)
-            if parent != nil {
-                onAttach?()
-            }
+            configureImages()
         }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            onAttach?()
+            configureImages()
+        }
+    }
+}
+
+enum NativeTabImages {
+    // Supply both images together. UIKit owns the selector and image transitions.
+    private static let pairs: [(image: UIImage?, selectedImage: UIImage?)] = [
+        (UIImage(systemName: "house"), UIImage(systemName: "house.fill")),
+        (UIImage(systemName: "magnifyingglass"), UIImage(named: "TabSearchFilled")?.withRenderingMode(.alwaysTemplate)),
+        (UIImage(systemName: "books.vertical"), UIImage(systemName: "books.vertical.fill")),
+    ]
+
+    static func configure(items: [UITabBarItem]) {
+        for (index, item) in items.enumerated() {
+            if index < pairs.count {
+                let pair = pairs[index]
+                if item.image != pair.image {
+                    item.image = pair.image
+                }
+                if item.selectedImage != pair.selectedImage {
+                    item.selectedImage = pair.selectedImage
+                }
+            } else if item.selectedImage != item.image {
+                // Diary keeps its shape; Profile keeps its original avatar rendering.
+                item.selectedImage = item.image
+            }
         }
     }
 }

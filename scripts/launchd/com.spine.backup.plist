@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Spine nightly backup - LaunchAgent TEMPLATE.
+
+  Runs the backup script every night at 03:30 local time and writes everything
+  it prints to ~/Library/Logs/spine-backup.log.
+
+  launchd does not expand "~" or $HOME in this file, so every path below starts
+  with the placeholder __HOME__. Do not load this file as it is: the install
+  step in docs/backups.md replaces the placeholder with your real home folder:
+
+      sed "s#__HOME__#$HOME#g" scripts/launchd/com.spine.backup.plist \
+        > ~/Library/LaunchAgents/com.spine.backup.plist
+
+  If the Mac is asleep at 03:30, launchd runs the job as soon as it wakes up.
+  If the Mac is switched off at 03:30, that night is skipped (healthchecks.io
+  will tell you). RunAtLoad is false so that loading the agent never starts a
+  backup by surprise.
+
+  When launchd stops the job (launchctl bootout, shutdown), the script cleans up
+  within a couple of seconds; ExitTimeOut is how long launchd waits for that
+  before it gives up and kills the job.
+
+  The script sets its own PATH as well; the PATH below is just a second line of
+  defence for Docker Desktop and Homebrew (rclone).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.spine.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__HOME__/.local/share/spine-backup/backup-production.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>ExitTimeOut</key>
+  <integer>30</integer>
+
+  <key>WorkingDirectory</key>
+  <string>__HOME__</string>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/spine-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/spine-backup.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:__HOME__/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

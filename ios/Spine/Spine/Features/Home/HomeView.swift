@@ -166,7 +166,7 @@ struct HomeView: View {
             ZStack(alignment: .top) {
                 SpinePageBackground()
                 HomeArtworkAtmosphere(media: viewModel.inProgressItems.first?.media)
-                    .offset(y: -scrollOffset)
+                    .offset(y: BackdropLayout.topOffset - scrollOffset)
                     .opacity(HomeBackdropMotion.opacity(for: scrollOffset))
 
                 ScrollView(showsIndicators: false) {
@@ -199,6 +199,9 @@ struct HomeView: View {
                 Task { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in

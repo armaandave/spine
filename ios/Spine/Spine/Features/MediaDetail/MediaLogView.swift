@@ -507,6 +507,7 @@ struct MediaLogView: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .ignoresSafeArea(edges: .top)
+        .offset(y: BackdropLayout.topOffset)
         .accessibilityHidden(true)
     }
 

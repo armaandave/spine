@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+		<!--
+		 Created by XML Export feature at MyAnimeList.net
+		 Version 1.1.0
+		-->
+
+		<myanimelist>
+
+			<myinfo>
+				<user_id>1</user_id>
+				<user_name>spine_fixture</user_name>
+				<user_export_type>2</user_export_type>
+				<user_total_manga>4</user_total_manga>
+				<user_total_reading>1</user_total_reading>
+				<user_total_completed>2</user_total_completed>
+				<user_total_onhold>0</user_total_onhold>
+				<user_total_dropped>0</user_total_dropped>
+				<user_total_plantoread>1</user_total_plantoread>
+			</myinfo>
+
+				<manga>
+					<manga_mangadb_id>2</manga_mangadb_id>
+					<manga_title><![CDATA[Berserk]]></manga_title>
+					<manga_volumes>0</manga_volumes>
+					<manga_chapters>0</manga_chapters>
+					<my_id>0</my_id>
+					<my_read_volumes>12</my_read_volumes>
+					<my_read_chapters>120</my_read_chapters>
+					<my_start_date>2020-06-15</my_start_date>
+					<my_finish_date>0000-00-00</my_finish_date>
+					<my_scanalation_group><![CDATA[]]></my_scanalation_group>
+					<my_score>10</my_score>
+					<my_storage></my_storage>
+					<my_retail_volumes>0</my_retail_volumes>
+					<my_status>Reading</my_status>
+					<my_comments><![CDATA[]]></my_comments>
+					<my_times_read>0</my_times_read>
+					<my_tags><![CDATA[]]></my_tags>
+					<my_priority>Low</my_priority>
+					<my_reread_value></my_reread_value>
+					<my_rereading>NO</my_rereading>
+					<my_discuss>YES</my_discuss>
+					<my_sns>default</my_sns>
+					<update_on_import>0</update_on_import>
+				</manga>
+
+				<manga>
+					<manga_mangadb_id>11</manga_mangadb_id>
+					<manga_title><![CDATA[Naruto]]></manga_title>
+					<manga_volumes>72</manga_volumes>
+					<manga_chapters>700</manga_chapters>
+					<my_id>0</my_id>
+					<my_read_volumes>0</my_read_volumes>
+					<my_read_chapters>0</my_read_chapters>
+					<my_start_date>2018-01-00</my_start_date>
+					<my_finish_date>2019-05-10</my_finish_date>
+					<my_scanalation_group><![CDATA[]]></my_scanalation_group>
+					<my_score>8</my_score>
+					<my_storage></my_storage>
+					<my_retail_volumes>0</my_retail_volumes>
+					<my_status>Completed</my_status>
+					<my_comments><![CDATA[]]></my_comments>
+					<my_times_read>2</my_times_read>
+					<my_tags><![CDATA[shonen]]></my_tags>
+					<my_priority>Low</my_priority>
+					<my_reread_value></my_reread_value>
+					<my_rereading>NO</my_rereading>
+					<my_discuss>YES</my_discuss>
+					<my_sns>default</my_sns>
+					<update_on_import>0</update_on_import>
+				</manga>
+
+				<manga>
+					<manga_mangadb_id>1706</manga_mangadb_id>
+					<manga_title><![CDATA[JoJo no Kimyou na Bouken Part 7: Steel Ball Run]]></manga_title>
+					<manga_volumes>24</manga_volumes>
+					<manga_chapters>96</manga_chapters>
+					<my_id>0</my_id>
+					<my_read_volumes>0</my_read_volumes>
+					<my_read_chapters>0</my_read_chapters>
+					<my_start_date>0000-00-00</my_start_date>
+					<my_finish_date>0000-00-00</my_finish_date>
+					<my_score>0</my_score>
+					<my_status>Plan to Read</my_status>
+					<my_comments><![CDATA[]]></my_comments>
+					<my_times_read>0</my_times_read>
+					<my_tags><![CDATA[]]></my_tags>
+					<my_rereading>NO</my_rereading>
+				</manga>
+
+				<manga>
+					<manga_mangadb_id>13</manga_mangadb_id>
+					<manga_title><![CDATA[One Piece]]></manga_title>
+					<manga_volumes>0</manga_volumes>
+					<manga_chapters>0</manga_chapters>
+					<my_read_volumes>0</my_read_volumes>
+					<my_read_chapters>50</my_read_chapters>
+					<my_start_date>0000-00-00</my_start_date>
+					<my_finish_date>2020-02-02</my_finish_date>
+					<my_score>9</my_score>
+					<my_status>Completed</my_status>
+					<my_comments><![CDATA[]]></my_comments>
+					<my_times_read>0</my_times_read>
+					<my_tags><![CDATA[]]></my_tags>
+					<my_rereadingg>YES</my_rereadingg>
+				</manga>
+
+		</myanimelist>
