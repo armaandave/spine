@@ -129,7 +129,7 @@ def most_logged_response(user, request):
         request,
     )
     return paginator.get_paginated_response(
-        stats_service.serialize_most_logged_rows(page, request),
+        stats_service.serialize_most_logged_rows(page, request, user),
     )
 
 

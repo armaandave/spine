@@ -10,6 +10,10 @@ struct APIClient: Sendable {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
+        // The API sends no cache headers, so URLCache would otherwise replay stale JSON (e.g. Stats
+        // from before a deploy or a new log). Poster images use URLSession.shared and keep their cache.
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: config)
     }()
 

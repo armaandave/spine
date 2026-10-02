@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 @testable import Spine
 
@@ -628,6 +629,26 @@ final class StatsTests: XCTestCase {
             ["start_date": "2025-01-01", "end_date": "2025-12-31", "page_size": "48", "media_type": "movie", "page": "2"],
         ])
         XCTAssertEqual(own.results.first?.logCount, 2)
+    }
+
+    func testAPIClientDefaultSessionNeverReplaysCachedResponses() {
+        let configuration = APIClient.defaultSession.configuration
+
+        XCTAssertNil(configuration.urlCache)
+        XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
+    }
+
+    func testSpineImageRetriesOnlyCancelledLoadsUpToTheCap() {
+        let cancelled = AsyncImagePhase.failure(URLError(.cancelled))
+        let missing = AsyncImagePhase.failure(URLError(.fileDoesNotExist))
+
+        XCTAssertTrue(SpineImageRetryPolicy.shouldRetry(phase: cancelled, retries: 0))
+        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(
+            phase: cancelled,
+            retries: SpineImageRetryPolicy.maxCancellationRetries
+        ))
+        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(phase: missing, retries: 0))
+        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(phase: .empty, retries: 0))
     }
 
     func testStatsMostLoggedViewModelPagesAndPrefetchesNearTheEnd() async throws {

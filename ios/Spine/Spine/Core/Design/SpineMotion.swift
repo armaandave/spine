@@ -108,6 +108,8 @@ extension View {
 struct SpineAsyncImage<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lastSuccessfulImage: Image?
+    @State private var loadAttempt = 0
+    @State private var cancellationRetries = 0
 
     let url: URL?
     let scale: CGFloat
@@ -131,10 +133,11 @@ struct SpineAsyncImage<Content: View>: View {
         ) { phase in
             resolvedContent(for: phase)
         }
-        .id(url)
+        .id(SpineImageLoadKey(url: url, attempt: loadAttempt))
         .transition(.opacity)
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: url)
         .onChange(of: url) { _, newURL in
+            cancellationRetries = 0
             if newURL == nil {
                 lastSuccessfulImage = nil
             }
@@ -149,6 +152,7 @@ struct SpineAsyncImage<Content: View>: View {
                 .transition(.opacity)
                 .onAppear {
                     lastSuccessfulImage = image
+                    cancellationRetries = 0
                 }
         case .empty, .failure:
             if url != nil, let lastSuccessfulImage {
@@ -157,10 +161,35 @@ struct SpineAsyncImage<Content: View>: View {
             } else {
                 content(phase)
                     .transition(.opacity)
+                    .task {
+                        retryIfCancelled(phase)
+                    }
             }
         @unknown default:
             content(phase)
                 .transition(.opacity)
         }
+    }
+
+    /// Lazy grids cancel image loads for cells that update or scroll away mid-flight, and AsyncImage
+    /// never restarts them. Reload once the placeholder is actually on screen again.
+    private func retryIfCancelled(_ phase: AsyncImagePhase) {
+        guard SpineImageRetryPolicy.shouldRetry(phase: phase, retries: cancellationRetries) else { return }
+        cancellationRetries += 1
+        loadAttempt += 1
+    }
+}
+
+private struct SpineImageLoadKey: Hashable {
+    let url: URL?
+    let attempt: Int
+}
+
+enum SpineImageRetryPolicy {
+    static let maxCancellationRetries = 3
+
+    static func shouldRetry(phase: AsyncImagePhase, retries: Int) -> Bool {
+        guard case let .failure(error) = phase, retries < maxCancellationRetries else { return false }
+        return (error as? URLError)?.code == .cancelled
     }
 }

@@ -460,6 +460,10 @@ Contract details:
   an accepted follow, and private entries are never included. Embedded media
   summaries deliberately return `user_state: null` so a target user's private
   tracking, diary, and list state is not exposed.
+- Ranked stats media (`diary_top_rated`, `most_logged`, per-type arrays, and the
+  most-logged endpoint) carry the stats owner's `custom_poster_url` and
+  `custom_backdrop_url`, matching Hall of Fame, so clients show the posters that
+  user chose.
 
 ### Stats Most Logged
 

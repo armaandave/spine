@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from app.models import (
     Book,
+    CustomPosterPreference,
     DiaryEntry,
     Item,
     ItemFilterFacet,
@@ -590,6 +591,53 @@ class StatsAPITests(TestCase):
         )
         self.assertIsNone(response.data["results"][0]["media"]["user_state"])
         self.assertEqual(private_profile.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_stats_posters_use_the_stats_owners_custom_artwork(self):
+        viewer = get_user_model().objects.create_user(
+            username="poster-viewer",
+            password="strong-password-123",
+        )
+        self.user.profile_private = False
+        self.user.save(update_fields=["profile_private"])
+        movie = self._items(MediaTypes.MOVIE.value, 1)[0]
+        DiaryEntry.objects.bulk_create([
+            DiaryEntry(
+                user=self.user,
+                item=movie,
+                consumed_at=self._aware(2026, 1, day),
+                rating=Decimal("4.5"),
+                visibility="public",
+            )
+            for day in (1, 2)
+        ])
+        owner_poster = "https://example.com/owner-poster.jpg"
+        CustomPosterPreference.objects.create(user=self.user, item=movie, custom_image_url=owner_poster)
+        CustomPosterPreference.objects.create(
+            user=viewer,
+            item=movie,
+            custom_image_url="https://example.com/viewer-poster.jpg",
+        )
+        params = {"start_date": "all", "end_date": "all"}
+
+        self.client.force_authenticate(self.user)
+        own = self.client.get("/api/v1/stats/me/summary/", params)
+        own_page = self.client.get("/api/v1/stats/me/most-logged/", params)
+        self.client.force_authenticate(viewer)
+        public = self.client.get(f"/api/v1/users/{self.user.username}/stats/summary/", params)
+        public_page = self.client.get(f"/api/v1/users/{self.user.username}/stats/most-logged/", params)
+
+        movie_stats = self._media_stats(own, MediaTypes.MOVIE.value)
+        for media in (
+            own.data["most_logged"][0]["media"],
+            own.data["diary_top_rated"][0]["media"],
+            movie_stats["most_logged"][0]["media"],
+            movie_stats["top_rated"][0]["media"],
+            own_page.data["results"][0]["media"],
+            public.data["most_logged"][0]["media"],
+            public_page.data["results"][0]["media"],
+        ):
+            self.assertEqual(media["custom_poster_url"], owner_poster)
+            self.assertIsNone(media["user_state"])
 
     @staticmethod
     def _items(media_type, count, *, prefix="item"):
