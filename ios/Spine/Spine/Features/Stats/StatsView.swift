@@ -7,6 +7,8 @@ struct StatsView: View {
     @State private var scrollOffset: CGFloat = 0
     @State private var scrollPosition = ScrollPosition(edge: .top)
 
+    private let profileRepository: ProfileRepository
+    private let username: String?
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
@@ -33,6 +35,8 @@ struct StatsView: View {
             username: username,
             onUnauthorized: onUnauthorized
         ))
+        self.profileRepository = profileRepository
+        self.username = username
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -217,7 +221,7 @@ struct StatsView: View {
                         StatsSection(title: "Top rated") {
                             StatsPosterRail(items: scope.topRated.map {
                                 let stars = StatsCopy.stars($0.rating, for: $0.media)
-                                return StatsPosterRailItem(
+                                return StatsPosterItem(
                                     media: $0.media,
                                     stars: stars,
                                     caption: stars == nil ? "Rated" : nil,
@@ -242,10 +246,14 @@ struct StatsView: View {
 
                     if !scope.mostLogged.isEmpty {
                         StatsSection(title: "Most logged") {
-                            StatsPosterRail(items: scope.mostLogged.map {
-                                StatsPosterRailItem(
+                            if scope.mostLoggedTotal > scope.mostLogged.count {
+                                mostLoggedSeeAllLink(scope)
+                            }
+                        } content: {
+                            StatsPosterGrid(items: scope.mostLogged.map {
+                                StatsPosterItem(
                                     media: $0.media,
-                                    caption: StatsCopy.logs($0.logCount),
+                                    caption: "\($0.logCount.formatted())×",
                                     accessibilityCaption: StatsCopy.logs($0.logCount)
                                 )
                             }) { media in
@@ -258,6 +266,42 @@ struct StatsView: View {
                 .transition(.opacity)
             }
         }
+    }
+
+    private func mostLoggedSeeAllLink(_ scope: StatsScopeSnapshot) -> some View {
+        NavigationLink {
+            StatsMostLoggedView(
+                viewModel: StatsMostLoggedViewModel(
+                    profileRepository: profileRepository,
+                    username: username,
+                    period: viewModel.selectedPeriod,
+                    mediaType: selectedMediaType,
+                    expectedTotal: scope.mostLoggedTotal,
+                    onUnauthorized: onUnauthorized
+                ),
+                scopeTitle: "\(scope.title) · \(viewModel.selectedPeriod.title)",
+                mediaRepository: mediaRepository,
+                trackingRepository: trackingRepository,
+                diaryRepository: diaryRepository,
+                listRepository: listRepository,
+                currentUserId: currentUserId,
+                selectedTab: selectedTab,
+                onSelectTab: onSelectTab,
+                onUnauthorized: onUnauthorized
+            )
+        } label: {
+            HStack(spacing: 4) {
+                Text("See all \(scope.mostLoggedTotal.formatted())")
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.62))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("See all \(scope.mostLoggedTotal.formatted()) most logged titles")
     }
 
     private func mediaPicker(_ summary: StatsSummary) -> some View {
@@ -354,6 +398,7 @@ private struct StatsScopeSnapshot {
     let metadataCoverage: StatsMetadataCoverage
     let topRated: [StatsTopRatedItem]
     let mostLogged: [StatsMostLoggedItem]
+    let mostLoggedTotal: Int
     let isAllTime: Bool
 
     init(summary: StatsSummary, mediaType: String?) {
@@ -378,6 +423,7 @@ private struct StatsScopeSnapshot {
                 metadataCoverage = media.metadataCoverage
                 topRated = media.topRated
                 mostLogged = media.mostLogged
+                mostLoggedTotal = media.mostLoggedTotal
             } else {
                 completedCount = 0
                 diaryEntryCount = 0
@@ -393,6 +439,7 @@ private struct StatsScopeSnapshot {
                 metadataCoverage = .empty
                 topRated = []
                 mostLogged = []
+                mostLoggedTotal = 0
             }
         } else {
             let typedPoints = SWStatsRatingChart.normalizedPoints(from: summary.mediaTypes)
@@ -413,6 +460,7 @@ private struct StatsScopeSnapshot {
             metadataCoverage = summary.metadataCoverage
             topRated = summary.topRated
             mostLogged = summary.mostLogged
+            mostLoggedTotal = summary.mostLoggedTotal
         }
     }
 

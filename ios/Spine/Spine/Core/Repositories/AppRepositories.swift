@@ -297,6 +297,13 @@ protocol ProfileRepository {
     func me() async throws -> UserProfile
     func profile(username: String) async throws -> UserProfile
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary
+    func statsMostLogged(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedItem>
     func likedMedia() async throws -> [MediaSummary]
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile
     func uploadAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> String?
@@ -319,6 +326,16 @@ extension ProfileRepository {
     }
 
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary {
+        fatalError("Not implemented")
+    }
+
+    func statsMostLogged(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedItem> {
         fatalError("Not implemented")
     }
 }
@@ -1063,6 +1080,30 @@ struct APIProfileRepository: ProfileRepository {
             path = "/stats/me/summary/"
         }
         return try await client.get(path, query: period.query, authenticated: true)
+    }
+
+    func statsMostLogged(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedItem> {
+        let path: String
+        if let username {
+            let escapedUsername = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+            path = "/users/\(escapedUsername)/stats/most-logged/"
+        } else {
+            path = "/stats/me/most-logged/"
+        }
+        var query = period.query + [URLQueryItem(name: "page_size", value: String(pageSize))]
+        if let mediaType {
+            query.append(URLQueryItem(name: "media_type", value: mediaType))
+        }
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return try await client.get(path, query: query, authenticated: true)
     }
 
     func likedMedia() async throws -> [MediaSummary] {

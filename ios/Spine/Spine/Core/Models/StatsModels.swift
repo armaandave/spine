@@ -61,6 +61,8 @@ struct StatsSummary: Decodable, Hashable {
     let metadataCoverage: StatsMetadataCoverage
     let topRated: [StatsTopRatedItem]
     let mostLogged: [StatsMostLoggedItem]
+    /// Every title logged at least twice; `mostLogged` is only a preview.
+    let mostLoggedTotal: Int
     let listProgress: [StatsListProgressItem]
     let seriesProgress: [MediaSeriesSummary]
 
@@ -77,6 +79,7 @@ struct StatsSummary: Decodable, Hashable {
         metadataCoverage: StatsMetadataCoverage = .empty,
         topRated: [StatsTopRatedItem] = [],
         mostLogged: [StatsMostLoggedItem] = [],
+        mostLoggedTotal: Int? = nil,
         listProgress: [StatsListProgressItem] = [],
         seriesProgress: [MediaSeriesSummary] = []
     ) {
@@ -92,6 +95,7 @@ struct StatsSummary: Decodable, Hashable {
         self.metadataCoverage = metadataCoverage
         self.topRated = topRated
         self.mostLogged = mostLogged
+        self.mostLoggedTotal = max(mostLoggedTotal ?? mostLogged.count, mostLogged.count)
         self.listProgress = listProgress
         self.seriesProgress = seriesProgress
     }
@@ -138,6 +142,7 @@ struct StatsSummary: Decodable, Hashable {
         case diaryTopRated
         case topRated
         case mostLogged
+        case mostLoggedTotal
         case listProgress
         case seriesProgress
     }
@@ -159,6 +164,7 @@ struct StatsSummary: Decodable, Hashable {
                 ?? container.decodeIfPresent([StatsTopRatedItem].self, forKey: .topRated)
                 ?? [],
             mostLogged: try container.decodeIfPresent([StatsMostLoggedItem].self, forKey: .mostLogged) ?? [],
+            mostLoggedTotal: try container.decodeIfPresent(Int.self, forKey: .mostLoggedTotal),
             listProgress: try container.decodeIfPresent([StatsListProgressItem].self, forKey: .listProgress) ?? [],
             seriesProgress: try container.decodeIfPresent([MediaSeriesSummary].self, forKey: .seriesProgress) ?? []
         )
@@ -314,6 +320,7 @@ struct StatsMediaTypeSummary: Decodable, Hashable, Identifiable {
     let ratingDistribution: [StatsRatingBucket]
     let topRated: [StatsTopRatedItem]
     let mostLogged: [StatsMostLoggedItem]
+    let mostLoggedTotal: Int
     let releaseYears: [StatsReleaseYearBucket]
     let topGenres: [StatsNamedCount]
     let topLanguages: [StatsNamedCount]
@@ -341,6 +348,7 @@ struct StatsMediaTypeSummary: Decodable, Hashable, Identifiable {
         ratingDistribution: [StatsRatingBucket] = [],
         topRated: [StatsTopRatedItem] = [],
         mostLogged: [StatsMostLoggedItem] = [],
+        mostLoggedTotal: Int? = nil,
         releaseYears: [StatsReleaseYearBucket] = [],
         topGenres: [StatsNamedCount] = [],
         topLanguages: [StatsNamedCount] = [],
@@ -361,6 +369,7 @@ struct StatsMediaTypeSummary: Decodable, Hashable, Identifiable {
         self.ratingDistribution = ratingDistribution
         self.topRated = topRated
         self.mostLogged = mostLogged
+        self.mostLoggedTotal = max(mostLoggedTotal ?? mostLogged.count, mostLogged.count)
         self.releaseYears = releaseYears
         self.topGenres = topGenres
         self.topLanguages = topLanguages
@@ -398,6 +407,7 @@ struct StatsMediaTypeSummary: Decodable, Hashable, Identifiable {
         case ratingDistribution
         case topRated
         case mostLogged
+        case mostLoggedTotal
         case releaseYears
         case topGenres
         case topLanguages
@@ -422,6 +432,7 @@ struct StatsMediaTypeSummary: Decodable, Hashable, Identifiable {
             ratingDistribution: try container.decodeIfPresent([StatsRatingBucket].self, forKey: .ratingDistribution) ?? [],
             topRated: try container.decodeIfPresent([StatsTopRatedItem].self, forKey: .topRated) ?? [],
             mostLogged: try container.decodeIfPresent([StatsMostLoggedItem].self, forKey: .mostLogged) ?? [],
+            mostLoggedTotal: try container.decodeIfPresent(Int.self, forKey: .mostLoggedTotal),
             releaseYears: try container.decodeIfPresent([StatsReleaseYearBucket].self, forKey: .releaseYears) ?? [],
             topGenres: try container.decodeIfPresent([StatsNamedCount].self, forKey: .topGenres) ?? [],
             topLanguages: try container.decodeIfPresent([StatsNamedCount].self, forKey: .topLanguages) ?? [],

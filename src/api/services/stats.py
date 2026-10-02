@@ -67,6 +67,8 @@ SINGLE_WEIGHT_MEDIA_TYPES = {
 }
 TOP_LEVEL_MEDIA_LIMIT = 12
 MEDIA_TYPE_MEDIA_LIMIT = 6
+MOST_LOGGED_MIN_LOGS = 2
+MOST_LOGGED_TYPE_PREVIEW_LIMIT = 8
 FACET_LIMIT = 10
 PROGRESS_COLLECTION_LIMIT = 25
 
@@ -141,14 +143,48 @@ def _parse_date_param(field, value):
     return parsed
 
 
-def build_stats_payload(*, user, viewer, request, stats_range):
-    """Build the additive native stats contract without provider API calls."""
+def parse_stats_media_type(value):
+    """Validate an optional primary media-type filter."""
+    if value in (None, ""):
+        return None
+    if value not in _primary_media_types():
+        raise ValidationError({"media_type": ["Use a primary media type."]})
+    return value
+
+
+def ranged_diary_entries(*, user, viewer, stats_range):
+    """Return visible diary entries inside the requested stats range."""
     diary_entries = visible_diary_entries(user=user, viewer=viewer)
     if not stats_range.is_all_time:
         diary_entries = diary_entries.filter(
             consumed_at__gte=stats_range.start_datetime,
             consumed_at__lte=stats_range.end_datetime,
         )
+    return diary_entries
+
+
+def most_logged_rows(entries, media_type=None):
+    """Titles logged at least twice, most logs first, newest log breaking ties."""
+    rows = entries.annotate(stats_media_type=_media_type_bucket("item__media_type"))
+    if media_type is not None:
+        rows = rows.filter(stats_media_type=media_type)
+    return (
+        rows.values("item_id", "stats_media_type")
+        .annotate(log_count=Count("id"), last_consumed_at=Max("consumed_at"))
+        .filter(log_count__gte=MOST_LOGGED_MIN_LOGS)
+        .order_by("-log_count", "-last_consumed_at", "item_id")
+    )
+
+
+def serialize_most_logged_rows(rows, request):
+    """Serialize one page of most-logged rows with a single item query."""
+    items = Item.objects.in_bulk(row["item_id"] for row in rows)
+    return _serialize_ranked_rows(rows, request, items, value_key="log_count")
+
+
+def build_stats_payload(*, user, viewer, request, stats_range):
+    """Build the additive native stats contract without provider API calls."""
+    diary_entries = ranged_diary_entries(user=user, viewer=viewer, stats_range=stats_range)
 
     diary_summary, diary_by_type = _diary_summaries(diary_entries)
     dated_book_reads = diary_entries.filter(
@@ -167,7 +203,10 @@ def build_stats_payload(*, user, viewer, request, stats_range):
     activity = _activity_payload(diary_entries, stats_range)
     rating_distribution, ratings_by_type = _rating_distributions(diary_entries)
     top_rated, top_rated_by_type = _top_rated_payloads(diary_entries, request)
-    most_logged, most_logged_by_type = _most_logged_payloads(diary_entries, request)
+    most_logged, most_logged_by_type, most_logged_totals = _most_logged_payloads(
+        diary_entries,
+        request,
+    )
     release_years, release_years_by_type = _release_year_payloads(diary_entries)
     facets, facets_by_type, coverage, coverage_by_type = _facet_payloads(diary_entries)
 
@@ -205,6 +244,7 @@ def build_stats_payload(*, user, viewer, request, stats_range):
             "rating_distribution": ratings_by_type[media_type],
             "top_rated": top_rated_by_type[media_type],
             "most_logged": most_logged_by_type[media_type],
+            "most_logged_total": most_logged_totals[media_type],
             "release_years": release_years_by_type[media_type],
             "top_genres": facets_by_type[media_type][ItemFilterFacet.FacetType.GENRE],
             "top_languages": facets_by_type[media_type][ItemFilterFacet.FacetType.LANGUAGE],
@@ -227,6 +267,7 @@ def build_stats_payload(*, user, viewer, request, stats_range):
         "rating_distribution": rating_distribution,
         "diary_top_rated": top_rated,
         "most_logged": most_logged,
+        "most_logged_total": most_logged_totals["all"],
         "release_years": release_years,
         "top_genres": facets[ItemFilterFacet.FacetType.GENRE],
         "top_languages": facets[ItemFilterFacet.FacetType.LANGUAGE],
@@ -661,22 +702,13 @@ def _top_rated_payloads(entries, request):
 
 
 def _most_logged_payloads(entries, request):
-    rows = list(
-        entries.annotate(stats_media_type=_media_type_bucket("item__media_type"))
-        .values("item_id", "stats_media_type")
-        .annotate(log_count=Count("id"), last_consumed_at=Max("consumed_at"))
-    )
-    rows.sort(
-        key=lambda row: (
-            -row["log_count"],
-            -row["last_consumed_at"].timestamp(),
-            row["item_id"],
-        ),
-    )
+    """Preview the most-logged titles; the paged endpoint serves the rest."""
+    rows = list(most_logged_rows(entries))
+    totals = Counter(row["stats_media_type"] for row in rows)
     overall_rows = rows[:TOP_LEVEL_MEDIA_LIMIT]
-    type_rows = _limited_rows_by_type(rows, MEDIA_TYPE_MEDIA_LIMIT)
+    type_rows = _limited_rows_by_type(rows, MOST_LOGGED_TYPE_PREVIEW_LIMIT)
     items = _ranked_items(overall_rows, type_rows)
-    return _serialize_ranked_rows(overall_rows, request, items, value_key="log_count"), {
+    by_type = {
         media_type: _serialize_ranked_rows(
             type_rows[media_type],
             request,
@@ -685,6 +717,14 @@ def _most_logged_payloads(entries, request):
         )
         for media_type in _primary_media_types()
     }
+    return (
+        _serialize_ranked_rows(overall_rows, request, items, value_key="log_count"),
+        by_type,
+        {
+            "all": len(rows),
+            **{media_type: totals[media_type] for media_type in _primary_media_types()},
+        },
+    )
 
 
 def _limited_rows_by_type(rows, limit):

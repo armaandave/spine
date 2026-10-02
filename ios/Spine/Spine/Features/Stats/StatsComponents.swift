@@ -946,7 +946,7 @@ struct StatsRankedBars: View {
 
 // MARK: - Poster rail
 
-struct StatsPosterRailItem: Identifiable {
+struct StatsPosterItem: Identifiable {
     let media: MediaSummary
     var stars: Double?
     var caption: String?
@@ -955,8 +955,61 @@ struct StatsPosterRailItem: Identifiable {
     var id: MediaSummary.ID { media.id }
 }
 
+/// Four-column poster grid matching the app's tag and likes grids, with an
+/// optional count badge in the corner of each poster.
+struct StatsPosterGrid: View {
+    let items: [StatsPosterItem]
+    /// Called as each lazily built cell appears, so callers can prefetch the next page.
+    var onItemAppear: ((StatsPosterItem) -> Void)?
+    let action: (MediaSummary) -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(items) { item in
+                Button {
+                    action(item.media)
+                } label: {
+                    MediaArtwork(
+                        url: item.media.displayPosterURL,
+                        title: item.media.title,
+                        slot: .tagGrid,
+                        mediaType: item.media.ref.mediaType,
+                        orientation: item.media.posterOrientation
+                    )
+                    .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
+                    .overlay(alignment: .bottomTrailing) {
+                        if let caption = item.caption {
+                            Text(caption)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.95))
+                                .monospacedDigit()
+                                .padding(.horizontal, 6)
+                                .frame(minHeight: 20)
+                                .background(.black.opacity(0.62), in: Capsule())
+                                .overlay {
+                                    Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 0.5)
+                                }
+                                .padding(5)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(item.media.displayTitle), \(item.accessibilityCaption)")
+                .accessibilityHint("Opens media details")
+                .onAppear {
+                    onItemAppear?(item)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct StatsPosterRail: View {
-    let items: [StatsPosterRailItem]
+    let items: [StatsPosterItem]
     var gutter: CGFloat = 16
     let action: (MediaSummary) -> Void
 

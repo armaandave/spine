@@ -1088,7 +1088,9 @@ struct ProfileView: View {
     }
 
     private func profileMenuSection(_ counts: ProfileCounts) -> some View {
-        VStack(spacing: 0) {
+        let shape = RoundedRectangle(cornerRadius: ProfileMenuRow.groupCornerRadius, style: .continuous)
+
+        return VStack(spacing: 0) {
             ForEach(Array(ProfileMenuDestination.allCases.enumerated()), id: \.element) { index, destination in
                 profileMenuLink(
                     destination,
@@ -1097,11 +1099,8 @@ struct ProfileView: View {
                 )
             }
         }
-        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.white.opacity(0.055), lineWidth: 1)
-        }
+        .clipShape(shape)
+        .modifier(ProfileMenuGroupSurface(shape: shape))
     }
 
     @ViewBuilder
@@ -1113,14 +1112,14 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .diary:
             Button {
                 onOpenDiary()
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .stats:
             NavigationLink {
                 StatsView(
@@ -1137,7 +1136,7 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: nil, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .reviews:
             NavigationLink {
                 ProfileReviewsView(
@@ -1152,7 +1151,7 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .lists:
             NavigationLink {
                 ProfileListsView(
@@ -1178,14 +1177,14 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .planned:
             Button {
                 onOpenLibrary(.planning)
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .likes:
             NavigationLink {
                 ProfileLikesView(
@@ -1201,7 +1200,7 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         case .tags:
             NavigationLink {
                 ProfileTagsView(
@@ -1216,7 +1215,7 @@ struct ProfileView: View {
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ProfileMenuRowButtonStyle())
         }
     }
 
@@ -1675,6 +1674,10 @@ enum ProfileMenuDestination: CaseIterable, Hashable {
 }
 
 struct ProfileMenuRow: View {
+    static let groupCornerRadius: CGFloat = 22
+    static let horizontalPadding: CGFloat = 16
+    static let minimumHeight: CGFloat = 48
+
     let title: String
     let count: Int?
     var showsDivider = true
@@ -1701,19 +1704,63 @@ struct ProfileMenuRow: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white.opacity(0.26))
         }
-        .frame(minHeight: 46)
-        .padding(.horizontal, 12)
+        .frame(minHeight: Self.minimumHeight)
+        .padding(.horizontal, Self.horizontalPadding)
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             if showsDivider {
                 Rectangle()
-                    .fill(.white.opacity(0.055))
-                    .frame(height: 1)
-                    .padding(.leading, 12)
+                    .fill(.white.opacity(0.12))
+                    .frame(height: 0.5)
+                    .padding(.leading, Self.horizontalPadding)
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(count.map { "\(title), \($0)" } ?? title)
+    }
+}
+
+/// Inset-grouped surface for the profile menu: Liquid Glass on iOS 26, a
+/// lighter dark card with a faint border before that.
+private struct ProfileMenuGroupSurface: ViewModifier {
+    let shape: RoundedRectangle
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.white.opacity(0.06), in: shape)
+                .overlay {
+                    shape.strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                }
+        }
+    }
+}
+
+/// Fills the whole row while pressed; the group clips it to its rounded corners.
+private struct ProfileMenuRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ProfileMenuRowPressHighlight(configuration: configuration)
+    }
+}
+
+private struct ProfileMenuRowPressHighlight: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let configuration: ButtonStyleConfiguration
+
+    var body: some View {
+        configuration.label
+            .background {
+                Color.white
+                    .opacity(configuration.isPressed ? 0.12 : 0)
+            }
+            .animation(
+                configuration.isPressed ? nil : SpineMotion.animation(reduceMotion: reduceMotion),
+                value: configuration.isPressed
+            )
     }
 }
 

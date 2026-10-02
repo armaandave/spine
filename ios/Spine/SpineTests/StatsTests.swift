@@ -573,6 +573,120 @@ final class StatsTests: XCTestCase {
         XCTAssertTrue(didCallUnauthorized)
     }
 
+    func testStatsSummaryDecodesMostLoggedTotalsWithPreviewFallback() throws {
+        let summary = try JSONDecoder.api.decode(StatsSummary.self, from: Data(
+            """
+            {
+              "most_logged": [\(Self.mostLoggedJSON(id: 1, logCount: 3))],
+              "most_logged_total": 37,
+              "media_types": [
+                {"media_type": "movie", "most_logged": [], "most_logged_total": 20},
+                {"media_type": "book", "most_logged": [\(Self.mostLoggedJSON(id: 2, logCount: 2))]}
+              ]
+            }
+            """.utf8
+        ))
+        let legacy = try JSONDecoder.api.decode(StatsSummary.self, from: Self.fullSummaryData)
+
+        XCTAssertEqual(summary.mostLoggedTotal, 37)
+        XCTAssertEqual(summary.mediaTypeSummary(for: "movie")?.mostLoggedTotal, 20)
+        XCTAssertEqual(summary.mediaTypeSummary(for: "book")?.mostLoggedTotal, 1)
+        XCTAssertEqual(legacy.mostLoggedTotal, legacy.mostLogged.count)
+    }
+
+    func testAPIProfileRepositoryRequestsMostLoggedPages() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        var paths: [String] = []
+        var queries: [[String: String]] = []
+        StatsRequestCaptureURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            paths.append(components.path)
+            queries.append(self.queryDictionary(components.queryItems ?? []))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer stats-access")
+            return Self.response(for: request, data: Self.mostLoggedPageData(ids: [7], count: 1, next: nil))
+        }
+
+        let own = try await repository.statsMostLogged(
+            username: nil,
+            period: .allTime,
+            mediaType: nil,
+            page: nil,
+            pageSize: 48
+        )
+        _ = try await repository.statsMostLogged(
+            username: "mika",
+            period: .year(2025),
+            mediaType: "movie",
+            page: "2",
+            pageSize: 48
+        )
+
+        XCTAssertEqual(paths, ["/api/v1/stats/me/most-logged/", "/api/v1/users/mika/stats/most-logged/"])
+        XCTAssertEqual(queries, [
+            ["start_date": "all", "end_date": "all", "page_size": "48"],
+            ["start_date": "2025-01-01", "end_date": "2025-12-31", "page_size": "48", "media_type": "movie", "page": "2"],
+        ])
+        XCTAssertEqual(own.results.first?.logCount, 2)
+    }
+
+    func testStatsMostLoggedViewModelPagesAndPrefetchesNearTheEnd() async throws {
+        let firstPage = try Self.mostLoggedPage(
+            ids: Array(1 ... 48),
+            count: 50,
+            next: "https://example.com/api/v1/stats/me/most-logged/?page=2&page_size=48"
+        )
+        let secondPage = try Self.mostLoggedPage(ids: [48, 49, 50], count: 50, next: nil)
+        let repository = StatsMostLoggedRepositoryFake { request in
+            request.page == nil ? firstPage : secondPage
+        }
+        let viewModel = StatsMostLoggedViewModel(
+            profileRepository: repository,
+            username: nil,
+            period: .year(2025),
+            mediaType: "movie",
+            expectedTotal: 12,
+            onUnauthorized: {}
+        )
+
+        XCTAssertEqual(viewModel.totalCount, 12)
+        await viewModel.load()
+        XCTAssertEqual(viewModel.items.count, 48)
+        XCTAssertEqual(viewModel.totalCount, 50)
+        XCTAssertTrue(viewModel.hasMorePages)
+
+        await viewModel.loadNextPageIfNeeded(currentItemID: viewModel.items[10].id)
+        XCTAssertEqual(repository.requests.count, 1)
+
+        await viewModel.loadNextPageIfNeeded(currentItemID: viewModel.items[44].id)
+        XCTAssertEqual(repository.requests.map(\.page), [nil, "2"])
+        XCTAssertEqual(repository.requests.map(\.mediaType), ["movie", "movie"])
+        XCTAssertEqual(repository.requests.map(\.pageSize), [48, 48])
+        XCTAssertEqual(repository.requests.first?.period, .year(2025))
+        XCTAssertEqual(viewModel.items.count, 50)
+        XCTAssertFalse(viewModel.hasMorePages)
+    }
+
+    func testStatsMostLoggedViewModelSurfacesErrorsAndUnauthorized() async {
+        var didCallUnauthorized = false
+        let repository = StatsMostLoggedRepositoryFake { _ in throw APIError.unauthorized }
+        let viewModel = StatsMostLoggedViewModel(
+            profileRepository: repository,
+            username: "mika",
+            period: .allTime,
+            mediaType: nil,
+            onUnauthorized: { didCallUnauthorized = true }
+        )
+
+        await viewModel.load()
+
+        XCTAssertNotNil(viewModel.errorMessage)
+        XCTAssertTrue(viewModel.items.isEmpty)
+        XCTAssertFalse(viewModel.isLoadingInitial)
+        XCTAssertTrue(didCallUnauthorized)
+        XCTAssertEqual(repository.requests.first?.username, "mika")
+    }
+
     func testStatsViewModelIgnoresStaleRequestAfterPeriodChange() async {
         let firstRequestStarted = expectation(description: "All-time request started")
         let repository = StatsProfileRepositoryFake { _, period in
@@ -614,6 +728,27 @@ final class StatsTests: XCTestCase {
         Dictionary(uniqueKeysWithValues: items.compactMap { item in
             item.value.map { (item.name, $0) }
         })
+    }
+
+    private static func mostLoggedJSON(id: Int, logCount: Int) -> String {
+        """
+        {"media": {"ref": {"item_id": \(id), "source": "tmdb", "media_type": "movie", "media_id": "\(id)", \
+        "season_number": null, "episode_number": null}, "title": "Title \(id)", "poster_url": null}, \
+        "log_count": \(logCount)}
+        """
+    }
+
+    private static func mostLoggedPageData(ids: [Int], count: Int, next: String?) -> Data {
+        let results = ids.map { mostLoggedJSON(id: $0, logCount: 2) }.joined(separator: ",")
+        let nextValue = next.map { "\"\($0)\"" } ?? "null"
+        return Data("{\"count\": \(count), \"next\": \(nextValue), \"previous\": null, \"results\": [\(results)]}".utf8)
+    }
+
+    private static func mostLoggedPage(ids: [Int], count: Int, next: String?) throws -> PagedResponse<StatsMostLoggedItem> {
+        try JSONDecoder.api.decode(
+            PagedResponse<StatsMostLoggedItem>.self,
+            from: mostLoggedPageData(ids: ids, count: count, next: next)
+        )
     }
 
     private static func summary(completedCount: Int) -> StatsSummary {
@@ -777,6 +912,54 @@ private final class StatsProfileRepositoryFake: ProfileRepository {
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary {
         requests.append(StatsFakeRequest(username: username, period: period))
         return try await handler(username, period)
+    }
+
+    func me() async throws -> UserProfile { fatalError("Not used") }
+    func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile { fatalError("Not used") }
+    func uploadAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> String? { fatalError("Not used") }
+    func deleteAvatar() async throws -> String? { fatalError("Not used") }
+    func saveProfileBackdrop(ref: MediaRef, backdropURL: String) async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
+    func clearProfileBackdrop() async throws -> ProfileBackdropSaveResponse { fatalError("Not used") }
+    func updatePreferences(_ request: PreferencesUpdateRequest) async throws -> UserPreferences { fatalError("Not used") }
+    func changePassword(_ request: PasswordChangeRequest) async throws { fatalError("Not used") }
+    func setHallOfFameItem(mediaType: String, ref: MediaRef) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+    func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
+}
+
+private struct StatsMostLoggedFakeRequest: Equatable {
+    let username: String?
+    let period: StatsPeriod
+    let mediaType: String?
+    let page: String?
+    let pageSize: Int
+}
+
+private final class StatsMostLoggedRepositoryFake: ProfileRepository {
+    typealias Handler = (StatsMostLoggedFakeRequest) async throws -> PagedResponse<StatsMostLoggedItem>
+
+    private(set) var requests: [StatsMostLoggedFakeRequest] = []
+    private let handler: Handler
+
+    init(handler: @escaping Handler) {
+        self.handler = handler
+    }
+
+    func statsMostLogged(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedItem> {
+        let request = StatsMostLoggedFakeRequest(
+            username: username,
+            period: period,
+            mediaType: mediaType,
+            page: page,
+            pageSize: pageSize
+        )
+        requests.append(request)
+        return try await handler(request)
     }
 
     func me() async throws -> UserProfile { fatalError("Not used") }

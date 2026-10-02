@@ -87,7 +87,12 @@ from api.views.social import (
     GenericLikeView,
     UserActivityView,
 )
-from api.views.stats import MyStatsSummaryView, UserStatsSummaryView
+from api.views.stats import (
+    MyStatsMostLoggedView,
+    MyStatsSummaryView,
+    UserStatsMostLoggedView,
+    UserStatsSummaryView,
+)
 from api.views.tracking import (
     BookCompleteView,
     BookJourneyView,
@@ -201,6 +206,7 @@ urlpatterns = [
     path("diary/<int:entry_id>/", DiaryDetailView.as_view(), name="api-diary-detail"),
     path("diary/<int:entry_id>/like/", DiaryLikeView.as_view(), name="api-diary-like"),
     path("stats/me/summary/", MyStatsSummaryView.as_view(), name="api-my-stats"),
+    path("stats/me/most-logged/", MyStatsMostLoggedView.as_view(), name="api-my-stats-most-logged"),
     path("lists/", ListsView.as_view(), name="api-lists"),
     path("lists/featured/", FeaturedListsView.as_view(), name="api-featured-lists"),
     path("lists/<int:list_id>/", ListDetailView.as_view(), name="api-list-detail"),
@@ -234,6 +240,11 @@ urlpatterns = [
     path("users/<str:username>/", PublicProfileView.as_view(), name="api-user-profile"),
     path("users/<str:username>/hof/", UserHOFView.as_view(), name="api-user-hof"),
     path("users/<str:username>/stats/summary/", UserStatsSummaryView.as_view(), name="api-user-stats"),
+    path(
+        "users/<str:username>/stats/most-logged/",
+        UserStatsMostLoggedView.as_view(),
+        name="api-user-stats-most-logged",
+    ),
     path("users/<str:username>/activity/", UserActivityView.as_view(), name="api-user-activity"),
     path("users/<str:username>/follow/", FollowView.as_view(), name="api-user-follow"),
     path("users/<str:username>/block/", BlockView.as_view(), name="api-user-block"),

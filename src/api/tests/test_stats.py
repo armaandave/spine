@@ -478,6 +478,144 @@ class StatsAPITests(TestCase):
         }
         self.assertIn(items[2].id, returned_ids)
 
+    def test_most_logged_keeps_repeat_titles_and_reports_totals(self):
+        movies = self._items(MediaTypes.MOVIE.value, 10)
+        book = self._items(MediaTypes.BOOK.value, 1)[0]
+        once = self._items(MediaTypes.MOVIE.value, 1, prefix="once")[0]
+        self._log(movies[0], days=[1, 2, 3])
+        for index, item in enumerate(movies[1:], start=4):
+            self._log(item, days=[index, index + 10])
+        self._log(book, days=[30, 31])
+        self._log(once, days=[25])
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(
+            "/api/v1/stats/me/summary/",
+            {"start_date": "all", "end_date": "all"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned = [entry["media"]["ref"]["item_id"] for entry in response.data["most_logged"]]
+        self.assertEqual(len(returned), 11)
+        self.assertEqual(returned[0], movies[0].id)
+        self.assertNotIn(once.id, returned)
+        self.assertTrue(all(entry["log_count"] >= 2 for entry in response.data["most_logged"]))
+        self.assertEqual(response.data["most_logged_total"], 11)
+
+        movie_stats = self._media_stats(response, MediaTypes.MOVIE.value)
+        self.assertEqual(len(movie_stats["most_logged"]), 8)
+        self.assertEqual(movie_stats["most_logged_total"], 10)
+        self.assertEqual(self._media_stats(response, MediaTypes.BOOK.value)["most_logged_total"], 1)
+        self.assertEqual(self._media_stats(response, MediaTypes.TV.value)["most_logged_total"], 0)
+
+    def test_most_logged_endpoint_pages_filters_and_validates(self):
+        movies = self._items(MediaTypes.MOVIE.value, 3)
+        book = self._items(MediaTypes.BOOK.value, 1)[0]
+        self._log(movies[0], days=[1, 2, 3])
+        self._log(movies[1], days=[4, 5])
+        self._log(movies[2], days=[6], months=[2, 3])
+        self._log(book, days=[7, 8])
+        self.client.force_authenticate(self.user)
+
+        first = self.client.get(
+            "/api/v1/stats/me/most-logged/",
+            {"start_date": "all", "end_date": "all", "page_size": 2},
+        )
+        second = self.client.get(
+            "/api/v1/stats/me/most-logged/",
+            {"start_date": "all", "end_date": "all", "page_size": 2, "page": 2},
+        )
+        movies_only = self.client.get(
+            "/api/v1/stats/me/most-logged/",
+            {"start_date": "all", "end_date": "all", "media_type": MediaTypes.MOVIE.value},
+        )
+        february = self.client.get(
+            "/api/v1/stats/me/most-logged/",
+            {"start_date": "2026-02-01", "end_date": "2026-02-28"},
+        )
+        invalid = self.client.get(
+            "/api/v1/stats/me/most-logged/",
+            {"start_date": "all", "end_date": "all", "media_type": "episode"},
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(first.data["count"], 4)
+        self.assertEqual(first.data["results"][0]["media"]["ref"]["item_id"], movies[0].id)
+        self.assertEqual(first.data["results"][0]["log_count"], 3)
+        self.assertIsNotNone(first.data["next"])
+        self.assertEqual(len(second.data["results"]), 2)
+        self.assertIsNone(second.data["next"])
+        self.assertEqual(movies_only.data["count"], 3)
+        self.assertEqual(
+            {entry["media"]["ref"]["media_type"] for entry in movies_only.data["results"]},
+            {MediaTypes.MOVIE.value},
+        )
+        self.assertEqual(february.data["count"], 0)
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_other_user_most_logged_respects_visibility_and_privacy(self):
+        target = get_user_model().objects.create_user(
+            username="repeat-target",
+            password="strong-password-123",
+            profile_private=False,
+        )
+        hidden = get_user_model().objects.create_user(
+            username="repeat-hidden",
+            password="strong-password-123",
+            profile_private=True,
+        )
+        viewer = get_user_model().objects.create_user(
+            username="repeat-viewer",
+            password="strong-password-123",
+        )
+        public_anime, mixed_anime = self._items(MediaTypes.ANIME.value, 2)
+        self._log(public_anime, days=[1, 2], user=target)
+        self._log(mixed_anime, days=[3], user=target)
+        self._log(mixed_anime, days=[4], user=target, visibility="private")
+        self.client.force_authenticate(viewer)
+
+        response = self.client.get(
+            f"/api/v1/users/{target.username}/stats/most-logged/",
+            {"start_date": "all", "end_date": "all"},
+        )
+        private_profile = self.client.get(
+            f"/api/v1/users/{hidden.username}/stats/most-logged/",
+            {"start_date": "all", "end_date": "all"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [entry["media"]["ref"]["item_id"] for entry in response.data["results"]],
+            [public_anime.id],
+        )
+        self.assertIsNone(response.data["results"][0]["media"]["user_state"])
+        self.assertEqual(private_profile.status_code, status.HTTP_404_NOT_FOUND)
+
+    @staticmethod
+    def _items(media_type, count, *, prefix="item"):
+        return [
+            Item.objects.create(
+                media_id=f"{prefix}-{media_type}-{index}",
+                source=Sources.TMDB.value,
+                media_type=media_type,
+                title=f"{prefix.title()} {media_type} {index}",
+                image=f"https://example.com/{prefix}-{media_type}-{index}.jpg",
+            )
+            for index in range(count)
+        ]
+
+    def _log(self, item, *, days, months=(1,), user=None, visibility="public"):
+        DiaryEntry.objects.bulk_create([
+            DiaryEntry(
+                user=user or self.user,
+                item=item,
+                consumed_at=self._aware(2026, month, day),
+                visibility=visibility,
+            )
+            for month in months
+            for day in days
+        ])
+
     @staticmethod
     def _aware(year, month, day):
         return datetime(

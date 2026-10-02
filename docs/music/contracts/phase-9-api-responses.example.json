@@ -41,8 +41,10 @@
         "object": {
           "id": 1,
           "list_name": "Favorite Albums",
+          "name": "Favorite Albums",
           "type": "list"
         },
+        "person": null,
         "type": "list_item_added",
         "viewer": {
           "can_view": true,
@@ -90,6 +92,7 @@
           "rating": "4.5",
           "type": "diary"
         },
+        "person": null,
         "type": "diary_created",
         "viewer": {
           "can_view": true,
@@ -136,6 +139,7 @@
           "rating": "4.5",
           "type": "tracking"
         },
+        "person": null,
         "type": "rating_updated",
         "viewer": {
           "can_view": true,
@@ -155,6 +159,7 @@
       "rating_distribution": [],
       "review_count": 0
     },
+    "completion": null,
     "credit_roles": [],
     "crew": [],
     "custom_backdrop_url": null,
@@ -191,6 +196,10 @@
         "vote_count": 20
       }
     ],
+    "external_ratings_preparation": {
+      "retry_after_seconds": 2,
+      "state": "ready"
+    },
     "genres": [
       "industrial rock"
     ],
@@ -282,6 +291,7 @@
     },
     "overview": null,
     "parent": null,
+    "position": null,
     "poster_accent_color": null,
     "poster_aspect_ratio": 1.0,
     "poster_height": 500,
@@ -570,11 +580,13 @@
   "list_create": {
     "collaborators": [],
     "description": "",
+    "entries_count": 0,
     "id": 1,
     "image_url": "https://www.themoviedb.org/assets/2/v4/glyphicons/basic/glyphicons-basic-38-picture-grey-c2ebdbb057f2a7614185931650f8cee23fa137b93812ccb132b9df511df1cfac.svg",
     "is_ranked": true,
     "items_count": 0,
     "like_count": 0,
+    "list_type": "media",
     "name": "Favorite Albums",
     "owner": {
       "avatar_url": null,
@@ -582,6 +594,7 @@
       "id": 901,
       "username": "phase9"
     },
+    "people_count": 0,
     "slug": "favorite-albums",
     "tags": [],
     "updated_at": "2026-07-16T12:00:00Z",
@@ -589,7 +602,12 @@
   },
   "list_detail": {
     "collaborators": [],
+    "completion": {
+      "completed_count": 1,
+      "total_count": 1
+    },
     "description": "",
+    "entries_count": 1,
     "id": 1,
     "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
     "is_ranked": true,
@@ -624,6 +642,7 @@
     ],
     "items_count": 1,
     "like_count": 0,
+    "list_type": "media",
     "name": "Favorite Albums",
     "owner": {
       "avatar_url": null,
@@ -631,6 +650,8 @@
       "id": 901,
       "username": "phase9"
     },
+    "people": [],
+    "people_count": 0,
     "slug": "favorite-albums",
     "tags": [],
     "updated_at": "2026-07-16T12:00:00Z",
@@ -689,11 +710,13 @@
       {
         "collaborators": [],
         "description": "",
+        "entries_count": 1,
         "id": 1,
         "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
         "is_ranked": true,
         "items_count": 1,
         "like_count": 0,
+        "list_type": "media",
         "name": "Favorite Albums",
         "owner": {
           "avatar_url": null,
@@ -701,6 +724,7 @@
           "id": 901,
           "username": "phase9"
         },
+        "people_count": 0,
         "preview_items": [
           {
             "backdrop_url": null,
@@ -730,6 +754,7 @@
             "user_state": null
           }
         ],
+        "preview_people": [],
         "slug": "favorite-albums",
         "tags": [],
         "updated_at": "2026-07-16T12:00:00Z",
@@ -888,6 +913,7 @@
           "eng"
         ],
         "overview": null,
+        "position": null,
         "poster_accent_color": null,
         "poster_aspect_ratio": 1.0,
         "poster_height": 500,
@@ -1055,6 +1081,7 @@
           "eng"
         ],
         "overview": null,
+        "position": null,
         "poster_accent_color": null,
         "poster_aspect_ratio": 1.0,
         "poster_height": 500,
@@ -1161,6 +1188,7 @@
         "eng"
       ],
       "overview": null,
+      "position": null,
       "poster_accent_color": null,
       "poster_aspect_ratio": 1.0,
       "poster_height": 500,
@@ -1268,6 +1296,20 @@
       }
     ],
     "end_date": "2026-07-16T23:59:59.999999Z",
+    "list_progress": [
+      {
+        "completion": {
+          "completed_count": 1,
+          "total_count": 1
+        },
+        "id": 1,
+        "media_type": "music",
+        "name": "Favorite Albums",
+        "poster_urls": [
+          "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500"
+        ]
+      }
+    ],
     "media_count": {
       "anime": 0,
       "book": 0,
@@ -1299,6 +1341,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "movie",
@@ -1309,6 +1355,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1415,6 +1462,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "tv",
@@ -1425,6 +1476,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1531,6 +1583,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "anime",
@@ -1541,6 +1597,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1647,6 +1704,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "manga",
@@ -1657,6 +1718,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1763,6 +1825,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "game",
@@ -1773,6 +1839,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1879,6 +1946,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "book",
@@ -1889,6 +1960,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -1995,6 +2067,10 @@
       {
         "average_rating": null,
         "completed_count": 0,
+        "completion": {
+          "completed_count": 0,
+          "total_count": 0
+        },
         "diary_entry_count": 0,
         "liked_count": 0,
         "media_type": "comic",
@@ -2005,6 +2081,7 @@
           "total_items": 0
         },
         "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 0,
         "rating_distribution": [
           {
@@ -2111,6 +2188,10 @@
       {
         "average_rating": "4.5",
         "completed_count": 1,
+        "completion": {
+          "completed_count": 1,
+          "total_count": 1
+        },
         "diary_entry_count": 1,
         "liked_count": 1,
         "media_type": "music",
@@ -2120,37 +2201,8 @@
           "release_year_items": 1,
           "total_items": 1
         },
-        "most_logged": [
-          {
-            "log_count": 1,
-            "media": {
-              "backdrop_url": null,
-              "custom_backdrop_url": null,
-              "custom_poster_url": null,
-              "default_source": "musicbrainz",
-              "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-              "overview": null,
-              "poster_accent_color": null,
-              "poster_aspect_ratio": null,
-              "poster_height": null,
-              "poster_orientation": "unknown",
-              "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-              "poster_width": null,
-              "ref": {
-                "episode_number": null,
-                "item_id": 902,
-                "media_id": "3bd76d40-7f0e-36b7-9348-91a33afee20e",
-                "media_type": "music",
-                "season_number": null,
-                "source": "musicbrainz"
-              },
-              "release_date": null,
-              "subtitle": null,
-              "title": "Year Zero",
-              "user_state": null
-            }
-          }
-        ],
+        "most_logged": [],
+        "most_logged_total": 0,
         "rated_count": 1,
         "rating_distribution": [
           {
@@ -2306,41 +2358,16 @@
       "release_year_items": 1,
       "total_items": 1
     },
-    "most_logged": [
-      {
-        "log_count": 1,
-        "media": {
-          "backdrop_url": null,
-          "custom_backdrop_url": null,
-          "custom_poster_url": null,
-          "default_source": "musicbrainz",
-          "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "overview": null,
-          "poster_accent_color": null,
-          "poster_aspect_ratio": null,
-          "poster_height": null,
-          "poster_orientation": "unknown",
-          "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "poster_width": null,
-          "ref": {
-            "episode_number": null,
-            "item_id": 902,
-            "media_id": "3bd76d40-7f0e-36b7-9348-91a33afee20e",
-            "media_type": "music",
-            "season_number": null,
-            "source": "musicbrainz"
-          },
-          "release_date": null,
-          "subtitle": null,
-          "title": "Year Zero",
-          "user_state": null
-        }
-      }
-    ],
+    "most_logged": [],
+    "most_logged_total": 0,
     "overview": {
       "active_days": 1,
       "average_rating": "4.5",
       "completed_count": 1,
+      "completion": {
+        "completed_count": 1,
+        "total_count": 1
+      },
       "current_streak_days": 1,
       "diary_entry_count": 1,
       "liked_count": 1,
@@ -2722,6 +2749,7 @@
       ],
       "total_scored": 1
     },
+    "series_progress": [],
     "start_date": "2025-07-16T00:00:00Z",
     "status_distribution": {
       "datasets": [

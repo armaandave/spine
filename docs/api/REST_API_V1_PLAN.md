@@ -303,6 +303,8 @@ list name as `object.name`, preserving the fallback expected by older clients.
 |---|---|---|
 | GET | `/api/v1/stats/me/summary/` | Yes |
 | GET | `/api/v1/users/{username}/stats/summary/` | Yes |
+| GET | `/api/v1/stats/me/most-logged/` | Yes |
+| GET | `/api/v1/users/{username}/stats/most-logged/` | Yes |
 | GET | `/api/v1/imports/` | Yes |
 | POST | `/api/v1/imports/{source}/` | Yes |
 | GET | `/api/v1/imports/tasks/{task_id}/` | Yes |
@@ -437,7 +439,11 @@ Contract details:
 - `release_years` is sparse and sorted ascending. Genre and language arrays are
   capped at ten values, ordered by count descending and then name.
 - Top-level media arrays are capped at 12 entries. Each media-type entry is
-  self-contained and caps `top_rated` and `most_logged` at six entries.
+  self-contained and caps `top_rated` at six entries and `most_logged` at eight.
+- `most_logged` only includes titles logged at least twice in the range, ordered
+  by `log_count` descending, then most recent log. The arrays are previews:
+  top-level and per-type `most_logged_total` give the full number of qualifying
+  titles, and the most-logged endpoint below pages through all of them.
 - `diary_top_rated` is the native visibility-aware ranked array. The legacy
   top-level `top_rated` key remains tracking-score based for the current user;
   other-user responses project visible diary ratings into legacy
@@ -454,6 +460,28 @@ Contract details:
   an accepted follow, and private entries are never included. Embedded media
   summaries deliberately return `user_state: null` so a target user's private
   tracking, diary, and list state is not exposed.
+
+### Stats Most Logged
+
+`GET /api/v1/stats/me/most-logged/` and
+`GET /api/v1/users/{username}/stats/most-logged/` page through every title the
+user logged at least twice. They accept the same `start_date`/`end_date`
+parameters and visibility rules as the summary, plus:
+
+- `media_type`: optional primary media type (`tv` includes season and episode
+  logs). Unknown values return `400`.
+- `page`, `page_size`: standard page-number pagination (25 by default, 100 max).
+
+```json
+{
+  "count": 37,
+  "next": "https://api.example.com/api/v1/stats/me/most-logged/?page=2&page_size=48",
+  "previous": null,
+  "results": [
+    { "media": { "ref": { "item_id": 42 }, "user_state": null }, "log_count": 5 }
+  ]
+}
+```
 
 ## Auth Flow
 

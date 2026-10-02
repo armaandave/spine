@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.pagination import StandardResultsSetPagination
 from api.permissions import can_view_user_profile
 from api.serializers.common import media_summary_from_item
 from api.services import stats as stats_service
@@ -111,3 +112,43 @@ class UserStatsSummaryView(APIView):
         if not can_view_user_profile(request.user, user):
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(stats_payload(user, request))
+
+
+def most_logged_response(user, request):
+    """Page through every title the user logged at least twice in the range."""
+    stats_range = stats_service.parse_stats_range(request.query_params)
+    media_type = stats_service.parse_stats_media_type(request.query_params.get("media_type"))
+    entries = stats_service.ranged_diary_entries(
+        user=user,
+        viewer=request.user,
+        stats_range=stats_range,
+    )
+    paginator = StandardResultsSetPagination()
+    page = paginator.paginate_queryset(
+        stats_service.most_logged_rows(entries, media_type),
+        request,
+    )
+    return paginator.get_paginated_response(
+        stats_service.serialize_most_logged_rows(page, request),
+    )
+
+
+class MyStatsMostLoggedView(APIView):
+    """Current user's complete most-logged list, paged."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return most_logged_response(request.user, request)
+
+
+class UserStatsMostLoggedView(APIView):
+    """Public user's complete most-logged list, paged."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username):
+        user = get_object_or_404(get_user_model(), username=username)
+        if not can_view_user_profile(request.user, user):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return most_logged_response(user, request)
