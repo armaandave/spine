@@ -123,7 +123,8 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
 
 ### 5.1 Planned base URL
 
-- Dev: Cloudflare quick tunnel or `http://localhost:8000` (Simulator only for localhost).
+- Default and release: `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`). Any launch without `SPINE_API_BASE_URL` uses production.
+- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh`, Simulator only, opted into per launch (see "Local backend (Simulator)" under Run). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
 - Config via `Info.plist` or xcconfig — **never hardcode secrets**.
 
 ### 5.2 v1 endpoints (target)
@@ -242,7 +243,22 @@ Rules:
 - Open `ios/Spine/Spine.xcodeproj` in Xcode.
 - Select iPhone simulator → Run (⌘R).
 - API base URL: `ios/Spine/Spine/Core/Environment/AppConfig.swift`
-- Scheme: **Debug** with live API against `http://127.0.0.1:8000` (Docker on same Mac).
+- Scheme: **Debug**. Without an override it talks to production (`https://api.spine-api.com`).
+
+### Local backend (Simulator)
+
+Production is the default on purpose. Use the local backend only when you mean to, and say which backend you used when reporting results.
+
+1. Start the backend from the repo root: `./start-dev.sh` (Django on `http://127.0.0.1:8001`; set `SPINE_DEV_PORT` to change the port). Check `curl http://127.0.0.1:8001/api/v1/health/` returns 200.
+2. Launch with `SPINE_API_BASE_URL` set:
+   - simctl: `SIMCTL_CHILD_SPINE_API_BASE_URL=http://127.0.0.1:8001 xcrun simctl launch --terminate-running-process <UDID> com.armaan.Spine`
+   - XcodeBuildMCP: `build_run_sim` cannot pass launch environment, so it always launches against production. Build (or build and run), then `stop_app_sim`, then `launch_app_sim` with `env: {"SPINE_API_BASE_URL": "http://127.0.0.1:8001"}`.
+   - Xcode: duplicate the scheme with **Shared** unchecked and set the variable in its Run action. Never add it to the shared `Spine.xcscheme`.
+3. Confirm the app's requests show up in the `runserver` output.
+
+Never point a "local" build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
+
+Release builds keep `AppConfig.productionAPIBaseURL`. Installed builds have no launch environment, so they always use production; don't change that default to a local URL.
 
 ### Codex Desktop simulator mirror
 

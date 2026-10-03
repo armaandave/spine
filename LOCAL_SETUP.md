@@ -20,7 +20,7 @@ This will:
 2. Start the Django development server
 3. Both run in the background and can be stopped with Ctrl+C
 
-The app will be available at: **http://127.0.0.1:8000**
+The app will be available at: **http://127.0.0.1:8001** (set `SPINE_DEV_PORT` to use another port; `8000` is the production Docker stack on the server Mac)
 
 ## Manual Setup (Step by Step)
 
@@ -214,9 +214,9 @@ npm run build-css-prod
 
 ## Accessing the App
 
-Once running:
-- **Web Interface**: http://127.0.0.1:8000
-- **Admin Panel**: http://127.0.0.1:8000/admin (if superuser created)
+Once running via `start-dev.sh`:
+- **Web Interface**: http://127.0.0.1:8001
+- **Admin Panel**: http://127.0.0.1:8001/admin (if superuser created)
 - **API**: Various endpoints available (see `src/app/urls.py`)
 
 ## Stopping the Servers

@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "description": "Frontend build tools for Spine",
     "scripts": {
-        "build-css": "./tailwindcss -i ./src/static/css/input.css -o ./src/static/css/main.css --watch",
+        "build-css": "./tailwindcss -i ./src/static/css/input.css -o ./src/static/css/main.css --watch=always",
         "build-css-prod": "./tailwindcss -i ./src/static/css/input.css -o ./src/static/css/main.css --minify"
     },
     "devDependencies": {
