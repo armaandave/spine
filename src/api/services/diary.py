@@ -37,7 +37,7 @@ def diary_payload(entry, request=None, viewer=None):
             ).exists()
         )
     is_single_weight = single_weight.uses_half_star_rating(entry.item)
-    return {
+    payload = {
         "id": entry.id,
         "user": user_summary(entry.user, request=request),
         "media": media_summary_from_item(
@@ -68,6 +68,10 @@ def diary_payload(entry, request=None, viewer=None):
         "created_at": entry.created_at,
         "updated_at": entry.updated_at,
     }
+    if entry.item.media_type == "game":
+        session = getattr(entry, "game_playthrough", None)
+        payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": (entry.progress_snapshot or {}).get("total_minutes"), "percentage": (entry.progress_snapshot or {}).get("percentage")})
+    return payload
 
 
 def prime_diary_likes(entries, viewer):
@@ -116,7 +120,8 @@ def create_entry(user, data):
     if is_single_weight:
         try:
             rating = single_weight.rating_from_wire(rating)
-            consumed_at = single_weight.calendar_datetime(consumed_at)
+            if ref["media_type"] != MediaTypes.GAME.value:
+                consumed_at = single_weight.calendar_datetime(consumed_at)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
     auto_mark_consumed = data.get("auto_mark_consumed", False)
@@ -124,6 +129,17 @@ def create_entry(user, data):
 
     with transaction.atomic():
         item = get_or_create_item_from_metadata(ref, metadata)
+        if ref["media_type"] == "game":
+            if not data.get("mutation_id"):
+                raise serializers.ValidationError({"mutation_id": "A mutation UUID is required for game completion."})
+            from app import game_tracking
+
+            payload = {key: value for key, value in data.items() if key in {"mutation_id", "playthrough_id", "start_date", "total_minutes", "percentage", "review", "review_title", "contains_spoilers", "tags", "is_rewatch", "liked"}}
+            payload["completion_date"] = consumed_at
+            if "rating" in data:
+                payload["rating"] = rating
+            _, entry = tracking_service._call_book(game_tracking.complete, user, item, **payload)
+            return entry
         entry = create_diary_entry(
             user=user,
             item=item,
@@ -181,12 +197,12 @@ def update_entry(entry, data):
         try:
             if "rating" in data:
                 data["rating"] = single_weight.rating_from_wire(data["rating"])
-            if "consumed_at" in data:
+            if "consumed_at" in data and entry.item.media_type != MediaTypes.GAME.value:
                 data["consumed_at"] = single_weight.calendar_datetime(data["consumed_at"])
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
         data.pop("visibility", None)
-    return update_diary_entry(entry, data, tags=tags)
+    return tracking_service._call_book(update_diary_entry, entry, data, tags=tags)
 
 
 def tag_results(query, user=None, *, limit=10):

@@ -83,8 +83,9 @@ class ImportSteamUpdate(TestCase):
         game.refresh_from_db()
         self.assertEqual(imported_counts[MediaTypes.GAME.value], 1)
         self.assertEqual(Game.objects.filter(user=self.user).count(), 1)
-        self.assertEqual(game.progress, 1300)
-        self.assertEqual(game.status, Status.IN_PROGRESS.value)
+        self.assertEqual(game.progress, 0)
+        self.assertEqual(game.imported_lifetime_minutes, 1300)
+        self.assertEqual(game.status, Status.PLANNING.value)
         self.assertEqual(game.history.count(), 2)
 
     def test_overwrite_steam_game_completed_status(
@@ -110,33 +111,27 @@ class ImportSteamUpdate(TestCase):
 
         game.refresh_from_db()
         self.assertEqual(imported_counts[MediaTypes.GAME.value], 1)
-        self.assertEqual(game.progress, 1100)
+        self.assertEqual(game.progress, 1000)
+        self.assertEqual(game.imported_lifetime_minutes, 1100)
         self.assertEqual(game.status, Status.COMPLETED.value)
 
-    def test_overwrite_updates_newest_game_instance(
+    def test_repeated_overwrite_updates_one_canonical_game(
         self,
         mock_get_metadata,
         mock_external_game,
         mock_api_request,
     ):
-        """Test overwrite mode updates the newest game instance."""
+        """Refresh a provider total without adding rows or hours."""
         self._setup_mocks(mock_get_metadata, mock_external_game, mock_api_request)
-        older_game = self._create_game(progress=100)
-        newer_game = self._create_game(progress=200)
-
-        imported_counts, _ = steam.importer(
-            "76561198000000000",
-            self.user,
-            "overwrite",
-        )
-
-        older_game.refresh_from_db()
-        newer_game.refresh_from_db()
-        self.assertEqual(imported_counts[MediaTypes.GAME.value], 1)
-        self.assertEqual(older_game.progress, 100)
-        self.assertEqual(older_game.status, Status.PLANNING.value)
-        self.assertEqual(newer_game.progress, 1300)
-        self.assertEqual(newer_game.status, Status.IN_PROGRESS.value)
+        game = self._create_game(progress=200)
+        steam.importer("76561198000000000", self.user, "overwrite")
+        imported_counts, _ = steam.importer("76561198000000000", self.user, "overwrite")
+        game.refresh_from_db()
+        self.assertEqual(imported_counts, {})
+        self.assertEqual(Game.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(game.progress, 200)
+        self.assertEqual(game.imported_lifetime_minutes, 1300)
+        self.assertEqual(game.status, Status.PLANNING.value)
 
     def test_new_mode_skips_existing_game(
         self,

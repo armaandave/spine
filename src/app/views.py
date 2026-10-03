@@ -1,11 +1,13 @@
 import logging
 from pathlib import Path
+from uuid import uuid4
 
 from django.apps import apps
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import prefetch_related_objects
@@ -17,8 +19,9 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from app import config, exposure, helpers, history_processor, single_weight
+from app import config, exposure, game_tracking, helpers, history_processor, single_weight
 from app import statistics as stats
+from app.book_tracking import BookTrackingConflict
 from app.forms import EpisodeForm, ManualItemForm, get_form_class, BookProgressForm, BookLogForm, BookStartReadingForm
 from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status, Movie, Episode, Book, BookSession, UserMessage
 
@@ -530,6 +533,16 @@ def update_media_score(request, media_type, instance_id):
         instance_id,
     )
 
+    if media_type == MediaTypes.GAME.value:
+        try:
+            score = single_weight.rating_from_wire(request.POST.get("score"))
+            game_tracking.set_rating(request.user, media.item, score)
+        except BookTrackingConflict as error:
+            return JsonResponse(error.as_dict(), status=409)
+        except ValidationError as error:
+            return JsonResponse({"error": error.messages[0]}, status=400)
+        return JsonResponse({"success": True, "score": single_weight.rating_to_wire(score)})
+
     score = float(request.POST.get("score"))
     if single_weight.supports(media_type):
         media = single_weight.set_rating(
@@ -719,7 +732,7 @@ def track_modal(
             title += f" S{season_number}"
 
     form_kwargs = (
-        {"public_rating_scale": True} if single_weight.supports(media_type) else {}
+        {"public_rating_scale": True} if single_weight.supports(media_type) or game_tracking.supports(media_type) else {}
     )
     form = get_form_class(media_type)(instance=media, initial=initial_data, **form_kwargs)
 
@@ -777,7 +790,7 @@ def media_save(request):
     # Validate the form and save the instance if it's valid
     form_class = get_form_class(media_type)
     form_kwargs = (
-        {"public_rating_scale": True} if single_weight.supports(media_type) else {}
+        {"public_rating_scale": True} if single_weight.supports(media_type) or game_tracking.supports(media_type) else {}
     )
     form = form_class(request.POST, instance=instance, **form_kwargs)
     if form.is_valid():
@@ -792,7 +805,11 @@ def media_save(request):
                 notes=form.cleaned_data.get("notes", ""),
             )
         else:
-            saved = form.save()
+            try:
+                saved = form.save()
+            except (BookTrackingConflict, ValidationError) as error:
+                messages.error(request, str(error))
+                return helpers.redirect_back(request)
         logger.info("%s saved successfully.", saved)
     else:
         logger.error(form.errors.as_json())
@@ -820,7 +837,13 @@ def media_delete(request):
             media_type,
             instance_id,
         )
-        if single_weight.supports(media_type):
+        if game_tracking.supports(media_type):
+            try:
+                game_tracking.remove_tracking(request.user, media.item)
+            except BookTrackingConflict as error:
+                messages.error(request, str(error))
+                return helpers.redirect_back(request)
+        elif single_weight.supports(media_type):
             try:
                 single_weight.unwatch(request.user, media.item)
             except single_weight.DiaryHistoryExists as error:
@@ -944,7 +967,7 @@ def create_entry(request):
     # Prepare and validate the media form
     updated_request = request.POST.copy()
     updated_request.update({"source": item.source, "media_id": item.media_id})
-    form_kwargs = {"public_rating_scale": True} if single_weight.supports(item) else {}
+    form_kwargs = {"public_rating_scale": True} if single_weight.supports(item) or game_tracking.supports(item) else {}
     media_form = get_form_class(item.media_type)(updated_request, **form_kwargs)
 
     if not media_form.is_valid():
@@ -977,7 +1000,11 @@ def create_entry(request):
             notes=media_form.cleaned_data.get("notes", ""),
         )
     else:
-        media_form.save()
+        try:
+            media_form.save()
+        except (BookTrackingConflict, ValidationError) as error:
+            messages.error(request, str(error))
+            return redirect("create_entry")
 
     # Success message
     msg = f"{item} added successfully."
@@ -1959,7 +1986,7 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                 item.save(update_fields=["total_pages"])
         
     # Determine default date for logging
-    default_date = date.today()
+    default_date = timezone.localdate()
     
     # For completed seasons, default to the season's end_date
     if media_type == MediaTypes.SEASON.value and season_number is not None:
@@ -1981,17 +2008,21 @@ def log_modal(request, source, media_type, media_id, season_number=None):
     is_single_weight = single_weight.supports(item)
     current_rating = (
         single_weight.rating_to_wire(tracking.score)
-        if is_single_weight and tracking and tracking.score is not None
+        if (is_single_weight or game_tracking.supports(item)) and tracking and tracking.score is not None
         else tracking.score if tracking else None
     )
+    game_state = game_tracking.state_payload(tracking) if game_tracking.supports(item) and tracking else None
     return render(request, 'app/components/log_modal.html', {
         'item': item,
+        'mutation_id': uuid4(),
+        'game_playthrough': game_state['current_playthrough'] if game_state and game_state['current_playthrough'] and game_state['current_playthrough']['status'] in game_tracking.OPEN_STATUSES else None,
         'user': request.user,
         'today': default_date,
         'book_completion': request.GET.get('book_complete') == '1',
         'is_repeat': (
             single_weight.default_repeat(request.user, item)
             if is_single_weight
+            else bool(game_state and game_state['lifetime_completion_count']) if game_tracking.supports(item)
             else request.GET.get('relisten') == '1'
         ),
         'current_rating': current_rating,
@@ -2093,188 +2124,56 @@ def unmark_movie_watched(request, source, media_id):
         return render(request, "app/components/media_actions.html", context)
 
 
+def _game_action_response(request, source, media_id, action):
+    """Retain legacy game URLs and HTMX fragments with canonical transitions."""
+    exposure.require_media_type(MediaTypes.GAME.value)
+    metadata = services.get_media_metadata(MediaTypes.GAME.value, media_id, source)
+    item, _ = Item.objects.get_or_create(
+        media_id=media_id, source=source, media_type=MediaTypes.GAME.value,
+        defaults={"title": metadata["title"], "image": metadata["image"]},
+    )
+    try:
+        current = action(request.user, item)
+    except game_tracking.CompletionRequired:
+        response = log_modal(request, source, MediaTypes.GAME.value, media_id)
+        response["HX-Retarget"] = "#log-modal-container"
+        response["HX-Reswap"] = "innerHTML"
+        return response
+    except BookTrackingConflict as error:
+        return JsonResponse(error.as_dict(), status=409)
+    except ValidationError as error:
+        return JsonResponse({"error": error.messages[0]}, status=400)
+    metadata.update(media_type=MediaTypes.GAME.value, source=source, media_id=media_id)
+    return render(request, "app/components/media_actions.html", {
+        "media": metadata,
+        "media_type": MediaTypes.GAME.value,
+        "current_instance": current,
+        "diary_entries": DiaryEntry.objects.filter(user=request.user, item=item).order_by("-consumed_at"),
+    })
+
+
 @require_POST
 def start_playing_game(request, source, media_id):
-    """Start playing a game by creating a Game instance with in-progress status."""
-    try:
-        media_type = MediaTypes.GAME.value
-            
-        # Get or create the item
-        metadata = services.get_media_metadata(media_type, media_id, source)
-        item, _ = Item.objects.get_or_create(
-            media_id=media_id,
-            source=source,
-            media_type=media_type,
-            defaults={
-                "title": metadata["title"],
-                "image": metadata["image"],
-            },
-        )
-        
-        # Get or create the Game instance
-        from app.models import Game
-        game_instance, created = Game.objects.get_or_create(
-            item=item,
-            user=request.user,
-            defaults={
-                "status": Status.IN_PROGRESS.value,
-                "start_date": timezone.now(),
-            }
-        )
-        
-        if not created:
-            # If it already exists, update the status
-            game_instance.status = Status.IN_PROGRESS.value
-            if not game_instance.start_date:
-                game_instance.start_date = timezone.now()
-            game_instance.save()
-        
-        # Get diary entries for this media
-        diary_entries = DiaryEntry.objects.filter(user=request.user, item=item).order_by('-consumed_at')
-        
-        # Return updated action buttons for HTMX to swap  
-        # Add required fields to metadata for template compatibility
-        metadata["media_type"] = media_type
-        metadata["source"] = source
-        metadata["media_id"] = media_id
-        context = {
-            "media": metadata,
-            "media_type": media_type,
-            "current_instance": game_instance,
-            "diary_entries": diary_entries,
-        }
-        
-        return render(request, "app/components/media_actions.html", context)
-        
-    except Exception as e:
-        logger.error(f"Error starting to play game: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
+    """Start or resume one game playthrough."""
+    return _game_action_response(request, source, media_id, game_tracking.start)
 
 
 @require_POST
 def mark_game_played(request, source, media_id):
-    """Mark a game as played by creating a Game instance with completed status."""
-    try:
-        media_type = MediaTypes.GAME.value
-            
-        # Get or create the item
-        metadata = services.get_media_metadata(media_type, media_id, source)
-        item, _ = Item.objects.get_or_create(
-            media_id=media_id,
-            source=source,
-            media_type=media_type,
-            defaults={
-                "title": metadata["title"],
-                "image": metadata["image"],
-            },
-        )
-        
-        # Get or create the Game instance
-        from app.models import Game
-        game_instance, created = Game.objects.get_or_create(
-            item=item,
-            user=request.user,
-            defaults={
-                "status": Status.COMPLETED.value,
-                "end_date": timezone.now(),
-            }
-        )
-
-        if not created:
-            # If it already exists, update the status only if it's not already completed
-            game_instance.end_date = timezone.now()
-            
-            # Only update status if it's not already completed
-            if game_instance.status != Status.COMPLETED.value:
-                game_instance.status = Status.COMPLETED.value
-                game_instance.save(update_fields=["status", "end_date"])
-            else:
-                game_instance.save(update_fields=["end_date"])
-        
-        # Get diary entries for this media
-        diary_entries = DiaryEntry.objects.filter(user=request.user, item=item).order_by('-consumed_at')
-        
-        # Return updated action buttons for HTMX to swap  
-        # Add required fields to metadata for template compatibility
-        metadata["media_type"] = media_type
-        metadata["source"] = source
-        metadata["media_id"] = media_id
-        context = {
-            "media": metadata,
-            "media_type": media_type,
-            "current_instance": game_instance,
-            "diary_entries": diary_entries,
-        }
-        
-        return render(request, "app/components/media_actions.html", context)
-        
-    except Exception as e:
-        logger.error(f"Error marking game as played: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
+    """Mark past completion or open the current playthrough's composer."""
+    return _game_action_response(request, source, media_id, game_tracking.mark_completed)
 
 
 @require_POST
 def mark_game_completed(request, source, media_id):
-    """Mark a game as completed by creating a tracking instance and marking it as consumed.
-    
-    Kept for backward compatibility. Redirects to mark_game_played functionality.
-    """
+    """Preserve the older completion URL."""
     return mark_game_played(request, source, media_id)
 
 
 @require_POST
 def unmark_game_completed(request, source, media_id):
-    """Unmark a game as completed by removing the tracking instance."""
-    media_type = MediaTypes.GAME.value
-        
-    try:
-        # Get the item
-        item = Item.objects.get(
-            media_id=media_id,
-            source=source,
-            media_type=media_type
-        )
-        
-        # Get the media instance
-        from app.models import Game
-        media_instance = Game.objects.get(
-            item=item,
-            user=request.user
-        )
-        
-        # Delete the media instance to "uncomplete" it
-        media_instance.delete()
-        
-        # Get metadata for template
-        metadata = services.get_media_metadata(media_type, media_id, source)
-        metadata["media_type"] = media_type
-        metadata["source"] = source
-        metadata["media_id"] = media_id
-        
-        # Get diary entries for this media
-        diary_entries = DiaryEntry.objects.filter(user=request.user, item=item).order_by('-consumed_at')
-        
-        context = {
-            "media": metadata,
-            "media_type": media_type,
-            "current_instance": None,  # No instance after uncompleting
-            "diary_entries": diary_entries,
-        }
-        return render(request, "app/components/media_actions.html", context)
-        
-    except (Item.DoesNotExist, Game.DoesNotExist):
-        # If the item or media instance doesn't exist, return the uncompleted state
-        metadata = services.get_media_metadata(media_type, media_id, source)
-        metadata["media_type"] = media_type
-        metadata["source"] = source
-        metadata["media_id"] = media_id
-        
-        context = {
-            "media": metadata,
-            "media_type": media_type,
-            "current_instance": None,
-        }
-        return render(request, "app/components/media_actions.html", context)
+    """Undo undated completion without deleting protected history."""
+    return _game_action_response(request, source, media_id, game_tracking.undo_completed)
 
 
 @require_POST
@@ -3183,10 +3082,10 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
         # Parse form data
         consumed_at = parse_date(request.POST.get('watch_date'))
         if not consumed_at:
-            if single_weight.supports(media_type):
+            if (single_weight.supports(media_type) or game_tracking.supports(media_type)):
                 return JsonResponse({"error": "A consumption date is required."}, status=400)
             consumed_at = timezone.now()
-        elif single_weight.supports(media_type) and consumed_at > timezone.localdate():
+        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > timezone.localdate():
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3196,7 +3095,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
         rating = request.POST.get('rating')
         if rating and rating.strip():
             rating = float(rating)
-            if single_weight.supports(media_type):
+            if (single_weight.supports(media_type) or game_tracking.supports(media_type)):
                 rating = single_weight.rating_from_wire(rating)
         else:
             rating = None
@@ -3221,20 +3120,36 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
         
         # Create the diary entry
         logger.info(f"About to create diary entry with auto_mark_consumed={auto_mark_consumed}")
-        entry = create_diary_entry(
-            user=request.user,
-            item=item,
-            consumed_at=consumed_at,
-            rating=rating,
-            review=review,
-            liked=liked,
-            is_rewatch=is_rewatch,
-            auto_mark_consumed=auto_mark_consumed,
-            tags=tag_names,
-            review_title=review_title,
-            contains_spoilers=contains_spoilers,
-            visibility=visibility,
-        )
+        if game_tracking.supports(item):
+            if not request.POST.get("mutation_id"):
+                return JsonResponse({"error": "Reopen the completion form and try again."}, status=400)
+            progress = {
+                name: request.POST[name] or None
+                for name in ("total_minutes", "percentage") if name in request.POST
+            }
+            _, entry = game_tracking.complete(
+                request.user, item, completion_date=consumed_at,
+                mutation_id=request.POST["mutation_id"],
+                playthrough_id=int(request.POST["playthrough_id"]) if request.POST.get("playthrough_id") else None,
+                rating=rating, liked=liked, review=review, review_title=review_title,
+                contains_spoilers=contains_spoilers, is_rewatch=is_rewatch,
+                tags=tag_names, **progress,
+            )
+        else:
+            entry = create_diary_entry(
+                user=request.user,
+                item=item,
+                consumed_at=consumed_at,
+                rating=rating,
+                review=review,
+                liked=liked,
+                is_rewatch=is_rewatch,
+                auto_mark_consumed=auto_mark_consumed,
+                tags=tag_names,
+                review_title=review_title,
+                contains_spoilers=contains_spoilers,
+                visibility=visibility,
+            )
         
         logger.info(f"Diary entry created successfully: {entry}")
         
@@ -3392,35 +3307,6 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                 book_instance.completed_manually = False
                 book_instance.save(update_fields=['completion_diary_entry', 'completed_manually'])
 
-        if media_type == MediaTypes.GAME.value and auto_mark_consumed:
-            completion_datetime = consumed_at or timezone.now()
-            from decimal import Decimal
-            from app.models import Game
-
-            game_defaults = {
-                "status": Status.COMPLETED.value,
-                "end_date": completion_datetime,
-            }
-            game_instance, created_game = Game.objects.get_or_create(
-                item=item,
-                user=request.user,
-                defaults=game_defaults,
-            )
-            logger.info(f"Game instance {'created' if created_game else 'found'}: {game_instance}")
-
-            game_instance.status = Status.COMPLETED.value
-            if not game_instance.start_date:
-                game_instance.start_date = completion_datetime
-            game_instance.end_date = completion_datetime
-
-            if rating is not None:
-                game_instance.score = Decimal(str(rating))
-            if review:
-                game_instance.notes = review
-
-            game_instance.save(update_fields=["status", "end_date", "score", "notes"])
-            logger.info(f"Game {game_instance} marked as completed for diary entry")
-
         # Return success response
         return JsonResponse({"success": True, "entry_id": entry.id})
         
@@ -3448,7 +3334,7 @@ def edit_diary_entry(request, entry_id):
         initial_data = {
             'rating': (
                 single_weight.rating_to_wire(entry.rating)
-                if single_weight.supports(entry.item) and entry.rating is not None
+                if (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and entry.rating is not None
                 else entry.rating
             ),
             'review': entry.review or '',
@@ -3507,12 +3393,15 @@ def update_diary_entry(request, entry_id):
         # Debug: Log the POST data
         logger.info(f"Update diary entry {entry_id} - POST data: {dict(request.POST)}")
         
-        # Parse form data
-        consumed_at = parse_date(request.POST.get('watch_date'))
+        # An omitted date preserves history; an explicit game date must be valid.
+        raw_date = request.POST.get("watch_date")
+        consumed_at = parse_date(raw_date) if raw_date is not None else None
+        if game_tracking.supports(entry.item) and raw_date is not None and not consumed_at:
+            return JsonResponse({"error": "A valid completion date is required."}, status=400)
         if not consumed_at:
-            # Keep the original datetime to preserve ordering
+            # Keep the original datetime to preserve ordering.
             consumed_at = entry.consumed_at
-        elif single_weight.supports(entry.item) and consumed_at > timezone.localdate():
+        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > timezone.localdate():
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3522,7 +3411,7 @@ def update_diary_entry(request, entry_id):
         rating = request.POST.get('rating')
         if rating and rating.strip():
             rating = float(rating)
-            if single_weight.supports(entry.item):
+            if (single_weight.supports(entry.item) or game_tracking.supports(entry.item)):
                 rating = single_weight.rating_from_wire(rating)
         else:
             rating = None
@@ -3557,6 +3446,11 @@ def update_diary_entry(request, entry_id):
                 "is_rewatch": is_rewatch,
                 "contains_spoilers": contains_spoilers,
                 "visibility": visibility,
+                **{
+                    name: request.POST[name] or None
+                    for name in ("total_minutes", "percentage")
+                    if game_tracking.supports(entry.item) and name in request.POST
+                },
             },
             tags=tag_names,
         )
@@ -3902,6 +3796,8 @@ def book_completed_modal(request, source, media_id):
 def pause_media(request, source, media_type, media_id):
     """Pause a media item by setting its status to PAUSED."""
     exposure.require_media_type(media_type)
+    if media_type == MediaTypes.GAME.value:
+        return _game_action_response(request, source, media_id, game_tracking.pause)
     try:
         # Movies don't support pause/drop
         if media_type == MediaTypes.MOVIE.value:
@@ -4037,6 +3933,8 @@ def pause_media(request, source, media_type, media_id):
 def resume_media(request, source, media_type, media_id):
     """Resume a paused or dropped media item by setting its status to IN_PROGRESS."""
     exposure.require_media_type(media_type)
+    if media_type == MediaTypes.GAME.value:
+        return _game_action_response(request, source, media_id, game_tracking.resume)
     try:
         # Movies don't support pause/drop
         if media_type == MediaTypes.MOVIE.value:
@@ -4153,6 +4051,8 @@ def resume_media(request, source, media_type, media_id):
 def drop_media(request, source, media_type, media_id):
     """Drop a media item by setting its status to DROPPED."""
     exposure.require_media_type(media_type)
+    if media_type == MediaTypes.GAME.value:
+        return _game_action_response(request, source, media_id, game_tracking.drop)
     try:
         # Movies don't support pause/drop
         if media_type == MediaTypes.MOVIE.value:

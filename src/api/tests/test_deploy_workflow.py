@@ -20,6 +20,14 @@ class DeskMacDeployWorkflowTests(SimpleTestCase):
         self.assertIn("persist-credentials: false", workflow)
         self.assertNotIn("contents: write", workflow)
 
+    def test_deploy_backs_up_database_before_replacing_app(self):
+        workflow = WORKFLOW.read_text()
+        self.assertLess(workflow.index("pg_dump"), workflow.index("./scripts/codex-mobile-deploy-backend.sh"))
+        self.assertIn("pg_restore --list", workflow)
+        self.assertIn("set -o noclobber", workflow)
+        self.assertIn("migrate --check", workflow)
+        self.assertIn('[[ "$deployed_sha" == "$expected_sha" ]]', workflow)
+
     def test_deploy_script_never_updates_github_branch(self):
         script = DEPLOY_SCRIPT.read_text()
 

@@ -663,7 +663,7 @@ class MediaReviewsView(MediaExposureMixin, APIView):
             return Response({"count": 0, "next": None, "previous": None, "results": []})
 
         entries = DiaryEntry.objects.filter(item=item).exclude(review="")
-        if single_weight.supports(media_type):
+        if single_weight.uses_half_star_rating(media_type):
             visibility = Q(user__profile_private=False)
             if request.user.is_authenticated:
                 from social.models import Block, Follow, FollowStatus

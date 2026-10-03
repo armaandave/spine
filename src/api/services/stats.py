@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
 
@@ -64,6 +64,7 @@ SINGLE_WEIGHT_MEDIA_TYPES = {
     MediaTypes.MOVIE.value,
     MediaTypes.MUSIC.value,
     MediaTypes.BOOK.value,
+    MediaTypes.GAME.value,
 }
 TOP_LEVEL_MEDIA_LIMIT = 12
 MEDIA_TYPE_MEDIA_LIMIT = 6
@@ -156,9 +157,16 @@ def ranged_diary_entries(*, user, viewer, stats_range):
     """Return visible diary entries inside the requested stats range."""
     diary_entries = visible_diary_entries(user=user, viewer=viewer)
     if not stats_range.is_all_time:
+        # These media use UTC midnight as a calendar-date carrier, not an instant.
+        calendar_types = Q(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES)
         diary_entries = diary_entries.filter(
-            consumed_at__gte=stats_range.start_datetime,
-            consumed_at__lte=stats_range.end_datetime,
+            (calendar_types & Q(
+                consumed_at__gte=datetime.combine(stats_range.start_date, time.min, tzinfo=UTC),
+                consumed_at__lte=datetime.combine(stats_range.end_date, time.max, tzinfo=UTC),
+            )) | (~calendar_types & Q(
+                consumed_at__gte=stats_range.start_datetime,
+                consumed_at__lte=stats_range.end_datetime,
+            )),
         )
     return diary_entries
 
@@ -198,6 +206,10 @@ def build_stats_payload(*, user, viewer, request, stats_range):
             completed_manually=True,
         ).count()
     lifetime_book_reads = dated_book_reads + undated_book_reads
+    game_completions = diary_entries.filter(item__media_type=MediaTypes.GAME.value).count()
+    if stats_range.is_all_time:
+        Game = apps.get_model("app", "Game")
+        game_completions += Game.objects.filter(user=user, completed_manually=True).count()
     tracking_by_type = _tracking_summaries(user)
     liked_total, likes_by_type = _like_summaries(user)
     activity = _activity_payload(diary_entries, stats_range)
@@ -227,6 +239,9 @@ def build_stats_payload(*, user, viewer, request, stats_range):
     if lifetime_book_reads or tracking_by_type[MediaTypes.BOOK.value]["tracked_count"]:
         overview["book_read_count"] = lifetime_book_reads
 
+    if game_completions or tracking_by_type[MediaTypes.GAME.value]["tracked_count"]:
+        overview["game_completion_count"] = game_completions
+
     media_types = []
     for media_type in _primary_media_types():
         diary_values = diary_by_type[media_type]
@@ -255,6 +270,8 @@ def build_stats_payload(*, user, viewer, request, stats_range):
             lifetime_book_reads or tracking_values["tracked_count"]
         ):
             media_payload["read_count"] = lifetime_book_reads
+        if media_type == MediaTypes.GAME.value and (game_completions or tracking_values["tracked_count"]):
+            media_payload["completion_count"] = game_completions
         media_types.append(media_payload)
 
     list_progress = _list_progress(user=user, viewer=viewer, request=request)
@@ -556,9 +573,9 @@ def _like_summaries(user):
 def _activity_payload(entries, stats_range):
     rows = list(
         entries.annotate(
-            activity_date=TruncDate(
-                "consumed_at",
-                tzinfo=timezone.get_current_timezone(),
+            activity_date=Case(
+                When(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES, then=TruncDate("consumed_at", tzinfo=UTC)),
+                default=TruncDate("consumed_at", tzinfo=timezone.get_current_timezone()),
             ),
         )
         .values("activity_date")

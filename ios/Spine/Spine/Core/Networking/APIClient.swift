@@ -129,6 +129,7 @@ struct APIClient: Sendable {
             request.httpMethod = "POST"
             request.timeoutInterval = 120
             request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let accessToken {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -307,6 +308,7 @@ struct APIClient: Sendable {
         request.httpMethod = method
         request.timeoutInterval = requestTimeout ?? 10
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +13,9 @@ from api.serializers.tracking import (
     BookProgressSerializer,
     ConsumeSerializer,
     EpisodeWatchSerializer,
+    GameCompletionSerializer,
+    GamePlaythroughSerializer,
+    GameProgressSerializer,
     TrackingWriteSerializer,
 )
 from api.services import completion as completion_service
@@ -19,7 +23,7 @@ from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
-from app.models import BasicMedia, MediaTypes, Status
+from app.models import BasicMedia, GameSession, MediaTypes, Status
 
 
 class TrackingListView(MediaExposureMixin, APIView):
@@ -150,7 +154,11 @@ class TrackingActionView(MediaExposureMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, source, media_type, media_id, action):
-        if media_type == MediaTypes.BOOK.value:
+        if media_type == MediaTypes.GAME.value:
+            serializer = BookActionSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            media = tracking_service.perform_game_action(request.user, source=source, media_id=media_id, action=action, data=serializer.validated_data)
+        elif media_type == MediaTypes.BOOK.value:
             serializer = BookActionSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             media = tracking_service.perform_book_action(
@@ -368,3 +376,53 @@ class BookJourneyView(APIView):
         if book is None:
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(tracking_service.serialize_tracking(book))
+
+
+class GameProgressView(APIView):
+    """Validate and expose canonical game playthrough state."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, source, media_id):
+        from app import game_tracking
+
+        serializer = GameProgressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        game = tracking_service._call_book(game_tracking.update_progress, request.user, tracking_service._game_item(request.user, source, media_id), **serializer.validated_data)
+        return Response(tracking_service.serialize_tracking(game))
+
+
+class GameCompleteView(APIView):
+    """Validate and expose canonical game playthrough state."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, source, media_id):
+        serializer = GameCompletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        game, entry = tracking_service.complete_game(request.user, source=source, media_id=media_id, data=serializer.validated_data)
+        return Response({"tracking": tracking_service.serialize_tracking(game), "diary_entry": diary_service.diary_payload(entry, request=request, viewer=request.user)}, status=status.HTTP_201_CREATED)
+
+
+class GamePlaythroughView(APIView):
+    """Validate and expose canonical game playthrough state."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, source, media_id, playthrough_id):
+        get_object_or_404(GameSession, pk=playthrough_id, related_game__user=request.user, related_game__item__source=source, related_game__item__media_id=media_id)
+        from app import game_tracking
+
+        serializer = GamePlaythroughSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        data.pop("playthrough_id", None)
+        game = tracking_service._call_book(game_tracking.update_playthrough, request.user, tracking_service._game_item(request.user, source, media_id), playthrough_id, **data)
+        return Response(tracking_service.serialize_tracking(game))
+
+    def delete(self, request, source, media_id, playthrough_id):
+        get_object_or_404(GameSession, pk=playthrough_id, related_game__user=request.user, related_game__item__source=source, related_game__item__media_id=media_id)
+        from app import game_tracking
+
+        game = tracking_service._call_book(game_tracking.delete_playthrough, request.user, tracking_service._game_item(request.user, source, media_id), playthrough_id)
+        return Response(tracking_service.serialize_tracking(game)) if game else Response(status=status.HTTP_204_NO_CONTENT)

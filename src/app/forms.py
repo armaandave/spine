@@ -240,7 +240,7 @@ class MediaForm(forms.ModelForm):
         """Expose the public half-star scale for single-weight media only."""
         self.public_rating_scale = kwargs.pop("public_rating_scale", False)
         super().__init__(*args, **kwargs)
-        if not self.public_rating_scale or self._meta.model not in {Movie, Music}:
+        if not self.public_rating_scale or self._meta.model not in {Movie, Music, Game}:
             return
         self.fields["score"].min_value = Decimal("0")
         self.fields["score"].max_value = Decimal("5")
@@ -253,7 +253,7 @@ class MediaForm(forms.ModelForm):
     def clean_score(self):
         """Validate half-star values for movie and music forms."""
         score = self.cleaned_data.get("score")
-        if self.public_rating_scale and self._meta.model in {Movie, Music} and score not in {
+        if self.public_rating_scale and self._meta.model in {Movie, Music, Game} and score not in {
             None,
             Decimal("0"),
             *(Decimal(step) / 2 for step in range(1, 11)),
@@ -303,6 +303,31 @@ class MovieForm(MediaForm):
 
 class GameForm(MediaForm):
     """Form for games."""
+
+    def __init__(self, *args, **kwargs):
+        """Compare bound ratings against the same public scale as the input."""
+        super().__init__(*args, **kwargs)
+        if self.is_bound and self.public_rating_scale and self.initial.get("score") is not None:
+            self.initial["score"] /= 2
+
+    def save(self, commit=True):
+        """Use the same game transitions for legacy tracking forms."""
+        if not commit:
+            return super().save(commit=False)
+        from app import game_tracking, single_weight
+
+        payload = {
+            "status": self.cleaned_data["status"],
+            "notes": self.cleaned_data.get("notes", ""),
+        }
+        if "score" in self.changed_data:
+            payload["rating"] = single_weight.rating_from_wire(self.cleaned_data.get("score")) if self.public_rating_scale else self.cleaned_data.get("score")
+        if "start_date" in self.changed_data:
+            payload["start_date"] = self.cleaned_data.get("start_date")
+        if "end_date" in self.changed_data and self.cleaned_data.get("end_date"):
+            raise forms.ValidationError("Edit completion dates through the completion log.")
+        self.instance = game_tracking.apply_tracking_state(self.instance.user, self.instance.item, **payload)
+        return self.instance
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""

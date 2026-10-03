@@ -1,6 +1,9 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.shortcuts import render
+from django.utils import timezone
 
 from app.providers import services
 
@@ -55,3 +58,21 @@ class ProviderAPIErrorMiddleware:
                 status=500,
             )
         return None
+
+
+class APICalendarTimezoneMiddleware:
+    """Apply the native client's calendar timezone for one API request."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        name = request.headers.get("X-Spine-Timezone")
+        if not request.path.startswith("/api/") or not name:
+            return self.get_response(request)
+        try:
+            client_timezone = ZoneInfo(name)
+        except (ValueError, ZoneInfoNotFoundError):
+            return self.get_response(request)
+        with timezone.override(client_timezone):
+            return self.get_response(request)

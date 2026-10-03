@@ -24,6 +24,10 @@ final class MediaLogViewModel {
     var visibility = "public"
     var liked = false
     var isRepeat = false
+    var gameProgress = GameProgressDraft()
+    var gameStartDate = Date()
+    var gameHasStartDate = false
+    var gamePlaythrough: GamePlaythroughState?
     var progressText = ""
     var progressType = "pages"
     var isLoadingTags = false
@@ -61,6 +65,13 @@ final class MediaLogViewModel {
                 || (state?.directConsumption == nil
                     && state?.isTracked == true
                     && state?.status == "Completed")
+        } else if detail.ref.mediaType == "game" {
+            let game = tracking?.game ?? detail.userState?.game
+            isRepeat = (game?.lifetimeCompletionCount ?? 0) > 0
+            if game?.hasLivePlaythrough == true {
+                gamePlaythrough = game?.currentPlaythrough
+                gameProgress = GameProgressDraft(totalMinutes: gamePlaythrough?.totalMinutes, percentage: gamePlaythrough?.percentage)
+            }
         } else if detail.ref.mediaType == "book" {
             isRepeat = tracking?.book?.isRereading ?? detail.userState?.book?.isRereading ?? false
         } else {
@@ -77,7 +88,7 @@ final class MediaLogViewModel {
     }
 
     var supportsProgress: Bool {
-        ["manga", "comic", "game", "boardgame"].contains(detail.ref.mediaType)
+        ["manga", "comic", "boardgame"].contains(detail.ref.mediaType)
     }
 
     var supportsSeasonLogging: Bool {
@@ -122,7 +133,7 @@ final class MediaLogViewModel {
         case "comic":
             "Log Comic"
         case "game":
-            "Log Game"
+            "Log Completion"
         case "boardgame":
             "Log Board Game"
         case "book":
@@ -171,7 +182,7 @@ final class MediaLogViewModel {
 
     static func ratingDecimal(for steps: Int, mediaType: String) -> Decimal? {
         guard steps > 0 else { return nil }
-        return ["movie", "music", "book"].contains(mediaType)
+        return ["movie", "music", "book", "game"].contains(mediaType)
             ? Decimal(steps) / 2
             : Decimal(steps)
     }
@@ -272,7 +283,19 @@ final class MediaLogViewModel {
             guard !selectedRef.usesCalendarConsumptionDate || !CalendarDateCodec.isFuture(consumedAt) else {
                 throw MediaLogError.futureDate
             }
-            if selectedRef.mediaType == "book" {
+            if selectedRef.mediaType == "game" {
+                let progress = try gameProgress.values()
+                _ = try await trackingRepository.completeGame(ref: selectedRef, request: GameCompletionWriteRequest(
+                    playthroughId: gamePlaythrough?.id,
+                    completionDate: CalendarDateCodec.string(from: consumedAt),
+                    startDate: gamePlaythrough == nil && gameHasStartDate ? CalendarDateCodec.string(from: gameStartDate) : nil,
+                    totalMinutes: progress.totalMinutes, percentage: progress.percentage,
+                    rating: Self.ratingDecimal(for: ratingSteps, mediaType: "game"),
+                    review: review, reviewTitle: reviewTitle, liked: liked, isRewatch: isRepeat,
+                    containsSpoilers: containsSpoilers, tags: tags, mutationId: completionMutationId))
+                MediaStateChange.post(ref: selectedRef)
+                return
+            } else if selectedRef.mediaType == "book" {
                 let response = try await trackingRepository.completeBook(
                     source: selectedRef.source,
                     mediaId: selectedRef.mediaId,
@@ -408,6 +431,13 @@ struct MediaLogView: View {
     }
 
     var body: some View {
+        NavigationStack {
+            composerContent
+                .toolbar(.hidden, for: .navigationBar)
+        }
+    }
+
+    private var composerContent: some View {
         ZStack(alignment: .top) {
             SpinePageBackground()
             backdrop
@@ -422,10 +452,10 @@ struct MediaLogView: View {
                         } else {
                             finishedFields
                         }
-                        errorText
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 20)
+                    .disabled(viewModel.isSaving)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: focusedField) { _, field in
@@ -442,6 +472,8 @@ struct MediaLogView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled(viewModel.isSaving)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if focusedField == nil {
                 actionsFooter
@@ -526,6 +558,7 @@ struct MediaLogView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Close log")
+        .disabled(viewModel.isSaving)
     }
 
     @ViewBuilder
@@ -587,6 +620,16 @@ struct MediaLogView: View {
         VStack(alignment: .leading, spacing: 14) {
             composerSurface {
                 dateRow
+                if viewModel.detail.ref.mediaType == "game" {
+                    if viewModel.gamePlaythrough == nil {
+                        Toggle("Known start date", isOn: $viewModel.gameHasStartDate)
+                        if viewModel.gameHasStartDate {
+                            DatePicker("Started", selection: $viewModel.gameStartDate, in: ...viewModel.consumedAt, displayedComponents: .date)
+                        }
+                    }
+                    GameProgressFields(draft: $viewModel.gameProgress)
+                    Divider().overlay(.white.opacity(0.1))
+                }
                 Divider().overlay(.white.opacity(0.1))
                 ratingPicker
                 Divider().overlay(.white.opacity(0.1))
@@ -694,19 +737,12 @@ struct MediaLogView: View {
                 }
                 .frame(maxWidth: 218)
                 .frame(height: 44)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Rating")
-                .accessibilityValue(viewModel.ratingLabel())
-                .accessibilityHint("Drag all the way left to clear your rating")
-                .accessibilityAdjustableAction { direction in
-                    switch direction {
-                    case .increment:
-                        viewModel.ratingSteps = min(10, viewModel.ratingSteps + 1)
-                    case .decrement:
-                        viewModel.ratingSteps = max(0, viewModel.ratingSteps - 1)
-                    default:
-                        break
+                .accessibilityRepresentation {
+                    Slider(value: Binding(get: { Double(viewModel.ratingSteps) }, set: { viewModel.ratingSteps = Int($0) }), in: 0...10, step: 1) {
+                        Text("Rating")
                     }
+                    .accessibilityValue(viewModel.ratingLabel())
+                    .accessibilityIdentifier("media-log.rating")
                 }
 
                 Spacer(minLength: 0)
@@ -824,7 +860,7 @@ struct MediaLogView: View {
 
     private var options: some View {
         composerSurface {
-            if !viewModel.selectedRef.isSingleWeight {
+            if !viewModel.selectedRef.usesCalendarConsumptionDate {
                 Picker("Visibility", selection: $viewModel.visibility) {
                     ForEach(APIConstants.visibilityChoices, id: \.self) { value in
                         Text(value.capitalized).tag(value)
@@ -870,6 +906,10 @@ struct MediaLogView: View {
 
     private var actionsFooter: some View {
         VStack(spacing: 10) {
+            errorText
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("media-log.save-error")
+
             Button {
                 Task {
                     if await viewModel.save() {

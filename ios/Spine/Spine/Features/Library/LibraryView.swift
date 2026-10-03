@@ -18,12 +18,20 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     func title(mediaType: String) -> String {
+        if mediaType == "game" {
+            switch self {
+            case .currentlyReading: return "Playing"
+            case .didNotFinish: return "Dropped"
+            case .read: return "Completed"
+            default: return rawValue
+            }
+        }
         if mediaType == "book", self == .planning { return "To Read" }
         return rawValue
     }
 
     static func available(for mediaType: String) -> [LibraryShelf] {
-        mediaType == "book"
+        ["book", "game"].contains(mediaType)
             ? [.planning, .currentlyReading, .paused, .didNotFinish, .read]
             : [.tracked, .planning]
     }
@@ -159,6 +167,9 @@ final class LibraryViewModel {
         } else if !mediaTypes.contains(mediaType) {
             mediaType = mediaTypes.first ?? "movie"
         }
+        if !availableShelves.contains(shelf) {
+            shelf = ["book", "game"].contains(mediaType) ? .currentlyReading : .tracked
+        }
     }
 
     func selectMediaType(_ type: String, searchText: String? = nil) async {
@@ -166,7 +177,7 @@ final class LibraryViewModel {
         guard mediaType != type || query != selectedQuery else { return }
         mediaType = type
         if !availableShelves.contains(shelf) {
-            shelf = type == "book" ? .currentlyReading : .tracked
+            shelf = ["book", "game"].contains(type) ? .currentlyReading : .tracked
         }
         query = selectedQuery
         filter.genres = []
@@ -533,7 +544,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var shelfPicker: some View {
-        if viewModel.mediaType == "book" {
+        if ["book", "game"].contains(viewModel.mediaType) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 7) {
                     ForEach(viewModel.availableShelves) { shelf in
@@ -653,13 +664,13 @@ struct LibraryView: View {
         case .planning:
             return viewModel.mediaType == "book" ? "No books to read" : "No planned \(mediaName)"
         case .currentlyReading:
-            return "No books currently reading"
+            return viewModel.mediaType == "game" ? "No games currently playing" : "No books currently reading"
         case .paused:
-            return "No paused books"
+            return "No paused \(mediaName)"
         case .didNotFinish:
-            return "No books marked Did Not Finish"
+            return viewModel.mediaType == "game" ? "No dropped games" : "No books marked Did Not Finish"
         case .read:
-            return "No read books"
+            return viewModel.mediaType == "game" ? "No completed games" : "No read books"
         }
     }
 
@@ -667,6 +678,7 @@ struct LibraryView: View {
         if !viewModel.query.isEmpty {
             return "No matches for \"\(viewModel.query)\" in \(viewModel.shelf.rawValue.lowercased())."
         }
+        if viewModel.mediaType == "game" { return "Games with this status will appear here." }
         switch viewModel.shelf {
         case .tracked:
             return "Consumed, logged, watched, read, or played media will appear here."
@@ -724,6 +736,10 @@ struct LibraryView: View {
     }
 
     private func bookProgressBadge(_ item: LibraryItem) -> String? {
+        if item.media.ref.mediaType == "game" {
+            let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""
+            return text.isEmpty ? nil : text
+        }
         guard item.media.ref.mediaType == "book" else { return nil }
         if let text = item.tracking.progress?.compactDisplayText(
             preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
@@ -903,7 +919,10 @@ private struct LibraryListRow: View {
         if let rating = item.tracking.rating {
             parts.append("\(rating) stars")
         }
-        if let progress = item.tracking.progress {
+        if item.media.ref.mediaType == "game" {
+            let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""
+            if !text.isEmpty { parts.append(text) }
+        } else if let progress = item.tracking.progress {
             if let progressText = progress.compactDisplayText(preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)) {
                 parts.append(progressText)
             }

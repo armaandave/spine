@@ -13,7 +13,7 @@ from api.serializers.common import (
     progress_for_media,
     tracking_state,
 )
-from app import book_tracking, single_weight
+from app import book_tracking, game_tracking, single_weight
 from app.models import BasicMedia, Book, MediaTypes, Status
 from app.providers import services as provider_services
 from social.models import Activity, ProgressChange
@@ -71,6 +71,9 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             data,
         )
 
+    if media_type == MediaTypes.GAME.value:
+        return _write_game_tracking(user, media.item, data)
+
     if media_type == MediaTypes.BOOK.value:
         return _write_book_tracking(
             user,
@@ -106,6 +109,8 @@ def delete_tracking(user, *, source, media_type, media_id, season_number=None):
         season_number=season_number,
     )
     if media is not None:
+        if media_type == MediaTypes.GAME.value:
+            return _call_book(game_tracking.remove_tracking, user, media.item)
         if media_type == MediaTypes.BOOK.value:
             return _call_book(book_tracking.remove_tracking, user, media.item)
         if single_weight.supports(media_type):
@@ -129,6 +134,8 @@ def consume_media(user, *, source, media_type, media_id, consumed_at=None):
             media_id=media_id,
             data={"status": Status.COMPLETED.value},
         )
+    if media_type == MediaTypes.GAME.value:
+        return _call_book(game_tracking.mark_completed, user, media.item)
     if single_weight.supports(media_type):
         return single_weight.mark_consumed(user, media.item)
     if media_type == MediaTypes.BOOK.value:
@@ -484,3 +491,51 @@ def _jsonable(value):
     if isinstance(value, list):
         return [_jsonable(item) for item in value]
     return value
+
+
+def _game_item(user, source, media_id):
+    from app.models import Item
+
+    item = Item.objects.filter(source=source, media_type="game", media_id=media_id).first()
+    if item:
+        return item
+    metadata = provider_services.get_media_metadata("game", media_id, source)
+    return get_or_create_item_from_metadata({"source": source, "media_type": "game", "media_id": media_id, "season_number": None, "episode_number": None}, metadata)
+
+
+def perform_game_action(user, *, source, media_id, action, data):
+    """Route game actions through the authoritative domain service."""
+    functions = {
+        "start": (game_tracking.start, {"start_date", "mutation_id"}),
+        "resume": (game_tracking.resume, {"start_date", "mutation_id"}),
+        "pause": (game_tracking.pause, set()),
+        "drop": (game_tracking.drop, {"end_date"}),
+        "restart": (game_tracking.restart, {"start_date", "end_date", "mutation_id"}),
+        "mark_completed": (game_tracking.mark_completed, set()),
+        "consume": (game_tracking.mark_completed, set()),
+        "undo_completed": (game_tracking.undo_completed, set()),
+        "delete_undated_completion": (game_tracking.delete_undated_completion, set()),
+    }
+    if action not in functions:
+        raise serializers.ValidationError({"action": "Unsupported game action."})
+    function, accepted = functions[action]
+    return _call_book(function, user, _game_item(user, source, media_id), **{key: value for key, value in data.items() if key in accepted and value is not None})
+
+
+def complete_game(user, *, source, media_id, data):
+    """Save one game completion and return its canonical state."""
+    payload = dict(data)
+    if "rating" in payload:
+        payload["rating"] = _call_book(single_weight.rating_from_wire, payload["rating"])
+    return _call_book(game_tracking.complete, user, _game_item(user, source, media_id), **payload)
+
+
+def _write_game_tracking(user, item, data):
+    payload = {key: value for key, value in data.items() if key in {"status", "rating", "start_date", "notes", "mutation_id", "total_minutes", "percentage", "progressed_on"}}
+    if "rating" in payload:
+        payload["rating"] = _call_book(single_weight.rating_from_wire, payload["rating"])
+    if "progress" in data:
+        payload["total_minutes"] = data["progress"]
+    if "end_date" in data and data["end_date"] is not None:
+        raise serializers.ValidationError({"end_date": "Use the completion log or playthrough date editor."})
+    return _call_book(game_tracking.apply_tracking_state, user, item, **payload)

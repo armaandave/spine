@@ -254,6 +254,7 @@ SpecialModels = [
     "Tag",
     "DiaryEntryTag",
     "BookSession",
+    "GameSession",
     "MediaLike",
     "MediaSeries",
     "MediaSeriesItem",

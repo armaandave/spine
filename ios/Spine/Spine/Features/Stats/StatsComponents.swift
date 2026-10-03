@@ -663,7 +663,7 @@ enum SWStatsRatingChart {
         mediaType: String?
     ) -> [SWStatsRatingPoint] {
         // ponytail: the API omits rating-scale metadata; infer the app's native five-star types until it carries a scale.
-        let usesFiveStarScale = mediaType.map { ["movie", "music", "book"].contains($0) } == true
+        let usesFiveStarScale = mediaType.map { ["movie", "music", "book", "game"].contains($0) } == true
             && !buckets.contains { ($0.numericRating ?? 0) > 5 && $0.count > 0 }
         let multiplier = usesFiveStarScale ? 2.0 : 1.0
         return normalizedPoints(from: buckets.compactMap { bucket in

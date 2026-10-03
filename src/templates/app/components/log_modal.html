@@ -12,6 +12,10 @@
               data-diary-log-form
               @submit="updateTagsBeforeSubmit()">
             {% csrf_token %}
+            {% if item.media_type == 'game' %}
+              <input type="hidden" name="mutation_id" value="{{ mutation_id }}">
+              {% if game_playthrough %}<input type="hidden" name="playthrough_id" value="{{ game_playthrough.id }}">{% endif %}
+            {% endif %}
             {% if item.media_type == 'book' and book_completion %}
               <input type="hidden" name="book_complete" value="true">
             {% endif %}
@@ -36,7 +40,7 @@
                     <div class="flex items-center gap-4 mb-3">
                         <div class="flex flex-col">
                             <label for="watch-date" class="text-xs text-gray-400 mb-1 uppercase tracking-wide">
-                                {% if item.media_type == 'book' %}Finish Date{% elif item.media_type == 'music' %}Date listened{% else %}Watch Date{% endif %}
+                                {% if item.media_type == 'game' %}Completion Date{% elif item.media_type == 'book' %}Finish Date{% elif item.media_type == 'music' %}Date listened{% else %}Watch Date{% endif %}
                             </label>
                             <input type="date" 
                                    id="watch-date" 
@@ -59,7 +63,7 @@
                                 }
                             }
                         }">
-                            {% if item.media_type == 'movie' or item.media_type == 'music' %}
+                            {% if item.media_type == 'movie' or item.media_type == 'music' or item.media_type == 'game' %}
                             <select name="rating"
                                     x-model.number="rating"
                                     aria-label="Rating"
