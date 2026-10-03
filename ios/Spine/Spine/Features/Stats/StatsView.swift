@@ -340,18 +340,23 @@ private struct StatsAtmosphere: View {
     let media: MediaSummary?
 
     var body: some View {
-        SpineAsyncImage(url: HomeArtworkAtmosphereModel.url(for: media)) { phase in
-            if case let .success(image) = phase {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Color.clear
+        // The image lives in an overlay so a wide (landscape) backdrop can never widen the page;
+        // the clear base fixes the size and the artwork is cropped to it.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: 470)
+            .overlay {
+                SpineAsyncImage(url: HomeArtworkAtmosphereModel.url(for: media)) { phase in
+                    if case let .success(image) = phase {
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Color.clear
+                    }
+                }
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 470)
-        .clipped()
+            .clipped()
         .blur(radius: 34)
         .saturation(1.15)
         .opacity(0.6)

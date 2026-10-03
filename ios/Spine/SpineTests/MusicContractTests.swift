@@ -465,7 +465,7 @@ final class MusicContractTests: XCTestCase {
             episodeNumber: nil
         )
 
-        XCTAssertEqual(Array(APIConstants.fallbackMediaTypes.suffix(3)), ["comic", "music", "boardgame"])
+        XCTAssertEqual(Array(APIConstants.fallbackMediaTypes.suffix(3)), ["book", "comic", "music"])
         XCTAssertEqual(theme.displayName, "Music")
         XCTAssertEqual(theme.symbolName, "music.note.list")
         XCTAssertEqual(theme.artworkOrientation, .square)
