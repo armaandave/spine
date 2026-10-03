@@ -52,10 +52,18 @@ class ExternalRatingPerformanceTests(TestCase):
             )
             for index, item in enumerate(items)
         ])
+        if connection.vendor == "postgresql":
+            # Bulk-created rows have no planner statistics yet. Production tables are
+            # analyzed automatically, so analyze here to time realistic query plans.
+            with connection.cursor() as cursor:
+                for model in (Item, Movie, ExternalRating):
+                    cursor.execute(f"ANALYZE {model._meta.db_table}")
 
     def _request(self, sort, page_size):
         client = APIClient()
-        client.force_authenticate(self.user)
+        # A fresh user per request, as real authentication gives; completed_item_ids()
+        # memoizes on the user object, so reusing self.user skews later query counts.
+        client.force_authenticate(get_user_model().objects.get(pk=self.user.pk))
         return client.get(
             "/api/v1/tracking/",
             {

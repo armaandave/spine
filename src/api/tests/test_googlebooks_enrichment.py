@@ -203,6 +203,13 @@ class GoogleBooksDetailIntegrationTests(TestCase):
             "price": {"amount": "12.99", "currency": "USD", "country": "US"},
         }
 
+        item = Item.objects.create(
+            source=Sources.OPENLIBRARY.value,
+            media_type=MediaTypes.BOOK.value,
+            media_id="OL-GOOGLE-M",
+            title="Primary Title",
+        )
+
         response = self.client.get(
             "/api/v1/media/openlibrary/book/OL-GOOGLE-M/",
         )
@@ -216,4 +223,5 @@ class GoogleBooksDetailIntegrationTests(TestCase):
         self.assertEqual(response.data["external_ratings"][-1]["source"], "Google Books")
         self.assertEqual(response.data["details"]["maturity_rating"], "Not Mature")
         self.assertNotIn("_google_books", response.data)
+        self.assertEqual(update_filter_mock.call_args.args[0], item)
         self.assertIs(update_filter_mock.call_args.args[1], primary)

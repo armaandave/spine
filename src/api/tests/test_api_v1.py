@@ -410,6 +410,7 @@ class ApiV1FoundationTests(TestCase):
                 "roles",
                 "credit_roles",
                 "default_source",
+                "position",
                 "custom_poster_url",
                 "user_state",
             },
@@ -7175,6 +7176,7 @@ class MusicRecordingApiTests(TestCase):
             "roles",
             "credit_roles",
             "default_source",
+            "position",
             "custom_poster_url",
             "user_state",
         }
