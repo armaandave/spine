@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "xcodebuildmcp": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "root=$(git rev-parse --show-toplevel) && cd \"$root\" && exec xcodebuildmcp mcp"
+      ],
+      "env": {
+        "XCODEBUILDMCP_PROJECT_PATH": "ios/Spine/Spine.xcodeproj",
+        "XCODEBUILDMCP_SCHEME": "Spine",
+        "XCODEBUILDMCP_BUNDLE_ID": "com.armaan.Spine"
+      }
+    }
+  }
+}

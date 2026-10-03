@@ -1,0 +1,18 @@
+# Spine's XcodeBuildMCP server for Codex, committed so worktree threads get it.
+# No `cwd` on purpose: Codex starts the server in the thread's directory, and the
+# command moves to that checkout's git root so XcodeBuildMCP loads its tracked
+# .xcodebuildmcp/config.yaml. A relative `cwd` would resolve against Codex's own
+# process directory instead. The env values are fallbacks.
+[mcp_servers.xcodebuildmcp_spine]
+command = "/bin/sh"
+args = ["-c", "root=$(git rev-parse --show-toplevel) && cd \"$root\" && exec xcodebuildmcp mcp"]
+
+[mcp_servers.xcodebuildmcp_spine.env]
+XCODEBUILDMCP_PROJECT_PATH = "ios/Spine/Spine.xcodeproj"
+XCODEBUILDMCP_SCHEME = "Spine"
+XCODEBUILDMCP_BUNDLE_ID = "com.armaan.Spine"
+
+# The user-level `xcodebuildmcp` server starts in pylon/ios with Pylon's defaults,
+# and project entries merge with it. Turn it off for Spine threads only.
+[mcp_servers.xcodebuildmcp]
+enabled = false
