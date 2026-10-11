@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import time
+from urllib.parse import urlparse
 
 import requests
 from defusedxml import ElementTree
@@ -11,6 +12,7 @@ from redis import Redis
 from requests.adapters import HTTPAdapter
 from requests_ratelimiter import LimiterAdapter, LimiterSession
 
+from app import request_timing
 from app.models import MediaTypes, Sources
 from app.providers import (
     comicvine,
@@ -263,7 +265,8 @@ def api_request(
                 retry_number + 1,
                 RATE_LIMIT_MAX_RETRIES,
             )
-            time.sleep(seconds_to_wait + 3)
+            with request_timing.span("retry_sleep", urlparse(url).hostname or provider):
+                time.sleep(seconds_to_wait + 3)
             continue
 
         if response_format == "xml":

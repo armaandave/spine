@@ -85,6 +85,9 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 
 INTERNAL_IPS = ["127.0.0.1"]
 
+# Per-request timing breakdown (Server-Timing header + log line); see app/request_timing.py
+SERVER_TIMING = config("SERVER_TIMING", default=DEBUG, cast=bool)
+
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 if ALLOWED_HOSTS != ["*"]:
@@ -141,6 +144,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "app.middleware.ServerTimingMiddleware",
     "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
