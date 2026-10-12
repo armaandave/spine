@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Spine
 
@@ -135,4 +136,32 @@ final class SpineMotionTests: XCTestCase {
             .loading
         )
     }
+
+    func testImagePhaseShowsLoadedImage() {
+        let phase = SpineImagePhase.phase(url: Self.imageURL, image: Image(systemName: "photo"), error: nil)
+
+        guard case .success = phase else { return XCTFail("Expected .success, got \(phase)") }
+    }
+
+    func testImagePhaseIsEmptyWhileLoading() {
+        let phase = SpineImagePhase.phase(url: Self.imageURL, image: nil, error: nil)
+
+        guard case .empty = phase else { return XCTFail("Expected .empty, got \(phase)") }
+    }
+
+    func testImagePhaseReportsLoadErrors() {
+        let phase = SpineImagePhase.phase(url: Self.imageURL, image: nil, error: URLError(.badServerResponse))
+
+        guard case let .failure(error) = phase else { return XCTFail("Expected .failure, got \(phase)") }
+        XCTAssertEqual((error as? URLError)?.code, .badServerResponse)
+    }
+
+    func testImagePhaseWithoutURLIsEmptyLikeAsyncImage() {
+        // Nuke reports a missing request as an error; logo views treat .failure as "fall back", not "loading".
+        let phase = SpineImagePhase.phase(url: nil, image: nil, error: URLError(.badURL))
+
+        guard case .empty = phase else { return XCTFail("Expected .empty, got \(phase)") }
+    }
+
+    private static let imageURL = URL(string: "https://image.tmdb.org/t/p/w500/poster.jpg")!
 }

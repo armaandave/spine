@@ -11,7 +11,7 @@ struct APIClient: Sendable {
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
         // The API sends no cache headers, so URLCache would otherwise replay stale JSON (e.g. Stats
-        // from before a deploy or a new log). Poster images use URLSession.shared and keep their cache.
+        // from before a deploy or a new log). Images have their own disk cache in SpineImagePipeline.
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: config)

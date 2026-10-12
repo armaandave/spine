@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		671D1B2DD23684D6FDA0ED9D /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = BE887A840EA52401991D8990 /* Nuke */; };
+		8EA4C184822016A0C1594FF4 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 332D0DED8DDDA44C01A04B51 /* NukeUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		5D55917D2FE6972C004415DF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				671D1B2DD23684D6FDA0ED9D /* Nuke in Frameworks */,
+				8EA4C184822016A0C1594FF4 /* NukeUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,8 @@
 			);
 			name = Spine;
 			packageProductDependencies = (
+				BE887A840EA52401991D8990 /* Nuke */,
+				332D0DED8DDDA44C01A04B51 /* NukeUI */,
 			);
 			productName = Spine;
 			productReference = 5D55916F2FE6972A004415DF /* Spine.app */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = 5D5591662FE6972A004415DF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4676B720E34414CEA33F734C /* XCRemoteSwiftPackageReference "Nuke" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5D5591702FE6972A004415DF /* Products */;
 			projectDirPath = "";
@@ -582,6 +594,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4676B720E34414CEA33F734C /* XCRemoteSwiftPackageReference "Nuke" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kean/Nuke";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.2.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BE887A840EA52401991D8990 /* Nuke */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4676B720E34414CEA33F734C /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = Nuke;
+		};
+		332D0DED8DDDA44C01A04B51 /* NukeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4676B720E34414CEA33F734C /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = NukeUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5D5591672FE6972A004415DF /* Project object */;
 }

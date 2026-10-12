@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import XCTest
 @testable import Spine
 
@@ -636,19 +635,6 @@ final class StatsTests: XCTestCase {
 
         XCTAssertNil(configuration.urlCache)
         XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
-    }
-
-    func testSpineImageRetriesOnlyCancelledLoadsUpToTheCap() {
-        let cancelled = AsyncImagePhase.failure(URLError(.cancelled))
-        let missing = AsyncImagePhase.failure(URLError(.fileDoesNotExist))
-
-        XCTAssertTrue(SpineImageRetryPolicy.shouldRetry(phase: cancelled, retries: 0))
-        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(
-            phase: cancelled,
-            retries: SpineImageRetryPolicy.maxCancellationRetries
-        ))
-        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(phase: missing, retries: 0))
-        XCTAssertFalse(SpineImageRetryPolicy.shouldRetry(phase: .empty, retries: 0))
     }
 
     func testStatsMostLoggedViewModelPagesAndPrefetchesNearTheEnd() async throws {

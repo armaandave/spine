@@ -2,6 +2,10 @@ import SwiftUI
 
 @main
 struct SpineApp: App {
+    init() {
+        SpineImagePipeline.install()
+    }
+
     var body: some Scene {
         WindowGroup {
             // A unit-test host must not boot the real app: its session would refresh, sign out and resume
