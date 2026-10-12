@@ -2,7 +2,6 @@ import hashlib
 import logging
 import re
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import date
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -415,7 +414,12 @@ def music(release_group_mbid, *, include_enrichment=True):
         "media_type": MediaTypes.MUSIC.value,
         "title": group.get("title") or "",
         "subtitle": artist,
-        "image": settings.IMG_NONE,
+        # Point straight at the Cover Art Archive image, as search results do,
+        # instead of first asking the archive whether a front cover exists.
+        "image": _cover_art_url(release_group_mbid),
+        "poster_width": 500,
+        "poster_height": 500,
+        "poster_aspect_ratio": 1.0,
         "release_date": first_release_date,
         "max_progress": 1,
         "genres": _genre_names(group.get("genres")),
@@ -444,7 +448,7 @@ def music(release_group_mbid, *, include_enrichment=True):
             "cover_art": {
                 "source": "cover_art_archive",
                 "release_group_mbid": release_group_mbid,
-                "fallback_used": True,
+                "fallback_used": False,
             },
             "representative_release": None,
         },
@@ -452,60 +456,36 @@ def music(release_group_mbid, *, include_enrichment=True):
     if not include_enrichment:
         return data
 
-    cover_art, representative_release = _music_enrichment(
+    data["music"]["representative_release"] = _music_enrichment(
         release_group_mbid,
         group.get("title") or "",
     )
-    has_cover = any(
-        image.get("front")
-        for image in (cover_art or {}).get("images", [])
-        if isinstance(image, dict)
-    )
-    data["music"]["cover_art"]["fallback_used"] = not has_cover
-    data["music"]["representative_release"] = representative_release
-    if has_cover:
-        data["image"] = _cover_art_url(release_group_mbid)
-        data.update(
-            {
-                "poster_width": 500,
-                "poster_height": 500,
-                "poster_aspect_ratio": 1.0,
-            },
-        )
     return data
 
 
 def _music_enrichment(release_group_mbid, title):
-    """Load independent Cover Art Archive and MusicBrainz detail together."""
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        cover_future = executor.submit(lookup_cover_art, release_group_mbid)
-        release_future = executor.submit(
-            resolve_representative_release,
-            release_group_mbid,
-            title,
+    """Resolve the representative release (edition and tracklist) for an album."""
+    try:
+        resolved = resolve_representative_release(release_group_mbid, title)
+        representative_release = (
+            _representative_release(resolved["release"], resolved["reason"])
+            if resolved["release"] is not None
+            else None
         )
-        cover_art = cover_future.result()
-        try:
-            resolved = release_future.result()
-            representative_release = (
-                _representative_release(resolved["release"], resolved["reason"])
-                if resolved["release"] is not None
-                else None
-            )
-            if representative_release is not None:
-                logger.info(
-                    "Selected MusicBrainz representative release group=%s release=%s reason=%s",
-                    release_group_mbid,
-                    representative_release["release_mbid"],
-                    resolved["reason"],
-                )
-        except (services.ProviderAPIError, AttributeError, KeyError, TypeError, ValueError):
-            logger.exception(
-                "MusicBrainz representative release resolution failed for group=%s",
+        if representative_release is not None:
+            logger.info(
+                "Selected MusicBrainz representative release group=%s release=%s reason=%s",
                 release_group_mbid,
+                representative_release["release_mbid"],
+                resolved["reason"],
             )
-            representative_release = None
-    return cover_art, representative_release
+    except (services.ProviderAPIError, AttributeError, KeyError, TypeError, ValueError):
+        logger.exception(
+            "MusicBrainz representative release resolution failed for group=%s",
+            release_group_mbid,
+        )
+        representative_release = None
+    return representative_release
 
 
 def browse_releases(release_group_mbid, *, limit=100, offset=0):

@@ -1258,6 +1258,34 @@ class Metadata(TestCase):
         )
 
     @patch("app.providers.hardcover.services.api_request")
+    def test_hardcover_book_suggests_author_books_without_recommendation_queries(self, api_request_mock):
+        api_request_mock.side_effect = [
+            {
+                "data": {
+                    "books_by_pk": {
+                        "id": 999001,
+                        "title": "Dune",
+                        "slug": "dune",
+                        "cached_contributors": "Frank Herbert",
+                        "cached_featured_series": None,
+                        "contributions": [],
+                        "default_cover_edition": None,
+                    },
+                },
+            },
+            {"data": {"books": [{"id": 999002, "title": "Dune Messiah", "cached_image": None}]}},
+        ]
+
+        response = hardcover.book("999001")
+
+        self.assertEqual(api_request_mock.call_count, 2)
+        self.assertIn("BooksByAuthor", api_request_mock.call_args.kwargs["params"]["query"])
+        self.assertEqual(
+            [book["title"] for book in response["related"]["recommendations"]],
+            ["Dune Messiah"],
+        )
+
+    @patch("app.providers.hardcover.services.api_request")
     def test_hardcover_series_books_dedupe_uses_nested_book_read_count(self, api_request_mock):
         api_request_mock.return_value = {
             "data": {

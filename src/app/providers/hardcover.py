@@ -452,140 +452,41 @@ def book(media_id):
         featured_series = get_featured_series(book_data.get("cached_featured_series"))
         series_items = get_series_books(featured_series.get("id")) if featured_series else []
 
-        # Try multiple approaches to get recommendations
+        # Hardcover's API has no recommendations field (the books_by_pk and top-level
+        # recommendations queries fail schema validation), so suggest more books by
+        # the same author instead.
         recommendations = []
-        book_id = int(media_id)
-        canonical_id = book_data.get("canonical_id")
-        
-        # Approach 1: Try nested recommendations on the book itself
-        try:
-            nested_query = """
-            query GetBookWithRecommendations($book_id: Int!) {
-              books_by_pk(id: $book_id) {
-                recommendations(limit: 10) {
-                  item_book {
+        author_name = book_data.get("cached_contributors")
+        if author_name:
+            try:
+                author_query = """
+                query BooksByAuthor($author: String!, $exclude_id: Int!) {
+                  books(
+                    where: {
+                      id: {_neq: $exclude_id},
+                      contributions: {author: {name: {_eq: $author}}}
+                    },
+                    limit: 10,
+                    order_by: {users_count: desc}
+                  ) {
                     id
                     title
                     cached_image(path: "url")
                   }
                 }
-              }
-            }
-            """
-            nested_resp = services.api_request(
-                Sources.HARDCOVER.value,
-                "POST",
-                base_url,
-                params={"query": nested_query, "variables": {"book_id": book_id}},
-                headers={"Authorization": settings.HARDCOVER_API},
-            )
-            nested_recs = nested_resp["data"]["books_by_pk"].get("recommendations", [])
-            if nested_recs:
-                recommendations = nested_recs
-        except Exception as e:
-            logger.warning(f"Nested recommendations failed: {e}")
-        
-        # Approach 2: Try top-level recommendations with canonical_id
-        if not recommendations and canonical_id:
-            try:
-                top_level_query = """
-                query GetRecommendationsByCanonicalId($rec_id: bigint!) {
-                  recommendations(
-                    where: {
-                      subject_id: {_eq: $rec_id},
-                      subject_type: {_eq: "Book"},
-                      item_type: {_eq: "Book"}
-                    },
-                    limit: 10
-                  ) {
-                    item_book {
-                      id
-                      title
-                      cached_image(path: "url")
-                    }
-                  }
-                }
                 """
-                top_resp = services.api_request(
+                author_resp = services.api_request(
                     Sources.HARDCOVER.value,
                     "POST",
                     base_url,
-                    params={"query": top_level_query, "variables": {"rec_id": int(canonical_id)}},
+                    params={"query": author_query, "variables": {"author": author_name, "exclude_id": int(media_id)}},
                     headers={"Authorization": settings.HARDCOVER_API},
                 )
-                top_recs = top_resp["data"].get("recommendations", [])
-                if top_recs:
-                    recommendations = top_recs
+                author_books = author_resp["data"].get("books", [])
+                # Convert to recommendations format
+                recommendations = [{"item_book": book} for book in author_books]
             except Exception as e:
-                logger.warning(f"Top-level recommendations failed: {e}")
-        
-        # Approach 3: Try with book_id instead of canonical_id
-        if not recommendations:
-            try:
-                book_id_query = """
-                query GetRecommendationsByBookId($rec_id: bigint!) {
-                  recommendations(
-                    where: {
-                      subject_id: {_eq: $rec_id},
-                      subject_type: {_eq: "Book"},
-                      item_type: {_eq: "Book"}
-                    },
-                    limit: 10
-                  ) {
-                    item_book {
-                      id
-                      title
-                      cached_image(path: "url")
-                    }
-                  }
-                }
-                """
-                book_id_resp = services.api_request(
-                    Sources.HARDCOVER.value,
-                    "POST",
-                    base_url,
-                    params={"query": book_id_query, "variables": {"rec_id": book_id}},
-                    headers={"Authorization": settings.HARDCOVER_API},
-                )
-                book_id_recs = book_id_resp["data"].get("recommendations", [])
-                if book_id_recs:
-                    recommendations = book_id_recs
-            except Exception as e:
-                logger.warning(f"Book ID recommendations failed: {e}")
-        
-        # Fallback: If no recommendations, get books by same author
-        if not recommendations:
-            author_name = book_data.get("cached_contributors")
-            if author_name:
-                try:
-                    author_query = """
-                    query BooksByAuthor($author: String!, $exclude_id: Int!) {
-                      books(
-                        where: {
-                          id: {_neq: $exclude_id},
-                          contributions: {author: {name: {_eq: $author}}}
-                        },
-                        limit: 10,
-                        order_by: {users_count: desc}
-                      ) {
-                        id
-                        title
-                        cached_image(path: "url")
-                      }
-                    }
-                    """
-                    author_resp = services.api_request(
-                        Sources.HARDCOVER.value,
-                        "POST",
-                        base_url,
-                        params={"query": author_query, "variables": {"author": author_name, "exclude_id": book_id}},
-                        headers={"Authorization": settings.HARDCOVER_API},
-                    )
-                    author_books = author_resp["data"].get("books", [])
-                    # Convert to recommendations format
-                    recommendations = [{"item_book": book} for book in author_books]
-                except Exception as e:
-                    logger.warning(f"Author fallback failed: {e}")
+                logger.warning(f"Author fallback failed: {e}")
 
         related = {
             "recommendations": get_recommendations(recommendations),
