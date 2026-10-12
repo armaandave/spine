@@ -31,7 +31,7 @@ Reference: `spine-prd.md` (product direction; PRD still says web-first — iOS s
 | Minimum iOS         | **iOS 17** (unless user requests lower)                                |
 | Architecture        | **MVVM** + **repository protocol** (live API implementations)          |
 | Networking          | `URLSession` + `Codable` — no third-party HTTP client unless requested   |
-| Images              | `AsyncImage` first; Kingfisher/Nuke only if needed                     |
+| Images              | `SpineAsyncImage` (Nuke `LazyImage` + `SpineImagePipeline` caches); no raw `AsyncImage` |
 | Persistence (later) | Keychain (tokens) → optional SwiftData cache                           |
 | Dependencies        | **Swift Package Manager only** — no CocoaPods                          |
 

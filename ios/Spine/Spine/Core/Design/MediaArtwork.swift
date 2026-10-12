@@ -9,7 +9,7 @@ struct MediaArtwork: View {
     var contentMode: PosterContentMode = .fill
 
     var body: some View {
-        SpineAsyncImage(url: imageURL) { phase in
+        SpineAsyncImage(url: imageURL, thumbnailSize: artworkSize) { phase in
             artwork(for: phase)
         }
         .frame(width: artworkSize.width, height: artworkSize.height)

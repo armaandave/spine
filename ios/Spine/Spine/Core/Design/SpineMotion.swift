@@ -1,3 +1,4 @@
+import NukeUI
 import SwiftUI
 
 enum SpineMotion {
@@ -105,39 +106,39 @@ extension View {
     }
 }
 
+/// Loads through `SpineImagePipeline` (memory + disk cache) but keeps the `AsyncImagePhase` content API.
+/// A scrolled-back cell whose image is in memory renders it on the first frame, with no placeholder or fade.
+/// Pass `thumbnailSize` when the display size is fixed so the image is decoded at that size.
 struct SpineAsyncImage<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lastSuccessfulImage: Image?
-    @State private var loadAttempt = 0
-    @State private var cancellationRetries = 0
 
     let url: URL?
-    let scale: CGFloat
+    let thumbnailSize: CGSize?
     private let content: (AsyncImagePhase) -> Content
 
     init(
         url: URL?,
-        scale: CGFloat = 1,
+        thumbnailSize: CGSize? = nil,
         @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
     ) {
         self.url = url
-        self.scale = scale
+        self.thumbnailSize = thumbnailSize
         self.content = content
     }
 
     var body: some View {
-        AsyncImage(
-            url: url,
-            scale: scale,
+        LazyImage(
+            request: SpineImagePipeline.request(url: url, thumbnailSize: thumbnailSize),
             transaction: Transaction(animation: SpineMotion.animation(reduceMotion: reduceMotion))
-        ) { phase in
-            resolvedContent(for: phase)
+        ) { state in
+            resolvedContent(for: SpineImagePhase.phase(url: url, image: state.image, error: state.error))
         }
-        .id(SpineImageLoadKey(url: url, attempt: loadAttempt))
+        // A new URL gets a fresh view, so the old and new images crossfade.
+        .id(url)
         .transition(.opacity)
         .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: url)
         .onChange(of: url) { _, newURL in
-            cancellationRetries = 0
             if newURL == nil {
                 lastSuccessfulImage = nil
             }
@@ -152,7 +153,6 @@ struct SpineAsyncImage<Content: View>: View {
                 .transition(.opacity)
                 .onAppear {
                     lastSuccessfulImage = image
-                    cancellationRetries = 0
                 }
         case .empty, .failure:
             if url != nil, let lastSuccessfulImage {
@@ -161,35 +161,25 @@ struct SpineAsyncImage<Content: View>: View {
             } else {
                 content(phase)
                     .transition(.opacity)
-                    .task {
-                        retryIfCancelled(phase)
-                    }
             }
         @unknown default:
             content(phase)
                 .transition(.opacity)
         }
     }
-
-    /// Lazy grids cancel image loads for cells that update or scroll away mid-flight, and AsyncImage
-    /// never restarts them. Reload once the placeholder is actually on screen again.
-    private func retryIfCancelled(_ phase: AsyncImagePhase) {
-        guard SpineImageRetryPolicy.shouldRetry(phase: phase, retries: cancellationRetries) else { return }
-        cancellationRetries += 1
-        loadAttempt += 1
-    }
 }
 
-private struct SpineImageLoadKey: Hashable {
-    let url: URL?
-    let attempt: Int
-}
-
-enum SpineImageRetryPolicy {
-    static let maxCancellationRetries = 3
-
-    static func shouldRetry(phase: AsyncImagePhase, retries: Int) -> Bool {
-        guard case let .failure(error) = phase, retries < maxCancellationRetries else { return false }
-        return (error as? URLError)?.code == .cancelled
+enum SpineImagePhase {
+    /// Matches `AsyncImage`: no URL is `.empty` (Nuke reports it as an error), and only a real load error
+    /// is `.failure`. Nuke never surfaces a cancelled load (a cell scrolled away mid-download) and restarts
+    /// it when the cell reappears.
+    static func phase(url: URL?, image: Image?, error: (any Error)?) -> AsyncImagePhase {
+        if let image {
+            return .success(image)
+        }
+        if url != nil, let error {
+            return .failure(error)
+        }
+        return .empty
     }
 }
