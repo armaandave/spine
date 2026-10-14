@@ -122,6 +122,43 @@ class ServicesTests(TestCase):
         self.assertEqual(mock_get.call_count, services.RATE_LIMIT_MAX_RETRIES + 1)
         self.assertEqual(mock_sleep.call_count, services.RATE_LIMIT_MAX_RETRIES)
 
+    def _rate_limited_then_ok(self, retry_after):
+        limited = MagicMock(status_code=429, headers={"Retry-After": retry_after})
+        error = requests.exceptions.HTTPError("429 Too Many Requests")
+        error.response = limited
+        limited.raise_for_status.side_effect = error
+        ok = MagicMock()
+        ok.json.return_value = {"data": {}}
+        return [limited, ok]
+
+    @patch("app.providers.services.time.sleep")
+    @patch("app.providers.services.session.post")
+    def test_hardcover_rate_limit_waits_only_as_long_as_asked(self, mock_post, mock_sleep):
+        mock_post.side_effect = self._rate_limited_then_ok("1")
+
+        services.api_request(
+            Sources.HARDCOVER.value,
+            "POST",
+            "https://api.hardcover.app/v1/graphql",
+            params={"query": "{}"},
+        )
+
+        mock_sleep.assert_called_once_with(1)
+
+    @patch("app.providers.services.time.sleep")
+    @patch("app.providers.services.session.get")
+    def test_other_providers_keep_rate_limit_padding(self, mock_get, mock_sleep):
+        mock_get.side_effect = self._rate_limited_then_ok("1")
+
+        services.api_request(Sources.MAL.value, "GET", "https://api.myanimelist.net/v2/anime/1")
+
+        mock_sleep.assert_called_once_with(1 + services.RATE_LIMIT_RETRY_PADDING_SECONDS)
+
+    def test_hardcover_429_does_not_mark_the_minute_budget_spent(self):
+        for session in (services.session, services.person_search_session):
+            adapter = session.get_adapter("https://api.hardcover.app/v1/graphql")
+            self.assertEqual(tuple(adapter.limit_statuses), ())
+
     @patch("app.providers.services.time.sleep")
     @patch("app.providers.services.session.get")
     def test_api_request_can_skip_rate_limit_retries(self, mock_get, mock_sleep):

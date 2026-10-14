@@ -212,6 +212,22 @@ python manage.py collectstatic
 npm run build-css-prod
 ```
 
+## Measuring Media Latency
+
+With `DEBUG=True` (or `SERVER_TIMING=True`), every response carries a `Server-Timing` header and the console logs a `server_timing` line. Both show where the request time went: provider network time per host (`http.<host>`), rate-limiter waits (`wait.<host>`), HTTP 429 retry sleeps, database queries, and untimed app work.
+
+To compare media types, run the benchmark. Redis must be running and provider API keys must be set:
+
+```bash
+cd src
+# Live: real providers, 3 cold + 5 warm runs per request; also records a cassette
+python manage.py benchmark_media_latency
+# Replay: same requests served from the cassette, no network or rate limits
+python manage.py benchmark_media_latency --replay ../benchmarks/media-latency/<run>/cassette.json
+```
+
+Each run writes `report.md`, `results.json`, and (for live runs) `cassette.json` under `benchmarks/media-latency/`, which git ignores. The benchmark uses a throwaway database and its own Redis cache prefix, so your dev data, rate-limit buckets, and Celery queues are untouched.
+
 ## Accessing the App
 
 Once running via `start-dev.sh`:

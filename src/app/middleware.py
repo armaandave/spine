@@ -1,11 +1,49 @@
+import logging
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
+from django.core.exceptions import MiddlewareNotUsed
+from django.db import connection
 from django.shortcuts import render
 from django.utils import timezone
 
+from app import request_timing
 from app.providers import services
+
+logger = logging.getLogger(__name__)
+
+
+class ServerTimingMiddleware:
+    """Report where request time went in a Server-Timing header and a log line."""
+
+    def __init__(self, get_response):
+        """Enable timing hooks only when SERVER_TIMING is on."""
+        if not settings.SERVER_TIMING:
+            raise MiddlewareNotUsed
+        request_timing.install()
+        self.get_response = get_response
+
+    def __call__(self, request):
+        """Collect spans for the request and summarize them on the response."""
+        with (
+            request_timing.collect() as timings,
+            connection.execute_wrapper(request_timing.db_execute_wrapper),
+        ):
+            response = self.get_response(request)
+        # Kept on the request so in-process benchmarks can read every span.
+        request.server_timing = timings
+        header = request_timing.server_timing_header(timings)
+        response["Server-Timing"] = header
+        logger.info(
+            "server_timing %s %s media_type=%s status=%s %s",
+            request.method,
+            request.path,
+            request.GET.get("media_type", "-"),
+            response.status_code,
+            header,
+        )
+        return response
 
 
 class AutoLoginMiddleware:

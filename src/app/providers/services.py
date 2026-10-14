@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import time
+from urllib.parse import urlparse
 
 import requests
 from defusedxml import ElementTree
@@ -11,6 +12,7 @@ from redis import Redis
 from requests.adapters import HTTPAdapter
 from requests_ratelimiter import LimiterAdapter, LimiterSession
 
+from app import request_timing
 from app.models import MediaTypes, Sources
 from app.providers import (
     comicvine,
@@ -27,6 +29,10 @@ from app.providers import (
 logger = logging.getLogger(__name__)
 RATE_LIMIT_MAX_RETRIES = 3
 RATE_LIMIT_MAX_WAIT_SECONDS = 60
+# Seconds added to a provider's Retry-After before retrying a 429.
+RATE_LIMIT_RETRY_PADDING_SECONDS = 3
+# Providers whose Retry-After is exact, so a 429 waits only as long as they ask.
+EXACT_RETRY_AFTER_PROVIDERS = {Sources.HARDCOVER.value}
 SUPPORTED_PERSON_SOURCES = (
     Sources.TMDB.value,
     Sources.HARDCOVER.value,
@@ -109,7 +115,9 @@ session.mount(
 )
 session.mount(
     "https://api.hardcover.app/v1/graphql",
-    LimiterAdapter(per_minute=50),
+    # No limit_statuses: on a 429 the limiter would otherwise mark the whole minute's
+    # budget as spent (a ~60 s stall); api_request waits out Retry-After instead.
+    LimiterAdapter(per_minute=50, limit_statuses=()),
 )
 session.mount(
     "https://www.steamgriddb.com/api/v2",
@@ -134,7 +142,9 @@ person_search_session.mount(
 )
 person_search_session.mount(
     "https://api.hardcover.app/v1/graphql",
-    LimiterAdapter(per_minute=50),
+    # No limit_statuses: on a 429 the limiter would otherwise mark the whole minute's
+    # budget as spent (a ~60 s stall); api_request waits out Retry-After instead.
+    LimiterAdapter(per_minute=50, limit_statuses=()),
 )
 
 
@@ -257,13 +267,16 @@ def api_request(
                 max(seconds_to_wait, 0),
                 RATE_LIMIT_MAX_WAIT_SECONDS,
             )
+            if provider not in EXACT_RETRY_AFTER_PROVIDERS:
+                seconds_to_wait += RATE_LIMIT_RETRY_PADDING_SECONDS
             logger.warning(
                 "Rate limited, waiting %s seconds before retry %s/%s",
                 seconds_to_wait,
                 retry_number + 1,
                 RATE_LIMIT_MAX_RETRIES,
             )
-            time.sleep(seconds_to_wait + 3)
+            with request_timing.span("retry_sleep", urlparse(url).hostname or provider):
+                time.sleep(seconds_to_wait)
             continue
 
         if response_format == "xml":

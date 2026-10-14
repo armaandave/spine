@@ -34,3 +34,6 @@ xcuserdata/
 ios/.derivedData
 
 .build/
+
+# Generated media latency benchmark output (reports, raw results, cassettes)
+/benchmarks/

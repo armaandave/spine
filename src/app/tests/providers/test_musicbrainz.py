@@ -564,10 +564,14 @@ class MusicBrainzTests(TestCase):
                 },
             ],
         }
-        lookup_cover_art.return_value = {"images": [{"front": True}]}
-
         result = musicbrainz.music(RELEASE_GROUP_MBID)
 
+        lookup_cover_art.assert_not_called()
+        self.assertEqual(
+            result["image"],
+            f"https://coverartarchive.org/release-group/{RELEASE_GROUP_MBID}/front-500",
+        )
+        self.assertFalse(result["music"]["cover_art"]["fallback_used"])
         self.assertEqual(result["title"], "Year Zero")
         self.assertEqual(result["release_date"], "2007-04-13")
         self.assertEqual(result["max_progress"], 1)
@@ -615,7 +619,6 @@ class MusicBrainzTests(TestCase):
         self.assertIsNone(result["details"]["release_count"])
         self.assertIsNone(result["details"]["annotation"])
         self.assertIsNone(result["music"]["representative_release"])
-        self.assertNotIn("poster_width", result)
 
     @patch("app.providers.musicbrainz.resolve_representative_release")
     @patch("app.providers.musicbrainz.lookup_cover_art")
@@ -634,37 +637,26 @@ class MusicBrainzTests(TestCase):
         result = musicbrainz.music(RELEASE_GROUP_MBID, include_enrichment=False)
 
         self.assertEqual(result["title"], "Year Zero")
-        self.assertEqual(result["image"], settings.IMG_NONE)
+        self.assertEqual(
+            result["image"],
+            f"https://coverartarchive.org/release-group/{RELEASE_GROUP_MBID}/front-500",
+        )
         self.assertIsNone(result["music"]["representative_release"])
         lookup_cover_art.assert_not_called()
         resolve_release.assert_not_called()
 
     @patch("app.providers.musicbrainz.resolve_representative_release")
     @patch("app.providers.musicbrainz.lookup_cover_art")
-    def test_music_enrichment_starts_cover_and_release_work_together(
+    def test_music_enrichment_only_resolves_the_tracklist(
         self,
         lookup_cover_art,
         resolve_release,
     ):
-        cover_started = threading.Event()
-        release_started = threading.Event()
+        resolve_release.return_value = {"release": None, "reason": None, "release_mbid": None}
 
-        def cover(_mbid):
-            cover_started.set()
-            self.assertTrue(release_started.wait(0.5))
-            return None
+        self.assertIsNone(musicbrainz._music_enrichment(RELEASE_GROUP_MBID, "Year Zero"))
 
-        def release(_mbid, _title):
-            release_started.set()
-            self.assertTrue(cover_started.wait(0.5))
-            return {"release": None, "reason": None, "release_mbid": None}
-
-        lookup_cover_art.side_effect = cover
-        resolve_release.side_effect = release
-
-        musicbrainz._music_enrichment(RELEASE_GROUP_MBID, "Year Zero")
-
-        lookup_cover_art.assert_called_once_with(RELEASE_GROUP_MBID)
+        lookup_cover_art.assert_not_called()
         resolve_release.assert_called_once_with(RELEASE_GROUP_MBID, "Year Zero")
 
     def test_lucene_escaping_preserves_unicode_and_escapes_reserved_tokens(self):

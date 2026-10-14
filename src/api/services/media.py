@@ -81,7 +81,7 @@ from app.models import (
     MediaTypes,
     Sources,
 )
-from app.providers import anilist, googlebooks, mal, musicbrainz
+from app.providers import anilist, mal, musicbrainz
 from app.providers import services as provider_services
 from app.providers.search_rank import normalize_search_text, rank_mixed_results
 from app.utils.color import build_accent_palette, compute_and_store_poster_accent
@@ -104,7 +104,7 @@ DETAIL_CACHE_VERSION = "v9"
 BOOK_DETAIL_CACHE_VERSION = "v1"
 MOVIE_DETAIL_CACHE_VERSION = "v1"
 EPISODE_DETAIL_CACHE_VERSION = "v1"
-MUSIC_DETAIL_CACHE_VERSION = "v2"
+MUSIC_DETAIL_CACHE_VERSION = "v3"
 ANIME_DETAIL_CACHE_VERSION = "v6"
 MANGA_DETAIL_CACHE_VERSION = "v1"
 PERSON_PREPARATION_LOCK_TIMEOUT = 60 * 15
@@ -971,7 +971,7 @@ def refresh_music_detail(*, source, media_id, include_music_enrichment):
     )
 
 
-def media_detail(  # noqa: C901
+def media_detail(
     *,
     source,
     media_type,
@@ -1033,8 +1033,6 @@ def media_detail(  # noqa: C901
         metadata = _enrich_anime_metadata(metadata, source)
     elif media_type == MediaTypes.MANGA.value:
         metadata = _enrich_manga_metadata(metadata, source)
-    elif media_type == MediaTypes.BOOK.value:
-        metadata = _enrich_book_metadata(metadata, source)
 
     summary = media_summary_from_provider(
         {
@@ -1082,10 +1080,6 @@ def media_detail(  # noqa: C901
         season_number=season_number,
         episode_number=episode_number,
         item=item,
-    )
-    rating_payload = _add_google_books_rating(
-        rating_payload,
-        metadata.get("_google_books"),
     )
     _persist_detail_series(metadata, source=source, media_type=media_type)
     seasons = (
@@ -1660,130 +1654,6 @@ def _normalize_manga_relation(value, *, default):
     normalized = ANIME_RELATION_LABELS.get(label.lower(), label.title())
     allowed = {*ANIME_RELATION_ORDER, "Related"}
     return normalized if normalized in allowed else default
-
-
-def _google_books_volume(metadata):
-    try:
-        return googlebooks.lookup_volume((metadata.get("details") or {}).get("isbn"))
-    except provider_services.ProviderAPIError as error:
-        logger.warning("Google Books enrichment unavailable: %s", error)
-        return None
-
-
-def _empty_book_value(value):
-    if value is None or value == "" or value == []:
-        return True
-    if isinstance(value, str):
-        return value.strip().lower() in {
-            "",
-            "no synopsis available.",
-            "no synopsis available yet.",
-        }
-    return False
-
-
-def _fallback(payload, key, value):
-    if not _empty_book_value(value) and _empty_book_value(payload.get(key)):
-        payload[key] = value
-
-
-def _all_empty(*values):
-    return all(_empty_book_value(value) for value in values)
-
-
-def _enrich_book_metadata(metadata, source):  # noqa: C901
-    if source not in {Sources.HARDCOVER.value, Sources.OPENLIBRARY.value}:
-        return metadata
-    google = _google_books_volume(metadata)
-    if google is None:
-        return metadata
-
-    enriched = deepcopy(metadata)
-    details = dict(enriched.get("details") or {})
-    enriched["details"] = details
-    _fallback(enriched, "title", google.get("title"))
-    _fallback(enriched, "subtitle", google.get("subtitle"))
-    _fallback(enriched, "synopsis", google.get("description"))
-
-    if _all_empty(enriched.get("genres"), details.get("genres")):
-        _fallback(enriched, "genres", google.get("categories"))
-
-    if _all_empty(
-        enriched.get("max_progress"),
-        details.get("number_of_pages"),
-        details.get("pages"),
-    ):
-        _fallback(enriched, "max_progress", google.get("page_count"))
-        _fallback(details, "number_of_pages", google.get("page_count"))
-
-    if _all_empty(
-        enriched.get("release_date"),
-        enriched.get("publish_date"),
-        details.get("publish_date"),
-        details.get("published_date"),
-        details.get("release_date"),
-    ):
-        _fallback(enriched, "release_date", google.get("published_date"))
-        _fallback(details, "publish_date", google.get("published_date"))
-        _fallback(details, "release_date", google.get("published_date"))
-
-    if _all_empty(details.get("authors"), details.get("author")):
-        _fallback(details, "authors", google.get("authors"))
-        _fallback(details, "author", ", ".join(google.get("authors") or []))
-
-    if _all_empty(details.get("publishers"), details.get("publisher")):
-        _fallback(
-            details,
-            "publishers",
-            [google["publisher"]] if google.get("publisher") else None,
-        )
-
-    if _all_empty(
-        enriched.get("languages"),
-        details.get("languages"),
-        details.get("language"),
-    ):
-        languages = [google["language"]] if google.get("language") else None
-        _fallback(enriched, "languages", languages)
-        _fallback(details, "languages", languages)
-
-    if google.get("maturity_rating") and _empty_book_value(details.get("maturity_rating")):
-        details["maturity_rating"] = google["maturity_rating"].replace("_", " ").title()
-    if (price := google.get("price")) and _empty_book_value(
-        details.get("google_books_price_amount"),
-    ):
-        details.update(
-            {
-                "google_books_price_amount": price["amount"],
-                "google_books_price_currency": price["currency"],
-                "google_books_price_country": price["country"],
-            },
-        )
-
-    external_links = dict(enriched.get("external_links") or {})
-    external_links["google_books"] = google["canonical_url"]
-    enriched["external_links"] = external_links
-    enriched["_google_books"] = google
-    return enriched
-
-
-def _add_google_books_rating(rating_payload, google):
-    rating = (google or {}).get("rating")
-    if not rating:
-        return rating_payload
-    return {
-        **rating_payload,
-        "external_ratings": [
-            *rating_payload["external_ratings"],
-            {
-                "source": "Google Books",
-                "value": rating["value"],
-                "vote_count": rating["count"],
-                "max_value": "5",
-                "url": google["canonical_url"],
-            },
-        ],
-    }
 
 
 def music_recording_detail(*, release_group_mbid, recording_mbid, request=None, user=None):
@@ -3458,17 +3328,6 @@ def book_cover_options(*, source, media_id, request=None, user=None):
         {"url": item.image, "thumbnail_url": item.image, "is_original": True},
         *_book_cover_candidates(source, media_id, isbns),
     ]
-    metadata = provider_services.get_media_metadata(MediaTypes.BOOK.value, media_id, source)
-    google = _google_books_volume(metadata)
-    if google and google.get("cover_url"):
-        covers.append(
-            {
-                "url": google["cover_url"],
-                "thumbnail_url": google["cover_url"],
-                "provider_name": "Google Books",
-                "provider_url": google["canonical_url"],
-            },
-        )
     for cover in covers:
         url = cover.get("url")
         if not url or url in seen:
