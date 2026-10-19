@@ -118,6 +118,7 @@ struct MediaFilterState: Equatable {
     var tag: String?
     var hasReview = false
     var liked = false
+    var service: StreamingFilterService = .any
 
     var isActive: Bool {
         activeCount > 0
@@ -141,6 +142,7 @@ struct MediaFilterState: Equatable {
         if tag?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { count += 1 }
         if hasReview { count += 1 }
         if liked { count += 1 }
+        if service.isActive { count += 1 }
         return count
     }
 
@@ -181,6 +183,7 @@ struct MediaFilterState: Equatable {
         if liked {
             items.append(URLQueryItem(name: "liked", value: "true"))
         }
+        items += service.queryItems
         if let page {
             items.append(URLQueryItem(name: "page", value: page))
         }
@@ -201,6 +204,14 @@ struct MediaFilterState: Equatable {
         sort = rawValue.map(MediaFilterSort.init(rawValue:))
         if sort != nil, direction == nil {
             direction = .desc
+        }
+    }
+
+    /// Narrowing to a type without streaming availability drops the Service filter, which could only match nothing.
+    mutating func selectMediaType(_ type: String?) {
+        mediaType = type
+        if !StreamingFilterRules.supportsService(mediaType: type) {
+            service = .any
         }
     }
 
@@ -262,19 +273,22 @@ struct MediaFilterOptionsResponse: Decodable, Equatable, Hashable {
     let languages: [FilterChoice]
     let platforms: [FilterChoice]
     let years: [Int]
+    let streaming: StreamingFilterOptions?
 
     init(
         sorts: [FilterChoice],
         genres: [FilterChoice],
         languages: [FilterChoice],
         platforms: [FilterChoice] = [],
-        years: [Int]
+        years: [Int],
+        streaming: StreamingFilterOptions? = nil
     ) {
         self.sorts = sorts
         self.genres = genres
         self.languages = languages
         self.platforms = platforms
         self.years = years
+        self.streaming = streaming
     }
 
     init(from decoder: Decoder) throws {
@@ -284,6 +298,8 @@ struct MediaFilterOptionsResponse: Decodable, Equatable, Hashable {
         languages = try container.decodeIfPresent([FilterChoice].self, forKey: .languages) ?? []
         platforms = try container.decodeIfPresent([FilterChoice].self, forKey: .platforms) ?? []
         years = try container.decodeIfPresent([Int].self, forKey: .years) ?? []
+        // A streaming block this client can't read hides the Service filter instead of every other filter.
+        streaming = (try? container.decodeIfPresent(StreamingFilterOptions.self, forKey: .streaming)) ?? nil
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -292,6 +308,7 @@ struct MediaFilterOptionsResponse: Decodable, Equatable, Hashable {
         case languages
         case platforms
         case years
+        case streaming
     }
 
     static let empty = MediaFilterOptionsResponse(sorts: [], genres: [], languages: [], years: [])

@@ -965,6 +965,11 @@ final class ProfileListDetailViewModel {
     var isSaving = false
     var errorMessage: String?
     var nextPageErrorMessage: String?
+    var streamingPendingCount = 0
+
+    var streamingPendingNote: String? {
+        StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
+    }
 
     private let listId: Int
     private let listRepository: ListRepository
@@ -1016,6 +1021,7 @@ final class ProfileListDetailViewModel {
                 filteredItems = response.results
                 people = []
                 nextPage = APIPageCursor.nextPage(from: response.next)
+                streamingPendingCount = response.streaming?.pendingCount ?? 0
                 list = detail.withItems(response.results)
                 Task { await loadFilterOptions() }
             case .people:
@@ -1054,6 +1060,7 @@ final class ProfileListDetailViewModel {
             requestGeneration += 1
             filteredItems = []
             nextPage = nil
+            streamingPendingCount = 0
         }
         let generation = requestGeneration
         let requestFilter = filter
@@ -1070,6 +1077,7 @@ final class ProfileListDetailViewModel {
             guard generation == requestGeneration, requestFilter == filter else { return }
             if reset {
                 filteredItems = response.results
+                streamingPendingCount = response.streaming?.pendingCount ?? 0
             } else {
                 let existingIDs = Set(filteredItems.map(\.id))
                 filteredItems += response.results.filter { !existingIDs.contains($0.id) }
@@ -1473,13 +1481,27 @@ struct ProfileListDetailView: View {
                                 filteredPaginationFooter
                                     .padding(.horizontal, 14)
                             } else if viewModel.displayedItems.isEmpty {
-                                DiaryStateCard(
-                                    title: viewModel.filter.isActive ? "No matching items" : "No items yet",
-                                    systemImage: "square.grid.2x2",
-                                    message: viewModel.filter.isActive ? "Try changing or resetting the filters." : "Add items from any media detail page."
-                                )
-                                .padding(.horizontal, 14)
+                                streamingPendingNote
+                                if viewModel.filter.service.isActive {
+                                    DiaryStateCard(
+                                        title: StreamingFilterCopy.emptyTitle(
+                                            service: viewModel.filter.service,
+                                            options: viewModel.filterOptions.streaming
+                                        ),
+                                        systemImage: "play.tv",
+                                        message: StreamingFilterCopy.emptyMessage
+                                    )
+                                    .padding(.horizontal, 14)
+                                } else {
+                                    DiaryStateCard(
+                                        title: viewModel.filter.isActive ? "No matching items" : "No items yet",
+                                        systemImage: "square.grid.2x2",
+                                        message: viewModel.filter.isActive ? "Try changing or resetting the filters." : "Add items from any media detail page."
+                                    )
+                                    .padding(.horizontal, 14)
+                                }
                             } else {
+                                streamingPendingNote
                                 mediaGrid(viewModel.displayedItems)
                                     .padding(.horizontal, 14)
                                 filteredPaginationFooter
@@ -1600,6 +1622,14 @@ struct ProfileListDetailView: View {
             hasContent: viewModel.list != nil,
             hasError: viewModel.errorMessage != nil
         )
+    }
+
+    @ViewBuilder
+    private var streamingPendingNote: some View {
+        if let note = viewModel.streamingPendingNote {
+            StreamingFilterPendingNote(text: note)
+                .padding(.horizontal, 14)
+        }
     }
 
     private var edgeSwipeBackGesture: some Gesture {
