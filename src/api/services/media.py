@@ -1053,6 +1053,11 @@ def media_detail(
         summary["overview"] = synopsis
     ref = summary["ref"]
     item = _external_rating_item(ref, primary_metadata)
+    from streaming import payloads as streaming_payloads
+    from streaming import sync as streaming_sync
+
+    # ST-400: refresh stale snapshots from the metadata already fetched.
+    streaming_sync.sync_from_metadata(source, media_type, media_id, primary_metadata)
     if summary.get("poster_accent_color") is None:
         summary["poster_accent_color"] = poster_accent_color(metadata, ref)
     logo, custom_logo_url = resolved_logo(
@@ -1164,6 +1169,14 @@ def media_detail(
         "related": metadata.get("related", {}),
         "related_sections": related_sections,
         "providers": watch_providers_for_user(metadata, user),
+        "where_to_watch": streaming_payloads.where_to_watch(
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            metadata=primary_metadata,
+            user=user,
+            request=request,
+        ),
         "community": community_stats(
             source=source,
             media_type=media_type,

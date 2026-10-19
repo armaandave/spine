@@ -70,6 +70,7 @@ Important files:
 | POST/DELETE | `/api/v1/me/avatar/` | Yes |
 | POST | `/api/v1/me/password/` | Yes |
 | PATCH | `/api/v1/me/preferences/` | Yes |
+| GET/PUT | `/api/v1/me/streaming/` | Yes |
 | GET | `/api/v1/me/hof/` | Yes |
 | PUT/DELETE | `/api/v1/me/hof/{media_type}/` | Yes |
 
@@ -91,6 +92,13 @@ Important files:
 | GET | `/api/v1/media/{source}/tv/{media_id}/seasons/` | Optional |
 | GET | `/api/v1/media/{source}/tv/{media_id}/seasons/{season_number}/` | Optional |
 | GET | `/api/v1/media/{source}/tv/{media_id}/seasons/{season_number}/episodes/` | Optional |
+
+### Streaming
+
+| Method | Path | Auth |
+|---|---|---|
+| GET | `/api/v1/streaming/regions/` | Yes |
+| GET | `/api/v1/streaming/providers/` | Yes |
 
 ### People
 
@@ -575,6 +583,17 @@ Validation uses the web password-change form, including password validators and 
 }
 ```
 
+## Streaming Availability
+
+Where-to-watch data comes from TMDB watch providers (sourced from JustWatch). The full product and payload contract is `docs/streaming-availability-contract.md`; this is a summary.
+
+- The effective country is the saved `users.User.watch_provider_region` when it is a 2-letter code, else the `X-Spine-Region` request header (iOS sends the device region) when nothing is saved, else `STREAMING_DEFAULT_REGION` (`US`). A saved empty string (web "Disabled") turns availability off.
+- `GET /api/v1/streaming/regions/` returns `{ "results": [{ "code": "US", "name": "United States" }] }`, sorted by name.
+- `GET /api/v1/streaming/providers/?region=US` returns `{ "region": "US", "results": [provider] }`, the merged movie and TV catalog for the country in display-priority order, cached for 24 hours. `region` defaults to the effective country; an unknown region returns `400`.
+- `GET /api/v1/me/streaming/` returns `region`, `region_name`, `region_is_set`, `enabled`, `provider_ids`, `providers`, and the JustWatch `attribution`. `PUT` takes `{ "region": "US", "provider_ids": [8, 337] }` (both required), replaces the selection, saves the country, and queues a background check of the user's library. Provider IDs must be unique positive integers from the country's catalog or already selected, at most 100. Demo users get `403`.
+- A provider object is `{ "provider_id": 8, "name": "Netflix", "logo_url": "https://image.tmdb.org/t/p/w154/…", "display_priority": 1 }`.
+- Snapshots (`streaming.StreamingAvailability` and `StreamingOffer`) are stored for active countries only: countries saved by users who have services, plus the default. Detail requests refresh missing or stale snapshots from metadata they already fetched; the `Queue stale streaming availability` beat task refreshes library and list titles every 6 hours, and `manage.py backfill_streaming_availability [--limit N] [--dry-run] [--force]` queues refreshes on demand.
+
 ## Current User Hall of Fame
 
 `GET /api/v1/me/hof/` returns the current user's Hall of Fame map:
@@ -911,6 +930,7 @@ Rules:
 - Anime and manga expose MAL/MangaUpdates related sections such as `related_anime`, `related_manga`, and recommendations.
 - TV seasons are top-level `seasons`, not `related_sections`.
 - Season detail exposes top-level `episodes` with `runtime` strings.
+- TMDB movie, TV, and season detail add `where_to_watch` for the viewer's effective country (see Streaming Availability): `region`, `region_name`, `link`, `has_services`, `on_my_services`, non-empty offer `groups` in Stream, Free, Free with ads, Rent, Buy order (the viewer's services first, marked `is_mine`), and `attribution`. It is `null` for other media and when availability is disabled. Seasons use season-level offers. The legacy `providers` field is unchanged.
 - `rating_distribution` uses only actual Spine diary ratings visible outside private scope and returns `[]` when there are no ratings.
 
 ## New Models and Migrations
