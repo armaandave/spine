@@ -255,3 +255,17 @@ The backend sends `watch_region`, `with_watch_providers` (pipe-joined, meaning a
 - `StreamingOffer(availability, provider, monetization, display_priority)`, unique per availability, provider, and type.
 - `UserStreamingService(user, provider)`, unique per user and provider.
 - Snapshots are written only for active countries (ST-400).
+
+## Operations
+
+- **Deploy:** the only migration is `streaming.0001_initial`, which is additive. The Celery worker and beat must be running, as they already are in production (`supervisord.conf`).
+- **Prime storage after the first deploy (optional):** `python manage.py backfill_streaming_availability --limit 2000` queues refresh batches for library and list titles in active countries. Add `--dry-run` to see the counts first. The worker then processes the batches through the shared TMDB rate limiter.
+- **Periodic refresh:** the beat entry `queue_stale_streaming_availability` (task "Queue stale streaming availability") runs every 6 hours. It queues missing titles first, then those older than 24 hours, up to 1000 titles per run.
+- **On save:** `PUT /me/streaming/` queues "Check streaming library" for that user, covering up to 1000 titles.
+- **Settings:** `STREAMING_DEFAULT_REGION` (default `US`) is the country for users who have not picked one and whose client sends no `X-Spine-Region`.
+- **Data terms:**
+  - TMDB requires crediting JustWatch wherever this data appears (ST-003).
+  - TMDB's API is free only for non-commercial use. If Spine starts earning revenue, all of its TMDB use, including this feature, needs TMDB's commercial license.
+- **Known follow-ups:**
+  - JustWatch lists service variants as separate providers (for example "Netflix Standard with Ads" and Amazon/Apple channels); the picker does not group them yet.
+  - Per-service deep links would need a different source, such as the Streaming Availability API by Movie of the Night.
