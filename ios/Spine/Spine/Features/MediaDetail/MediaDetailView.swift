@@ -688,12 +688,14 @@ private enum MediaDetailSheet: Identifiable {
     case posterMenu
     case bookGameActions
     case addToList
+    case streamingServices
 
     var id: String {
         switch self {
         case .posterMenu: "posterMenu"
         case .bookGameActions: "bookGameActions"
         case .addToList: "addToList"
+        case .streamingServices: "streamingServices"
         }
     }
 }
@@ -1065,6 +1067,7 @@ struct MediaDetailView: View {
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
     private let companyRepository: CompanyRepository
+    private let streamingRepository: StreamingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
@@ -1081,6 +1084,7 @@ struct MediaDetailView: View {
         listRepository: ListRepository = AppRepositories.current().lists,
         peopleRepository: PeopleRepository = AppRepositories.current().people,
         companyRepository: CompanyRepository = AppRepositories.current().companies,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
@@ -1096,6 +1100,7 @@ struct MediaDetailView: View {
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
         self.companyRepository = companyRepository
+        self.streamingRepository = streamingRepository
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
@@ -1180,6 +1185,7 @@ struct MediaDetailView: View {
             listRepository: listRepository,
             peopleRepository: peopleRepository,
             companyRepository: companyRepository,
+            streamingRepository: streamingRepository,
             currentUserId: currentUserId,
             selectedTab: selectedTab,
             posterTransitionNamespace: posterTransitionNamespace,
@@ -1294,6 +1300,7 @@ private struct MediaDetailPageView: View {
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
     private let companyRepository: CompanyRepository
+    private let streamingRepository: StreamingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let posterTransitionNamespace: Namespace.ID
@@ -1317,6 +1324,7 @@ private struct MediaDetailPageView: View {
         listRepository: ListRepository = AppRepositories.current().lists,
         peopleRepository: PeopleRepository = AppRepositories.current().people,
         companyRepository: CompanyRepository = AppRepositories.current().companies,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         posterTransitionNamespace: Namespace.ID,
@@ -1336,6 +1344,7 @@ private struct MediaDetailPageView: View {
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
         self.companyRepository = companyRepository
+        self.streamingRepository = streamingRepository
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.posterTransitionNamespace = posterTransitionNamespace
@@ -1516,6 +1525,8 @@ private struct MediaDetailPageView: View {
                         onUnauthorized: onUnauthorized
                     )
                 }
+            case .streamingServices:
+                StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
             }
         }
         .sheet(item: $editingGamePlaythrough, onDismiss: presentPendingGameSheet) { playthrough in
@@ -1813,6 +1824,11 @@ private struct MediaDetailPageView: View {
                   let detail = viewModel.detail,
                   completionMayHaveChanged(in: detail, for: changedRef)
             else { return }
+            Swift.Task<Void, Never> { await viewModel.load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+            // A new country or new services change Where to Watch.
+            guard let detail = viewModel.detail, WhereToWatch.isAvailable(for: detail.ref) else { return }
             Swift.Task<Void, Never> { await viewModel.load() }
         }
     }
@@ -2841,6 +2857,11 @@ private struct MediaDetailPageView: View {
             VStack(alignment: .leading, spacing: 28) {
                 SynopsisText(text: synopsisPreview(detail))
                 trackingSummarySection(detail)
+                if let whereToWatch = detail.whereToWatch, WhereToWatch.isAvailable(for: detail.ref) {
+                    WhereToWatchSection(whereToWatch: whereToWatch) {
+                        presentedSheet = .streamingServices
+                    }
+                }
                 if detail.ref.mediaType == "game", let game = gameState(detail) {
                     GamePlayHistorySection(game: game,
                         onEdit: { editingGamePlaythrough = $0 },
@@ -4789,7 +4810,7 @@ private struct StarRatingPill: View {
     }
 }
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let title: String
 
     var body: some View {
