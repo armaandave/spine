@@ -158,13 +158,13 @@ class WhereToWatchTests(TestCase):
         self.assertEqual(_provider_ids(payload, "flatrate"), [8])
 
     def test_saved_region_and_unknown_region_name(self):
-        self.user.watch_provider_region = "JP"
+        self.user.watch_provider_region = "XX"
         self.user.save(update_fields=["watch_provider_region"])
 
-        payload = self._build(metadata={"providers": {"JP": {"flatrate": [NETFLIX]}}})
+        payload = self._build(metadata={"providers": {"XX": {"flatrate": [NETFLIX]}}})
 
-        self.assertEqual(payload["region"], "JP")
-        self.assertEqual(payload["region_name"], "JP")
+        self.assertEqual(payload["region"], "XX")
+        self.assertEqual(payload["region_name"], "XX")
 
     def test_snapshot_payload_query_count_is_constant(self):
         self._subscribe(NETFLIX)

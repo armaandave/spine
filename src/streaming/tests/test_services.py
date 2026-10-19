@@ -112,7 +112,8 @@ class StreamingHelperTests(TestCase):
         reset_streaming_state(self, region_names=None)
 
         with patch("app.providers.tmdb.watch_provider_regions") as regions_mock:
-            self.assertEqual(services.region_name("US", fetch=False), "US")
+            self.assertEqual(services.region_name("XX", fetch=False), "XX")
+            self.assertEqual(services.region_name("US", fetch=False), "United States")
         regions_mock.assert_not_called()
 
         reset_streaming_state(self)
@@ -124,12 +125,12 @@ class StreamingHelperTests(TestCase):
 
         with patch(
             "app.providers.tmdb.watch_provider_regions",
-            return_value=[("", "Disabled"), ("JP", "Japan")],
+            return_value=[("", "Disabled"), ("ZZ", "Zedland")],
         ) as regions_mock:
-            self.assertEqual(services.region_names(), {"JP": "Japan"})
-            self.assertEqual(services.region_name("JP"), "Japan")
+            self.assertEqual(services.region_names(), {"ZZ": "Zedland"})
+            self.assertEqual(services.region_name("ZZ"), "Zedland")
             services._region_names.update(expires=0.0, names={})
-            self.assertEqual(services.cached_region_names(), {"JP": "Japan"})
+            self.assertEqual(services.cached_region_names(), {"ZZ": "Zedland"})
             self.assertEqual(services.region_name("XX"), "XX")
         regions_mock.assert_called_once()
 
@@ -137,4 +138,4 @@ class StreamingHelperTests(TestCase):
         reset_streaming_state(self, region_names=None)
 
         with patch("app.providers.tmdb.watch_provider_regions", side_effect=RuntimeError("down")):
-            self.assertEqual(services.region_name("US"), "US")
+            self.assertEqual(services.region_name("XX"), "XX")

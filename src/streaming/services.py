@@ -12,6 +12,7 @@ from django.core.cache import cache
 
 from app.models import MediaTypes, Sources
 from streaming.models import UserStreamingService
+from streaming.region_names import REGION_NAMES
 
 ATTRIBUTION = {"name": "JustWatch", "url": "https://www.justwatch.com"}
 FRESH_FOR = timedelta(hours=24)
@@ -105,6 +106,7 @@ def active_regions():
         saved = (
             get_user_model()
             .objects.filter(streaming_services__isnull=False)
+            .order_by()
             .values_list("watch_provider_region", flat=True)
             .distinct()
         )
@@ -182,11 +184,14 @@ def cached_region_names():
 def region_name(code, *, fetch=True):
     """Return a country's display name, falling back to the code.
 
-    With ``fetch=False`` it never contacts TMDB, for paths such as media
+    Known regions come from a bundled table and never contact TMDB. For other
+    codes, ``fetch=False`` still never contacts TMDB, for paths such as media
     detail that must not make extra provider requests.
     """
     if not code:
         return None
+    if code in REGION_NAMES:
+        return REGION_NAMES[code]
     try:
         names = region_names() if fetch else cached_region_names()
     except Exception:  # noqa: BLE001 - a name lookup must never break a page

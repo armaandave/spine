@@ -387,7 +387,7 @@ class PendingTitleTests(TestCase):
 
         self.assertEqual(response.data["streaming"], {"region": "US", "pending_count": 2})
         self.assertEqual(response.data["results"], [])
-        delay.assert_called_once_with([["movie", "1"], ["movie", "3"]])
+        delay.assert_called_once_with([["movie", "1"], ["movie", "3"]], force=False)
 
     def test_checks_are_not_queued_before_commit(self):
         with patch(DELAY) as delay, self.captureOnCommitCallbacks(execute=False) as callbacks:
@@ -407,8 +407,8 @@ class PendingTitleTests(TestCase):
 
         first.assert_called_once()
         repeat.assert_not_called()
-        other_country.assert_called_once_with([["movie", "1"], ["movie", "2"], ["movie", "3"]])
-        other.assert_called_once_with([["movie", "1"]])
+        other_country.assert_called_once_with([["movie", "1"], ["movie", "2"], ["movie", "3"]], force=False)
+        other.assert_called_once_with([["movie", "1"]], force=False)
         self.assertEqual(response.data["streaming"]["pending_count"], 1)
 
     def test_debounced_requests_still_report_pending_titles(self):
@@ -433,7 +433,7 @@ class PendingTitleTests(TestCase):
         response, delay = self._get(f"/api/v1/lists/{custom_list.id}/items/")
 
         self.assertEqual(response.data["streaming"]["pending_count"], 2)
-        delay.assert_called_once_with([["movie", "7"], ["tv", "7"]])
+        delay.assert_called_once_with([["movie", "7"], ["tv", "7"]], force=False)
 
     def test_queued_titles_are_batched_and_capped(self):
         items = Item.objects.bulk_create([

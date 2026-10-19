@@ -4,7 +4,6 @@ Contract: docs/streaming-availability-contract.md
 """
 
 import logging
-from itertools import batched
 
 from django.core.cache import cache
 from django.db import transaction
@@ -42,11 +41,9 @@ TV_MEDIA_TYPES = (
 # Item media types with availability; seasons and episodes use their show's (ST-002).
 STREAMABLE_MEDIA_TYPES = (MediaTypes.MOVIE.value, *TV_MEDIA_TYPES)
 MAX_PROVIDER_ID = 2_147_483_647
-# Unchecked titles queued per request, how long a user's queueing is debounced,
-# and how many titles one refresh task takes.
+# Unchecked titles queued per request and how long a user's queueing is debounced.
 PENDING_CHECK_LIMIT = 500
 PENDING_CHECK_DEBOUNCE = 600
-REFRESH_BATCH_SIZE = 100
 
 
 def parse_service_param(params):
@@ -186,10 +183,9 @@ def _claim_pending_check(user, region):
 
 
 def _queue_title_checks(titles):
-    from streaming.tasks import refresh_streaming_titles
+    from streaming.tasks import enqueue_refresh_batches
 
-    for batch in batched(titles, REFRESH_BATCH_SIZE):
-        refresh_streaming_titles.delay(list(batch))
+    enqueue_refresh_batches(titles)
 
 
 def scope_has_titles(queryset, params=None, *, item_path="item__"):
