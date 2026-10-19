@@ -701,6 +701,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Queue stale external ratings",
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
+    "queue_stale_streaming_availability": {
+        "task": "Queue stale streaming availability",
+        "schedule": 60 * 60 * 6,  # every 6 hours
+    },
     "sync_nyt_featured_lists": {
         "task": "Sync NYT featured lists",
         "schedule": 60 * 60 * 24,  # every 24 hours

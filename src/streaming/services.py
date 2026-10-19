@@ -30,6 +30,10 @@ MAX_SERVICES = 100
 
 ACTIVE_REGIONS_CACHE_KEY = "streaming:active_regions:v1"
 ACTIVE_REGIONS_TTL = 300
+# Country names almost never change, so keep them long enough that request
+# paths which must not call TMDB nearly always find them.
+REGION_NAMES_CACHE_KEY = "streaming:region_names:v1"
+REGION_NAMES_TTL = 60 * 60 * 24 * 30
 
 _REGION_PATTERN = re.compile(r"^[A-Z]{2}$")
 _TV_LIKE_TYPES = {
@@ -136,27 +140,55 @@ def logo_url(logo_path):
 _region_names = {"expires": 0.0, "names": {}}
 
 
+def _memoized_region_names():
+    if _region_names["names"] and _region_names["expires"] > time.monotonic():
+        return _region_names["names"]
+    return None
+
+
+def _remember_region_names(names):
+    _region_names.update(names=names, expires=time.monotonic() + 86400)
+    return names
+
+
 def region_names():
     """Return {code: English name} for TMDB watch regions.
 
     Memoized per process for a day on top of the Django cache, so DEBUG's
     DummyCache does not add a TMDB call to every request.
     """
-    now = time.monotonic()
-    if _region_names["names"] and _region_names["expires"] > now:
-        return _region_names["names"]
-    from app.providers import tmdb
+    names = _memoized_region_names()
+    if names is not None:
+        return names
+    names = cache.get(REGION_NAMES_CACHE_KEY)
+    if not names:
+        from app.providers import tmdb
 
-    names = {code: name for code, name in tmdb.watch_provider_regions() if code}
-    _region_names.update(names=names, expires=now + 86400)
-    return names
+        names = {code: name for code, name in tmdb.watch_provider_regions() if code}
+        if names:
+            cache.set(REGION_NAMES_CACHE_KEY, names, REGION_NAMES_TTL)
+    return _remember_region_names(names)
 
 
-def region_name(code):
-    """Return a country's display name, falling back to the code."""
+def cached_region_names():
+    """Return known region names without contacting TMDB ({} when unknown)."""
+    names = _memoized_region_names()
+    if names is not None:
+        return names
+    names = cache.get(REGION_NAMES_CACHE_KEY)
+    return _remember_region_names(names) if names else {}
+
+
+def region_name(code, *, fetch=True):
+    """Return a country's display name, falling back to the code.
+
+    With ``fetch=False`` it never contacts TMDB, for paths such as media
+    detail that must not make extra provider requests.
+    """
     if not code:
         return None
     try:
-        return region_names().get(code, code)
+        names = region_names() if fetch else cached_region_names()
     except Exception:  # noqa: BLE001 - a name lookup must never break a page
         return code
+    return names.get(code, code)

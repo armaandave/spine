@@ -1,0 +1,220 @@
+"""Store streaming availability snapshots (ST-400).
+
+Snapshots are written only for active regions. Detail pages refresh missing or
+stale ones from metadata they already fetched; background tasks call TMDB.
+"""
+
+import logging
+from collections import Counter
+
+from django.core.cache import cache
+from django.db import DatabaseError, IntegrityError, transaction
+from django.utils import timezone
+from django_redis.exceptions import ConnectionInterrupted
+from redis.exceptions import RedisError
+
+from app.models import MediaTypes
+from app.providers.services import ProviderAPIError
+from streaming import tmdb
+from streaming.models import StreamingAvailability, StreamingOffer
+from streaming.services import FRESH_FOR, active_regions, normalize_region, title_key
+
+logger = logging.getLogger(__name__)
+
+REFRESH_LOCK_TIMEOUT = 60 * 15
+STORE_ATTEMPTS = 3
+REFRESH_STATUSES = ("refreshed", "fresh", "deduplicated", "skipped", "failed")
+
+
+def _regions(regions):
+    return {code for code in map(normalize_region, regions) if code}
+
+
+def regions_needing_refresh(title_type, tmdb_id, regions, *, now=None):
+    """Return the regions whose snapshot of the title is missing or stale."""
+    regions = _regions(regions)
+    if not regions:
+        return set()
+    cutoff = (now or timezone.now()) - FRESH_FOR
+    fresh = StreamingAvailability.objects.filter(
+        title_type=title_type,
+        tmdb_id=str(tmdb_id),
+        region__in=regions,
+        fetched_at__gte=cutoff,
+    ).values_list("region", flat=True)
+    return regions - set(fresh)
+
+
+def _write_snapshots(title_type, tmdb_id, snapshots):
+    now = timezone.now()
+    lookup = {"title_type": title_type, "tmdb_id": tmdb_id, "region__in": list(snapshots)}
+    rows = {
+        row.region: row
+        for row in StreamingAvailability.objects.select_for_update()
+        .filter(**lookup)
+        .order_by("region")
+    }
+    for region, row in rows.items():
+        row.link = snapshots[region][0]
+        row.fetched_at = now
+    if rows:
+        StreamingAvailability.objects.bulk_update(rows.values(), ["link", "fetched_at"])
+        StreamingOffer.objects.filter(availability__in=list(rows.values())).delete()
+    missing = [
+        StreamingAvailability(
+            title_type=title_type,
+            tmdb_id=tmdb_id,
+            region=region,
+            link=link,
+            fetched_at=now,
+        )
+        for region, (link, _offers) in snapshots.items()
+        if region not in rows
+    ]
+    if missing:
+        StreamingAvailability.objects.bulk_create(missing)
+        rows = {row.region: row for row in StreamingAvailability.objects.filter(**lookup)}
+    StreamingOffer.objects.bulk_create(
+        [
+            StreamingOffer(
+                availability=rows[region],
+                provider_id=offer.provider_id,
+                monetization=offer.monetization,
+                display_priority=offer.display_priority,
+            )
+            for region, (_link, offers) in snapshots.items()
+            for offer in offers
+        ],
+    )
+
+
+def store_snapshots(title_type, tmdb_id, results, regions):
+    """Replace the title's snapshots in ``regions`` with TMDB ``results``.
+
+    ``results`` is TMDB's watch-provider dict keyed by region. Every region
+    gets a row, with zero offers when TMDB has nothing there, so "checked, not
+    available" stays distinct from "never checked". Returns the regions written.
+    """
+    regions = _regions(regions)
+    if not regions:
+        return set()
+    tmdb_id = str(tmdb_id)
+    results = results if isinstance(results, dict) else {}
+    snapshots = {
+        region: (tmdb.region_link(results.get(region)), tmdb.parse_offers(results.get(region)))
+        for region in sorted(regions)
+    }
+    tmdb.upsert_providers(
+        offer._asdict() for _link, offers in snapshots.values() for offer in offers
+    )
+    # A concurrent writer can create the same rows first; retrying then
+    # updates the rows it made instead.
+    for attempt in range(1, STORE_ATTEMPTS + 1):
+        try:
+            with transaction.atomic():
+                _write_snapshots(title_type, tmdb_id, snapshots)
+        except IntegrityError:
+            if attempt == STORE_ATTEMPTS:
+                raise
+            logger.info(
+                "Retrying streaming snapshot write title=%s:%s attempt=%s",
+                title_type,
+                tmdb_id,
+                attempt,
+            )
+        else:
+            break
+    return regions
+
+
+def sync_from_metadata(source, media_type, media_id, metadata):
+    """Refresh missing or stale snapshots from detail metadata already in hand.
+
+    Only TMDB movie and TV detail metadata qualifies; season metadata holds
+    season-level offers. Makes no HTTP request and never raises on database
+    or cache errors, since it runs inside detail requests. Returns the regions
+    written.
+    """
+    if media_type not in (MediaTypes.MOVIE.value, MediaTypes.TV.value):
+        return set()
+    key = title_key(source, media_type, media_id)
+    if key is None or not isinstance(metadata, dict):
+        return set()
+    providers = metadata.get("providers")
+    if not isinstance(providers, dict):
+        return set()
+    try:
+        stale = regions_needing_refresh(*key, active_regions())
+        return store_snapshots(*key, providers, stale) if stale else set()
+    except (DatabaseError, ConnectionInterrupted, RedisError) as error:
+        logger.warning(
+            "Streaming sync from metadata failed title=%s:%s type=%s",
+            *key,
+            type(error).__name__,
+        )
+        return set()
+
+
+def _title(value):
+    try:
+        title_type, tmdb_id = value
+    except (TypeError, ValueError):
+        return None
+    tmdb_id = str(tmdb_id).strip() if tmdb_id is not None else ""
+    if title_type not in tmdb.TITLE_TYPES or not tmdb_id:
+        return None
+    return title_type, tmdb_id
+
+
+def _refresh_title(title_type, tmdb_id, regions, *, force):
+    if not force and not regions_needing_refresh(title_type, tmdb_id, regions):
+        return "fresh"
+    lock_key = f"streaming:refresh:{title_type}:{tmdb_id}"
+    if not cache.add(lock_key, 1, timeout=REFRESH_LOCK_TIMEOUT):
+        return "deduplicated"
+    try:
+        if not force and not regions_needing_refresh(title_type, tmdb_id, regions):
+            return "fresh"
+        try:
+            results = tmdb.fetch_title_providers(title_type, tmdb_id)
+        except ProviderAPIError as error:
+            if error.status_code != 404:
+                raise
+            # TMDB has no such title, so it is unavailable everywhere.
+            results = {}
+        store_snapshots(title_type, tmdb_id, results, regions)
+    finally:
+        cache.delete(lock_key)
+    return "refreshed"
+
+
+def refresh_titles(titles, *, force=False):
+    """Fetch and store availability for titles in every active region.
+
+    ``titles`` holds ``(title_type, tmdb_id)`` pairs. Titles are isolated: a
+    failure is counted and the rest continue. A per-title cache lock keeps
+    concurrent workers from repeating the TMDB call, and titles already fresh
+    everywhere are skipped unless ``force``.
+    """
+    titles = list(titles)
+    keys = list(dict.fromkeys(key for key in map(_title, titles) if key is not None))
+    # Malformed and repeated titles count as skipped.
+    counts = Counter(skipped=len(titles) - len(keys))
+    regions = active_regions()
+    for title_type, tmdb_id in keys:
+        try:
+            status = _refresh_title(title_type, tmdb_id, regions, force=force)
+        except Exception as error:  # noqa: BLE001 - one bad title must not stop a batch
+            logger.warning(
+                "Streaming refresh failed title=%s:%s type=%s",
+                title_type,
+                tmdb_id,
+                type(error).__name__,
+            )
+            status = "failed"
+        counts[status] += 1
+    return {
+        "requested": len(titles),
+        "regions": sorted(regions),
+        **{status: counts[status] for status in REFRESH_STATUSES},
+    }
