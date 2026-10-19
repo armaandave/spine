@@ -438,8 +438,11 @@ def search(
     return search_handlers[media_type]()
 
 
-def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count"):
-    """Browse provider metadata by supported media attributes."""
+def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count", watch_region=None, watch_providers=None):
+    """Browse provider metadata by supported media attributes.
+
+    ``watch_region``/``watch_providers`` filter TMDB movies and TV by streaming service.
+    """
     if source == Sources.MAL.value and media_type == MediaTypes.ANIME.value:
         if year:
             msg = "year discovery is not supported for anime."
@@ -470,7 +473,8 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
         if platform:
             msg = "platform discovery is only supported for games."
             raise ValueError(msg)
-        return tmdb.discover(media_type, page=page, genre=genre, year=year)
+        watch = {"watch_region": watch_region, "watch_providers": watch_providers} if watch_providers else {}
+        return tmdb.discover(media_type, page=page, genre=genre, year=year, **watch)
 
     if source == Sources.IGDB.value and media_type == MediaTypes.GAME.value:
         return igdb.discover(page=page, page_size=page_size, genre=genre, year=year, platform=platform)
