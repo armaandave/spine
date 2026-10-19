@@ -1023,7 +1023,11 @@ final class ProfileListDetailViewModel {
                 nextPage = APIPageCursor.nextPage(from: response.next)
                 streamingPendingCount = response.streaming?.pendingCount ?? 0
                 list = detail.withItems(response.results)
-                Task { await loadFilterOptions() }
+                Task {
+                    if await loadFilterOptions() {
+                        await loadFilteredItems(reset: true)
+                    }
+                }
             case .people:
                 let response = try await listRepository.people(listId: listId, page: nil)
                 guard generation == requestGeneration else { return }
@@ -1045,12 +1049,20 @@ final class ProfileListDetailViewModel {
         }
     }
 
-    func loadFilterOptions() async {
-        guard list?.listType != .people else { return }
+    /// Returns true when it dropped services the user no longer has from the filter, so the items need reloading.
+    @discardableResult
+    func loadFilterOptions() async -> Bool {
+        guard list?.listType != .people else { return false }
         do {
-            filterOptions = try await filterOptionsRepository.options(scope: .list(id: listId), filter: filter)
+            let options = try await filterOptionsRepository.options(scope: .list(id: listId), filter: filter)
+            filterOptions = options
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            guard service != filter.service else { return false }
+            filter.service = service
+            return true
         } catch {
             filterOptions = .empty
+            return false
         }
     }
 
@@ -1617,8 +1629,10 @@ struct ProfileListDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
             guard viewModel.list?.listType == .media else { return }
             Task {
+                // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                let hadServiceFilter = viewModel.filter.service.isActive
                 await viewModel.loadFilterOptions()
-                guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
+                guard !Task.isCancelled, hadServiceFilter else { return }
                 await viewModel.loadFilteredItems(reset: true)
             }
         }
@@ -1670,7 +1684,8 @@ struct ProfileListDetailView: View {
                 MediaFilterButton(
                     filter: $viewModel.filter,
                     scope: .list(id: list.id),
-                    options: viewModel.filterOptions
+                    options: viewModel.filterOptions,
+                    onUnauthorized: onUnauthorized
                 ) {
                     Task {
                         await viewModel.loadFilterOptions()

@@ -82,6 +82,19 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertEqual(filter.service, .any)
     }
 
+    func testPruningKeepsOnlyTheServicesTheUserStillHas() {
+        let services = [
+            StreamingFilterServiceOption(providerId: 8, label: "Netflix"),
+            StreamingFilterServiceOption(providerId: 1899, label: "HBO Max"),
+        ]
+
+        XCTAssertEqual(StreamingFilterService.providers([8, 337, 1899]).pruned(toAvailable: services), .providers([8, 1899]))
+        XCTAssertEqual(StreamingFilterService.providers([337]).pruned(toAvailable: services), .any)
+        XCTAssertEqual(StreamingFilterService.providers([8]).pruned(toAvailable: []), .any)
+        XCTAssertEqual(StreamingFilterService.mine.pruned(toAvailable: []), .mine, "My services is never pruned")
+        XCTAssertEqual(StreamingFilterService.any.pruned(toAvailable: services), .any)
+    }
+
     // MARK: - Filter options
 
     func testFilterOptionsDecodeTheStreamingObject() throws {
@@ -420,6 +433,77 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertEqual(repository.requests.last?.service, .any)
     }
 
+    func testDiscoverRestartsWhenOnMyServicesChangesMidLoadAndDropsTheStaleResponse() async throws {
+        let repository = StreamingFilterDiscoverRepository()
+        let fightClub = try Self.mediaSummary(mediaId: "550", title: "Fight Club")
+        let dune = try Self.mediaSummary(mediaId: "693134", title: "Dune: Part Two")
+        repository.discoverHandler = { request in
+            PagedResponse(count: 1, next: nil, previous: nil, results: [request.service.isActive ? dune : fightClub])
+        }
+        repository.holdsResponses = true
+        let viewModel = MediaDiscoverViewModel(
+            request: MediaDiscoverRequest(mediaType: "movie", source: "tmdb", filter: .genre("Drama")),
+            mediaRepository: repository,
+            onUnauthorized: {}
+        )
+
+        let initialLoad = Task { await viewModel.load() }
+        await waitUntil { repository.isHolding { $0.service == .any } }
+        let onMyServices = Task { await viewModel.setOnMyServices(true) }
+        await waitUntil { repository.isHolding { $0.service == .mine } }
+
+        repository.release { $0.service == .any }
+        await initialLoad.value
+        XCTAssertTrue(viewModel.results.isEmpty, "The response for the old criteria is dropped")
+        XCTAssertTrue(viewModel.isLoading, "The restarted load is still running")
+
+        repository.release { $0.service == .mine }
+        await onMyServices.value
+        XCTAssertEqual(viewModel.results.map(\.title), ["Dune: Part Two"])
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertEqual(repository.requests.map(\.service), [.any, .mine])
+    }
+
+    func testDiscoverDropsANextPageForEarlierCriteria() async throws {
+        let repository = StreamingFilterDiscoverRepository()
+        let fightClub = try Self.mediaSummary(mediaId: "550", title: "Fight Club")
+        let se7en = try Self.mediaSummary(mediaId: "807", title: "Se7en")
+        let dune = try Self.mediaSummary(mediaId: "693134", title: "Dune: Part Two")
+        repository.discoverHandler = { request in
+            if request.service.isActive {
+                return PagedResponse(count: 1, next: nil, previous: nil, results: [dune])
+            }
+            if request.page == nil {
+                let next = "https://example.com/api/v1/media/discover/?page=2"
+                return PagedResponse(count: 2, next: next, previous: nil, results: [fightClub])
+            }
+            return PagedResponse(count: 2, next: nil, previous: nil, results: [se7en])
+        }
+        let viewModel = MediaDiscoverViewModel(
+            request: MediaDiscoverRequest(mediaType: "movie", source: "tmdb", filter: .genre("Drama")),
+            mediaRepository: repository,
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        XCTAssertTrue(viewModel.hasMorePages)
+        repository.holdsResponses = true
+
+        let nextPage = Task { await viewModel.loadNextPage() }
+        await waitUntil { repository.isHolding { $0.page == "2" } }
+        let onMyServices = Task { await viewModel.setOnMyServices(true) }
+        await waitUntil { repository.isHolding { $0.service == .mine } }
+
+        repository.release { $0.page == "2" }
+        await nextPage.value
+        XCTAssertTrue(viewModel.results.isEmpty, "Page 2 of the old criteria is dropped")
+        XCTAssertFalse(viewModel.isLoadingNextPage)
+
+        repository.release { $0.service == .mine }
+        await onMyServices.value
+        XCTAssertEqual(viewModel.results.map(\.title), ["Dune: Part Two"])
+        XCTAssertFalse(viewModel.hasMorePages)
+    }
+
     // MARK: - Library
 
     func testLibraryKeepsTheServiceFilterForTVAndClearsItForOtherTypes() async {
@@ -492,6 +576,23 @@ final class StreamingFilterTests: XCTestCase {
         XCTAssertTrue(viewModel.showsMyServicesToggle)
     }
 
+    func testLibraryDropsChosenServicesTheUserNoLongerHas() async {
+        let tracking = StreamingFilterTrackingRepository()
+        let viewModel = LibraryViewModel(
+            mediaRepository: StreamingFilterDiscoverRepository(),
+            trackingRepository: tracking,
+            filterOptionsRepository: StreamingFilterOptionsRepository(options: Self.options(available: true)),
+            onUnauthorized: {}
+        )
+        viewModel.filter.service = .providers([8, 337])
+
+        await viewModel.loadFilterOptions()
+        await viewModel.reload()
+
+        XCTAssertEqual(viewModel.filter.service, .providers([8]), "Netflix is the user's only service now")
+        XCTAssertEqual(tracking.requests.last.map { serviceValues($0.filter.queryItems()) }, ["8"])
+    }
+
     // MARK: - Repository wiring
 
     func testTrackingRepositorySendsRepeatedServicesAndReadsPendingCount() async throws {
@@ -544,6 +645,14 @@ final class StreamingFilterTests: XCTestCase {
 
     private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         try JSONDecoder.api.decode(type, from: Data(json.utf8))
+    }
+
+    private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else { return XCTFail("Timed out") }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     /// Netflix is the user's one service unless `services` says otherwise.
@@ -628,11 +737,28 @@ private final class StreamingFilterDiscoverRepository: MediaRepository {
     var discoverHandler: (MediaDiscoverRequest) throws -> PagedResponse<MediaSummary> = { _ in
         PagedResponse(count: 0, next: nil, previous: nil, results: [])
     }
+    /// While true, each Discover call waits until the test releases it.
+    var holdsResponses = false
     private(set) var requests: [MediaDiscoverRequest] = []
+    private var held: [(request: MediaDiscoverRequest, continuation: CheckedContinuation<Void, Never>)] = []
 
     func discover(_ request: MediaDiscoverRequest) async throws -> PagedResponse<MediaSummary> {
         requests.append(request)
+        if holdsResponses {
+            await withCheckedContinuation { continuation in
+                held.append((request, continuation))
+            }
+        }
         return try discoverHandler(request)
+    }
+
+    func isHolding(_ matches: (MediaDiscoverRequest) -> Bool) -> Bool {
+        held.contains { matches($0.request) }
+    }
+
+    func release(_ matches: (MediaDiscoverRequest) -> Bool) {
+        guard let index = held.firstIndex(where: { matches($0.request) }) else { return }
+        held.remove(at: index).continuation.resume()
     }
 
     func meta() async throws -> MetaResponse { fatalError("Not used") }

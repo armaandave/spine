@@ -47,6 +47,15 @@ enum StreamingFilterService: Hashable {
         }
         return ids.isEmpty ? .any : .providers(ids)
     }
+
+    /// Keeps only the chosen services the user still has, going back to Any when none are left.
+    /// Any and My services are unchanged.
+    func pruned(toAvailable services: [StreamingFilterServiceOption]) -> StreamingFilterService {
+        guard case let .providers(ids) = self else { return self }
+        let available = Set(services.map(\.providerId))
+        let kept = ids.filter(available.contains)
+        return kept.isEmpty ? .any : .providers(kept)
+    }
 }
 
 /// The `streaming` object in `/filter-options/`.
@@ -87,7 +96,8 @@ struct StreamingFilterOptions: Decodable, Equatable, Hashable {
 
     /// "Availability in United States · Powered by JustWatch" (ST-003).
     var attributionText: String {
-        guard let country = regionName ?? region, !country.isEmpty else {
+        let country = region.map { StreamingRegion.displayName(code: $0, serverName: regionName) } ?? regionName
+        guard let country, !country.isEmpty else {
             return "Powered by JustWatch"
         }
         return "Availability in \(country) · Powered by JustWatch"

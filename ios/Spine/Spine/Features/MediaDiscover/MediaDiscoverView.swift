@@ -18,6 +18,8 @@ final class MediaDiscoverViewModel {
     let pillFilter: MediaDiscoverRequest.Filter?
     private var nextPage: String?
     private var hasAttemptedInitialLoad = false
+    /// Bumped by every load, so a response for earlier criteria is dropped.
+    private var requestGeneration = 0
 
     init(request: MediaDiscoverRequest, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
         self.request = request
@@ -67,16 +69,24 @@ final class MediaDiscoverViewModel {
         await loadNextPage()
     }
 
+    /// Starts over from the first page. A load already in flight is superseded, not waited on.
     func load() async {
-        guard !isLoading else { return }
+        requestGeneration += 1
+        let generation = requestGeneration
         request.page = nil
         isLoading = true
+        isLoadingNextPage = false
         errorMessage = nil
         needsStreamingServices = false
-        defer { isLoading = false }
+        defer {
+            if generation == requestGeneration {
+                isLoading = false
+            }
+        }
 
         do {
             let response = try await mediaRepository.discover(request)
+            guard generation == requestGeneration else { return }
             results = response.results
             totalCount = response.count
             nextPage = Self.page(from: response.next)
@@ -84,6 +94,7 @@ final class MediaDiscoverViewModel {
         } catch is CancellationError {
             return
         } catch {
+            guard generation == requestGeneration else { return }
             hasAttemptedInitialLoad = true
             needsStreamingServices = isOnMyServices && StreamingFilterRules.isChooseServicesError(error)
             errorMessage = error.localizedDescription
@@ -103,12 +114,18 @@ final class MediaDiscoverViewModel {
 
     func loadNextPage() async {
         guard let nextPage, !isLoadingNextPage else { return }
+        let generation = requestGeneration
         request.page = nextPage
         isLoadingNextPage = true
-        defer { isLoadingNextPage = false }
+        defer {
+            if generation == requestGeneration {
+                isLoadingNextPage = false
+            }
+        }
 
         do {
             let response = try await mediaRepository.discover(request)
+            guard generation == requestGeneration else { return }
             let existing = Set(results.map(\.id))
             results += response.results.filter { !existing.contains($0.id) }
             totalCount = response.count
@@ -116,6 +133,7 @@ final class MediaDiscoverViewModel {
         } catch is CancellationError {
             return
         } catch {
+            guard generation == requestGeneration else { return }
             errorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -312,10 +330,9 @@ struct MediaDiscoverView: View {
     }
 
     /// The opening pill plus On my services; either can narrow the results alone (ST-302).
+    /// Changing either while results load starts the load over.
     private var serviceFilterBar: some View {
-        let isBusy = viewModel.isLoading || viewModel.isLoadingNextPage
-
-        return ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
                     if let pillFilter = viewModel.pillFilter {
@@ -326,7 +343,7 @@ struct MediaDiscoverView: View {
                         ) {
                             Task { await viewModel.setIncludesPillFilter(!viewModel.includesPillFilter) }
                         }
-                        .allowsHitTesting(viewModel.canTogglePillFilter && !isBusy)
+                        .allowsHitTesting(viewModel.canTogglePillFilter)
                     }
 
                     MediaDiscoverFilterPill(
@@ -336,7 +353,6 @@ struct MediaDiscoverView: View {
                     ) {
                         Task { await viewModel.setOnMyServices(!viewModel.isOnMyServices) }
                     }
-                    .allowsHitTesting(!isBusy)
                 }
                 .padding(.horizontal, 16)
             }

@@ -112,6 +112,9 @@ final class StreamingServicesViewModel {
             catalog = providers
             catalogRegion = region
             remember(providers)
+            // Saving accepts saved services this country doesn't list (ST-101) but rejects unsaved ones.
+            let allowedIDs = Set(providers.map(\.id)).union(saved?.providerIds ?? [])
+            selectedProviderIds.removeAll { !allowedIDs.contains($0) }
         } catch {
             guard generation == catalogGeneration else { return }
             if !(error is CancellationError) {
@@ -122,7 +125,8 @@ final class StreamingServicesViewModel {
         isLoadingCatalog = false
     }
 
-    /// Changing country keeps the selected services (ST-101).
+    /// Changing country keeps the saved services (ST-101). Unsaved picks the new country doesn't list are dropped
+    /// when its catalog loads.
     func selectRegion(_ code: String) async {
         guard code != selectedRegion else { return }
         selectedRegion = code
@@ -227,13 +231,8 @@ final class StreamingServicesViewModel {
     }
 
     func regionName(for code: String) -> String {
-        if let region = regions.first(where: { $0.code == code }) {
-            return region.name
-        }
-        if let saved, saved.region == code, let name = saved.regionName, !name.isEmpty {
-            return name
-        }
-        return Locale.current.localizedString(forRegionCode: code) ?? code
+        let savedName = saved?.region == code ? saved?.regionName : nil
+        return StreamingRegion.displayName(code: code, serverName: regions.first { $0.code == code }?.name ?? savedName)
     }
 
     private func apply(_ preferences: StreamingPreferences) {

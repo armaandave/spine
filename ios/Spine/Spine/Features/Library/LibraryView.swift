@@ -332,6 +332,10 @@ final class LibraryViewModel {
                 filter.sort = nil
                 filter.direction = nil
             }
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            if service != filter.service {
+                filter.service = service
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -491,8 +495,10 @@ struct LibraryView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
                 Task {
+                    // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                    let hadServiceFilter = viewModel.filter.service.isActive
                     await viewModel.loadFilterOptions()
-                    guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
+                    guard !Task.isCancelled, hadServiceFilter else { return }
                     await viewModel.reload()
                 }
             }
@@ -570,7 +576,8 @@ struct LibraryView: View {
                     filter: $viewModel.filter,
                     scope: .tracking(mediaType: viewModel.mediaType),
                     options: viewModel.filterOptions,
-                    mediaTypes: viewModel.mediaTypes
+                    mediaTypes: viewModel.mediaTypes,
+                    onUnauthorized: onUnauthorized
                 ) {
                     Task {
                         await viewModel.loadFilterOptions()

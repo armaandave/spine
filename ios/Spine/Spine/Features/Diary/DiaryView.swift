@@ -190,6 +190,10 @@ final class DiaryViewModel {
             let options = try await filterOptionsRepository.options(scope: .diary, filter: requestFilter)
             guard requestFilter == diaryRequestFilter else { return }
             filterOptions = options
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            if service != filter.service {
+                filter.service = service
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -350,13 +354,6 @@ struct MediaDiaryView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await viewModel.load() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
-                Task {
-                    await viewModel.loadFilterOptions()
-                    guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
-                    await viewModel.load()
-                }
             }
         }
     }
@@ -538,6 +535,15 @@ struct DiaryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await reloadDiary() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                Task {
+                    // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                    let hadServiceFilter = viewModel.filter.service.isActive
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled, hadServiceFilter else { return }
+                    await reloadDiary()
+                }
+            }
         }
     }
 
@@ -710,7 +716,8 @@ struct DiaryView: View {
             MediaFilterButton(
                 filter: $viewModel.filter,
                 scope: .diary,
-                options: viewModel.filterOptions
+                options: viewModel.filterOptions,
+                onUnauthorized: onUnauthorized
             ) {
                 Task { await reloadDiary(loadsFilterOptions: true) }
             }

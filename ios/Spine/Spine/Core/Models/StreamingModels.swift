@@ -24,6 +24,15 @@ struct StreamingRegion: Decodable, Hashable, Identifiable {
     let name: String
 
     var id: String { code }
+
+    /// The server's name for a country unless it is missing, empty, or just the code (what the server sends when it
+    /// can't name the country); then the device's name for the code, then the code itself.
+    static func displayName(code: String, serverName: String?) -> String {
+        if let serverName, !serverName.isEmpty, serverName.caseInsensitiveCompare(code) != .orderedSame {
+            return serverName
+        }
+        return Locale.current.localizedString(forRegionCode: code) ?? code
+    }
 }
 
 /// GET /streaming/regions/
@@ -103,8 +112,7 @@ struct WhereToWatch: Decodable, Equatable {
     }
 
     var regionDisplayName: String {
-        if let regionName, !regionName.isEmpty { return regionName }
-        return Locale.current.localizedString(forRegionCode: region) ?? region
+        StreamingRegion.displayName(code: region, serverName: regionName)
     }
 
     var linkURL: URL? {

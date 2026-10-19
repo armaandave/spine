@@ -9,6 +9,7 @@ struct MediaFilterSheet: View {
     let showsTagFilter: Bool
     let onApply: () -> Void
     private let streamingRepository: StreamingRepository
+    private let onUnauthorized: () -> Void
 
     @State private var draft: MediaFilterState
     @State private var isGenreExpanded = false
@@ -21,6 +22,7 @@ struct MediaFilterSheet: View {
         mediaTypes: [String],
         showsTagFilter: Bool = true,
         streamingRepository: StreamingRepository = AppRepositories.current().streaming,
+        onUnauthorized: @escaping () -> Void = {},
         onApply: @escaping () -> Void
     ) {
         _filter = filter
@@ -30,6 +32,7 @@ struct MediaFilterSheet: View {
         self.showsTagFilter = showsTagFilter
         self.onApply = onApply
         self.streamingRepository = streamingRepository
+        self.onUnauthorized = onUnauthorized
         _draft = State(initialValue: filter.wrappedValue)
     }
 
@@ -83,6 +86,11 @@ struct MediaFilterSheet: View {
                     }
                 }
             }
+        }
+        // A service removed under Edit your services can't stay chosen. Options that failed to load change nothing.
+        .onChange(of: options.streaming?.services) { _, services in
+            guard let services else { return }
+            draft.service = draft.service.pruned(toAvailable: services)
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
@@ -169,7 +177,7 @@ struct MediaFilterSheet: View {
                 }
 
                 NavigationLink {
-                    StreamingServicesView(repository: streamingRepository, onUnauthorized: {})
+                    StreamingServicesView(repository: streamingRepository, onUnauthorized: onUnauthorized)
                 } label: {
                     Text(streaming.services.isEmpty ? "Choose your streaming services" : "Edit your services")
                 }

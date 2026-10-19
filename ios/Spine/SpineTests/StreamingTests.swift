@@ -189,6 +189,29 @@ final class StreamingContractTests: XCTestCase {
         XCTAssertEqual(whereToWatch.regionDisplayName, Locale.current.localizedString(forRegionCode: "US") ?? "US")
     }
 
+    func testCountryNamesSkipAServerNameThatIsOnlyTheCode() throws {
+        let deviceName = Locale.current.localizedString(forRegionCode: "DE") ?? "DE"
+        XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: "Germany"), "Germany")
+        XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: "DE"), deviceName)
+        XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: ""), deviceName)
+        XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: nil), deviceName)
+
+        let whereToWatch = try decode(WhereToWatch.self, #"""
+        { "region": "DE", "region_name": "DE", "link": null, "has_services": false,
+          "on_my_services": false, "groups": [], "attribution": null }
+        """#)
+        XCTAssertEqual(whereToWatch.regionDisplayName, deviceName)
+
+        XCTAssertEqual(
+            StreamingFilterOptions(available: true, region: "DE", regionName: "DE").attributionText,
+            "Availability in \(deviceName) · Powered by JustWatch"
+        )
+        XCTAssertEqual(
+            StreamingFilterOptions(available: true, regionName: "Germany").attributionText,
+            "Availability in Germany · Powered by JustWatch"
+        )
+    }
+
     func testProviderWithoutIsMineIsNotTheUsers() throws {
         let provider = try decode(WhereToWatchProvider.self, #"""
         { "provider_id": 8, "name": "Netflix", "logo_url": "https://image.tmdb.org/t/p/w154/abc.png", "display_priority": 1 }
@@ -534,6 +557,24 @@ final class StreamingServicesViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasChanges, "Back to the saved country and services")
     }
 
+    func testChangingCountryDropsUnsavedPicksTheNewCountryDoesNotList() async throws {
+        let repository = StreamingRepositoryFake(preferences: try preferences(region: "US", ids: [337]))
+        let viewModel = makeViewModel(repository)
+        await viewModel.load()
+        viewModel.toggle(try XCTUnwrap(viewModel.catalog.first { $0.providerId == 8 }))
+        viewModel.toggle(try XCTUnwrap(viewModel.catalog.first { $0.providerId == 15 }))
+
+        await viewModel.selectRegion("GB")
+
+        // GB lists Netflix and Disney Plus is saved, so both stay. Saving an unsaved Hulu would fail: GB doesn't list it.
+        XCTAssertEqual(viewModel.selectedProviderIds, [337, 8])
+        XCTAssertEqual(viewModel.selectedProvidersMissingFromCatalog.map(\.name), ["Disney Plus"])
+
+        let didSave = await viewModel.save()
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(repository.savedRequests, [StreamingPreferencesUpdateRequest(region: "GB", providerIds: [337, 8])])
+    }
+
     func testServiceSearchFiltersByName() async throws {
         let viewModel = makeViewModel(StreamingRepositoryFake(preferences: try preferences(region: "US", ids: [])))
         await viewModel.load()
@@ -660,6 +701,23 @@ final class StreamingServicesViewModelTests: XCTestCase {
         XCTAssertNotNil(viewModel.regionsErrorMessage)
         XCTAssertEqual(viewModel.selectedRegionName, "United States")
         XCTAssertEqual(viewModel.regionName(for: "FR"), Locale.current.localizedString(forRegionCode: "FR") ?? "FR")
+    }
+
+    func testCountryNameSkipsASavedNameThatIsOnlyTheCode() async throws {
+        let repository = StreamingRepositoryFake(preferences: StreamingPreferences(
+            region: "DE",
+            regionName: "DE",
+            regionIsSet: true,
+            enabled: true,
+            providerIds: [],
+            providers: [],
+            attribution: nil
+        ))
+        repository.regionsError = APIError.httpStatus(500, nil)
+        let viewModel = makeViewModel(repository)
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.selectedRegionName, Locale.current.localizedString(forRegionCode: "DE") ?? "DE")
     }
 
     // MARK: - Helpers
