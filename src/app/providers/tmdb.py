@@ -241,9 +241,17 @@ def _genre_id(media_type, genre):
     return genres.get(alias)
 
 
-def discover(media_type, *, page=1, genre=None, year=None):
-    """Discover TMDB movies/TV shows by genre and/or year."""
+def discover(media_type, *, page=1, genre=None, year=None, watch_region=None, watch_providers=None):
+    """Discover TMDB movies/TV shows by genre, year, and/or streaming service.
+
+    ``watch_providers`` keeps titles streamable (stream, free, or ads) on any of
+    those providers in ``watch_region``.
+    """
     cache_key = f"discover_{Sources.TMDB.value}_{media_type}_{genre}_{year}_{page}_{settings.TMDB_LANG}_{settings.TMDB_NSFW}"
+    providers = None
+    if watch_providers:
+        providers = "|".join(str(provider_id) for provider_id in sorted(watch_providers))
+        cache_key = f"{cache_key}_watch_{watch_region}_{providers}"
     data = cache.get(cache_key)
     if data is None:
         params = {
@@ -253,6 +261,12 @@ def discover(media_type, *, page=1, genre=None, year=None):
         }
         if settings.TMDB_NSFW:
             params["include_adult"] = "true"
+        if providers:
+            from streaming.models import STREAMABLE_MONETIZATIONS
+
+            params["watch_region"] = watch_region
+            params["with_watch_providers"] = providers
+            params["with_watch_monetization_types"] = "|".join(STREAMABLE_MONETIZATIONS)
         if genre:
             genre_id = _genre_id(media_type, genre)
             if not genre_id:

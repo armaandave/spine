@@ -519,6 +519,12 @@
         "value": "rating:musicbrainz"
       }
     ],
+    "streaming": {
+      "available": false,
+      "region": "US",
+      "region_name": "United States",
+      "services": []
+    },
     "years": [
       2007
     ]
