@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from streaming import payloads, services, tmdb
 from streaming.models import UserStreamingService
+from streaming.region_names import REGION_NAMES
 from streaming.tasks import check_user_streaming_library
 
 
@@ -84,7 +85,10 @@ class StreamingRegionsView(APIView):
 
     def get(self, request):
         results = sorted(
-            ({"code": code, "name": name} for code, name in services.region_names().items()),
+            (
+                {"code": code, "name": REGION_NAMES.get(code, name)}
+                for code, name in services.region_names().items()
+            ),
             key=lambda region: (region["name"].casefold(), region["code"]),
         )
         return Response({"results": results})
