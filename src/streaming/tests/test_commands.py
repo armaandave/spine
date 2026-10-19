@@ -46,7 +46,7 @@ class BackfillStreamingAvailabilityCommandTests(TestCase):
         output = self._run("--dry-run")
 
         self.assertIn("Active regions: GB, US", output)
-        self.assertIn("Library and list titles: 3", output)
+        self.assertIn("Library, list, and diary titles: 3", output)
         self.assertIn("Missing in a region: 2", output)
         self.assertIn("Fresh: 1", output)
         self.assertIn("Dry run: no tasks queued", output)

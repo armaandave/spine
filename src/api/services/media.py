@@ -1067,7 +1067,7 @@ def media_detail(
     from streaming import payloads as streaming_payloads
     from streaming import sync as streaming_sync
 
-    # ST-400: refresh stale snapshots from the metadata already fetched.
+    # ST-400: fill in missing snapshots from the metadata already fetched.
     streaming_sync.sync_from_metadata(source, media_type, media_id, primary_metadata)
     if summary.get("poster_accent_color") is None:
         summary["poster_accent_color"] = poster_accent_color(metadata, ref)

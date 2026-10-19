@@ -3,7 +3,12 @@
 Contract: docs/streaming-availability-contract.md
 """
 
+import logging
+
+from django.core.cache import cache
 from django.db import transaction
+from django_redis.exceptions import ConnectionInterrupted
+from redis.exceptions import RedisError
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +18,29 @@ from streaming import payloads, services, tmdb
 from streaming.models import UserStreamingService
 from streaming.region_names import REGION_NAMES
 from streaming.tasks import check_user_streaming_library
+
+logger = logging.getLogger(__name__)
+
+# Seconds during which repeated saves for one user and country queue one library check.
+LIBRARY_CHECK_DEBOUNCE = 60
+
+
+def _queue_library_check(user_id, region):
+    """Queue the ST-102 library check at most once a minute per user and country.
+
+    Fails open: when the cache is unavailable the check is queued anyway.
+    """
+    try:
+        claimed = cache.add(
+            f"streaming:library-check:v1:{user_id}:{region}",
+            1,
+            timeout=LIBRARY_CHECK_DEBOUNCE,
+        )
+    except (ConnectionInterrupted, RedisError, ConnectionError, OSError) as error:
+        logger.warning("Streaming library check debounce unavailable type=%s", type(error).__name__)
+        claimed = True
+    if claimed:
+        check_user_streaming_library.delay(user_id)
 
 
 def _known_region(value):
@@ -161,5 +189,5 @@ class MeStreamingView(APIView):
             # Commit callbacks run in order, so the check sees the new active
             # regions. ST-102: the save never waits for the library check.
             transaction.on_commit(services.invalidate_active_regions)
-            transaction.on_commit(lambda: check_user_streaming_library.delay(user.pk))
+            transaction.on_commit(lambda: _queue_library_check(user.pk, region))
         return Response(payloads.streaming_settings(user, request))

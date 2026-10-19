@@ -2,12 +2,15 @@
 
 import json
 import logging
+from datetime import timedelta
 from itertools import batched
 
 from celery import shared_task
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from streaming import library, sync
+from streaming.models import StreamingAvailability
 from streaming.services import active_regions, effective_region, region_names
 
 logger = logging.getLogger(__name__)
@@ -17,6 +20,10 @@ REFRESH_BATCH_SIZE = 100
 LIBRARY_CHECK_LIMIT = 1000
 # Titles the periodic task queues per run.
 STALE_QUEUE_LIMIT = 1000
+# The periodic task deletes snapshots this old in countries that are no longer
+# active, in batches of this many rows.
+PRUNE_AFTER = timedelta(days=30)
+PRUNE_BATCH_SIZE = 1000
 
 
 @shared_task(name="Refresh streaming availability")
@@ -50,9 +57,9 @@ def enqueue_refresh_batches(titles, *, force=False):
 def check_user_streaming_library(user_id):
     """Queue refreshes for a user's titles missing or stale in their country.
 
-    Runs after the user saves streaming settings (ST-102). Covers tracked and
-    listed movies and shows (seasons and episodes map to the show) and does
-    nothing when availability is off or the country is not active.
+    Runs after the user saves streaming settings (ST-102). Covers tracked,
+    listed, and diary movies and shows (seasons and episodes map to the show)
+    and does nothing when availability is off or the country is not active.
     """
     user = get_user_model().objects.filter(pk=user_id).first()
     region = effective_region(user) if user is not None else None
@@ -75,11 +82,28 @@ def check_user_streaming_library(user_id):
     return result
 
 
+def _prune_inactive_snapshots(regions):
+    """Delete snapshots older than PRUNE_AFTER outside ``regions``; return the count.
+
+    Nothing refreshes snapshots in countries that are no longer active, so
+    they only go stale. Offers are deleted with their snapshot.
+    """
+    old = StreamingAvailability.objects.filter(
+        fetched_at__lt=timezone.now() - PRUNE_AFTER,
+    ).exclude(region__in=regions)
+    deleted = 0
+    while ids := list(old.values_list("pk", flat=True)[:PRUNE_BATCH_SIZE]):
+        StreamingAvailability.objects.filter(pk__in=ids).delete()
+        deleted += len(ids)
+    return deleted
+
+
 @shared_task(name="Queue stale streaming availability")
 def queue_stale_streaming_availability():
-    """Queue a bounded refresh of library and list titles in active countries.
+    """Queue a bounded refresh of library, list, and diary titles in active countries.
 
     Titles missing a snapshot come first, then the oldest stale ones (ST-400).
+    Old snapshots in countries that are no longer active are deleted.
     """
     regions = active_regions()
     titles = library.library_titles()
@@ -92,6 +116,7 @@ def queue_stale_streaming_availability():
         "stale": len(stale),
         "selected": len(selected),
         "batches": enqueue_refresh_batches(selected),
+        "pruned": _prune_inactive_snapshots(regions),
     }
     try:
         # Keeps country names cached for detail pages, which never fetch them.

@@ -1,4 +1,4 @@
-"""Queue streaming availability refreshes for library and list titles."""
+"""Queue streaming availability refreshes for library, list, and diary titles."""
 
 from math import ceil
 
@@ -12,7 +12,7 @@ from streaming.tasks import REFRESH_BATCH_SIZE, enqueue_refresh_batches
 class Command(BaseCommand):
     """Report and queue bounded refresh batches without TMDB calls here."""
 
-    help = "Report and queue streaming availability refreshes for library and list titles"
+    help = "Report and queue streaming availability refreshes for library, list, and diary titles"
 
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, help="Maximum titles to queue.")
@@ -44,7 +44,7 @@ class Command(BaseCommand):
 
         report = (
             ("Active regions", ", ".join(sorted(regions)) or "none"),
-            ("Library and list titles", len(titles)),
+            ("Library, list, and diary titles", len(titles)),
             ("Missing in a region", len(missing)),
             ("Stale", len(stale)),
             ("Fresh", len(titles) - len(missing) - len(stale)),

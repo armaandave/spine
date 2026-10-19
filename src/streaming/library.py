@@ -1,4 +1,4 @@
-"""Library and list titles that need stored availability (ST-102, ST-400)."""
+"""Library, list, and diary titles that need stored availability (ST-102, ST-400)."""
 
 from collections import Counter, defaultdict
 from itertools import batched
@@ -6,7 +6,7 @@ from itertools import batched
 from django.db.models import Q
 from django.utils import timezone
 
-from app.models import TV, MediaTypes, Movie, Season, Sources
+from app.models import TV, DiaryEntry, MediaTypes, Movie, Season, Sources
 from lists.models import CustomListItem
 from streaming.models import StreamingAvailability
 from streaming.services import FRESH_FOR
@@ -22,11 +22,12 @@ LOOKUP_CHUNK_SIZE = 500
 
 
 def library_titles(user=None):
-    """Return ``{(title_type, tmdb_id)}`` for tracked and listed TMDB movies/TV.
+    """Return ``{(title_type, tmdb_id)}`` for tracked, listed, and logged TMDB titles.
 
     Tracked means a Movie, TV, or Season row (episodes always sit under a
     tracked season); listed means an item in a custom list the user owns or
-    collaborates on. ``user=None`` covers every user.
+    collaborates on; logged means a diary entry, which for shows, seasons, and
+    episodes need not have a tracking row. ``user=None`` covers every user.
     """
     titles = set()
     for model, title_type in ((Movie, "movie"), (TV, "tv"), (Season, "tv")):
@@ -37,18 +38,22 @@ def library_titles(user=None):
             (title_type, media_id)
             for media_id in rows.order_by().values_list("item__media_id", flat=True).distinct()
         )
-    listed = CustomListItem.objects.filter(
-        item__source=Sources.TMDB.value,
-        item__media_type__in=list(TITLE_TYPE_BY_MEDIA_TYPE),
-    )
+    listed = CustomListItem.objects.all()
+    logged = DiaryEntry.objects.all()
     if user is not None:
         listed = listed.filter(Q(custom_list__owner=user) | Q(custom_list__collaborators=user))
-    titles.update(
-        (TITLE_TYPE_BY_MEDIA_TYPE[media_type], media_id)
-        for media_type, media_id in listed.order_by()
-        .values_list("item__media_type", "item__media_id")
-        .distinct()
-    )
+        logged = logged.filter(user=user)
+    for rows in (listed, logged):
+        titles.update(
+            (TITLE_TYPE_BY_MEDIA_TYPE[media_type], media_id)
+            for media_type, media_id in rows.filter(
+                item__source=Sources.TMDB.value,
+                item__media_type__in=list(TITLE_TYPE_BY_MEDIA_TYPE),
+            )
+            .order_by()
+            .values_list("item__media_type", "item__media_id")
+            .distinct()
+        )
     return titles
 
 

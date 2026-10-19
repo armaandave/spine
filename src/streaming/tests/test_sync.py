@@ -74,15 +74,28 @@ class StoreSnapshotTests(TestCase):
         self.assertLess(timezone.now() - row.fetched_at, timedelta(minutes=1))
         self.assertEqual(_offers("movie", "693134", "US"), [("flatrate", 15, 5)])
 
+    def test_without_replace_existing_rows_are_left_alone(self):
+        make_snapshot("movie", "603", "US", [(HULU, "flatrate")])
+        before = StreamingAvailability.objects.get(tmdb_id="603", region="US").fetched_at
+        stamp = timezone.now() - timedelta(days=2)
+
+        written = sync.store_snapshots("movie", "603", TITLE_RESULTS, {"US", "GB"}, fetched_at=stamp, replace=False)
+
+        self.assertEqual(written, {"GB"})
+        self.assertEqual(_offers("movie", "603", "US"), [("flatrate", 15, 5)])
+        self.assertEqual(StreamingAvailability.objects.get(tmdb_id="603", region="US").fetched_at, before)
+        self.assertEqual(_offers("movie", "603", "GB"), [("flatrate", 8, 1)])
+        self.assertEqual(StreamingAvailability.objects.get(tmdb_id="603", region="GB").fetched_at, stamp)
+
     def test_retries_when_a_concurrent_writer_wins(self):
         real_write = sync._write_snapshots
         calls = []
 
-        def flaky_write(*args):
+        def flaky_write(*args, **kwargs):
             calls.append(args)
             if len(calls) == 1:
                 raise IntegrityError("duplicate key")
-            return real_write(*args)
+            return real_write(*args, **kwargs)
 
         with patch("streaming.sync._write_snapshots", side_effect=flaky_write):
             sync.store_snapshots("tv", "1396", {"US": {"flatrate": [NETFLIX]}}, {"US"})
@@ -101,7 +114,7 @@ class StoreSnapshotTests(TestCase):
 
 
 class SyncFromMetadataTests(TestCase):
-    """ST-400: detail pages refresh snapshots from metadata, without HTTP."""
+    """ST-400: detail pages fill in missing snapshots from metadata, without HTTP."""
 
     def setUp(self):
         reset_streaming_state(self)
@@ -110,7 +123,7 @@ class SyncFromMetadataTests(TestCase):
         self.http_mock = http.start()
         self.addCleanup(http.stop)
 
-    def test_writes_missing_active_regions_and_leaves_fresh_ones(self):
+    def test_writes_missing_active_regions_as_stale_and_leaves_existing_ones(self):
         make_snapshot("movie", "693134", "US", [(HULU, "flatrate")])
 
         written = sync.sync_from_metadata("tmdb", "movie", "693134", {"providers": TITLE_RESULTS})
@@ -118,18 +131,34 @@ class SyncFromMetadataTests(TestCase):
         self.assertEqual(written, {"GB"})
         self.assertEqual(_offers("movie", "693134", "US"), [("flatrate", 15, 5)])
         self.assertEqual(_offers("movie", "693134", "GB"), [("flatrate", 8, 1)])
+        # Stamped already stale, so the next periodic run fetches it live.
+        self.assertEqual(sync.regions_needing_refresh("movie", "693134", {"US", "GB"}), {"GB"})
         self.assertFalse(StreamingAvailability.objects.filter(region="FR").exists())
         self.http_mock.assert_not_called()
 
-    def test_refreshes_stale_regions(self):
-        make_snapshot("tv", "1396", "US", [(HULU, "flatrate")], age=timedelta(hours=25))
-        make_snapshot("tv", "1396", "GB", [(HULU, "flatrate")])
+    def test_older_cached_metadata_never_rolls_back_a_stored_snapshot(self):
+        # A background refresh found the show nowhere a little over a day ago...
+        make_snapshot("tv", "1396", "US", age=timedelta(hours=25))
+        make_snapshot("tv", "1396", "GB", age=timedelta(hours=25))
+        stored = dict(StreamingAvailability.objects.values_list("region", "fetched_at"))
 
+        # ...and a detail view still holds older cached metadata listing offers.
         written = sync.sync_from_metadata("tmdb", "tv", "1396", {"providers": TITLE_RESULTS})
 
-        self.assertEqual(written, {"US"})
-        self.assertIn(("flatrate", 8, 1), _offers("tv", "1396", "US"))
-        self.assertEqual(_offers("tv", "1396", "GB"), [("flatrate", 15, 5)])
+        self.assertEqual(written, set())
+        self.assertFalse(StreamingOffer.objects.exists())
+        self.assertEqual(dict(StreamingAvailability.objects.values_list("region", "fetched_at")), stored)
+        # Still stale, so the background refresh fetches it rather than skip it.
+        with patch(
+            "streaming.sync.tmdb.fetch_title_providers",
+            return_value={"US": {"flatrate": [HULU]}},
+        ) as fetch_mock:
+            result = sync.refresh_titles([("tv", "1396")])
+
+        self.assertEqual(result["refreshed"], 1)
+        fetch_mock.assert_called_once_with("tv", "1396")
+        self.assertEqual(_offers("tv", "1396", "US"), [("flatrate", 15, 5)])
+        self.assertEqual(sync.regions_needing_refresh("tv", "1396", {"US", "GB"}), set())
 
     def test_no_providers_anywhere_records_unavailable_rows(self):
         written = sync.sync_from_metadata("tmdb", "movie", "1", {"providers": {}})
@@ -148,9 +177,9 @@ class SyncFromMetadataTests(TestCase):
         self.assertEqual(sync.sync_from_metadata("tmdb", "movie", "2", None), set())
         self.assertFalse(StreamingAvailability.objects.exists())
 
-    def test_fresh_titles_cost_one_query(self):
+    def test_titles_with_rows_cost_one_query(self):
         make_snapshot("movie", "5", "US")
-        make_snapshot("movie", "5", "GB")
+        make_snapshot("movie", "5", "GB", age=timedelta(days=3))
         sync.active_regions()
 
         with self.assertNumQueries(1):

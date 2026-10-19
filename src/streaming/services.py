@@ -69,7 +69,11 @@ def region_is_set(user):
 
 
 def effective_region(user, request=None):
-    """Resolve the user's streaming country per ST-100, or None when disabled."""
+    """Resolve the user's streaming country per ST-100, or None when disabled.
+
+    The device header counts only for known watch regions, checked against the
+    bundled and cached names without contacting TMDB.
+    """
     saved = _saved_region(user)
     if saved == "":
         return None
@@ -78,7 +82,7 @@ def effective_region(user, request=None):
         return code
     if request is not None:
         code = normalize_region(request.headers.get(REGION_HEADER))
-        if code:
+        if code and (code in REGION_NAMES or code in cached_region_names()):
             return code
     return normalize_region(settings.STREAMING_DEFAULT_REGION) or "US"
 

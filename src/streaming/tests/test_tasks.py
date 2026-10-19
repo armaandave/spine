@@ -5,8 +5,9 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
-from app.models import TV, Item, MediaTypes, Movie, Season, Sources, Status
+from app.models import TV, DiaryEntry, Item, MediaTypes, Movie, Season, Sources, Status
 from app.providers.services import ProviderAPIError
 from config.celery import app as celery_app
 from lists.models import CustomList, CustomListItem
@@ -14,6 +15,7 @@ from streaming import tasks
 from streaming.library import library_titles, titles_needing_refresh
 from streaming.models import StreamingAvailability, StreamingOffer
 from streaming.tests.helpers import (
+    NETFLIX,
     TITLE_RESULTS,
     activate_region,
     make_snapshot,
@@ -214,6 +216,32 @@ class LibraryCheckTests(TestCase):
         self.assertEqual(fetch_mock.call_count, 5)
         self.assertEqual(titles_needing_refresh(library_titles(self.user), {"GB", "US"}), ([], []))
 
+    @patch("streaming.tasks.refresh_streaming_titles.delay")
+    def test_diary_only_titles_are_library_titles(self, delay_mock):
+        now = timezone.now()
+        # Diary entries need not have a tracking row behind them.
+        episode = _item(MediaTypes.EPISODE.value, "1400", season_number=2, episode_number=3)
+        DiaryEntry.objects.create(user=self.user, item=episode, consumed_at=now)
+        DiaryEntry.objects.create(user=self.user, item=_item(MediaTypes.MOVIE.value, "604"), consumed_at=now)
+        DiaryEntry.objects.create(
+            user=self.user,
+            item=_item(MediaTypes.BOOK.value, "OL2M", source=Sources.OPENLIBRARY.value),
+            consumed_at=now,
+        )
+        DiaryEntry.objects.create(
+            user=self.other,
+            item=_item(MediaTypes.SEASON.value, "1401", season_number=1),
+            consumed_at=now,
+        )
+
+        self.assertEqual(library_titles(self.user), {("tv", "1400"), ("movie", "604")})
+        self.assertEqual(library_titles(), {("tv", "1400"), ("movie", "604"), ("tv", "1401")})
+
+        result = tasks.check_user_streaming_library(self.user.pk)
+
+        self.assertEqual((result["status"], result["missing"]), ("queued", 2))
+        delay_mock.assert_called_once_with([["movie", "604"], ["tv", "1400"]], force=False)
+
 
 class QueueStaleStreamingTests(TestCase):
     """ST-400 periodic refresh selection."""
@@ -241,10 +269,51 @@ class QueueStaleStreamingTests(TestCase):
 
         self.assertEqual(
             result,
-            {"regions": ["GB", "US"], "titles": 4, "missing": 1, "stale": 2, "selected": 2, "batches": 1},
+            {"regions": ["GB", "US"], "titles": 4, "missing": 1, "stale": 2, "selected": 2, "batches": 1, "pruned": 0},
         )
         delay_mock.assert_called_once_with([["movie", "3"], ["movie", "2"]], force=False)
         names_mock.assert_called_once()
+
+    @patch("streaming.tasks.region_names")
+    @patch("streaming.tasks.refresh_streaming_titles.delay")
+    def test_diary_only_titles_are_queued(self, delay_mock, _names_mock):
+        for media_id in ("1", "2", "3", "4"):
+            for region in ("US", "GB"):
+                make_snapshot("movie", media_id, region)
+        other = get_user_model().objects.create_user(username="diarist", password="pw-12345678")
+        DiaryEntry.objects.create(
+            user=other,
+            item=_item(MediaTypes.EPISODE.value, "1396", season_number=1, episode_number=1),
+            consumed_at=timezone.now(),
+        )
+
+        result = tasks.queue_stale_streaming_availability()
+
+        self.assertEqual((result["titles"], result["missing"]), (5, 1))
+        delay_mock.assert_called_once_with([["tv", "1396"]], force=False)
+
+    @patch("streaming.tasks.region_names")
+    @patch("streaming.tasks.refresh_streaming_titles.delay")
+    def test_prunes_old_snapshots_in_inactive_countries(self, _delay_mock, _names_mock):
+        old = make_snapshot("movie", "1", "FR", [(NETFLIX, "flatrate")], age=timedelta(days=31))
+        make_snapshot("tv", "9", "DE", age=timedelta(days=90))
+        make_snapshot("movie", "2", "FR", age=timedelta(days=29))
+        make_snapshot("movie", "1", "GB", age=timedelta(days=31))
+
+        with (
+            patch("streaming.tasks.PRUNE_BATCH_SIZE", 1),
+            self.assertLogs("streaming.tasks", level="INFO") as logs,
+        ):
+            result = tasks.queue_stale_streaming_availability()
+
+        self.assertEqual(result["pruned"], 2)
+        self.assertEqual(
+            set(StreamingAvailability.objects.values_list("title_type", "tmdb_id", "region")),
+            {("movie", "2", "FR"), ("movie", "1", "GB")},
+        )
+        self.assertFalse(StreamingOffer.objects.filter(availability_id=old.pk).exists())
+        summary = json.loads(logs.output[-1].split("streaming_stale_queue_summary ", 1)[1])
+        self.assertEqual(summary["pruned"], 2)
 
     @patch("streaming.tasks.region_names", side_effect=RuntimeError("down"))
     @patch("streaming.tasks.refresh_streaming_titles.delay")

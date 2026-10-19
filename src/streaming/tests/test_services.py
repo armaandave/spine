@@ -39,6 +39,17 @@ class RegionResolutionTests(TestCase):
         self.assertEqual(services.effective_region(self.user), "US")
         self.assertFalse(services.region_is_set(self.user))
 
+    def test_header_must_be_a_known_watch_region(self):
+        reset_streaming_state(self, region_names=None)
+
+        with patch("app.providers.tmdb.watch_provider_regions") as regions_mock:
+            # Bundled names cover real regions even before live names are cached.
+            self.assertEqual(services.effective_region(self.user, self._request("xk")), "XK")
+            self.assertEqual(services.effective_region(self.user, self._request("ZZ")), "US")
+            reset_streaming_state(self, region_names={"ZZ": "Zedland"})
+            self.assertEqual(services.effective_region(self.user, self._request("zz")), "ZZ")
+        regions_mock.assert_not_called()
+
     @override_settings(STREAMING_DEFAULT_REGION="ca")
     def test_default_region_setting_is_normalized(self):
         self.assertEqual(services.effective_region(self.user), "CA")

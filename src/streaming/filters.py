@@ -106,7 +106,8 @@ def apply_service_filter(queryset, params, *, user, request, item_path="item__")
 
     Returns ``(queryset, streaming)``. ``streaming`` is the response block, or
     None when the request has no ``service``. Titles never checked for the
-    country are excluded, counted as pending, and queued for a check.
+    country are excluded; in active countries they are also counted as pending
+    and queued for a check.
     """
     selection = parse_service_param(params)
     if selection is None:
@@ -126,11 +127,15 @@ def apply_service_filter(queryset, params, *, user, request, item_path="item__")
 def check_pending_titles(queryset, region, *, user, item_path="item__"):
     """Count titles in ``queryset`` with no snapshot for ``region`` and queue checks.
 
-    Checks are only queued for countries that get snapshots (ST-400), at most
-    PENDING_CHECK_LIMIT per request, debounced per user and country, after commit.
+    Only countries that get snapshots (ST-400) have pending titles; elsewhere
+    the count is 0 because nothing will ever be stored. Checks are queued at
+    most PENDING_CHECK_LIMIT per request, debounced per user and country, after
+    commit.
     """
+    if region not in active_regions():
+        return 0
     titles = unchecked_titles(queryset, region, item_path=item_path)
-    if titles and region in active_regions() and _claim_pending_check(user, region):
+    if titles and _claim_pending_check(user, region):
         queued = [list(title) for title in titles[:PENDING_CHECK_LIMIT]]
         # A plain callable, not functools.partial: Django's robust on_commit
         # error logging reads __qualname__, which partial objects lack.

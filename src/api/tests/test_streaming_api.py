@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from redis.exceptions import RedisError
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -193,6 +194,31 @@ class StreamingSettingsApiTests(TestCase):
 
         check_mock.assert_called_once_with(self.user.pk)
         self.assertEqual(regions_seen_by_check, [{"GB", "US"}])
+
+    def test_repeated_saves_queue_one_library_check_per_country_per_minute(self):
+        first, first_check, _callbacks = self._put({"region": "US", "provider_ids": [8]})
+        repeat, repeat_check, _callbacks = self._put({"region": "US", "provider_ids": [8, 15]})
+        moved, moved_check, _callbacks = self._put({"region": "GB", "provider_ids": [8]})
+
+        self.assertEqual(
+            [response.status_code for response in (first, repeat, moved)],
+            [status.HTTP_200_OK] * 3,
+        )
+        first_check.assert_called_once_with(self.user.pk)
+        repeat_check.assert_not_called()
+        moved_check.assert_called_once_with(self.user.pk)
+        self.assertEqual(repeat.data["provider_ids"], [8, 15])
+
+    def test_library_check_is_queued_when_the_debounce_cache_fails(self):
+        with (
+            patch("api.views.streaming.cache.add", side_effect=RedisError("down")),
+            self.assertLogs("api.views.streaming", level="WARNING") as logs,
+        ):
+            response, check_mock, _callbacks = self._put({"region": "US", "provider_ids": [8]})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        check_mock.assert_called_once_with(self.user.pk)
+        self.assertIn("type=RedisError", logs.output[0])
 
     def test_country_change_keeps_services_missing_from_the_new_catalog(self):
         self._select(HULU)

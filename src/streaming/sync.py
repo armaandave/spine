@@ -1,11 +1,13 @@
 """Store streaming availability snapshots (ST-400).
 
-Snapshots are written only for active regions. Detail pages refresh missing or
-stale ones from metadata they already fetched; background tasks call TMDB.
+Snapshots are written only for active regions. Detail pages only fill in
+missing ones from metadata they already fetched, stamped as already stale;
+background tasks call TMDB and keep them fresh.
 """
 
 import logging
 from collections import Counter
+from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError, transaction
@@ -24,6 +26,9 @@ logger = logging.getLogger(__name__)
 REFRESH_LOCK_TIMEOUT = 60 * 15
 STORE_ATTEMPTS = 3
 REFRESH_STATUSES = ("refreshed", "fresh", "deduplicated", "skipped", "failed")
+# Detail metadata can be about two days old (two stacked 24-hour caches), so
+# snapshots made from it start out stale and the next periodic run replaces them.
+METADATA_SNAPSHOT_AGE = FRESH_FOR + timedelta(seconds=1)
 
 
 def _regions(regions):
@@ -45,8 +50,8 @@ def regions_needing_refresh(title_type, tmdb_id, regions, *, now=None):
     return regions - set(fresh)
 
 
-def _write_snapshots(title_type, tmdb_id, snapshots):
-    now = timezone.now()
+def _write_snapshots(title_type, tmdb_id, snapshots, *, fetched_at=None, replace=True):
+    fetched_at = fetched_at or timezone.now()
     lookup = {"title_type": title_type, "tmdb_id": tmdb_id, "region__in": list(snapshots)}
     rows = {
         row.region: row
@@ -54,9 +59,13 @@ def _write_snapshots(title_type, tmdb_id, snapshots):
         .filter(**lookup)
         .order_by("region")
     }
+    if not replace:
+        # Existing rows stay as they are; only missing regions are written.
+        snapshots = {region: snapshot for region, snapshot in snapshots.items() if region not in rows}
+        rows = {}
     for region, row in rows.items():
         row.link = snapshots[region][0]
-        row.fetched_at = now
+        row.fetched_at = fetched_at
     if rows:
         StreamingAvailability.objects.bulk_update(rows.values(), ["link", "fetched_at"])
         StreamingOffer.objects.filter(availability__in=list(rows.values())).delete()
@@ -66,7 +75,7 @@ def _write_snapshots(title_type, tmdb_id, snapshots):
             tmdb_id=tmdb_id,
             region=region,
             link=link,
-            fetched_at=now,
+            fetched_at=fetched_at,
         )
         for region, (link, _offers) in snapshots.items()
         if region not in rows
@@ -86,14 +95,17 @@ def _write_snapshots(title_type, tmdb_id, snapshots):
             for offer in offers
         ],
     )
+    return set(snapshots)
 
 
-def store_snapshots(title_type, tmdb_id, results, regions):
+def store_snapshots(title_type, tmdb_id, results, regions, *, fetched_at=None, replace=True):
     """Replace the title's snapshots in ``regions`` with TMDB ``results``.
 
     ``results`` is TMDB's watch-provider dict keyed by region. Every region
     gets a row, with zero offers when TMDB has nothing there, so "checked, not
-    available" stays distinct from "never checked". Returns the regions written.
+    available" stays distinct from "never checked". Rows are stamped
+    ``fetched_at`` (default now). With ``replace=False``, regions that already
+    have a row are left untouched. Returns the regions written.
     """
     regions = _regions(regions)
     if not regions:
@@ -108,11 +120,17 @@ def store_snapshots(title_type, tmdb_id, results, regions):
         offer._asdict() for _link, offers in snapshots.values() for offer in offers
     )
     # A concurrent writer can create the same rows first; retrying then
-    # updates the rows it made instead.
+    # updates the rows it made instead (or skips them without ``replace``).
     for attempt in range(1, STORE_ATTEMPTS + 1):
         try:
             with transaction.atomic():
-                _write_snapshots(title_type, tmdb_id, snapshots)
+                written = _write_snapshots(
+                    title_type,
+                    tmdb_id,
+                    snapshots,
+                    fetched_at=fetched_at,
+                    replace=replace,
+                )
         except IntegrityError:
             if attempt == STORE_ATTEMPTS:
                 raise
@@ -124,16 +142,19 @@ def store_snapshots(title_type, tmdb_id, results, regions):
             )
         else:
             break
-    return regions
+    return written
 
 
 def sync_from_metadata(source, media_type, media_id, metadata):
-    """Refresh missing or stale snapshots from detail metadata already in hand.
+    """Fill in missing snapshots from detail metadata already in hand.
 
-    Only TMDB movie and TV detail metadata qualifies; season metadata holds
-    season-level offers. Makes no HTTP request and never raises on database
-    or cache errors, since it runs inside detail requests. Returns the regions
-    written.
+    Cached detail metadata can be older than stored rows, so existing rows are
+    never updated. Only active regions with no row at all are written, stamped
+    as already stale so the next periodic run replaces them from a live TMDB
+    call. Only TMDB movie and TV detail metadata qualifies; season metadata
+    holds season-level offers. Makes no HTTP request and never raises on
+    database or cache errors, since it runs inside detail requests. Returns
+    the regions written.
     """
     if media_type not in (MediaTypes.MOVIE.value, MediaTypes.TV.value):
         return set()
@@ -143,9 +164,25 @@ def sync_from_metadata(source, media_type, media_id, metadata):
     providers = metadata.get("providers")
     if not isinstance(providers, dict):
         return set()
+    title_type, tmdb_id = key
     try:
-        stale = regions_needing_refresh(*key, active_regions())
-        return store_snapshots(*key, providers, stale) if stale else set()
+        regions = active_regions()
+        stored = StreamingAvailability.objects.filter(
+            title_type=title_type,
+            tmdb_id=tmdb_id,
+            region__in=regions,
+        ).values_list("region", flat=True)
+        missing = regions - set(stored)
+        if not missing:
+            return set()
+        return store_snapshots(
+            title_type,
+            tmdb_id,
+            providers,
+            missing,
+            fetched_at=timezone.now() - METADATA_SNAPSHOT_AGE,
+            replace=False,
+        )
     except (DatabaseError, ConnectionInterrupted, RedisError) as error:
         logger.warning(
             "Streaming sync from metadata failed title=%s:%s type=%s",
