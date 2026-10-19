@@ -34,19 +34,23 @@ struct PagedResponse<T: Decodable>: Decodable {
     let previous: String?
     let results: [T]
     let completion: CompletionProgress?
+    /// Present on collection pages requested with a Service filter.
+    let streaming: StreamingFilterPageInfo?
 
     init(
         count: Int,
         next: String?,
         previous: String?,
         results: [T],
-        completion: CompletionProgress? = nil
+        completion: CompletionProgress? = nil,
+        streaming: StreamingFilterPageInfo? = nil
     ) {
         self.count = count
         self.next = next
         self.previous = previous
         self.results = results
         self.completion = completion
+        self.streaming = streaming
     }
 }
 

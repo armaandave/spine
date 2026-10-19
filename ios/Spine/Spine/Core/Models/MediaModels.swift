@@ -355,20 +355,32 @@ struct MediaDiscoverRequest: Hashable, Identifiable {
 
     let mediaType: String
     let source: String?
-    let filter: Filter
+    /// The genre, year, or platform. Optional only when a Service filter narrows the results instead (ST-302).
+    var filter: Filter?
     var page: String?
     var pageSize: Int?
+    var service: StreamingFilterService = .any
 
     var id: String {
-        [mediaType, source ?? "_", filter.queryItem.name, filter.value].joined(separator: ":")
+        var parts = [mediaType, source ?? "_", filter?.queryItem.name ?? "_", filter?.value ?? "_"]
+        parts += service.queryItems.compactMap(\.value).map { "service=\($0)" }
+        return parts.joined(separator: ":")
+    }
+
+    /// Movie and TV Discover can be narrowed to the user's services (ST-002, ST-302).
+    var supportsServiceFilter: Bool {
+        ["movie", "tv"].contains(mediaType) && (source == nil || source == "tmdb")
     }
 
     var queryItems: [URLQueryItem] {
         var items = [
             URLQueryItem(name: "media_type", value: mediaType),
             URLQueryItem(name: "sort", value: "vote_count"),
-            filter.queryItem,
         ]
+        if let filter {
+            items.append(filter.queryItem)
+        }
+        items += service.queryItems
         if let source {
             items.append(URLQueryItem(name: "source", value: source))
         }
@@ -382,7 +394,11 @@ struct MediaDiscoverRequest: Hashable, Identifiable {
     }
 
     var title: String {
-        "\(filter.value) · \(MediaTypeTheme.theme(for: mediaType).displayName)"
+        let mediaTypeName = MediaTypeTheme.theme(for: mediaType).displayName
+        guard let filter else {
+            return service.isActive ? "On My Services · \(mediaTypeName)" : mediaTypeName
+        }
+        return "\(filter.value) · \(mediaTypeName)"
     }
 
     static func detailPillRequest(ref: MediaRef, filter: Filter) -> MediaDiscoverRequest? {
