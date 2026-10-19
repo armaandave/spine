@@ -126,6 +126,7 @@ INSTALLED_APPS = [
     "integrations",
     "lists",
     "social",
+    "streaming",
     "users",
     "debug_toolbar",
     "django_celery_beat",
@@ -373,6 +374,8 @@ MUSICBRAINZ_CONTACT = config(
     default="github@fuzzygrim.com",
 )
 MUSIC_DEFAULT_MARKET = config("MUSIC_DEFAULT_MARKET", default="US")
+# Where-to-watch region for users who have not picked one.
+STREAMING_DEFAULT_REGION = config("STREAMING_DEFAULT_REGION", default="US")
 LISTENBRAINZ_TOKEN = config(
     "LISTENBRAINZ_TOKEN",
     default=secret("LISTENBRAINZ_TOKEN_FILE", ""),
