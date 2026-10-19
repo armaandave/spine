@@ -201,8 +201,6 @@ enum StreamingFilterRules {
 }
 
 enum StreamingFilterCopy {
-    static let addServicesHint = "Add your streaming services in Settings → Streaming Services"
-
     static func pendingNote(pendingCount: Int, service: StreamingFilterService) -> String? {
         guard service.isActive, pendingCount > 0 else { return nil }
         let titles = pendingCount == 1 ? "1 title" : "\(pendingCount.formatted()) titles"

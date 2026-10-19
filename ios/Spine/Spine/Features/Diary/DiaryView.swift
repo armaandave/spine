@@ -351,6 +351,13 @@ struct MediaDiaryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await viewModel.load() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                Task {
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
+                    await viewModel.load()
+                }
+            }
         }
     }
 

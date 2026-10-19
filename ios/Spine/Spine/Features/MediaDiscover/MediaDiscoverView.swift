@@ -143,11 +143,13 @@ struct MediaDiscoverView: View {
     @State private var viewModel: MediaDiscoverViewModel
     @State private var selectedMedia: MediaBrowsingSelection?
     @State private var edgeDragOffset: CGFloat = 0
+    @State private var isChoosingStreamingServices = false
 
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
     private let listRepository: ListRepository
+    private let streamingRepository: StreamingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
@@ -159,6 +161,7 @@ struct MediaDiscoverView: View {
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
         listRepository: ListRepository = AppRepositories.current().lists,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
@@ -168,6 +171,7 @@ struct MediaDiscoverView: View {
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.listRepository = listRepository
+        self.streamingRepository = streamingRepository
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
@@ -190,11 +194,18 @@ struct MediaDiscoverView: View {
                             .tint(.white)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if viewModel.needsStreamingServices, viewModel.results.isEmpty {
-                        ContentUnavailableView(
-                            "Choose your streaming services",
-                            systemImage: "play.tv",
-                            description: Text("\(StreamingFilterCopy.addServicesHint) to see what's on them.")
-                        )
+                        ContentUnavailableView {
+                            Label("Choose your streaming services", systemImage: "play.tv")
+                        } description: {
+                            Text("Pick the services you subscribe to and see what's streaming on them.")
+                        } actions: {
+                            Button("Choose Services") {
+                                isChoosingStreamingServices = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.white)
+                            .foregroundStyle(.black)
+                        }
                     } else if let error = viewModel.errorMessage, viewModel.results.isEmpty {
                         ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
                     } else if viewModel.results.isEmpty, viewModel.isOnMyServices {
@@ -259,6 +270,13 @@ struct MediaDiscoverView: View {
                 if viewModel.results.isEmpty {
                     await viewModel.load()
                 }
+            }
+            .sheet(isPresented: $isChoosingStreamingServices) {
+                StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                guard viewModel.isOnMyServices else { return }
+                Task { await viewModel.load() }
             }
         }
         .background(Color.black)

@@ -8,6 +8,7 @@ struct MediaFilterSheet: View {
     let mediaTypes: [String]
     let showsTagFilter: Bool
     let onApply: () -> Void
+    private let streamingRepository: StreamingRepository
 
     @State private var draft: MediaFilterState
     @State private var isGenreExpanded = false
@@ -19,6 +20,7 @@ struct MediaFilterSheet: View {
         options: MediaFilterOptionsResponse,
         mediaTypes: [String],
         showsTagFilter: Bool = true,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         onApply: @escaping () -> Void
     ) {
         _filter = filter
@@ -27,6 +29,7 @@ struct MediaFilterSheet: View {
         self.mediaTypes = mediaTypes
         self.showsTagFilter = showsTagFilter
         self.onApply = onApply
+        self.streamingRepository = streamingRepository
         _draft = State(initialValue: filter.wrappedValue)
     }
 
@@ -144,7 +147,7 @@ struct MediaFilterSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("My services")
                         if streaming.services.isEmpty {
-                            Text(StreamingFilterCopy.addServicesHint)
+                            Text("Choose your streaming services first.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -163,6 +166,12 @@ struct MediaFilterSheet: View {
                     } action: {
                         draft.service = draft.service.togglingProvider(service.providerId)
                     }
+                }
+
+                NavigationLink {
+                    StreamingServicesView(repository: streamingRepository, onUnauthorized: {})
+                } label: {
+                    Text(streaming.services.isEmpty ? "Choose your streaming services" : "Edit your services")
                 }
             } header: {
                 Text("Service")

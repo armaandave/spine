@@ -489,6 +489,13 @@ struct LibraryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await viewModel.reload() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                Task {
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
+                    await viewModel.reload()
+                }
+            }
         }
         .fullScreenCover(item: $selectedGridMedia, onDismiss: { selectedGridMedia = nil }) { selection in
             MediaDetailView(

@@ -1614,6 +1614,14 @@ struct ProfileListDetailView: View {
             guard containsMedia || isViewingPerson else { return }
             Task { await viewModel.load() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+            guard viewModel.list?.listType == .media else { return }
+            Task {
+                await viewModel.loadFilterOptions()
+                guard !Task.isCancelled, viewModel.filter.service.isActive else { return }
+                await viewModel.loadFilteredItems(reset: true)
+            }
+        }
     }
 
     private var contentPhase: SpineContentPhase {

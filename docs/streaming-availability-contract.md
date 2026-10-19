@@ -193,7 +193,13 @@ On success it replaces the selection, saves the region, queues the library check
         { "provider_id": 1899, "name": "HBO Max", "logo_url": "…", "display_priority": 151, "is_mine": true }
       ]
     },
-    { "type": "rent", "label": "Rent", "providers": [] }
+    {
+      "type": "rent",
+      "label": "Rent",
+      "providers": [
+        { "provider_id": 2, "name": "Apple TV Store", "logo_url": "…", "display_priority": 9, "is_mine": false }
+      ]
+    }
   ],
   "attribution": { "name": "JustWatch", "url": "https://www.justwatch.com" }
 }
