@@ -508,6 +508,7 @@ struct ProfileView: View {
     private let diaryRepository: DiaryRepository
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
+    private let streamingRepository: StreamingRepository
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
@@ -534,6 +535,7 @@ struct ProfileView: View {
         activityRepository: ActivityRepository,
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
@@ -562,6 +564,7 @@ struct ProfileView: View {
         self.diaryRepository = diaryRepository
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
+        self.streamingRepository = streamingRepository
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
@@ -649,6 +652,7 @@ struct ProfileView: View {
                         profile: viewModel.profile,
                         profileRepository: profileRepository,
                         mediaRepository: mediaRepository,
+                        streamingRepository: streamingRepository,
                         onProfileUpdated: { updated in
                             viewModel.profile = updated
                             Swift.Task<Void, Never> { await viewModel.reload() }
@@ -2161,12 +2165,14 @@ private struct ProfileSettingsSheet: View {
     let onLogout: () -> Void
     private let profileRepository: ProfileRepository
     private let mediaRepository: MediaRepository
+    private let streamingRepository: StreamingRepository
     private let onUnauthorized: () -> Void
 
     init(
         profile: UserProfile?,
         profileRepository: ProfileRepository,
         mediaRepository: MediaRepository,
+        streamingRepository: StreamingRepository,
         onProfileUpdated: @escaping (UserProfile) -> Void,
         onUnauthorized: @escaping () -> Void,
         importCoordinator: LetterboxdImportCoordinator,
@@ -2184,6 +2190,7 @@ private struct ProfileSettingsSheet: View {
         self.onLogout = onLogout
         self.profileRepository = profileRepository
         self.mediaRepository = mediaRepository
+        self.streamingRepository = streamingRepository
         self.onUnauthorized = onUnauthorized
         _viewModel = State(initialValue: ProfileSettingsViewModel(
             profileRepository: profileRepository,
@@ -2401,6 +2408,10 @@ private struct ProfileSettingsSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    StreamingServicesSettingsLink(repository: streamingRepository, onUnauthorized: onUnauthorized)
 
                     SettingsDivider()
 
@@ -3188,6 +3199,18 @@ private struct SettingsAboutView: View {
                                     detail: "Game review data",
                                     url: URL(string: "https://store.steampowered.com/")!
                                 )
+                                SettingsDivider()
+                                SettingsCreditLink(
+                                    title: "TMDB",
+                                    detail: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                                    url: URL(string: "https://www.themoviedb.org/")!
+                                )
+                                SettingsDivider()
+                                SettingsCreditLink(
+                                    title: "JustWatch",
+                                    detail: "Where to watch data",
+                                    url: URL(string: "https://www.justwatch.com")!
+                                )
                             }
                         }
                     }
@@ -3206,7 +3229,7 @@ private struct SettingsAboutView: View {
     }
 }
 
-private struct SettingsGroup<Content: View>: View {
+struct SettingsGroup<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
 
@@ -3223,7 +3246,7 @@ private struct SettingsGroup<Content: View>: View {
     }
 }
 
-private struct SettingsCard<Content: View>: View {
+struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -3237,7 +3260,7 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
-private struct SettingsNavigationRow: View {
+struct SettingsNavigationRow: View {
     let title: String
     let detail: String
     var systemName: String = ""
@@ -3328,7 +3351,7 @@ private struct SettingsIcon: View {
     }
 }
 
-private struct SettingsDivider: View {
+struct SettingsDivider: View {
     var body: some View {
         Rectangle()
             .fill(.white.opacity(0.075))
@@ -3476,7 +3499,7 @@ private struct SettingsStatusMessage: View {
     }
 }
 
-private struct SettingsMessageCard: View {
+struct SettingsMessageCard: View {
     let message: String
     let systemName: String
     let tint: Color
@@ -3496,7 +3519,7 @@ private struct SettingsMessageCard: View {
     }
 }
 
-private struct SettingsSaveButton: View {
+struct SettingsSaveButton: View {
     let title: String
     let isSaving: Bool
     let isDisabled: Bool
