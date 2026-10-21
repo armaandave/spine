@@ -1388,6 +1388,13 @@ private struct MediaDetailPageView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
 
+            if progressUpdateDetail == nil, selectedTab == .search {
+                ExplorationSearchButton(glass: .clear.interactive())
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+
             if progressUpdateDetail == nil {
                 ExplorationHomeButton(glass: .clear.interactive())
                     .padding(.horizontal, 16)
@@ -5423,6 +5430,29 @@ private struct DetailFactRow: Identifiable {
 
     var id: String { label }
     var isEmpty: Bool { label.isEmpty || (value?.isEmpty != false && people.isEmpty && companies.isEmpty) }
+    var symbolName: String {
+        Self.symbolNames[label] ?? (!people.isEmpty ? "person" : !companies.isEmpty ? "building.2" : "info.circle")
+    }
+
+    private static let symbolNames: [String: String] = [
+        "Status": "flag", "Format": "tag", "Physical Format": "book.closed", "Release Type": "opticaldisc",
+        "Release Date": "calendar", "First Aired": "calendar", "Aired": "calendar", "Publish Date": "calendar",
+        "Year": "calendar", "Last Aired": "calendar.badge.clock", "Broadcast": "antenna.radiowaves.left.and.right",
+        "Runtime": "clock", "Time to Beat": "hourglass",
+        "Certification": "checkmark.shield", "Age Rating": "checkmark.shield", "Maturity Rating": "checkmark.shield",
+        "Box Office": "dollarsign.circle", "Google Books Price": "creditcard",
+        "Seasons": "square.stack", "Season": "square.stack",
+        "Episodes": "play.rectangle.on.rectangle", "Episode": "play.rectangle", "Production Code": "number",
+        "Chapters": "book.pages", "Pages": "book.pages", "Latest Chapter": "bookmark", "Last Issue": "bookmark",
+        "Issues": "books.vertical", "Source": "book", "ISBN": "barcode", "Track Count": "music.note.list",
+        "Series": "rectangle.stack", "Collection": "rectangle.stack", "Franchise": "rectangle.stack",
+        "Genres": "theatermasks", "Themes": "sparkles",
+        "Director": "megaphone", "Directors": "megaphone", "Creator": "lightbulb", "Creators": "lightbulb",
+        "Author": "person", "Authors": "person.2", "Artist": "music.mic", "Artists": "music.mic",
+        "Studios": "building.2", "Companies": "building.2", "Developer": "hammer",
+        "Publisher": "building.columns", "Publishers": "building.columns",
+        "Country": "globe", "Languages": "character.bubble", "Platforms": "gamecontroller",
+    ]
 
     init(label: String, value: String?, destination: URL? = nil) {
         self.label = label
@@ -5456,103 +5486,239 @@ private struct MediaFactsSection: View {
 
     var body: some View {
         if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 14) {
                 SectionLabel(title: "Details")
 
                 VStack(spacing: 0) {
-                    ForEach(rows) { row in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         DetailFactRowView(
                             row: row,
+                            showsDivider: index > 0,
                             onPersonSelected: onPersonSelected,
                             onCompanySelected: onCompanySelected
                         )
-
-                        if row.id != rows.last?.id {
-                            Divider().overlay(.white.opacity(0.045))
-                        }
                     }
                 }
-                .mediaDetailSurface(cornerRadius: 14)
+                .mediaDetailGroupSurface()
             }
         }
     }
 }
 
 private struct DetailFactRowView: View {
+    private static let iconWidth: CGFloat = 20
+    private static let iconSpacing: CGFloat = 10
+
     let row: DetailFactRow
+    let showsDivider: Bool
     let onPersonSelected: (PersonRef) -> Void
     let onCompanySelected: (CompanyRef) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text(row.label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.44))
-                .lineLimit(1)
-                .frame(width: 98, alignment: .leading)
+        content
+            .overlay(alignment: .top) {
+                if showsDivider {
+                    MediaDetailRowDivider(
+                        leadingInset: MediaDetailGroup.horizontalPadding + Self.iconWidth + Self.iconSpacing
+                    )
+                }
+            }
+    }
 
-            if row.people.isEmpty && row.companies.isEmpty {
-                if let destination = row.destination {
-                    Link(destination: destination) {
-                        HStack(spacing: 5) {
-                            detailText(row.value ?? "")
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption2.weight(.bold))
-                        }
-                        .foregroundStyle(.white.opacity(0.84))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens in the system browser")
-                } else {
-                    detailText(row.value ?? "")
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.86)
+    /// A row naming one person or company opens it like a settings row; rows with several make each name tappable.
+    @ViewBuilder
+    private var content: some View {
+        if let destination = row.destination {
+            Link(destination: destination) {
+                layout(trailingSymbol: "arrow.up.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(row.value ?? "")")
+            .accessibilityHint("Opens in the system browser")
+        } else if row.people.count == 1, let person = row.people.first, let personRef = person.personRef {
+            Button {
+                onPersonSelected(personRef)
+            } label: {
+                layout(trailingSymbol: "chevron.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(person.name)")
+            .accessibilityHint("Opens person details")
+        } else if row.companies.count == 1, let company = row.companies.first {
+            Button {
+                onCompanySelected(company.ref)
+            } label: {
+                layout(trailingSymbol: "chevron.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(company.name)")
+            .accessibilityHint("Opens company details")
+        } else {
+            layout(trailingSymbol: nil)
+                .accessibilityElement(children: row.people.count > 1 || row.companies.count > 1 ? .contain : .combine)
+        }
+    }
+
+    /// Sits the value beside its label when it fits on one line, and under it when it doesn't.
+    private func layout(trailingSymbol: String?) -> some View {
+        HStack(spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    label
+                    Spacer(minLength: 16)
+                    values(alignment: .trailing)
+                        .fixedSize()
                 }
-            } else if !row.people.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(row.people, id: \.self) { person in
-                        if let personRef = person.personRef {
-                            Button {
-                                onPersonSelected(personRef)
-                            } label: {
-                                personName(person.name)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("View \(person.name)")
-                        } else {
-                            personName(person.name)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(row.companies) { company in
-                        Button {
-                            onCompanySelected(company.ref)
-                        } label: {
-                            detailText(company.name)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("View \(company.name)")
-                    }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    label
+                    values(alignment: .leading)
+                        .padding(.leading, Self.iconWidth + Self.iconSpacing)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            if let trailingSymbol {
+                Image(systemName: trailingSymbol)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .accessibilityHidden(true)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, minHeight: MediaDetailGroup.rowMinHeight, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
-    private func personName(_ name: String) -> some View {
-        detailText(name)
+    private var label: some View {
+        HStack(spacing: Self.iconSpacing) {
+            Image(systemName: row.symbolName)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.42))
+                .frame(width: Self.iconWidth)
+                .accessibilityHidden(true)
+
+            Text(row.label)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.55))
+                .lineLimit(1)
+        }
     }
 
-    private func detailText(_ text: String) -> some View {
+    @ViewBuilder
+    private func values(alignment: HorizontalAlignment) -> some View {
+        let textAlignment: TextAlignment = alignment == .trailing ? .trailing : .leading
+
+        if !row.people.isEmpty {
+            VStack(alignment: alignment, spacing: 6) {
+                ForEach(row.people, id: \.self) { person in
+                    if row.people.count > 1, let personRef = person.personRef {
+                        Button {
+                            onPersonSelected(personRef)
+                        } label: {
+                            linkedValue(person.name, alignment: textAlignment)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View \(person.name)")
+                    } else {
+                        valueText(person.name, alignment: textAlignment)
+                    }
+                }
+            }
+        } else if !row.companies.isEmpty {
+            VStack(alignment: alignment, spacing: 6) {
+                ForEach(row.companies) { company in
+                    if row.companies.count > 1 {
+                        Button {
+                            onCompanySelected(company.ref)
+                        } label: {
+                            linkedValue(company.name, alignment: textAlignment)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View \(company.name)")
+                    } else {
+                        valueText(company.name, alignment: textAlignment)
+                    }
+                }
+            }
+        } else {
+            valueText(row.value ?? "", alignment: textAlignment)
+        }
+    }
+
+    private func linkedValue(_ text: String, alignment: TextAlignment) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            valueText(text, alignment: alignment)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.3))
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func valueText(_ text: String, alignment: TextAlignment) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.84))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.92))
+            .multilineTextAlignment(alignment)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Inset-grouped Liquid Glass card for the credits and details lists, matching the profile menu.
+private enum MediaDetailGroup {
+    static let cornerRadius: CGFloat = 22
+    static let horizontalPadding: CGFloat = 16
+    static let rowMinHeight: CGFloat = 48
+}
+
+private extension View {
+    func mediaDetailGroupSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: MediaDetailGroup.cornerRadius, style: .continuous)
+
+        return self
+            .clipShape(shape)
+            .glassEffect(.regular, in: shape)
+            // The page is always dark; light-mode glass would wash out the white text.
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+private struct MediaDetailRowDivider: View {
+    let leadingInset: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.12))
+            .frame(height: 0.5)
+            .padding(.leading, leadingInset)
+    }
+}
+
+/// Fills the whole row while pressed; the group clips it to its rounded corners.
+private struct MediaDetailRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        MediaDetailRowPressHighlight(configuration: configuration)
+    }
+}
+
+private struct MediaDetailRowPressHighlight: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let configuration: ButtonStyleConfiguration
+
+    var body: some View {
+        configuration.label
+            .background {
+                Color.white
+                    .opacity(configuration.isPressed ? 0.12 : 0)
+            }
+            .animation(
+                configuration.isPressed ? nil : SpineMotion.animation(reduceMotion: reduceMotion),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -6249,8 +6415,8 @@ private struct MediaReviewsView: View {
                     endPoint: .bottomTrailing
                 )
                 .overlay {
-                    Image(systemName: theme.symbolName)
-                        .foregroundStyle(.white.opacity(0.5))
+                    MediaTypeGlyph(theme: theme, size: 17)
+                        .opacity(0.5)
                 }
             }
         }
@@ -6839,11 +7005,16 @@ private struct CreditDisplay: Identifiable {
 }
 
 private struct CreditSection: View {
+    private static let collapsedLimit = 6
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let cast: [CreditDisplay]
     let crew: [CreditDisplay]
     let onSelect: (PersonRef) -> Void
     @State private var selectedTab: CreditTab
+    @State private var expandedTab: CreditTab?
 
     init(
         title: String,
@@ -6867,54 +7038,124 @@ private struct CreditSection: View {
         }
     }
 
+    private var tabs: [CreditTab] {
+        title == "Characters & Creators" ? [.crew, .cast] : [.cast, .crew]
+    }
+
+    private var isExpanded: Bool { expandedTab == selectedTab }
+
+    /// Short lists show everyone; longer ones open on the first few and expand in place.
+    private var collapsedCount: Int {
+        visiblePeople.count > Self.collapsedLimit + 2 ? Self.collapsedLimit : visiblePeople.count
+    }
+
+    private var shownPeople: [CreditDisplay] {
+        isExpanded ? visiblePeople : Array(visiblePeople.prefix(collapsedCount))
+    }
+
     var body: some View {
         if !visiblePeople.isEmpty {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
                     SectionLabel(title: title)
-                    Spacer()
+                    Spacer(minLength: 0)
                     if !cast.isEmpty && !crew.isEmpty {
                         creditTabs
                     }
                 }
 
-                LazyVStack(spacing: 7) {
-                    ForEach(visiblePeople) { person in
-                        creditRow(person)
-                    }
+                // Swapping identity per tab crossfades the two lists inside one card.
+                ZStack(alignment: .top) {
+                    creditList
+                        .id(selectedTab)
+                        .transition(.opacity)
                 }
+                .mediaDetailGroupSurface()
             }
         }
     }
 
     private var creditTabs: some View {
-        HStack(spacing: 4) {
-            if title == "Characters & Creators" {
-                creditTab(.crew)
-                creditTab(.cast)
-            } else {
-                creditTab(.cast)
-                creditTab(.crew)
+        Picker(title, selection: $selectedTab.animation(reduceMotion ? nil : .smooth(duration: 0.3))) {
+            ForEach(tabs, id: \.self) { tab in
+                Text(tabTitle(tab)).tag(tab)
             }
         }
-        .padding(3)
-        .background(.white.opacity(0.055), in: Capsule())
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
+        // The page is always dark; keep the system control from drawing its light-mode thumb.
+        .environment(\.colorScheme, .dark)
     }
 
-    private func creditTab(_ tab: CreditTab) -> some View {
-        Button {
-            selectedTab = tab
-        } label: {
-            Text(tabTitle(tab))
-                .font(.system(size: 11, weight: .heavy))
-                .foregroundStyle(selectedTab == tab ? .white.opacity(0.9) : .white.opacity(0.52))
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(selectedTab == tab ? .white.opacity(0.13) : .clear, in: Capsule())
+    private var creditList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(shownPeople.enumerated()), id: \.element.id) { index, person in
+                creditRow(person)
+                    .overlay(alignment: .top) {
+                        if index > 0 {
+                            MediaDetailRowDivider(leadingInset: CreditRow.textInset)
+                        }
+                    }
+            }
+
+            if collapsedCount < visiblePeople.count {
+                expandButton
+                    .overlay(alignment: .top) {
+                        MediaDetailRowDivider(leadingInset: MediaDetailGroup.horizontalPadding)
+                    }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tabTitle(tab))
-        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func creditRow(_ person: CreditDisplay) -> some View {
+        if let personRef = person.personRef {
+            Button {
+                onSelect(personRef)
+            } label: {
+                CreditRow(person: person, showsChevron: true)
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel(accessibilityLabel(for: person))
+            .accessibilityHint("Opens person details")
+        } else {
+            CreditRow(person: person, showsChevron: false)
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var expandButton: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+                expandedTab = isExpanded ? nil : selectedTab
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(isExpanded ? "Show Less" : "Show All")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+
+                if !isExpanded {
+                    Text(visiblePeople.count.formatted())
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+            .frame(maxWidth: .infinity, minHeight: MediaDetailGroup.rowMinHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MediaDetailRowButtonStyle())
     }
 
     private func tabTitle(_ tab: CreditTab) -> String {
@@ -6925,72 +7166,6 @@ private struct CreditSection: View {
             return tab == .cast ? "Characters" : "Creators"
         }
         return tab.title
-    }
-
-    private func creditRow(_ person: CreditDisplay) -> some View {
-        Group {
-            if let personRef = person.personRef {
-                Button {
-                    onSelect(personRef)
-                } label: {
-                    creditRowContent(person, showsChevron: true)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(for: person))
-                .accessibilityHint("Opens person details")
-            } else {
-                creditRowContent(person, showsChevron: false)
-                    .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
-    private func creditRowContent(_ person: CreditDisplay, showsChevron: Bool) -> some View {
-        HStack(spacing: 10) {
-            SpineAsyncImage(url: URL(string: person.imageUrl ?? "")) { phase in
-                switch phase {
-                case let .success(image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(.white.opacity(0.12))
-                        .overlay {
-                            Image(systemName: "person.fill")
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                }
-            }
-            .frame(width: 38, height: 38)
-            .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(person.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(1)
-
-                if let subtitle = person.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if showsChevron {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.38))
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(minHeight: 52)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.12), in: Capsule())
-        .contentShape(Capsule())
     }
 
     private func accessibilityLabel(for person: CreditDisplay) -> String {
@@ -7010,6 +7185,93 @@ private enum CreditTab {
         case .cast: "Cast"
         case .crew: "Crew"
         }
+    }
+}
+
+private struct CreditRow: View {
+    private static let avatarSize: CGFloat = 42
+    private static let avatarSpacing: CGFloat = 12
+    static let textInset = MediaDetailGroup.horizontalPadding + avatarSize + avatarSpacing
+
+    let person: CreditDisplay
+    let showsChevron: Bool
+
+    var body: some View {
+        HStack(spacing: Self.avatarSpacing) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+
+                if let role = person.subtitle?.nilIfEmpty {
+                    Text(role)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var avatar: some View {
+        SpineAsyncImage(
+            url: URL(string: person.imageUrl ?? ""),
+            thumbnailSize: CGSize(width: Self.avatarSize, height: Self.avatarSize)
+        ) { phase in
+            switch phase {
+            case let .success(image):
+                // Headshots are portrait; pin the crop to the top so faces stay in the circle.
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: Self.avatarSize, height: Self.avatarSize, alignment: .top)
+            default:
+                monogram
+            }
+        }
+        .frame(width: Self.avatarSize, height: Self.avatarSize)
+        .clipShape(Circle())
+        .overlay {
+            Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+        }
+    }
+
+    private var monogram: some View {
+        Circle()
+            .fill(.white.opacity(0.08))
+            .overlay {
+                if let initials {
+                    Text(initials)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.6))
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+            }
+    }
+
+    private var initials: String? {
+        let words = person.name.split(whereSeparator: \.isWhitespace)
+        let letters = [words.first, words.count > 1 ? words.last : nil]
+            .compactMap { $0?.first(where: \.isLetter) }
+        return letters.isEmpty ? nil : String(letters).uppercased()
     }
 }
 

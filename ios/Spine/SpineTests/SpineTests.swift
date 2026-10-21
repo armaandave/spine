@@ -150,7 +150,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(movie.gradientColors.count, 2)
         XCTAssertEqual(boardGame.displayName, "Board Games")
         XCTAssertEqual(boardGame.symbolName, "dice.fill")
-        XCTAssertEqual(anime.symbolText, "オ")
+        XCTAssertEqual(anime.displayName, "Anime")
         XCTAssertEqual(movie.gradientColors, boardGame.gradientColors)
     }
 

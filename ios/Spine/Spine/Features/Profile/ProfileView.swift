@@ -3029,7 +3029,10 @@ private struct SettingsPreferencesView: View {
                             }
                         )) {
                             HStack(spacing: 12) {
-                                SettingsIcon(systemName: theme.symbolName)
+                                MediaTypeGlyph(theme: theme, size: 16)
+                                    .opacity(0.85)
+                                    .frame(width: 24, height: 28)
+                                    .accessibilityHidden(true)
                                 Text(theme.displayName)
                                     .foregroundStyle(.white)
                             }

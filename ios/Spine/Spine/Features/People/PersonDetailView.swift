@@ -433,6 +433,13 @@ struct PersonDetailView: View {
                 .contentShape(Rectangle())
                 .gesture(edgeSwipeBackGesture)
         }
+        .overlay(alignment: .bottomLeading) {
+            if selectedTab == .search {
+                ExplorationSearchButton()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             ExplorationHomeButton()
                 .padding(.horizontal, 16)
@@ -814,13 +821,6 @@ struct PersonDetailView: View {
                 .accessibilityValue(expandedCreditRoles.contains(group.id) ? "Expanded" : "Collapsed")
                 .accessibilityIdentifier("person-role-header.\(type.rawValue).\(group.id)")
 
-                if let completion = roleCompletion(for: group, type: type),
-                   completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
-                        .accessibilityLabel("\(group.role) completion")
-                        .accessibilityIdentifier("person-role-completion.\(type.rawValue).\(group.id)")
-                }
-
                 Button {
                     toggleCreditRole(group.id)
                 } label: {
@@ -988,13 +988,6 @@ struct PersonDetailView: View {
         }
         let types = FilmographyType.available(in: viewModel.filmography)
         return types.count == 1 ? viewModel.detail?.completion : nil
-    }
-
-    private func roleCompletion(
-        for group: FilmographyCreditGroup,
-        type: FilmographyType
-    ) -> CompletionProgress? {
-        viewModel.detail?.roleCompletions?[type.rawValue]?[group.role]
     }
 
     private static let seriesRoleID = "media-series"

@@ -177,8 +177,11 @@ struct SearchView: View {
 
 /// Owns detail presentation so neither search typing nor results updates touch `MediaDetailView`.
 private struct SearchViewContainer: View {
+    @Environment(\.appNavigationState) private var appNavigationState
     @State private var selectedRef: MediaRef?
     @State private var selectedFeaturedList: FeaturedListDestination?
+    @State private var focusesSearchOnDismiss = false
+    @State private var returnFocusRequest = 0
 
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
@@ -197,12 +200,18 @@ private struct SearchViewContainer: View {
             mediaRepository: mediaRepository,
             listRepository: listRepository,
             mediaLensStore: mediaLensStore,
-            focusRequest: focusRequest,
+            focusRequest: focusRequest + returnFocusRequest,
             onUnauthorized: onUnauthorized,
             onFeaturedList: { selectedFeaturedList = FeaturedListDestination(id: $0) },
             onSelect: { selectedRef = $0.ref }
         )
-        .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
+        .onChange(of: appNavigationState?.returnToSearchRequest) {
+            focusesSearchOnDismiss = true
+        }
+        .fullScreenCover(item: $selectedRef, onDismiss: {
+            selectedRef = nil
+            focusSearchIfReturning()
+        }) { ref in
             MediaDetailCover(
                 ref: ref,
                 mediaRepository: mediaRepository,
@@ -216,7 +225,10 @@ private struct SearchViewContainer: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $selectedFeaturedList, onDismiss: { selectedFeaturedList = nil }) { destination in
+        .fullScreenCover(item: $selectedFeaturedList, onDismiss: {
+            selectedFeaturedList = nil
+            focusSearchIfReturning()
+        }) { destination in
             let repositories = AppRepositories.current()
             ProfileListDetailView(
                 listId: destination.id,
@@ -233,6 +245,13 @@ private struct SearchViewContainer: View {
                 onUnauthorized: onUnauthorized
             )
         }
+    }
+
+    /// Focus only after the cover finishes dismissing, so the search field is on screen.
+    private func focusSearchIfReturning() {
+        guard focusesSearchOnDismiss else { return }
+        focusesSearchOnDismiss = false
+        returnFocusRequest += 1
     }
 }
 
