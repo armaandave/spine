@@ -13,6 +13,10 @@ XCODEBUILDMCP_SCHEME = "Spine"
 XCODEBUILDMCP_BUNDLE_ID = "com.armaan.Spine"
 
 # The user-level `xcodebuildmcp` server starts in pylon/ios with Pylon's defaults,
-# and project entries merge with it. Turn it off for Spine threads only.
+# and project entries merge with it. Turn it off for Spine threads only. Codex
+# rejects a server entry without a transport ("invalid transport"), so this
+# repeats the user-level command while keeping it disabled.
 [mcp_servers.xcodebuildmcp]
+command = "xcodebuildmcp"
+args = ["mcp"]
 enabled = false
