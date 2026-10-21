@@ -123,8 +123,9 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
 
 ### 5.1 Planned base URL
 
-- Default and release: `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`). Any launch without `SPINE_API_BASE_URL` uses production.
-- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh`, Simulator only, opted into per launch (see "Local backend (Simulator)" under Run). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
+- Default and release: `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`). Release builds always use it.
+- Debug builds use, in order: the launch environment's `SPINE_API_BASE_URL`, then the `SpineAPIBaseURL` Info.plist key (`ios/Spine/Configs/Info.plist`, from the `SPINE_API_BASE_URL` build setting, which is production unless a build overrides it), then production.
+- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh`, opted into per Simulator launch (see "Local backend (Simulator)" under Run). On a phone, `scripts/ios/build-to-iphone.sh --local` bakes a local backend's address into the build (`scripts/ios/TEST_ON_IPHONE.md`). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
 - Config via `Info.plist` or xcconfig — **never hardcode secrets**.
 
 ### 5.2 v1 endpoints (target)
@@ -256,9 +257,11 @@ Production is the default on purpose. Use the local backend only when you mean t
    - Xcode: duplicate the scheme with **Shared** unchecked and set the variable in its Run action. Never add it to the shared `Spine.xcscheme`.
 3. Confirm the app's requests show up in the `runserver` output.
 
+To open signed in as a passwordless dev user, start the backend with `scripts/ios/local-backend.sh` instead (it prints its port), and launch with `--dev-sign-in` after the bundle ID (`simctl launch ... com.armaan.Spine --dev-sign-in`). Only a local backend answers it; production answers 404.
+
 Never point a "local" build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
 
-Release builds keep `AppConfig.productionAPIBaseURL`. Installed builds have no launch environment, so they always use production; don't change that default to a local URL.
+Release builds always use `AppConfig.productionAPIBaseURL`. Installed Debug builds use production unless they were built with `scripts/ios/build-to-iphone.sh --local`; don't change the `SPINE_API_BASE_URL` build setting's default to a local URL.
 
 ### Codex Desktop simulator mirror
 
@@ -303,6 +306,17 @@ Implementation notes:
 - Use inline JSON fixtures in tests for decoder coverage — keep test data in `SpineTests/`, not in the app target
 
 No XCTest required for every change; required for non-trivial decoding/network logic.
+
+Run them under the cleanup wrapper on a scratch simulator it creates (the stock "iPhone 17" simulator on this Mac can wedge on boot, and never borrow another session's):
+
+```sh
+~/.local/bin/agent-cleanup run --owner <task> --label spine-ios-tests --timeout 2400 \
+  --sim-runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5 \
+  --sim-device-type com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+  -- /bin/sh -c 'exec xcodebuild test -project ios/Spine/Spine.xcodeproj -scheme Spine -destination "id=$AGENT_CLEANUP_SIM_UDID" -only-testing:SpineTests -parallel-testing-enabled NO'
+```
+
+A first boot loads the Mac heavily for a few minutes, and the Mac also serves production: skip it while the load is already high, and say the tests didn't run.
 
 ---
 

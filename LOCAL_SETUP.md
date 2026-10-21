@@ -3,7 +3,7 @@
 ## Prerequisites
 
 Before starting, ensure you have:
-- **Python 3.x** (check with `python --version` or `python3 --version`)
+- **uv** (check with `uv --version`; see https://docs.astral.sh/uv/). It provides Python 3.12 and the locked dependencies.
 - **Node.js and npm** (check with `node --version` and `npm --version`)
 - **Redis** (optional for development, but recommended for full functionality)
 
@@ -26,23 +26,17 @@ The app will be available at: **http://127.0.0.1:8001** (set `SPINE_DEV_PORT` to
 
 If you prefer to set things up manually or the script doesn't work:
 
-### 1. Set Up Python Virtual Environment
+### 1. Install Python Dependencies
 
 ```bash
-# Create virtual environment (if not already created)
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # On macOS/Linux
-# OR
-venv\Scripts\activate  # On Windows
+uv sync --locked
 ```
 
-### 2. Install Python Dependencies
+This installs exactly what `uv.lock` pins, the same set CI and the production image use, into `.venv` in this checkout (each worktree gets its own).
 
-```bash
-pip install -r requirements.txt
-```
+### 2. Run Python Through uv
+
+Run every Python command as `uv run --locked <command>`. It keeps `.venv` in sync with `uv.lock` first, so a branch that changes dependencies just works.
 
 ### 3. Install Node Dependencies
 
@@ -54,15 +48,15 @@ npm install
 
 ```bash
 cd src
-python manage.py migrate
+uv run --locked python manage.py migrate
 ```
 
-This will create the SQLite database and run all migrations.
+This will create the SQLite database (`src/db/db.sqlite3`) and run all migrations.
 
 ### 5. Create a Superuser (Optional, for admin access)
 
 ```bash
-python manage.py createsuperuser
+uv run --locked python manage.py createsuperuser
 ```
 
 Follow the prompts to create an admin user.
@@ -78,9 +72,8 @@ npm run build-css
 
 **Terminal 2 - Django Server:**
 ```bash
-source venv/bin/activate  # If not already activated
 cd src
-python manage.py runserver
+uv run --locked python manage.py runserver 127.0.0.1:8001  # 8000 is production on the server Mac
 ```
 
 ## Environment Variables (Optional)
@@ -129,25 +122,25 @@ If you want background tasks (notifications, calendar updates) to work:
 
 **Terminal 3 - Celery Worker:**
 ```bash
-source venv/bin/activate
 cd src
-celery -A config worker -l info
+CELERY_REDIS_URL=redis://localhost:6379/5 REDIS_PREFIX=dev: uv run --locked celery -A config worker -l info
 ```
+
+On the server Mac, Redis DB 0 and DB 5 hold old task backlogs in the unprefixed queue. A worker on DB 0, or on DB 5 without its own `REDIS_PREFIX`, would run them all. Give the server the same two variables so its tasks reach this worker.
 
 **Terminal 4 - Celery Beat (for scheduled tasks):**
 ```bash
-source venv/bin/activate
 cd src
-celery -A config beat -l info
+uv run --locked celery -A config beat -l info
 ```
 
 ## Troubleshooting
 
 ### Port Already in Use
 
-If port 8000 is already in use:
+If port 8001 is already in use (8000 is production on the server Mac):
 ```bash
-python manage.py runserver 8001  # Use different port
+uv run --locked python manage.py runserver 127.0.0.1:8002  # Use a different port
 ```
 
 ### CSS Not Updating
@@ -161,15 +154,15 @@ python manage.py runserver 8001  # Use different port
 If you get database errors:
 ```bash
 cd src
-python manage.py migrate  # Run migrations
-python manage.py makemigrations  # Create new migrations if needed
+uv run --locked python manage.py migrate  # Run migrations
+uv run --locked python manage.py makemigrations  # Create new migrations if needed
 ```
 
-### Virtual Environment Issues
+### Python Package Issues
 
 If Python packages aren't found:
-- Make sure virtual environment is activated (`source venv/bin/activate`)
-- Reinstall dependencies: `pip install -r requirements.txt`
+- Run the command through `uv run --locked`, which syncs `.venv` first
+- Or resync by hand: `uv sync --locked`
 
 ### Redis Connection Errors
 
@@ -189,24 +182,27 @@ If Redis isn't running:
 ## Useful Commands
 
 ```bash
+# Everything CI's Fast checks run: ruff, missing migrations, the full test suite
+scripts/check.sh
+
 # Run tests
 cd src
-python manage.py test
+uv run --locked python manage.py test
 
 # Create migrations
-python manage.py makemigrations
+uv run --locked python manage.py makemigrations
 
 # Apply migrations
-python manage.py migrate
+uv run --locked python manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+uv run --locked python manage.py createsuperuser
 
 # Django shell
-python manage.py shell
+uv run --locked python manage.py shell
 
 # Collect static files (production only)
-python manage.py collectstatic
+uv run --locked python manage.py collectstatic
 
 # Build CSS for production
 npm run build-css-prod

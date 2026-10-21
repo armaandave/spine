@@ -16,9 +16,8 @@ npm run build-css &
 CSS_PID=$!
 
 echo "🚀 Starting Django development server..."
-source venv/bin/activate
 cd src
-python manage.py runserver "127.0.0.1:$PORT" &
+uv run --locked python manage.py runserver "127.0.0.1:$PORT" &
 DJANGO_PID=$!
 
 echo "✅ Development servers started!"
