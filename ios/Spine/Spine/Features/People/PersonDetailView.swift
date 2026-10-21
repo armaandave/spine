@@ -866,6 +866,7 @@ struct PersonDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(item.title)")
+                .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

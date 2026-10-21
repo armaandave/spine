@@ -608,6 +608,7 @@ struct CompanyDetailView: View {
                                 ? "View anime \(item.displayTitle)"
                                 : "View \(item.displayTitle)"
                         )
+                        .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -210,6 +210,7 @@ struct SeriesDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(item.displayTitle)")
+                        .prefetchingArtwork(after: item, in: detail.items) { $0.artworkRequest(slot: .tagGrid) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

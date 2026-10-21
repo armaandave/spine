@@ -247,6 +247,14 @@ struct TaggedDiaryView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(item.media.title)")
+                .prefetchingArtwork(after: item, in: viewModel.media) {
+                    MediaArtwork.imageRequest(
+                        url: $0.media.displayPosterURL,
+                        slot: .tagGrid,
+                        mediaType: $0.media.ref.mediaType,
+                        orientation: $0.media.posterOrientation
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

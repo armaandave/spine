@@ -4,7 +4,8 @@ import SwiftUI
 @Observable
 final class StatsMostLoggedViewModel {
     static let pageSize = 48
-    private static let prefetchDistance = 8
+    // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
+    private static let prefetchDistance = ArtworkPrefetch.lookahead
 
     private(set) var items: [StatsMostLoggedItem] = []
     private(set) var totalCount: Int

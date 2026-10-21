@@ -198,6 +198,7 @@ struct ProfileLikesView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(item.title)")
+                .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1089,7 +1090,8 @@ final class ProfileListDetailViewModel {
 
     func loadNextFilteredPageIfNeeded(currentItem: MediaSummary) async {
         guard nextPage != nil, !isLoadingFilteredItems,
-              let thresholdIndex = filteredItems.index(filteredItems.endIndex, offsetBy: -8, limitedBy: filteredItems.startIndex) ?? filteredItems.indices.first,
+              // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
+              let thresholdIndex = filteredItems.index(filteredItems.endIndex, offsetBy: -ArtworkPrefetch.lookahead, limitedBy: filteredItems.startIndex) ?? filteredItems.indices.first,
               let currentIndex = filteredItems.firstIndex(where: { $0.id == currentItem.id }),
               currentIndex >= thresholdIndex else {
             return
@@ -1823,6 +1825,7 @@ struct ProfileListDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .prefetchingArtwork(after: item, in: items) { $0.artworkRequest(slot: .tagGrid) }
                 .task {
                     await viewModel.loadNextFilteredPageIfNeeded(currentItem: item)
                 }
