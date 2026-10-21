@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/ios/feature-status.sh)",
+      "Bash(scripts/check.sh)",
+      "Bash(git fetch origin)",
+      "Bash(git merge --no-ff *)",
+      "Bash(git push origin myapp-main)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run watch *)",
+      "Bash(docker exec spine printenv SPINE_COMMIT_SHA)",
+      "Bash(docker logs --since *)",
+      "Bash(git tag ios-*)",
+      "Bash(git push origin ios-*)",
+      "Bash(git worktree remove .claude/worktrees/*)",
+      "Bash(git branch -d *)",
+      "Bash(git push origin --delete worktree-*)",
+      "Bash(git push origin --delete claude/*)"
+    ]
+  }
+}

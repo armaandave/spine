@@ -104,6 +104,12 @@ final class AppSession {
     }
 
     func start() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--dev-sign-in"), await devSignIn() {
+            return
+        }
+        #endif
+
         let hasTokens: Bool
         do {
             hasTokens = try repositories.auth.hasStoredTokens
@@ -204,6 +210,25 @@ final class AppSession {
             errorMessage = error.localizedDescription
         }
     }
+
+    #if DEBUG
+    /// A Debug build launched with --dev-sign-in signs in as the local backend's dev user, the way Sign In would.
+    /// Any other server answers 404, and the launch then carries on as usual.
+    private func devSignIn() async -> Bool {
+        do {
+            let user = try await repositories.auth.devSignIn()
+            userCache.save(user)
+            signedInEntryPoint = .home
+            state = .signedIn(user)
+            hasFreshProfile = true
+            confirmConnectivity()
+            return true
+        } catch {
+            SessionLog.note("Launch: dev sign-in failed, so the launch carries on as usual")
+            return false
+        }
+    }
+    #endif
 
     func register(username: String, email: String, password: String) async {
         errorMessage = nil

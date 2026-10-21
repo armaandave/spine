@@ -1,0 +1,80 @@
+name: CI
+
+# Every push to any branch runs the checks. A push to myapp-main that passes them
+# deploys production when it changes what the backend is built from
+# (deploy-backend-desk-mac.yml decides).
+on:
+  push:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the older run. Each push to myapp-main gets
+# its own group, so every production commit gets a result and no deploy is cut short.
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/myapp-main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Fast checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      # Pinned to a commit because it is a third-party action.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.12"
+      # Lint, models without a migration, and the test suite on SQLite.
+      - name: scripts/check.sh
+        run: scripts/check.sh
+
+  database:
+    name: Database checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      # Production runs postgres:16-alpine (docker-compose.production.yml).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: spine
+          POSTGRES_USER: spine
+          POSTGRES_PASSWORD: spine-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spine -d spine"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    # Setting DB_HOST switches settings.py from SQLite to Postgres.
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: spine
+      DB_USER: spine
+      DB_PASSWORD: spine-ci
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: "3.12"
+      # What every deploy does when the new container starts (entrypoint.sh).
+      - name: Apply every migration to an empty database
+        run: uv run --locked python manage.py migrate --noinput
+      - name: Tests on Postgres
+        run: uv run --locked python manage.py test --parallel 4 --noinput
+
+  deploy:
+    name: Deploy production
+    needs: [checks, database]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/myapp-main'
+    uses: ./.github/workflows/deploy-backend-desk-mac.yml
+    with:
+      ref: ${{ github.sha }}

@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 import re
 from contextlib import suppress
 
@@ -8,7 +9,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
-from django.db import transaction
+from django.db import connection, transaction
+from django.http import Http404
 from django.utils import timezone
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import status
@@ -316,6 +318,43 @@ class LoginView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         return Response(token_response(serializer.validated_data["user"], request=request))
+
+
+# The passwordless account that dev sign-in logs in as on a local backend.
+DEV_SIGN_IN_USERNAME = "claude"
+
+
+def dev_sign_in_enabled():
+    """Return whether dev sign-in may answer, which it does only on a local dev server.
+
+    All three must hold, and production meets none of them: DEBUG is on, the database
+    is SQLite, and SPINE_DEV_SIGN_IN=1 is set, which only scripts/ios/local-backend.sh
+    does.
+    """
+    return (
+        settings.DEBUG
+        and connection.vendor == "sqlite"
+        and os.environ.get("SPINE_DEV_SIGN_IN") == "1"
+    )
+
+
+class DevSignInView(APIView):
+    """Sign in as the dev user without a password, for testing on a local backend.
+
+    Debug builds launched with --dev-sign-in call it. Anywhere but a local dev server
+    it answers 404, as if it did not exist.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if not dev_sign_in_enabled():
+            raise Http404
+        User = get_user_model()
+        user = User.objects.filter(username=DEV_SIGN_IN_USERNAME).first()
+        if user is None:
+            user = User.objects.create_user(username=DEV_SIGN_IN_USERNAME)
+        return Response(token_response(user, request=request))
 
 
 class RefreshView(APIView):

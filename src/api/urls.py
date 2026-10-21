@@ -2,6 +2,7 @@ from django.urls import path
 
 from api.views.auth import (
     AppleAuthView,
+    DevSignInView,
     LoginView,
     LogoutView,
     PasswordResetConfirmView,
@@ -119,6 +120,7 @@ urlpatterns = [
     path("auth/password-reset/", PasswordResetView.as_view(), name="api-password-reset"),
     path("auth/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="api-password-reset-confirm"),
     path("auth/apple/", AppleAuthView.as_view(), name="api-apple"),
+    path("auth/dev-sign-in/", DevSignInView.as_view(), name="api-dev-sign-in"),
     path("me/", MeView.as_view(), name="api-me"),
     path("me/avatar/", AvatarView.as_view(), name="api-me-avatar"),
     path("me/profile-backdrop/", ProfileBackdropView.as_view(), name="api-me-profile-backdrop"),
