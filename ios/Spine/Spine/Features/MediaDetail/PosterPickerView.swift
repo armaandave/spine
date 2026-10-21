@@ -234,6 +234,9 @@ struct PosterPickerView: View {
                         ) {
                             viewModel.selectedPosterURL = poster.url
                         }
+                        .prefetchingArtwork(after: poster, in: viewModel.filteredPosters) {
+                            MediaArtwork.imageRequest(url: $0.thumbnailUrl ?? $0.url, slot: .pickerGrid)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)

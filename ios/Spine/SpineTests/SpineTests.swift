@@ -1536,6 +1536,38 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryViewModelRequestsTheNextPageOnePrefetchScreenFromTheEnd() async {
+        let repository = ScriptedLibraryTrackingRepository(responses: [
+            "movie:": PagedResponse(
+                count: 21,
+                next: "https://spine.test/api/v1/tracking/?media_type=movie&page=2",
+                previous: nil,
+                results: (1 ... 20).map { libraryItem(id: "\($0)", title: "Movie \($0)") }
+            ),
+            "movie:2": PagedResponse(
+                count: 21,
+                next: nil,
+                previous: "https://spine.test/api/v1/tracking/?media_type=movie",
+                results: [libraryItem(id: "21", title: "Movie 21")]
+            )
+        ])
+        let viewModel = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: repository,
+            onUnauthorized: {}
+        )
+        await viewModel.reload()
+
+        // 17 items from the end is still beyond the artwork look-ahead.
+        await viewModel.loadNextPageIfNeeded(currentItem: viewModel.items[3])
+        XCTAssertEqual(repository.requests.count, 1)
+
+        await viewModel.loadNextPageIfNeeded(currentItem: viewModel.items[20 - ArtworkPrefetch.lookahead])
+        XCTAssertEqual(repository.requests.map(\.page), [nil, "2"])
+        XCTAssertEqual(viewModel.items.count, 21)
+    }
+
+    @MainActor
     func testLibraryViewModelIgnoresStaleMediaTypeResponses() async {
         let repository = DelayedLibraryTrackingRepository(responses: [
             "tv": (
