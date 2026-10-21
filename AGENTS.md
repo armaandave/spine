@@ -293,7 +293,7 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
 ## 17) App Store Connect
 
 - Spine's App Store Connect app is "Spine Diary", app ID `6825566855` (bundle ID `com.armaan.Spine`, `K8A623RZVV`). The internal TestFlight group "Me" is `4372d914-22d0-4f90-96dd-27ed38e160aa`, with Armaan as its tester. Check it with `ASC_APP_ID=6825566855 node ~/.appstoreconnect/asc.mjs status`.
-- Xcode Cloud isn't set up for Spine yet; its first-time setup happens in Xcode (Integrate → Create Workflow). Until `asc.mjs status` lists a Spine build, pushes make no TestFlight builds: skip that step in `scripts/ios/SHIP.md` and say so.
+- Xcode Cloud's workflow "Default" (`402D425F-065C-42A4-87AB-E95241728CC8`) archives `Spine` when a push to `myapp-main` touches `ios/Spine/Spine/`, `ios/Spine/Spine.xcodeproj/` or `ios/Spine/Configs/`, and uploads it to TestFlight; "Me" gets every build. The app is iPhone-only: an iPad target that supports only some orientations fails Apple's upload check.
 - `node ~/.appstoreconnect/asc.mjs` reads Pylon's app by default; `ASC_APP_ID=<id>` points it at another app. `status` and `get` are reads. `post` and `patch` write: ask first, except where `scripts/ios/SHIP.md` says the ship request covers it.
 - The tool signs requests with the API key in `~/.appstoreconnect/private_keys/`. Never copy, print, or commit that key.
 - Xcode Cloud assigns build numbers when it uploads. Tag the commit behind each TestFlight build, for example `ios-1.0-build3`.
