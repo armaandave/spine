@@ -100,7 +100,12 @@ class ExternalRatingPerformanceTests(TestCase):
             timings["rating:imdb"] * 1000,
             (timings["rating:imdb"] - timings["title"]) * 1000,
         )
-        self.assertLessEqual(timings["rating:imdb"] - timings["title"], 0.05)
+        # Relative to the title sort in the same run, so the bound holds on any machine:
+        # CI's shared runners are about twice as slow as the server Mac, where this was
+        # first calibrated as an absolute 50 ms. A rating sort that loads every row into
+        # Python runs many times slower than the title sort; one that queries per row
+        # already fails the query-count check above.
+        self.assertLess(timings["rating:imdb"], 3 * timings["title"])
 
     def test_sqlite_plan_uses_exact_rating_index(self):
         queryset = Movie.objects.filter(user=self.user)
