@@ -12,10 +12,20 @@ protocol AuthRepository {
     func refresh() async throws
     /// Ends the session on this device at once. Revoking it on the server carries on in the background.
     func logout() async
+    #if DEBUG
+    /// Signs in as a local backend's passwordless dev user (`scripts/ios/local-backend.sh`).
+    func devSignIn() async throws -> AuthUser
+    #endif
 }
 
 extension AuthRepository {
     var storedUserID: Int? { nil }
+
+    #if DEBUG
+    func devSignIn() async throws -> AuthUser {
+        throw APIError.httpStatus(404, nil)
+    }
+    #endif
 }
 
 protocol MediaRepository {
@@ -519,6 +529,12 @@ struct APIAuthRepository: AuthRepository {
     func logout() async {
         await service.logout()
     }
+
+    #if DEBUG
+    func devSignIn() async throws -> AuthUser {
+        try await service.devSignIn()
+    }
+    #endif
 }
 
 struct APIMediaRepository: MediaRepository {

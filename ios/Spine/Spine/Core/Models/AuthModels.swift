@@ -31,6 +31,11 @@ struct RegisterRequest: Encodable {
     let passwordConfirm: String
 }
 
+#if DEBUG
+/// The dev sign-in body is empty: a local backend signs in its one dev user.
+struct DevSignInRequest: Encodable {}
+#endif
+
 struct RefreshRequest: Encodable {
     let refresh: String
 }

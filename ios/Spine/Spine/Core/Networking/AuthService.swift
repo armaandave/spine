@@ -31,6 +31,16 @@ struct AuthService {
         return response.user
     }
 
+    #if DEBUG
+    /// Signs in as the passwordless dev user of a local backend (`scripts/ios/local-backend.sh`), for Debug
+    /// builds launched with --dev-sign-in. Every other server answers 404.
+    func devSignIn() async throws -> AuthUser {
+        let response: AuthTokenResponse = try await client.post("/auth/dev-sign-in/", body: DevSignInRequest())
+        try await storeTokens(from: response)
+        return response.user
+    }
+    #endif
+
     /// The launch-time refresh. Every refresh rotates the refresh token, so it is skipped while the stored access
     /// token is still good for a couple of minutes; a token that can't be read or decoded is refreshed as usual.
     ///
