@@ -28,10 +28,12 @@ CLAUDE.md
 requests.http
 TODO.txt
 .codex
+.claude/worktrees/
 .cache
 *.xcuserstate
 xcuserdata/
 ios/.derivedData
+ios/.derivedData.log
 
 .build/
 
