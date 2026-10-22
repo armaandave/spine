@@ -1314,7 +1314,8 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators
         )
     }
 
@@ -1337,7 +1338,8 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators
         )
     }
 }
@@ -1371,9 +1373,12 @@ struct ProfileListDetailView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    /// The featured card the list was opened from, for its metadata, live banner and source link.
+    private let featured: FeaturedListCard?
 
     init(
         listId: Int,
+        featured: FeaturedListCard? = nil,
         profileRepository: ProfileRepository,
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
@@ -1411,6 +1416,7 @@ struct ProfileListDetailView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
+        self.featured = featured
         _viewModel = State(initialValue: ProfileListDetailViewModel(
             listId: listId,
             listRepository: listRepository,
@@ -1643,7 +1649,9 @@ struct ProfileListDetailView: View {
                 }
                 }
 
+                if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
                 Menu {
+                    if list.canEdit(by: currentUserId) {
                     Button("Edit List", systemImage: "slider.horizontal.3") {
                         Task {
                             if await viewModel.loadAllItemsForEditing(),
@@ -1652,14 +1660,18 @@ struct ProfileListDetailView: View {
                             }
                         }
                     }
+                    }
+                    if list.canDelete(by: currentUserId) {
                     Button("Delete List", systemImage: "trash", role: .destructive) {
                         isDeleteAlertPresented = true
+                    }
                     }
                 } label: {
                     ProfileListCircleIconLabel(systemName: "ellipsis")
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isSaving)
+                }
             }
         }
     }
@@ -1682,6 +1694,10 @@ struct ProfileListDetailView: View {
         let isOwnerCurrentUser = list.owner.id == currentUserId
 
         return VStack(alignment: .leading, spacing: 7) {
+            if let featured {
+                FeaturedListLiveBanner(card: featured)
+            }
+
             NavigationLink {
                 ProfileView(
                     profileRepository: profileRepository,
@@ -1781,6 +1797,11 @@ struct ProfileListDetailView: View {
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(4)
                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
+            }
+
+            if let featured {
+                FeaturedListDetailMeta(card: featured)
+                    .padding(.top, 2)
             }
         }
     }

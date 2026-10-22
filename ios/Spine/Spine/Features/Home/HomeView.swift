@@ -295,10 +295,10 @@ struct HomeView: View {
             .frame(minHeight: 360)
         } else if viewModel.isLoading, viewModel.profile == nil {
             VStack(alignment: .leading, spacing: 22) {
-                HomeSection(title: "In Progress") {
+                SpineSection(title: "In Progress") {
                     HomeInProgressSkeleton()
                 }
-                HomeSection(title: "Activity") {
+                SpineSection(title: "Activity") {
                     ActivityFeedSkeleton()
                 }
             }
@@ -309,7 +309,7 @@ struct HomeView: View {
     }
 
     private var inProgressSection: some View {
-        HomeSection(title: "In Progress") {
+        SpineSection(title: "In Progress") {
             Group {
                 if viewModel.isLoadingInProgress, viewModel.inProgressItems.isEmpty {
                     HomeInProgressSkeleton()
@@ -332,8 +332,10 @@ struct HomeView: View {
                         onSelectTab(.search)
                     }
                 } else {
-                    HomeInProgressRail(items: viewModel.inProgressItems) { item in
-                        selectedRef = item.media.ref
+                    SpineRail(items: viewModel.inProgressItems) { item in
+                        HomeInProgressPoster(item: item) {
+                            selectedRef = item.media.ref
+                        }
                     }
                 }
             }
@@ -342,7 +344,7 @@ struct HomeView: View {
     }
 
     private var activitySection: some View {
-        HomeSection(title: "Activity") {
+        SpineSection(title: "Activity") {
             Group {
                 if viewModel.isLoadingActivity, viewModel.activityItems.isEmpty {
                     ActivityFeedSkeleton()
@@ -543,40 +545,6 @@ private struct HomeAvatar: View {
         .clipShape(Circle())
         .overlay {
             Circle().stroke(.white.opacity(0.12), lineWidth: 1)
-        }
-    }
-}
-
-private struct HomeSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title.uppercased())
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(.white)
-                .tracking(0.8)
-
-            content()
-        }
-    }
-}
-
-private struct HomeInProgressRail: View {
-    let items: [LibraryItem]
-    let action: (LibraryItem) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(alignment: .top, spacing: 12) {
-                ForEach(items) { item in
-                    HomeInProgressPoster(item: item) {
-                        action(item)
-                    }
-                }
-            }
-            .padding(.trailing, 14)
         }
     }
 }

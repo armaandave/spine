@@ -201,6 +201,8 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
     let items: [MediaSummary]
     let people: [PersonListEntry]
     let completion: CompletionProgress?
+    /// Users the owner lets edit the list.
+    let collaborators: [UserSummary]
 
     init(
         id: Int,
@@ -220,7 +222,8 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         likeCount: Int,
         items: [MediaSummary],
         people: [PersonListEntry] = [],
-        completion: CompletionProgress? = nil
+        completion: CompletionProgress? = nil,
+        collaborators: [UserSummary] = []
     ) {
         self.id = id
         self.name = name
@@ -240,6 +243,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         self.items = items
         self.people = people
         self.completion = completion
+        self.collaborators = collaborators
     }
 
     enum CodingKeys: String, CodingKey {
@@ -261,6 +265,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         case items
         case people
         case completion
+        case collaborators
     }
 
     init(from decoder: Decoder) throws {
@@ -284,6 +289,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         items = try container.decodeIfPresent([MediaSummary].self, forKey: .items) ?? []
         people = try container.decodeIfPresent([PersonListEntry].self, forKey: .people) ?? []
         completion = try container.decodeIfPresent(CompletionProgress.self, forKey: .completion)
+        collaborators = (try? container.decodeIfPresent([UserSummary].self, forKey: .collaborators)) ?? []
     }
 }
 
