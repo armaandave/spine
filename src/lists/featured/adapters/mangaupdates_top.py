@@ -2,12 +2,14 @@
 
 Params: ``{"orderby": "rating", "type": ["Manga"], "limit": 50}``. One POST to
 ``/v1/series/search`` (no key). Adult, Hentai and Doujinshi are excluded unless
-``MAL_NSFW`` is on, like Spine's MangaUpdates search.
+``MAL_NSFW`` is on, like Spine's MangaUpdates search. ``"min_entries"`` is the series a
+complete page has (the limit); fewer fail the run.
 """
 
 from django.conf import settings
 
 from app.providers import mangaupdates
+from lists.featured.adapters import _rows
 from lists.featured.helpers import post_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -33,6 +35,7 @@ def validate(definition):
     if set(definition.media_types) != {"manga"}:
         msg = "MangaUpdates lists are manga lists"
         raise ValueError(msg)
+    _rows.validate(definition, limit)
 
 
 def _year(value):
@@ -72,6 +75,7 @@ def fetch(definition):
                 image=image,
             ),
         )
+    _rows.require(definition, len(entries), "MangaUpdates' series search")
     return FetchResult(entries=entries)
 
 

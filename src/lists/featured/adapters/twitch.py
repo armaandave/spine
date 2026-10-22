@@ -6,12 +6,13 @@ made from ``IGDB_ID``/``IGDB_SECRET``, which are Twitch client credentials.
 Twitch categories that aren't games (Just Chatting, IRL, Music, Slots…) are dropped;
 the rest are ranked 1..n. Most rows carry an ``igdb_id``. For the rest IGDB's
 ``external_games`` (Twitch source) is tried, then the resolver's strict title match.
+``"min_entries"`` is the fewest games a complete response keeps; fewer fail the run.
 """
 
 import re
 
 from app.providers import igdb
-from lists.featured.adapters import _igdb_games
+from lists.featured.adapters import _igdb_games, _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -74,6 +75,7 @@ def validate(definition):
     if tuple(definition.media_types) != ("game",):
         msg = "Twitch top games is a game list"
         raise ValueError(msg)
+    _rows.validate(definition, definition.params.get("limit", MAX_LIMIT))
 
 
 def split_year(name):
@@ -116,6 +118,7 @@ def fetch(definition):
         msg = "Twitch returned no top games."
         raise AdapterError(msg)
     games = [row for row in rows if str(row.get("id") or "") not in NON_GAMES]
+    _rows.require(definition, len(games), "Twitch's top games")
     with_igdb = [str(row["igdb_id"]) for row in games if str(row.get("igdb_id") or "").strip()]
     without = [str(row["id"]) for row in games if not str(row.get("igdb_id") or "").strip()]
     by_igdb = _igdb_games.games_by_ids(with_igdb)

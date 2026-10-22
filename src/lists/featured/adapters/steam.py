@@ -10,14 +10,15 @@ Params:
 Optional ``"limit"`` (at most and by default 100). Only games are kept: hardware, software, DLC,
 bundles, packages and preorders are dropped, and the rest are ranked 1..n. Appids
 are matched to IGDB in one batched ``external_games`` request; an appid IGDB doesn't
-know keeps its ``steam`` id for the resolver.
+know keeps its ``steam`` id for the resolver. ``"min_entries"`` is the fewest games a
+complete chart keeps (about 90 of Steam's 100 rows are games); fewer fail the run.
 """
 
 import json
 from datetime import UTC, datetime
 
 from app.providers import igdb
-from lists.featured.adapters import _igdb_games
+from lists.featured.adapters import _igdb_games, _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -51,6 +52,7 @@ def validate(definition):
     if tuple(definition.media_types) != ("game",):
         msg = "Steam charts are game lists"
         raise ValueError(msg)
+    _rows.validate(definition, params.get("limit", DEFAULT_LIMIT))
 
 
 def is_game(row):
@@ -124,7 +126,9 @@ def fetch(definition):
     else:
         day = _day(response.get("rollup_date"))
         edition = f"{day:%b} {day.day}, {day.year}" if day else ""
-    return FetchResult(entries=entries_from_rows(rows, games, limit), edition=edition)
+    entries = entries_from_rows(rows, games, limit)
+    _rows.require(definition, len(entries), f"Steam's {chart.replace('_', ' ')} chart")
+    return FetchResult(entries=entries, edition=edition)
 
 
 ADAPTER = Adapter(key="steam", fetch=fetch, validate=validate)

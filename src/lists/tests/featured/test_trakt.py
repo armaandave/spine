@@ -5,14 +5,14 @@ from django.test import SimpleTestCase, override_settings
 from lists.featured.adapters import ADAPTERS, trakt
 from lists.featured.registry import get
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import api_routes, load_fixture, make_definition
+from lists.tests.featured.helpers import api_routes, few_rows, load_fixture, make_definition
 
 
 @override_settings(TRAKT_API="test-trakt-key")
 class TraktAdapterTests(SimpleTestCase):
     def test_box_office_sends_trakt_headers_and_ids(self):
         with api_routes({"api.trakt.tv/movies/boxoffice": load_fixture("trakt", "boxoffice.json")}) as api:
-            result = ADAPTERS["trakt"].fetch(get("trakt-weekend-box-office"))
+            result = ADAPTERS["trakt"].fetch(few_rows(get("trakt-weekend-box-office")))
         headers = api.call_args.kwargs["headers"]
         self.assertEqual((headers["trakt-api-key"], headers["trakt-api-version"]), ("test-trakt-key", "2"))
         self.assertIsNone(api.call_args.kwargs["params"])
@@ -25,7 +25,7 @@ class TraktAdapterTests(SimpleTestCase):
 
     def test_trending_shows(self):
         with api_routes({"api.trakt.tv/shows/trending": load_fixture("trakt", "trending_shows.json")}) as api:
-            result = ADAPTERS["trakt"].fetch(get("trakt-trending-shows"))
+            result = ADAPTERS["trakt"].fetch(few_rows(get("trakt-trending-shows")))
         self.assertEqual(api.call_args.kwargs["params"], {"limit": 20})
         self.assertEqual([entry.key for entry in result.entries], ["tmdb:tv:213375", "tmdb:tv:95480"])
         self.assertEqual((result.entries[0].note, result.edition), ("", ""))
@@ -37,9 +37,9 @@ class TraktAdapterTests(SimpleTestCase):
 
     def test_failures(self):
         with api_routes({"api.trakt.tv": []}), self.assertRaisesMessage(AdapterError, "no movies"):
-            ADAPTERS["trakt"].fetch(get("trakt-weekend-box-office"))
+            ADAPTERS["trakt"].fetch(few_rows(get("trakt-weekend-box-office")))
         with override_settings(TRAKT_API=""), self.assertRaisesMessage(AdapterError, "TRAKT_API"):
-            ADAPTERS["trakt"].fetch(get("trakt-weekend-box-office"))
+            ADAPTERS["trakt"].fetch(few_rows(get("trakt-weekend-box-office")))
 
     def test_validate(self):
         bad = (

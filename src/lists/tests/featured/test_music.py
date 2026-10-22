@@ -12,7 +12,7 @@ from lists.featured.adapters import ADAPTERS, _music, apple_music, official_char
 from lists.featured.definitions import music
 from lists.featured.engine import run
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import FeaturedTestCase, api_routes, load_fixture, make_definition
+from lists.tests.featured.helpers import FeaturedTestCase, api_routes, few_rows, load_fixture, make_definition
 
 TAKE_CARE_RELEASE = "1e268632-6b5a-4592-bd60-64be3276d104"
 TAKE_CARE_RG = "0f2ef5ab-cb0b-3b0b-b2ea-cdb3a4e4ff85"
@@ -20,7 +20,7 @@ ZACH_RG = "8a8f1e0c-1b31-4f39-9d2c-4a1d5d4f0001"
 
 
 def definition(key):
-    return registry.get(key) or next(item for item in music.DEFINITIONS if item.key == key)
+    return few_rows(registry.get(key) or next(item for item in music.DEFINITIONS if item.key == key))
 
 
 def series_definition(**params):

@@ -7,7 +7,14 @@ from lists.featured.adapters import ADAPTERS, netflix
 from lists.featured.adapters import _tmdb_match as tmdb_match
 from lists.featured.registry import get
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import FeaturedTestCase, api_routes, load_fixture, make_definition, no_overrides
+from lists.tests.featured.helpers import (
+    FeaturedTestCase,
+    api_routes,
+    few_rows,
+    load_fixture,
+    make_definition,
+    no_overrides,
+)
 
 
 def tmdb_search(results_by_query):
@@ -101,7 +108,7 @@ class NetflixWeeklyTests(FeaturedTestCase):
             "/search/": tmdb_search(searches),
         }
         with no_overrides(), api_routes(routes) as api:
-            return ADAPTERS["netflix"].fetch(get(key)), api
+            return ADAPTERS["netflix"].fetch(few_rows(get(key))), api
 
     def test_latest_week_of_one_category_with_tmdb_ids(self):
         result_, _ = self.fetch("netflix-top-10-films-english")
@@ -145,7 +152,7 @@ class NetflixWeeklyTests(FeaturedTestCase):
                 "/search/": tmdb_search(SEARCHES),
             }
             with api_routes(routes):
-                result_ = ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+                result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         self.assertEqual(result_.entries[0].key, "t:animals|")
         self.assertEqual(result_.entries[1].ids, {"tmdb": "425"})
 
@@ -155,23 +162,23 @@ class NetflixWeeklyTests(FeaturedTestCase):
             "/search/": requests.ConnectionError("down"),
         }
         with no_overrides(), api_routes(routes):
-            result_ = ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+            result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         self.assertEqual([entry.key for entry in result_.entries], ["t:animals|", "t:ice age|"])
 
     def test_missing_columns_or_category_raise(self):
         with api_routes({"all-weeks-global.tsv": "week\tcategory\n2026-10-18\tFilms (English)\n"}):
             with self.assertRaisesMessage(AdapterError, "missing columns"):
-                ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+                ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
         with api_routes({"all-weeks-global.tsv": header + "\n"}), self.assertRaisesMessage(AdapterError, "no weekly rows"):
-            ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
 
     def test_runs_through_the_engine(self):
         routes = {
             "all-weeks-global.tsv": load_fixture("netflix", "weekly.tsv"),
             "/search/": tmdb_search(SEARCHES),
         }
-        definition = get("netflix-top-10-films-english")
+        definition = few_rows(get("netflix-top-10-films-english"))
         with no_overrides(), api_routes(routes):
             fetched = ADAPTERS["netflix"].fetch(definition)
         run = self.run_list(definition, fetch_result=fetched)
@@ -192,7 +199,7 @@ class NetflixMostPopularTests(FeaturedTestCase):
         }
         routes = {"most-popular.tsv": load_fixture("netflix", "most-popular.tsv"), "/search/": tmdb_search(searches)}
         with no_overrides(), api_routes(routes):
-            fetched = ADAPTERS["netflix"].fetch(get("netflix-most-popular-tv"))
+            fetched = ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-tv")))
         self.assertEqual(
             [(entry.rank, entry.key, entry.note) for entry in fetched.entries],
             [

@@ -10,7 +10,7 @@ from lists.featured import registry
 from lists.featured.adapters import ADAPTERS, apple_books, nyt_overview, read_with_jenna, reeses_book_club
 from lists.featured.definitions import books_live
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import api_routes, load_fixture
+from lists.tests.featured.helpers import api_routes, few_rows, load_fixture
 
 
 def http_error(status):
@@ -45,7 +45,7 @@ class NYTOverviewTests(SimpleTestCase):
         cache.clear()
 
     def fetch(self, slug):
-        return ADAPTERS["nyt_overview"].fetch(registry.get(f"nyt-{slug}"))
+        return ADAPTERS["nyt_overview"].fetch(few_rows(registry.get(f"nyt-{slug}")))
 
     def test_weekly_chart_isbns_notes_and_edition(self):
         with api_routes({"/lists/overview.json": load_fixture("nyt_overview", "overview.json")}) as mocked:
@@ -102,7 +102,7 @@ class NYTOverviewTests(SimpleTestCase):
 class AppleBooksTests(SimpleTestCase):
     def fetch(self, routes):
         with api_routes(routes), patch.object(apple_books, "RETRY_SECONDS", 0):
-            return ADAPTERS["apple_books"].fetch(registry.get("apple-books-top-paid"))
+            return ADAPTERS["apple_books"].fetch(few_rows(registry.get("apple-books-top-paid")))
 
     def test_cover_isbns_titles_and_artwork(self):
         result = self.fetch({"/us/books/top-paid/50/books.json": load_fixture("apple_books", "top_paid.json")})
@@ -150,7 +150,7 @@ class HardcoverTrendingTests(SimpleTestCase):
             return load_fixture("hardcover_trending", name)
 
         with api_routes({"hardcover.app": respond}) as mocked:
-            result = ADAPTERS["hardcover_trending"].fetch(registry.get("hardcover-trending"))
+            result = ADAPTERS["hardcover_trending"].fetch(few_rows(registry.get("hardcover-trending")))
         self.assertIn("duration: month", mocked.call_args_list[0].kwargs["params"]["query"])
         self.assertEqual(mocked.call_args_list[1].kwargs["params"]["variables"], {"ids": [446681, 2769384, 427578]})
         # 2769384 is missing from the books response (merged), so it is skipped; ranks keep their places.
@@ -159,16 +159,16 @@ class HardcoverTrendingTests(SimpleTestCase):
 
     def test_graphql_errors(self):
         with api_routes({"hardcover.app": {"errors": [{"message": "bad"}]}}), self.assertRaises(AdapterError):
-            ADAPTERS["hardcover_trending"].fetch(registry.get("hardcover-trending"))
+            ADAPTERS["hardcover_trending"].fetch(few_rows(registry.get("hardcover-trending")))
         with api_routes({"hardcover.app": {"data": {"books_trending": {"ids": [], "error": None}}}}):
             with self.assertRaisesRegex(AdapterError, "no trending"):
-                ADAPTERS["hardcover_trending"].fetch(registry.get("hardcover-trending"))
+                ADAPTERS["hardcover_trending"].fetch(few_rows(registry.get("hardcover-trending")))
 
 
 class OpenLibraryTrendingTests(SimpleTestCase):
     def test_works_become_editions(self):
         with api_routes({"/trending/daily.json": load_fixture("openlibrary_trending", "daily.json")}) as mocked:
-            result = ADAPTERS["openlibrary_trending"].fetch(registry.get("openlibrary-trending-daily"))
+            result = ADAPTERS["openlibrary_trending"].fetch(few_rows(registry.get("openlibrary-trending-daily")))
         self.assertEqual(mocked.call_args.kwargs["params"], {"limit": 50})
         cover, first_edition, none = result.entries
         self.assertEqual(cover.ids, {"olid": "OL36647151M"})
@@ -179,14 +179,14 @@ class OpenLibraryTrendingTests(SimpleTestCase):
 
     def test_empty_response_fails(self):
         with api_routes({"/trending/weekly.json": {"works": []}}), self.assertRaises(AdapterError):
-            ADAPTERS["openlibrary_trending"].fetch(registry.get("openlibrary-trending-weekly"))
+            ADAPTERS["openlibrary_trending"].fetch(few_rows(registry.get("openlibrary-trending-weekly")))
 
 
 @override_settings(MAL_API="test-mal", MAL_NSFW=False)
 class MALMangaTests(SimpleTestCase):
     def test_ranking_with_mal_ids(self):
         with api_routes({"/manga/ranking": load_fixture("mal_manga", "ranking_manga.json")}) as mocked:
-            result = ADAPTERS["mal_manga"].fetch(registry.get("mal-top-manga"))
+            result = ADAPTERS["mal_manga"].fetch(few_rows(registry.get("mal-top-manga")))
         kwargs = mocked.call_args.kwargs
         self.assertEqual(kwargs["headers"]["X-MAL-CLIENT-ID"], "test-mal")
         self.assertEqual((kwargs["params"]["ranking_type"], kwargs["params"]["limit"]), ("manga", 50))
@@ -198,14 +198,14 @@ class MALMangaTests(SimpleTestCase):
 
     def test_errors(self):
         with api_routes({"/manga/ranking": http_error(403)}), self.assertRaisesRegex(AdapterError, "HTTP 403"):
-            ADAPTERS["mal_manga"].fetch(registry.get("mal-most-popular-manga"))
+            ADAPTERS["mal_manga"].fetch(few_rows(registry.get("mal-most-popular-manga")))
 
 
 @override_settings(MAL_NSFW=False)
 class MangaUpdatesTopTests(SimpleTestCase):
     def test_rating_order_with_ids(self):
         with api_routes({"/series/search": load_fixture("mangaupdates_top", "search_rating.json")}) as mocked:
-            result = ADAPTERS["mangaupdates_top"].fetch(registry.get("mangaupdates-top-rated"))
+            result = ADAPTERS["mangaupdates_top"].fetch(few_rows(registry.get("mangaupdates-top-rated")))
         body = mocked.call_args.kwargs["params"]
         self.assertEqual((body["orderby"], body["type"], body["perpage"]), ("rating", ["Manga"], 50))
         self.assertIn("Hentai", body["exclude_genre"])
@@ -217,7 +217,7 @@ class ReesesBookClubTests(SimpleTestCase):
     def test_picks_newest_first_with_authors_and_labels(self):
         page = load_fixture("reeses_book_club", "our-picks.html")
         with api_routes({"reesesbookclub.com": lambda url, params: page}), patch.object(reeses_book_club, "MIN_PICKS", 2):
-            result = ADAPTERS["reeses_book_club"].fetch(registry.get("reeses-book-club"))
+            result = ADAPTERS["reeses_book_club"].fetch(few_rows(registry.get("reeses-book-club")))
         self.assertEqual(
             [(entry.rank, entry.title, entry.creator, entry.note) for entry in result.entries],
             [
@@ -230,14 +230,14 @@ class ReesesBookClubTests(SimpleTestCase):
 
     def test_a_changed_layout_fails_instead_of_emptying_the_list(self):
         with api_routes({"reesesbookclub.com": lambda url, params: "<html></html>"}), self.assertRaises(AdapterError):
-            ADAPTERS["reeses_book_club"].fetch(registry.get("reeses-book-club"))
+            ADAPTERS["reeses_book_club"].fetch(few_rows(registry.get("reeses-book-club")))
 
 
 class ReadWithJennaTests(SimpleTestCase):
     def test_months_titles_authors_and_link_isbns(self):
         page = load_fixture("read_with_jenna", "list.html")
         with api_routes({"today.com": lambda url, params: page}), patch.object(read_with_jenna, "MIN_PICKS", 2):
-            result = ADAPTERS["read_with_jenna"].fetch(registry.get("read-with-jenna"))
+            result = ADAPTERS["read_with_jenna"].fetch(few_rows(registry.get("read-with-jenna")))
         self.assertEqual(result.edition, "October 2026")
         self.assertEqual(
             [(entry.note, entry.title, entry.creator, entry.isbns) for entry in result.entries],

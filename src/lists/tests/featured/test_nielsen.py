@@ -1,7 +1,14 @@
 from lists.featured.adapters import ADAPTERS, nielsen
 from lists.featured.registry import get
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import FeaturedTestCase, api_routes, load_fixture, make_definition, no_overrides
+from lists.tests.featured.helpers import (
+    FeaturedTestCase,
+    api_routes,
+    few_rows,
+    load_fixture,
+    make_definition,
+    no_overrides,
+)
 from lists.tests.featured.test_netflix import result, tmdb_search
 
 SEARCHES = {
@@ -19,7 +26,7 @@ class NielsenTests(FeaturedTestCase):
     def fetch(self, key):
         routes = {"nielsen.com/data-center/top-ten": load_fixture("nielsen", "top10.html"), "/search/": tmdb_search(SEARCHES)}
         with no_overrides(), api_routes(routes):
-            return ADAPTERS["nielsen"].fetch(get(key))
+            return ADAPTERS["nielsen"].fetch(few_rows(get(key)))
 
     def test_overall_chart_sets_media_types_per_entry(self):
         fetched = self.fetch("nielsen-streaming-top-10")
@@ -40,7 +47,7 @@ class NielsenTests(FeaturedTestCase):
     def test_page_without_streaming_tables_raises(self):
         with api_routes({"nielsen.com": "<html><table><tr><th>Program</th></tr></table></html>"}):
             with self.assertRaisesMessage(AdapterError, "no streaming overall table"):
-                ADAPTERS["nielsen"].fetch(get("nielsen-streaming-top-10"))
+                ADAPTERS["nielsen"].fetch(few_rows(get("nielsen-streaming-top-10")))
 
     def test_validate(self):
         with self.assertRaises(ValueError):

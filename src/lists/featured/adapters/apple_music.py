@@ -5,12 +5,14 @@ Params: ``{"country": "us", "limit": 100}``.
 Each album is matched to a MusicBrainz release group through the Apple Music URL
 relationships MusicBrainz editors add to releases; albums without one fall back to
 a strict release-group search (title without edition markers, artist, year).
+``"min_entries"`` is the fewest albums a complete feed has; fewer fail the run before
+any MusicBrainz lookup.
 """
 
 import time
 from datetime import datetime
 
-from lists.featured.adapters import _music
+from lists.featured.adapters import _music, _rows
 from lists.featured.helpers import get_json
 from lists.featured.text import parse_year
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
@@ -33,6 +35,7 @@ def validate(definition):
     if set(definition.media_types) != {"music"}:
         msg = "Apple Music charts hold music"
         raise ValueError(msg)
+    _rows.validate(definition, definition.params.get("limit", 100))
 
 
 def _feed(country, limit):
@@ -70,6 +73,7 @@ def fetch(definition):
     if not albums:
         msg = "Apple Music returned no albums."
         raise AdapterError(msg)
+    _rows.require(definition, len(albums), f"Apple Music's {country} chart")
     by_url = _music.release_groups_for_urls(
         url for album in albums for url in album_urls(album["id"], country)
     )

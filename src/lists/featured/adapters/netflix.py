@@ -14,6 +14,10 @@ Categories: "Films (English)", "Films (Non-English)", "TV (English)",
 (``_tmdb_match``): TV tries the show title without ": Season 2" or ": Limited Series",
 then the series name from ``season_title``; the most popular exact match in the
 category's language (English or not) wins.
+
+``"min_entries"`` is the rows a complete chart has: 10 for the latest week of a weekly
+category, 10 per category for most-popular. Fewer fail the run, so a file caught
+mid-update never shrinks a list.
 """
 
 import csv
@@ -21,6 +25,7 @@ import io
 import re
 from datetime import date, timedelta
 
+from lists.featured.adapters import _rows
 from lists.featured.adapters._tmdb_match import with_tmdb_match
 from lists.featured.helpers import get_text
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
@@ -152,6 +157,7 @@ def validate(definition):
     if not media_types <= set(definition.media_types):
         msg = f"the categories hold {sorted(media_types)}, so media_types must include them"
         raise ValueError(msg)
+    _rows.validate(definition)
 
 
 def _entry(definition, rank, row, max_year):
@@ -185,6 +191,7 @@ def _weekly(definition, rows):
         raise AdapterError(msg)
     week = max(row["week"] for row in rows)
     rows = sorted((row for row in rows if row["week"] == week), key=lambda row: _int(row["weekly_rank"]) or 99)
+    _rows.require(definition, len(rows), f"Netflix's {category} week of {week}")
     year = int(week[:4]) if week[:4].isdigit() else None
     entries = [
         _entry(definition, _int(row["weekly_rank"]), row, year + 1 if year else None)
@@ -199,6 +206,8 @@ def _most_popular(definition, rows):
     if not rows:
         msg = f"Netflix has no most-popular rows for {categories}."
         raise AdapterError(msg)
+    for category in categories:
+        _rows.require(definition, sum(row["category"] == category for row in rows), f"Netflix's most-popular {category}")
     rows.sort(key=lambda row: -(_int(row["views_first_91_days"]) or 0))
     entries, seen = [], set()
     for row in rows:

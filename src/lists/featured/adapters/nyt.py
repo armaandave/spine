@@ -3,12 +3,14 @@
 Params: ``{"slug": "combined-print-and-e-book-fiction", "fallback_name": "…"}``, plus
 ``"monthly": True`` for charts NYT now publishes monthly (the edition reads "October 2026").
 Entries carry every ISBN the chart lists, so the resolver tries Hardcover then Open
-Library per ISBN before a strict title + author search.
+Library per ISBN before a strict title + author search. ``"min_entries"`` is the
+fewest books a complete chart has; fewer fail the run.
 """
 
 from datetime import date
 
 from app.providers import nytbooks
+from lists.featured.adapters import _rows
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
 
@@ -21,6 +23,7 @@ def validate(definition):
     if set(definition.media_types) != {"book"}:
         msg = "NYT charts are book lists"
         raise ValueError(msg)
+    _rows.validate(definition)
 
 
 def _note(book):
@@ -84,6 +87,7 @@ def fetch(definition):
         )
     except nytbooks.NYTBooksError as error:
         raise AdapterError(str(error)) from None
+    _rows.require(definition, len(chart.get("books") or ()), f"NYT's {params['slug']} chart")
     return fetch_result_from_chart(chart, monthly=bool(params.get("monthly")))
 
 

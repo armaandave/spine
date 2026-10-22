@@ -6,12 +6,14 @@ ISBN-13 (``…/9781250412584.jpg/100x152bb.png``); a filename that validates as 
 ISBN-13 is used as one, and every entry also carries its title and author for the
 strict title search. The feed's ``releaseDate`` is the store edition's (ebook reissues
 of old books carry recent dates), so it isn't used as the publication year.
+``"min_entries"`` is the fewest books a complete feed has; fewer fail the run.
 """
 
 import re
 import time
 from email.utils import parsedate_to_datetime
 
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -51,6 +53,7 @@ def validate(definition):
     if set(definition.media_types) != {"book"}:
         msg = "Apple Books charts are book lists"
         raise ValueError(msg)
+    _rows.validate(definition, params.get("limit", 50))
 
 
 def isbn13(value):
@@ -129,6 +132,7 @@ def fetch(definition):
                 image=large_artwork(row.get("artworkUrl100")),
             ),
         )
+    _rows.require(definition, len(entries), f"Apple Books' {feed} feed")
     return FetchResult(entries=entries, edition=_edition(feed_data.get("updated")))
 
 

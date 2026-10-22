@@ -5,12 +5,13 @@ complete week (Monday to Monday, UTC).
 
 Rows already carry release-group MBIDs. Repeats are dropped, singles are dropped (one
 batched MusicBrainz search gives every type), and the few rows without an MBID get
-a strict title and artist search.
+a strict title and artist search. ``"min_entries"`` is the fewest albums a complete
+chart keeps once singles are dropped; fewer fail the run.
 """
 
 from datetime import UTC, datetime
 
-from lists.featured.adapters import _music
+from lists.featured.adapters import _music, _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -30,6 +31,7 @@ def validate(definition):
     if set(definition.media_types) != {"music"}:
         msg = "ListenBrainz charts hold music"
         raise ValueError(msg)
+    _rows.validate(definition, definition.params.get("limit", 50))
 
 
 def edition_label(stats_range, from_ts):
@@ -90,6 +92,7 @@ def fetch(definition):
         )
         if len(entries) == limit:
             break
+    _rows.require(definition, len(entries), f"ListenBrainz's {stats_range} chart")
     return FetchResult(entries=entries, edition=edition_label(stats_range, payload.get("from_ts")))
 
 

@@ -4,7 +4,8 @@ Params: ``{"chart": "boxoffice"}`` (movies only; Trakt updates it on Mondays), o
 ``{"chart": "trending", "media": "movies" | "shows", "limit": 20}``.
 
 Requests send ``trakt-api-key`` (``settings.TRAKT_API``) and ``trakt-api-version: 2``.
-Every entry carries Trakt's TMDB and IMDb ids.
+Every entry carries Trakt's TMDB and IMDb ids. ``"min_entries"`` is the rows a complete
+chart has (10 for the box office, the limit for trending); fewer fail the run.
 """
 
 from datetime import timedelta
@@ -12,6 +13,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -42,6 +44,7 @@ def validate(definition):
     if MEDIA[media][1] not in definition.media_types:
         msg = f"Trakt {media} need media type {MEDIA[media][1]}"
         raise ValueError(msg)
+    _rows.validate(definition, None if chart == "boxoffice" else params.get("limit", 20))
 
 
 def weekend_label(today):
@@ -78,6 +81,7 @@ def fetch(definition):
     if not isinstance(rows, list) or not rows:
         msg = f"Trakt returned no {media} for {chart}."
         raise AdapterError(msg)
+    _rows.require(definition, len(rows), f"Trakt's {chart} chart")
     entries = []
     for rank, row in enumerate(rows, start=1):
         item = row.get(key) or {}
