@@ -59,6 +59,18 @@ def sanitize(message, limit=MAX_ERROR_LENGTH):
     return text[:limit]
 
 
+def failure_summary(error):
+    """Return a log line for an unexpected error: its type, sanitized message and where
+    it was raised, without the traceback (whose frames and chained errors can hold
+    keyed URLs).
+    """
+    tb = error.__traceback__
+    while tb is not None and tb.tb_next is not None:
+        tb = tb.tb_next
+    where = f" at {tb.tb_frame.f_code.co_filename}:{tb.tb_lineno} in {tb.tb_frame.f_code.co_name}" if tb else ""
+    return f"{type(error).__name__}: {sanitize(error)}{where}"
+
+
 def _headers(headers):
     return {"User-Agent": USER_AGENT, **(headers or {})}
 
