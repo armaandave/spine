@@ -319,6 +319,8 @@ Run them under the cleanup wrapper on a scratch simulator it creates (the stock 
 
 A first boot loads the Mac heavily for a few minutes, and the Mac also serves production: skip it while the load is already high, and say the tests didn't run.
 
+The helper shuts its simulator down afterwards but never deletes it. Start these runs from inside the feature's checkout: shipping deletes the simulators made there (`scripts/ios/delete-scratch-sims.sh`, `scripts/ios/SHIP.md` step 10).
+
 ---
 
 ## 12) Attribution (App Store / About)
