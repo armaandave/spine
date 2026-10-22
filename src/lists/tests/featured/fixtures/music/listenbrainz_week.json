@@ -1,0 +1,76 @@
+{
+ "payload": {
+  "count": 100,
+  "from_ts": 1791763200,
+  "to_ts": 1792368000,
+  "last_updated": 1792543729,
+  "range": "week",
+  "offset": 0,
+  "release_groups": [
+   {
+    "artist_mbids": [
+     "0d79fe8e-ba27-4859-bb8c-2f255f346853"
+    ],
+    "artist_name": "BTS",
+    "caa_id": 44649507220,
+    "caa_release_mbid": "8c0e8294-93f0-45d4-a98f-e9a37060de4a",
+    "listen_count": 284179,
+    "release_group_mbid": "21159e3f-172e-43f6-aa7d-8e06a81fea49",
+    "release_group_name": "ARIRANG"
+   },
+   {
+    "artist_mbids": [
+     "0d79fe8e-ba27-4859-bb8c-2f255f346853"
+    ],
+    "artist_name": "BTS",
+    "caa_id": 44649396012,
+    "caa_release_mbid": "20af35dd-dda2-47de-8ea5-78211c0dfe9c",
+    "listen_count": 211727,
+    "release_group_mbid": "21159e3f-172e-43f6-aa7d-8e06a81fea49",
+    "release_group_name": "ARIRANG"
+   },
+   {
+    "artist_mbids": [
+     "f09d2950-e3c6-47b2-b21c-2bad2cd3f616"
+    ],
+    "artist_name": "Agust D",
+    "caa_id": 35452891861,
+    "caa_release_mbid": "c9f9dcf6-d6da-433e-87a4-182620eb4208",
+    "listen_count": 77651,
+    "release_group_mbid": "4c87e1ec-5d76-4f74-a683-2177e5f0ddf1",
+    "release_group_name": "D‐DAY"
+   },
+   {
+    "artist_mbids": [
+     "d2582c77-6b0f-4b2f-802f-8f3cad1a5fec"
+    ],
+    "artist_name": "Jimin",
+    "caa_id": 39390999111,
+    "caa_release_mbid": "d9d41212-ce33-469f-86cb-2174e8a06898",
+    "listen_count": 42510,
+    "release_group_mbid": "066ee758-118c-47f9-b2bd-13b07e005ade",
+    "release_group_name": "MUSE"
+   },
+   {
+    "artist_mbids": [
+     "0d79fe8e-ba27-4859-bb8c-2f255f346853"
+    ],
+    "artist_name": "BTS",
+    "caa_id": 44649507220,
+    "caa_release_mbid": "8c0e8294-93f0-45d4-a98f-e9a37060de4a",
+    "listen_count": 284179,
+    "release_group_mbid": "21159e3f-172e-43f6-aa7d-8e06a81fea49",
+    "release_group_name": "ARIRANG"
+   },
+   {
+    "artist_mbids": [],
+    "artist_name": "RM, Youjeen",
+    "caa_id": null,
+    "caa_release_mbid": null,
+    "listen_count": 32896,
+    "release_group_mbid": null,
+    "release_group_name": "Indigo"
+   }
+  ]
+ }
+}
