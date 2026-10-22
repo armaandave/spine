@@ -5346,6 +5346,66 @@ final class SpineTests: XCTestCase {
         XCTAssertFalse(viewModel.isLoading)
     }
 
+    @MainActor
+    func testOwnProfileRefreshesInProgressEachTimeItAppears() async {
+        let trackingRepository = ScriptedLibraryTrackingRepository(responses: [
+            "book:": PagedResponse(
+                count: 1,
+                next: nil,
+                previous: nil,
+                results: [libraryItem(id: "7", title: "Removed Book", mediaType: "book", status: "In progress")]
+            ),
+        ])
+        let viewModel = ProfileViewModel(
+            profileRepository: HallOfFameProfileRepository(
+                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
+                setResponse: [:],
+                clearResponse: [:]
+            ),
+            trackingRepository: trackingRepository,
+            activityRepository: ScriptedHomeActivityRepository(items: []),
+            onUnauthorized: {}
+        )
+
+        await viewModel.loadOnAppear()
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Removed Book"])
+
+        // The book leaves the library somewhere else, then the profile appears again.
+        trackingRepository.responses = [:]
+        await viewModel.loadOnAppear()
+
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), [])
+    }
+
+    @MainActor
+    func testProfileRefreshKeepsShownSectionsInsteadOfLoadingPlaceholders() async {
+        let trackingRepository = ScriptedLibraryTrackingRepository(responses: [:])
+        let activityRepository = ScriptedHomeActivityRepository(items: [])
+        let viewModel = ProfileViewModel(
+            profileRepository: HallOfFameProfileRepository(
+                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
+                setResponse: [:],
+                clearResponse: [:]
+            ),
+            trackingRepository: trackingRepository,
+            activityRepository: activityRepository,
+            onUnauthorized: {}
+        )
+        var inProgressLoadingStates: [Bool] = []
+        var activityLoadingStates: [Bool] = []
+        trackingRepository.onList = { inProgressLoadingStates.append(viewModel.isLoadingInProgress) }
+        activityRepository.onRequest = { activityLoadingStates.append(viewModel.isLoadingActivity) }
+
+        await viewModel.load()
+        await viewModel.reload()
+
+        // The first load shows placeholders; the refresh keeps "Nothing in progress yet" and "No activity yet" up.
+        XCTAssertEqual(inProgressLoadingStates, [true, false])
+        XCTAssertEqual(activityLoadingStates, [true, false])
+        XCTAssertFalse(viewModel.isLoadingInProgress)
+        XCTAssertFalse(viewModel.isLoadingActivity)
+    }
+
     func testHardcoverBookSeriesRelatedSectionDecoding() throws {
         let data = """
         {
@@ -7726,8 +7786,9 @@ private enum CompanyCatalogTestError: Error {
 }
 
 private final class ScriptedLibraryTrackingRepository: TrackingRepository {
-    private let responses: [String: PagedResponse<Spine.LibraryItem>]
+    var responses: [String: PagedResponse<Spine.LibraryItem>]
     var requests: [LibraryTrackingRequest] = []
+    var onList: (@MainActor () -> Void)?
 
     init(responses: [String: PagedResponse<Spine.LibraryItem>]) {
         self.responses = responses
@@ -7735,6 +7796,7 @@ private final class ScriptedLibraryTrackingRepository: TrackingRepository {
 
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<Spine.LibraryItem> {
         requests.append(LibraryTrackingRequest(mediaType: mediaType, page: page, status: status, query: query))
+        await onList?()
         guard let response = responses["\(mediaType):\(page ?? ""):\(query ?? "")"] ?? responses["\(mediaType):\(page ?? "")"] else {
             return PagedResponse(count: 0, next: nil, previous: nil, results: [])
         }
@@ -7938,6 +8000,7 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
     let items: [ActivityItem]
     let error: Error?
     var requests: [ActivityRequest] = []
+    var onRequest: (@MainActor () -> Void)?
 
     init(items: [ActivityItem], error: Error? = nil) {
         self.items = items
@@ -7946,6 +8009,7 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
 
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem] {
         requests.append(ActivityRequest(username: username, limit: limit))
+        await onRequest?()
         if let error { throw error }
         return Array(items.prefix(limit))
     }

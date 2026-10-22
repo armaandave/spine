@@ -38,10 +38,19 @@ final class ProfileViewModel {
         self.onUnauthorized = onUnauthorized
     }
 
+    /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
+    /// Another user's profile loads once.
+    func loadOnAppear() async {
+        guard username == nil || profile == nil else { return }
+        await load()
+    }
+
     func load() async {
         requestGeneration += 1
         let generation = requestGeneration
-        isLoading = profile == nil
+        // Placeholders show only on the first load; a refresh keeps what's on screen until new data arrives.
+        let isFirstLoad = profile == nil
+        isLoading = isFirstLoad
         errorMessage = nil
         isLoadingInProgress = false
         isLoadingActivity = false
@@ -61,9 +70,9 @@ final class ProfileViewModel {
             guard generation == requestGeneration else { return }
             profile = loadedProfile
             if username == nil {
-                isLoadingInProgress = inProgressItems.isEmpty
+                isLoadingInProgress = isFirstLoad
             }
-            isLoadingActivity = recentActivityItems.isEmpty
+            isLoadingActivity = isFirstLoad
         } catch is CancellationError {
             return
         } catch {
@@ -97,8 +106,6 @@ final class ProfileViewModel {
             return
         }
 
-        isLoadingActivity = true
-        activityErrorMessage = nil
         defer {
             if generation == requestGeneration {
                 isLoadingActivity = false
@@ -109,6 +116,7 @@ final class ProfileViewModel {
             let activity = try await activityRepository.userActivity(username: username, limit: 6)
             guard generation == requestGeneration else { return }
             recentActivityItems = activity
+            activityErrorMessage = nil
         } catch is CancellationError {
             return
         } catch {
@@ -127,8 +135,6 @@ final class ProfileViewModel {
             return
         }
 
-        isLoadingInProgress = true
-        inProgressErrorMessage = nil
         defer {
             if generation == requestGeneration {
                 isLoadingInProgress = false
@@ -143,6 +149,7 @@ final class ProfileViewModel {
             )
             guard generation == requestGeneration else { return }
             inProgressItems = items
+            inProgressErrorMessage = nil
         } catch is CancellationError {
             return
         } catch {
@@ -593,9 +600,7 @@ struct ProfileView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             .task {
-                if viewModel.profile == nil {
-                    await viewModel.load()
-                }
+                await viewModel.loadOnAppear()
             }
             .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
