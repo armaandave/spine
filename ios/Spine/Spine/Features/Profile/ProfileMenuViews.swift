@@ -2033,9 +2033,12 @@ struct ProfileListDetailView: View {
 }
 
 enum CustomListBackdropSelection {
+    /// Every media type whose detail page has a backdrop (the server resolves the same ones).
+    static let mediaTypes: Set<String> = ["movie", "tv", "game", "anime", "manga"]
+
     static func artworkURL(from items: [MediaSummary]) -> String? {
         items.lazy.compactMap { item -> String? in
-            guard item.ref.mediaType == "movie" || item.ref.mediaType == "tv" else { return nil }
+            guard mediaTypes.contains(item.ref.mediaType) else { return nil }
             let url = item.displayBackdropURL?.trimmingCharacters(in: .whitespacesAndNewlines)
             return url?.isEmpty == false ? url : nil
         }.first

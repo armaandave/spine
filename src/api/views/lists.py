@@ -49,11 +49,18 @@ LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
 PERSON_COMPLETION_WORKERS = 8
 PERSON_COMPLETION_TIMEOUT = 25
-HEADER_BACKDROP_MEDIA_TYPES = {MediaTypes.MOVIE.value, MediaTypes.TV.value}
+# Media types whose detail page has a backdrop.
+HEADER_BACKDROP_MEDIA_TYPES = {
+    MediaTypes.MOVIE.value,
+    MediaTypes.TV.value,
+    MediaTypes.GAME.value,
+    MediaTypes.ANIME.value,
+    MediaTypes.MANGA.value,
+}
 
 
 def _header_backdrop_item_id(items):
-    """Return the first movie or TV item: the app shows its backdrop above the list."""
+    """Return the first item with a possible backdrop, shown above the list."""
     return next(
         (item.id for item in items if item.media_type in HEADER_BACKDROP_MEDIA_TYPES),
         None,

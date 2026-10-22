@@ -858,6 +858,30 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(third["backdrop_url"])
         metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
 
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"artworks": [{"image_id": "elden-ring-art"}]},
+    )
+    def test_list_detail_resolves_the_first_game_backdrop(self, metadata_mock):
+        user = get_user_model().objects.create_user(username="list-first-game", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Games")
+        book = Item.objects.create(source=Sources.HARDCOVER.value, media_type=MediaTypes.BOOK.value, media_id="b1", title="A Book")
+        game = Item.objects.create(source=Sources.IGDB.value, media_type=MediaTypes.GAME.value, media_id="119133", title="Elden Ring")
+        CustomListItem.objects.create(custom_list=custom_list, item=book, position=1)
+        CustomListItem.objects.create(custom_list=custom_list, item=game, position=2)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first, second = response.data["items"]
+        self.assertIsNone(first["backdrop_url"])
+        self.assertEqual(
+            second["backdrop_url"],
+            "https://images.igdb.com/igdb/image/upload/t_original/elden-ring-art.jpg",
+        )
+        metadata_mock.assert_called_once_with(MediaTypes.GAME.value, game.media_id, Sources.IGDB.value)
+
     @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
     @patch(
         "app.providers.services.get_media_metadata",
