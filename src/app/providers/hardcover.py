@@ -403,10 +403,6 @@ def book(media_id):
             )
         except requests.exceptions.HTTPError as error:
             logger.error("HTTP error fetching book %s: %s", media_id, error)
-            if error.response.status_code == requests.codes.too_many_requests:
-                saved = saved_book(media_id)
-                if saved:
-                    return saved
             handle_error(error)
 
         if "errors" in response:
@@ -532,10 +528,7 @@ def book(media_id):
 
 
 def saved_book(media_id):
-    """Return a basic page for a saved book while Hardcover is rate limited.
-
-    Not cached, so the full page returns once Hardcover answers again.
-    """
+    """Return a basic page for a saved book while Hardcover is rate limited."""
     item = Item.objects.filter(
         source=Sources.HARDCOVER.value,
         media_type=MediaTypes.BOOK.value,
