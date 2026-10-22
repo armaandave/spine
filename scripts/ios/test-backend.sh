@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # The always-on test backend: the server the Spine Dev app (Debug builds) talks to, so Spine Dev
-# works whenever it's opened, not only during a test. launchd keeps it running on this Mac at
-# http://<this Mac>.local:8010, at low priority. It is scripts/ios/local-backend.sh underneath, so
-# production is never touched: SQLite only, Redis DB 5 under its own prefix, never port 8000.
+# works whenever it's opened, not only during a test. launchd keeps it running on this Mac on port
+# 8010, at low priority. It is scripts/ios/local-backend.sh underneath, so production is never
+# touched: SQLite only, Redis DB 5 under its own prefix, never port 8000.
+#
+# Spine Dev reaches it through Tailscale at https://<this Mac's tailnet name>:8445 (tailscale serve,
+# tailnet only), so it works anywhere the iPhone's Tailscale app is connected. Without that Tailscale
+# entry, builds fall back to http://<this Mac>.local:8010, which works only on the Mac's Wi-Fi.
 #
 # Normally it serves myapp-main from its own checkout, .claude/test-backend in the main checkout,
 # whose src/db/db.sqlite3 is the lasting test database (test accounts only, never personal data).
@@ -12,6 +16,7 @@
 #
 # Usage: scripts/ios/test-backend.sh <command>
 #   status          print TEST_API and what it serves; exits 1 if it doesn't answer
+#   api             print the address Spine Dev builds use (Tailscale when set up)
 #   use [hours]     serve this checkout's backend there for [hours] (default 4, at most 12)
 #   release [--any] go back to myapp-main now (only from the checkout being served, unless --any)
 #   update          move it to origin/myapp-main, after a ship
@@ -21,6 +26,7 @@
 set -euo pipefail
 
 port=8010
+tailnet_port=8445
 label=com.armaan.spine-test-backend
 plist="$HOME/Library/LaunchAgents/$label.plist"
 log="$HOME/Library/Logs/spine-test-backend.log"
@@ -36,6 +42,25 @@ domain="gui/$(id -u)"
 
 die() { echo "STOPPED: $*" >&2; exit 1; }
 answers() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$port/api/v1/health/")" = 200 ]; }
+
+# The Tailscale CLI: on PATH, or inside the Mac app.
+tailscale_cli() {
+  if command -v tailscale >/dev/null 2>&1; then echo tailscale
+  elif [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then echo /Applications/Tailscale.app/Contents/MacOS/Tailscale
+  fi
+}
+
+# The address Spine Dev uses: this Mac's Tailscale name when Tailscale serves the test backend there,
+# else the local-network address.
+spine_dev_api() {
+  local ts name
+  ts=$(tailscale_cli)
+  if [ -n "$ts" ] && "$ts" serve status 2>/dev/null | grep -q ":$tailnet_port (tailnet only)"; then
+    name=$("$ts" status --json 2>/dev/null | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)
+    if [ -n "$name" ]; then echo "https://$name:$tailnet_port"; return; fi
+  fi
+  echo "$api"
+}
 
 # The checkout whose server listens on the port, from the listening process's working directory.
 served_checkout() {
@@ -62,7 +87,7 @@ status() {
   local served until=""
   answers || die "the test backend at $api isn't answering. Check: launchctl print $domain/$label, and $log"
   served=$(served_checkout)
-  echo "TEST_API: $api"
+  echo "TEST_API: $(spine_dev_api)"
   echo "SERVED_CHECKOUT: $served"
   if [ "$served" = "$test_checkout" ]; then
     echo "SERVING: myapp-main ($(git -C "$test_checkout" log -1 --format='%h %s'))"
@@ -196,6 +221,11 @@ install() {
 EOF
   launchctl bootout "$domain/$label" 2>/dev/null || true
   launchctl bootstrap "$domain" "$plist"
+  local ts
+  ts=$(tailscale_cli)
+  if [ -n "$ts" ]; then
+    "$ts" serve --bg --https="$tailnet_port" "http://127.0.0.1:$port" >/dev/null || echo "Tailscale didn't take the $tailnet_port entry; Spine Dev will need the Mac's Wi-Fi."
+  fi
   echo "Installed; starting (the first start installs its Python packages)..."
   wait_for "$test_checkout"
   status
@@ -209,6 +239,7 @@ uninstall() {
 
 case "${1:-}" in
   status) status ;;
+  api) spine_dev_api ;;
   use) use "${2:-}" ;;
   release) release "${2:-}" ;;
   update) update ;;

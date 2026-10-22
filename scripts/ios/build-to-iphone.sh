@@ -44,7 +44,7 @@ configuration=Debug
 # Run the helpers next to this script, so older worktrees can use myapp-main's copies.
 here=$(cd "$(dirname "$0")" && pwd)
 if [ $build_only -eq 1 ]; then
-  local_api="http://$(scutil --get LocalHostName).local:8010"
+  local_api=$("$here/test-backend.sh" api)
   serving="(not checked)"
 else
   backend=$("$here/test-backend.sh" status 2>&1) || die "${backend#STOPPED: }"

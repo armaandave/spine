@@ -20,8 +20,9 @@ their iPhone or phone. Shipping to production afterwards is the `spine-ship` ski
 - Spine Dev talks to the **test backend**, which is always running on the Mac, so Spine Dev
   works whenever the user opens it, not only during a test. Test accounts, ratings and likes
   stay out of production's data.
-  - It is `scripts/ios/test-backend.sh`, kept running by launchd at
-    `http://<Mac>.local:8010` at low priority. Underneath it is `scripts/ios/local-backend.sh`:
+  - It is `scripts/ios/test-backend.sh`, kept running by launchd on port 8010 at low
+    priority, and served over Tailscale at `https://<Mac's tailnet name>:8445` (`tailscale
+    serve`, tailnet only). Underneath it is `scripts/ios/local-backend.sh`:
     DEBUG, SQLite only, Redis DB 5 under its own prefix, never port 8000. Nothing reaches
     production.
   - Normally it serves `myapp-main` from its own checkout (`.claude/test-backend` in the main
@@ -32,13 +33,16 @@ their iPhone or phone. Shipping to production afterwards is the `spine-ship` ski
     migrations included. Then it goes back to `myapp-main` by itself (or sooner with
     `release`), and what was written meanwhile is dropped. Because the address never changes,
     Spine Dev keeps working afterwards without a rebuild.
-  - The build bakes the test backend's address into the app's `SpineAPIBaseURL` Info.plist key.
+  - The build bakes the test backend's Tailscale address into the app's `SpineAPIBaseURL`
+    Info.plist key (`test-backend.sh api` prints it), so Spine Dev works anywhere the
+    iPhone's Tailscale app is connected. If the Mac doesn't serve it over Tailscale, builds
+    fall back to `http://<Mac>.local:8010`, which works only on the Mac's Wi-Fi.
   - It opens signed in as the passwordless dev user (`--dev-sign-in`), the test account.
     Only a local backend answers that (DEBUG, SQLite and `SPINE_DEV_SIGN_IN=1`);
     production answers 404.
   - Catalog data (TMDB and the other providers) is real.
-  - The iPhone must be on the same Wi-Fi as the Mac (or the Mac on the iPhone's
-    hotspot), and iOS asks once for Local Network access, which the user must allow.
+  - Installing a build needs the iPhone on the same Wi-Fi as the Mac (or plugged in); using
+    Spine Dev afterwards only needs Tailscale connected on the iPhone.
 - Production only ever changes through `spine-ship`. This workflow never merges,
   pushes, or deploys.
 
@@ -78,8 +82,8 @@ expects.
 ### 3. Build to the iPhone
 
 Tell the user Spine Dev is going onto their phone next to their real Spine app, signed
-in as the dev user. The phone must be on the Mac's Wi-Fi, and iOS may ask once to find
-devices on the local network, which they should allow. Then run it in the background,
+in as the dev user. The phone must be on the Mac's Wi-Fi (or plugged in) for the install, and
+afterwards Spine Dev works anywhere with Tailscale connected. Then run it in the background,
 in the `ios` queue (heavy iOS work on this Mac takes turns; it may wait for its turn first):
 
 ```bash
@@ -123,5 +127,6 @@ Keep it short:
   - Developer Mode is off
   - a signing prompt is waiting in Xcode
   - Local Network access for Spine Dev is off: Settings → Privacy & Security → Local Network
+  - Spine Dev can't load anything: Tailscale isn't connected on the iPhone
 - Don't change signing, the team, or the bundle IDs. Don't uninstall either app,
   archive, or upload to TestFlight in this workflow.
