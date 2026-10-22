@@ -185,7 +185,7 @@ Featured syncs share production's provider keys with the app, so every run (and 
 
 - **`FeaturedListSync`**:
   - Identity: `key` (unique slug); `custom_list` (nullable one-to-one, `SET_NULL`, related name `featured_sync`); `definition_hash`; `fingerprint`.
-  - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced).
+  - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced); `entry_notes` (every list: what each row shows, from the entries' `note` and the chart movement, `{"<item_id>" | "<source>:person:<id>": "Winner · Best Picture" | "▲2 · $12.4M"}`, rewritten on every successful run).
   - Run state: `last_attempt_at`; `last_success_at`; `last_status` (`ok|unchanged|guarded|failed|empty|deferred`); `last_error` (sanitized, never containing a key); `consecutive_failures`; `lease_until`; `deferred_until` (when a deferred run is retried).
   - Counts: `entry_count`; `resolved_count`; `unresolved` (JSON, at most 50 rows of `{rank, key, title, year, creator}`).
 - **`FeaturedListSnapshot`**: `sync` (foreign key); `taken_on` (date); `edition`; `fingerprint`; `entries` (JSON `[[rank, entry_key, item_id|null], …]`). Unique on `(sync, taken_on)`. Written only when the fingerprint changes.
@@ -216,6 +216,8 @@ All of it is additive.
 - Each result gains an optional `featured` object, in the card shape below without `preview_items` (`null` when the list has no card). Manually featured lists get one too, with `kind: "editorial"`, `cadence: "static"` and media types taken from their items.
 
 **`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
+
+**Entry notes:** on lists the engine writes, every item in `GET /api/v1/lists/{id}/items/` and the detail's `items`, and every person in `GET /api/v1/lists/{id}/people/` and the detail's `people`, gains `note`: a string or `null`. It's the entry's own note ("2023, 2022", "Nominee · Fiction", "Joint 21", "Inducted 2019"), with a chart's movement in front ("▲2 · $12.4M"); a source note that already gives the movement ("New this week") stands alone, and an item listed by several entries joins their notes with "; ". Other lists' items have no `note` key.
 
 **`GET /api/v1/lists/featured/shelves/`:**
 

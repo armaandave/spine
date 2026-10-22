@@ -295,6 +295,59 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(APIClient().get("/api/v1/lists/featured/shelves/").status_code, 401)
 
 
+class FeaturedItemNotesTests(FeaturedApiTestCase):
+    """Featured lists' items carry their entry's note; other lists' items don't."""
+
+    def rerun(self, key, entries):
+        definition = next(item for item in self.definitions if item.key == key)
+        with registry.override_definitions(self.definitions):
+            result = self.run_list(definition, entries)
+        self.assertTrue(result.ok, result.message)
+        return result.custom_list
+
+    def awards(self):
+        entries = movie_entries("al", 2)
+        return self.rerun("awards-live", [
+            Entry(1, entries[0].title, media_type="movie", ids=entries[0].ids, image=entries[0].image, note="Winner · Best Picture"),
+            entries[1],
+        ])
+
+    def test_list_items_carry_notes(self):
+        custom_list = self.awards()
+        results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
+        self.assertEqual([item["note"] for item in results], ["Winner · Best Picture", None])
+        detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
+        self.assertEqual([item["note"] for item in detail["items"]], ["Winner · Best Picture", None])
+
+    def test_other_lists_items_have_no_note_key(self):
+        own = CustomList.objects.create(owner=self.viewer, name="Mine")
+        CustomListItem.objects.create(custom_list=own, item=Item.objects.get(media_id="hf-1"), position=1)
+        for custom_list in (own, self.manual):
+            self.assertNotIn("note", self.get(f"/api/v1/lists/{custom_list.id}/items/").data["results"][0])
+            self.assertNotIn("note", self.get(f"/api/v1/lists/{custom_list.id}/").data["items"][0])
+
+    def test_chart_movement_combines_with_the_entry_note(self):
+        entries = movie_entries("cf", 7)
+        swapped = [
+            Entry(1, "cf 2", media_type="movie", ids={"tmdb": "cf-2"}, image=entries[1].image, note="$12.4M"),
+            Entry(2, "cf 1", media_type="movie", ids={"tmdb": "cf-1"}, image=entries[0].image, note="New this week"),
+            *entries[2:],
+        ]
+        custom_list = self.rerun("chart-films", swapped)
+        results = self.get(f"/api/v1/lists/{custom_list.id}/items/", sort="position").data["results"]
+        self.assertEqual([item["note"] for item in results[:3]], ["▲1 · $12.4M", "New this week", None])
+        # Card previews keep the bare movement.
+        shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+        movie = next(shelf for shelf in shelves if shelf["key"] == "movie")
+        card = next(card for card in movie["lists"] if card["slug"] == "chart-films")
+        self.assertEqual([item["note"] for item in card["preview_items"][:3]], ["▲1", "▼1", None])
+
+    def test_people_list_entries_carry_notes(self):
+        custom_list = self.rerun("laureates", [Entry(1, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, image="https://p/1.jpg", note="2022")])
+        self.assertEqual(self.get(f"/api/v1/lists/{custom_list.id}/people/").data["results"][0]["note"], "2022")
+        self.assertEqual(self.get(f"/api/v1/lists/{custom_list.id}/").data["people"][0]["note"], "2022")
+
+
 @override_settings(FEATURED_REPORT_TOKEN="report-token-value")
 class FeaturedHealthEndpointTests(FeaturedApiTestCase):
     """GET /api/v1/lists/featured/health/ is for staff or the report token only."""

@@ -40,7 +40,7 @@ from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
 from app.providers import services as provider_services
-from lists.models import CustomList, CustomListItem, PersonListItem
+from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
 from social.models import Activity, ContentLike, SocialAuditLog
 
 LIST_PREVIEW_ITEM_LIMIT = 12
@@ -62,6 +62,32 @@ def person_list_item_payload(list_person, request=None, completion=None):
         "date_added": list_person.date_added,
         "completion": completion,
     }
+
+
+def featured_entry_notes(custom_list):
+    """Return a featured list's notes by item ID or person ref, else None.
+
+    Only lists the featured-lists engine writes have them; their items gain a ``note``
+    key (``"Winner · Best Picture"``, ``"▲2 · $12.4M"`` or null), other lists' items
+    keep their shape.
+    """
+    return (
+        FeaturedListSync.objects.filter(custom_list=custom_list)
+        .values_list("entry_notes", flat=True)
+        .first()
+    )
+
+
+def person_note_key(list_person):
+    """Return the key a person's featured note is stored under."""
+    return f"{list_person.source}:person:{list_person.person_id}"
+
+
+def _with_person_notes(payloads, list_people, notes):
+    if notes is not None:
+        for payload, list_person in zip(payloads, list_people, strict=True):
+            payload["note"] = notes.get(person_note_key(list_person))
+    return payloads
 
 
 def list_payload(
@@ -119,11 +145,13 @@ def list_payload(
         )
     if include_preview_items or include_items:
         items, people = [], []
+        notes = featured_entry_notes(custom_list) if include_items else None
         if is_people_list:
             list_people = custom_list.person_items.all()
             if include_preview_items and not include_items:
                 list_people = list_people[:LIST_PREVIEW_ITEM_LIMIT]
-            people = _person_list_payloads(list(list_people), request)
+            list_people = list(list_people)
+            people = _with_person_notes(_person_list_payloads(list_people, request), list_people, notes)
         else:
             list_items = custom_list.customlistitem_set.select_related("item").filter(
                 item__media_type__in=exposure.media_types(),
@@ -138,6 +166,8 @@ def list_payload(
                     include_user_state=False,
                 )
                 item["position"] = list_item.position
+                if notes is not None:
+                    item["note"] = notes.get(str(list_item.item_id))
                 items.append(item)
         if include_preview_items:
             data["preview_items"] = items
@@ -575,6 +605,7 @@ class ListItemsView(APIView):
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(list_items, request, view=self))
         prime_collection_items([list_item.item for list_item in page], request.user)
+        notes = featured_entry_notes(custom_list)
         response = paginator.get_paginated_response(
             [
                 {
@@ -589,6 +620,7 @@ class ListItemsView(APIView):
                     "your_rating": f"{list_item.user_rating:.1f}"
                     if list_item.user_rating is not None
                     else None,
+                    **({"note": notes.get(str(list_item.item_id))} if notes is not None else {}),
                 }
                 for list_item in page
             ],
@@ -699,8 +731,13 @@ class ListPeopleView(APIView):
             request,
             view=self,
         )
+        list_people = list(page)
         return paginator.get_paginated_response(
-            _person_list_payloads(list(page), request),
+            _with_person_notes(
+                _person_list_payloads(list_people, request),
+                list_people,
+                featured_entry_notes(custom_list),
+            ),
         )
 
     @extend_schema(

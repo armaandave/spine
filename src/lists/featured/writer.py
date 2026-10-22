@@ -339,6 +339,59 @@ def movement_notes(previous_positions, rows, items):
     return notes
 
 
+MAX_NOTE_LENGTH = 200
+_MOVEMENT_PREFIXES = ("▲", "▼", "new")
+
+
+def combine_notes(movement, note):
+    """Return what a row shows: Spine's chart movement and the source's own note.
+
+    ``"▲2"`` and ``"$12.4M"`` become ``"▲2 · $12.4M"``. A note that already says how
+    the entry moved ("▲2", "New this week") is kept on its own.
+    """
+    if not movement or not note:
+        return movement or note
+    if note.casefold().startswith(_MOVEMENT_PREFIXES):
+        return note
+    return f"{movement} · {note}"
+
+
+def entry_notes(resolutions, key_for, movement=None):
+    """Return ``{key: note}`` for every stored entry with a note or a movement.
+
+    ``key_for(match)`` names the row (an item ID, or a person ref) or returns None. An
+    item listed by several entries (one nominee in two categories) joins their notes.
+    """
+    movement = movement or {}
+    collected = {}
+    for resolution in resolutions:
+        match = resolution.match
+        if match is None or resolution.skipped:
+            continue
+        key = key_for(match)
+        if key is None:
+            continue
+        notes = collected.setdefault(key, [])
+        if resolution.entry.note and resolution.entry.note not in notes:
+            notes.append(resolution.entry.note)
+    combined = {}
+    for key, notes in collected.items():
+        note = combine_notes(movement.get(key, ""), "; ".join(notes))[:MAX_NOTE_LENGTH]
+        if note:
+            combined[key] = note
+    return combined
+
+
+def _note_keys(people, rows, items):
+    """Return ``key_for(match)`` for ``entry_notes``: person refs, or item IDs."""
+    if people:
+        return lambda match: match.ref
+    if not items:  # content unchanged: the Items already exist
+        existing = _existing_items([match for _, _, match in rows])
+        items = {match.ref: existing[_item_key(match)] for _, _, match in rows if _item_key(match) in existing}
+    return lambda match: str(items[match.ref].pk) if match.ref in items else None
+
+
 def _replace_media(custom_list, rows, items):
     CustomListItem.objects.filter(custom_list=custom_list).delete()
     CustomListItem.objects.bulk_create(
@@ -428,6 +481,8 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
                         partial(enqueue_external_rating_batches, sorted(new_item_ids)),
                         robust=True,
                     )
+
+        sync.entry_notes = entry_notes(resolutions, _note_keys(people, rows, items), sync.item_notes)
 
         FeaturedListSync.objects.filter(custom_list=custom_list).exclude(pk=sync.pk).update(custom_list=None)
         sync.custom_list = custom_list

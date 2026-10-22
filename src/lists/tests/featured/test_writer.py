@@ -1,9 +1,11 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from app.models import Item, MediaTypes, Sources
 from app.providers import services
 from lists.featured.registry import Guards
+from lists.featured.writer import combine_notes
 from lists.featured.types import Entry, FetchResult
 from lists.models import CustomList, CustomListItem, FeaturedListSnapshot, FeaturedListSync, PersonListItem
 from lists.tests.featured.helpers import FeaturedTestCase, entry, make_definition
@@ -136,6 +138,44 @@ class WriterTests(FeaturedTestCase):
         sync = FeaturedListSync.objects.get(key="test-list")
         self.assertEqual(sync.unresolved[0]["key"], "tmdb:movie:404")
         self.assertIn("metadata lookup failed", sync.unresolved[0]["reason"])
+
+    def test_every_entry_note_is_stored_per_item(self):
+        entries = [
+            entry(1, "A", media_type="movie", ids={"tmdb": "1"}, image="https://x/1.jpg", note="Winner · Best Picture"),
+            entry(2, "A again", media_type="movie", ids={"ref": "tmdb:movie:1"}, image="https://x/1.jpg", note="Nominee · Best Director"),
+            entry(3, "B", media_type="movie", ids={"tmdb": "2"}, image="https://x/2.jpg"),
+        ]
+        definition = make_definition(kind="award")
+        self.run_list(definition, entries)
+        sync = FeaturedListSync.objects.get(key="test-list")
+        first = str(Item.objects.get(media_id="1").pk)
+        self.assertEqual(sync.entry_notes, {first: "Winner · Best Picture; Nominee · Best Director"})
+        self.assertEqual(sync.item_notes, {})
+
+        # Notes refresh even when the content is unchanged.
+        changed = [replace(entries[0], note="Winner · Best Picture · 2027"), entries[2]]
+        self.assertEqual(self.run_list(definition, changed).status, "unchanged")
+        sync.refresh_from_db()
+        self.assertEqual(sync.entry_notes, {first: "Winner · Best Picture · 2027"})
+
+    def test_chart_movement_and_notes_combine(self):
+        definition = make_definition()
+        self.run_list(definition, movies("1", "2", "3"))
+        swapped = [replace(movie, rank=rank) for movie, rank in zip(movies("2", "1", "4"), (1, 2, 3), strict=True)]
+        swapped[0] = replace(swapped[0], note="$12.4M")
+        self.run_list(definition, swapped)
+        sync = FeaturedListSync.objects.get(key="test-list")
+        ids = {media_id: str(Item.objects.get(media_id=media_id).pk) for media_id in ("1", "2", "4")}
+        self.assertEqual(sync.item_notes, {ids["2"]: "▲1", ids["1"]: "▼1", ids["4"]: "NEW"})
+        self.assertEqual(sync.entry_notes, {ids["2"]: "▲1 · $12.4M", ids["1"]: "▼1", ids["4"]: "NEW"})
+
+    def test_combine_notes(self):
+        self.assertEqual(combine_notes("▲2", "$12.4M"), "▲2 · $12.4M")
+        self.assertEqual(combine_notes("▲2", ""), "▲2")
+        self.assertEqual(combine_notes("", "Joint 21"), "Joint 21")
+        # A source note that already says how the entry moved stands alone.
+        self.assertEqual(combine_notes("▲2", "▲2"), "▲2")
+        self.assertEqual(combine_notes("NEW", "New this week"), "New this week")
 
     def test_people_lists_write_person_rows(self):
         definition = make_definition(list_type="people", media_types=("book",), position=950, kind="award")
