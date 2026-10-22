@@ -319,6 +319,8 @@ Run them under the cleanup wrapper, in the `ios` queue (heavy iOS work on this M
 
 A first boot loads the Mac heavily for a few minutes, and the Mac also serves production; the queue keeps it to one simulator at a time. Builds for a simulator or a phone go through the queue too (`--queue ios`).
 
+The helper deletes its simulator when the run ends. Start these runs from inside the feature's checkout, so shipping can delete any it left behind (`scripts/ios/delete-scratch-sims.sh`, `scripts/ios/SHIP.md` step 10).
+
 ---
 
 ## 12) Attribution (App Store / About)

@@ -256,7 +256,7 @@ Every feature follows this path. Armaan drives it with the prompts in quotes.
    - New logic gets a test. A bug fix gets a test that fails before the fix and passes after it.
    - Tests must pass with no `.env` and no API keys, as in CI.
 3. **Try on the phone.** "Test this on my iPhone." Use the `spine-test-on-iphone` skill (`scripts/ios/TEST_ON_IPHONE.md`). It installs **Spine Dev**, the Debug app, which talks to the always-on test backend on the Mac (`scripts/ios/test-backend.sh`), signed in as its dev user. A branch with backend changes is served from the test backend first (`scripts/ios/test-backend.sh use`); never deploy to test. Armaan's real **Spine** app (TestFlight, production, the real account) is never used for testing. Repeat 2–3 until Armaan is happy.
-4. **Ship.** "Ship this." Use the `spine-ship` skill (`scripts/ios/SHIP.md`): verify, merge into `myapp-main` in the main checkout, and push. CI then deploys production, and Xcode Cloud makes a TestFlight build if the iOS app changed. Watch both, verify production, and remove the worktree.
+4. **Ship.** "Ship this." Use the `spine-ship` skill (`scripts/ios/SHIP.md`): verify, merge into `myapp-main` in the main checkout, and push. CI then deploys production, and Xcode Cloud makes a TestFlight build if the iOS app changed. Watch both, verify production, then remove the worktree and delete any scratch simulators it left behind.
 5. **Roll back.** "Roll back" if a ship broke production (`scripts/ios/SHIP.md`, Workflow B).
 
 ## 14) Shipping: Pushing `myapp-main` Goes Live

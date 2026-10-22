@@ -112,6 +112,10 @@ Run from the feature worktree unless a step says otherwise.
 10. **Clean up.** If `scripts/ios/test-backend.sh status` says it serves the feature
     worktree, run `scripts/ios/test-backend.sh release` from it. Then remove the feature
     worktree and the merged branch, local and remote.
+    Then, from the main checkout, delete any scratch simulators the feature left behind:
+    `scripts/ios/delete-scratch-sims.sh .claude/worktrees/<name>`. The cleanup helper deletes
+    each run's simulator when the run ends; this catches any it didn't, at a few GB each on
+    this Mac's nearly full disk. Report any it skips.
 11. **Report** the deploy (or why it was skipped), the CI result, migrations, the build
     number and whether it's in "Me", and anything left to do.
 
