@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -52,7 +54,8 @@ class MusicListsSocialTests(TestCase):
             "media_id": item.media_id,
         }
 
-    def test_ranked_lists_filters_likes_and_feed_serialize_music(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_ranked_lists_filters_likes_and_feed_serialize_music(self, _backdrop_mock):
         self.client.force_authenticate(self.owner)
         created = self.client.post(
             "/api/v1/lists/",

@@ -824,19 +824,92 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.data["items_count"], 1)
         self.assertNotIn("items", response.data)
 
-    @patch("app.providers.services.get_media_metadata")
-    def test_list_detail_items_do_not_resolve_provider_backdrops(self, metadata_mock):
-        user = get_user_model().objects.create_user(username="list-detail-no-provider", password="strong-password-123")
-        custom_list = CustomList.objects.create(owner=user, name="Watchlist")
-        item = self._create_movie_items(1, title_prefix="Backdrop", media_id_prefix="no-provider-backdrop")[0]
-        CustomListItem.objects.create(custom_list=custom_list, item=item)
+    def _create_header_backdrop_list(self, username):
+        """Create a three-film list where only the second has the viewer's backdrop."""
+        user = get_user_model().objects.create_user(username=username, password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Current Posters")
+        gravity, heat, third = self._create_movie_items(3, title_prefix="Film", media_id_prefix=f"{username}-")
+        for position, item in enumerate([gravity, heat, third], start=1):
+            CustomListItem.objects.create(custom_list=custom_list, item=item, position=position)
+        CustomBackdropPreference.objects.create(
+            user=user,
+            item=heat,
+            custom_image_url="https://example.com/heat-custom.jpg",
+        )
         self.client.force_authenticate(user)
+        return custom_list, gravity
+
+    @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"backdrop_path": "/gravity.jpg"},
+    )
+    def test_list_detail_items_resolve_only_the_first_film_backdrop(self, metadata_mock, _images_mock):
+        custom_list, gravity = self._create_header_backdrop_list("list-detail-first-film")
 
         response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(response.data["items"][0]["backdrop_url"])
+        first, second, third = response.data["items"]
+        self.assertEqual(first["backdrop_url"], "https://image.tmdb.org/t/p/original/gravity.jpg")
+        self.assertIsNone(first["custom_backdrop_url"])
+        self.assertIsNone(second["backdrop_url"])
+        self.assertEqual(second["custom_backdrop_url"], "https://example.com/heat-custom.jpg")
+        self.assertIsNone(third["backdrop_url"])
+        metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
+
+    @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"backdrop_path": "/gravity.jpg"},
+    )
+    def test_list_items_first_page_resolves_first_film_backdrop(self, metadata_mock, _images_mock):
+        custom_list, gravity = self._create_header_backdrop_list("list-items-first-film")
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"page_size": 2})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first, second = response.data["results"]
+        self.assertEqual(first["backdrop_url"], "https://image.tmdb.org/t/p/original/gravity.jpg")
+        self.assertEqual(second["custom_backdrop_url"], "https://example.com/heat-custom.jpg")
+        metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
+
+        metadata_mock.reset_mock()
+        later_page = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"page_size": 2, "page": 2})
+        sorted_page = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"sort": "title"})
+
+        self.assertEqual(later_page.status_code, status.HTTP_200_OK)
+        self.assertIsNone(later_page.data["results"][0]["backdrop_url"])
+        self.assertEqual(sorted_page.status_code, status.HTTP_200_OK)
+        self.assertIsNone(sorted_page.data["results"][0]["backdrop_url"])
         metadata_mock.assert_not_called()
+
+    @patch("app.providers.services.get_media_metadata")
+    def test_list_items_load_when_first_film_backdrop_provider_fails(self, metadata_mock):
+        custom_list, _gravity = self._create_header_backdrop_list("list-backdrop-provider-down")
+        errors = [
+            ProviderAPIError(
+                Sources.TMDB.value,
+                requests.exceptions.HTTPError(response=MagicMock(status_code=503, text="down")),
+            ),
+            requests.exceptions.ConnectionError(),
+        ]
+
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+                metadata_mock.side_effect = error
+
+                detail = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+                items = self.client.get(f"/api/v1/lists/{custom_list.id}/items/")
+
+                self.assertEqual(detail.status_code, status.HTTP_200_OK)
+                self.assertEqual(items.status_code, status.HTTP_200_OK)
+                self.assertIsNone(detail.data["items"][0]["backdrop_url"])
+                self.assertIsNone(items.data["results"][0]["backdrop_url"])
+                self.assertEqual(
+                    items.data["results"][1]["custom_backdrop_url"],
+                    "https://example.com/heat-custom.jpg",
+                )
 
     @patch("app.providers.services.get_media_metadata")
     def test_list_items_include_same_user_backdrop_as_media_detail(self, metadata_mock):
@@ -860,7 +933,8 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(media["custom_backdrop_url"], "https://example.com/custom-backdrop.jpg")
         metadata_mock.assert_not_called()
 
-    def test_ranked_list_reorder_updates_positions(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_ranked_list_reorder_updates_positions(self, _backdrop_mock):
         user = get_user_model().objects.create_user(username="list-reorder", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
         items = self._create_movie_items(3, title_prefix="Ranked", media_id_prefix="ranked")
@@ -953,7 +1027,8 @@ class ApiV1FoundationTests(TestCase):
             [(items[0].id, 1), (items[2].id, 2)],
         )
 
-    def test_mode_switch_assigns_and_preserves_positions(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_mode_switch_assigns_and_preserves_positions(self, _backdrop_mock):
         user = get_user_model().objects.create_user(username="list-mode-switch", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Mode")
         items = self._create_movie_items(3, title_prefix="Mode", media_id_prefix="mode")
@@ -1135,6 +1210,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(response.data["previous"])
         self.assertEqual(summary_mock.call_count, 25)
 
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
     @patch("app.providers.steam.get_review_rating")
     @patch("app.providers.steam.get_metacritic_rating")
     @patch("app.providers.imdb.get_title_rating")
@@ -1145,6 +1221,7 @@ class ApiV1FoundationTests(TestCase):
         imdb_mock,
         metacritic_mock,
         steam_review_mock,
+        _backdrop_mock,
     ):
         user = get_user_model().objects.create_user(
             username="rating-free-reads",
