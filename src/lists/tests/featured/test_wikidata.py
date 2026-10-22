@@ -240,6 +240,7 @@ class BookTests(WikidataTestCase):
             "/works/OL2W/editions.json": http_error(404),
             "/works/OL2W.json": load_fixture("wikidata", "work_OL2W_redirect.json"),
             "/works/OL3W/editions.json": load_fixture("wikidata", "editions_OL3W.json"),
+            "/search.json": {"docs": []},
             **routes,
         }
         with wikidata_routes(
@@ -274,11 +275,28 @@ class BookTests(WikidataTestCase):
             openlibrary={
                 "/works/OL1W/editions.json": {"entries": [{"key": "/books/OL7M", "title": "Orbital"}]},
                 "/works/OL2W/editions.json": {"entries": []},
+                "/search.json": {"docs": []},
             },
         ):
             entries = {entry.title: entry for entry in ADAPTERS["wikidata"].fetch(definition).entries}
         self.assertEqual(entries["Orbital"].ids, {"olid": "OL7M", "wikidata": "Q115"})
         self.assertEqual(entries["Prophet Song"].ids, {"wikidata": "Q116"})
+
+    def test_books_without_ids_are_found_by_title_and_author(self):
+        docs = {
+            "docs": [
+                {"key": "/works/OL8W", "title": "Holiday", "author_name": ["Someone Else"], "first_publish_year": 1965, "edition_count": 90},
+                {"key": "/works/OL9W", "title": "Holiday", "author_name": ["Stanley Middleton"], "first_publish_year": 1990, "edition_count": 80},
+                {"key": "/works/OL10W", "title": "Holiday", "author_name": ["Stanley Middleton"], "first_publish_year": 1974, "edition_count": 3},
+                {"key": "/works/OL11W", "title": "Holiday", "author_name": ["Stanley Middleton"], "first_publish_year": 1966, "edition_count": 2},
+                {"key": "/works/OL12W", "title": "Holidays Abroad", "author_name": ["Stanley Middleton"], "first_publish_year": 1965, "edition_count": 9},
+            ],
+        }
+        editions = {"entries": [{"key": "/books/OL21M", "title": "Holiday", "languages": [{"key": "/languages/eng"}], "covers": [77]}]}
+        entries = {entry.title: entry for entry in self.fetch(**{"/search.json": docs, "/works/OL11W/editions.json": editions}).entries}
+        # Wrong author, too far from 1965 and a different title are all refused.
+        self.assertEqual(entries["Holiday"].ids, {"olid": "OL21M", "wikidata": "Q117"})
+        self.assertEqual(entries["Holiday"].image, "https://covers.openlibrary.org/b/id/77-L.jpg")
 
     def test_an_open_library_failure_leaves_the_entry_to_title_search(self):
         entries = {entry.title: entry for entry in self.fetch(**{"/works/OL2W.json": http_error(500)}).entries}

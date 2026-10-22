@@ -29,7 +29,9 @@ numeric id (the ``P9043`` qualifier on ``P5794``); MusicBrainz release groups
 (``P436``); MyAnimeList (``P4086``/``P4087``). Books carry Open Library *work* ids
 (``P648``), so the adapter turns them into a Hardcover book (Hardcover's own Open
 Library mappings, title-checked) or else an Open Library edition (the work's
-editions endpoint). Goodreads work ids (``P8383``) are not used: Hardcover maps
+editions endpoint). A book with no Open Library id is looked up by title *and*
+author on Open Library's search first, since generic titles ("Selected Poems")
+never surface in a title-only search. Goodreads work ids (``P8383``) are not used: Hardcover maps
 Goodreads *book* ids, a different number space, so they match the wrong books.
 """
 
@@ -48,7 +50,7 @@ from django.core.cache import cache
 
 from lists.featured.helpers import get_json, post_json
 from lists.featured.resolve import parse_ref
-from lists.featured.text import normalize_title, title_forms
+from lists.featured.text import creators_match, normalize_title, title_forms
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
 logger = logging.getLogger(__name__)
@@ -60,12 +62,13 @@ SUPPLEMENT = Path(__file__).resolve().parent.parent / "static" / "supplements" /
 SUPPLEMENT_COLUMNS = ["list", "year", "qid", "title", "creator", "published", "ref", "why"]
 
 # Bump when the query or the parsing changes, so every Wikidata list re-syncs.
-QUERY_VERSION = "3"
+QUERY_VERSION = "4"
 SPARQL_TTL = 60 * 60 * 12
 LOOKUP_HIT_TTL = 60 * 60 * 24 * 30
 LOOKUP_MISS_TTL = 60 * 60 * 24
 SPARQL_TIMEOUT = 90
 HARDCOVER_BATCH = 200
+SEARCH_YEAR_TOLERANCE = 2
 OPENLIBRARY_PLATFORM = 3  # Hardcover's platform id for Open Library mappings
 CACHE_PREFIX = "featured:wikidata:"
 
@@ -735,6 +738,53 @@ def work_editions(work_id):
     return _cached("olwork", work_id, compute)
 
 
+def work_by_author(entry):
+    """Return the Open Library work for a book that has no id, searching by title and author.
+
+    The catalog search by title alone rarely reaches "Selected Poems" by a given
+    poet. Accepted only on an exact (main) title, a matching author name and a
+    first publication within two years; among duplicate works the one with the
+    most editions wins. Cached like the other lookups.
+    """
+    title = _main_title(entry).title
+    authors = [name.strip() for name in entry.creator.split(",") if name.strip()]
+    if not authors:
+        return None
+
+    def compute():
+        data = get_json(
+            "openlibrary",
+            f"{OPENLIBRARY_URL}/search.json",
+            params={
+                "title": title,
+                "author": authors[0],
+                "fields": "key,title,author_name,first_publish_year,edition_count",
+                "limit": 20,
+            },
+        )
+        matches = [
+            doc
+            for doc in data.get("docs") or []
+            if str(doc.get("key", "")).startswith("/works/")
+            and doc.get("author_name")
+            and title_forms(doc.get("title")) & title_forms(title)
+            and creators_match(entry.creator, doc["author_name"])
+            and not (
+                entry.year
+                and doc.get("first_publish_year")
+                and abs(int(doc["first_publish_year"]) - entry.year) > SEARCH_YEAR_TOLERANCE
+            )
+        ]
+        if not matches:
+            return {}
+        best = max(matches, key=lambda doc: doc.get("edition_count") or 0)
+        return {"work": best["key"].rsplit("/", 1)[-1]}
+
+    key = hashlib.sha256(f"{normalize_title(title)}|{entry.creator}|{entry.year}".encode()).hexdigest()[:24]
+    found = _cached("olsearch", key, compute)
+    return (found or {}).get("work")
+
+
 def _main_title(entry):
     """Search a book by its main title: "Wilmington's Lie: The Murderous Coup…" -> "Wilmington's Lie".
 
@@ -758,9 +808,6 @@ def _book_ids(pairs):
         olid = str(((work or {}).get("ids") or {}).get("olw", "")).upper()
         if entry.media_type == "book" and "ref" not in entry.ids and re.match(r"^OL\d+[WM]$", olid):
             works[index] = olid
-    if not works:
-        return [entry for entry, _ in pairs]
-
     found = {}  # index -> (ids, image)
     mapped = hardcover_books([f"/works/{olid}" for olid in works.values() if olid.endswith("W")])
     for index, olid in works.items():
@@ -769,6 +816,17 @@ def _book_ids(pairs):
             found[index] = ({"hardcover": book["id"]}, book["image"])
         elif olid.endswith("M"):
             found[index] = ({"olid": olid}, "")
+
+    for index, (entry, work) in enumerate(pairs):
+        if index in works or entry.media_type != "book" or "ref" in entry.ids or not entry.creator:
+            continue
+        try:
+            work_id = work_by_author(entry)
+        except AdapterError as error:
+            logger.warning("Open Library search failed for %s: %s", entry.key, error)
+            continue
+        if work_id:
+            works[index] = work_id
 
     editions = {}
     for index, olid in works.items():
