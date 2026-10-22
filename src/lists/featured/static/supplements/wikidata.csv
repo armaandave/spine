@@ -1,0 +1,497 @@
+list,year,qid,title,creator,published,ref,why
+cannes-palme-dor,2018,Q27591008,The Image Book,,,-,"won a Special Palme d'Or, not the Palme"
+cannes-palme-dor,1954,Q862708,Gate of Hell,,,,Wikipedia winners table; Wikidata lacks it (Grand Prix)
+cannes-palme-dor,1951,Q1170844,Miracle in Milan,,,,Wikipedia winners table; Wikidata lacks it (Wikidata has no year)
+cannes-palme-dor,1949,Q271830,The Third Man,,,,Wikipedia winners table; Wikidata lacks it (Grand Prix)
+cannes-palme-dor,1947,Q2279661,Antoine and Antoinette,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix, awarded by genre)"
+cannes-palme-dor,1947,Q632718,Crossfire,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix, awarded by genre)"
+cannes-palme-dor,1947,Q40895,Dumbo,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix, awarded by genre)"
+cannes-palme-dor,1947,Q3233764,The Damned,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix, awarded by genre)"
+cannes-palme-dor,1947,Q2186004,Ziegfeld Follies,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix, awarded by genre)"
+cannes-palme-dor,1946,Q814296,Brief Encounter,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q2578176,María Candelaria,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q2280650,Men Without Wings,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q427915,Neecha Nagar,Chetan Anand,,,Wikipedia winners table (Grand Prix 1946); Wikidata has no year
+cannes-palme-dor,1946,Q2553634,Pastoral Symphony,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q721146,"Rome, Open City",,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q671940,The Last Chance,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q237134,The Lost Weekend,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q1757020,The Red Meadows,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q945852,The Turning Point,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+cannes-palme-dor,1946,Q2290980,Torment,,,,"Wikipedia winners table; Wikidata lacks it (Grand Prix du Festival, shared by eleven films (Neecha Nagar is on Wikidata))"
+bafta-best-film,2026,Q117085614,One Battle After Another,Paul Thomas Anderson,,,"Wikipedia winners table (film year 2025, ceremony 2026); Wikidata lacks it"
+bafta-best-film,2025,Q116701124,Conclave,Edward Berger,,,"Wikipedia winners table (film year 2024, ceremony 2025); Wikidata lacks it"
+bafta-best-film,2022,Q85323337,The Power of the Dog,Jane Campion,,,"Wikipedia winners table (film year 2021, ceremony 2022); Wikidata lacks it"
+bafta-best-film,2021,Q61740820,Nomadland,Chloé Zhao,,,"Wikipedia winners table (film year 2020, ceremony 2021); Wikidata lacks it"
+bafta-best-film,2020,Q62721520,1917,Sam Mendes,,,"Wikipedia winners table (film year 2019, ceremony 2020); Wikidata lacks it"
+bafta-best-film,2017,Q20856802,La La Land,Damien Chazelle,,,"Wikipedia winners table (film year 2016, ceremony 2017); Wikidata lacks it"
+bafta-best-film,2016,Q18002795,The Revenant,,,,ceremony year per Wikipedia (film year 2015); Wikidata says [2015]
+bafta-best-film,2014,Q3023357,12 Years a Slave,,,,ceremony year per Wikipedia (film year 2013); Wikidata says [2013]
+bafta-best-film,2013,Q59653,Argo,,,,ceremony year per Wikipedia (film year 2012); Wikidata says [2012]
+bafta-best-film,2012,Q171861,The Artist,Michel Hazanavicius,,,"Wikipedia winners table (film year 2011, ceremony 2012); Wikidata lacks it"
+bafta-best-film,2011,Q160060,The King's Speech,,,,ceremony year per Wikipedia (film year 2010); Wikidata says [2010]
+bafta-best-film,2010,Q183066,The Hurt Locker,,,,ceremony year per Wikipedia (film year 2009); Wikidata says [2009]
+bafta-best-film,2008,Q1626186,Atonement,Joe Wright,,,"Wikipedia winners table (film year 2007, ceremony 2008); Wikidata lacks it"
+bafta-best-film,2006,Q160618,Brokeback Mountain,,,,ceremony year per Wikipedia (film year 2005); Wikidata says [2005]
+bafta-best-film,2005,Q201924,The Aviator,Martin Scorsese,,,"Wikipedia winners table (film year 2004, ceremony 2005); Wikidata lacks it"
+bafta-best-film,2004,Q131074,The Lord of the Rings: The Return of the King,Peter Jackson,,,"Wikipedia winners table (film year 2003, ceremony 2004); Wikidata lacks it"
+bafta-best-film,2001,Q128518,Gladiator,,,,ceremony year per Wikipedia (film year 2000); Wikidata says [2000]
+bafta-best-film,1999,Q182944,Shakespeare in Love,John Madden,,,"Wikipedia winners table (film year 1998, ceremony 1999); Wikidata lacks it"
+bafta-best-film,1998,Q775970,The Full Monty,Peter Cattaneo,,,"Wikipedia winners table (film year 1997, ceremony 1998); Wikidata lacks it"
+bafta-best-film,1996,Q643263,Sense and Sensibility,Ang Lee,,,"Wikipedia winners table (film year 1995, ceremony 1996); Wikidata lacks it"
+bafta-best-film,1995,Q901213,Four Weddings and a Funeral,,,,ceremony year per Wikipedia (film year 1994); Wikidata says [1994]
+bafta-best-film,1994,Q483941,Schindler's List,,,,ceremony year per Wikipedia (film year 1993); Wikidata says [1993]
+bafta-best-film,1993,Q913389,Howards End,James Ivory,,,"Wikipedia winners table (film year 1992, ceremony 1993); Wikidata lacks it"
+bafta-best-film,1992,Q644065,The Commitments,Alan Parker,,,"Wikipedia winners table (film year 1991, ceremony 1992); Wikidata lacks it"
+bafta-best-film,1991,Q42047,Goodfellas,Martin Scorsese,,,"Wikipedia winners table (film year 1990, ceremony 1991); Wikidata lacks it"
+bafta-best-film,1989,Q212775,The Last Emperor,Bernardo Bertolucci,,,"Wikipedia winners table (film year 1988, ceremony 1989); Wikidata lacks it"
+bafta-best-film,1988,Q1315577,Jean de Florette,Claude Berri,,,"Wikipedia winners table (film year 1987, ceremony 1988); Wikidata lacks it"
+bafta-best-film,1986,Q912729,The Purple Rose of Cairo,,,,ceremony year per Wikipedia (film year 1985); Wikidata says nothing
+bafta-best-film,1985,Q494582,The Killing Fields,Roland Joffé,,,"Wikipedia winners table (film year 1984, ceremony 1985); Wikidata lacks it"
+bafta-best-film,1984,Q1753575,Educating Rita,Lewis Gilbert,,,"Wikipedia winners table (film year 1983, ceremony 1984); Wikidata lacks it"
+bafta-best-film,1983,Q202211,Gandhi,Richard Attenborough,,,"Wikipedia winners table (film year 1982, ceremony 1983); Wikidata lacks it"
+bafta-best-film,1982,Q207921,Chariots of Fire,Hugh Hudson,,,"Wikipedia winners table (film year 1981, ceremony 1982); Wikidata lacks it"
+bafta-best-film,1981,Q272860,The Elephant Man,David Lynch,,,"Wikipedia winners table (film year 1980, ceremony 1981); Wikidata lacks it"
+bafta-best-film,1980,Q731310,Manhattan,Woody Allen,,,"Wikipedia winners table (film year 1979, ceremony 1980); Wikidata lacks it"
+bafta-best-film,1978,Q233464,Annie Hall,Woody Allen,,,"Wikipedia winners table (film year 1977, ceremony 1978); Wikidata lacks it"
+bafta-best-film,1977,Q171669,One Flew Over the Cuckoo's Nest,,,,ceremony year per Wikipedia (film year 1976); Wikidata says [1976]
+bafta-best-film,1976,Q916431,Alice Doesn't Live Here Anymore,Martin Scorsese,,,"Wikipedia winners table (film year 1975, ceremony 1976); Wikidata lacks it"
+bafta-best-film,1975,Q836115,"Lacombe, Lucien",Louis Malle,,,"Wikipedia winners table (film year 1974, ceremony 1975); Wikidata lacks it"
+bafta-best-film,1974,Q909816,Day for Night,François Truffaut,,,"Wikipedia winners table (film year 1973, ceremony 1974); Wikidata lacks it"
+bafta-best-film,1973,Q918363,Cabaret,Bob Fosse,,,"Wikipedia winners table (film year 1972, ceremony 1973); Wikidata lacks it"
+bafta-best-film,1972,Q1360124,Sunday Bloody Sunday,John Schlesinger,,,"Wikipedia winners table (film year 1971, ceremony 1972); Wikidata lacks it"
+bafta-best-film,1971,Q232000,Butch Cassidy and the Sundance Kid,George Roy Hill,,,"Wikipedia winners table (film year 1970, ceremony 1971); Wikidata lacks it"
+bafta-best-film,1970,Q61696,Midnight Cowboy,John Schlesinger,,,"Wikipedia winners table (film year 1969, ceremony 1970); Wikidata lacks it"
+bafta-best-film,1969,Q217627,The Graduate,Mike Nichols,,,"Wikipedia winners table (film year 1968, ceremony 1969); Wikidata lacks it"
+bafta-best-film,1968,Q218999,A Man For All Seasons,Fred Zinnemann,,,"Wikipedia winners table (film year 1967, ceremony 1968); Wikidata lacks it"
+bafta-best-film,1967,Q325643,Who's Afraid of Virginia Woolf?,Mike Nichols,,,"Wikipedia winners table (film year 1966, ceremony 1967); Wikidata lacks it"
+bafta-best-film,1966,Q201215,My Fair Lady,George Cukor,,,"Wikipedia winners table (film year 1965, ceremony 1966); Wikidata lacks it"
+bafta-best-film,1964,Q313315,Tom Jones,Tony Richardson,,,"Wikipedia winners table (film year 1963, ceremony 1964); Wikidata lacks it"
+bafta-best-film,1963,Q228186,Lawrence of Arabia,David Lean,,,"Wikipedia winners table (film year 1962, ceremony 1963); Wikidata lacks it"
+bafta-best-film,1962,Q1305092,Ballad of a Soldier,Grigori Chukhrai,,,"Wikipedia winners table (film year 1961, ceremony 1962); Wikidata lacks it"
+bafta-best-film,1961,Q270510,The Apartment,Billy Wilder,,,"Wikipedia winners table (film year 1960, ceremony 1961); Wikidata lacks it"
+bafta-best-film,1960,Q180098,Ben-Hur,William Wyler,,,"Wikipedia winners table (film year 1959, ceremony 1960); Wikidata lacks it"
+bafta-best-film,1959,Q617997,Room at the Top,Jack Clayton,,,"Wikipedia winners table (film year 1958, ceremony 1959); Wikidata lacks it"
+bafta-best-film,1958,Q622380,Pather Panchali,,,-,"nominated, not the winner"
+bafta-best-film,1958,Q188718,The Bridge on the River Kwai,David Lean,,,"Wikipedia winners table (film year 1957, ceremony 1958); Wikidata lacks it"
+bafta-best-film,1957,Q225553,Gervaise,René Clément,,,"Wikipedia winners table (film year 1956, ceremony 1957); Wikidata lacks it"
+bafta-best-film,1953,Q2717481,The Sound Barrier,David Lean,,,"Wikipedia winners table (film year 1952, ceremony 1953); Wikidata lacks it"
+bafta-best-film,1952,Q1196452,La Ronde,Max Ophüls,,,"Wikipedia winners table (film year 1951, ceremony 1952); Wikidata lacks it"
+bafta-best-film,1951,Q200299,All About Eve,Joseph L. Mankiewicz,,,"Wikipedia winners table (film year 1950, ceremony 1951); Wikidata lacks it"
+bafta-best-film,1950,Q172837,Bicycle Thieves,Vittorio De Sica,,,"Wikipedia winners table (film year 1949, ceremony 1950); Wikidata lacks it"
+bafta-best-film,1949,Q27178,Hamlet,Laurence Olivier,,,"Wikipedia winners table (film year 1948, ceremony 1949); Wikidata lacks it"
+bafta-best-film,1948,Q645094,The Best Years of Our Lives,,,,ceremony year per Wikipedia (film year 1947); Wikidata says [1949]
+venice-golden-lion,2026,Q140743054,Woman Unknown,May el-Toukhy,,,Wikipedia winners table; Wikidata lacks it
+venice-golden-lion,2019,Q42759035,Joker,Todd Phillips,,,Wikipedia winners table; Wikidata lacks it
+venice-golden-lion,2016,Q26158148,The Woman Who Left,Lav Diaz,,,Wikipedia winners table; Wikidata lacks it
+venice-golden-lion,1992,Q644174,The Story of Qiu Ju,Zhang Yimou,,,Wikipedia winners table; Wikidata lacks it
+venice-golden-lion,1966,Q784812,The Battle of Algiers,Gillo Pontecorvo,,,Wikipedia winners table; Wikidata lacks it (Wikidata says 1965)
+berlinale-golden-bear,2026,Q136163095,Yellow Letters,İlker Çatak,,,Wikipedia winners table; Wikidata lacks it
+berlinale-golden-bear,2024,Q124319816,Dahomey,Mati Diop,,,Wikipedia winners table; Wikidata lacks it (Wikidata has no year)
+berlinale-golden-bear,2020,Q110281357,The Works and Days,,,-,"won in Encounters, not the Golden Bear"
+berlinale-golden-bear,2017,Q28127581,On Body and Soul,Ildikó Enyedi,,,Wikipedia winners table; Wikidata lacks it (Wikidata has no year)
+berlinale-golden-bear,2005,Q1138876,In Good Company,,,-,not a Golden Bear winner
+berlinale-golden-bear,1983,Q1402826,La colmena,Mario Camus,,,Wikipedia winners table; Wikidata lacks it (Wikidata has no year)
+berlinale-golden-bear,1978,Q2866389,Ascensor,Tomás Muñoz,,,Wikipedia winners table; Wikidata lacks it (shared by the Spanish films in competition)
+berlinale-golden-bear,1960,Q281677,El Lazarillo de Tormes,César Fernández Ardavín,,,Wikipedia winners table; Wikidata lacks it (Wikidata has no year)
+berlinale-golden-bear,1951,Q3213438,In Beaver Valley,James Algar,,,Wikipedia winners table; Wikidata lacks it (Golden Bear for documentary)
+national-film-registry,2025,Q659609,Before Sunrise,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,Q929432,Brooklyn Bridge,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,Q204057,Philadelphia,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,Q98719457,"Say Amen, Somebody",,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,Q157044,The Hours,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,,The Loving Story,,2011,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,,The Maid of McMillan,,1916,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2025,Q137940003,The Oath of the Sword,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q642516,American Me,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q965200,Common Threads: Stories from the Quilt,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q5156256,Compensation,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q5521344,Ganja & Hess,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q1783892,My Family,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q1125451,My Own Private Idaho,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q1385470,Powwow Highway,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q550581,Spy Kids,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q1381289,Up in Smoke,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q7899447,Uptown Saturday Night,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,Q30599687,Will,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2024,,Zora Lathan student films,,1975,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q15052276,20 Feet from Stardom,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q123859871,A Movie Trip Through Filmland,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q3283813,Alambrista!,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q2277762,Bamboozled,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,,Bohulano Family Film Collection,,1950,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q123855899,Cruisin' J-Town,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q1420421,Desperately Seeking Susan,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q1351911,Fame,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q1146404,Helen Keller in Her Story,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q1146503,Love & Basketball,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q3851789,Matewan,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q2238172,Maya Lin: A Strong Clear Vision,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q112860828,Passing Through,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,,The Lighted Field,,1987,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q182071,The Wedding Banquet,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2023,Q123855900,We're Alive,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q125398873,Attica,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q125820640,Behind Every Good Man,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,,Betty Tells Her Story,,1972,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q5001393,Bush Mama,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,,Cab Calloway's home movies,,1948,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q162672,Carrie,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q784181,Cyrano de Bergerac,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q1528825,Hairspray,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q1631381,House Party,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,,"Itam Hakim, Hopiit",,1984,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,,Manzanar,,1971,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,,Mardi Gras Carnival,,1898,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q6864828,Mingus,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q7137004,Pariah,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q647939,Scorpio Rising,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q2601720,Super Fly,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q47063893,The Ballad of Gregorio Cortez,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q144521,Titicut Follies,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q7821187,Tongues Untied,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q12130403,Union Maids,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2022,Q8034292,Word Is Out: Stories of Some of Our Lives,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2020,Q114855784,Mauna Kea: Temple Under Siege,,,-,duplicate item; the Library of Congress entry is Mauna Kea: Temple Under Siege
+national-film-registry,2017,Q1545826,Ace in the Hole,,,,induction year per the Library of Congress list on Wikipedia (Wikidata says nothing)
+national-film-registry,2017,Q64761060,Ace in the Hole (aka Big Carnival),,,-,duplicate item; the Library of Congress entry is Ace in the Hole
+national-film-registry,2016,Q36479,The Lion King,,,,induction year per the Library of Congress list on Wikipedia (Wikidata says [2023])
+national-film-registry,2012,Q7744257,The Kidnappers Foil,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,2008,Q2249268,Footage of World War II by George Stevens,,,-,duplicate item; Q64761077 has the TMDB id
+national-film-registry,2000,Q1771928,Why We Fight,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,1998,Q1955166,"Westinghouse Works, 1904",,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,1996,Q2667789,Flash Gordon,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,1995,Q2071362,Rip Van Winkle,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,1994,Q940900,The Exploits of Elaine,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+national-film-registry,1992,Q4666933,Dog Star Man,,,,inducted per the Library of Congress list on Wikipedia; Wikidata lacks it
+pulitzer-fiction,2024,Q126009535,Night Watch,Jayne Anne Phillips,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2026,,There Is No Place for Us: Working and Homeless in America,Brian Goldstone,2025,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2025,,To the Success of Our Hopeless Cause: The Many Lives of the Soviet Dissident Movement,Benjamin Nathans,2024,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2024,Q131324842,A Day in the Life of Abed Salama: Anatomy of a Jerusalem Tragedy,Nathan Thrall,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2023,Q112300317,His Name Is George Floyd: One Man's Life and the Struggle for Racial Justice,Toluse Olorunnipa and Robert Samuels,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2022,Q111912354,"Invisible Child: Poverty, Survival and Hope in an American City",Andrea Elliott,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2021,,Wilmington's Lie: The Murderous Coup of 1898 and the Rise of White Supremacy,David Zucchino,2020,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2018,Q97887617,Locking Up Our Own: Crime and Punishment in Black America,James Forman Jr.,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2015,Q17105817,The Sixth Extinction: An Unnatural History,Elizabeth Kolbert,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2014,Q17090255,Toms River: A Story of Science and Salvation,Dan Fagin,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2013,Q15613931,"Devil in the Grove: Thurgood Marshall, the Groveland Boys, and the Dawn of a New America",Gilbert King,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2010,Q7729293,The Dead Hand: The Untold Story of the Cold War Arms Race and Its Dangerous Legacy,David E. Hoffman,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2009,Q3700769,Slavery by Another Name: The Re-Enslavement of Black Americans from the Civil War to World War II,Douglas A. Blackmon,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2008,Q7776627,"The Years of Extermination: Nazi Germany and the Jews, 1939–1945",Saul Friedländer,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2006,Q6006826,Imperial Reckoning: The Untold Story of Britain's Gulag in Kenya,Caroline Elkins,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2004,Q4186911,Gulag: A History of the Soviet Camps,Anne Applebaum,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,2003,Q4659043,"A Problem from Hell"": America and the Age of Genocide",Samantha Power,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1999,Q4767874,Annals of the Former World,John McPhee,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1997,Q4804889,"Ashes to Ashes: America's Hundred-Year Cigarette War, the Public Health, and the Unabashed Triumph of Philip Morris",Richard Kluger,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1996,Q7739013,The Haunted Land: Facing Europe's Ghosts after Communism,Tina Rosenberg,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1994,Q6522558,Lenin's Tomb (1st edition),,,-,duplicate: an edition item of the winner
+pulitzer-general-nonfiction,1993,Q16159473,Lincoln at Gettysburg: The Words That Remade America,Garry Wills,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1990,Q4753368,And Their Children after Them,Dale Maharidge and Michael Williamson,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1987,Q4783275,Arab and Jew: Wounded Spirits in a Promised Land,David K. Shipler,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1986,Q5153377,Common Ground: A Turbulent Decade in the Lives of Three American Families,J. Anthony Lukas,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1986,Q6926545,"Move Your Shadow: South Africa, Black and White",Joseph Lelyveld,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1985,Q7737294,"The Good War"": An Oral History of World War II",Studs Terkel,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1983,Q6075546,Is There No Place on Earth for Me?,Susan Sheehan,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1981,Q5449302,Fin-de-Siècle Vienna: Politics and Culture,Carl E. Schorske,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1980,Q831517,"Gödel, Escher, Bach: An Eternal Golden Braid",Douglas Hofstadter,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1977,Q4877820,"Beautiful Swimmers: Watermen, Crabs and the Chesapeake Bay",William W. Warner,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1976,Q7997866,Why Survive?: Being Old in America,Robert N. Butler,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1974,Q2841991,The Denial of Death,Ernest Becker and Ernest Becker,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1973,Q5098425,"Children of Crisis, Volumes II and III",Robert Coles,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1971,Q3818940,"The Rising Sun: The Decline and Fall of the Japanese Empire, 1936–1945",John Toland,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1969,Q7549316,So Human an Animal: How We Are Shaped by Surroundings and Events,René Dubos,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1966,Q7967220,"Wandering through Winter: A Naturalist's Record of a 20,000-Mile Journey through the North American Winter",Edwin Way Teale,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1965,Q7073331,O Strange New World: American Culture: The Formative Years,Howard Mumford Jones,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1964,Q4774387,Anti-Intellectualism in American Life,Richard Hofstadter,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-general-nonfiction,1962,Q7749730,The Making of the President 1960,Theodore H. White,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2026,,We the People: A History of the U.S. Constitution,Jill Lepore,2025,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2025,Q135903048,"Combee: Harriet Tubman, the Combahee River Raid, and Black Freedom during the Civil War",Edda L. Fields-Black,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2025,Q137583703,Native Nations: A Millennium in North America,Kathleen DuVal,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2024,,No Right to an Honest Living: The Struggles of Boston's Black Workers in the Civil War Era,Jacqueline Jones,2023,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2023,Q130336398,Freedom's Dominion: A Saga of White Resistance to Federal Power,Jefferson Cowie,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2022,,Covered with Night: A Story of Murder and Indigenous Justice in Early America,Nicole Eustace,2021,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2022,Q116736009,Cuba: An American History,Ada Ferrer,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2020,Q93290694,Sweet Taste of Liberty: A True Story of Slavery and Restitution in America,W. Caleb McDaniel,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2016,Q84459006,Custer's Trials: A Life on the Frontier of a New America,T. J. Stiles,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2014,Q20926243,"The Internal Enemy: Slavery and War in Virginia, 1772-1832",Alan Taylor,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2013,Q16974730,Embers of War: The Fall of an Empire and the Making of America's Vietnam,Fredrik Logevall,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2011,Q7733746,The Fiery Trial: Abraham Lincoln and American Slavery,Eric Foner,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2010,Q4366353,Lords of Finance: The Bankers Who Broke the World,Liaquat Ahamed,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2009,Q7739360,The Hemingses of Monticello: An American Family,Annette Gordon-Reed,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2008,Q7991134,"What Hath God Wrought: The Transformation of America, 1815–1848",Daniel Walker Howe,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2007,Q7759175,"The Race Beat: The Press, the Civil Rights Struggle, and the Awakening of a Nation",Gene Roberts and Hank Klibanoff,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2005,Q7971576,Washington's Crossing,David Hackett Fischer,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2002,Q7751174,The Metaphysical Club: A Story of Ideas in America,Louis Menand,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,2001,Q5474624,Founding Brothers: The Revolutionary Generation,Joseph J. Ellis,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1999,Q5587785,Gotham: A History of New York City to 1898,Edwin G. Burrows and Mike Wallace,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1998,,Summer for the Gods: The Scopes Trial and America's Continuing Debate over Science and Religion,Edward J. Larson,1997,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1997,Q7102548,Original Meanings: Politics and Ideas in the Making of the Constitution,Jack N. Rakove,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1992,Q7733532,The Fate of Liberty: Abraham Lincoln and Civil Liberties,"Mark E. Neely, Jr.",,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1991,,A Midwife's Tale,Laurel Thatcher Ulrich,1990,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1990,Q16985818,In Our Image: America's Empire in the Philippines,Stanley Karnow,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1989,Q4742818,"Parting the Waters: America in the King Years, 1954-1963",Taylor Branch,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1986,Q4545128,...the Heavens and the Earth: A Political History of the Space Age,Walter A. McDougall,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1985,Q7250307,"Prophets of Regulation: Charles Francis Adams, Louis D. Brandeis, James M. Landis, Alfred E. Kahn",Thomas K. McCraw,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1983,Q7769948,"The Transformation of Virginia, 1740–1790",Rhys L. Isaac,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1980,Q4879884,Been in the Storm So Long: The Aftermath of Slavery,Leon F. Litwack,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1979,Q7730997,The Dred Scott Case: Its Significance in American Law and Politics,Don E. Fehrenbacher,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1977,Q7741523,"The Impending Crisis, 1848–1861",David M. Potter,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1975,Q6175711,Jefferson and His Time,Dumas Malone,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1973,Q7165965,People of Paradox: An Inquiry Concerning the Origins of American Civilization,Michael Kammen,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1971,Q7366403,Roosevelt: The Soldier of Freedom,James MacGregor Burns,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1970,Q7240939,Present at the Creation: My Years in the State Department,Dean Acheson,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1969,Q7102641,Origins of the Fifth Amendment: The Right against Self-Incrimination,Leonard W. Levy,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1967,Q16975520,Exploration and Empire: The Explorer and the Scientist in the Winning of the American West,William H. Goetzmann,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1966,Q19787064,The Life of the Mind in America,Perry Miller,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1965,Q16982685,"The Greenback Era: A Social and Political History of American Finance, 1865–1879",Irwin Unger,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1964,Q19866536,Puritan Village: The Formation of a New England Town,Sumner Chilton Powell,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1963,Q7971612,"Washington: Village and Capital, 1800–1878",Constance McLaughlin Green,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1962,,"The Triumphant Empire: Thunder-Clouds Gather in the West, 1763–1766",Lawrence H. Gipson,1961,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1961,Q19867178,Between War and Peace: The Potsdam Conference,Herbert Feis,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1960,Q28368741,In the Days of McKinley,Margaret Leech,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1959,,The Republican Era: 1869–1901,Leonard D. White and Jean Schneider,1958,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1958,,Banks and Politics in America,Bray Hammond,1957,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1956,,The Age of Reform,Richard Hofstadter,1955,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1955,,Great River: The Rio Grande in North American History,Paul Horgan,1954,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1954,Q4659799,A Stillness at Appomattox,Bruce Catton,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1953,,The Era of Good Feelings,George Dangerfield,1952,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1951,,"The Old Northwest, Pioneer Period 1815–1840",R. Carlyle Buley,1950,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1950,,Art and Life in America,Oliver W. Larkin,1949,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1949,,The Disruption of American Democracy,Roy Franklin Nichols,1948,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1946,Q42185314,The Age of Jackson,Arthur M. Schlesinger Jr.,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1945,,Unfinished Business,Stephen Bonsal,1944,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1944,,The Growth of American Thought,Merle Curti,1943,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1942,Q85796934,"Reveille in Washington, 1860–1865",Margaret Leech,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1941,Q7714809,"The Atlantic Migration, 1607–1860",Marcus Lee Hansen,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1940,Q17985392,Abraham Lincoln: The War Years,Carl Sandburg,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1938,Q104880558,"The Road to Reunion, 1865–1900",Paul Herman Buck,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1937,,"The Flowering of New England, 1815–1865",Van Wyck Brooks,1936,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1936,,A Constitutional History of the United States,Andrew C. McLaughlin,1935,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1935,,The Colonial Period of American History,Charles McLean Andrews,1934,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1934,,The People's Choice,Herbert Agar,1933,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1933,,The Significance of Sections in American History,Frederick Jackson Turner,1932,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1932,Q56308426,My Experiences in the World War,John J. Pershing,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1931,,"The Coming of the War, 1914",Bernadotte E. Schmitt,1930,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1930,Q16324711,The War of Independence,Claude H. Van Tyne,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1929,Q7755337,"The Organization and Administration of the Union Army, 1861–1865",Fred Albert Shannon,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1928,,Main Currents in American Thought,Vernon Louis Parrington,1927,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1927,,Pinckney's Treaty,Samuel Flagg Bemis,1926,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1926,,"A History of the United States, Vol. VI: The War for Southern Independence (1849–1865)",Edward Channing,1925,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1925,Q28368740,History of the American Frontier,Frederic L. Paxson,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1924,Q104880634,The American Revolution: A Constitutional Interpretation,Charles Howard McIlwain,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1923,,The Supreme Court in United States History,Charles Warren,1922,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1922,Q19087575,The Founding of New England,James Truslow Adams,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1921,Q102079158,The Victory at Sea,William Sowden Sims and Burton J. Hendrick,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1920,Q19787037,The War with Mexico,Justin H. Smith,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1918,Q16984385,"A History of the Civil War, 1861–1865",James Ford Rhodes,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-history,1917,,With Americans of Past and Present Days,Jean Jules Jusserand,1916,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2026,,Pride and Pleasure: The Schuyler Sisters in an Age of Revolution,Amanda Vaill,2025,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2025,Q134563641,Every Living Thing: The Great and Deadly Race to Know All Life,Jason Roberts,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2024,Q125852905,King: A Life,Jonathan Eig,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2024,,Master Slave Husband Wife: An Epic Journey from Slavery to Freedom,Ilyon Woo,2023,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2023,Q117303914,G-Man: J. Edgar Hoover and the Making of the American Century,Beverly Gage,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2022,Q111976417,Chasing Me to My Grave: An Artist's Memoir of the Jim Crow South,Winfred Rembert and Erin I. Kelly,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2018,Q85794271,Prairie Fires: The American Dreams of Laura Ingalls Wilder,Caroline Fraser,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2017,Q39069946,"The Return: Fathers, Sons and the Land in Between",Hisham Matar,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2014,,Margaret Fuller: A New American Life,Megan Marshall,2013,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2013,Q16823397,"The Black Count: Glory, Revolution, Betrayal, and the Real Count of Monte Cristo",Tom Reiss,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2011,Q7971636,Washington: A Life,Ron Chernow,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2010,Q7734218,The First Tycoon: The Epic Life of Cornelius Vanderbilt,T. J. Stiles,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2009,Q4744367,American Lion: Andrew Jackson in the White House,Jon Meacham,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2008,Q5336784,Eden's Outcasts: The Story of Louisa May Alcott and Her Father,John Matteson,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2007,Q7752368,The Most Famous Man in America: The Biography of Henry Ward Beecher,Debby Applegate,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2006,Q4744748,American Prometheus: The Triumph and Tragedy of J. Robert Oppenheimer,Kai Bird and Martin J. Sherwin,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2004,Q16852749,Khrushchev: The Man and His Era,William Taubman,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2003,Q124354904,Master of the Senate: The Years of Lyndon Johnson,Robert Caro,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,2000,,"Vera, Mrs. Vladimir Nabokov",Stacy Schiff,1999,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1999,Q16932851,Lindbergh,A. Scott Berg,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1996,Q3708007,God: A Biography,Jack Miles,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1995,,Harriet Beecher Stowe: A Life,Joan D. Hedrick,1994,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1992,,Fortunate Son: The Autobiography of Lewis B. Puller Jr.,Lewis B. Puller,1991,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1990,,Machiavelli in Hell,Sebastian de Grazia,1989,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1988,Q60753295,Look Homeward: A Life of Thomas Wolfe,David Herbert Donald,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1987,Q21260493,Bearing The Cross: Martin Luther King Jr. and the Southern Christian Leadership Conference,David J. Garrow,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1986,,Louise Bogan: A Portrait,Elizabeth Frank,1985,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1985,,The Life and Times of Cotton Mather,Kenneth Silverman,1984,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1984,,"Booker T. Washington: The Wizard of Tuskegee, 1901–1915",Louis R. Harlan,1983,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1982,,Grant: A Biography,William S. McFeely,1981,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1981,Q7177937,Peter the Great: His Life and World,Robert K. Massie,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1980,Q2534271,The Rise of Theodore Roosevelt,Edmund Morris,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1979,,Days of Sorrow and Pain: Leo Baeck and the Berlin Jews,Leonard Baker,1978,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1978,,Samuel Johnson,Walter Jackson Bate,1977,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1977,,A Prince of Our Disorder: The Life of T. E. Lawrence,John E. Mack,1976,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1976,,Edith Wharton: A Biography,R. W. B. Lewis,1975,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1975,Q7757917,The Power Broker: Robert Moses and the Fall of New York,Robert Caro,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1974,,"O'Neill, Son and Artist",Louis Sheaffer,1973,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1973,,Luce and His Empire,W. A. Swanberg,1972,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1972,Q108309265,Eleanor and Franklin,Joseph P. Lash,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1971,,"Robert Frost: The Years of Triumph, 1915–1938",Lawrance Thompson,1970,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1970,Q105985548,Huey Long,Thomas Harry Williams,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1969,,The Man from New York: John Quinn and His Friends,Benjamin Lawrence Reid,1968,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1968,,Memoirs,George F. Kennan,1967,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1967,,Mr. Clemens and Mark Twain,Justin Kaplan,1966,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1965,,"Henry Adams, 3 vols.",Ernest Samuels,1964,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1964,,John Keats,Walter Jackson Bate,1963,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1963,,Henry James,Leon Edel,1962,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1961,,Charles Sumner and the Coming of the Civil War,David Donald,1960,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1960,,John Paul Jones,Samuel Eliot Morison,1959,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1959,,Woodrow Wilson,Arthur Walworth,1958,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1958,,"George Washington, vols. I-VII",Douglas Southall Freeman,1957,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1956,,Benjamin Henry Latrobe,Talbot Faulkner Hamlin,1955,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1955,,The Taft Story,William S. White,1954,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1954,Q7765946,The Spirit of St. Louis,Charles A. Lindbergh,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1953,,Edmund Pendleton 1721–1803,David J. Mays,1952,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1952,,Charles Evans Hughes,Merlo J. Pusey,1951,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1951,,John C. Calhoun: American Portrait,Margaret Louise Coit,1950,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1950,,John Quincy Adams and the Foundations of American Foreign Policy,Samuel Flagg Bemis,1949,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1949,,Roosevelt and Hopkins,Robert E. Sherwood,1948,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1948,,Forgotten First Citizen: John Bigelow,Margaret Clapp,1947,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1947,,The Autobiography of William Allen White,William Allen White,1946,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1946,,Son of the Wilderness: The Life of John Muir,Linnie Marsh Wolfe,1945,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1945,,George Bancroft: Brahmin Rebel,Russel Blaine Nye,1944,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1944,,The American Leonardo: The Life of Samuel F. B. Morse,Carleton Mabee,1943,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1943,,Admiral of the Ocean Sea,Samuel Eliot Morison,1942,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1942,,Crusader in Crinoline: The Life of Harriet Beecher Stowe,Forrest Wilson,1941,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1941,,"Jonathan Edwards, 1703–1758: A Biography",Ola Elizabeth Winslow,1940,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1940,,"Woodrow Wilson, Life and Letters. Vols. VII and VIII",Ray Stannard Baker,1939,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1939,Q108304004,Benjamin Franklin,Carl Van Doren,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1938,,Pedlar's Progress: The Life of Bronson Alcott,Odell Shepard,1937,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1938,Q138606451,"The Life of Andrew Jackson, 2 vols.",Marquis James,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1937,,Hamilton Fish,Allan Nevins,1936,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1936,,The Thought and Character of William James,Ralph Barton Perry,1935,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1935,,R. E. Lee,Douglas S. Freeman,1934,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1934,,John Hay,Tyler Dennett,1933,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1933,,Grover Cleveland: A Study in Courage,Allan Nevins,1932,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1932,,Theodore Roosevelt: A Biography,Henry F. Pringle,1931,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1931,,"Charles W. Eliot, President of Harvard University, 1869–1901",Henry James,1930,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1930,,The Raven: A Biography of Sam Houston,Marquis James,1929,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1929,,The Training of an American: The Earlier Life and Letters of Walter H. Page,Burton J. Hendrick,1928,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1928,,The American Orchestra and Theodore Thomas,Charles Edward Russell,1927,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1927,,Whitman,Emory Holloway,1926,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1926,,"The Life of Sir William Osler, 2 vols.",Harvey Cushing,1925,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1925,,Barrett Wendell and His Letters,M. A. De Wolfe Howe,1924,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1924,Q42190186,From Immigrant to Inventor,Michael I. Pupin,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1923,,The Life and Letters of Walter H. Page,Burton J. Hendrick,1922,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1922,,A Daughter of the Middle Border,Hamlin Garland,1921,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1921,,The Americanization of Edward Bok: The Autobiography of a Dutch Boy Fifty Years After,Edward Bok,1920,,Wikipedia winners table; Wikidata lacks it
+pulitzer-biography,1918,Q4888605,"Benjamin Franklin, Self-Revealed",William Cabell Bruce,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-memoir,2026,,Things in Nature Merely Grow,Yiyun Li,2025,,Wikipedia winners table; Wikidata lacks it
+pulitzer-memoir,2025,,Feeding Ghosts: A Graphic Memoir,Tessa Hulls,2024,,Wikipedia winners table; Wikidata lacks it
+pulitzer-memoir,2024,Q127876751,Liliana's Invincible Summer: A Sister's Search for Justice,Cristina Rivera Garza,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2026,,Ars Poeticas,Juliana Spahr,2025,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2025,,New and Selected Poems,Marie Howe,2024,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2024,Q131320487,Tripas: Poems,Brandon Som,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2023,Q129161622,"Then the War: and Selected Poems, 2007–2020",Carl Phillips,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2019,Q128800277,Be With,Forrest Gander,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2015,Q128996406,Digest,Gregory Pardlo,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2014,Q129742972,3 Sections,Vijay Seshadri,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2013,Q65043350,Stag's Leap,Sharon Olds,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2011,Q129078527,The Best of It: New and Selected Poems,Kay Ryan,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2008,,Failure,Philip Schultz,2007,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2006,,Late Wife,Claudia Emerson,2005,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2005,,Delights & Shadows,Ted Kooser,2004,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2004,,Walking to Martha's Vineyard,Franz Wright,2003,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2003,,Moy Sand and Gravel,Paul Muldoon,2002,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2002,,Practical Gods,Carl Dennis,2001,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,2000,,Repair,C. K. Williams,1999,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1999,,Blizzard of One,Mark Strand,1998,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1998,,Black Zodiac,Charles Wright,1997,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1997,,Alive Together: New and Selected Poems,Lisel Mueller,1996,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1996,,The Dream of the Unified Field,Jorie Graham,1995,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1995,,The Simple Truth,Philip Levine,1994,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1994,,Neon Vernacular: New and Selected Poems,Yusef Komunyakaa,1993,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1992,,Selected Poems,James Tate,1991,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1989,,New and Collected Poems,Richard Wilbur,1988,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1988,,Partial Accounts: New and Selected Poems,William Meredith,1987,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1987,Q7795400,Thomas and Beulah,Rita Dove,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1986,,The Flying Change,Henry S. Taylor,1985,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1985,,Yin,Carolyn Kizer,1984,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1983,,Selected Poems,Galway Kinnell,1982,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1982,,The Collected Poems,Sylvia Plath,1981,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1981,,The Morning of the Poem,James Schuyler,1980,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1980,,Selected Poems,Donald Justice,1979,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1979,,Now and Then,Robert Penn Warren,1978,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1978,,Collected Poems,Howard Nemerov,1977,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1975,Q7856410,Turtle Island,Gary Snyder,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1974,,The Dolphin,Robert Lowell,1973,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1973,,Up Country,Maxine Kumin,1972,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1972,,Collected Poems,James Wright,1971,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1971,,The Carrier of Ladders,W. S. Merwin,1970,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1970,,Untitled Subjects,Richard Howard,1969,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1969,,Of Being Numerous,George Oppen,1968,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1968,,The Hard Hours,Anthony Hecht,1967,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1967,Q6658069,Live or Die,Anne Sexton,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1966,,Selected Poems,Richard Eberhart,1965,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1965,Q7730936,77 Dream Songs,John Berryman,,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1963,,Pictures from Brueghel,William Carlos Williams,1962,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1962,,Poems,Alan Dugan,1961,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1960,,Heart's Needle,W. D. Snodgrass,1959,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1959,,Selected Poems 1928-1958,Stanley Kunitz,1958,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1958,,Promises: Poems 1954-1956,Robert Penn Warren,1957,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1957,,Things of This World,Richard Wilbur,1956,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1956,,Poems: North & South – A Cold Spring,Elizabeth Bishop,1955,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1955,,Collected Poems,Wallace Stevens,1954,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1953,,Collected Poems 1917-1952,Archibald MacLeish,1952,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1952,,Collected Poems,Marianne Moore,1951,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1951,,Complete Poems,Carl Sandburg,1950,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1949,,Terror and Decorum,Peter Viereck,1948,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1945,,V-Letter and Other Poems,Karl Shapiro,1944,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1944,,Western Star,Stephen Vincent Benét,1943,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1940,,Collected Poems,Mark Van Doren,1939,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1939,,Selected Poems,John Gould Fletcher,1938,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1938,,Cold Morning Sky,Marya Zaturenska,1937,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1936,,Strange Holiness,Robert P. T. Coffin,1935,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1934,,Collected Verse,Robert Hillyer,1933,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1933,,Conquistador,Archibald MacLeish,1932,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1932,,The Flowering Stone,George Dillon,1931,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1931,Q85753299,Collected Poems of Robert Frost,,,-,duplicate item of the 1931 winner
+pulitzer-poetry,1930,,Selected Poems,Conrad Aiken,1929,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1926,,What's O'Clock,Amy Lowell,1925,,Wikipedia winners table; Wikidata lacks it
+pulitzer-poetry,1924,Q7008086,New Hampshire,Robert Frost,,,year per Wikipedia (Wikidata says [1923])
+booker-prize,1970,Q4000425,Troubles,,,-,"won the one-off Lost Man Booker Prize (2010), not the 1970 Booker"
+international-booker-prize,2023,Q118946932,Time Shelter,,,-,duplicate item of the 2023 winner
+international-booker-prize,2021,Q113859354,At Night All Blood Is Black,,,-,duplicate item of the 2021 winner
+international-booker-prize,2021,Q125509557,The Perfect Nine,,,-,"shortlisted in 2021, not the winner"
+hugo-best-novel,2011,Q11681262,All Clear,,,-,"volume of the 2011 winner Blackout/All Clear, which is listed"
+hugo-best-novel,2011,Q18366291,Blackout,,,-,"volume of the 2011 winner Blackout/All Clear, which is listed"
+womens-prize-fiction,2026,Q138964814,The Correspondent,Virginia Evans,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2025,Q132638069,The Persians,,,-,not the 2025 winner (The Safekeep)
+womens-prize-fiction,2025,Q130749180,The Safekeep,Yael van der Wouden,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2024,Q131727485,Brotherless Night,V. V. Ganeshananthan,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2020,Q96380258,Hamnet,Maggie O'Farrell,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2019,Q65089909,An American Marriage,Tayari Jones,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2018,Q39073748,Home Fire,Kamila Shamsie,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2017,Q28135786,The Power,Naomi Alderman,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2015,Q19364465,How to Be Both,Ali Smith,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2014,Q18349573,A Girl Is a Half-formed Thing,Eimear McBride,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2013,Q16997453,May We Be Forgiven,A. M. Homes,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2011,Q7769245,The Tiger's Wife,Téa Obreht,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2009,Q13636457,Home,Marilynne Robinson,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2008,Q7761069,The Road Home,Rose Tremain,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2005,Q2107910,We Need to Talk About Kevin,Lionel Shriver,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2003,Q7250211,Property,Valerie Martin,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2001,Q7741334,The Idea of Perfection,Kate Grenville,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,2000,Q16963195,When I Lived in Modern Times,Linda Grant,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,1999,Q4656184,A Crime in the Neighborhood,Suzanne Berne,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,1998,Q6489841,Larry's Party,Carol Shields,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,1998,Q1472202,The House Gun,,,-,not the 1998 winner (Larry's Party)
+womens-prize-fiction,1997,Q5507274,Fugitive Pieces,Anne Michaels,,,Wikipedia winners table; Wikidata lacks it
+newbery-medal,2026,Q138303635,All the Blues in the Sky,Renée Watson,,,Wikipedia winners table; Wikidata lacks it
+newbery-medal,2006,Q5872028,Hitler Youth,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,2006,Q7244509,Princess Academy,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,2004,Q19364499,An American Plague,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,2001,Q7773405,The Wanderer,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1983,Q5597870,Graven Images,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1971,Q16765232,Sing Down the Moon,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1968,Q7718412,The Black Pearl,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1967,Q7744452,The King's Fifth,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1958,Q7737990,The Great Wheel,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1946,Q6317936,Justin Morgan Had a Horse,,,-,"an Honor book, recorded on Wikidata as the Medal"
+newbery-medal,1932,Q7733123,The Fairy Circus,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,2026,,Fireworks,"Matthew Burgess, Cátia Chien",2025,,Wikipedia winners table; Wikidata lacks it
+caldecott-medal,1953,Q7092998,One Morning in Maine,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,1950,Q85808852,The Wild Birthday Cake,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,1949,Q4930219,Blueberries for Sal,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,1948,Q65069745,Roger and the Fox,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,1942,Q65066429,Nothing At All,,,-,"an Honor book, recorded on Wikidata as the Medal"
+caldecott-medal,1939,Q23307497,Snow White and the Seven Dwarfs,,,-,"an Honor book, recorded on Wikidata as the Medal"
