@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from app.providers import hardcover, nytbooks, openlibrary  # noqa: F401 - stable patch targets
 from lists.featured import engine, registry, resolve
@@ -60,6 +63,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--owner", required=True)
+        parser.add_argument(
+            "--skip-synced-within",
+            type=float,
+            default=0,
+            metavar="HOURS",
+            help="Skip charts the featured-lists engine synced successfully within this many hours.",
+        )
 
     def handle(self, *args, **options):  # noqa: ARG002
         try:
@@ -68,8 +78,14 @@ class Command(BaseCommand):
             raise CommandError(f"Spine user {options['owner']!r} does not exist.") from error
 
         failures = []
+        recent = options.get("skip_synced_within") or 0
+        cutoff = timezone.now() - timedelta(hours=recent)
         for definition in nytbooks.FEATURED_CHARTS:
-            result = engine.run(_featured_definition(definition), owner, trigger="command")
+            featured = _featured_definition(definition)
+            if recent and FeaturedListSync.objects.filter(key=featured.key, last_success_at__gte=cutoff).exists():
+                self.stdout.write(f"{definition['fallback_name']}: synced within {recent:g} hours; skipped.")
+                continue
+            result = engine.run(featured, owner, trigger="command")
             if result.status == FeaturedListSync.Status.DEFERRED:
                 # Waiting for Hardcover's or Open Library's quota: retried later, not a failure.
                 self.stdout.write(self.style.WARNING(f"{definition['fallback_name']}: {result.message}"))

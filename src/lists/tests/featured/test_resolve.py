@@ -1,10 +1,12 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase
+from django.utils import timezone
 
 from app.providers import services
-from lists.featured import resolve
+from lists.featured import registry, resolve
 from lists.featured.registry import Guards
 from lists.featured.resolve import Resolver, parse_ref, pick_title_match
 from lists.featured.types import Entry, Match
@@ -169,9 +171,21 @@ class TitleSearchTests(ResolverTestCase):
             self.assertIsNone(resolver.resolve_one(first).match)
             blocked = resolver.resolve_one(second)
         self.assertEqual(search.call_count, 1)
-        self.assertEqual(blocked.reason, "title search budget used up")
+        # Cut off by the cap: deferred to the next run, not unresolved.
+        self.assertTrue(blocked.deferred)
+        self.assertEqual(blocked.reason, "this run's 1 title searches are used up")
+        self.assertAlmostEqual(blocked.retry_at, timezone.now() + resolve.TITLE_SEARCH_RETRY, delta=timedelta(minutes=1))
         self.assertEqual(cache.get(resolver._cache_key(first)), resolve.MISS)
         self.assertIsNone(cache.get(resolver._cache_key(second)))
+
+    def test_hits_outlive_the_longest_cadence_and_refresh_on_use(self):
+        longest = max(definition.cadence for definition in registry.all_definitions() if definition.cadence)
+        self.assertGreater(timedelta(seconds=resolve.HIT_TTL), longest)
+        entry = Entry(1, "Dune", year=2021)
+        _, _, resolver = self.search(entry, [tmdb_result(438631, "Dune", "2021-09-15")])
+        with patch.object(cache, "touch") as touch:
+            self.assertIsNotNone(resolver.resolve_one(entry).match)
+        touch.assert_called_once_with(resolver._cache_key(entry), resolve.HIT_TTL)
 
     def test_hits_and_misses_are_cached(self):
         entry = Entry(1, "Dune", year=2021)

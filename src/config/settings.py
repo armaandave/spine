@@ -702,10 +702,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Sync NYT featured lists",
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
-    "sync_letterboxd_top_500_featured_list": {
-        "task": "Sync Letterboxd Top 500 featured list",
-        "schedule": 60 * 60 * 24,  # every 24 hours
-    },
     "dispatch_featured_lists": {
         "task": "Dispatch featured lists",
         "schedule": 60,  # every minute; queues only the lists that are due

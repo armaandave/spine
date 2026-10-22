@@ -118,13 +118,18 @@ def is_retired(definition, sync):
 
 
 def featured_lists():
-    """Return public featured lists with owner, collaborators and sync state loaded."""
+    """Return public featured lists with owner, collaborators and sync state loaded.
+
+    The sync's report-only JSON columns stay unloaded (``item_notes`` is kept: chart
+    cards show it).
+    """
     return (
         CustomList.objects.filter(
             is_featured=True,
             visibility=CustomList.Visibility.PUBLIC,
         )
         .select_related("owner", "featured_sync")
+        .defer("featured_sync__unresolved", "featured_sync__entry_notes")
         .prefetch_related("collaborators")
         .order_by("featured_position", "id")
     )

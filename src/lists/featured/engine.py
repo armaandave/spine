@@ -27,7 +27,7 @@ LOCK_PREFIX = "featured:lock:"
 LOCK_GRACE_SECONDS = 120
 SUCCESS_STATUSES = (FeaturedListSync.Status.OK, FeaturedListSync.Status.UNCHANGED)
 QUOTA_SCOPE = "featured"
-# Report-only JSON columns that runs and the dispatcher never read (commit rewrites them).
+# Report-only JSON columns the dispatcher and the shelves never read.
 LARGE_FIELDS = ("unresolved", "item_notes", "entry_notes")
 
 

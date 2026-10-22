@@ -292,6 +292,15 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
             self.shelves(media_type="movie")
         self.assertLessEqual(max(landing, by_type), QUERY_CEILING)
 
+    def test_report_only_sync_columns_are_not_loaded(self):
+        with CaptureQueriesContext(connection) as context:
+            self.shelves()
+            self.get("/api/v1/lists/featured/", view="all")
+        sql = "\n".join(query["sql"] for query in context.captured_queries)
+        self.assertIn('"item_notes"', sql)  # chart cards show it
+        self.assertNotIn('"unresolved"', sql)
+        self.assertNotIn('"entry_notes"', sql)
+
     def test_people_cards_count_people(self):
         book = self.shelves()["shelves"][3]
         self.assertEqual(book["lists"][0]["items_count"], PersonListItem.objects.count())

@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django_celery_beat.schedulers import ModelEntry
 
 from app.signals import create_task_result_on_publish
@@ -162,10 +164,23 @@ class DispatchTaskTests(TestCase):
         self.assertEqual(again, [])  # "one" still holds its lease, so "two" waits
         kwargs = apply_async.call_args_list[0].kwargs
         self.assertEqual(kwargs["args"], ["one"])
+        self.assertEqual(kwargs["kwargs"]["lease_until"], (NOW + timedelta(seconds=720)).isoformat())
         self.assertEqual(kwargs["queue"], "featured")
         self.assertEqual(kwargs["soft_time_limit"], 600)
         self.assertEqual(kwargs["expires"], 720)
         self.assertEqual(FeaturedListSync.objects.get(key="one").lease_until, NOW + timedelta(seconds=720))
+
+    def test_dispatch_skips_the_report_only_columns(self):
+        FeaturedListSync.objects.create(key="one", last_attempt_at=NOW, last_success_at=NOW)
+        with (
+            registry.override_definitions([make_definition(key="one")]),
+            patch.object(dispatch.sync_featured_list, "apply_async"),
+            CaptureQueriesContext(connection) as context,
+        ):
+            dispatch.dispatch(now=NOW)
+        sql = "\n".join(query["sql"] for query in context.captured_queries)
+        for column in ("unresolved", "item_notes", "entry_notes"):
+            self.assertNotIn(f'"{column}"', sql)
 
     def test_live_polls_are_queued_beside_a_running_sync(self):
         busy = make_definition(key="busy", position=101)
@@ -188,12 +203,31 @@ class DispatchTaskTests(TestCase):
 
     def test_sync_task_skips_work_that_already_ran(self):
         definition = make_definition()
-        FeaturedListSync.objects.create(key=definition.key, last_attempt_at=NOW, lease_until=NOW + timedelta(minutes=5))
+        lease = NOW + timedelta(minutes=5)
+        FeaturedListSync.objects.create(key=definition.key, last_attempt_at=NOW, lease_until=lease)
         with registry.override_definitions([definition]), patch("lists.featured.engine.run") as run:
-            result = dispatch.sync_featured_list(definition.key, dispatched_at=(NOW - timedelta(seconds=30)).isoformat())
+            result = dispatch.sync_featured_list(
+                definition.key,
+                dispatched_at=(NOW - timedelta(seconds=30)).isoformat(),
+                lease_until=lease.isoformat(),
+            )
         run.assert_not_called()
         self.assertEqual(result["status"], "skipped")
-        self.assertIsNone(FeaturedListSync.objects.get().lease_until)
+        self.assertIsNone(FeaturedListSync.objects.get().lease_until)  # its own lease
+
+    def test_a_skipped_poll_keeps_a_newer_runs_lease(self):
+        definition = make_definition()
+        running = NOW + timedelta(minutes=12)  # set by the run that started after this poll's slot
+        FeaturedListSync.objects.create(key=definition.key, last_attempt_at=NOW, lease_until=running)
+        with registry.override_definitions([definition]), patch("lists.featured.engine.run") as run:
+            result = dispatch.sync_featured_list(
+                definition.key,
+                dispatched_at=(NOW - timedelta(seconds=30)).isoformat(),
+                lease_until=(NOW - timedelta(seconds=60) + timedelta(minutes=12)).isoformat(),
+            )
+        run.assert_not_called()
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(FeaturedListSync.objects.get().lease_until, running)
 
     def test_sync_task_runs_the_engine(self):
         definition = make_definition()
@@ -260,8 +294,10 @@ class SchedulingConfigTests(SimpleTestCase):
         self.assertEqual(dispatch.dispatch_featured_lists.name, "Dispatch featured lists")
         self.assertTrue(dispatch.dispatch_featured_lists.ignore_result)
         self.assertEqual(dispatch.sync_featured_list.name, "Sync featured list")
-        for legacy in ("sync_nyt_featured_lists", "sync_letterboxd_top_500_featured_list"):
-            self.assertIn(legacy, settings.CELERY_BEAT_SCHEDULE)
+        # Production's beat already runs the NYT task; the dispatcher syncs the
+        # Letterboxd Top 500, whose separate beat entry never shipped.
+        self.assertIn("sync_nyt_featured_lists", settings.CELERY_BEAT_SCHEDULE)
+        self.assertNotIn("sync_letterboxd_top_500_featured_list", settings.CELERY_BEAT_SCHEDULE)
 
     def test_database_scheduler_keeps_the_dispatcher_expiry(self):
         # Production beat runs django_celery_beat's DatabaseScheduler, which keeps only

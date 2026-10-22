@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from app.providers import hardcover, igdb, openlibrary, quota
 from lists.featured import dispatch, engine, registry
+from lists.featured.registry import Guards
 from lists.featured.types import AdapterError, FetchResult
 from lists.models import FeaturedListSync
 from lists.tests.featured.helpers import FeaturedTestCase, entry, fake_adapter, make_definition
@@ -106,6 +107,28 @@ class EngineTests(FeaturedTestCase):
         with fake_adapter([]):
             expected = engine.compute_hash(definition)
         self.assertEqual(FeaturedListSync.objects.get().definition_hash, expected)
+
+
+class TitleSearchCapTests(FeaturedTestCase):
+    def test_entries_past_the_cap_wait_for_the_next_run(self):
+        definition = make_definition(guards=Guards(max_title_searches=1, min_resolve_rate=0.9))
+        entries = [entry(rank, f"Film {rank}", year=2000) for rank in (1, 2, 3)]
+
+        def search(media_type, title, page, **kwargs):
+            return {"results": [{"media_id": title[-1], "source": "tmdb", "title": title, "release_date": "2000-01-01", "image": "https://x/i.jpg"}]}
+
+        with patch("app.providers.services.search", side_effect=search) as searched:
+            first = self.run_list(definition, entries)
+            # One search per run; the earlier answers come from the cache.
+            self.assertEqual((first.status, first.stored_count), ("deferred", 1))
+            sync = FeaturedListSync.objects.get()
+            self.assertEqual((sync.resolved_count, sync.entry_count), (1, 3))
+            self.assertIsNotNone(sync.deferred_until)
+            self.assertEqual(self.run_list(definition, entries).stored_count, 2)
+            third = self.run_list(definition, entries)
+        self.assertEqual((third.status, third.stored_count), ("ok", 3))
+        self.assertEqual(searched.call_count, 3)
+        self.assertIsNone(FeaturedListSync.objects.get().deferred_until)
 
 
 class HardKilledRunTests(FeaturedTestCase):

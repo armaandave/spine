@@ -8,6 +8,7 @@ from app.providers import services
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.mdblist.com"
+MAX_LIST_PAGES = 50  # 50,000 items at 1,000 a page
 
 
 def handle_error(error):
@@ -107,10 +108,15 @@ def get_list(list_id):
 
 
 def _list_items(path, extra_params=None):
-    """Follow MDBList's cursor pagination and tag each item with its Spine media type."""
+    """Follow MDBList's cursor pagination and tag each item with its Spine media type.
+
+    A cursor that repeats, or more than ``MAX_LIST_PAGES`` pages, raises
+    ``ProviderAPIError`` rather than looping forever or returning part of the list.
+    """
     items = []
     cursor = None
-    while True:
+    seen = set()
+    for _page in range(MAX_LIST_PAGES):
         params = {
             "append_to_response": "poster",
             "limit": 1000,
@@ -126,6 +132,10 @@ def _list_items(path, extra_params=None):
         cursor = page.get("next_cursor") or (page.get("pagination") or {}).get("next_cursor")
         if not cursor:
             return items
+        if cursor in seen:
+            raise services.ProviderAPIError("mdblist", None, f"{path} repeated a page cursor")
+        seen.add(cursor)
+    raise services.ProviderAPIError("mdblist", None, f"{path} has more than {MAX_LIST_PAGES} pages")
 
 
 def get_external_list_items(list_id):

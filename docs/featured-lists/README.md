@@ -149,7 +149,7 @@ The existing lists keep their identities: `("mdblist", "155837")` and `("nyt", <
 4. ISBNs: Hardcover, then Open Library, in today's `_resolve_book` order.
 5. A strict title search per media type: exact normalized title, year ±1, creator when available. No fuzzy guessing.
 
-Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 30 days, misses for 1 day. Title searches are capped per run (default 50). Unresolved entries go to the health report.
+Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 45 days (longer than the longest cadence, 33 days; each hit refreshes the TTL), misses for 1 day. Title searches are capped per run (default 50); entries past the cap are deferred for an hour, not unresolved, so the next run searches the next batch. Unresolved entries go to the health report.
 
 **Writer guards**, in order:
 1. `require_exact_count`
@@ -213,9 +213,10 @@ No new `CustomList` columns.
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
 - **Retired lists:** each tick first unfeatures retired lists (`dispatch.retire_orphans`, see the legacy endpoint below).
-- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
+- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs. A poll that finds a newer run already started skips itself and releases only the lease the dispatcher took for it (`lease_until` in its kwargs), never a running sync's.
+- **Killed runs back off:** each attempt counts as a failure from the moment it starts (`consecutive_failures + 1`); success resets it and a deferral takes it back. A run killed outright (SIGKILL, `time_limit`, OOM, a deploy restart) therefore still backs off. While a run is in progress, the health report shows it with one failure more than it had and `leased: true`.
 - **TaskResult noise:** skip the dispatcher in `app/signals.py:create_task_result_on_publish`, and set `ignore_result=True` on it.
-- **Legacy entries:** the `Sync NYT featured lists` and `Sync Letterboxd Top 500 featured list` beat entries stay. The commands they call become thin wrappers over the engine and keep their CLI, messages and tests. `django_celery_beat` never deletes rows, so never remove those task names.
+- **Legacy entries:** production's beat already runs `Sync NYT featured lists`, so that entry and task name stay. It now skips charts the engine synced successfully in the last 12 hours (`sync_nyt_featured_lists --skip-synced-within 12`). `django_celery_beat` never deletes rows, so never remove that task name. The `Sync Letterboxd Top 500 featured list` entry never shipped and is gone: the dispatcher syncs that list. The commands stay thin wrappers over the engine and keep their CLI, messages and tests.
 
 ## API
 

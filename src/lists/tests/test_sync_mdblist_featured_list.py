@@ -1,7 +1,6 @@
 from io import StringIO
 from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
@@ -78,23 +77,4 @@ class SyncMDBListFeaturedListTests(TestCase):
         self.assertEqual(
             list(custom_list.customlistitem_set.values_list("item__media_id", flat=True)),
             ["2"],
-        )
-
-    def test_celery_task_syncs_the_letterboxd_top_500_daily(self):
-        from lists.tasks import sync_letterboxd_top_500_featured_list
-
-        with patch("lists.tasks.call_command", return_value=None) as command:
-            sync_letterboxd_top_500_featured_list()
-
-        command.assert_called_once_with(
-            "sync_mdblist_featured_list",
-            "https://mdblist.com/lists/davearmaan12/external/155837",
-            owner="Spine",
-        )
-        self.assertEqual(
-            settings.CELERY_BEAT_SCHEDULE["sync_letterboxd_top_500_featured_list"],
-            {
-                "task": sync_letterboxd_top_500_featured_list.name,
-                "schedule": 60 * 60 * 24,
-            },
         )

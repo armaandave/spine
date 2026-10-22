@@ -136,5 +136,6 @@ class FeaturedListSnapshotAdmin(ReadOnlyAdmin):
 
     search_fields = ["sync__key", "edition"]
     list_display = ["sync", "taken_on", "edition", "fingerprint"]
+    list_select_related = ["sync"]
     list_filter = ["taken_on"]
     raw_id_fields = ["sync"]
