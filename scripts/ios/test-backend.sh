@@ -105,6 +105,7 @@ serve() {
     if [ -d "$path/src" ] && [ "${until:-0}" -gt "$(date +%s)" ]; then checkout=$path; else rm -f "$state"; until=0; fi
   fi
   echo "$(date '+%F %T') serving $checkout"
+  export SPINE_RUN_SCHEDULER=1 # the scheduler keeps featured lists current
   cd "$checkout"
   if [ "$until" -eq 0 ]; then
     exec "$here/local-backend.sh" --port "$port"
