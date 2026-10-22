@@ -1,6 +1,6 @@
 import Foundation
 
-struct GameProgressValues: Codable, Hashable {
+nonisolated struct GameProgressValues: Codable, Hashable {
     let totalMinutes: Int?
     let percentage: Int?
 
@@ -13,7 +13,7 @@ struct GameProgressValues: Codable, Hashable {
     }
 }
 
-struct GamePlaythroughState: Codable, Hashable, Identifiable {
+nonisolated struct GamePlaythroughState: Codable, Hashable, Identifiable {
     let id: Int
     let status: String
     let origin: String?
@@ -28,7 +28,7 @@ struct GamePlaythroughState: Codable, Hashable, Identifiable {
     var isUnfinished: Bool { ["in progress", "paused"].contains(status.lowercased()) }
 }
 
-struct GameTrackingState: Codable, Hashable {
+nonisolated struct GameTrackingState: Codable, Hashable {
     let currentPlaythrough: GamePlaythroughState?
     let playHistory: [GamePlaythroughState]
     let undatedCompletion: BookUndatedReadState?

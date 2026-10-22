@@ -77,7 +77,7 @@ private struct FeaturedNowStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 10) {
                     ForEach(shelf.lists) { card in
-                        FeaturedListButton(card: card, sourceKey: shelf.key, onSelect: onSelect) {
+                        FeaturedListButton(card: card, sourceKey: shelf.key, showsTopEntries: true, onSelect: onSelect) {
                             FeaturedChartCard(card: card)
                         }
                     }
@@ -169,7 +169,7 @@ private struct FeaturedShelfSection: View {
 
 extension View {
     /// Loads a featured layer when it appears, revalidates it when the app returns from the background, and polls
-    /// it while one of its lists is live and it's on screen.
+    /// it while it's on screen and one of its lists is live, or an upcoming window is still to start.
     func featuredLayerLifecycle(store: FeaturedListsStore, mediaType: String?) -> some View {
         modifier(FeaturedLayerLifecycle(store: store, mediaType: mediaType))
     }
@@ -197,7 +197,9 @@ private struct FeaturedLayerLifecycle: ViewModifier {
                     wasInBackground = true
                 case .active where wasInBackground:
                     wasInBackground = false
-                    Task { await store.load(mediaType: mediaType, force: true) }
+                    // The normal staleness rule, so every layer still in the navigation stack doesn't refetch on
+                    // each app switch; a live list always refetches.
+                    Task { await store.load(mediaType: mediaType, force: store.hasLiveList(mediaType: mediaType)) }
                 default:
                     break
                 }
@@ -205,7 +207,8 @@ private struct FeaturedLayerLifecycle: ViewModifier {
     }
 
     private var pollID: PollID {
-        PollID(mediaType: mediaType, polls: scenePhase == .active && store.hasLiveList(mediaType: mediaType))
+        // An upcoming window counts, so polling starts when it does without waiting for a re-render.
+        PollID(mediaType: mediaType, polls: scenePhase == .active && store.nextPollDelay(mediaType: mediaType) != nil)
     }
 
     private struct PollID: Hashable {

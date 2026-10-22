@@ -30,7 +30,8 @@ struct MediaTypeTheme: Equatable {
 
     private static let musicColor = Color(red: 0.20, green: 0.78, blue: 0.74)
 
-    static func theme(for slug: String) -> MediaTypeTheme {
+    /// `nonisolated` so featured shelves can name a shelf while decoding off the main actor.
+    nonisolated static func theme(for slug: String) -> MediaTypeTheme {
         let normalized = slug.lowercased()
         switch normalized {
         case APIConstants.allMedia:

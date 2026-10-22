@@ -131,20 +131,22 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(response.shelves[1].title, "Critics & Canon")
     }
 
-    func testDiskCacheRoundTripsAResponse() throws {
+    func testDiskCacheRoundTripsAResponse() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = FeaturedShelvesDiskCache(directory: directory)
         let response = try decode(FeaturedFixtures.shelvesJSON)
         let savedAt = FeaturedFixtures.date("2026-10-21T18:05:00Z")
 
-        cache.save(FeaturedShelvesCacheEntry(savedAt: savedAt, response: response), key: "landing")
-        let entry = try XCTUnwrap(cache.load(key: "landing"))
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: savedAt, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        let entry = try XCTUnwrap(loaded)
 
         XCTAssertEqual(entry.savedAt, savedAt)
         XCTAssertEqual(entry.response, response)
         XCTAssertEqual(entry.response.shelves[1].lists.first?.previews.first?.note, "▲2")
-        XCTAssertNil(cache.load(key: "movie"))
+        let missing = await cache.load(key: "movie")
+        XCTAssertNil(missing)
     }
 
     func testDatesParseWithAndWithoutFractionsOrZone() {
@@ -202,7 +204,7 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(card.stackPeople, [])
     }
 
-    func testDiskCacheRoundTripsPreviewPeople() throws {
+    func testDiskCacheRoundTripsPreviewPeople() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = FeaturedShelvesDiskCache(directory: directory)
@@ -213,11 +215,47 @@ final class FeaturedListsDecodingTests: XCTestCase {
         ]}]}
         """)
 
-        cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
-        let entry = try XCTUnwrap(cache.load(key: "landing"))
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        let entry = try XCTUnwrap(loaded)
 
         XCTAssertEqual(entry.response, response)
         XCTAssertEqual(entry.response.allCards.first?.previewPeople.map(\.name), ["Annie Ernaux"])
+    }
+
+    func testDiskCacheIsKeptPerAPIServer() async throws {
+        XCTAssertEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "https://api.spine-api.com")!),
+            "api.spine-api.com"
+        )
+        XCTAssertEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8001")!),
+            "127.0.0.1-8001"
+        )
+        XCTAssertNotEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8001")!),
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8002")!)
+        )
+    }
+
+    func testListTypeDecodesTolerantlyAndRoundTrips() async throws {
+        let response = try decode("""
+        {"shelves": [{"key": "book", "title": "Books", "media_type": "book", "lists": [
+          {"id": 1, "name": "Nobel Laureates", "list_type": "people", "media_types": ["book"], "items_count": 121, "preview_items": []},
+          {"id": 2, "name": "Booker", "list_type": "media", "media_types": ["book"], "items_count": 3, "preview_items": []},
+          {"id": 3, "name": "Odd", "list_type": "places", "media_types": ["book"], "items_count": 3, "preview_items": []},
+          {"id": 4, "name": "Old Server", "media_types": ["book"], "items_count": 3, "preview_items": []}
+        ]}]}
+        """)
+        XCTAssertEqual(response.allCards.map(\.listType), [.people, .media, nil, nil])
+        XCTAssertEqual(response.allCards.map(\.isPeopleList), [true, false, false, false])
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = FeaturedShelvesDiskCache(directory: directory)
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        XCTAssertEqual(loaded?.response.allCards.map(\.listType), [.people, .media, nil, nil])
     }
 
     func testListDetailDecodesItsFeaturedBlock() throws {
@@ -385,6 +423,108 @@ final class FeaturedPresentationTests: XCTestCase {
         XCTAssertEqual(FeaturedBadge.resolve(for: card(changed: recent, period: "2026"), now: now), .updated(recent))
         XCTAssertEqual(FeaturedBadge.resolve(for: card(changed: old, period: "2026"), now: now), .period("2026"))
         XCTAssertEqual(FeaturedBadge.resolve(for: card(kind: .award), now: now), .kind(.award))
+    }
+
+    func testLiveStateEndsAtItsEndEvenWhenTheServerSaidLive() {
+        // A card restored from the cache keeps the server's "live" past the window's end.
+        let ending = FeaturedLiveState(status: .live, startsAt: now.addingTimeInterval(-3600), endsAt: now.addingTimeInterval(60))
+        XCTAssertTrue(ending.isLive(at: now))
+        XCTAssertFalse(ending.isLive(at: now.addingTimeInterval(60)))
+        XCTAssertFalse(ending.isLive(at: now.addingTimeInterval(86400)))
+
+        // Without an end, a window lasts twelve hours from its start.
+        let noEnd = FeaturedLiveState(status: .live, startsAt: now.addingTimeInterval(-3600))
+        XCTAssertTrue(noEnd.isLive(at: now))
+        XCTAssertFalse(noEnd.isLive(at: now.addingTimeInterval(11 * 3600)))
+
+        // With neither, the server's word is all there is.
+        XCTAssertTrue(FeaturedLiveState(status: .live).isLive(at: now))
+
+        let card = card(live: ending, changed: now.addingTimeInterval(-60), period: "2027")
+        XCTAssertEqual(FeaturedBadge.resolve(for: card, now: now.addingTimeInterval(120)), .updated(now.addingTimeInterval(-60)))
+        XCTAssertFalse(FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [card]),
+        ]).hasLiveList(now: now.addingTimeInterval(120)))
+    }
+
+    func testStaticListsNeverShowTheUpdatedBadge() {
+        let changed = now.addingTimeInterval(-3600)
+        let staticList = FeaturedListCard(
+            id: 1, name: "Canon", itemsCount: 100, mediaTypes: ["movie"], kind: .canon, cadence: .static,
+            contentChangedAt: changed
+        )
+        XCTAssertEqual(FeaturedBadge.resolve(for: staticList, now: now), .kind(.canon))
+
+        let weekly = FeaturedListCard(
+            id: 2, name: "Chart", itemsCount: 10, mediaTypes: ["movie"], kind: .chart, cadence: .weekly,
+            contentChangedAt: changed
+        )
+        XCTAssertEqual(FeaturedBadge.resolve(for: weekly, now: now), .updated(changed))
+    }
+
+    func testPeopleListsCountPeople() {
+        let flagged = FeaturedListCard(id: 1, name: "Nobel", itemsCount: 121, mediaTypes: ["book"], cadence: .yearly, listType: .people)
+        XCTAssertEqual(flagged.countLabel, "121 people · Yearly")
+        XCTAssertEqual(flagged.countText, "121 people")
+
+        let person = PersonListEntry(
+            entryId: 1, personId: "OL1A", source: "openlibrary", name: "Annie Ernaux",
+            profileUrl: nil, knownForDepartment: nil, position: 1, dateAdded: ""
+        )
+        let previewed = FeaturedListCard(id: 2, name: "Nobel", itemsCount: 1, mediaTypes: ["book"], previewPeople: [person])
+        XCTAssertEqual(previewed.countText, "1 person")
+
+        let books = FeaturedListCard(id: 3, name: "Booker", itemsCount: 121, mediaTypes: ["book"], listType: .media)
+        XCTAssertEqual(books.countText, "121 books")
+    }
+
+    func testAccessibilitySummaryReadsTheBadgeAndTheTopThree() throws {
+        func media(_ id: Int, _ title: String, position: Int) throws -> MediaSummary {
+            let json = #"{"item_id": \#(id), "source": "tmdb", "media_type": "movie", "media_id": "\#(id)"}"#
+            return MediaSummary(ref: try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8)), title: title, position: position)
+        }
+        let live = FeaturedListCard(
+            id: 1, name: "Oscars 2027", itemsCount: 7, mediaTypes: ["movie"], kind: .award,
+            source: FeaturedSource(name: "The Academy"), cadence: .live,
+            live: FeaturedLiveState(status: .live, label: "7 of 23 announced")
+        )
+        XCTAssertEqual(
+            live.accessibilitySummary(now: now),
+            "Oscars 2027, Live, 7 of 23 announced, 7 films · Live, The Academy"
+        )
+
+        let chart = FeaturedListCard(
+            id: 2, name: "Netflix Top 10", isRanked: true, itemsCount: 10, mediaTypes: ["movie"], kind: .chart,
+            source: FeaturedSource(name: "Netflix"), cadence: .weekly, contentChangedAt: now.addingTimeInterval(-2 * 3600),
+            previews: [
+                FeaturedPreview(media: try media(1, "One", position: 1), note: "▲2"),
+                FeaturedPreview(media: try media(2, "Two", position: 2), note: "NEW"),
+                FeaturedPreview(media: try media(3, "Three", position: 3)),
+                FeaturedPreview(media: try media(4, "Four", position: 4), note: "▼1"),
+            ]
+        )
+        XCTAssertEqual(
+            chart.accessibilitySummary(now: now),
+            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix"
+        )
+        XCTAssertEqual(
+            chart.accessibilitySummary(now: now, includesTopEntries: true),
+            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix, 1. One, up 2, 2. Two, new, 3. Three"
+        )
+    }
+
+    func testNextLiveStartIsTheEarliestUpcomingWindow() {
+        let soon = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(600)))
+        let later = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(3600)))
+        let started = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(-60)))
+        let response = FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [later, started, soon]),
+        ])
+
+        XCTAssertEqual(response.nextLiveStart(after: now), now.addingTimeInterval(600))
+        XCTAssertNil(FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [started]),
+        ]).nextLiveStart(after: now))
     }
 
     func testUpcomingWindowCountsAsLiveOnceItStarts() {
@@ -617,6 +757,81 @@ final class FeaturedListsStoreTests: XCTestCase {
         XCTAssertFalse(store.hasLiveList(mediaType: nil))
     }
 
+    func testPollingStartsWhenAnUpcomingWindowBegins() async {
+        let startsAt = clock.addingTimeInterval(30 * 60)
+        let endsAt = startsAt.addingTimeInterval(3 * 3600)
+        let upcoming = FeaturedFixtures.response(
+            name: "Oscars",
+            live: FeaturedLiveState(status: .upcoming, label: "0 of 23", startsAt: startsAt, endsAt: endsAt)
+        )
+        let live = FeaturedFixtures.response(
+            name: "Oscars",
+            live: FeaturedLiveState(status: .live, label: "1 of 23", startsAt: startsAt, endsAt: endsAt)
+        )
+        let repository = FeaturedShelvesRepository(landing: [
+            .success(upcoming),
+            .success(live),
+            .success(FeaturedFixtures.response(name: "Oscars", live: FeaturedLiveState(status: .done))),
+        ])
+        var sleeps: [Duration] = []
+        let store = FeaturedListsStore(
+            repository: repository,
+            cache: FeaturedMemoryCache(),
+            now: { [unowned self] in clock },
+            sleep: { [unowned self] duration in
+                sleeps.append(duration)
+                clock += TimeInterval(duration.components.seconds)
+            }
+        )
+
+        await store.load(mediaType: nil)
+        XCTAssertFalse(store.hasLiveList(mediaType: nil))
+        XCTAssertEqual(store.nextPollDelay(mediaType: nil), .seconds(30 * 60))
+        await store.pollWhileLive(mediaType: nil)
+
+        // It slept until the window started, refetched, then polled once a minute until the night was done.
+        XCTAssertEqual(sleeps, [.seconds(30 * 60), .seconds(60)])
+        XCTAssertEqual(repository.landingCalls, 3)
+        XCTAssertNil(store.nextPollDelay(mediaType: nil))
+    }
+
+    func testDoesNotSaveAnUnchangedResponseAgain() async {
+        let cache = FeaturedMemoryCache()
+        let first = FeaturedShelvesResponse(
+            generatedAt: clock,
+            shelves: FeaturedFixtures.response(name: "Same").shelves
+        )
+        let regenerated = FeaturedShelvesResponse(
+            generatedAt: clock.addingTimeInterval(60),
+            shelves: FeaturedFixtures.response(name: "Same").shelves
+        )
+        let repository = FeaturedShelvesRepository(landing: [
+            .success(first),
+            .success(regenerated),
+            .success(FeaturedFixtures.response(name: "Changed")),
+        ])
+        let store = makeStore(repository: repository, cache: cache)
+
+        await store.load(mediaType: nil)
+        await store.load(mediaType: nil, force: true)
+        XCTAssertEqual(cache.saves, 1)
+
+        await store.load(mediaType: nil, force: true)
+        XCTAssertEqual(cache.saves, 2)
+        XCTAssertEqual(cache.entries["landing"]?.response.allCards.map(\.name), ["Changed"])
+    }
+
+    func testReadsTheDiskCacheOnce() async {
+        let cache = FeaturedMemoryCache()
+        let repository = FeaturedShelvesRepository(landing: [.failure(APIError.invalidResponse), .failure(APIError.invalidResponse)])
+        let store = makeStore(repository: repository, cache: cache)
+
+        await store.load(mediaType: nil)
+        await store.load(mediaType: nil)
+
+        XCTAssertEqual(cache.loads, 1)
+    }
+
     func testDoesNotPollWithoutALiveList() async {
         let repository = FeaturedShelvesRepository(landing: [.success(FeaturedFixtures.response(name: "Quiet"))])
         var sleeps = 0
@@ -645,9 +860,9 @@ final class FeaturedListsStoreTests: XCTestCase {
 
     private func makeStore(
         repository: FeaturedShelvesRepository,
-        cache: FeaturedMemoryCache = FeaturedMemoryCache()
+        cache: FeaturedMemoryCache? = nil
     ) -> FeaturedListsStore {
-        FeaturedListsStore(repository: repository, cache: cache, now: { [unowned self] in clock })
+        FeaturedListsStore(repository: repository, cache: cache ?? FeaturedMemoryCache(), now: { [unowned self] in clock })
     }
 }
 
@@ -709,6 +924,44 @@ final class FeaturedEntryNoteTests: XCTestCase {
         XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture", nil])
     }
 
+    func testEditingAFeaturedListKeepsItsFeaturedBlockAndNotes() async throws {
+        let repository = FeaturedNotesListRepository(
+            items: [MediaSummary(ref: try ref(1), title: "Winner", position: 1, note: "Winner · Best Picture")],
+            featuredJSON: #"{"id": 12, "name": "Oscars", "kind": "award", "media_types": ["movie"], "items_count": 1}"#
+        )
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        XCTAssertEqual(viewModel.list?.featured?.kind, .award)
+
+        let saved = await viewModel.update(CustomListWriteRequest(name: "Oscars", description: "Edited"))
+
+        XCTAssertTrue(saved)
+        XCTAssertEqual(repository.updateCalls, 1)
+        XCTAssertEqual(viewModel.list?.featured?.kind, .award)
+        XCTAssertEqual(viewModel.displayedItems.map(\.note), ["Winner · Best Picture"])
+        XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture"])
+    }
+
+    func testEditingAnOrdinaryListDoesNotReload() async throws {
+        let repository = FeaturedNotesListRepository(items: [MediaSummary(ref: try ref(1), title: "One", position: 1)])
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+
+        _ = await viewModel.update(CustomListWriteRequest(name: "Renamed"))
+
+        XCTAssertEqual(repository.detailCalls, 1)
+    }
+
     private func ref(_ itemId: Int) throws -> MediaRef {
         let json = #"{"item_id": \#(itemId), "source": "tmdb", "media_type": "movie", "media_id": "\#(itemId)"}"#
         return try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8))
@@ -718,20 +971,31 @@ final class FeaturedEntryNoteTests: XCTestCase {
 @MainActor
 private final class FeaturedNotesListRepository: ListRepository {
     let items: [MediaSummary]
+    let featuredJSON: String?
+    var detailCalls = 0
+    var updateCalls = 0
 
-    init(items: [MediaSummary]) {
+    init(items: [MediaSummary], featuredJSON: String? = nil) {
         self.items = items
+        self.featuredJSON = featuredJSON
     }
 
     func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { [] }
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary] { [] }
 
     func detail(id: Int) async throws -> CustomListDetail {
+        detailCalls += 1
+        return try Self.detail(itemsCount: items.count, featuredJSON: featuredJSON)
+    }
+
+    /// The list as `GET /lists/{id}/` sends it, or, without `featuredJSON`, as a PATCH answers: no featured block.
+    private static func detail(itemsCount: Int, featuredJSON: String?) throws -> CustomListDetail {
+        let featured = featuredJSON.map { #", "featured": \#($0)"# } ?? ""
         let json = """
         {"id": 12, "name": "Oscars", "slug": "oscars", "description": "", "visibility": "public",
          "is_ranked": true, "list_type": "media",
          "owner": {"id": 1, "username": "Spine", "display_name": "Spine", "avatar_url": null},
-         "items_count": \(items.count), "like_count": 0, "items": []}
+         "items_count": \(itemsCount), "like_count": 0, "items": []\(featured)}
         """
         return try JSONDecoder.api.decode(CustomListDetail.self, from: Data(json.utf8))
     }
@@ -741,7 +1005,11 @@ private final class FeaturedNotesListRepository: ListRepository {
     }
 
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary { fatalError("unused") }
-    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail { fatalError("unused") }
+    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail {
+        updateCalls += 1
+        return try Self.detail(itemsCount: items.count, featuredJSON: nil)
+    }
+
     func delete(id: Int) async throws {}
     func addItem(listId: Int, ref: MediaRef) async throws -> MediaSummary { fatalError("unused") }
     func removeItem(listId: Int, itemId: Int) async throws {}
@@ -869,14 +1137,21 @@ private enum FeaturedFixtures {
     }
 }
 
+@MainActor
 private final class FeaturedMemoryCache: FeaturedShelvesCaching {
     var entries: [String: FeaturedShelvesCacheEntry] = [:]
+    var loads = 0
+    var saves = 0
 
-    func load(key: String) -> FeaturedShelvesCacheEntry? {
-        entries[key]
+    @MainActor
+    func load(key: String) async -> FeaturedShelvesCacheEntry? {
+        loads += 1
+        return entries[key]
     }
 
-    func save(_ entry: FeaturedShelvesCacheEntry, key: String) {
+    @MainActor
+    func save(_ entry: FeaturedShelvesCacheEntry, key: String) async {
+        saves += 1
         entries[key] = entry
     }
 }

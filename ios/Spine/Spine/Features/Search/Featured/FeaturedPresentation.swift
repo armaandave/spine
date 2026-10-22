@@ -27,7 +27,8 @@ enum FeaturedBadge: Equatable {
         if let live = card.live, live.isLive(at: now) {
             return .live(label: live.label)
         }
-        if card.wasUpdatedRecently(now: now), let changed = card.contentChangedAt {
+        // A static list changes only when Spine edits it, which isn't news.
+        if card.cadence != .static, card.wasUpdatedRecently(now: now), let changed = card.contentChangedAt {
             return .updated(changed)
         }
         if let period = card.periodLabel {
@@ -129,10 +130,17 @@ extension FeaturedListCard {
         singleMediaType == "music"
     }
 
+    /// "10 films", "121 people"
+    var countText: String {
+        let noun = isPeopleList
+            ? (itemsCount == 1 ? "person" : "people")
+            : FeaturedCountNoun.noun(for: mediaTypes, count: itemsCount)
+        return "\(itemsCount.formatted()) \(noun)"
+    }
+
     /// "10 films · Weekly"
     var countLabel: String {
-        let count = "\(itemsCount.formatted()) \(FeaturedCountNoun.noun(for: mediaTypes, count: itemsCount))"
-        return [count, cadence.label].compactMap { $0 }.joined(separator: " · ")
+        [countText, cadence.label].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// The people a tile stacks in place of posters: a people list's, when it has no media previews.
@@ -170,8 +178,39 @@ extension FeaturedListCard {
         return parts.joined(separator: " · ")
     }
 
-    var accessibilitySummary: String {
-        [name, countLabel, source?.name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    /// What VoiceOver reads for a tile: the name, the status badge, the count and the source, then, for cards that
+    /// show them, the top three entries with their chart movement.
+    func accessibilitySummary(now: Date, includesTopEntries: Bool = false) -> String {
+        var parts = [name, FeaturedBadge.resolve(for: self, now: now).accessibilityText(now: now), countLabel, source?.name]
+        if includesTopEntries {
+            parts += previews.prefix(3).enumerated().map { index, preview in
+                let movement = FeaturedMovement(note: preview.note).map { ", \($0.accessibilityText)" } ?? ""
+                return "\(rank(at: index) ?? index + 1). \(preview.media.displayTitle)\(movement)"
+            }
+        }
+        return parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+extension FeaturedBadge {
+    /// The badge as VoiceOver reads it ("Live, 7 of 23 announced", "Updated 2h ago", "Award").
+    func accessibilityText(now: Date) -> String? {
+        switch self {
+        case let .live(label): label.isEmpty ? "Live" : "Live, \(label)"
+        case let .updated(date): FeaturedRelativeTime.updatedLabel(from: date, now: now)
+        case let .period(label): label
+        case let .kind(kind): kind == .unknown ? nil : kind.rawValue.capitalized
+        }
+    }
+}
+
+extension FeaturedMovement {
+    var accessibilityText: String {
+        switch self {
+        case let .up(amount): "up \(amount)"
+        case let .down(amount): "down \(amount)"
+        case .new: "new"
+        }
     }
 }
 
@@ -223,6 +262,16 @@ extension FeaturedShelvesResponse {
 
     func hasLiveList(now: Date) -> Bool {
         allCards.contains { $0.isLive(at: now) }
+    }
+
+    /// The earliest start of an upcoming window that hasn't begun.
+    func nextLiveStart(after now: Date) -> Date? {
+        allCards.compactMap { $0.live?.upcomingStart(after: now) }.min()
+    }
+
+    /// The same shelves as `other`, ignoring when the server generated them.
+    func hasSameContent(as other: FeaturedShelvesResponse) -> Bool {
+        mediaType == other.mediaType && isLegacy == other.isLegacy && shelves == other.shelves
     }
 
     /// "42 lists · 3 live · updated today", for a media type's grouped layer.

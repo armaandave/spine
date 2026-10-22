@@ -6,7 +6,7 @@ import Foundation
 // `.unknown`, and a card, shelf or preview item that can't be decoded is dropped instead of failing the whole
 // response: a strict failure would blank the Search landing.
 
-enum FeaturedKind: String, CaseIterable, Codable, Hashable {
+nonisolated enum FeaturedKind: String, CaseIterable, Codable, Hashable {
     case chart
     case award
     case canon
@@ -38,7 +38,7 @@ enum FeaturedKind: String, CaseIterable, Codable, Hashable {
     }
 }
 
-enum FeaturedCadence: String, Codable, Hashable {
+nonisolated enum FeaturedCadence: String, Codable, Hashable {
     case live
     case daily
     case weekly
@@ -74,7 +74,7 @@ enum FeaturedCadence: String, Codable, Hashable {
     }
 }
 
-enum FeaturedLiveStatus: String, Codable, Hashable {
+nonisolated enum FeaturedLiveStatus: String, Codable, Hashable {
     case upcoming
     case live
     case done
@@ -86,7 +86,7 @@ enum FeaturedLiveStatus: String, Codable, Hashable {
     }
 }
 
-struct FeaturedLiveState: Codable, Hashable {
+nonisolated struct FeaturedLiveState: Codable, Hashable {
     let status: FeaturedLiveStatus
     /// "7 of 23 announced"
     let label: String
@@ -115,21 +115,36 @@ struct FeaturedLiveState: Codable, Hashable {
         endsAt = container.featuredDate(forKey: .endsAt)
     }
 
-    /// Live now: the server says so, or an upcoming window has started and not yet ended.
+    /// How long a window without an `ends_at` is assumed to last.
+    static let assumedLength: TimeInterval = 12 * 60 * 60
+
+    /// When the window ends: `ends_at`, else `assumedLength` after it starts, else nil.
+    var effectiveEnd: Date? {
+        endsAt ?? startsAt?.addingTimeInterval(Self.assumedLength)
+    }
+
+    /// Live now: the server said so, or an upcoming window has started, and the window hasn't ended. A state
+    /// restored from the cache, or saved before the window closed, stops being live at its end.
     func isLive(at now: Date) -> Bool {
         switch status {
         case .live:
-            return true
+            return effectiveEnd.map { now < $0 } ?? true
         case .upcoming:
             guard let startsAt, startsAt <= now else { return false }
-            return endsAt.map { now < $0 } ?? true
+            return effectiveEnd.map { now < $0 } ?? true
         case .done, .unknown:
             return false
         }
     }
+
+    /// The start of an upcoming window that hasn't begun yet, when the client should start polling.
+    func upcomingStart(after now: Date) -> Date? {
+        guard status == .upcoming, let startsAt, startsAt > now else { return nil }
+        return startsAt
+    }
 }
 
-struct FeaturedSource: Codable, Hashable {
+nonisolated struct FeaturedSource: Codable, Hashable {
     let name: String
     let url: String?
 
@@ -161,7 +176,7 @@ struct FeaturedSource: Codable, Hashable {
 
 /// One preview poster: the `MediaSummary` list previews already use, plus the entry's chart note ("▲2") when the
 /// server sends one.
-struct FeaturedPreview: Codable, Hashable, Identifiable {
+nonisolated struct FeaturedPreview: Codable, Hashable, Identifiable {
     let media: MediaSummary
     let note: String?
 
@@ -189,7 +204,7 @@ struct FeaturedPreview: Codable, Hashable, Identifiable {
     }
 }
 
-struct FeaturedListCard: Codable, Hashable, Identifiable {
+nonisolated struct FeaturedListCard: Codable, Hashable, Identifiable {
     let id: Int
     let name: String
     let slug: String
@@ -208,8 +223,15 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
     let previews: [FeaturedPreview]
     /// A people list's first people (`preview_people`); empty for media lists.
     let previewPeople: [PersonListEntry]
+    /// `list_type`, when the server sends it.
+    let listType: CustomListType?
 
     var previewItems: [MediaSummary] { previews.map(\.media) }
+
+    /// A list of people rather than media: the server says so, or it sent people previews.
+    var isPeopleList: Bool {
+        listType == .people || !previewPeople.isEmpty
+    }
 
     init(
         id: Int,
@@ -227,7 +249,8 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         lastSyncedAt: Date? = nil,
         live: FeaturedLiveState? = nil,
         previews: [FeaturedPreview] = [],
-        previewPeople: [PersonListEntry] = []
+        previewPeople: [PersonListEntry] = [],
+        listType: CustomListType? = nil
     ) {
         self.id = id
         self.name = name
@@ -245,6 +268,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         self.live = live
         self.previews = previews
         self.previewPeople = previewPeople
+        self.listType = listType
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -265,6 +289,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         case previews
         case previewItems
         case previewPeople
+        case listType
     }
 
     init(from decoder: Decoder) throws {
@@ -293,6 +318,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         contentChangedAt = container.featuredDate(forKey: .contentChangedAt)
         lastSyncedAt = container.featuredDate(forKey: .lastSyncedAt)
         live = container.lenient(FeaturedLiveState.self, forKey: .live)
+        listType = container.lenient(CustomListType.self, forKey: .listType)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -313,10 +339,11 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         try container.encodeIfPresent(live, forKey: .live)
         try container.encode(previews, forKey: .previews)
         try container.encode(previewPeople, forKey: .previewPeople)
+        try container.encodeIfPresent(listType, forKey: .listType)
     }
 }
 
-struct FeaturedShelf: Codable, Hashable, Identifiable {
+nonisolated struct FeaturedShelf: Codable, Hashable, Identifiable {
     static let nowKey = "now"
     static let mixedMediaType = "mixed"
 
@@ -386,7 +413,7 @@ struct FeaturedShelf: Codable, Hashable, Identifiable {
     }
 }
 
-struct FeaturedShelvesResponse: Codable, Hashable {
+nonisolated struct FeaturedShelvesResponse: Codable, Hashable {
     /// The order the server sends media-type shelves in, which the legacy fallback copies.
     static let mediaTypeOrder = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
 
@@ -427,7 +454,7 @@ struct FeaturedShelvesResponse: Codable, Hashable {
 // MARK: - Legacy fallback
 
 /// Media types for shelves: seasons and episodes are TV.
-enum FeaturedMediaTypes {
+nonisolated enum FeaturedMediaTypes {
     static func normalized(_ mediaType: String) -> String {
         ["season", "episode"].contains(mediaType) ? "tv" : mediaType
     }
@@ -458,7 +485,8 @@ extension FeaturedListCard {
             isRanked: list.isRanked,
             itemsCount: list.itemsCount,
             mediaTypes: FeaturedMediaTypes.derived(from: previews.map(\.media)),
-            previews: previews
+            previews: previews,
+            listType: list.listType
         )
     }
 }
@@ -490,7 +518,7 @@ extension FeaturedShelvesResponse {
 // MARK: - Decoding helpers
 
 /// An array that drops the elements it can't decode instead of failing.
-struct FeaturedLossyArray<Element: Decodable>: Decodable {
+nonisolated struct FeaturedLossyArray<Element: Decodable>: Decodable {
     let elements: [Element]
 
     init(from decoder: Decoder) throws {
@@ -508,13 +536,13 @@ struct FeaturedLossyArray<Element: Decodable>: Decodable {
     }
 }
 
-private struct FeaturedSkippedValue: Decodable {
+private nonisolated struct FeaturedSkippedValue: Decodable {
     init(from decoder: Decoder) throws {}
 }
 
 /// Parses the API's ISO 8601 timestamps. Django sends microseconds, which `ISO8601DateFormatter` won't read,
 /// so fractional seconds are dropped first.
-enum FeaturedDate {
+nonisolated enum FeaturedDate {
     nonisolated(unsafe) private static let formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -535,7 +563,7 @@ enum FeaturedDate {
     }
 }
 
-private extension KeyedDecodingContainer {
+private nonisolated extension KeyedDecodingContainer {
     /// Decodes an optional value, treating a value of the wrong shape as missing.
     func lenient<T: Decodable>(_ type: T.Type, forKey key: Key) -> T? {
         (try? decodeIfPresent(type, forKey: key)) ?? nil
@@ -546,7 +574,7 @@ private extension KeyedDecodingContainer {
     }
 }
 
-private extension String {
+private nonisolated extension String {
     var nilIfBlank: String? {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self
     }

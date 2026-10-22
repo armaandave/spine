@@ -1,6 +1,6 @@
 import Foundation
 
-struct MediaRef: Codable, Hashable, Identifiable {
+nonisolated struct MediaRef: Codable, Hashable, Identifiable {
     let itemId: Int?
     let source: String
     let mediaType: String
@@ -154,7 +154,7 @@ struct MediaBrowsingSelection: Hashable, Identifiable {
     }
 }
 
-struct MediaSummary: Codable, Identifiable, Hashable {
+nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     let ref: MediaRef
     let title: String
     let preferredTitle: String?
@@ -1372,7 +1372,7 @@ struct MediaDetail: Decodable, Identifiable {
     }
 }
 
-enum PosterOrientation: String, Codable, Hashable {
+nonisolated enum PosterOrientation: String, Codable, Hashable {
     case portrait
     case landscape
     case square
@@ -1472,7 +1472,7 @@ struct HallOfFameItemsResponse: Codable, Equatable {
     let items: [String: MediaSummary?]
 }
 
-struct UserMediaState: Codable, Hashable {
+nonisolated struct UserMediaState: Codable, Hashable {
     let isTracked: Bool
     let trackingId: Int?
     let status: String?

@@ -1204,6 +1204,7 @@ final class ProfileListDetailViewModel {
         defer { isSaving = false }
 
         do {
+            let previousList = list
             let updatedList = try await listRepository.update(id: listId, request)
             list = updatedList
             if updatedList.listType == .people {
@@ -1215,6 +1216,10 @@ final class ProfileListDetailViewModel {
                 nextPage = nil
             }
             CustomListChange.post(listId: listId, listType: updatedList.listType)
+            // The PATCH response has no `featured` block and no entry notes, so a featured list reloads them.
+            if previousList?.hasFeaturedDetails == true {
+                await load()
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -1295,6 +1300,11 @@ final class ProfileListDetailViewModel {
 }
 
 private extension CustomListDetail {
+    /// A featured block or an entry note, which only the list's own endpoints send.
+    var hasFeaturedDetails: Bool {
+        featured != nil || items.contains { $0.note != nil } || people.contains { $0.note != nil }
+    }
+
     func withItems(_ items: [MediaSummary]) -> CustomListDetail {
         CustomListDetail(
             id: id,
@@ -1378,10 +1388,10 @@ struct ProfileListDetailView: View {
     /// The featured card the list was opened from, for its metadata, live banner and source link.
     private let featured: FeaturedListCard?
 
-    /// The tapped card, else the list's own featured block, so a featured list opened from a profile or a link
-    /// shows its metadata too.
+    /// The list's own featured block, which is fresher than the tapped card (a card restored from the cache can
+    /// still say live), else the tapped card until the list loads.
     private var featuredCard: FeaturedListCard? {
-        featured ?? viewModel.list?.featured
+        viewModel.list?.featured ?? featured
     }
 
     init(
@@ -1830,7 +1840,8 @@ struct ProfileListDetailView: View {
     }
 
     private func mediaGrid(_ items: [MediaSummary]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
+        // Top-aligned, so a cell with a note doesn't push its poster below its neighbours'.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: 4), spacing: 10) {
             ForEach(items) { item in
                 Button {
                     selectedMedia = MediaBrowsingSelection(ref: item.ref, within: items.map(\.ref))
@@ -1869,7 +1880,7 @@ struct ProfileListDetailView: View {
         let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
         let columnCount = PeopleListGridLayout.columnCount(isAccessibilitySize: isAccessibilitySize)
         let columns = Array(
-            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8),
+            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8, alignment: .top),
             count: columnCount
         )
 
