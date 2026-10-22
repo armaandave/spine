@@ -108,6 +108,15 @@ def definition_for(custom_list):
     return definition, sync
 
 
+def is_retired(definition, sync):
+    """Return whether the engine synced this list but its definition is gone.
+
+    Such a list is not "manually featured"; the dispatcher unfeatures it
+    (``dispatch.retire_orphans``) and every endpoint hides it until then.
+    """
+    return definition is None and sync is not None
+
+
 def featured_lists():
     """Return public featured lists with owner, collaborators and sync state loaded."""
     return (
@@ -282,6 +291,7 @@ def featured_cards(now, lists=None):
     exposed = set(exposure.media_types())
     lists = list(featured_lists() if lists is None else lists)
     joined = [(custom_list, *definition_for(custom_list)) for custom_list in lists]
+    joined = [row for row in joined if not is_retired(row[1], row[2])]
     manual = _manual_media_types([row[0] for row in joined if row[1] is None])
     cards = []
     for custom_list, definition, sync in joined:
@@ -547,7 +557,9 @@ class FeaturedListsView(APIView):
         now = timezone.now()
         selected = []
         for custom_list in lists:
-            definition, _ = definition_for(custom_list)
+            definition, sync = definition_for(custom_list)
+            if is_retired(definition, sync):
+                continue
             if show_all or definition is None or definition.headline:
                 selected.append(custom_list)
         payloads = list_payloads(selected, request)

@@ -109,6 +109,30 @@ class LegacyFeaturedEndpointTests(FeaturedApiTestCase):
         self.assertEqual((manual["featured"]["kind"], manual["featured"]["cadence"]), ("editorial", "static"))
         self.assertEqual(headline["preview_items"][0]["title"], "hf 1")
 
+    def test_lists_whose_definition_is_gone_are_hidden(self):
+        # The registry dropped a list the engine synced (a past live ceremony): it is
+        # not "manually featured", even before the dispatcher unfeatures it.
+        self.definitions = [item for item in self.definitions if item.key not in ("headline-films", "chart-films")]
+        legacy = self.get("/api/v1/lists/featured/", view="all")
+        self.assertEqual([row["name"] for row in legacy.data["results"]][:2], ["Staff Picks", "Both Types"])
+        names = [row["name"] for row in legacy.data["results"]]
+        self.assertNotIn("Headline Films", names)
+        self.assertNotIn("Chart Films", names)
+        self.assertEqual(
+            [row["name"] for row in self.get("/api/v1/lists/featured/").data["results"]],
+            ["Staff Picks"],
+        )
+        slugs = {
+            card["slug"]
+            for shelf in self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+            for card in shelf["lists"]
+        }
+        self.assertNotIn("headline-films", slugs)
+        self.assertNotIn("chart-films", slugs)
+        self.assertIn("staff-picks", slugs)
+        chart = CustomList.objects.get(import_source_id="chart-films")
+        self.assertIsNone(self.get(f"/api/v1/lists/{chart.id}/").data.get("featured"))
+
     def test_list_detail_carries_the_featured_block(self):
         chart = CustomList.objects.get(import_source_id="chart-films")
         response = self.get(f"/api/v1/lists/{chart.id}/")

@@ -4,6 +4,7 @@
 The beat entry runs ``dispatch_featured_lists`` every 60 seconds.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -12,8 +13,9 @@ from django.db.models import Q
 from django.utils import timezone
 
 from lists.featured import engine, order, registry
-from lists.models import FeaturedListSync
+from lists.models import CustomList, FeaturedListSync
 
+logger = logging.getLogger(__name__)
 DISPATCH_TASK = "Dispatch featured lists"
 SYNC_TASK = "Sync featured list"
 QUEUE = "featured"
@@ -132,10 +134,33 @@ def poll_offsets(definition, now):
     return [int(step * index) for index in range(int(DISPATCH_PERIOD.total_seconds() // step))]
 
 
+def retire_orphans(definitions):
+    """Unfeature lists the engine synced whose definition left the registry.
+
+    A list whose sync row's key is gone, and whose identity no definition claims (a
+    re-keyed definition keeps its list), would otherwise count as manually featured.
+    Only ``is_featured`` is cleared: the list, its items, sync row and snapshots stay.
+    Returns the unfeatured list IDs.
+    """
+    keys = [definition.key for definition in definitions]
+    identities = {definition.identity for definition in definitions}
+    rows = (
+        FeaturedListSync.objects.filter(custom_list__is_featured=True)
+        .exclude(key__in=keys)
+        .values_list("key", "custom_list_id", "custom_list__import_source", "custom_list__import_source_id")
+    )
+    retired = {list_id: key for key, list_id, source, source_id in rows if (source, source_id) not in identities}
+    if retired:
+        CustomList.objects.filter(pk__in=retired).update(is_featured=False)
+        logger.info("Featured lists retired (no definition): %s", ", ".join(sorted(retired.values())))
+    return sorted(retired)
+
+
 def dispatch(now=None):
-    """Lease and queue every due definition; return the queued keys."""
+    """Retire orphaned lists, then lease and queue every due definition; return the queued keys."""
     now = now or timezone.now()
     definitions = registry.all_definitions()
+    retire_orphans(definitions)
     syncs = {sync.key: sync for sync in FeaturedListSync.objects.all()}
     hashes = {definition.key: engine.compute_hash(definition) for definition in definitions}
     queued = []

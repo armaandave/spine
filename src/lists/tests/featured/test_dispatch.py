@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django_celery_beat.schedulers import ModelEntry
 
@@ -10,7 +11,7 @@ from app.signals import create_task_result_on_publish
 from lists.featured import dispatch, order, registry
 from lists.featured.dispatch import backoff, due, plan
 from lists.featured.registry import LiveWindow
-from lists.models import FeaturedListSync
+from lists.models import CustomList, FeaturedListSync
 from lists.tests.featured.helpers import make_definition
 
 NOW = datetime(2026, 10, 21, 18, 0, tzinfo=UTC)
@@ -202,6 +203,45 @@ class DispatchTaskTests(TestCase):
             result = dispatch.sync_featured_list(definition.key)
         run.assert_called_once_with(definition, trigger="dispatch")
         self.assertEqual(result, {"key": "test-list", "status": "ok", "message": ""})
+
+    def test_dispatch_unfeatures_lists_whose_definition_is_gone(self):
+        owner = get_user_model().objects.create_user(username="Spine")
+
+        def featured_list(source_id):
+            return CustomList.objects.create(
+                owner=owner,
+                name=source_id,
+                visibility=CustomList.Visibility.PUBLIC,
+                is_featured=True,
+                import_source="spine",
+                import_source_id=source_id,
+            )
+
+        orphan = featured_list("booker-prize-2025")
+        FeaturedListSync.objects.create(key="booker-prize-2025", custom_list=orphan)
+        rekeyed = featured_list("old-key")  # its definition kept the identity under a new key
+        FeaturedListSync.objects.create(key="old-key", custom_list=rekeyed)
+        current = featured_list("current")
+        FeaturedListSync.objects.create(key="current", custom_list=current)
+        featured_list("staff-picks")  # featured by hand: no sync row
+        definitions = [
+            make_definition(key="current"),
+            make_definition(key="new-key", identity=("spine", "old-key")),
+        ]
+        with (
+            registry.override_definitions(definitions),
+            patch.object(dispatch.sync_featured_list, "apply_async"),
+        ):
+            dispatch.dispatch(now=NOW)
+
+        featured = dict(CustomList.objects.values_list("import_source_id", "is_featured"))
+        self.assertEqual(
+            featured,
+            {"booker-prize-2025": False, "old-key": True, "current": True, "staff-picks": True},
+        )
+        orphan.refresh_from_db()  # never deleted: items, sync row and visibility stay
+        self.assertEqual(orphan.visibility, CustomList.Visibility.PUBLIC)
+        self.assertEqual(FeaturedListSync.objects.get(key="booker-prize-2025").custom_list, orphan)
 
     def test_unknown_keys_release_their_lease(self):
         FeaturedListSync.objects.create(key="gone", lease_until=NOW)

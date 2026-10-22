@@ -203,6 +203,7 @@ No new `CustomList` columns.
   - its `deferred_until` passed;
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
+- **Retired lists:** each tick first unfeatures retired lists (`dispatch.retire_orphans`, see the legacy endpoint below).
 - **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
 - **TaskResult noise:** skip the dispatcher in `app/signals.py:create_task_result_on_publish`, and set `ignore_result=True` on it.
 - **Legacy entries:** the `Sync NYT featured lists` and `Sync Letterboxd Top 500 featured list` beat entries stay. The commands they call become thin wrappers over the engine and keep their CLI, messages and tests. `django_celery_beat` never deletes rows, so never remove those task names.
@@ -214,6 +215,7 @@ All of it is additive.
 **`GET /api/v1/lists/featured/` (legacy):**
 - Same shape as today.
 - By default `results` holds only `headline=True` lists plus any manually featured list that isn't in the registry, so installed builds keep seeing today's six. `?view=all` returns every featured list.
+- "Manually featured" means no `FeaturedListSync` row. A list the engine synced whose definition is gone (no definition has its sync key or its identity, such as a past ceremony) is *retired*: every endpoint hides it, and the dispatcher sets `is_featured=False` on it each tick. It's never deleted.
 - Each result gains an optional `featured` object, in the card shape below without `preview_items` (`null` when the list has no card). Manually featured lists get one too, with `kind: "editorial"`, `cadence: "static"` and media types taken from their items.
 
 **`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
