@@ -6,6 +6,7 @@ from lists.featured import overrides
 from lists.featured.adapters import ADAPTERS, netflix
 from lists.featured.adapters import _tmdb_match as tmdb_match
 from lists.featured.registry import get
+from lists.featured.resolve import Resolver
 from lists.featured.types import AdapterError
 from lists.tests.featured.helpers import (
     FeaturedTestCase,
@@ -275,3 +276,65 @@ class NetflixSharedDownloadTests(FeaturedTestCase):
             result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         self.assertEqual(len(self.downloads(api, "all-weeks-global.tsv")), 1)
         self.assertEqual(len(result_.entries), 2)
+
+
+class NetflixTVSpecialTests(FeaturedTestCase):
+    """Specials and films Netflix files under TV never take an older series' id."""
+
+    ROWS = (
+        # rank, show_title, season_title, runtime
+        (1, "The Reunion", "N/A", "1.5333"),  # a reunion special; TMDB's "The Reunion" is a 2014 series
+        (2, "Jo Koy: Blue in the Face", "N/A", "0.9333"),  # stand-up: a film on TMDB
+        (3, "Skyscraper Live", "N/A", "1.95"),  # a live special TMDB files as a new series
+        (4, "Stranger Things", "N/A", "6.8167"),  # a whole series charted without a season
+    )
+    SEARCHES = {  # noqa: RUF012
+        ("tv", "the reunion"): [result(61234, "The Reunion", "2014-04-01", popularity=90.0)],
+        ("movie", "jo koy: blue in the face"): [result(1770859, "Jo Koy: Blue in the Face", "2026-09-16")],
+        ("tv", "skyscraper live"): [result(299001, "Skyscraper Live", "2026-01-30", popularity=5.0)],
+        ("tv", "stranger things"): [result(66732, "Stranger Things", "2016-07-15", popularity=300.0)],
+    }
+
+    def fetch(self, table=None):
+        header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
+        lines = [
+            f"2026-10-18\tTV (English)\t{rank}\t{show}\t{season}\t1000\t{runtime}\t1000\t1"
+            for rank, show, season, runtime in self.ROWS
+        ]
+        routes = {"all-weeks-global.tsv": "\n".join([header, *lines]) + "\n", "/search/": tmdb_search(self.SEARCHES)}
+        with patch.object(overrides, "table", return_value=table or {}), api_routes(routes):
+            return ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-tv-english")))
+
+    def test_specials_need_a_new_series_and_films_are_left_out(self):
+        fetched = self.fetch()
+        self.assertEqual(
+            [(entry.rank, entry.title, entry.key) for entry in fetched.entries],
+            [
+                (1, "The Reunion", "t:the reunion|"),  # not tmdb:tv:61234, the 2014 series
+                (3, "Skyscraper Live", "tmdb:tv:299001"),
+                (4, "Stranger Things", "tmdb:tv:66732"),  # long runtime: matched as before
+            ],
+        )
+        self.assertEqual(fetched.entries[0].ids, {"review": netflix.SPECIAL_REVIEW})
+
+    def test_the_resolver_holds_an_unmatched_special_for_review(self):
+        definition = get("netflix-top-10-tv-english")
+        fetched = self.fetch()
+        with patch.object(overrides, "table", return_value={}):
+            resolution = Resolver(definition).resolve_one(fetched.entries[0])
+        self.assertIsNone(resolution.match)
+        self.assertEqual((resolution.how, resolution.reason), ("review", netflix.SPECIAL_REVIEW))
+
+    def test_an_override_on_the_title_key_still_wins(self):
+        fetched = self.fetch({("netflix", "t:the reunion|"): "tmdb:tv:327817"})
+        self.assertEqual(fetched.entries[0].key, "t:the reunion|")
+        self.assertNotIn("review", fetched.entries[0].ids)
+
+    def test_is_special(self):
+        row = {"category": "TV (English)", "show_title": "Jo Koy", "season_title": "N/A", "runtime": "0.9"}
+        self.assertTrue(netflix.is_special(row))
+        self.assertTrue(netflix.is_special({**row, "runtime": "0"}))  # a live event
+        self.assertFalse(netflix.is_special({**row, "runtime": "6.8"}))
+        self.assertFalse(netflix.is_special({**row, "runtime": ""}))
+        self.assertFalse(netflix.is_special({**row, "season_title": "Jo Koy: Season 1"}))
+        self.assertFalse(netflix.is_special({**row, "category": "Films (English)"}))
