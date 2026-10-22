@@ -1,5 +1,6 @@
 import json
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.management import CommandError, call_command
 
@@ -51,7 +52,7 @@ class ReportCommandTests(FeaturedTestCase):
     def test_text_and_json_reports(self):
         definition = make_definition()
         self.run_list(definition, entries()[:1])
-        with registry.override_definitions([definition]), fake_adapter([]):
+        with registry.override_definitions([definition]), fake_adapter([]), patch("lists.featured.overrides._load", return_value=()):
             text = StringIO()
             call_command("featured_lists_report", stdout=text)
             raw = StringIO()
