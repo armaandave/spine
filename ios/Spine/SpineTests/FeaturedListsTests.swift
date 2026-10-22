@@ -220,6 +220,45 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(entry.response.allCards.first?.previewPeople.map(\.name), ["Annie Ernaux"])
     }
 
+    func testListDetailDecodesItsFeaturedBlock() throws {
+        let detail = try decodeDetail(featured: """
+        {"id": 12, "name": "Netflix Top 10: Films", "slug": "netflix-top-10-films", "is_ranked": true, "items_count": 10,
+         "media_types": ["movie"], "kind": "chart", "source": {"name": "Netflix", "url": "https://www.netflix.com/tudum/top10"},
+         "cadence": "weekly", "period_label": "Week of Oct 13", "content_changed_at": "2026-10-21T16:00:00.123456Z",
+         "last_synced_at": "2026-10-21T17:30:00Z",
+         "live": {"status": "live", "label": "7 of 23 announced", "starts_at": "2026-10-21T15:00:00Z", "ends_at": null}}
+        """)
+
+        let featured = try XCTUnwrap(detail.featured)
+        XCTAssertEqual(featured.kind, .chart)
+        XCTAssertEqual(featured.source?.linkURL, URL(string: "https://www.netflix.com/tudum/top10"))
+        XCTAssertEqual(
+            featured.metadataLine(now: FeaturedFixtures.date("2026-10-21T18:00:00Z")),
+            "CHART · Netflix · Updated 2h ago · Refreshes weekly"
+        )
+        XCTAssertEqual(featured.live?.isLive(at: FeaturedFixtures.date("2026-10-21T18:00:00Z")), true)
+        XCTAssertEqual(featured.previews, [])
+        XCTAssertEqual(detail.name, "Netflix Top 10: Films")
+    }
+
+    func testListDetailWithoutOrWithABadFeaturedBlockStillDecodes() throws {
+        XCTAssertNil(try decodeDetail(featured: nil).featured)
+        XCTAssertNil(try decodeDetail(featured: "null").featured)
+        XCTAssertNil(try decodeDetail(featured: #"{"name": "No id"}"#).featured)
+        XCTAssertNil(try decodeDetail(featured: #""oops""#).featured)
+    }
+
+    private func decodeDetail(featured: String?) throws -> CustomListDetail {
+        let featuredJSON = featured.map { #", "featured": \#($0)"# } ?? ""
+        let json = """
+        {"id": 12, "name": "Netflix Top 10: Films", "slug": "netflix-top-10-films", "description": "", "visibility": "public",
+         "is_ranked": true, "list_type": "media",
+         "owner": {"id": 1, "username": "Spine", "display_name": "Spine", "avatar_url": null},
+         "items_count": 0, "like_count": 0, "items": []\(featuredJSON)}
+        """
+        return try JSONDecoder.api.decode(CustomListDetail.self, from: Data(json.utf8))
+    }
+
     private func decode(_ json: String) throws -> FeaturedShelvesResponse {
         try JSONDecoder.api.decode(FeaturedShelvesResponse.self, from: Data(json.utf8))
     }

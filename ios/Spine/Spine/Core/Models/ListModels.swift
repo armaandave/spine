@@ -203,6 +203,8 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
     let completion: CompletionProgress?
     /// Users the owner lets edit the list.
     let collaborators: [UserSummary]
+    /// Featured metadata, sent for public featured lists: the card fields without previews.
+    let featured: FeaturedListCard?
 
     init(
         id: Int,
@@ -223,7 +225,8 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         items: [MediaSummary],
         people: [PersonListEntry] = [],
         completion: CompletionProgress? = nil,
-        collaborators: [UserSummary] = []
+        collaborators: [UserSummary] = [],
+        featured: FeaturedListCard? = nil
     ) {
         self.id = id
         self.name = name
@@ -244,6 +247,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         self.people = people
         self.completion = completion
         self.collaborators = collaborators
+        self.featured = featured
     }
 
     enum CodingKeys: String, CodingKey {
@@ -266,6 +270,7 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         case people
         case completion
         case collaborators
+        case featured
     }
 
     init(from decoder: Decoder) throws {
@@ -290,6 +295,8 @@ struct CustomListDetail: Codable, Identifiable, Hashable {
         people = try container.decodeIfPresent([PersonListEntry].self, forKey: .people) ?? []
         completion = try container.decodeIfPresent(CompletionProgress.self, forKey: .completion)
         collaborators = (try? container.decodeIfPresent([UserSummary].self, forKey: .collaborators)) ?? []
+        // A featured block that can't be decoded is left out rather than failing the list.
+        featured = (try? container.decodeIfPresent(FeaturedListCard.self, forKey: .featured)) ?? nil
     }
 }
 
