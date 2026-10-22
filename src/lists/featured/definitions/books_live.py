@@ -76,6 +76,7 @@ APPLE_BOOKS = [
         # Self-published free books often have no ISBN cover: a title search each,
         # on Hardcover and then Open Library. Later runs hit the resolve cache.
         guards=Guards(max_title_searches=120),
+        soft_time_limit=900,  # Open Library search is limited to 20 requests a minute
         source_name="Apple Books",
         source_url=source_url,
         description=description,
