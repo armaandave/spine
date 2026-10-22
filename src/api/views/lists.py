@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, wait
 
+import requests
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Max, Q
@@ -39,6 +40,7 @@ from api.services import filters as filter_service
 from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
+from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, PersonListItem
 from social.models import Activity, ContentLike, SocialAuditLog
@@ -47,6 +49,35 @@ LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
 PERSON_COMPLETION_WORKERS = 8
 PERSON_COMPLETION_TIMEOUT = 25
+HEADER_BACKDROP_MEDIA_TYPES = {MediaTypes.MOVIE.value, MediaTypes.TV.value}
+
+
+def _header_backdrop_item_id(items):
+    """Return the first movie or TV item: the app shows its backdrop above the list."""
+    return next(
+        (item.id for item in items if item.media_type in HEADER_BACKDROP_MEDIA_TYPES),
+        None,
+    )
+
+
+def _list_item_summary(item, request, *, resolve_backdrop):
+    """Serialize a list item; only the header item pays for a provider backdrop."""
+    try:
+        return media_summary_from_item(
+            item,
+            request=request,
+            user=request.user,
+            include_resolved_backdrop=resolve_backdrop,
+            include_user_state=False,
+        )
+    except (provider_services.ProviderAPIError, requests.exceptions.RequestException):
+        # The header backdrop is decoration: a provider outage must not fail the list.
+        return media_summary_from_item(
+            item,
+            request=request,
+            user=request.user,
+            include_user_state=False,
+        )
 
 
 def person_list_item_payload(list_person, request=None, completion=None):
@@ -130,12 +161,17 @@ def list_payload(
             )
             if include_preview_items and not include_items:
                 list_items = list_items[:LIST_PREVIEW_ITEM_LIMIT]
+            list_items = list(list_items)
+            header_item_id = (
+                _header_backdrop_item_id(list_item.item for list_item in list_items)
+                if include_items
+                else None
+            )
             for list_item in list_items:
-                item = media_summary_from_item(
+                item = _list_item_summary(
                     list_item.item,
-                    request=request,
-                    user=request.user,
-                    include_user_state=False,
+                    request,
+                    resolve_backdrop=list_item.item_id == header_item_id,
                 )
                 item["position"] = list_item.position
                 items.append(item)
@@ -598,14 +634,21 @@ class ListItemsView(APIView):
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(list_items, request, view=self))
         prime_collection_items([list_item.item for list_item in page], request.user)
+        # Only the plain first page, which the app opens a list with, resolves the
+        # header backdrop; filtered, sorted and later pages make no provider calls.
+        header_item_id = (
+            _header_backdrop_item_id(list_item.item for list_item in page)
+            if paginator.page.number == 1
+            and set(request.query_params) <= {"page", "page_size"}
+            else None
+        )
         response = paginator.get_paginated_response(
             [
                 {
-                    **media_summary_from_item(
+                    **_list_item_summary(
                         list_item.item,
-                        request=request,
-                        user=request.user,
-                        include_user_state=False,
+                        request,
+                        resolve_backdrop=list_item.item_id == header_item_id,
                     ),
                     "position": list_item.position,
                     "date_added": list_item.date_added,
