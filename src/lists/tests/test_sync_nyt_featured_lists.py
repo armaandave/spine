@@ -75,7 +75,7 @@ class SyncNYTFeaturedListsTests(TestCase):
     @patch("lists.management.commands.sync_nyt_featured_lists.nytbooks.get_current_chart")
     def test_command_creates_five_native_ranked_lists(self, get_chart, _lookup):
         get_chart.side_effect = [
-            chart_payload(definition) for definition in nytbooks.FEATURED_CHARTS
+            chart_payload(definition, count=10) for definition in nytbooks.FEATURED_CHARTS
         ]
 
         call_command(
@@ -105,7 +105,7 @@ class SyncNYTFeaturedListsTests(TestCase):
                     flat=True,
                 ),
             ),
-            [1, 2],
+            list(range(1, 11)),
         )
         self.assertEqual(get_chart.call_count, 5)
 
@@ -180,7 +180,7 @@ class SyncNYTFeaturedListsTests(TestCase):
     @patch("lists.management.commands.sync_nyt_featured_lists.nytbooks.get_current_chart")
     def test_rerun_replaces_items_without_replacing_list(self, get_chart, _lookup):
         get_chart.side_effect = [
-            chart_payload(definition, count=1)
+            chart_payload(definition, count=10)  # a complete chart: NYT lists 10 or 15 books
             for definition in nytbooks.FEATURED_CHARTS
         ]
         call_command("sync_nyt_featured_lists", owner="Spine", stdout=StringIO())
@@ -192,14 +192,14 @@ class SyncNYTFeaturedListsTests(TestCase):
         first_id = first.id
 
         get_chart.side_effect = [
-            chart_payload(definition, count=2)
+            chart_payload(definition, count=15)
             for definition in nytbooks.FEATURED_CHARTS
         ]
         call_command("sync_nyt_featured_lists", owner="Spine", stdout=StringIO())
 
         first.refresh_from_db()
         self.assertEqual(first.id, first_id)
-        self.assertEqual(first.items.count(), 2)
+        self.assertEqual(first.items.count(), 15)
 
     @patch(
         "lists.management.commands.sync_nyt_featured_lists.hardcover.lookup_book_by_isbn",

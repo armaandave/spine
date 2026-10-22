@@ -3,12 +3,14 @@
 Params: ``{"duration": "month", "limit": 25}``; ``duration`` is one of Hardcover's
 ``TrendingDuration`` values (``week``, ``month``, ``three_month``, ``one_year``, ``all``).
 Two requests: the ranked ids, then their titles, authors, years and covers, so new Items
-need no further provider call.
+need no further provider call. ``"min_entries"`` is the fewest books a complete response
+has; fewer fail the run.
 """
 
 from django.conf import settings
 
 from app.providers import hardcover
+from lists.featured.adapters import _rows
 from lists.featured.helpers import post_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -45,6 +47,7 @@ def validate(definition):
     if set(definition.media_types) != {"book"}:
         msg = "Hardcover trending is a book list"
         raise ValueError(msg)
+    _rows.validate(definition, limit)
 
 
 def _graphql(query, variables):
@@ -92,6 +95,7 @@ def fetch(definition):
                 image=book.get("cached_image") or "",
             ),
         )
+    _rows.require(definition, len(entries), "Hardcover's trending books")
     return FetchResult(entries=entries)
 
 

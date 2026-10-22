@@ -9,11 +9,15 @@ edition is the week shown above the table ("Week of Sep 28, 2026").
 Titles only, matched to TMDB here (``_tmdb_match``): "East of Eden (2026)" searches
 "East of Eden" within a year of 2026. On the overall chart a title with more than
 one episode is a show; otherwise it tries movies, then shows.
+
+Both charts are top 10s: definitions set ``"min_entries": 10``, and a table with fewer
+titled rows fails the run instead of shrinking the list.
 """
 
 import re
 from html.parser import HTMLParser
 
+from lists.featured.adapters import _rows
 from lists.featured.adapters._tmdb_match import best_match, with_tmdb_match
 from lists.featured.helpers import get_text
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
@@ -95,6 +99,7 @@ def validate(definition):
     if set(definition.media_types) != set(CHARTS[chart]):
         msg = f"the {chart} chart holds {CHARTS[chart]}"
         raise ValueError(msg)
+    _rows.validate(definition)
 
 
 def _int(value):
@@ -134,15 +139,15 @@ def fetch(definition):
         msg = f"Nielsen's {chart} table has unexpected columns {header}."
         raise AdapterError(msg) from None
     episodes_at = header.index(EPISODES_HEADER) if EPISODES_HEADER in header else None
-    entries = []
-    for row in table["rows"][1:]:
-        if len(row) <= max(title_at, rank_at) or not row[title_at]:
-            continue
-        episodes = _int(row[episodes_at]) if episodes_at is not None and len(row) > episodes_at else None
-        entries.append(_entry(definition, chart, _int(row[rank_at]), row[title_at], episodes))
-    if not entries:
+    rows = [row for row in table["rows"][1:] if len(row) > max(title_at, rank_at) and row[title_at]]
+    if not rows:
         msg = f"Nielsen's {chart} table is empty."
         raise AdapterError(msg)
+    _rows.require(definition, len(rows), f"Nielsen's {chart} table")
+    entries = []
+    for row in rows:
+        episodes = _int(row[episodes_at]) if episodes_at is not None and len(row) > episodes_at else None
+        entries.append(_entry(definition, chart, _int(row[rank_at]), row[title_at], episodes))
     return FetchResult(entries=entries, edition=edition_label(table["before"]))
 
 

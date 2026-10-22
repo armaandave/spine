@@ -7,7 +7,8 @@ Params: ``{"category": "lit", "person_source": "openlibrary"}``.
 query then maps the laureates to Open Library authors (``P648``) and a Commons
 portrait (``P18``). A laureate without an Open Library id falls back to the
 resolver's strict name search in ``person_source``. Newest first; a prize split
-between laureates reads "<year> · shared".
+between laureates reads "<year> · shared". ``QID_CORRECTIONS`` fixes the few Wikidata
+ids the API has wrong.
 """
 
 import re
@@ -23,6 +24,10 @@ LIMIT = 500
 TIMEOUT = 30
 PORTRAIT_WIDTH = 400
 OPENLIBRARY_AUTHOR = re.compile(r"^OL\d+A$")
+# Wikidata ids the Nobel API gives that aren't the laureate, checked by hand.
+QID_CORRECTIONS = {
+    "Q7884119": "Q42037",  # "Une lettre de J. M. G. Le Clézio", an essay; Q42037 is Le Clézio (OL198800A)
+}
 
 
 def validate(definition):
@@ -67,7 +72,7 @@ def laureate_qids(laureates):
                 "",
             )
         if qid:
-            found[str(laureate.get("id"))] = qid
+            found[str(laureate.get("id"))] = QID_CORRECTIONS.get(qid, qid)
     return found
 
 

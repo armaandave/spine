@@ -8,12 +8,14 @@ Params (one mode):
   carries long-running shows such as One Piece). The edition reads "Fall 2026".
 
 Optional ``"limit"`` (default 100, at most 500). MAL ids are per season, like
-Spine's anime Items, so they resolve directly.
+Spine's anime Items, so they resolve directly. ``"min_entries"`` is the fewest entries
+a complete chart has (the limit for rankings, a floor for a season); fewer fail the run.
 """
 
 from django.conf import settings
 from django.utils import timezone
 
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -44,6 +46,7 @@ def validate(definition):
     if tuple(definition.media_types) != ("anime",):
         msg = "MAL anime charts are anime lists"
         raise ValueError(msg)
+    _rows.validate(definition, params.get("limit", DEFAULT_LIMIT))
 
 
 def current_season(today):
@@ -91,14 +94,18 @@ def fetch(definition):
     limit = int(params.get("limit", DEFAULT_LIMIT))
     if params.get("ranking"):
         nodes = _get("ranking", {"ranking_type": params["ranking"], "limit": limit, "fields": FIELDS})
-        return FetchResult(entries=entries_from_nodes(nodes))
+        entries = entries_from_nodes(nodes)
+        _rows.require(definition, len(entries), f"MyAnimeList's {params['ranking']} ranking")
+        return FetchResult(entries=entries)
     year, season = current_season(timezone.localdate())
     nodes = _get(
         f"season/{year}/{season}",
         {"sort": "anime_num_list_users", "limit": MAX_LIMIT, "fields": FIELDS},
     )
     premieres = [node for node in nodes if node.get("start_season") == {"year": year, "season": season}]
-    return FetchResult(entries=entries_from_nodes(premieres[:limit]), edition=f"{season.title()} {year}")
+    entries = entries_from_nodes(premieres[:limit])
+    _rows.require(definition, len(entries), f"MyAnimeList's {season} {year} premieres")
+    return FetchResult(entries=entries, edition=f"{season.title()} {year}")
 
 
 ADAPTER = Adapter(key="mal_anime", fetch=fetch, validate=validate)

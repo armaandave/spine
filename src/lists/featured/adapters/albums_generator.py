@@ -3,10 +3,11 @@
 Params: ``{"limit": 100, "min_votes": 100}``. Albums are ordered by average rating,
 then by vote count. Each album's Spotify ID is matched to a release group through
 MusicBrainz URL relationships, with a strict title, artist and year search as the
-fallback.
+fallback. ``"min_entries"`` is the fewest albums a complete list has; fewer fail the run
+before any MusicBrainz lookup.
 """
 
-from lists.featured.adapters import _music
+from lists.featured.adapters import _music, _rows
 from lists.featured.helpers import get_json
 from lists.featured.text import parse_year
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
@@ -26,6 +27,7 @@ def validate(definition):
     if set(definition.media_types) != {"music"}:
         msg = "1001 Albums Generator lists hold music"
         raise ValueError(msg)
+    _rows.validate(definition, definition.params.get("limit", 100))
 
 
 def _rated(albums, min_votes):
@@ -53,6 +55,7 @@ def fetch(definition):
     if not top:
         msg = "The 1001 Albums Generator returned no rated albums."
         raise AdapterError(msg)
+    _rows.require(definition, len(top), "The 1001 Albums Generator's ratings")
     urls = {
         album["spotifyId"]: SPOTIFY_URL.format(spotify_id=album["spotifyId"])
         for _, _, album in top

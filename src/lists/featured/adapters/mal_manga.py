@@ -2,12 +2,14 @@
 
 Params: ``{"ranking_type": "manga" | "bypopularity" | …, "limit": 50}``. Needs the
 ``MAL_API`` client id, sent as ``X-MAL-CLIENT-ID``. NSFW entries are left out unless
-``MAL_NSFW`` is on, like Spine's MAL search.
+``MAL_NSFW`` is on, like Spine's MAL search. ``"min_entries"`` is the entries a complete
+ranking has (the limit); fewer fail the run.
 """
 
 from django.conf import settings
 
 from app.providers import mal
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -29,6 +31,7 @@ def validate(definition):
     if set(definition.media_types) != {"manga"}:
         msg = "MAL manga rankings are manga lists"
         raise ValueError(msg)
+    _rows.validate(definition, limit)
 
 
 def _authors(node):
@@ -85,6 +88,7 @@ def fetch(definition):
                 image=picture.get("large") or picture.get("medium") or "",
             ),
         )
+    _rows.require(definition, len(entries), f"MyAnimeList's {definition.params['ranking_type']} ranking")
     return FetchResult(entries=entries)
 
 

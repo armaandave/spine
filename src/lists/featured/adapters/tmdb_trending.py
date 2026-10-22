@@ -1,15 +1,18 @@
 """TMDB trending: ``/trending/{movie|tv}/{day|week}`` with the tmdb provider's key.
 
-Params: ``{"media_type": "movie" | "tv", "window": "week"}``. One page: 20 titles.
+Params: ``{"media_type": "movie" | "tv", "window": "week", "min_entries": 20}``. One
+page: 20 titles; fewer than ``min_entries`` fail the run.
 """
 
 from app.providers import tmdb
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.text import parse_year
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
 MEDIA_TYPES = ("movie", "tv")
 WINDOWS = ("day", "week")
+PAGE_SIZE = 20
 
 
 def validate(definition):
@@ -24,6 +27,7 @@ def validate(definition):
     if params["media_type"] not in definition.media_types:
         msg = "media_types must include the trending media type"
         raise ValueError(msg)
+    _rows.validate(definition, PAGE_SIZE)
 
 
 def fetch(definition):
@@ -35,6 +39,7 @@ def fetch(definition):
     if not results:
         msg = f"TMDB returned no trending {media_type} titles."
         raise AdapterError(msg)
+    _rows.require(definition, len(results), f"TMDB's trending {media_type} page")
     entries = [
         Entry(
             rank=rank,

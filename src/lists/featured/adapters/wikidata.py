@@ -670,10 +670,15 @@ def hardcover_books(external_ids):
             json={"query": query, "variables": {"ids": ids[start : start + HARDCOVER_BATCH]}},
             headers={"Authorization": settings.HARDCOVER_API},
         )
+        if not isinstance(data, dict) or not isinstance(data.get("data") or {}, dict):
+            msg = "Hardcover sent an unreadable answer to the Open Library mapping query."
+            raise AdapterError(msg)
         if data.get("errors"):
             msg = "Hardcover rejected the Open Library mapping query."
             raise AdapterError(msg)
         for mapping in (data.get("data") or {}).get("book_mappings") or []:
+            if not isinstance(mapping, dict) or not mapping.get("external_id"):
+                continue
             book = mapping.get("book") or {}
             if not book.get("id"):
                 continue
@@ -702,7 +707,7 @@ def _fetch_editions(work_id, hops=3):
     for _ in range(hops):
         try:
             data = get_json("openlibrary", f"{OPENLIBRARY_URL}/works/{work_id}/editions.json", params={"limit": 50})
-            return data.get("entries") or []
+            return (data.get("entries") or []) if isinstance(data, dict) else []
         except AdapterError:
             work = get_json("openlibrary", f"{OPENLIBRARY_URL}/works/{work_id}.json")
             location = str(work.get("location") or "")
@@ -764,7 +769,7 @@ def work_by_author(entry):
         )
         matches = [
             doc
-            for doc in data.get("docs") or []
+            for doc in ((data.get("docs") or []) if isinstance(data, dict) else [])
             if str(doc.get("key", "")).startswith("/works/")
             and doc.get("author_name")
             and title_forms(doc.get("title")) & title_forms(title)

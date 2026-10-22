@@ -1,3 +1,5 @@
+import csv
+import re
 from unittest.mock import patch
 
 import requests
@@ -168,6 +170,28 @@ class StaticAdapterTests(SimpleTestCase):
         definition = make_definition(adapter="static", params={"file": "missing.csv"}, cadence=None)
         with self.assertRaises(AdapterError):
             ADAPTERS["static"].fetch(definition)
+
+    def test_tie_notes_mark_every_row_of_a_tie(self):
+        """A "Joint N" tie starts at place N and runs unbroken; a left-out row may open it."""
+        checked = 0
+        for path in sorted(static_adapter.DIRECTORY.glob("*.csv")):
+            with path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            if not any(re.fullmatch(r"Joint \d+", row.get("note") or "") for row in rows):
+                continue
+            checked += 1
+            ranks = {int(row["rank"]) for row in rows}
+            ties = {}
+            for row in rows:
+                if match := re.fullmatch(r"Joint (\d+)", row["note"]):
+                    ties.setdefault(int(match.group(1)), []).append(int(row["rank"]))
+            for place, tied in ties.items():
+                with self.subTest(file=path.name, place=place):
+                    left_out = [rank for rank in range(place, tied[0]) if rank not in ranks]
+                    self.assertEqual(tied[0], place + len(left_out), "the first tied row's place is untied")
+                    self.assertEqual(tied, list(range(tied[0], tied[0] + len(tied))), "a tie is interrupted")
+                    self.assertGreaterEqual(len(tied) + len(left_out), 2, "a tie of one")
+        self.assertGreaterEqual(checked, 2)  # both Sight and Sound polls
 
 
 @override_settings(MDBLIST_API="secret-mdblist-value")

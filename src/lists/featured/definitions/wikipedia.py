@@ -154,6 +154,7 @@ ANIME = [
         source_name="Crunchyroll Anime Awards",
         description="Every Crunchyroll Anime Awards Anime of the Year, newest first.",
         columns={"year": "Year", "title": "Anime", "creator": r"Studio(\(s\))?"},
+        last_year=True,  # "2021 / 2022 (7th)": the ceremony's award year is the last
         min_entries=8,
         guards=Guards(min_resolve_rate=0.7),
     ),

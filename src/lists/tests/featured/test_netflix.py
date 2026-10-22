@@ -6,8 +6,16 @@ from lists.featured import overrides
 from lists.featured.adapters import ADAPTERS, netflix
 from lists.featured.adapters import _tmdb_match as tmdb_match
 from lists.featured.registry import get
+from lists.featured.resolve import Resolver
 from lists.featured.types import AdapterError
-from lists.tests.featured.helpers import FeaturedTestCase, api_routes, load_fixture, make_definition, no_overrides
+from lists.tests.featured.helpers import (
+    FeaturedTestCase,
+    api_routes,
+    few_rows,
+    load_fixture,
+    make_definition,
+    no_overrides,
+)
 
 
 def tmdb_search(results_by_query):
@@ -101,7 +109,7 @@ class NetflixWeeklyTests(FeaturedTestCase):
             "/search/": tmdb_search(searches),
         }
         with no_overrides(), api_routes(routes) as api:
-            return ADAPTERS["netflix"].fetch(get(key)), api
+            return ADAPTERS["netflix"].fetch(few_rows(get(key))), api
 
     def test_latest_week_of_one_category_with_tmdb_ids(self):
         result_, _ = self.fetch("netflix-top-10-films-english")
@@ -145,7 +153,7 @@ class NetflixWeeklyTests(FeaturedTestCase):
                 "/search/": tmdb_search(SEARCHES),
             }
             with api_routes(routes):
-                result_ = ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+                result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         self.assertEqual(result_.entries[0].key, "t:animals|")
         self.assertEqual(result_.entries[1].ids, {"tmdb": "425"})
 
@@ -155,23 +163,23 @@ class NetflixWeeklyTests(FeaturedTestCase):
             "/search/": requests.ConnectionError("down"),
         }
         with no_overrides(), api_routes(routes):
-            result_ = ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+            result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         self.assertEqual([entry.key for entry in result_.entries], ["t:animals|", "t:ice age|"])
 
     def test_missing_columns_or_category_raise(self):
         with api_routes({"all-weeks-global.tsv": "week\tcategory\n2026-10-18\tFilms (English)\n"}):
             with self.assertRaisesMessage(AdapterError, "missing columns"):
-                ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+                ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
         header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
         with api_routes({"all-weeks-global.tsv": header + "\n"}), self.assertRaisesMessage(AdapterError, "no weekly rows"):
-            ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
 
     def test_runs_through_the_engine(self):
         routes = {
             "all-weeks-global.tsv": load_fixture("netflix", "weekly.tsv"),
             "/search/": tmdb_search(SEARCHES),
         }
-        definition = get("netflix-top-10-films-english")
+        definition = few_rows(get("netflix-top-10-films-english"))
         with no_overrides(), api_routes(routes):
             fetched = ADAPTERS["netflix"].fetch(definition)
         run = self.run_list(definition, fetch_result=fetched)
@@ -192,7 +200,7 @@ class NetflixMostPopularTests(FeaturedTestCase):
         }
         routes = {"most-popular.tsv": load_fixture("netflix", "most-popular.tsv"), "/search/": tmdb_search(searches)}
         with no_overrides(), api_routes(routes):
-            fetched = ADAPTERS["netflix"].fetch(get("netflix-most-popular-tv"))
+            fetched = ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-tv")))
         self.assertEqual(
             [(entry.rank, entry.key, entry.note) for entry in fetched.entries],
             [
@@ -225,3 +233,108 @@ class TMDBMatchTests(FeaturedTestCase):
             second = tmdb_match.best_match("tv", ["Die Falle"])
         self.assertEqual((first["id"], second["id"]), (283371, 283371))
         self.assertEqual(api.call_count, 1)
+
+
+class NetflixSharedDownloadTests(FeaturedTestCase):
+    WEEKLY = (
+        "netflix-top-10-films-english",
+        "netflix-top-10-films-non-english",
+        "netflix-top-10-tv-english",
+        "netflix-top-10-tv-non-english",
+    )
+
+    def downloads(self, api, file):
+        return [call for call in api.call_args_list if call.args[2].endswith(file)]
+
+    def test_the_weekly_lists_share_one_download(self):
+        weekly = load_fixture("netflix", "weekly.tsv")
+        weekly += "2026-10-18\tFilms (Non-English)\t1\tLa Grazia\tN/A\t1\t2.1\t1\t1\n"
+        routes = {"all-weeks-global.tsv": weekly, "/search/": tmdb_search(SEARCHES)}
+        with no_overrides(), api_routes(routes) as api:
+            results = [ADAPTERS["netflix"].fetch(few_rows(get(key))) for key in self.WEEKLY]
+        self.assertEqual(len(self.downloads(api, "all-weeks-global.tsv")), 1)
+        self.assertEqual([len(result.entries) for result in results], [2, 1, 2, 2])
+
+    def test_the_cache_keeps_each_categorys_latest_week_only(self):
+        rows = netflix.parse_tsv(load_fixture("netflix", "weekly.tsv"), "weekly")
+        self.assertIn("2026-10-11", {row["week"] for row in rows})
+        self.assertEqual({row["week"] for row in netflix.latest_weeks(rows)}, {"2026-10-18"})
+
+    def test_the_most_popular_lists_share_one_download(self):
+        routes = {"most-popular.tsv": load_fixture("netflix", "most-popular.tsv"), "/search/": tmdb_search({})}
+        with no_overrides(), api_routes(routes) as api:
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-tv")))
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-films")))
+        self.assertEqual(len(self.downloads(api, "most-popular.tsv")), 1)
+
+    def test_a_failed_download_is_not_cached(self):
+        header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
+        with api_routes({"all-weeks-global.tsv": header + "\n"}), self.assertRaises(AdapterError):
+            ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+        routes = {"all-weeks-global.tsv": load_fixture("netflix", "weekly.tsv"), "/search/": tmdb_search(SEARCHES)}
+        with no_overrides(), api_routes(routes) as api:
+            result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
+        self.assertEqual(len(self.downloads(api, "all-weeks-global.tsv")), 1)
+        self.assertEqual(len(result_.entries), 2)
+
+
+class NetflixTVSpecialTests(FeaturedTestCase):
+    """Specials and films Netflix files under TV never take an older series' id."""
+
+    ROWS = (
+        # rank, show_title, season_title, runtime
+        (1, "The Reunion", "N/A", "1.5333"),  # a reunion special; TMDB's "The Reunion" is a 2014 series
+        (2, "Jo Koy: Blue in the Face", "N/A", "0.9333"),  # stand-up: a film on TMDB
+        (3, "Skyscraper Live", "N/A", "1.95"),  # a live special TMDB files as a new series
+        (4, "Stranger Things", "N/A", "6.8167"),  # a whole series charted without a season
+    )
+    SEARCHES = {  # noqa: RUF012
+        ("tv", "the reunion"): [result(61234, "The Reunion", "2014-04-01", popularity=90.0)],
+        ("movie", "jo koy: blue in the face"): [result(1770859, "Jo Koy: Blue in the Face", "2026-09-16")],
+        ("tv", "skyscraper live"): [result(299001, "Skyscraper Live", "2026-01-30", popularity=5.0)],
+        ("tv", "stranger things"): [result(66732, "Stranger Things", "2016-07-15", popularity=300.0)],
+    }
+
+    def fetch(self, table=None):
+        header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
+        lines = [
+            f"2026-10-18\tTV (English)\t{rank}\t{show}\t{season}\t1000\t{runtime}\t1000\t1"
+            for rank, show, season, runtime in self.ROWS
+        ]
+        routes = {"all-weeks-global.tsv": "\n".join([header, *lines]) + "\n", "/search/": tmdb_search(self.SEARCHES)}
+        with patch.object(overrides, "table", return_value=table or {}), api_routes(routes):
+            return ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-tv-english")))
+
+    def test_specials_need_a_new_series_and_films_are_left_out(self):
+        fetched = self.fetch()
+        self.assertEqual(
+            [(entry.rank, entry.title, entry.key) for entry in fetched.entries],
+            [
+                (1, "The Reunion", "t:the reunion|"),  # not tmdb:tv:61234, the 2014 series
+                (3, "Skyscraper Live", "tmdb:tv:299001"),
+                (4, "Stranger Things", "tmdb:tv:66732"),  # long runtime: matched as before
+            ],
+        )
+        self.assertEqual(fetched.entries[0].ids, {"review": netflix.SPECIAL_REVIEW})
+
+    def test_the_resolver_holds_an_unmatched_special_for_review(self):
+        definition = get("netflix-top-10-tv-english")
+        fetched = self.fetch()
+        with patch.object(overrides, "table", return_value={}):
+            resolution = Resolver(definition).resolve_one(fetched.entries[0])
+        self.assertIsNone(resolution.match)
+        self.assertEqual((resolution.how, resolution.reason), ("review", netflix.SPECIAL_REVIEW))
+
+    def test_an_override_on_the_title_key_still_wins(self):
+        fetched = self.fetch({("netflix", "t:the reunion|"): "tmdb:tv:327817"})
+        self.assertEqual(fetched.entries[0].key, "t:the reunion|")
+        self.assertNotIn("review", fetched.entries[0].ids)
+
+    def test_is_special(self):
+        row = {"category": "TV (English)", "show_title": "Jo Koy", "season_title": "N/A", "runtime": "0.9"}
+        self.assertTrue(netflix.is_special(row))
+        self.assertTrue(netflix.is_special({**row, "runtime": "0"}))  # a live event
+        self.assertFalse(netflix.is_special({**row, "runtime": "6.8"}))
+        self.assertFalse(netflix.is_special({**row, "runtime": ""}))
+        self.assertFalse(netflix.is_special({**row, "season_title": "Jo Koy: Season 1"}))
+        self.assertFalse(netflix.is_special({**row, "category": "Films (English)"}))

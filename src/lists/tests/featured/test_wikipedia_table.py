@@ -1,9 +1,11 @@
 """Tests for the Wikipedia table adapter and its Wikidata ID lookups (no network)."""
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
+from app.providers import quota
 from lists.featured import engine
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import _wikipedia_ids as wikidata
@@ -26,14 +28,27 @@ def parse_response(fixture, title="Page"):
 
 
 def wiki(pages, *, items=None, redirects=(), missing=()):
-    """Route MediaWiki requests: ``action=parse`` by page, ``prop=pageprops`` from ``items``."""
+    """Route MediaWiki requests.
+
+    ``prop=revisions`` gives each page in ``pages`` one settled revision, ``action=parse``
+    renders it by ``oldid``, and ``prop=pageprops`` answers from ``items``.
+    """
     items = items or {}
+    revids = {title: revid for revid, title in enumerate(pages, start=101)}
+    titles_by_revid = {revid: title for title, revid in revids.items()}
 
     def respond(url, params):  # noqa: ARG001
         if params["action"] == "parse":
-            if params["page"] in missing or params["page"] not in pages:
-                return {"error": {"code": "missingtitle", "info": "The page you specified doesn't exist."}}
-            return pages[params["page"]]
+            title = titles_by_revid.get(int(params["oldid"]))
+            if title is None or title in missing:
+                return {"error": {"code": "nosuchrevid", "info": "There is no revision with that ID."}}
+            return pages[title]
+        if params.get("prop") == "revisions":
+            title = params["titles"]
+            if title in missing or title not in pages:
+                return {"query": {"pages": [{"ns": 0, "title": title, "missing": True}]}}
+            revision = {"revid": revids[title], "parentid": 1, "timestamp": "2026-10-01T12:00:00Z"}
+            return {"query": {"pages": [{"pageid": revids[title], "title": title, "revisions": [revision]}]}}
         titles = params["titles"].split("|")
         return {
             "query": {
@@ -79,6 +94,22 @@ class ParseTests(SimpleTestCase):
     def rows(self, fixture, params):
         rows, _ = wikipedia_table.parse_rows(load_fixture("wikipedia_table", fixture), params)
         return wikipedia_table._merge(rows, params)
+
+    def test_last_year_reads_a_two_year_season_as_its_award_year(self):
+        html = """<table class="wikitable"><tr><th>Year</th><th>Anime</th><th>Studio(s)</th></tr>
+        <tr><th rowspan="3">2021 (6th)</th></tr>
+        <tr><td><b>Attack on Titan</b></td><td>MAPPA</td></tr>
+        <tr><td>86</td><td>A-1 Pictures</td></tr>
+        <tr><th rowspan="2">2021 / 2022 (7th)</th></tr>
+        <tr><td><b>Cyberpunk: Edgerunners</b></td><td>Trigger</td></tr></table>"""
+        params = definition_for("crunchyroll-anime-of-the-year").params
+        self.assertTrue(params["last_year"])
+        rows, _ = wikipedia_table.parse_rows(html, params)
+        self.assertEqual([(row.title, row.year) for row in rows], [("Attack on Titan", 2021), ("Cyberpunk: Edgerunners", 2022)])
+        first, _ = wikipedia_table.parse_rows(html, {**params, "last_year": False})
+        self.assertEqual(first[1].year, 2021)
+        self.assertEqual(wikipedia_table.cell_year("2022 / 2023 (8th) [15]", last=True), 2023)
+        self.assertIsNone(wikipedia_table.cell_year("TBA", last=True))
 
     def test_emmy_winners_newest_first_with_repeat_years_merged(self):
         rows = self.rows("emmy_drama.html", definition_for("emmys-outstanding-drama-series").params)
@@ -367,6 +398,25 @@ class WikidataIdTests(SimpleTestCase):
         with api_routes({SPARQL: sparql(rows)}):
             return wikidata.provider_ids(media_type, {row[0] for row in rows})
 
+    def test_only_well_formed_qids_reach_the_sparql_query(self):
+        injected = "Q1 } ?x ?y ?z . { wd:Q2"
+        with api_routes({SPARQL: sparql([("Q1", "P4947", "550")])}) as api:
+            result = wikidata.provider_ids("movie", ["Q1", injected, "Q0", "P31", ""])
+        self.assertEqual(result, {"Q1": ({"tmdb": "550"}, "")})
+        query = api.call_args.kwargs["params"]["query"]
+        self.assertIn("VALUES ?item { wd:Q1 }", query)
+        self.assertNotIn("?x", query)
+        with api_routes({}):  # nothing valid: no request at all
+            self.assertEqual(wikidata.provider_ids("movie", [injected]), {})
+
+    def test_page_props_without_a_qid_give_no_item(self):
+        pages = [
+            {"title": "Fight Club", "pageprops": {"wikibase_item": "Q190050"}},
+            {"title": "Odd", "pageprops": {"wikibase_item": "Q1 } ?x"}},
+        ]
+        with api_routes({WIKIPEDIA: {"query": {"pages": pages}}}):
+            self.assertEqual(wikidata.wikidata_items("en", ["Fight Club", "Odd"]), {"Fight Club": "Q190050"})
+
     def test_igdb_needs_the_numeric_qualifier_else_steam(self):
         result = self.ids(
             "game",
@@ -534,3 +584,53 @@ class EngineTests(FeaturedTestCase):
         )
         self.assertEqual(result.resolutions[0].entry.note, "2025")
         self.assertEqual(result.message, "")
+
+
+class StableRevisionTests(SimpleTestCase):
+    """Pages are read at their newest revision that has stood for 30 minutes."""
+
+    NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
+
+    def test_parses_the_newest_revision_at_least_half_an_hour_old(self):
+        calls = []
+
+        def respond(url, params):  # noqa: ARG001
+            calls.append(params)
+            if params["action"] == "query":  # the vandal's edit at 11:50 is newer than 11:30
+                revision = {"revid": 555, "parentid": 554, "timestamp": "2026-10-22T09:00:00Z"}
+                return {"query": {"pages": [{"pageid": 7, "title": "Page", "revisions": [revision]}]}}
+            return {"parse": {"title": "Page", "revid": 555, "text": "<p>settled</p>"}}
+
+        with api_routes({WIKIPEDIA: respond}):
+            html, revid = wikipedia_table.fetch_page("en", "Page", now=self.NOW)
+        self.assertEqual((html, revid), ("<p>settled</p>", 555))
+        query, parse = calls
+        self.assertEqual(
+            {name: query[name] for name in ("prop", "titles", "redirects", "rvlimit", "rvdir", "rvstart")},
+            {
+                "prop": "revisions",
+                "titles": "Page",
+                "redirects": "1",
+                "rvlimit": "1",
+                "rvdir": "older",
+                "rvstart": "2026-10-22T11:30:00Z",
+            },
+        )
+        self.assertEqual(parse["oldid"], "555")
+        self.assertNotIn("page", parse)
+
+    def test_a_missing_page_is_none(self):
+        missing = {"query": {"pages": [{"ns": 0, "title": "Nope", "missing": True}]}}
+        with api_routes({WIKIPEDIA: missing}):
+            self.assertEqual(wikipedia_table.fetch_page("en", "Nope", now=self.NOW), (None, None))
+
+    def test_a_page_created_in_the_last_half_hour_defers_the_run(self):
+        fresh = {"query": {"pages": [{"pageid": 9, "title": "2026 Awards"}]}}  # no revision before 11:30
+        with api_routes({WIKIPEDIA: fresh}), self.assertRaises(quota.Deferred) as raised:
+            wikipedia_table.fetch_page("en", "2026 Awards", now=self.NOW)
+        self.assertEqual(raised.exception.until, datetime(2026, 10, 22, 12, 30, tzinfo=UTC))
+
+    def test_unreadable_revision_answers_raise(self):
+        for payload in ({"error": {"code": "internal_api_error"}}, {"query": {}}, ["odd"]):
+            with self.subTest(payload=payload), api_routes({WIKIPEDIA: payload}), self.assertRaises(AdapterError):
+                wikipedia_table.fetch_page("en", "Page", now=self.NOW)

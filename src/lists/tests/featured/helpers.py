@@ -6,12 +6,15 @@
   URL containing a key returns its value; an unmatched URL fails the test, so a test
   can never reach the network.
 - ``make_definition(**fields)`` returns a valid ``FeaturedList`` with test defaults.
+- ``few_rows(definition)`` lets a real chart definition accept a trimmed fixture: it
+  sets ``min_entries`` (the rows a complete chart has) to 1.
 - ``fake_adapter(result)`` registers a temporary adapter (key ``"test"``) that returns
   ``result`` (a ``FetchResult``, a list of entries, or a callable).
 - ``FeaturedTestCase`` clears the cache, provider quotas and pending ratings, creates the ``Spine`` owner, and offers
   ``run_list(definition, entries)`` and ``assertListRefs(custom_list, refs)``.
 """
 
+import dataclasses
 import json
 from contextlib import contextmanager
 from datetime import timedelta
@@ -78,6 +81,11 @@ def make_definition(**fields):
     }
     values.update(fields)
     return FeaturedList(**values)
+
+
+def few_rows(definition, minimum=1):
+    """Return ``definition`` with ``params["min_entries"]`` lowered for a trimmed fixture."""
+    return dataclasses.replace(definition, params={**definition.params, "min_entries": minimum})
 
 
 def entry(rank, title, **fields):

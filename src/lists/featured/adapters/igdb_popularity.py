@@ -8,11 +8,12 @@ Params: ``{"popularity_type": 10, "limit": 50}``. Useful types (``popularity_typ
 Steam's peak players (5) and global top sellers (9) are better served by the
 ``steam`` adapter directly, and Twitch hours watched (34) maps non-game categories
 to games. Rows carry IGDB game ids; one ``games`` request adds names and covers.
+``"min_entries"`` is the entries a complete chart has (the limit); fewer fail the run.
 """
 
 from datetime import UTC, datetime
 
-from lists.featured.adapters import _igdb_games
+from lists.featured.adapters import _igdb_games, _rows
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
 TYPES = {
@@ -36,6 +37,7 @@ def validate(definition):
     if tuple(definition.media_types) != ("game",):
         msg = "IGDB popularity charts are game lists"
         raise ValueError(msg)
+    _rows.validate(definition, params.get("limit", DEFAULT_LIMIT))
 
 
 def entries_from_rows(rows, games):
@@ -72,6 +74,7 @@ def fetch(definition):
     if not rows:
         msg = f"IGDB returned no {TYPES[popularity_type]} chart."
         raise AdapterError(msg)
+    _rows.require(definition, len(rows), f"IGDB's {TYPES[popularity_type]} chart")
     games = _igdb_games.games_by_ids(row.get("game_id") for row in rows)
     calculated = max((row.get("calculated_at") or 0 for row in rows), default=0)
     day = datetime.fromtimestamp(calculated, UTC).date() if calculated else None

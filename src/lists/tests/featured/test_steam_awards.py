@@ -55,6 +55,14 @@ class SteamAwardsParsingTests(SimpleTestCase):
             [("GOTY", PUBG, "PUBG: BATTLEGROUNDS"), ("Best Developer", "", "")],  # a developer, not an app
         )
 
+    def test_an_unreadable_config_is_an_adapter_error(self):
+        for raw in ("{not json", "[1, 2]", "&quot;text&quot;"):
+            page = f'<div data-steam_awards_config="{raw}"></div>'
+            with self.subTest(raw=raw), self.assertRaises(AdapterError):
+                steam_awards.parse_page(page, 2025)
+        # A config without votes yet isn't this year's page.
+        self.assertIsNone(steam_awards.parse_page('<div data-steam_awards_config="{}"></div>', 2025))
+
     def test_a_page_for_another_year_is_rejected(self):
         # /steamawards/2026 redirects to the 2025 page until Steam publishes 2026.
         self.assertIsNone(steam_awards.parse_page(PAGE_2025, 2026))

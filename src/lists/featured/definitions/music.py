@@ -10,6 +10,7 @@ from datetime import timedelta
 from lists.featured.registry import FeaturedList, Guards
 
 DAILY = timedelta(days=1)
+EVERY_OTHER_DAY = timedelta(days=2)  # weekly charts: the card still reads "weekly"
 WEEKLY = timedelta(days=7)
 # Yearly lists: re-checked about monthly so a new edition, or a winner MusicBrainz
 # editors add after the ceremony, appears within weeks. Over 32 days reads "yearly".
@@ -48,7 +49,7 @@ CHARTS = [
         kind="chart",
         position=700,
         adapter="apple_music",
-        params={"country": "us", "limit": 100},
+        params={"country": "us", "limit": 100, "min_entries": 90},
         cadence=DAILY,
         source_name="Apple Music",
         source_url="https://rss.marketingtools.apple.com/",
@@ -62,7 +63,7 @@ CHARTS = [
         kind="chart",
         position=701,
         adapter="apple_music",
-        params={"country": "gb", "limit": 100},
+        params={"country": "gb", "limit": 100, "min_entries": 90},
         cadence=DAILY,
         source_name="Apple Music",
         source_url="https://rss.marketingtools.apple.com/",
@@ -76,8 +77,10 @@ CHARTS = [
         kind="chart",
         position=702,
         adapter="official_charts",
-        params={"chart": "albums-chart"},
-        cadence=WEEKLY,
+        params={"chart": "albums-chart", "min_entries": 95},  # a top 100
+        # The chart comes out on Fridays; a weekly cadence counted from the first sync could
+        # lag it by six days. Re-reads are cheap: MusicBrainz answers are cached.
+        cadence=EVERY_OTHER_DAY,
         source_name="Official Charts",
         source_url="https://www.officialcharts.com/charts/albums-chart/",
         description="The UK's best-selling and most-streamed albums of the week.",
@@ -90,7 +93,7 @@ CHARTS = [
         kind="chart",
         position=703,
         adapter="listenbrainz",
-        params={"range": "week", "limit": 50},
+        params={"range": "week", "limit": 50, "min_entries": 40},
         cadence=DAILY,  # the stats land a day or two after the week ends
         source_name="ListenBrainz",
         source_url="https://listenbrainz.org/statistics/?range=week",
@@ -104,7 +107,7 @@ CHARTS = [
         kind="community",
         position=704,
         adapter="listenbrainz",
-        params={"range": "all_time", "limit": 100},
+        params={"range": "all_time", "limit": 100, "min_entries": 70},  # 100 rows less singles
         cadence=WEEKLY,
         source_name="ListenBrainz",
         source_url="https://listenbrainz.org/statistics/?range=all_time",
@@ -118,7 +121,7 @@ CHARTS = [
         kind="community",
         position=705,
         adapter="albums_generator",
-        params={"limit": 100, "min_votes": 100},
+        params={"limit": 100, "min_votes": 100, "min_entries": 90},
         cadence=DAILY,
         source_name="1001 Albums Generator",
         source_url="https://1001albumsgenerator.com/",

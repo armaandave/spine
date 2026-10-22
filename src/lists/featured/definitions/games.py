@@ -17,7 +17,7 @@ CHARTS = [
         kind="chart",
         position=540,
         adapter="steam",
-        params={"chart": "weekly_top_sellers", "country": "US"},
+        params={"chart": "weekly_top_sellers", "country": "US", "min_entries": 60},  # games among 100 rows
         cadence=timedelta(days=2),  # weekly chart, checked every other day so a new week lands soon
         source_name="Steam",
         source_url="https://store.steampowered.com/charts/topsellers/US",
@@ -31,7 +31,7 @@ CHARTS = [
         kind="chart",
         position=541,
         adapter="steam",
-        params={"chart": "most_played"},
+        params={"chart": "most_played", "min_entries": 60},  # games among 100 rows
         cadence=timedelta(days=1),
         source_name="Steam",
         source_url="https://store.steampowered.com/charts/mostplayed",
@@ -45,7 +45,7 @@ CHARTS = [
         kind="chart",
         position=542,
         adapter="twitch",
-        params={"limit": 100},
+        params={"limit": 100, "min_entries": 50},  # games among 100 categories
         cadence=timedelta(hours=1),
         source_name="Twitch",
         source_url="https://www.twitch.tv/directory?sort=VIEWER_COUNT",
@@ -59,7 +59,7 @@ CHARTS = [
         kind="chart",
         position=543,
         adapter="igdb_popularity",
-        params={"popularity_type": 10, "limit": 50},
+        params={"popularity_type": 10, "limit": 50, "min_entries": 45},
         cadence=timedelta(days=1),
         source_name="IGDB",
         source_url="https://www.igdb.com/",
@@ -73,7 +73,7 @@ CHARTS = [
         kind="community",
         position=544,
         adapter="igdb_popularity",
-        params={"popularity_type": 3, "limit": 50},
+        params={"popularity_type": 3, "limit": 50, "min_entries": 45},
         cadence=timedelta(days=1),
         source_name="IGDB",
         source_url="https://www.igdb.com/",
@@ -87,7 +87,7 @@ CHARTS = [
         kind="community",
         position=545,
         adapter="igdb_popularity",
-        params={"popularity_type": 2, "limit": 50},
+        params={"popularity_type": 2, "limit": 50, "min_entries": 45},
         cadence=timedelta(days=1),
         source_name="IGDB",
         source_url="https://www.igdb.com/",

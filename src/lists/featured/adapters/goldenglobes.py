@@ -64,14 +64,25 @@ def validate(definition):
         raise ValueError(msg)
 
 
-def _get(path, params):
-    return get_json("goldenglobes", f"{API}/{path}", params=params)
+def _get(path, params, shape=list):
+    data = get_json("goldenglobes", f"{API}/{path}", params=params)
+    if not isinstance(data, shape):
+        msg = f"Golden Globes returned an unexpected {path.split('/', 1)[0]} response."
+        raise AdapterError(msg)
+    return data
+
+
+def _ints(*values):
+    try:
+        return tuple(int(value) for value in values)
+    except (TypeError, ValueError):
+        return None
 
 
 def winners(category):
     """Return ``[(ceremony year, record id), …]`` for every winning nomination."""
-    term = _get(f"award-categories/{category}", {"_fields": "id,name,count"})
-    count = int((term or {}).get("count") or 0)
+    term = _get(f"award-categories/{category}", {"_fields": "id,name,count"}, shape=dict)
+    (count,) = _ints(term.get("count") or 0) or (0,)
     if not count:
         msg = f"Golden Globes category {category} has no nominations."
         raise AdapterError(msg)
@@ -81,10 +92,17 @@ def winners(category):
             "nomination",
             {"award-categories": category, "per_page": PER_PAGE, "page": page, "_fields": "id,acf"},
         )
-        for row in rows or []:
-            acf = row.get("acf") or {}
+        for row in rows:
+            acf = (row.get("acf") or {}) if isinstance(row, dict) else None
+            if not isinstance(acf, dict):
+                msg = f"Golden Globes sent an unreadable nomination in category {category}."
+                raise AdapterError(msg)
             if acf.get("is_winner") and acf.get("film_tv_show") and acf.get("year"):
-                found.append((int(acf["year"]), int(acf["film_tv_show"])))
+                won = _ints(acf["year"], acf["film_tv_show"])
+                if won is None:
+                    msg = f"Golden Globes nomination {row.get('id')} has an unreadable year or record id."
+                    raise AdapterError(msg)
+                found.append(won)
     return found
 
 
@@ -98,8 +116,12 @@ def records(record_type, ids):
             record_type,
             {"include": ",".join(map(str, chunk)), "per_page": PER_PAGE, "_fields": "id,title,acf"},
         )
-        for row in rows or []:
-            found[int(row["id"])] = row
+        for row in rows:
+            record_id = _ints(row.get("id")) if isinstance(row, dict) else None
+            if record_id is None:
+                msg = f"Golden Globes sent an unreadable {record_type} record."
+                raise AdapterError(msg)
+            found[record_id[0]] = row
     return found
 
 

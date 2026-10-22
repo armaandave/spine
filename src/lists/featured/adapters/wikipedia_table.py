@@ -1,8 +1,14 @@
 """Awards and curated lists read from Wikipedia tables.
 
-Each page is fetched through the MediaWiki API (``action=parse``, one request per page)
-and its ``wikitable`` tables are read row by row, with ``rowspan`` and ``colspan``
-expanded so a year cell spanning a ceremony's nominees applies to each of them.
+Each page is fetched through the MediaWiki API and its ``wikitable`` tables are read row
+by row, with ``rowspan`` and ``colspan`` expanded so a year cell spanning a ceremony's
+nominees applies to each of them.
+
+A page is read as its newest revision that is at least ``STABLE_AGE`` (30 minutes) old:
+one ``prop=revisions`` request finds it, then ``action=parse`` renders that revision. A
+vandal edit is usually reverted within minutes, so one present at sync time can't stick
+for the list's whole cadence. A page with no revision that old (it was just created)
+defers the run until it has one. Live award pages (``award_page``) have their own rule.
 
 Params:
 
@@ -23,6 +29,8 @@ Params:
   background); ``"all"`` (default) keeps every row.
 - ``category``: a pattern the category cell must match.
 - ``latest_only``: keep only the rows of the latest year (a yearly top 10).
+- ``last_year``: a year cell naming several years ("2021 / 2022" for a season that
+  spans two) gives its last one instead of its first.
 - ``order``: ``"newest"`` (default: newest year first) or ``"source"``.
 - ``match_year``: send the year to the resolver (default true). Turn it off when the
   award year isn't the work's year (a TV series winning in its fifth season).
@@ -46,11 +54,13 @@ lists every year. Linked titles get provider IDs through Wikidata
 
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
+from django.utils import timezone
 
+from app.providers import quota
 from lists.featured.adapters import _wikipedia_ids as wikidata
 from lists.featured.helpers import get_json
 from lists.featured.text import normalize_title, parse_year
@@ -65,8 +75,10 @@ WINNER_MARK = "‡"
 SYMBOLS = re.compile(r"^[\s‡†*§¤#^]+|[\s‡†*§¤#^]+$")
 BRACKETED_NOTE = re.compile(r"\[\s*[^\]]{0,12}\s*\]")
 TRAILING_PARENTHETICAL = re.compile(r"\s*\([^()]*\)\s*$")
+YEARS = re.compile(r"(?<!\d)(1[5-9]\d\d|2[01]\d\d)(?!\d)")  # as text.parse_year reads them
 EMPTY_TITLES = {"", "-", "—", "–", "n/a", "tba", "tbd", "none", "not awarded", "no award"}
 MAX_SPAN = 500
+STABLE_AGE = timedelta(minutes=30)  # read the newest revision at least this old
 SITE = re.compile(r"^[a-z]{2,3}$")
 # Links into these namespaces are never the work itself (ja: 特別 is Special).
 NAMESPACES = {"File", "Image", "Help", "Wikipedia", "Category", "Template", "Special", "Portal", "特別", "ファイル"}
@@ -333,6 +345,14 @@ def _table_matches(table, index, selector):
     return True
 
 
+def cell_year(text, *, last=False):
+    """Return the first year in a cell's text, or its last when ``last``."""
+    if not last:
+        return parse_year(text)
+    years = YEARS.findall(text or "")
+    return int(years[-1]) if years else None
+
+
 def _context_year(table):
     caption = table.find("caption")
     heading = table.find_previous(["h2", "h3", "h4"])
@@ -355,6 +375,7 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
     split_creator = params.get("split_creator", "")
     strip_parenthetical = bool(params.get("strip_parenthetical"))
     main_title = bool(params.get("main_title"))
+    last_year = bool(params.get("last_year"))
     rows, matched_tables = [], 0
     for index, table in enumerate(soup.select("table.wikitable")):
         if not _table_matches(table, index, selector):
@@ -372,14 +393,14 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
         for tr, row in grid[header_at + 1 :]:
             distinct = {id(cell) for cell in row if cell is not None}
             if len(distinct) == 1 and len(row) > 1:  # a group row: "2026", "Best Dramatic Show"
-                group_year = parse_year(cell_text(row[0])) or group_year
+                group_year = cell_year(cell_text(row[0]), last=last_year) or group_year
                 continue
 
             def cell_at(name, row=row):
                 position = found.get(name)
                 return row[position] if position is not None and position < len(row) else None
 
-            year = parse_year(cell_text(cell_at("year"))) if "year" in found else group_year
+            year = cell_year(cell_text(cell_at("year")), last=last_year) if "year" in found else group_year
             if category and not category.search(cell_text(cell_at("category"))):
                 continue
             result_cell = cell_at("result")
@@ -420,26 +441,69 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
 # Fetch ----------------------------------------------------------------------------
 
 
-def fetch_page(site, title):
-    """Return ``(html, revid)`` for a page, or ``(None, None)`` when it doesn't exist."""
+def stable_revision(site, title, now=None):
+    """Return the id of the newest revision of ``title`` at least ``STABLE_AGE`` old.
+
+    Redirects are followed. None when the page doesn't exist; ``quota.Deferred`` when
+    every revision is newer (the page was just created), so the run is retried later.
+    """
+    now = now or timezone.now()
+    data = get_json(
+        "wikipedia",
+        wikidata.api_url(site),
+        params={
+            "action": "query",
+            "prop": "revisions",
+            "titles": title,
+            "redirects": "1",
+            "rvprop": "ids|timestamp",
+            "rvlimit": "1",
+            "rvdir": "older",
+            "rvstart": (now - STABLE_AGE).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "format": "json",
+            "formatversion": "2",
+        },
+    )
+    query = data.get("query") if isinstance(data, dict) else None
+    pages = query.get("pages") if isinstance(query, dict) else None
+    if not isinstance(pages, list) or not pages or not isinstance(pages[0], dict):
+        error = (data.get("error") or {}) if isinstance(data, dict) else {}
+        code = error.get("code") if isinstance(error, dict) else None
+        msg = f"Wikipedia could not list the revisions of {title!r}: {code or 'no pages'}."
+        raise AdapterError(msg)
+    page = pages[0]
+    if page.get("missing"):
+        return None
+    if page.get("invalid"):
+        msg = f"Wikipedia rejected the page title {title!r}."
+        raise AdapterError(msg)
+    revisions = page.get("revisions") or []
+    if not revisions or not revisions[0].get("revid"):
+        minutes = int(STABLE_AGE.total_seconds() // 60)
+        raise quota.Deferred("wikipedia", now + STABLE_AGE, f"page {title!r} is under {minutes} minutes old")
+    return revisions[0]["revid"]
+
+
+def fetch_page(site, title, now=None):
+    """Return ``(html, revid)`` for a page's stable revision, or ``(None, None)`` when it doesn't exist."""
+    revid = stable_revision(site, title, now)
+    if revid is None:
+        return None, None
     data = get_json(
         "wikipedia",
         wikidata.api_url(site),
         params={
             "action": "parse",
-            "page": title,
+            "oldid": str(revid),
             "prop": "text|revid",
-            "redirects": "1",
             "disableeditsection": "1",
             "disablelimitreport": "1",
             "format": "json",
             "formatversion": "2",
         },
     )
-    error = data.get("error") or {}
-    if error.get("code") == "missingtitle":
-        return None, None
-    parsed = data.get("parse") or {}
+    error = (data.get("error") or {}) if isinstance(data, dict) else {"code": "unreadable"}
+    parsed = (data.get("parse") or {}) if isinstance(data, dict) else {}
     if error or not isinstance(parsed.get("text"), str):
         msg = f"Wikipedia could not parse {title!r}: {error.get('code') or 'no text'}."
         raise AdapterError(msg)

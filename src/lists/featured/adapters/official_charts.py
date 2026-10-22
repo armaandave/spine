@@ -5,6 +5,8 @@ in capitals, with long titles cut short ("YOU SEEM PRETTY SAD FOR A GIRL SO IN")
 row gets a strict MusicBrainz search: exact title or title without edition markers,
 a matching artist, no singles, and a single best candidate; a title of 30 or more
 characters may also match a longer release-group title it is the start of.
+``"min_entries"`` (default ``MIN_ROWS``) is the fewest readable rows a complete chart
+has; fewer fail the run before any MusicBrainz lookup.
 """
 
 import re
@@ -12,7 +14,7 @@ from datetime import datetime
 
 from bs4 import BeautifulSoup
 
-from lists.featured.adapters import _music
+from lists.featured.adapters import _music, _rows
 from lists.featured.helpers import get_text
 from lists.featured.text import normalize_title
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
@@ -46,6 +48,7 @@ def validate(definition):
     if set(definition.media_types) != {"music"}:
         msg = "the albums chart holds music"
         raise ValueError(msg)
+    _rows.validate(definition)
 
 
 def _text(node):
@@ -87,6 +90,7 @@ def fetch(definition):
     if len(rows) < MIN_ROWS:
         msg = f"The Official Charts page had {len(rows)} readable rows; its layout may have changed."
         raise AdapterError(msg)
+    _rows.require(definition, len(rows), "The Official Charts page")
     entries = []
     verified = _music.release_group_details(
         mbid for _, title, artist in rows if (mbid := VERIFIED.get(_verified_key(title, artist)))

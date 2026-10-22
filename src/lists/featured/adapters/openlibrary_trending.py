@@ -3,9 +3,11 @@
 Params: ``{"period": "daily" | "weekly" | "monthly", "limit": 50}``. Open Library ranks
 works, but Spine stores Open Library editions, so each work becomes its
 ``cover_edition_key``, or else the first edition the response lists. A work with
-neither is left to the strict title + author search.
+neither is left to the strict title + author search. ``"min_entries"`` is the fewest
+books a complete response has; fewer fail the run.
 """
 
+from lists.featured.adapters import _rows
 from lists.featured.helpers import get_json
 from lists.featured.types import Adapter, AdapterError, Entry, FetchResult
 
@@ -27,6 +29,7 @@ def validate(definition):
     if set(definition.media_types) != {"book"}:
         msg = "Open Library trending is a book list"
         raise ValueError(msg)
+    _rows.validate(definition, limit)
 
 
 def edition_key(work):
@@ -71,6 +74,7 @@ def fetch(definition):
                 image=f"https://covers.openlibrary.org/b/id/{work['cover_i']}-L.jpg" if work.get("cover_i") else "",
             ),
         )
+    _rows.require(definition, len(entries), f"Open Library's {params['period']} trending books")
     return FetchResult(entries=entries)
 
 

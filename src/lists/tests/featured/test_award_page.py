@@ -346,6 +346,14 @@ class HoldRuleTests(ReplayCase):
         ):
             award_page.fetch(definition)
 
+    def test_polls_use_a_short_timeout(self):
+        definition = award_definition()
+        missing = {"query": {"pages": [{"title": "The Game Awards 2025", "missing": True}]}}
+        with patch.object(award_page, "DIRECTORY", NOMINEES), api_routes({"/w/api.php": missing}) as api:
+            award_page.fetch(definition)
+        self.assertTrue(api.call_args_list)
+        self.assertEqual({call.kwargs["timeout"] for call in api.call_args_list}, {15})
+
     def test_an_empty_nominee_file_makes_no_requests(self):
         definition = award_definition(params={"pages": ["The Game Awards 2026"], "ceremony": "empty"}, featured=False)
         with patch.object(award_page, "DIRECTORY", NOMINEES / "empty"), api_routes({}):

@@ -40,6 +40,7 @@ NYT_CHARTS = [
             "slug": chart["slug"],
             "fallback_name": chart["fallback_name"],
             **({"monthly": True} if chart["slug"] in NYT_MONTHLY else {}),
+            "min_entries": 10,  # NYT charts list 10 or 15 books
         },
         cadence=timedelta(days=1),
         source_name="The New York Times",

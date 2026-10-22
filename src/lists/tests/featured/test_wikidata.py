@@ -251,6 +251,23 @@ class BookTests(WikidataTestCase):
         ):
             return ADAPTERS["wikidata"].fetch(definition)
 
+    @override_settings(HARDCOVER_API="test-hardcover-key")
+    def test_unreadable_hardcover_answers_are_adapter_errors(self):
+        for answer, message in (
+            (["not", "an", "object"], "unreadable answer"),
+            ({"data": ["odd"]}, "unreadable answer"),
+            ({"errors": [{"message": "x"}]}, "rejected"),
+        ):
+            with (
+                self.subTest(answer=answer),
+                patch("app.providers.services.api_request", return_value=answer),
+                self.assertRaisesMessage(AdapterError, message),
+            ):
+                wd.hardcover_books(["/works/OL1W"])
+        mappings = {"data": {"book_mappings": ["odd", {"external_id": "/works/OL1W", "book": {"id": 7}}]}}
+        with patch("app.providers.services.api_request", return_value=mappings):
+            self.assertEqual(wd.hardcover_books(["/works/OL1W"])["/works/OL1W"]["id"], "7")
+
     def test_works_become_hardcover_books_or_open_library_editions(self):
         entries = {entry.title: entry for entry in self.fetch().entries}
         orbital = entries["Orbital"]
@@ -419,6 +436,13 @@ class NobelTests(WikidataTestCase):
             result.entries[2].image,
             "https://commons.wikimedia.org/wiki/Special:FilePath/Eyvind_Johnson.jpg?width=400",
         )
+
+    def test_wrong_api_qids_are_corrected(self):
+        laureates = [
+            {"id": "818", "knownName": {"en": "J. M. G. Le Clézio"}, "wikidata": {"id": "Q7884119"}},  # an essay
+            {"id": "1050", "wikidata": {"id": "Q512062"}},
+        ]
+        self.assertEqual(nobel_adapter.laureate_qids(laureates), {"818": "Q42037", "1050": "Q512062"})
 
     def test_failures_and_validation(self):
         with patch("app.providers.services.api_request", side_effect=http_error(524)), self.assertRaisesMessage(

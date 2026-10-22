@@ -10,7 +10,7 @@ from lists.featured.adapters import steam as steam_adapter
 from lists.featured.definitions.games import DEFINITIONS
 from lists.featured.types import AdapterError
 from lists.tests.featured.game_routes import bodies, external, igdb_game, igdb_routes
-from lists.tests.featured.helpers import FeaturedTestCase, api_routes, load_fixture, make_definition
+from lists.tests.featured.helpers import FeaturedTestCase, api_routes, few_rows, load_fixture, make_definition
 
 CS2_RELEASED = 1695772800  # 2023-09-27
 AION2_RELEASED = 1763424000  # 2025-11-18
@@ -140,7 +140,7 @@ class SteamAdapterTests(SimpleTestCase):
 @override_settings(IGDB_ID="test-igdb-id", IGDB_SECRET="test-igdb-secret")
 class SteamSyncTests(FeaturedTestCase):
     def test_most_played_sync_writes_games_and_skips_the_launcher(self):
-        definition = next(item for item in DEFINITIONS if item.key == "steam-most-played")
+        definition = few_rows(next(item for item in DEFINITIONS if item.key == "steam-most-played"))
         covers = [
             external(730, igdb_game(242408, "Counter-Strike 2", CS2_RELEASED, "co7989")),
             external(570, igdb_game(2963, "Dota 2", None, "co9xyz")),
