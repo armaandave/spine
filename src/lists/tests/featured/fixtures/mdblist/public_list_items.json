@@ -1,0 +1,83 @@
+{
+ "movies": [
+  {
+   "id": 278,
+   "mediatype": "movie",
+   "imdb_id": "tt0111161",
+   "tvdb_id": 190,
+   "ids": {
+    "mdblist": "a0",
+    "imdb": "tt0111161",
+    "tmdb": 278,
+    "tvdb": 190
+   },
+   "title": "The Shawshank Redemption",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 1994,
+   "adult": 0,
+   "release_date": "1994-09-23",
+   "status": "Released",
+   "runtime": 142,
+   "added_at": "2025-06-16T18:20:59",
+   "poster": "https://image.tmdb.org/t/p/w200/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg",
+   "rank": 1000
+  },
+  {
+   "id": 238,
+   "mediatype": "movie",
+   "imdb_id": "tt0068646",
+   "tvdb_id": 275,
+   "ids": {
+    "mdblist": "a2d7",
+    "imdb": "tt0068646",
+    "tmdb": 238,
+    "tvdb": 275
+   },
+   "title": "The Godfather",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 1972,
+   "adult": 0,
+   "release_date": "1972-03-14",
+   "status": "Released",
+   "runtime": 175,
+   "added_at": "2025-06-16T18:20:59",
+   "poster": "https://image.tmdb.org/t/p/w200/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+   "rank": 2000
+  },
+  {
+   "id": 155,
+   "mediatype": "movie",
+   "imdb_id": "tt0468569",
+   "tvdb_id": 116,
+   "ids": {
+    "mdblist": "8m",
+    "imdb": "tt0468569",
+    "tmdb": 155,
+    "tvdb": 116
+   },
+   "title": "The Dark Knight",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 2008,
+   "adult": 0,
+   "release_date": "2008-07-16",
+   "status": "Released",
+   "runtime": 152,
+   "added_at": "2025-06-16T18:20:59",
+   "poster": "https://image.tmdb.org/t/p/w200/qJ2tW6WMUDux911r6m7haRef0WH.jpg",
+   "rank": 3000
+  }
+ ],
+ "shows": [],
+ "pagination": {
+  "limit": 3,
+  "offset": 0,
+  "total": 250,
+  "has_more": false
+ }
+}

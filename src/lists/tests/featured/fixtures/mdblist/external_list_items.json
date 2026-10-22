@@ -1,0 +1,83 @@
+{
+ "movies": [
+  {
+   "id": 14537,
+   "mediatype": "movie",
+   "imdb_id": "tt0056058",
+   "tvdb_id": 2682,
+   "ids": {
+    "mdblist": "ytn",
+    "imdb": "tt0056058",
+    "tmdb": 14537,
+    "tvdb": 2682
+   },
+   "title": "Harakiri",
+   "language": "ja",
+   "spoken_language": "ja",
+   "country": "jp",
+   "release_year": 1962,
+   "adult": 0,
+   "release_date": "1962-09-15",
+   "status": "Released",
+   "runtime": 135,
+   "added_at": null,
+   "poster": "https://image.tmdb.org/t/p/w200/5konZnIbcAxZjP616Cz5o9bKEfW.jpg",
+   "rank": 1
+  },
+  {
+   "id": 34530,
+   "mediatype": "movie",
+   "imdb_id": "tt0055233",
+   "tvdb_id": 19867,
+   "ids": {
+    "mdblist": "zys",
+    "imdb": "tt0055233",
+    "tmdb": 34530,
+    "tvdb": 19867
+   },
+   "title": "The Human Condition III: A Soldier's Prayer",
+   "language": "ja",
+   "spoken_language": "ja",
+   "country": "jp",
+   "release_year": 1961,
+   "adult": 0,
+   "release_date": "1961-01-28",
+   "status": "Released",
+   "runtime": 190,
+   "added_at": null,
+   "poster": "https://image.tmdb.org/t/p/w200/pag7gyxSFe7vTl6riHfZ5Xci6q7.jpg",
+   "rank": 2
+  },
+  {
+   "id": 389,
+   "mediatype": "movie",
+   "imdb_id": "tt0050083",
+   "tvdb_id": 572,
+   "ids": {
+    "mdblist": "c0ro",
+    "imdb": "tt0050083",
+    "tmdb": 389,
+    "tvdb": 572
+   },
+   "title": "12 Angry Men",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 1957,
+   "adult": 0,
+   "release_date": "1957-04-10",
+   "status": "released",
+   "runtime": 97,
+   "added_at": null,
+   "poster": "https://image.tmdb.org/t/p/w200/zhG3vKWyDRaZYoaww1UVAi29T9h.jpg",
+   "rank": 3
+  }
+ ],
+ "shows": [],
+ "pagination": {
+  "offset": 0,
+  "limit": 3,
+  "total": 3,
+  "has_more": false
+ }
+}

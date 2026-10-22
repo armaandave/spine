@@ -1,0 +1,49 @@
+{
+ "status": "OK",
+ "num_results": 3,
+ "results": {
+  "list_name": "Combined Print and E-Book Fiction",
+  "list_name_encoded": "combined-print-and-e-book-fiction",
+  "bestsellers_date": "2026-10-10",
+  "published_date": "2026-10-25",
+  "display_name": "Combined Print & E-Book Fiction",
+  "books": [
+   {
+    "rank": 2,
+    "rank_last_week": 1,
+    "weeks_on_list": 6,
+    "primary_isbn10": "1538742578",
+    "primary_isbn13": "9781538742570",
+    "title": "THE HOUSEMAID",
+    "author": "Freida McFadden",
+    "book_image": "https://storage.googleapis.com/du-prd/books/images/9781538742570.jpg",
+    "isbns": [{"isbn10": "1538742578", "isbn13": "9781538742570"}]
+   },
+   {
+    "rank": 1,
+    "rank_last_week": 0,
+    "weeks_on_list": 1,
+    "primary_isbn10": "0593798430",
+    "primary_isbn13": "9780593798430",
+    "title": "ONYX STORM",
+    "author": "Rebecca Yarros",
+    "book_image": "https://storage.googleapis.com/du-prd/books/images/9780593798430.jpg",
+    "isbns": [
+     {"isbn10": "0593798430", "isbn13": "9780593798430"},
+     {"isbn10": "1649376871", "isbn13": "9781649376879"}
+    ]
+   },
+   {
+    "rank": 3,
+    "rank_last_week": 3,
+    "weeks_on_list": 40,
+    "primary_isbn10": "",
+    "primary_isbn13": "9780063021426",
+    "title": "JAMES",
+    "author": "Percival Everett",
+    "book_image": "",
+    "isbns": []
+   }
+  ]
+ }
+}

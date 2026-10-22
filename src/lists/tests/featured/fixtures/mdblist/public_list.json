@@ -1,0 +1,20 @@
+[
+ {
+  "id": 101881,
+  "user_id": 22305,
+  "user_name": "snoak",
+  "name": "Top 250 Movies (iMDB)",
+  "slug": "imdb-top-250-movies",
+  "description": "",
+  "mediatype": "movie",
+  "items": 250,
+  "likes": 569,
+  "dynamic": true,
+  "private": false,
+  "updated": "2026-10-21T22:32:28.000Z",
+  "expires": "2026-10-22T12:24:28.000Z",
+  "liked": false,
+  "movies": 250,
+  "shows": 0
+ }
+]

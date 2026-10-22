@@ -62,6 +62,13 @@ def _isbn_candidates(book):
     return candidates
 
 
+def _optional_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def get_current_chart(slug, fallback_name):
     """Return one normalized current NYT Best Sellers chart."""
     if not settings.NYT_BOOKS_API_KEY:
@@ -100,6 +107,10 @@ def get_current_chart(slug, fallback_name):
                     "rank": rank,
                     "title": str(book.get("title") or "").strip(),
                     "isbns": isbns,
+                    "author": str(book.get("author") or "").strip(),
+                    "image": str(book.get("book_image") or "").strip(),
+                    "rank_last_week": _optional_int(book.get("rank_last_week")),
+                    "weeks_on_list": _optional_int(book.get("weeks_on_list")),
                 },
             )
 

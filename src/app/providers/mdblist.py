@@ -73,44 +73,51 @@ def get_media_ratings(tmdb_id, media_type):
     return data
 
 
-def get_external_list(list_id):
-    """Return one MDBList external-list record."""
+def _get(path, params=None):
     try:
-        data = services.api_request(
+        return services.api_request(
             "mdblist",
             "GET",
-            f"{base_url}/external/lists/{list_id}",
-            params={
-                "apikey": settings.MDBLIST_API,
-                "append_to_response": "poster",
-            },
+            f"{base_url}{path}",
+            params={"apikey": settings.MDBLIST_API, **(params or {})},
         )
     except requests.exceptions.HTTPError as error:
         handle_error(error)
+
+
+def _first(data):
     return data[0] if isinstance(data, list) and data else data
 
 
-def get_external_list_items(list_id):
-    """Return every item in one MDBList external list."""
+def get_external_list(list_id):
+    """Return one MDBList external-list record."""
+    return _first(_get(f"/external/lists/{list_id}", {"append_to_response": "poster"}))
+
+
+def get_user_external_lists():
+    """Return the external lists (Letterboxd, Trakt mirrors) owned by the API key's account."""
+    data = _get("/external/lists/user")
+    return data if isinstance(data, list) else []
+
+
+def get_list(list_id):
+    """Return one public MDBList user list record."""
+    return _first(_get(f"/lists/{list_id}"))
+
+
+def _list_items(path, extra_params=None):
+    """Follow MDBList's cursor pagination and tag each item with its Spine media type."""
     items = []
     cursor = None
     while True:
         params = {
-            "apikey": settings.MDBLIST_API,
             "append_to_response": "poster",
             "limit": 1000,
+            **(extra_params or {}),
         }
         if cursor:
             params["cursor"] = cursor
-        try:
-            page = services.api_request(
-                "mdblist",
-                "GET",
-                f"{base_url}/external/lists/{list_id}/items",
-                params=params,
-            )
-        except requests.exceptions.HTTPError as error:
-            handle_error(error)
+        page = _get(path, params)
 
         for media_type, values in (("movie", page.get("movies")), ("tv", page.get("shows"))):
             items.extend({**item, "spine_media_type": media_type} for item in values or [])
@@ -118,3 +125,18 @@ def get_external_list_items(list_id):
         cursor = page.get("next_cursor") or (page.get("pagination") or {}).get("next_cursor")
         if not cursor:
             return items
+
+
+def get_external_list_items(list_id):
+    """Return every item in one MDBList external list."""
+    return _list_items(f"/external/lists/{list_id}/items")
+
+
+def get_list_items(list_id):
+    """Return every item in one public MDBList user list (ranks as MDBList stores them)."""
+    return _list_items(f"/lists/{list_id}/items")
+
+
+def get_official_list_items(slug, mediatype):
+    """Return every item in an MDBList official list for ``movie`` or ``show``."""
+    return _list_items(f"/lists/official/{slug}/items", {"mediatype": mediatype})

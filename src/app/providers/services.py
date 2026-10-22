@@ -222,7 +222,7 @@ def api_request(
         params: Query params for GET, JSON body for POST
         data: Raw data for POST
         headers: Request headers
-        response_format: "json" (default) or "xml" for XML parsing
+        response_format: "json" (default), "xml" for XML parsing, or "text" for the body
         request_session: Optional requests session; defaults to the shared provider session
         timeout: Optional request timeout; defaults to the global provider timeout
         retry_rate_limits: Whether HTTP 429 responses may wait and retry
@@ -281,6 +281,8 @@ def api_request(
 
         if response_format == "xml":
             return ElementTree.fromstring(response.text)
+        if response_format == "text":
+            return response.text
         return response.json()
 
     raise RuntimeError("Unreachable rate-limit retry state")
