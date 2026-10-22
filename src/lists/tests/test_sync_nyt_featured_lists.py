@@ -212,7 +212,7 @@ class SyncNYTFeaturedListsTests(TestCase):
         first, *others = nytbooks.FEATURED_CHARTS
         FeaturedListSync.objects.create(key=f"nyt-{first['slug']}", last_success_at=timezone.now() - timedelta(hours=3))
         FeaturedListSync.objects.create(key=f"nyt-{others[0]['slug']}", last_success_at=timezone.now() - timedelta(hours=13))
-        get_chart.side_effect = [chart_payload(definition) for definition in others]
+        get_chart.side_effect = [chart_payload(definition, count=15) for definition in others]
 
         sync_nyt_featured_lists()
 
