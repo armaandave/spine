@@ -386,6 +386,7 @@ GOODREADS = [
         columns={"year": "Year", "category": "Category", "title": "Title", "creator": "Author"},
         category=pattern,
         winners="all",
+        main_title=True,
         min_entries=10,
         guards=BOOK_GUARDS,
     )
