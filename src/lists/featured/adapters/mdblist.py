@@ -17,6 +17,7 @@ Optional: ``"limit": N`` keeps only the top N entries.
 import re
 from urllib.parse import urlparse
 
+import requests
 from django.conf import settings
 
 from app.providers import mdblist, services
@@ -137,6 +138,12 @@ def entries_from_items(items, limit=None):
     return entries[:limit] if limit else entries
 
 
+def _network_problem(error):
+    """Describe a requests failure without its message, which holds the keyed URL."""
+    status_code = getattr(getattr(error, "response", None), "status_code", None)
+    return f"HTTP {status_code}" if status_code is not None else f"network error ({type(error).__name__})"
+
+
 def _public_list(list_ids):
     """Return ``(metadata, items)`` from the first of ``list_ids`` that has items.
 
@@ -149,6 +156,9 @@ def _public_list(list_ids):
             items = mdblist.get_list_items(list_id)
         except services.ProviderAPIError as error:
             problems.append(f"list {list_id}: {sanitize(error, 160)}")
+            continue
+        except requests.RequestException as error:  # its text names the keyed URL
+            problems.append(f"list {list_id}: {_network_problem(error)}")
             continue
         if items or index == len(list_ids) - 1:
             return metadata, items
@@ -174,6 +184,8 @@ def fetch(definition):
             items = mdblist.get_official_list_items(params["official"], params["mediatype"])
     except services.ProviderAPIError as error:
         raise AdapterError(sanitize(error)) from None
+    except requests.RequestException as error:
+        raise AdapterError(f"MDBList request failed: {_network_problem(error)}.") from None
     metadata = metadata if isinstance(metadata, dict) else {}
     limit = int(params["limit"]) if params.get("limit") else None
     expected = metadata.get("items")

@@ -17,9 +17,10 @@ def handle_error(error):
 
     try:
         error_json = error_resp.json()
-    except requests.exceptions.JSONDecodeError as json_error:
-        logger.exception("Failed to decode JSON response")
-        raise services.ProviderAPIError("mdblist", error) from json_error
+    except requests.exceptions.JSONDecodeError:
+        # No traceback: the HTTPError being handled names the URL, apikey included.
+        logger.warning("MDBList returned a non-JSON error body (HTTP %s)", status_code)
+        raise services.ProviderAPIError("mdblist", error) from None
 
     # Handle authentication errors
     if status_code == requests.codes.unauthorized:
