@@ -22,7 +22,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Prefetch, Q
 from django.http import Http404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -4625,6 +4625,25 @@ def season_episodes(*, source, media_id, season_number, request=None, user=None)
     }
 
 
+def _current_ratings(media_type, item):
+    """Return each person's current rating of the item once, from public accounts.
+
+    A current rating is the score on the person's newest tracking row, the rating their
+    own media page shows; people who haven't rated are left out. Logging the same media
+    again therefore never counts twice, and rating without a log still counts.
+    """
+    model = apps.get_model(app_label="app", model_name=media_type)
+    rows = (
+        model.objects.filter(item=item, user__profile_private=False)
+        .order_by("user_id", "-created_at", "-id")
+        .values_list("user_id", "score")
+    )
+    newest = {}
+    for user_id, score in rows:
+        newest.setdefault(user_id, score)
+    return [score for score in newest.values() if score is not None]
+
+
 def community_stats(
     *,
     source,
@@ -4659,23 +4678,17 @@ def community_stats(
         entries = entries.filter(user__profile_private=False)
     else:
         entries = entries.exclude(visibility="private")
-    rating_values = [entry.rating for entry in entries if entry.rating is not None]
-    if single_weight.uses_half_star_rating(media_type):
-        rating_values = [single_weight.rating_to_wire(value) for value in rating_values]
+    # Episodes have no current rating, so they still count their logs' ratings.
+    if media_type == MediaTypes.EPISODE.value:
+        stored_ratings = [entry.rating for entry in entries if entry.rating is not None]
+    else:
+        stored_ratings = _current_ratings(media_type, item)
+    half_star = single_weight.uses_half_star_rating(media_type)
+    rating_values = [single_weight.rating_to_wire(value) if half_star else value for value in stored_ratings]
     average = round(sum(rating_values) / len(rating_values), 2) if rating_values else None
     distribution = [
-        {
-            "rating": str(
-                bucket["rating"] / 2
-                if single_weight.uses_half_star_rating(media_type)
-                else bucket["rating"]
-            ),
-            "count": bucket["count"],
-        }
-        for bucket in entries.exclude(rating__isnull=True)
-        .values("rating")
-        .annotate(count=Count("id"))
-        .order_by("rating")
+        {"rating": str(rating / 2 if half_star else rating), "count": count}
+        for rating, count in sorted(Counter(stored_ratings).items())
     ]
     liked = MediaLike.objects.filter(item=item)
     if media_type in {MediaTypes.MOVIE.value, MediaTypes.MUSIC.value}:
