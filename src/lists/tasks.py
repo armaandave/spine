@@ -3,6 +3,9 @@
 from celery import shared_task
 from django.core.management import call_command
 
+# Registers "Dispatch featured lists" and "Sync featured list" (featured queue).
+from lists.featured.dispatch import dispatch_featured_lists, sync_featured_list  # noqa: F401
+
 LETTERBOXD_TOP_500_MDBLIST_URL = "https://mdblist.com/lists/davearmaan12/external/155837"
 
 

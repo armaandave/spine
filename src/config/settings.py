@@ -706,7 +706,26 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Sync Letterboxd Top 500 featured list",
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
+    "dispatch_featured_lists": {
+        "task": "Dispatch featured lists",
+        "schedule": 60,  # every minute; queues only the lists that are due
+        "options": {"queue": "featured", "expires": 55},
+    },
 }
+
+# Featured lists run on their own worker ([program:celery-featured]), so long imports
+# on the default queue never delay an award night.
+CELERY_TASK_ROUTES = {
+    "Dispatch featured lists": {"queue": "featured"},
+    "Sync featured list": {"queue": "featured"},
+}
+
+# Lets the weekly review agent read /api/v1/lists/featured/health/ with the
+# X-Spine-Report-Token header. Empty disables the token path (staff only).
+FEATURED_REPORT_TOKEN = config(
+    "FEATURED_REPORT_TOKEN",
+    default=secret("FEATURED_REPORT_TOKEN_FILE", ""),
+)
 
 IS_PROD = not any(cmd in sys.argv for cmd in ("runserver", "test"))
 if IS_PROD:
