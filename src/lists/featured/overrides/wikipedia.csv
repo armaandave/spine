@@ -1,0 +1,15 @@
+scope,entry_key,ref,note
+wikipedia_table,wikidata:Q8058353,tmdb:tv:91130,New York Philharmonic Young People's Concerts (1958) on TMDB; Wikidata has no TMDB or IMDb ID
+wikipedia_table,imdb:tt0243435,-,My Name Is Barbra is a TV special TMDB lists as a movie (314691); TV lists can't hold it
+emmys-outstanding-drama-series,t:law and order|,tmdb:tv:549,Law & Order (1990); the title alone matches several series
+emmys-outstanding-drama-series,t:northern exposure|,tmdb:tv:4396,Northern Exposure (1990)
+emmys-outstanding-drama-series,t:police story|,tmdb:tv:9855,Police Story (1973 anthology)
+emmys-outstanding-drama-series,t:net playhouse season 3|,tmdb:tv:15560,NET Playhouse (1966); the winner row names the season
+emmys-outstanding-drama-series,t:hallmark hall of fame the magnificent yankee|,tmdb:tv:4779,"The Magnificent Yankee was a Hallmark Hall of Fame presentation; TMDB has the anthology"
+emmys-outstanding-drama-series,t:studio one|,tmdb:tv:4259,Studio One (1948 CBS anthology)
+emmys-outstanding-comedy-series,t:get smart|,tmdb:tv:4455,Get Smart (1965)
+emmys-outstanding-comedy-series,t:the jack benny show|,tmdb:tv:10151,TMDB names it The Jack Benny Program (1950)
+emmys-outstanding-limited-series,imdb:tt6205862,tmdb:tv:64513,The People v. O. J. Simpson is season 1 of American Crime Story; Wikidata's IMDb ID is the season
+emmys-outstanding-limited-series,imdb:tt1291580,-,Behind the Candelabra is a TV film (Outstanding Miniseries or Movie); TMDB lists it as a movie
+emmys-outstanding-limited-series,imdb:tt1848902,-,Game Change is a TV film (Outstanding Miniseries or Movie); TMDB lists it as a movie
+emmys-outstanding-limited-series,wikidata:Q25184188,tmdb:tv:2583,Prime Suspect 5 is a serial of Prime Suspect (1991) on TMDB
