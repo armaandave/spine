@@ -1,0 +1,24 @@
+{
+ "count": 4,
+ "series": [
+  {
+   "id": "70fee40f-2a17-4822-b1e6-5bef988cde11",
+   "name": "TheNeedleDrop: Top 50 Albums of 2023",
+   "type": "Release group series"
+  },
+  {
+   "id": "788a3664-bea9-4e10-bbef-60f6f8ee84ff",
+   "name": "TheNeedleDrop: Top 50 Albums of 2024",
+   "type": "Release group series"
+  },
+  {
+   "id": "e5504a71-03f8-4168-952d-cec1c1b63696",
+   "name": "TheNeedleDrop: Top 50 Albums of 2025",
+   "type": "Release group series"
+  },
+  {
+   "id": "6caab53b-4588-4295-adfc-82b83c6e2760",
+   "name": "TheNeedleDrop: Honorable Mentions of 2025"
+  }
+ ]
+}

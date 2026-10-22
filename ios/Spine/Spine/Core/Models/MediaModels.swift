@@ -1,6 +1,6 @@
 import Foundation
 
-struct MediaRef: Codable, Hashable, Identifiable {
+nonisolated struct MediaRef: Codable, Hashable, Identifiable {
     let itemId: Int?
     let source: String
     let mediaType: String
@@ -154,7 +154,7 @@ struct MediaBrowsingSelection: Hashable, Identifiable {
     }
 }
 
-struct MediaSummary: Codable, Identifiable, Hashable {
+nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     let ref: MediaRef
     let title: String
     let preferredTitle: String?
@@ -182,6 +182,8 @@ struct MediaSummary: Codable, Identifiable, Hashable {
     let creditRoles: [String]
     let defaultSource: String?
     let position: Int?
+    /// Featured lists only: the entry's note ("Winner · Best Picture", "▲2 · $12.4M").
+    let note: String?
     var userState: UserMediaState?
 
     var id: String { ref.id }
@@ -229,6 +231,7 @@ struct MediaSummary: Codable, Identifiable, Hashable {
         case creditRoles
         case defaultSource
         case position
+        case note
         case userState
     }
 
@@ -260,6 +263,7 @@ struct MediaSummary: Codable, Identifiable, Hashable {
         creditRoles: [String] = [],
         defaultSource: String? = nil,
         position: Int? = nil,
+        note: String? = nil,
         userState: UserMediaState? = nil
     ) {
         self.ref = ref
@@ -289,6 +293,7 @@ struct MediaSummary: Codable, Identifiable, Hashable {
         self.creditRoles = creditRoles
         self.defaultSource = defaultSource
         self.position = position
+        self.note = note
         self.userState = userState
     }
 
@@ -323,6 +328,7 @@ struct MediaSummary: Codable, Identifiable, Hashable {
             creditRoles: try container.decodeIfPresent([String].self, forKey: .creditRoles) ?? [],
             defaultSource: try container.decodeIfPresent(String.self, forKey: .defaultSource),
             position: try container.decodeIfPresent(Int.self, forKey: .position),
+            note: (try? container.decodeIfPresent(String.self, forKey: .note)) ?? nil,
             userState: try container.decodeIfPresent(UserMediaState.self, forKey: .userState)
         )
     }
@@ -1366,7 +1372,7 @@ struct MediaDetail: Decodable, Identifiable {
     }
 }
 
-enum PosterOrientation: String, Codable, Hashable {
+nonisolated enum PosterOrientation: String, Codable, Hashable {
     case portrait
     case landscape
     case square
@@ -1466,7 +1472,7 @@ struct HallOfFameItemsResponse: Codable, Equatable {
     let items: [String: MediaSummary?]
 }
 
-struct UserMediaState: Codable, Hashable {
+nonisolated struct UserMediaState: Codable, Hashable {
     let isTracked: Bool
     let trackingId: Int?
     let status: String?

@@ -126,7 +126,7 @@ struct TrackingState: Codable, Equatable {
     }
 }
 
-struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
+nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
     let id: Int
     let status: String
     let origin: String?
@@ -157,7 +157,7 @@ struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
-struct BookUndatedReadState: Codable, Equatable, Hashable {
+nonisolated struct BookUndatedReadState: Codable, Equatable, Hashable {
     let id: String
     let status: String
     let date: String?
@@ -169,7 +169,7 @@ struct BookUndatedReadState: Codable, Equatable, Hashable {
     }
 }
 
-struct BookTrackingState: Codable, Equatable, Hashable {
+nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
     let currentJourney: BookJourneyState?
     let readingHistory: [BookJourneyState]
     let undatedRead: BookUndatedReadState?
@@ -295,7 +295,7 @@ extension ProgressChangeState {
     }
 }
 
-struct ProgressState: Codable, Hashable {
+nonisolated struct ProgressState: Codable, Hashable {
     let kind: String
     let value: Decimal?
     let max: Decimal?

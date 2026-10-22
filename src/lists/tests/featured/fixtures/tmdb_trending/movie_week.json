@@ -1,0 +1,4 @@
+{"page": 1, "total_pages": 500, "total_results": 10000, "results": [
+  {"id": 1400940, "media_type": "movie", "title": "Clayface", "original_title": "Clayface", "release_date": "2026-09-11", "poster_path": "/clayface.jpg", "popularity": 300.1},
+  {"id": 1561726, "media_type": "movie", "title": "Masterplan", "original_title": "Masterplan", "release_date": "2026-10-02", "poster_path": null, "popularity": 120.5}
+]}

@@ -1,0 +1,47 @@
+{
+ "head": {
+  "vars": [
+   "w",
+   "title",
+   "wins",
+   "year",
+   "creators",
+   "types",
+   "igdb_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q64441774"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Baldur's Gate 3"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|2023||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q7889"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Larian Studios"
+    },
+    "year": {
+     "type": "literal",
+     "value": "2023"
+    },
+    "igdb_": {
+     "type": "literal",
+     "value": "119171"
+    }
+   }
+  ]
+ }
+}

@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from lists.models import CustomList, CustomListItem, PersonListItem
+from lists.models import (
+    CustomList,
+    CustomListItem,
+    FeaturedListSnapshot,
+    FeaturedListSync,
+    PersonListItem,
+)
 
 
 @admin.register(CustomList)
@@ -88,3 +94,48 @@ class PersonListItemAdmin(admin.ModelAdmin):
                 list_type=CustomList.ListType.PEOPLE,
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class ReadOnlyAdmin(admin.ModelAdmin):
+    """Admin that shows engine-owned rows without letting anyone edit them."""
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        """Rows are written by the featured-lists engine only."""
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        """Rows are written by the featured-lists engine only."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):  # noqa: ARG002
+        """Rows are written by the featured-lists engine only."""
+        return False
+
+
+@admin.register(FeaturedListSync)
+class FeaturedListSyncAdmin(ReadOnlyAdmin):
+    """Read-only sync state and health for featured lists."""
+
+    search_fields = ["key", "custom_list__name"]
+    list_display = [
+        "key",
+        "last_status",
+        "resolved_count",
+        "entry_count",
+        "consecutive_failures",
+        "last_success_at",
+        "content_changed_at",
+    ]
+    list_filter = ["last_status"]
+    raw_id_fields = ["custom_list"]
+
+
+@admin.register(FeaturedListSnapshot)
+class FeaturedListSnapshotAdmin(ReadOnlyAdmin):
+    """Read-only daily snapshots of featured lists."""
+
+    search_fields = ["sync__key", "edition"]
+    list_display = ["sync", "taken_on", "edition", "fingerprint"]
+    list_select_related = ["sync"]
+    list_filter = ["taken_on"]
+    raw_id_fields = ["sync"]

@@ -1,0 +1,27 @@
+{
+ "url-count": 1,
+ "url-offset": 0,
+ "urls": [
+  {
+   "resource": "https://music.apple.com/us/album/1440642493",
+   "relations": [
+    {
+     "target-type": "release",
+     "type": "purchase for download",
+     "release": {
+      "id": "1e268632-6b5a-4592-bd60-64be3276d104",
+      "title": "Take Care"
+     }
+    },
+    {
+     "target-type": "release",
+     "type": "streaming",
+     "release": {
+      "id": "1e268632-6b5a-4592-bd60-64be3276d104",
+      "title": "Take Care"
+     }
+    }
+   ]
+  }
+ ]
+}

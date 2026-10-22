@@ -1204,6 +1204,7 @@ final class ProfileListDetailViewModel {
         defer { isSaving = false }
 
         do {
+            let previousList = list
             let updatedList = try await listRepository.update(id: listId, request)
             list = updatedList
             if updatedList.listType == .people {
@@ -1215,6 +1216,10 @@ final class ProfileListDetailViewModel {
                 nextPage = nil
             }
             CustomListChange.post(listId: listId, listType: updatedList.listType)
+            // The PATCH response has no `featured` block and no entry notes, so a featured list reloads them.
+            if previousList?.hasFeaturedDetails == true {
+                await load()
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -1295,6 +1300,11 @@ final class ProfileListDetailViewModel {
 }
 
 private extension CustomListDetail {
+    /// A featured block or an entry note, which only the list's own endpoints send.
+    var hasFeaturedDetails: Bool {
+        featured != nil || items.contains { $0.note != nil } || people.contains { $0.note != nil }
+    }
+
     func withItems(_ items: [MediaSummary]) -> CustomListDetail {
         CustomListDetail(
             id: id,
@@ -1314,7 +1324,9 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators,
+            featured: featured
         )
     }
 
@@ -1337,7 +1349,9 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators,
+            featured: featured
         )
     }
 }
@@ -1371,9 +1385,18 @@ struct ProfileListDetailView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    /// The featured card the list was opened from, for its metadata, live banner and source link.
+    private let featured: FeaturedListCard?
+
+    /// The list's own featured block, which is fresher than the tapped card (a card restored from the cache can
+    /// still say live), else the tapped card until the list loads.
+    private var featuredCard: FeaturedListCard? {
+        viewModel.list?.featured ?? featured
+    }
 
     init(
         listId: Int,
+        featured: FeaturedListCard? = nil,
         profileRepository: ProfileRepository,
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
@@ -1411,6 +1434,7 @@ struct ProfileListDetailView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
+        self.featured = featured
         _viewModel = State(initialValue: ProfileListDetailViewModel(
             listId: listId,
             listRepository: listRepository,
@@ -1643,7 +1667,9 @@ struct ProfileListDetailView: View {
                 }
                 }
 
+                if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
                 Menu {
+                    if list.canEdit(by: currentUserId) {
                     Button("Edit List", systemImage: "slider.horizontal.3") {
                         Task {
                             if await viewModel.loadAllItemsForEditing(),
@@ -1652,14 +1678,18 @@ struct ProfileListDetailView: View {
                             }
                         }
                     }
+                    }
+                    if list.canDelete(by: currentUserId) {
                     Button("Delete List", systemImage: "trash", role: .destructive) {
                         isDeleteAlertPresented = true
+                    }
                     }
                 } label: {
                     ProfileListCircleIconLabel(systemName: "ellipsis")
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isSaving)
+                }
             }
         }
     }
@@ -1682,6 +1712,10 @@ struct ProfileListDetailView: View {
         let isOwnerCurrentUser = list.owner.id == currentUserId
 
         return VStack(alignment: .leading, spacing: 7) {
+            if let featured = featuredCard {
+                FeaturedListLiveBanner(card: featured)
+            }
+
             NavigationLink {
                 ProfileView(
                     profileRepository: profileRepository,
@@ -1782,6 +1816,11 @@ struct ProfileListDetailView: View {
                     .lineLimit(4)
                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
             }
+
+            if let featured = featuredCard {
+                FeaturedListDetailMeta(card: featured)
+                    .padding(.top, 2)
+            }
         }
     }
 
@@ -1801,7 +1840,8 @@ struct ProfileListDetailView: View {
     }
 
     private func mediaGrid(_ items: [MediaSummary]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
+        // Top-aligned, so a cell with a note doesn't push its poster below its neighbours'.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: 4), spacing: 10) {
             ForEach(items) { item in
                 Button {
                     selectedMedia = MediaBrowsingSelection(ref: item.ref, within: items.map(\.ref))
@@ -1822,6 +1862,9 @@ struct ProfileListDetailView: View {
                                 .foregroundStyle(.white.opacity(0.72))
                                 .frame(maxWidth: .infinity)
                         }
+                        if let note = FeaturedEntryNote.text(item.note) {
+                            entryNote(note)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
@@ -1837,7 +1880,7 @@ struct ProfileListDetailView: View {
         let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
         let columnCount = PeopleListGridLayout.columnCount(isAccessibilitySize: isAccessibilitySize)
         let columns = Array(
-            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8),
+            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8, alignment: .top),
             count: columnCount
         )
 
@@ -1881,6 +1924,10 @@ struct ProfileListDetailView: View {
                                     .foregroundStyle(.white.opacity(0.5))
                                     .lineLimit(1)
                             }
+
+                            if let note = FeaturedEntryNote.text(person.note) {
+                                entryNote(note)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                         .contentShape(Rectangle())
@@ -1897,6 +1944,16 @@ struct ProfileListDetailView: View {
         }
     }
 
+    /// A featured entry's note under its poster or name: small and secondary.
+    private func entryNote(_ note: String) -> some View {
+        Text(note)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity)
+    }
+
     private func detailCountLabel(_ list: CustomListDetail) -> String {
         let count = list.listType == .people ? list.entriesCount : list.itemsCount
         let noun = list.listType == .people
@@ -1910,7 +1967,8 @@ struct ProfileListDetailView: View {
             ? person.position.map { "Rank \($0), " } ?? ""
             : ""
         let department = person.knownForDepartment.map { ", \($0)" } ?? ""
-        return "\(rank)\(person.name)\(department)"
+        let note = FeaturedEntryNote.text(person.note).map { ", \($0)" } ?? ""
+        return "\(rank)\(person.name)\(department)\(note)"
     }
 
     private var deleteConfirmationMessage: String {

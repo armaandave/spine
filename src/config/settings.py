@@ -702,7 +702,38 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Sync NYT featured lists",
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
+    "dispatch_featured_lists": {
+        "task": "Dispatch featured lists",
+        "schedule": 60,  # every minute; queues only the lists that are due
+        # django_celery_beat's DatabaseScheduler reads "expire_seconds" and drops "expires".
+        "options": {"queue": "featured", "expire_seconds": 55},
+    },
 }
+
+# Featured lists run on their own worker ([program:celery-featured]), so long imports
+# on the default queue never delay an award night.
+CELERY_TASK_ROUTES = {
+    "Dispatch featured lists": {"queue": "featured"},
+    "Sync featured list": {"queue": "featured"},
+}
+
+# Lets the weekly review agent read /api/v1/lists/featured/health/ with the
+# X-Spine-Report-Token header. Empty disables the token path (staff only).
+FEATURED_REPORT_TOKEN = config(
+    "FEATURED_REPORT_TOKEN",
+    default=secret("FEATURED_REPORT_TOKEN_FILE", ""),
+)
+
+# Requests featured-list syncs may make per UTC day (app/providers/quota.py). They
+# share the app's Hardcover key, which has a daily quota on top of ~60 a minute, and
+# Open Library's 20 a minute. Once a budget is spent, entries that need the provider
+# wait for the next day; the app's own search and pages are never limited by this.
+FEATURED_HARDCOVER_DAILY_BUDGET = config(
+    "FEATURED_HARDCOVER_DAILY_BUDGET", default=1000, cast=int
+)
+FEATURED_OPENLIBRARY_DAILY_BUDGET = config(
+    "FEATURED_OPENLIBRARY_DAILY_BUDGET", default=2000, cast=int
+)
 
 IS_PROD = not any(cmd in sys.argv for cmd in ("runserver", "test"))
 if IS_PROD:

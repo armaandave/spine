@@ -1,0 +1,3 @@
+key,name,media_types,kind,position,description,source_name,source_url,is_ranked
+sample-canon,Sample Canon,movie,canon,150,Three films for tests.,BFI,https://www.bfi.org.uk/,true
+sample-people,Sample Laureates,book,award,950,People for tests.,Nobel,https://www.nobelprize.org/,false

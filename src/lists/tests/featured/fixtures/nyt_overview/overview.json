@@ -1,0 +1,110 @@
+{
+ "status": "OK",
+ "num_results": 4,
+ "results": {
+  "bestsellers_date": "2026-10-17",
+  "published_date": "2026-11-01",
+  "previous_published_date": "2026-10-25",
+  "lists": [
+   {
+    "list_id": 1,
+    "list_name": "Hardcover Fiction",
+    "list_name_encoded": "hardcover-fiction",
+    "display_name": "Hardcover Fiction",
+    "updated": "WEEKLY",
+    "books": [
+     {
+      "rank": 1,
+      "rank_last_week": 2,
+      "weeks_on_list": 3,
+      "primary_isbn10": "",
+      "primary_isbn13": "9781682818084",
+      "title": "THRESHING DAY",
+      "author": "Rebecca Yarros",
+      "contributor": "by Rebecca Yarros",
+      "book_image": "https://static01.nyt.com/bestsellers/images/9781682818084.jpg",
+      "updated_date": "2026-10-07T18:21:49.532Z",
+      "isbns": [
+       {
+        "isbn10": "",
+        "isbn13": "9781682818084"
+       }
+      ]
+     },
+     {
+      "rank": 15,
+      "rank_last_week": 9,
+      "weeks_on_list": 2,
+      "primary_isbn10": "",
+      "primary_isbn13": "9781546008873",
+      "title": "RETURN TO THE SHACK",
+      "author": "Wm",
+      "contributor": "by Wm. Paul Young",
+      "book_image": "https://static01.nyt.com/bestsellers/images/9781546008873.jpg",
+      "updated_date": "2026-10-14T17:13:53.318Z",
+      "isbns": [
+       {
+        "isbn10": "",
+        "isbn13": "9781546008873"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "list_id": 303,
+    "list_name": "Audio Children's",
+    "list_name_encoded": "audio-childrens",
+    "display_name": "Audio Children's",
+    "updated": "MONTHLY",
+    "books": [
+     {
+      "rank": 1,
+      "rank_last_week": 5,
+      "weeks_on_list": 7,
+      "primary_isbn10": "",
+      "primary_isbn13": "9781789392869",
+      "title": "HARRY POTTER AND THE SORCERER’S STONE (FULL-CAST EDITION)",
+      "author": "J.K. Rowling",
+      "contributor": "by J.K. Rowling",
+      "book_image": "https://static01.nyt.com/bestsellers/images/9781789392869.jpg",
+      "updated_date": "2026-10-08T14:09:20.543Z",
+      "isbns": [
+       {
+        "isbn10": "",
+        "isbn13": "9781789392869"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "list_id": 301,
+    "list_name": "Audio Fiction",
+    "list_name_encoded": "audio-fiction",
+    "display_name": "Audio Fiction",
+    "updated": "MONTHLY",
+    "books": [
+     {
+      "rank": 9,
+      "rank_last_week": 0,
+      "weeks_on_list": 1,
+      "primary_isbn10": "",
+      "primary_isbn13": "DORORIG001917",
+      "title": "THE INFINITE EXTENT",
+      "author": "Dennis E. Taylor",
+      "contributor": "by Dennis E. Taylor",
+      "book_image": "https://static01.nyt.com/bestsellers/images/DORORIG001917.jpg",
+      "updated_date": "2026-10-07T18:18:41.231Z",
+      "isbns": [
+       {
+        "isbn10": "",
+        "isbn13": "DORORIG001917"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

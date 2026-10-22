@@ -1246,6 +1246,38 @@ class Search(TestCase):
         for book in response["results"]:
             self.assertTrue(all(key in book for key in required_keys))
 
+    @patch("app.providers.hardcover.services.api_request")
+    def test_hardcover_search_reads_author_names_and_release_year(self, mock_api_request):
+        """Hardcover documents carry author_names and release_year; search exposes both."""
+        cache.clear()
+        mock_api_request.return_value = {
+            "data": {
+                "search": {
+                    "results": {
+                        "hits": [
+                            {
+                                "document": {
+                                    "id": "427578",
+                                    "title": "Project Hail Mary",
+                                    "image": {"url": "https://example.com/phm.jpg"},
+                                    "author_names": ["Andy Weir"],
+                                    "release_year": 2021,
+                                    "ratings_count": 8593,
+                                },
+                            },
+                        ],
+                        "found": 1,
+                    },
+                },
+            },
+        }
+
+        response = hardcover.search("Project Hail Mary", 1, preserve_ranking_fields=True)
+
+        book = response["results"][0]
+        self.assertEqual(book["author_name"], ["Andy Weir"])
+        self.assertEqual(book["first_publish_year"], 2021)
+
     def test_hardcover_title_query_cap_stops_at_word_boundary(self):
         """Test the long title cap does not split words."""
         query = "one two three four five six seven eight nine ten eleven twelve"

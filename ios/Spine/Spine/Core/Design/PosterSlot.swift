@@ -15,6 +15,8 @@ enum PosterSlot {
     case tagGrid
     case episodeStill
     case hofCrown
+    /// Square album art on Search's featured tiles.
+    case featuredSquare
 
     var size: CGSize {
         switch self {
@@ -42,6 +44,8 @@ enum PosterSlot {
             CGSize(width: 72, height: 42)
         case .hofCrown:
             CGSize(width: 64, height: 96)
+        case .featuredSquare:
+            CGSize(width: 60, height: 60)
         }
     }
 

@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 import requests
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 
@@ -104,8 +105,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 "ratings_count": hit["document"].get("ratings_count"),
                 "rating": hit["document"].get("rating"),
                 "edition_count": hit["document"].get("edition_count"),
-                "first_publish_year": hit["document"].get("first_publish_year"),
-                "author_name": hit["document"].get("author_name"),
+                # Hardcover's search documents carry release_year and author_names.
+                "first_publish_year": hit["document"].get("release_year"),
+                "author_name": hit["document"].get("author_names"),
             }
             for hit in hits
         ]
@@ -485,6 +487,8 @@ def book(media_id):
                 author_books = author_resp["data"].get("books", [])
                 # Convert to recommendations format
                 recommendations = [{"item_book": book} for book in author_books]
+            except SoftTimeLimitExceeded:
+                raise
             except Exception as e:
                 logger.warning(f"Author fallback failed: {e}")
 
@@ -966,6 +970,8 @@ def series_page(series_id):
             params={"query": query, "variables": {"series_id": int(series_id)}},
             headers={"Authorization": settings.HARDCOVER_API},
         )
+    except SoftTimeLimitExceeded:
+        raise
     except Exception as e:
         logger.warning("Series books failed: %s", e)
         return {

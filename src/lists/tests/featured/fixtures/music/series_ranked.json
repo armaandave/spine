@@ -1,0 +1,110 @@
+{
+ "id": "acf170fe-b358-4140-9e32-93a9c7afa544",
+ "name": "The Guardian 100 Best Albums Ever",
+ "type": "Release group series",
+ "relations": [
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "3"
+   },
+   "release_group": {
+    "id": "e959a4b3-6306-3c45-9df6-e7241dae9ea3",
+    "title": "Never Mind the Bollocks Here’s the Sex Pistols",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "1977-10-28",
+    "artist-credit": [
+     {
+      "name": "Sex Pistols",
+      "joinphrase": "",
+      "artist": {
+       "id": "e5db18cb-4b1f-496d-a308-548b611090d3",
+       "name": "Sex Pistols"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "1"
+   },
+   "release_group": {
+    "id": "c1fa4d2c-ec62-37d5-b01d-6df7f8fd2c90",
+    "title": "What’s Going On",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "1971-05-20",
+    "artist-credit": [
+     {
+      "name": "Marvin Gaye",
+      "joinphrase": "",
+      "artist": {
+       "id": "afdb7919-059d-43c1-b668-ba1d265e7e42",
+       "name": "Marvin Gaye"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "2"
+   },
+   "release_group": {
+    "id": "72d15666-99a7-321e-b1f3-a3f8c09dff9f",
+    "title": "Revolver",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "1966-08-05",
+    "artist-credit": [
+     {
+      "name": "The Beatles",
+      "joinphrase": "",
+      "artist": {
+       "id": "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
+       "name": "The Beatles"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "n/a"
+   },
+   "release_group": {
+    "id": "1b022e01-4da6-387b-8658-8678046e4cef",
+    "title": "Nevermind",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "1991-09-24",
+    "artist-credit": [
+     {
+      "name": "Nirvana",
+      "joinphrase": "",
+      "artist": {
+       "id": "5b11f4ce-a62d-471e-81fc-a69a8278c7da",
+       "name": "Nirvana"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "url",
+   "type": "wikidata",
+   "url": {
+    "resource": "https://www.wikidata.org/wiki/Q1"
+   }
+  }
+ ]
+}

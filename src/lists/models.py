@@ -286,3 +286,96 @@ class PersonListItem(models.Model):
     def __str__(self):
         """Return the person's name."""
         return self.name
+
+
+class FeaturedListSync(models.Model):
+    """Sync state and health for one featured-list definition (``lists.featured``)."""
+
+    class Status(models.TextChoices):
+        """Outcome of the latest attempt."""
+
+        OK = "ok", "OK"
+        UNCHANGED = "unchanged", "Unchanged"
+        GUARDED = "guarded", "Guarded"
+        FAILED = "failed", "Failed"
+        EMPTY = "empty", "Empty"
+        # Some entries waited for a provider's daily budget or rate limit.
+        DEFERRED = "deferred", "Deferred"
+
+    # Identity
+    key = models.SlugField(max_length=128, unique=True)
+    custom_list = models.OneToOneField(
+        CustomList,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="featured_sync",
+    )
+    definition_hash = models.CharField(max_length=64, blank=True, default="")
+    fingerprint = models.CharField(max_length=64, blank=True, default="")
+    # Content
+    edition = models.CharField(max_length=255, blank=True, default="")
+    content_changed_at = models.DateTimeField(null=True, blank=True)
+    live_label = models.CharField(max_length=255, blank=True, default="")
+    # Run state
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        blank=True,
+        default="",
+    )
+    last_error = models.TextField(blank=True, default="")
+    consecutive_failures = models.PositiveIntegerField(default=0)
+    lease_until = models.DateTimeField(null=True, blank=True)
+    # When a deferred run is retried: the provider's budget reset or 429 wait.
+    deferred_until = models.DateTimeField(null=True, blank=True)
+    # Counts
+    entry_count = models.PositiveIntegerField(default=0)
+    resolved_count = models.PositiveIntegerField(default=0)
+    unresolved = models.JSONField(blank=True, default=list)
+    # Charts only: {"<item_id>": "▲2" | "▼1" | "NEW"} against the previous content.
+    item_notes = models.JSONField(blank=True, default=dict)
+    # Every list: what each entry shows ("Winner · Best Picture", "▲2 · $12.4M"), keyed
+    # by item ID, or by "<source>:person:<id>" in people lists.
+    entry_notes = models.JSONField(blank=True, default=dict)
+
+    class Meta:
+        """Meta options for featured-list sync state."""
+
+        ordering = ["key"]
+
+    def __str__(self):
+        """Return the definition key."""
+        return self.key
+
+
+class FeaturedListSnapshot(models.Model):
+    """One day's contents of a featured list, written when its content changes."""
+
+    sync = models.ForeignKey(
+        FeaturedListSync,
+        on_delete=models.CASCADE,
+        related_name="snapshots",
+    )
+    taken_on = models.DateField()
+    edition = models.CharField(max_length=255, blank=True, default="")
+    fingerprint = models.CharField(max_length=64)
+    # [[rank, entry_key, item_id | null], ...]
+    entries = models.JSONField(default=list)
+
+    class Meta:
+        """Meta options for featured-list snapshots."""
+
+        ordering = ["-taken_on"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sync", "taken_on"],
+                name="%(app_label)s_featuredlistsnapshot_unique_day",
+            ),
+        ]
+
+    def __str__(self):
+        """Return the list key and date."""
+        return f"{self.sync.key} {self.taken_on}"
