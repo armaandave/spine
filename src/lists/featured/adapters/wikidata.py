@@ -60,7 +60,7 @@ SUPPLEMENT = Path(__file__).resolve().parent.parent / "static" / "supplements" /
 SUPPLEMENT_COLUMNS = ["list", "year", "qid", "title", "creator", "published", "ref", "why"]
 
 # Bump when the query or the parsing changes, so every Wikidata list re-syncs.
-QUERY_VERSION = "2"
+QUERY_VERSION = "3"
 SPARQL_TTL = 60 * 60 * 12
 LOOKUP_HIT_TTL = 60 * 60 * 24 * 30
 LOOKUP_MISS_TTL = 60 * 60 * 24
@@ -73,6 +73,7 @@ QID = re.compile(r"^Q[1-9]\d*$")
 MODES = ("award", "criterion", "registry")
 TIE = "tie"
 EXCLUDE = "-"
+DISAMBIGUATOR = re.compile(r"\s*\((?:book|novel|poetry collection|memoir|nonfiction book|\d{4} book)\)$", re.IGNORECASE)
 
 CLASSES = {
     "movie": ("Q11424",),  # film
@@ -490,6 +491,22 @@ def _note(years, ties):
     )
 
 
+def _with_supplement_details(work, supplement):
+    """Fill a work's missing year and add the supplement's spelling of its creator.
+
+    Wikidata items added by the supplement often lack an author, or spell one
+    differently from catalogs ("Leonard Levy" vs "Leonard W. Levy"); the strict
+    title search accepts any one matching name.
+    """
+    rows = [row for row in supplement if row["qid"] and row["qid"] == work["qid"]]
+    if not rows:
+        return work
+    names = [name for name in (work["creator"], *(row["creator"] for row in rows)) if name]
+    creator = ", ".join(dict.fromkeys(names))
+    year = work["year"] or next((row["published"] for row in rows if row["published"]), None)
+    return {**work, "creator": creator, "year": year}
+
+
 def _award_entries(definition, works, supplement):
     by_qid = defaultdict(set)
     for row in supplement:
@@ -497,6 +514,7 @@ def _award_entries(definition, works, supplement):
             by_qid[row["qid"]].add(row["year"])
     candidates = []
     for work in works:
+        work = _with_supplement_details(work, supplement)  # noqa: PLW2901
         media_type = _media_type(definition, work["ids"])
         years = _award_years(work, by_qid.get(work["qid"]))
         if not years:
@@ -720,14 +738,17 @@ def work_editions(work_id):
 def _main_title(entry):
     """Search a book by its main title: "Wilmington's Lie: The Murderous Coup…" -> "Wilmington's Lie".
 
+    Wikidata's disambiguators go too: "Blood in the Water (book)" -> "Blood in the Water".
+
     The strict title search accepts a result whose main title equals the entry's
     title, but not the reverse, and catalogs often drop long subtitles. The match
     stays exact on the main title, the author and the year.
     """
-    head = entry.title.split(":", 1)[0].strip()
-    if head == entry.title or len(normalize_title(head)) < 3:  # noqa: PLR2004
-        return entry
-    return replace(entry, title=head)
+    title = DISAMBIGUATOR.sub("", entry.title)
+    head = title.split(":", 1)[0].strip()
+    if len(normalize_title(head)) < 3:  # noqa: PLR2004
+        head = title
+    return entry if head == entry.title else replace(entry, title=head)
 
 
 def _book_ids(pairs):

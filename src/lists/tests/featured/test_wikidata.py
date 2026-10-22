@@ -289,6 +289,7 @@ class BookTests(WikidataTestCase):
             "wikidata-test,2021,,Wilmington's Lie: The Murderous Coup of 1898,David Zucchino,2020,,\n"
             "wikidata-test,2020,,Big: A Short One,Vashti Harrison,2019,,\n"
             "wikidata-test,2019,,Ok: Two Letters,Someone,2018,,\n"
+            "wikidata-test,2018,,Blood in the Water (book),Heather Ann Thompson,2016,,\n"
         )
         with supplement(body):
             entries = {entry.creator: entry for entry in self.fetch().entries}
@@ -296,6 +297,14 @@ class BookTests(WikidataTestCase):
         self.assertEqual(entries["David Zucchino"].key, "t:wilmingtons lie|2020")
         self.assertEqual(entries["Vashti Harrison"].title, "Big")
         self.assertEqual(entries["Someone"].title, "Ok: Two Letters")  # too short to search alone
+        self.assertEqual(entries["Heather Ann Thompson"].title, "Blood in the Water")
+
+    def test_supplement_rows_fill_a_missing_year_and_add_their_author_spelling(self):
+        body = "wikidata-test,1974,Q117,Holiday,Stanley Middleton Jr.,1965,,\nwikidata-test,2024,Q115,Orbital,,2023,,\n"
+        with supplement(body):
+            entries = {entry.title: entry for entry in self.fetch().entries}
+        self.assertEqual(entries["Holiday"].creator, "Stanley Middleton, Stanley Middleton Jr.")
+        self.assertEqual(entries["Orbital"].creator, "Samantha Harvey")
 
     @override_settings(HARDCOVER_API="")
     def test_without_a_hardcover_key_books_use_open_library(self):
