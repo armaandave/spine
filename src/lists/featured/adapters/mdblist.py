@@ -6,6 +6,8 @@ Params (exactly one mode):
   an external list owned by our MDBList account. A source URL is matched against
   ``GET /external/lists/user``.
 - ``{"list_id": "101881"}``: anyone's public MDBList list, via ``/lists/{id}/items``.
+  Optional ``"fallback_ids": ["12306"]``: other public lists tried in order when
+  this one fails or comes back empty (user lists can vanish).
 - ``{"official": "moviemeter", "mediatype": "movie" | "show"}``: an MDBList
   official list via ``/lists/official/{slug}/items``.
 
@@ -57,7 +59,7 @@ def find_external_list(url):
     for remote in mdblist.get_user_external_lists():
         if _source_path(remote.get("url") or "") == wanted:
             return remote
-    msg = f"No MDBList external list on our account mirrors {wanted!r}."
+    msg = f"No MDBList external list on our account mirrors {wanted!r}. Add {url} as an MDBList external list."
     raise AdapterError(msg)
 
 
@@ -81,6 +83,14 @@ def validate(definition):
     if mode == "list_id" and not str(params["list_id"]).isdigit():
         msg = "list_id must be numeric"
         raise ValueError(msg)
+    fallback_ids = params.get("fallback_ids")
+    if fallback_ids is not None:
+        if mode != "list_id":
+            msg = "fallback_ids only applies to list_id"
+            raise ValueError(msg)
+        if isinstance(fallback_ids, str) or not all(str(value).isdigit() for value in fallback_ids):
+            msg = "fallback_ids must be a list of numeric list IDs"
+            raise ValueError(msg)
     if mode == "official" and params.get("mediatype") not in MEDIATYPES:
         msg = "official lists need mediatype movie or show"
         raise ValueError(msg)
@@ -127,6 +137,25 @@ def entries_from_items(items, limit=None):
     return entries[:limit] if limit else entries
 
 
+def _public_list(list_ids):
+    """Return ``(metadata, items)`` from the first of ``list_ids`` that has items.
+
+    The last list is returned even when empty, so the writer's guards judge it.
+    """
+    problems = []
+    for index, list_id in enumerate(list_ids):
+        try:
+            metadata = mdblist.get_list(list_id)
+            items = mdblist.get_list_items(list_id)
+        except services.ProviderAPIError as error:
+            problems.append(f"list {list_id}: {sanitize(error, 160)}")
+            continue
+        if items or index == len(list_ids) - 1:
+            return metadata, items
+        problems.append(f"list {list_id} is empty")
+    raise AdapterError("MDBList public lists failed: " + "; ".join(problems))
+
+
 def fetch(definition):
     """Fetch one MDBList list."""
     params = definition.params
@@ -139,8 +168,7 @@ def fetch(definition):
             list_id = list_id or str(metadata["id"])
             items = mdblist.get_external_list_items(list_id)
         elif mode == "list_id":
-            metadata = mdblist.get_list(params["list_id"])
-            items = mdblist.get_list_items(params["list_id"])
+            metadata, items = _public_list([params["list_id"], *params.get("fallback_ids", ())])
         else:
             metadata = {}
             items = mdblist.get_official_list_items(params["official"], params["mediatype"])

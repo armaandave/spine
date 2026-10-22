@@ -1,0 +1,5 @@
+[
+  {"revenue": 31000000, "movie": {"title": "Street Fighter", "year": 2026, "ids": {"trakt": 929414, "slug": "street-fighter-2026", "imdb": "tt27419420", "tmdb": 1153576}}},
+  {"revenue": 15000000, "movie": {"title": "You Can See Everything", "year": 2026, "ids": {"trakt": 1398468, "slug": "you-can-see-everything-2026", "imdb": "tt45368240", "tmdb": 1765072}}},
+  {"revenue": 850000, "movie": {"title": "Other Mommy", "year": 2026, "ids": {"trakt": 1, "slug": "other-mommy-2026", "imdb": null, "tmdb": 1400837}}}
+]
