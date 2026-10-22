@@ -1314,7 +1314,8 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators
         )
     }
 
@@ -1337,7 +1338,8 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators
         )
     }
 }
@@ -1647,8 +1649,9 @@ struct ProfileListDetailView: View {
                 }
                 }
 
-                if list.isOwned(by: currentUserId) {
+                if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
                 Menu {
+                    if list.canEdit(by: currentUserId) {
                     Button("Edit List", systemImage: "slider.horizontal.3") {
                         Task {
                             if await viewModel.loadAllItemsForEditing(),
@@ -1657,8 +1660,11 @@ struct ProfileListDetailView: View {
                             }
                         }
                     }
+                    }
+                    if list.canDelete(by: currentUserId) {
                     Button("Delete List", systemImage: "trash", role: .destructive) {
                         isDeleteAlertPresented = true
+                    }
                     }
                 } label: {
                     ProfileListCircleIconLabel(systemName: "ellipsis")
