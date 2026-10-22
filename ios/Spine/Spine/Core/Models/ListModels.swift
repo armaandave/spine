@@ -1,11 +1,11 @@
 import Foundation
 
-enum CustomListType: String, Codable, Hashable {
+nonisolated enum CustomListType: String, Codable, Hashable {
     case media
     case people
 }
 
-struct PersonListEntry: Codable, Identifiable, Hashable {
+nonisolated struct PersonListEntry: Codable, Identifiable, Hashable {
     let entryId: Int
     let personId: String
     let source: String

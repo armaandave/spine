@@ -225,6 +225,16 @@ extension FeaturedShelvesResponse {
         allCards.contains { $0.isLive(at: now) }
     }
 
+    /// The earliest start of an upcoming window that hasn't begun.
+    func nextLiveStart(after now: Date) -> Date? {
+        allCards.compactMap { $0.live?.upcomingStart(after: now) }.min()
+    }
+
+    /// The same shelves as `other`, ignoring when the server generated them.
+    func hasSameContent(as other: FeaturedShelvesResponse) -> Bool {
+        mediaType == other.mediaType && isLegacy == other.isLegacy && shelves == other.shelves
+    }
+
     /// "42 lists · 3 live · updated today", for a media type's grouped layer.
     func summaryLine(now: Date, calendar: Calendar = .current) -> String {
         let cards = Dictionary(allCards.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }).values

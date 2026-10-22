@@ -131,20 +131,22 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(response.shelves[1].title, "Critics & Canon")
     }
 
-    func testDiskCacheRoundTripsAResponse() throws {
+    func testDiskCacheRoundTripsAResponse() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = FeaturedShelvesDiskCache(directory: directory)
         let response = try decode(FeaturedFixtures.shelvesJSON)
         let savedAt = FeaturedFixtures.date("2026-10-21T18:05:00Z")
 
-        cache.save(FeaturedShelvesCacheEntry(savedAt: savedAt, response: response), key: "landing")
-        let entry = try XCTUnwrap(cache.load(key: "landing"))
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: savedAt, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        let entry = try XCTUnwrap(loaded)
 
         XCTAssertEqual(entry.savedAt, savedAt)
         XCTAssertEqual(entry.response, response)
         XCTAssertEqual(entry.response.shelves[1].lists.first?.previews.first?.note, "▲2")
-        XCTAssertNil(cache.load(key: "movie"))
+        let missing = await cache.load(key: "movie")
+        XCTAssertNil(missing)
     }
 
     func testDatesParseWithAndWithoutFractionsOrZone() {
@@ -202,7 +204,7 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(card.stackPeople, [])
     }
 
-    func testDiskCacheRoundTripsPreviewPeople() throws {
+    func testDiskCacheRoundTripsPreviewPeople() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = FeaturedShelvesDiskCache(directory: directory)
@@ -213,11 +215,47 @@ final class FeaturedListsDecodingTests: XCTestCase {
         ]}]}
         """)
 
-        cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
-        let entry = try XCTUnwrap(cache.load(key: "landing"))
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        let entry = try XCTUnwrap(loaded)
 
         XCTAssertEqual(entry.response, response)
         XCTAssertEqual(entry.response.allCards.first?.previewPeople.map(\.name), ["Annie Ernaux"])
+    }
+
+    func testDiskCacheIsKeptPerAPIServer() async throws {
+        XCTAssertEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "https://api.spine-api.com")!),
+            "api.spine-api.com"
+        )
+        XCTAssertEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8001")!),
+            "127.0.0.1-8001"
+        )
+        XCTAssertNotEqual(
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8001")!),
+            FeaturedShelvesDiskCache.serverDirectoryName(for: URL(string: "http://127.0.0.1:8002")!)
+        )
+    }
+
+    func testListTypeDecodesTolerantlyAndRoundTrips() async throws {
+        let response = try decode("""
+        {"shelves": [{"key": "book", "title": "Books", "media_type": "book", "lists": [
+          {"id": 1, "name": "Nobel Laureates", "list_type": "people", "media_types": ["book"], "items_count": 121, "preview_items": []},
+          {"id": 2, "name": "Booker", "list_type": "media", "media_types": ["book"], "items_count": 3, "preview_items": []},
+          {"id": 3, "name": "Odd", "list_type": "places", "media_types": ["book"], "items_count": 3, "preview_items": []},
+          {"id": 4, "name": "Old Server", "media_types": ["book"], "items_count": 3, "preview_items": []}
+        ]}]}
+        """)
+        XCTAssertEqual(response.allCards.map(\.listType), [.people, .media, nil, nil])
+        XCTAssertEqual(response.allCards.map(\.isPeopleList), [true, false, false, false])
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = FeaturedShelvesDiskCache(directory: directory)
+        await cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
+        let loaded = await cache.load(key: "landing")
+        XCTAssertEqual(loaded?.response.allCards.map(\.listType), [.people, .media, nil, nil])
     }
 
     func testListDetailDecodesItsFeaturedBlock() throws {
@@ -617,6 +655,81 @@ final class FeaturedListsStoreTests: XCTestCase {
         XCTAssertFalse(store.hasLiveList(mediaType: nil))
     }
 
+    func testPollingStartsWhenAnUpcomingWindowBegins() async {
+        let startsAt = clock.addingTimeInterval(30 * 60)
+        let endsAt = startsAt.addingTimeInterval(3 * 3600)
+        let upcoming = FeaturedFixtures.response(
+            name: "Oscars",
+            live: FeaturedLiveState(status: .upcoming, label: "0 of 23", startsAt: startsAt, endsAt: endsAt)
+        )
+        let live = FeaturedFixtures.response(
+            name: "Oscars",
+            live: FeaturedLiveState(status: .live, label: "1 of 23", startsAt: startsAt, endsAt: endsAt)
+        )
+        let repository = FeaturedShelvesRepository(landing: [
+            .success(upcoming),
+            .success(live),
+            .success(FeaturedFixtures.response(name: "Oscars", live: FeaturedLiveState(status: .done))),
+        ])
+        var sleeps: [Duration] = []
+        let store = FeaturedListsStore(
+            repository: repository,
+            cache: FeaturedMemoryCache(),
+            now: { [unowned self] in clock },
+            sleep: { [unowned self] duration in
+                sleeps.append(duration)
+                clock += TimeInterval(duration.components.seconds)
+            }
+        )
+
+        await store.load(mediaType: nil)
+        XCTAssertFalse(store.hasLiveList(mediaType: nil))
+        XCTAssertEqual(store.nextPollDelay(mediaType: nil), .seconds(30 * 60))
+        await store.pollWhileLive(mediaType: nil)
+
+        // It slept until the window started, refetched, then polled once a minute until the night was done.
+        XCTAssertEqual(sleeps, [.seconds(30 * 60), .seconds(60)])
+        XCTAssertEqual(repository.landingCalls, 3)
+        XCTAssertNil(store.nextPollDelay(mediaType: nil))
+    }
+
+    func testDoesNotSaveAnUnchangedResponseAgain() async {
+        let cache = FeaturedMemoryCache()
+        let first = FeaturedShelvesResponse(
+            generatedAt: clock,
+            shelves: FeaturedFixtures.response(name: "Same").shelves
+        )
+        let regenerated = FeaturedShelvesResponse(
+            generatedAt: clock.addingTimeInterval(60),
+            shelves: FeaturedFixtures.response(name: "Same").shelves
+        )
+        let repository = FeaturedShelvesRepository(landing: [
+            .success(first),
+            .success(regenerated),
+            .success(FeaturedFixtures.response(name: "Changed")),
+        ])
+        let store = makeStore(repository: repository, cache: cache)
+
+        await store.load(mediaType: nil)
+        await store.load(mediaType: nil, force: true)
+        XCTAssertEqual(cache.saves, 1)
+
+        await store.load(mediaType: nil, force: true)
+        XCTAssertEqual(cache.saves, 2)
+        XCTAssertEqual(cache.entries["landing"]?.response.allCards.map(\.name), ["Changed"])
+    }
+
+    func testReadsTheDiskCacheOnce() async {
+        let cache = FeaturedMemoryCache()
+        let repository = FeaturedShelvesRepository(landing: [.failure(APIError.invalidResponse), .failure(APIError.invalidResponse)])
+        let store = makeStore(repository: repository, cache: cache)
+
+        await store.load(mediaType: nil)
+        await store.load(mediaType: nil)
+
+        XCTAssertEqual(cache.loads, 1)
+    }
+
     func testDoesNotPollWithoutALiveList() async {
         let repository = FeaturedShelvesRepository(landing: [.success(FeaturedFixtures.response(name: "Quiet"))])
         var sleeps = 0
@@ -645,9 +758,9 @@ final class FeaturedListsStoreTests: XCTestCase {
 
     private func makeStore(
         repository: FeaturedShelvesRepository,
-        cache: FeaturedMemoryCache = FeaturedMemoryCache()
+        cache: FeaturedMemoryCache? = nil
     ) -> FeaturedListsStore {
-        FeaturedListsStore(repository: repository, cache: cache, now: { [unowned self] in clock })
+        FeaturedListsStore(repository: repository, cache: cache ?? FeaturedMemoryCache(), now: { [unowned self] in clock })
     }
 }
 
@@ -869,14 +982,21 @@ private enum FeaturedFixtures {
     }
 }
 
+@MainActor
 private final class FeaturedMemoryCache: FeaturedShelvesCaching {
     var entries: [String: FeaturedShelvesCacheEntry] = [:]
+    var loads = 0
+    var saves = 0
 
-    func load(key: String) -> FeaturedShelvesCacheEntry? {
-        entries[key]
+    @MainActor
+    func load(key: String) async -> FeaturedShelvesCacheEntry? {
+        loads += 1
+        return entries[key]
     }
 
-    func save(_ entry: FeaturedShelvesCacheEntry, key: String) {
+    @MainActor
+    func save(_ entry: FeaturedShelvesCacheEntry, key: String) async {
+        saves += 1
         entries[key] = entry
     }
 }
