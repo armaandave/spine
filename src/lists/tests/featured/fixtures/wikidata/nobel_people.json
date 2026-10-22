@@ -1,0 +1,53 @@
+{
+ "head": {
+  "vars": [
+   "p",
+   "ol_",
+   "image_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q206970"
+    },
+    "ol_": {
+     "type": "literal",
+     "value": "OL1100A"
+    },
+    "image_": {
+     "type": "literal",
+     "value": "http://commons.wikimedia.org/wiki/Special:FilePath/Eyvind%20Johnson.jpg"
+    }
+   },
+   {
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q312663"
+    },
+    "ol_": {
+     "type": "literal",
+     "value": "OL1200A"
+    }
+   },
+   {
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q512062"
+    },
+    "ol_": {
+     "type": "literal",
+     "value": "OL1300A"
+    }
+   },
+   {
+    "p": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2633699"
+    }
+   }
+  ]
+ }
+}
