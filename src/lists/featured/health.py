@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from app.providers import quota
-from lists.featured import dispatch, engine, registry
+from lists.featured import dispatch, engine, ratings, registry
 from lists.models import FeaturedListSync
 
 STALE_SLACK = timedelta(hours=1)
@@ -94,6 +94,7 @@ def report(now=None):
             }
             for provider, budget in engine.provider_budgets().items()
         },
+        "ratings_pending": ratings.pending_count(),
         "lists": rows,
         "orphans": orphans,
     }

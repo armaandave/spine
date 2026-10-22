@@ -6,6 +6,9 @@ from django.core.management import call_command
 # Registers "Dispatch featured lists" and "Sync featured list" (featured queue).
 from lists.featured.dispatch import dispatch_featured_lists, sync_featured_list  # noqa: F401
 
+# Registers "Enrich featured list ratings" (default queue).
+from lists.featured.ratings import enrich_featured_ratings  # noqa: F401
+
 LETTERBOXD_TOP_500_MDBLIST_URL = "https://mdblist.com/lists/davearmaan12/external/155837"
 
 

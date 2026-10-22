@@ -160,7 +160,7 @@ Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 30 da
 Entries deferred by a provider budget (below) don't count toward the resolve rate, so a list is never `guarded` just because a budget ran out.
 
 Any failure raises `GuardError`, records the status, and leaves the list untouched. Otherwise one transaction does all of this:
-- get or create Items inside `app.mixins.collect_external_rating_item_ids()`, and call `app.tasks.enqueue_external_rating_batches(ids)` on commit (never one ratings task per Item);
+- get or create Items inside `app.mixins.collect_external_rating_item_ids()`, and on commit hand the new IDs to `ratings.add_pending(ids)` (never one ratings task per Item; see "External ratings" below);
 - get or create the `CustomList` by `(owner, *identity)`;
 - set its fields (public, ranked, `is_featured`, `featured_position`, source URL, `last_synced_at`);
 - replace the items only when the content fingerprint changed, and set `content_changed_at` when it does;
@@ -170,7 +170,7 @@ The `list-media-types` branch is adding `CustomList.locked_media_types`. Once it
 
 ## Provider budgets
 
-Featured syncs share production's provider keys with the app, so every run (and every dry run) happens inside `app.providers.quota.scope("featured", …)`. Inside it, each `services.api_request` to Hardcover (`api.hardcover.app`) or Open Library (`openlibrary.org`) counts against a per-UTC-day Redis counter: adapter fetches, ISBN lookups, title searches and the writer's metadata fetches for new Items alike. Cached provider answers cost nothing.
+Featured syncs share production's provider keys with the app, so every run (and every dry run) happens inside `app.providers.quota.scope("featured", …)`. Inside it, each `services.api_request` to Hardcover (`api.hardcover.app`) or Open Library (`openlibrary.org`) counts against a per-UTC-day Redis counter: adapter fetches, ISBN lookups, title searches, the writer's metadata fetches for new Items, and the ratings batches for those Items alike. Cached provider answers cost nothing.
 
 | Setting | Default | Why |
 |---|---|---|
@@ -181,6 +181,15 @@ Featured syncs share production's provider keys with the app, so every run (and 
 - **429 with a long wait:** a 429 asking for more than the 60 s `api_request` would sleep (Hardcover's "Try again in 69163 seconds", in `Retry-After` or the body) blocks the provider for that long. Featured requests then defer at once instead of sleeping; a long 429 the app itself receives blocks featured syncs too. Shorter 429s still wait and retry as before.
 - **Deferred entries** stay unresolved, aren't cached, and don't count toward the resolve rate. A run with deferred entries writes the list only when it wouldn't shrink: a new list appears with what resolved, a growing one keeps its progress, and a current list is otherwise left as it is. Either way the status is `deferred`, `deferred_until` holds the reset time, and the dispatcher retries the list then. An adapter whose own fetch is deferred records the same.
 - The health report shows each list's `deferred_until`, a `deferred` total, and `quota` (budget, used today, blocked until) per provider.
+
+## External ratings for new Items
+
+`ratings.py` trickles new Items' ratings onto the default worker instead of queueing them all at once (a first deploy creates thousands of Items):
+- The writer adds new Item IDs to a Redis set (`services.redis_db`).
+- Each dispatcher tick queues one `Enrich featured list ratings` batch of at most 50 on the default queue, only when the previous batch has finished (or 30 minutes passed), so app tasks never wait behind a featured backlog.
+- The batch runs `enrich_external_ratings_batch` inside the featured quota scope, so its Hardcover and Open Library metadata calls count against the featured budgets. Book Items whose provider has no featured budget left today, or is blocked by a long 429, stay pending until it resets.
+- The health report shows `ratings_pending`. If Redis loses the set, list detail still enriches Items when someone opens them.
+- Known gap: a transient failure inside a batch retries that Item through the app's own `enrich_external_ratings` task, outside the featured scope, as it would for any Item.
 
 ## Models (one migration in `lists`)
 

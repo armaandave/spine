@@ -12,7 +12,7 @@ from celery import shared_task
 from django.db.models import Q
 from django.utils import timezone
 
-from lists.featured import engine, order, registry
+from lists.featured import engine, order, ratings, registry
 from lists.models import CustomList, FeaturedListSync
 
 logger = logging.getLogger(__name__)
@@ -157,10 +157,13 @@ def retire_orphans(definitions):
 
 
 def dispatch(now=None):
-    """Retire orphaned lists, then lease and queue every due definition; return the queued keys."""
+    """Retire orphaned lists, trickle new Items' ratings, then lease and queue every
+    due definition; return the queued keys.
+    """
     now = now or timezone.now()
     definitions = registry.all_definitions()
     retire_orphans(definitions)
+    ratings.drain()
     syncs = {sync.key: sync for sync in FeaturedListSync.objects.all()}
     hashes = {definition.key: engine.compute_hash(definition) for definition in definitions}
     queued = []
