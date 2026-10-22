@@ -317,7 +317,12 @@ NATIONAL_BOOK_AWARDS = [
         tables={"caption": r"Nonfiction winners and finalists|nonfiction books, 19[56]0.1963"},
         description="Every winner of the National Book Award for Nonfiction (1950-1963 and since 1984), newest first.",
     ),
-    national_book_award("national-book-award-poetry", "Poetry", 372),
+    national_book_award(
+        "national-book-award-poetry",
+        "Poetry",
+        372,
+        strip_parenthetical=True,  # "The Far Field (posth.)", "New and Selected Poems (vol. 1 of two)"
+    ),
     national_book_award(
         "national-book-award-translated-literature",
         "Translated Literature",
