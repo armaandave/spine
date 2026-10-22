@@ -2,14 +2,14 @@
 # Build the "Spine Dev" app (Debug, bundle ID com.armaan.Spine.dev) from the current
 # checkout (myapp-main or any worktree), install it on the paired iPhone, and open it.
 # Uncommitted changes in the checkout are included. Spine Dev sits next to the real Spine
-# app from TestFlight and never touches it or production: it talks to this checkout's
-# backend on the Mac and opens signed in as that backend's dev user.
-# scripts/ios/local-backend.sh must be running from this checkout, and the iPhone must be
-# on the Mac's Wi-Fi.
+# app from TestFlight and never touches it or production: it talks to the always-on test
+# backend on the Mac (scripts/ios/test-backend.sh) and opens signed in as its dev user. If
+# the branch has backend changes production doesn't have, the test backend must be serving
+# this checkout first (scripts/ios/test-backend.sh use). The iPhone must be on the Mac's Wi-Fi.
 #
 # Usage: scripts/ios/build-to-iphone.sh [--build-only] [--device <id>]
 #   --build-only   compile for a generic iPhone; do not touch the phone
-#   --local        accepted for older instructions; every build is local now
+#   --local        accepted for older instructions; changes nothing
 #   --device       override the phone (default: SPINE_DEVICE_ID or Armaan's iPhone 14 Pro Max)
 set -euo pipefail
 
@@ -41,12 +41,20 @@ grep -q 'PRODUCT_BUNDLE_IDENTIFIER = com.armaan.Spine.dev;' "$project/project.pb
 # production. Release (com.armaan.Spine) is only built by Xcode Cloud for TestFlight.
 configuration=Debug
 
+# Run the helpers next to this script, so older worktrees can use myapp-main's copies.
+here=$(cd "$(dirname "$0")" && pwd)
 if [ $build_only -eq 1 ]; then
-  local_api="http://$(scutil --get LocalHostName).local:8001"
+  local_api=$("$here/test-backend.sh" api)
+  serving="(not checked)"
 else
-  # Run the helper next to this script, so older worktrees can use myapp-main's copy.
-  local_api=$("$(cd "$(dirname "$0")" && pwd)/local-backend.sh" --status 2>/dev/null | sed -n 's/^LOCAL_API: //p' | tail -n 1 || true)
-  [ -n "$local_api" ] || die "this checkout's local backend isn't running. Start it in the background first: ~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend -- scripts/ios/local-backend.sh"
+  backend=$("$here/test-backend.sh" status 2>&1) || die "${backend#STOPPED: }"
+  local_api=$(printf '%s\n' "$backend" | sed -n 's/^TEST_API: //p')
+  serving=$(printf '%s\n' "$backend" | sed -n 's/^SERVING: //p')
+  served=$(printf '%s\n' "$backend" | sed -n 's/^SERVED_CHECKOUT: //p')
+  verdict=$("$here/feature-status.sh" 2>/dev/null | sed -n 's/^VERDICT: //p')
+  if [ "$verdict" = local-backend ] && [ "$served" != "$top" ]; then
+    die "this branch has backend changes production doesn't have, and the test backend serves $serving. Serve this checkout first: scripts/ios/test-backend.sh use"
+  fi
 fi
 
 # One stable build cache per checkout, so worktrees never share build products.
@@ -85,7 +93,7 @@ app="$build_dir/Build/Products/$configuration-iphoneos/$app_name"
 [ -d "$app" ] || die "build succeeded but $app is missing"
 bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
 api=$(/usr/libexec/PlistBuddy -c 'Print :SpineAPIBaseURL' "$app/Info.plist" 2>/dev/null || echo unknown)
-echo "Built:    $app_name ($bundle_id), talks to $api"
+echo "Built:    $app_name ($bundle_id), talks to $api ($serving)"
 if [ "$api" != "$local_api" ]; then
   die "the build talks to $api instead of $local_api; nothing was installed"
 fi
@@ -98,5 +106,5 @@ fi
 xcrun devicectl device install app --device "$device" "$app" >/dev/null
 xcrun devicectl device process launch --device "$device" --terminate-existing "$bundle_id" --dev-sign-in >/dev/null
 echo "INSTALLED: Spine Dev ($bundle_id) is open on the iPhone, next to the real Spine app."
-echo "It talks to $local_api and opened signed in as the dev user. If iOS asks to find devices on"
-echo "the local network, tap Allow. Opened later from the home screen, it stays on that backend."
+echo "It talks to the test backend at $local_api, serving $serving, and opened signed in as the"
+echo "dev user. If iOS asks to find devices on the local network, tap Allow."
