@@ -95,6 +95,22 @@ class ParseTests(SimpleTestCase):
         rows, _ = wikipedia_table.parse_rows(load_fixture("wikipedia_table", fixture), params)
         return wikipedia_table._merge(rows, params)
 
+    def test_last_year_reads_a_two_year_season_as_its_award_year(self):
+        html = """<table class="wikitable"><tr><th>Year</th><th>Anime</th><th>Studio(s)</th></tr>
+        <tr><th rowspan="3">2021 (6th)</th></tr>
+        <tr><td><b>Attack on Titan</b></td><td>MAPPA</td></tr>
+        <tr><td>86</td><td>A-1 Pictures</td></tr>
+        <tr><th rowspan="2">2021 / 2022 (7th)</th></tr>
+        <tr><td><b>Cyberpunk: Edgerunners</b></td><td>Trigger</td></tr></table>"""
+        params = definition_for("crunchyroll-anime-of-the-year").params
+        self.assertTrue(params["last_year"])
+        rows, _ = wikipedia_table.parse_rows(html, params)
+        self.assertEqual([(row.title, row.year) for row in rows], [("Attack on Titan", 2021), ("Cyberpunk: Edgerunners", 2022)])
+        first, _ = wikipedia_table.parse_rows(html, {**params, "last_year": False})
+        self.assertEqual(first[1].year, 2021)
+        self.assertEqual(wikipedia_table.cell_year("2022 / 2023 (8th) [15]", last=True), 2023)
+        self.assertIsNone(wikipedia_table.cell_year("TBA", last=True))
+
     def test_emmy_winners_newest_first_with_repeat_years_merged(self):
         rows = self.rows("emmy_drama.html", definition_for("emmys-outstanding-drama-series").params)
         self.assertEqual([row.title for row in rows], ["Succession", "Game of Thrones"])

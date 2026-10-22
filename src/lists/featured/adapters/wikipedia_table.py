@@ -29,6 +29,8 @@ Params:
   background); ``"all"`` (default) keeps every row.
 - ``category``: a pattern the category cell must match.
 - ``latest_only``: keep only the rows of the latest year (a yearly top 10).
+- ``last_year``: a year cell naming several years ("2021 / 2022" for a season that
+  spans two) gives its last one instead of its first.
 - ``order``: ``"newest"`` (default: newest year first) or ``"source"``.
 - ``match_year``: send the year to the resolver (default true). Turn it off when the
   award year isn't the work's year (a TV series winning in its fifth season).
@@ -73,6 +75,7 @@ WINNER_MARK = "‡"
 SYMBOLS = re.compile(r"^[\s‡†*§¤#^]+|[\s‡†*§¤#^]+$")
 BRACKETED_NOTE = re.compile(r"\[\s*[^\]]{0,12}\s*\]")
 TRAILING_PARENTHETICAL = re.compile(r"\s*\([^()]*\)\s*$")
+YEARS = re.compile(r"(?<!\d)(1[5-9]\d\d|2[01]\d\d)(?!\d)")  # as text.parse_year reads them
 EMPTY_TITLES = {"", "-", "—", "–", "n/a", "tba", "tbd", "none", "not awarded", "no award"}
 MAX_SPAN = 500
 STABLE_AGE = timedelta(minutes=30)  # read the newest revision at least this old
@@ -342,6 +345,14 @@ def _table_matches(table, index, selector):
     return True
 
 
+def cell_year(text, *, last=False):
+    """Return the first year in a cell's text, or its last when ``last``."""
+    if not last:
+        return parse_year(text)
+    years = YEARS.findall(text or "")
+    return int(years[-1]) if years else None
+
+
 def _context_year(table):
     caption = table.find("caption")
     heading = table.find_previous(["h2", "h3", "h4"])
@@ -364,6 +375,7 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
     split_creator = params.get("split_creator", "")
     strip_parenthetical = bool(params.get("strip_parenthetical"))
     main_title = bool(params.get("main_title"))
+    last_year = bool(params.get("last_year"))
     rows, matched_tables = [], 0
     for index, table in enumerate(soup.select("table.wikitable")):
         if not _table_matches(table, index, selector):
@@ -381,14 +393,14 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
         for tr, row in grid[header_at + 1 :]:
             distinct = {id(cell) for cell in row if cell is not None}
             if len(distinct) == 1 and len(row) > 1:  # a group row: "2026", "Best Dramatic Show"
-                group_year = parse_year(cell_text(row[0])) or group_year
+                group_year = cell_year(cell_text(row[0]), last=last_year) or group_year
                 continue
 
             def cell_at(name, row=row):
                 position = found.get(name)
                 return row[position] if position is not None and position < len(row) else None
 
-            year = parse_year(cell_text(cell_at("year"))) if "year" in found else group_year
+            year = cell_year(cell_text(cell_at("year")), last=last_year) if "year" in found else group_year
             if category and not category.search(cell_text(cell_at("category"))):
                 continue
             result_cell = cell_at("result")
