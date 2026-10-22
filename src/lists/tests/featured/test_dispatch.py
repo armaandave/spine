@@ -6,7 +6,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
 from app.signals import create_task_result_on_publish
-from lists.featured import dispatch, registry
+from lists.featured import dispatch, order, registry
 from lists.featured.dispatch import backoff, due, plan
 from lists.featured.registry import LiveWindow
 from lists.models import FeaturedListSync
@@ -97,6 +97,26 @@ class PlanTests(SimpleTestCase):
         definitions = [make_definition(key="old", position=101), make_definition(key="new", position=102)]
         syncs = {"old": sync_row(key="old", last_success_at=NOW - timedelta(days=3))}
         self.assertEqual([item.key for item in plan(definitions, syncs, NOW, max_non_live=5)], ["new", "old"])
+
+    def test_equally_stale_lists_follow_the_shelf_order_then_position(self):
+        definitions = [
+            make_definition(key="movie-extra", position=101),
+            make_definition(key="movie-second", position=102),
+            make_definition(key="book-first", position=300, media_types=("book",)),
+            make_definition(key="movie-first", position=103),
+            make_definition(key="book-extra", position=301, media_types=("book",)),
+            make_definition(key="synced", position=100),
+        ]
+        syncs = {"synced": sync_row(key="synced", last_success_at=NOW - timedelta(days=3))}
+        shelves = {"movie": ["movie-first", "movie-second"], "book": ["book-first"]}
+        with patch.object(order, "SHELF_ORDER", shelves):
+            chosen = plan(definitions, syncs, NOW, max_non_live=10)
+        # Never-synced first: each shelf's first list, then the second, then the
+        # uncurated by position; lists that synced before still go stalest first.
+        self.assertEqual(
+            [item.key for item in chosen],
+            ["movie-first", "book-first", "movie-second", "movie-extra", "book-extra", "synced"],
+        )
 
     def test_one_non_live_sync_at_a_time_by_default(self):
         definitions = [make_definition(key=f"list-{number}", position=100 + number) for number in range(3)]

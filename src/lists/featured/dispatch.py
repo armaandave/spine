@@ -11,7 +11,7 @@ from celery import shared_task
 from django.db.models import Q
 from django.utils import timezone
 
-from lists.featured import engine, registry
+from lists.featured import engine, order, registry
 from lists.models import FeaturedListSync
 
 DISPATCH_TASK = "Dispatch featured lists"
@@ -85,9 +85,11 @@ def due(definition, sync, now, *, definition_hash=None):  # noqa: PLR0911
 def plan(definitions, syncs, now, *, hashes=None, max_non_live=MAX_NON_LIVE):
     """Return the definitions to queue now: every due live one, then the stalest others.
 
-    ``syncs`` maps key to ``FeaturedListSync`` (missing = never attempted). Non-live
-    work is capped so that at most ``max_non_live`` are leased at once, which keeps
-    the queue short enough for award nights.
+    ``syncs`` maps key to ``FeaturedListSync`` (missing = never attempted). Equally
+    stale lists (never synced, say) follow the curated shelf order, then position, so
+    flagship lists fill first after a deploy. Non-live work is capped so that at most
+    ``max_non_live`` are leased at once, which keeps the queue short enough for award
+    nights.
     """
     hashes = hashes or {}
     live, others = [], []
@@ -101,10 +103,13 @@ def plan(definitions, syncs, now, *, hashes=None, max_non_live=MAX_NON_LIVE):
         if decision.due:
             (live if decision.live else others).append(definition)
 
+    ranks = order.sync_ranks()
+
     def staleness(definition):
         sync = syncs.get(definition.key)
         last = sync.last_success_at if sync is not None else None
-        return (last is not None, last or _EPOCH, definition.position, definition.key)
+        rank = ranks.get(definition.key)
+        return (last is not None, last or _EPOCH, rank is None, rank or 0, definition.position, definition.key)
 
     others.sort(key=staleness)
     return live + others[: max(0, max_non_live - in_flight)]

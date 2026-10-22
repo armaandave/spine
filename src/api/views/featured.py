@@ -34,7 +34,7 @@ from api.views.lists import (
 from app import exposure
 from app.models import MediaTypes
 from app.providers import tmdb
-from lists.featured import health, registry
+from lists.featured import health, order, registry
 from lists.models import CustomList, CustomListItem, PersonListItem
 from social.models import ContentLike
 
@@ -371,13 +371,52 @@ def featured_block(custom_list, request, *, items_count):
     return card_payload(cards[0], request, items_count=items_count, now=now)
 
 
-def _shelf_sort_key(featured):
-    return (featured.live_status != "live", not featured.recent, featured.position, featured.custom_list.id)
+def _key(featured):
+    return featured.definition.key if featured.definition else None
 
 
-def _now_sort_key(featured):
-    changed = featured.changed_at.timestamp() if featured.changed_at else 0
-    return (featured.live_status != "live", featured.live_status is None, -changed, featured.position)
+def _shelf_sorted(cards, media_type):
+    """Sort a shelf: live, then the curated keys in order, then position and name."""
+    curated = order.shelf_index(media_type)
+
+    def sort_key(featured):
+        rank = curated.get(_key(featured))
+        return (
+            featured.live_status != "live",
+            rank is None,
+            rank or 0,
+            featured.position,
+            featured.custom_list.name,
+            featured.custom_list.id,
+        )
+
+    return sorted(cards, key=sort_key)
+
+
+def _now_cards(cards):
+    """Return "Now": lists near a live window, then recently changed priority charts.
+
+    Charts follow ``order.NOW_PRIORITY``, at most ``order.NOW_PER_TYPE`` per media type.
+    """
+    chosen = sorted(
+        (card for card in cards if card.live_status is not None),
+        key=lambda card: (card.live_status != "live", card.position, card.custom_list.id),
+    )
+    priority = order.now_index()
+    charts = sorted(
+        (card for card in cards if card.live_status is None and card.recent and _key(card) in priority),
+        key=lambda card: priority[_key(card)],
+    )
+    per_type = {}
+    for card in charts:
+        if len(chosen) >= NOW_LIMIT:
+            break
+        if any(per_type.get(media_type, 0) >= order.NOW_PER_TYPE for media_type in card.media_types):
+            continue
+        for media_type in card.media_types:
+            per_type[media_type] = per_type.get(media_type, 0) + 1
+        chosen.append(card)
+    return chosen[:NOW_LIMIT]
 
 
 def _shelf_types(featured):
@@ -450,21 +489,15 @@ def _kind_counts(cards):
 
 def landing_shelves(request, cards, now):
     """Return the landing shelves: Now, one per media type, then Across Media."""
-    now_cards = sorted(
-        (
-            card
-            for card in cards
-            if card.live_status is not None or (card.kind == "chart" and card.recent)
-        ),
-        key=_now_sort_key,
-    )
+    now_cards = _now_cards(cards)
     by_type = {}
-    for card in sorted(cards, key=_shelf_sort_key):
+    for card in cards:
         for media_type in _shelf_types(card):
             by_type.setdefault(media_type, []).append(card)
-    order = [value for value in (*SHELF_MEDIA_TYPES, MIXED) if by_type.get(value)]
-    shown = {card.custom_list.id: card for card in now_cards[:NOW_LIMIT]}
-    for media_type in order:
+    by_type = {media_type: _shelf_sorted(shelf, media_type) for media_type, shelf in by_type.items()}
+    shelf_order = [value for value in (*SHELF_MEDIA_TYPES, MIXED) if by_type.get(value)]
+    shown = {card.custom_list.id: card for card in now_cards}
+    for media_type in shelf_order:
         shown.update({card.custom_list.id: card for card in by_type[media_type][:SHELF_LIMIT]})
     render = _CardRenderer(request, cards, list(shown.values()))
     shelves = []
@@ -480,16 +513,16 @@ def landing_shelves(request, cards, now):
             see_all=f"{SHELVES_PATH}?media_type={media_type}",
             kind_counts=_kind_counts(by_type[media_type]),
         )
-        for media_type in order
+        for media_type in shelf_order
     )
     return shelves
 
 
 def media_type_shelves(request, cards, media_type):
     """Return one shelf per kind for a media type (or ``mixed``), with every card."""
-    selected = sorted(
+    selected = _shelf_sorted(
         (card for card in cards if media_type in _shelf_types(card)),
-        key=_shelf_sort_key,
+        media_type,
     )
     render = _CardRenderer(request, selected, selected)
     return [

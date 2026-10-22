@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from app.providers import nytbooks
-from lists.featured import overrides, registry
+from lists.featured import order, overrides, registry
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import static as static_adapter
 from lists.featured.definitions import static as static_definitions
@@ -21,6 +21,9 @@ class RegistryContractTests(SimpleTestCase):
 
     def test_registry_has_no_problems(self):
         self.assertEqual(registry.problems(), [])
+
+    def test_curated_order_names_only_real_keys(self):
+        self.assertEqual(order.problems(registry.all_definitions()), [])
 
     def test_keys_and_identities_are_unique(self):
         definitions = registry.all_definitions()
@@ -282,3 +285,47 @@ class EntryKeyTests(SimpleTestCase):
     def test_ids_are_strings_and_blank_ids_are_dropped(self):
         entry = Entry(1, "X", ids={"tmdb": 550, "imdb": "", "igdb": None})
         self.assertEqual(entry.ids, {"tmdb": "550"})
+
+
+class CuratedOrderCheckTests(SimpleTestCase):
+    """``order.problems()`` catches typos and misplaced keys in ``order.py``."""
+
+    definitions = (
+        make_definition(key="film-chart", media_types=("movie",)),
+        make_definition(key="film-canon", kind="canon", media_types=("movie",)),
+        make_definition(key="duo", media_types=("movie", "tv")),
+    )
+
+    def check(self, shelves, now=(), allowed=frozenset()):
+        with (
+            patch.object(order, "SHELF_ORDER", shelves),
+            patch.object(order, "NOW_PRIORITY", list(now)),
+            patch.object(order, "ALLOWED_MISSING", allowed),
+        ):
+            return order.problems(self.definitions)
+
+    def test_valid_order_has_no_problems(self):
+        self.assertEqual(self.check({"movie": ["film-chart", "duo"], "tv": ["duo"]}, now=["film-chart"]), [])
+
+    def test_unknown_keys_fail_unless_allowed_missing(self):
+        self.assertEqual(
+            self.check({"movie": ["film-chart", "flim-chart"]}, now=["netflx"]),
+            ["SHELF_ORDER['movie']: unknown key 'flim-chart'", "NOW_PRIORITY: unknown key 'netflx'"],
+        )
+        self.assertEqual(self.check({"movie": ["flim-chart"]}, allowed=frozenset({"flim-chart"})), [])
+
+    def test_misplaced_and_duplicate_keys(self):
+        self.assertEqual(
+            self.check({"tv": ["film-chart"], "movie": ["duo", "duo"], "podcast": []}, now=["film-canon", "duo", "duo"]),
+            [
+                "SHELF_ORDER['tv']: 'film-chart' is not a tv list",
+                "SHELF_ORDER['movie']: duplicate keys",
+                "SHELF_ORDER['podcast']: unknown media type",
+                "NOW_PRIORITY: duplicate keys",
+                "NOW_PRIORITY: 'film-canon' is not a chart",
+            ],
+        )
+
+    def test_sync_ranks_take_the_best_shelf(self):
+        with patch.object(order, "SHELF_ORDER", {"movie": ["film-chart", "duo"], "tv": ["duo"]}):
+            self.assertEqual(order.sync_ranks(), {"film-chart": 0, "duo": 0})

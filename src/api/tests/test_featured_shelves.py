@@ -1,18 +1,20 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
 
-from api.views.featured import list_payloads
+from api.views import featured as featured_views
+from api.views.featured import Featured, list_payloads
 from api.views.lists import list_payload
 from app.models import Item, MediaTypes, Sources
-from lists.featured import registry
+from lists.featured import order, registry
 from lists.featured.registry import LiveWindow
 from lists.featured.types import Entry
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
@@ -42,6 +44,7 @@ class FeaturedApiTestCase(FeaturedTestCase):
 
     def setUp(self):
         super().setUp()
+        self.curate(shelves={}, now=["chart-films", "album-chart"])
         self.viewer = get_user_model().objects.create_user(username="viewer")
         self.client = APIClient()
         self.client.force_authenticate(self.viewer)
@@ -78,6 +81,13 @@ class FeaturedApiTestCase(FeaturedTestCase):
             featured_position=40,
         )
         CustomListItem.objects.create(custom_list=self.manual, item=Item.objects.get(media_id="hf-1"), position=1)
+
+    def curate(self, *, shelves=None, now=None):
+        """Replace the curated order (``lists.featured.order``) for this test."""
+        if shelves is not None:
+            self.enterContext(patch.object(order, "SHELF_ORDER", shelves))
+        if now is not None:
+            self.enterContext(patch.object(order, "NOW_PRIORITY", now))
 
     def get(self, path, **params):
         with registry.override_definitions(self.definitions):
@@ -166,16 +176,16 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertIsNone(now["media_type"])
         self.assertIsNone(now["see_all"])
         self.assertEqual(now["kind_counts"], {})
-        # Live first, then charts changed this week, newest change first.
-        self.assertEqual([card["slug"] for card in now["lists"]], ["awards-live", "album-chart", "chart-films"])
+        # Live first, then charts changed this week, in NOW_PRIORITY order.
+        self.assertEqual([card["slug"] for card in now["lists"]], ["awards-live", "chart-films", "album-chart"])
         self.assertEqual(now["live_count"], 1)
 
         self.assertEqual(movie["title"], "Movies")
         self.assertEqual(movie["see_all"], "/api/v1/lists/featured/shelves/?media_type=movie")
         self.assertEqual(
             [card["slug"] for card in movie["lists"]],
-            # live, then changed in the last 7 days, then by position
-            ["awards-live", "headline-films", "chart-films", "staff-picks", "both-types"],
+            # live, then (nothing curated here) by position
+            ["awards-live", "headline-films", "staff-picks", "chart-films", "both-types"],
         )
         self.assertEqual(movie["kind_counts"], {"chart": 1, "award": 1, "canon": 1, "community": 1, "editorial": 1})
         self.assertEqual(movie["count"], 5)
@@ -293,6 +303,121 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
 
     def test_requires_authentication(self):
         self.assertEqual(APIClient().get("/api/v1/lists/featured/shelves/").status_code, 401)
+
+
+class CuratedOrderTests(FeaturedApiTestCase):
+    """Shelves and "Now" follow ``lists.featured.order``."""
+
+    def setUp(self):
+        super().setUp()
+        extra = [
+            make_definition(key="chart-b", name="Chart B", position=102),
+            make_definition(key="chart-c", name="Chart C", position=103),
+            make_definition(key="duo", name="Duo", position=104, kind="canon", media_types=("movie", "tv")),
+        ]
+        self.definitions = [*self.definitions, *extra]
+        with registry.override_definitions(self.definitions):
+            for definition in extra:
+                self.assertTrue(self.run_list(definition, movie_entries(definition.key, 2)).ok)
+        twin = CustomList.objects.create(
+            owner=self.owner,
+            name="Alpha Picks",
+            visibility=CustomList.Visibility.PUBLIC,
+            is_featured=True,
+            featured_position=40,
+        )
+        CustomListItem.objects.create(custom_list=twin, item=Item.objects.get(media_id="hf-1"), position=1)
+        self.curate(
+            shelves={
+                "movie": ["chart-c", "no-such-list", "chart-films", "awards-live"],
+                "tv": ["both-types", "duo"],
+            },
+        )
+
+    def slugs(self, shelf):
+        return [card["slug"] for card in shelf["lists"]]
+
+    def landing(self):
+        shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+        return {shelf["key"]: shelf for shelf in shelves}
+
+    def test_live_then_curated_then_position_and_name(self):
+        shelves = self.landing()
+        self.assertEqual(
+            self.slugs(shelves["movie"]),
+            # live (even though curated last), the curated keys in order (unknown keys
+            # ignored), then by position, then name: Alpha and Staff share position 40.
+            [
+                "awards-live", "chart-c", "chart-films", "headline-films", "alpha-picks", "staff-picks",
+                "chart-b", "duo", "both-types",
+            ],
+        )
+
+    def test_two_type_lists_follow_each_shelfs_order(self):
+        shelves = self.landing()
+        movie = self.slugs(shelves["movie"])
+        self.assertLess(movie.index("duo"), movie.index("both-types"))
+        self.assertEqual(self.slugs(shelves["tv"]), ["both-types", "duo"])
+
+    def test_media_type_view_orders_each_kind_the_same_way(self):
+        data = self.get("/api/v1/lists/featured/shelves/", media_type="movie").data
+        groups = {shelf["key"]: self.slugs(shelf) for shelf in data["shelves"]}
+        self.assertEqual(groups["chart"], ["chart-c", "chart-films", "chart-b"])
+        self.assertEqual(groups["canon"], ["duo", "both-types"])
+        self.assertEqual(groups["editorial"], ["alpha-picks", "staff-picks"])
+        tv = self.get("/api/v1/lists/featured/shelves/", media_type="tv").data
+        self.assertEqual(self.slugs(tv["shelves"][0]), ["both-types", "duo"])
+
+    def test_now_shows_only_recent_priority_charts_in_order(self):
+        self.curate(now=["album-chart", "chart-c", "both-types", "chart-films"])
+        FeaturedListSync.objects.filter(key="chart-films").update(content_changed_at=timezone.now() - timedelta(days=8))
+        now = self.landing()["now"]
+        # chart-b changed this week but isn't a priority chart; chart-films is stale;
+        # both-types is a priority key that didn't change this week.
+        self.assertEqual(self.slugs(now), ["awards-live", "album-chart", "chart-c"])
+        self.assertEqual(now["count"], 3)
+
+
+def now_card(key, media_types=("movie",), *, live_status=None, position=150, recent=True):
+    """Return a ``Featured`` for "Now" tests, without the database."""
+    definition = make_definition(key=key, media_types=media_types, position=position)
+    custom_list = CustomList(id=position, name=key, featured_position=position)
+    return Featured(
+        custom_list=custom_list,
+        definition=definition,
+        sync=None,
+        media_types=media_types,
+        kind="chart",
+        live_status=live_status,
+        live_window=None,
+        recent=recent,
+    )
+
+
+class NowStripTests(SimpleTestCase):
+    """The "Now" caps: two charts per media type, ten cards in all."""
+
+    def test_caps_charts_per_media_type_and_in_total(self):
+        types = ("movie", "tv", "book", "game", "music", "anime")
+        charts = [now_card(f"{media_type}-{number}", (media_type,), position=200 + index * 3 + number)
+                  for index, media_type in enumerate(types) for number in range(3)]
+        live = [now_card("ceremony", ("book",), live_status="live", position=1),
+                now_card("tomorrow", ("movie",), live_status="upcoming", position=2)]
+        priority = [card.definition.key for card in charts]
+        with patch.object(order, "NOW_PRIORITY", priority):
+            chosen = [card.definition.key for card in featured_views._now_cards([*charts, *live])]
+        self.assertEqual(len(chosen), featured_views.NOW_LIMIT)
+        self.assertEqual(
+            chosen,
+            # Live lists don't use up their type's two chart slots.
+            ["ceremony", "tomorrow", "movie-0", "movie-1", "tv-0", "tv-1", "book-0", "book-1", "game-0", "game-1"],
+        )
+
+    def test_two_type_charts_count_against_both_types(self):
+        charts = [now_card("duo", ("movie", "tv")), now_card("movie-a"), now_card("tv-a", ("tv",)), now_card("tv-b", ("tv",))]
+        with patch.object(order, "NOW_PRIORITY", ["duo", "movie-a", "tv-a", "tv-b"]):
+            chosen = [card.definition.key for card in featured_views._now_cards(charts)]
+        self.assertEqual(chosen, ["duo", "movie-a", "tv-a"])
 
 
 class FeaturedItemNotesTests(FeaturedApiTestCase):

@@ -32,6 +32,7 @@ Keep about 130 public featured lists, owned by the `Spine` user, current from ma
 | `writer.py` | foundation | guarded atomic write, snapshot, health |
 | `engine.py` | foundation | `run(definition, owner, trigger)` with a cache lock |
 | `dispatch.py` | foundation | pure `due(...)` and the dispatcher task |
+| `order.py` | curation | `SHELF_ORDER` and `NOW_PRIORITY`: the curated order of shelves, "Now" and first syncs |
 | `health.py` | foundation | `report()` |
 | `static/<key>.csv` | canon agents | one curated list each |
 | `static/manifest-<family>.csv` | canon agents | one row per static list |
@@ -202,7 +203,7 @@ No new `CustomList` columns.
   - its `deferred_until` passed;
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
-- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first, so one of the worker's two slots is always free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
+- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
 - **TaskResult noise:** skip the dispatcher in `app/signals.py:create_task_result_on_publish`, and set `ignore_result=True` on it.
 - **Legacy entries:** the `Sync NYT featured lists` and `Sync Letterboxd Top 500 featured list` beat entries stay. The commands they call become thin wrappers over the engine and keep their CLI, messages and tests. `django_celery_beat` never deletes rows, so never remove those task names.
 
@@ -237,10 +238,20 @@ All of it is additive.
 
 - **Shelf order:** `now`; then each exposed media type that has lists, in the order movie, tv, anime, manga, game, book, comic, music; then `mixed`.
 - **Hidden media types:** lists whose media types are all hidden by `app.exposure` are omitted (music when it's off, for example).
-- **"Now":** lists inside or within 24 h of a live window, then charts whose content changed in the last 7 days. Live lists first, then `content_changed_at` descending. At most 10.
-- **Within a shelf:** live, then content changed in the last 7 days, then `position`.
+- **"Now":** lists inside or within 24 h of a live window come first (inside before near, then by `position`). Then the charts in `order.NOW_PRIORITY` whose content changed in the last 7 days, in that order, at most 2 per media type (a chart with two media types counts against both; live lists don't count). At most 10 cards in all. A chart not in `NOW_PRIORITY` never appears in "Now".
+- **Within a shelf:** live lists (inside a window) first; then the keys in `order.SHELF_ORDER[<media type>]`, in that order; then every other list by `position`, then name. A list with two media types follows each shelf's own order. "Across Media" has no curated order.
 
-**`GET /api/v1/lists/featured/shelves/?media_type=movie`** returns `{"generated_at", "media_type": "movie", "shelves": [...]}`. There's one shelf per kind with lists, in the order chart, award, canon, community, curator, editorial, with titles "Charts", "Awards", "Critics & Canon", "Community", "Curators' Picks" and "Editorial". Each shelf holds all of its cards, ordered like the landing shelf. `?media_type=mixed` does the same for "Across Media" (lists with 3 or more media types). An unknown value is a 400; a media type hidden by `app.exposure` is a 404. Empty shelves are left out, including "Now".
+### How to change the order
+
+All curation lives in `src/lists/featured/order.py`; the weekly review edits only that file.
+
+- **Reorder a shelf:** move keys in `SHELF_ORDER["<media type>"]`. The first 12 are what the landing shelf shows. A key not listed falls after the curated ones, by `position`.
+- **Change "Now":** reorder or add chart keys in `NOW_PRIORITY`. Only `kind="chart"` lists are allowed, and only the first two recently changed charts per media type show.
+- **New list:** add its key where it belongs. A live ceremony list (`booker-prize-2026`) goes right after its award's all-time list; its live state floats it to the top during its window.
+- **Planned list not in the registry yet:** add its key to `ALLOWED_MISSING`, or leave it out until it lands.
+- **Check:** `uv run --locked python manage.py test lists.tests.featured.test_registry` fails on any unknown key, a key on a shelf its media types don't include, a duplicate, or a non-chart in `NOW_PRIORITY`. The order also decides which never-synced lists the dispatcher syncs first.
+
+**`GET /api/v1/lists/featured/shelves/?media_type=movie`** returns `{"generated_at", "media_type": "movie", "shelves": [...]}`. There's one shelf per kind with lists, in the order chart, award, canon, community, curator, editorial, with titles "Charts", "Awards", "Critics & Canon", "Community", "Curators' Picks" and "Editorial". Each shelf holds all of its cards, ordered by the same rule as the landing shelf (live, curated, then position and name). `?media_type=mixed` does the same for "Across Media" (lists with 3 or more media types). An unknown value is a 400; a media type hidden by `app.exposure` is a 404. Empty shelves are left out, including "Now".
 
 **Card shape:**
 
