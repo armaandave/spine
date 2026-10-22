@@ -299,6 +299,8 @@ class FeaturedListSync(models.Model):
         GUARDED = "guarded", "Guarded"
         FAILED = "failed", "Failed"
         EMPTY = "empty", "Empty"
+        # Some entries waited for a provider's daily budget or rate limit.
+        DEFERRED = "deferred", "Deferred"
 
     # Identity
     key = models.SlugField(max_length=128, unique=True)
@@ -327,12 +329,17 @@ class FeaturedListSync(models.Model):
     last_error = models.TextField(blank=True, default="")
     consecutive_failures = models.PositiveIntegerField(default=0)
     lease_until = models.DateTimeField(null=True, blank=True)
+    # When a deferred run is retried: the provider's budget reset or 429 wait.
+    deferred_until = models.DateTimeField(null=True, blank=True)
     # Counts
     entry_count = models.PositiveIntegerField(default=0)
     resolved_count = models.PositiveIntegerField(default=0)
     unresolved = models.JSONField(blank=True, default=list)
     # Charts only: {"<item_id>": "▲2" | "▼1" | "NEW"} against the previous content.
     item_notes = models.JSONField(blank=True, default=dict)
+    # Every list: what each entry shows ("Winner · Best Picture", "▲2 · $12.4M"), keyed
+    # by item ID, or by "<source>:person:<id>" in people lists.
+    entry_notes = models.JSONField(blank=True, default=dict)
 
     class Meta:
         """Meta options for featured-list sync state."""

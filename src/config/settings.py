@@ -727,6 +727,17 @@ FEATURED_REPORT_TOKEN = config(
     default=secret("FEATURED_REPORT_TOKEN_FILE", ""),
 )
 
+# Requests featured-list syncs may make per UTC day (app/providers/quota.py). They
+# share the app's Hardcover key, which has a daily quota on top of ~60 a minute, and
+# Open Library's 20 a minute. Once a budget is spent, entries that need the provider
+# wait for the next day; the app's own search and pages are never limited by this.
+FEATURED_HARDCOVER_DAILY_BUDGET = config(
+    "FEATURED_HARDCOVER_DAILY_BUDGET", default=1000, cast=int
+)
+FEATURED_OPENLIBRARY_DAILY_BUDGET = config(
+    "FEATURED_OPENLIBRARY_DAILY_BUDGET", default=2000, cast=int
+)
+
 IS_PROD = not any(cmd in sys.argv for cmd in ("runserver", "test"))
 if IS_PROD:
     ALLAUTH_TRUSTED_CLIENT_IP_HEADER = "X-Real-IP"

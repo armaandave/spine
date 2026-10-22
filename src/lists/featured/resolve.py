@@ -16,17 +16,20 @@ Order, first hit wins:
    Capped per run by ``Guards.max_title_searches``.
 
 Steps 4-6 are cached under ``featured:resolve:…``: hits for 30 days, misses for one
-day. Provider errors and an exhausted budget are never cached.
+day. Provider errors and an exhausted budget are never cached. An entry whose lookup
+hit a provider's daily budget or rate limit (``app.providers.quota``) is *deferred*:
+unresolved, uncached, and left out of the resolve rate until the next run.
 """
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 
 import requests
 from django.core.cache import cache
 
 from app.models import PRIMARY_MEDIA_TYPES, MediaTypes, Sources
-from app.providers import hardcover, igdb, openlibrary, services, tmdb
+from app.providers import hardcover, igdb, openlibrary, quota, services, tmdb
 from lists.featured import overrides as overrides_module
 from lists.featured.helpers import sanitize
 from lists.featured.text import (
@@ -137,13 +140,24 @@ class Resolution:
 
     entry: object
     match: Match | None
-    how: str = ""  # override, ref, id, imdb, steam, isbn, title, cache, skip, review
+    how: str = ""  # override, ref, id, imdb, steam, isbn, title, cache, skip, review, deferred
     reason: str = ""  # why it is unresolved
+    retry_at: datetime | None = None  # deferred: when the provider may be called again
 
     @property
     def skipped(self):
         """Return whether an override removed this entry from the list."""
         return self.how == "skip"
+
+    @property
+    def deferred(self):
+        """Return whether the entry waits for a provider's budget or rate limit."""
+        return self.how == "deferred"
+
+
+def deferred_resolution(entry, error):
+    """Return the ``Resolution`` for an entry whose lookup raised ``quota.Deferred``."""
+    return Resolution(entry, None, "deferred", str(error), retry_at=error.until)
 
 
 class _Uncacheable(Exception):  # noqa: N818
@@ -274,6 +288,8 @@ class Resolver:
             match, how = self._network(entry)
         except _Uncacheable as reason:
             return Resolution(entry, None, "", str(reason))
+        except quota.Deferred as error:
+            return deferred_resolution(entry, error)
         if self.use_cache:
             cache.set(cache_key, match.as_cache() if match else MISS, HIT_TTL if match else MISS_TTL)
         if match is None:

@@ -42,7 +42,7 @@ class Command(BaseCommand):
             result = engine.run(definition, owner, trigger="command", resolver=resolver)
 
         self._print(definition, result, resolver, options["show"])
-        if result.status not in ("dry-run", *engine.SUCCESS_STATUSES):
+        if result.status not in ("dry-run", "deferred", *engine.SUCCESS_STATUSES):
             raise CommandError(f"{definition.key}: {result.status}: {result.message}")
 
     def _print(self, definition, result, resolver, show):
@@ -89,3 +89,6 @@ class Command(BaseCommand):
         elif result.ok:
             list_id = result.custom_list.pk if result.custom_list is not None else None
             self.stdout.write(self.style.SUCCESS(f"Status {result.status}; list {list_id}."))
+        elif result.status == "deferred":
+            message = result.message or "some entries wait for a provider's quota"
+            self.stdout.write(self.style.WARNING(f"Deferred: {message}"))

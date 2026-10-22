@@ -6,6 +6,7 @@ from lists.featured import engine, registry, resolve
 from lists.featured.adapters import nyt as nyt_adapter
 from lists.featured.resolve import Resolver
 from lists.featured.types import GuardError
+from lists.models import FeaturedListSync
 
 LIST_TAGS = ["NYT Best Sellers", "Books"]
 
@@ -69,6 +70,10 @@ class Command(BaseCommand):
         failures = []
         for definition in nytbooks.FEATURED_CHARTS:
             result = engine.run(_featured_definition(definition), owner, trigger="command")
+            if result.status == FeaturedListSync.Status.DEFERRED:
+                # Waiting for Hardcover's or Open Library's quota: retried later, not a failure.
+                self.stdout.write(self.style.WARNING(f"{definition['fallback_name']}: {result.message}"))
+                continue
             if not result.ok:
                 chart_name = (result.fetch.name if result.fetch else None) or definition["fallback_name"]
                 error = _legacy_error(result, chart_name)

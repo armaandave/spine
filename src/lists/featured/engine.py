@@ -5,11 +5,13 @@ import uuid
 from dataclasses import dataclass, field
 
 from celery.exceptions import SoftTimeLimitExceeded
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db.models import F
 from django.utils import timezone
 
+from app.providers import quota
 from lists.featured import overrides, registry, writer
 from lists.featured.adapters import ADAPTERS
 from lists.featured.helpers import sanitize
@@ -23,6 +25,15 @@ OWNER_USERNAME = "Spine"
 LOCK_PREFIX = "featured:lock:"
 LOCK_GRACE_SECONDS = 120
 SUCCESS_STATUSES = (FeaturedListSync.Status.OK, FeaturedListSync.Status.UNCHANGED)
+QUOTA_SCOPE = "featured"
+
+
+def provider_budgets():
+    """Return the daily request budgets featured syncs get (``app.providers.quota``)."""
+    return {
+        "hardcover": settings.FEATURED_HARDCOVER_DAILY_BUDGET,
+        "openlibrary": settings.FEATURED_OPENLIBRARY_DAILY_BUDGET,
+    }
 
 
 @dataclass
@@ -102,8 +113,28 @@ def _record_failure(sync, status, message, resolutions=None):
     sync.refresh_from_db(fields=["consecutive_failures"])
 
 
+def _record_deferral(sync, message, until, resolutions=None):
+    """Leave the list as it is and retry at ``until``; neither a success nor a failure."""
+    sync.last_status = FeaturedListSync.Status.DEFERRED
+    sync.last_error = sanitize(message)
+    sync.deferred_until = until
+    fields = ["last_status", "last_error", "deferred_until"]
+    if resolutions is not None:
+        counted = writer.countable(resolutions)
+        sync.entry_count = len(counted)
+        sync.resolved_count = sum(1 for resolution in counted if resolution.match is not None)
+        sync.unresolved = writer.unresolved_rows(resolutions)
+        fields += ["entry_count", "resolved_count", "unresolved"]
+    sync.save(update_fields=fields)
+
+
 def dry_run(definition, owner=None, *, fetch_result=None, resolver=None):
     """Fetch and resolve without writing anything; report what the guards would do."""
+    with quota.scope(QUOTA_SCOPE, provider_budgets()):
+        return _dry_run(definition, owner, fetch_result=fetch_result, resolver=resolver)
+
+
+def _dry_run(definition, owner, *, fetch_result, resolver):
     fetch = fetch_result if fetch_result is not None else ADAPTERS[definition.adapter].fetch(definition)
     owner = owner or get_user_model().objects.filter(username=OWNER_USERNAME).first()
     fetch, resolutions, previous = _resolve(definition, owner, fetch, resolver)
@@ -113,6 +144,10 @@ def dry_run(definition, owner=None, *, fetch_result=None, resolver=None):
         writer.check_guards(definition, fetch, resolutions, previous)
     except GuardError as guard:
         message, error = str(guard), guard
+    waiting = writer.deferred(resolutions)
+    if waiting and not message:
+        keeps = "" if writer.writes_despite_deferrals(definition, resolutions, previous) else "; the list would be left as it is"
+        message = f"{len(waiting)} entries deferred ({waiting[0].reason}){keeps}"
     return RunResult(
         key=definition.key,
         status="dry-run",
@@ -142,11 +177,18 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
     fetch, resolutions = None, None
     logger.info("Featured list %s: sync started (%s)", definition.key, trigger)
     try:
-        owner = owner or default_owner()
-        if fetch_result is None:
-            fetch_result = ADAPTERS[definition.adapter].fetch(definition)
-        fetch, resolutions, previous = _resolve(definition, owner, fetch_result, resolver)
+        with quota.scope(QUOTA_SCOPE, provider_budgets()):
+            owner = owner or default_owner()
+            if fetch_result is None:
+                fetch_result = ADAPTERS[definition.adapter].fetch(definition)
+            fetch, resolutions, previous = _resolve(definition, owner, fetch_result, resolver)
         writer.check_guards(definition, fetch, resolutions, previous)
+        waiting = writer.deferred(resolutions)
+        if waiting and not writer.writes_despite_deferrals(definition, resolutions, previous):
+            message = f"{len(waiting)} entries deferred ({waiting[0].reason}); the list was left as it is."
+            _record_deferral(sync, message, writer.retry_at(resolutions), resolutions)
+            logger.info("Featured list %s: %s", definition.key, message)
+            return RunResult(definition.key, FeaturedListSync.Status.DEFERRED, message, fetch, resolutions)
         written = writer.commit(
             definition,
             owner,
@@ -156,6 +198,10 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
             now=now,
             definition_hash=compute_hash(definition),
         )
+    except quota.Deferred as error:  # the adapter itself needed the provider
+        _record_deferral(sync, str(error), error.until)
+        logger.info("Featured list %s: %s", definition.key, error)
+        return RunResult(definition.key, FeaturedListSync.Status.DEFERRED, str(error), error=error)
     except GuardError as error:
         _record_failure(sync, error.status, str(error), resolutions)
         logger.warning("Featured list %s: %s", definition.key, error)
@@ -187,6 +233,7 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
     return RunResult(
         key=definition.key,
         status=written.status,
+        message=sync.last_error if written.status == FeaturedListSync.Status.DEFERRED else "",
         fetch=fetch,
         resolutions=resolutions,
         custom_list=written.custom_list,

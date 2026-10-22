@@ -3,6 +3,10 @@
 ``prepare`` fills in missing titles and posters for Items that don't exist yet (the
 only network step), ``check_guards`` refuses suspicious results, and ``commit`` does
 everything else in one transaction.
+
+Entries deferred by a provider's budget or rate limit (``Resolution.deferred``) don't
+count toward the resolve rate. A run with deferred entries writes only when the list
+wouldn't shrink (``writes_despite_deferrals``), and is retried at ``deferred_until``.
 """
 
 import hashlib
@@ -18,10 +22,10 @@ from django.db import transaction
 from app.external_ratings import eligible_rating_sources
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
 from app.models import Item, MediaTypes
-from app.providers import services
+from app.providers import quota, services
 from app.tasks import enqueue_external_rating_batches
 from lists.featured.helpers import sanitize
-from lists.featured.resolve import PROVIDER_ERRORS, Resolution
+from lists.featured.resolve import PROVIDER_ERRORS, Resolution, deferred_resolution
 from lists.featured.types import GuardError
 from lists.models import (
     CustomList,
@@ -53,6 +57,27 @@ class WriteResult:
 def countable(resolutions):
     """Return the resolutions that count toward resolve rates (overrides may skip)."""
     return [resolution for resolution in resolutions if not resolution.skipped]
+
+
+def deferred(resolutions):
+    """Return the resolutions waiting for a provider's budget or rate limit."""
+    return [resolution for resolution in resolutions if resolution.deferred]
+
+
+def retry_at(resolutions):
+    """Return when every deferred entry may be retried, or None."""
+    times = [resolution.retry_at for resolution in deferred(resolutions) if resolution.retry_at]
+    return max(times) if times else None
+
+
+def writes_despite_deferrals(definition, resolutions, previous_count):
+    """Return whether a run with deferred entries should still write the list.
+
+    Only when the list wouldn't shrink: a new list appears with what resolved, and a
+    growing one keeps its progress, but a current list is never cut short for a day.
+    """
+    stored = len(ordered_matches(definition, resolutions))
+    return stored > 0 and stored >= previous_count
 
 
 def unresolved_rows(resolutions, limit=MAX_UNRESOLVED_ROWS):
@@ -148,20 +173,24 @@ def prepare(definition, resolutions):
     if not needed:
         return list(resolutions)
     existing = _existing_items(needed)
-    filled, failed = {}, {}
+    filled, failed, waiting = {}, {}, {}
     for match in needed:
         key = _item_key(match)
-        if key in existing or key in filled or key in failed:
+        if key in existing or key in filled or key in failed or key in waiting:
             continue
         try:
             filled[key] = _metadata_match(match)
+        except quota.Deferred as error:
+            waiting[key] = error
         except PROVIDER_ERRORS as error:
             failed[key] = f"metadata lookup failed: {sanitize(error, 160)}"
     prepared = []
     for resolution in resolutions:
         match = resolution.match
         key = _item_key(match) if match is not None else None
-        if key in failed:
+        if key in waiting:
+            prepared.append(deferred_resolution(resolution.entry, waiting[key]))
+        elif key in failed:
             prepared.append(Resolution(resolution.entry, None, "", failed[key]))
         elif key in filled:
             prepared.append(replace(resolution, match=filled[key]))
@@ -210,8 +239,11 @@ def check_guards(definition, fetch, resolutions, previous_count):
             expected=fetch.expected_count,
             actual=len(fetch.entries),
         )
-    counted = countable(resolutions)
+    waiting = deferred(resolutions)
+    counted = [resolution for resolution in countable(resolutions) if not resolution.deferred]
     resolved = [resolution for resolution in counted if resolution.match is not None]
+    if not resolved and waiting:
+        return  # nothing to judge yet; the engine records the deferral
     if not resolved:
         raise GuardError(
             "zero_resolved",
@@ -229,7 +261,8 @@ def check_guards(definition, fetch, resolutions, previous_count):
         )
     stored = len(ordered_matches(definition, resolutions))
     if (
-        previous_count
+        not waiting  # with deferrals the engine writes only when the list doesn't shrink
+        and previous_count
         and previous_count >= guards.drop_check_min_previous
         and stored < previous_count * (1 - guards.max_drop)
     ):
@@ -406,7 +439,11 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
             sync.content_changed_at = now
         sync.last_success_at = now
         sync.last_status = FeaturedListSync.Status.OK if changed else FeaturedListSync.Status.UNCHANGED
+        sync.deferred_until = retry_at(resolutions)
         sync.last_error = ""
+        if sync.deferred_until is not None:
+            sync.last_status = FeaturedListSync.Status.DEFERRED
+            sync.last_error = sanitize(deferred(resolutions)[0].reason)
         sync.consecutive_failures = 0
         sync.entry_count = len(counted)
         sync.resolved_count = sum(1 for resolution in counted if resolution.match is not None)

@@ -8,7 +8,7 @@
 - ``make_definition(**fields)`` returns a valid ``FeaturedList`` with test defaults.
 - ``fake_adapter(result)`` registers a temporary adapter (key ``"test"``) that returns
   ``result`` (a ``FetchResult``, a list of entries, or a callable).
-- ``FeaturedTestCase`` clears the cache, creates the ``Spine`` owner, and offers
+- ``FeaturedTestCase`` clears the cache and provider quotas, creates the ``Spine`` owner, and offers
   ``run_list(definition, entries)`` and ``assertListRefs(custom_list, refs)``.
 """
 
@@ -22,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
 
+from app.providers import quota
 from lists.featured import engine, overrides, registry
 from lists.featured.adapters import ADAPTERS
 from lists.featured.registry import FeaturedList
@@ -116,6 +117,7 @@ class FeaturedTestCase(TestCase):
     def setUp(self):
         super().setUp()
         cache.clear()
+        quota.clear()
         self.owner = get_user_model().objects.create_user(username=engine.OWNER_USERNAME)
 
     def run_list(self, definition, entries=None, *, fetch_result=None, **run_kwargs):

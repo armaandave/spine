@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from app.providers import quota
 from lists.featured import dispatch, engine, registry
 from lists.models import FeaturedListSync
 
@@ -49,6 +50,7 @@ def _row(definition, sync, now):
         "last_success_at": _iso(sync.last_success_at if sync else None),
         "content_changed_at": _iso(sync.content_changed_at if sync else None),
         "consecutive_failures": sync.consecutive_failures if sync else 0,
+        "deferred_until": _iso(sync.deferred_until if sync else None),
         "last_error": sync.last_error if sync else "",
         "edition": sync.edition if sync else "",
         "entry_count": entry_count,
@@ -78,11 +80,20 @@ def report(now=None):
             "failing": sum(1 for row in rows if row["consecutive_failures"]),
             "stale": sum(1 for row in rows if row["stale"]),
             "never_synced": sum(1 for row in rows if row["status"] == "never"),
+            "deferred": sum(1 for row in rows if row["status"] == FeaturedListSync.Status.DEFERRED),
             "due": sum(1 for row in rows if row["due"]),
             "live": sum(1 for row in rows if row["live"] == "live"),
             "unresolved_entries": sum(row["entry_count"] - row["resolved_count"] for row in rows),
         },
         "problems": registry.problems(definitions),
+        "quota": {
+            provider: {
+                "budget": budget,
+                "used_today": quota.used_today(engine.QUOTA_SCOPE, provider, now),
+                "blocked_until": _iso(quota.blocked_until(provider, now)),
+            }
+            for provider, budget in engine.provider_budgets().items()
+        },
         "lists": rows,
         "orphans": orphans,
     }

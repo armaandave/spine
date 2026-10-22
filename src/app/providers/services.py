@@ -23,6 +23,7 @@ from app.providers import (
     manual,
     musicbrainz,
     openlibrary,
+    quota,
     tmdb,
 )
 
@@ -248,11 +249,22 @@ def api_request(
 
     rate_limit_retries = RATE_LIMIT_MAX_RETRIES if retry_rate_limits else 0
     for retry_number in range(rate_limit_retries + 1):
+        # Featured-list syncs: spend the provider's daily budget, or raise Deferred.
+        quota.before_request(provider, url)
         try:
             response = request_func(**request_kwargs)
             response.raise_for_status()
         except requests.exceptions.HTTPError as error:
             error_resp = error.response
+            if error_resp.status_code == requests.codes.too_many_requests:
+                # A wait longer than we would sleep (a daily quota) blocks the provider
+                # for featured-list syncs, which then defer instead of sleeping.
+                quota.rate_limited(
+                    provider,
+                    url,
+                    error_resp,
+                    max_sleep=RATE_LIMIT_MAX_WAIT_SECONDS,
+                )
             if (
                 error_resp.status_code != requests.codes.too_many_requests
                 or retry_number == rate_limit_retries

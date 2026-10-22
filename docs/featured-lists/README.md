@@ -156,6 +156,8 @@ Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 30 da
 3. resolve rate below `min_resolve_rate`
 4. a drop greater than `max_drop` against the previous count, checked only when that count is at least `drop_check_min_previous`
 
+Entries deferred by a provider budget (below) don't count toward the resolve rate, so a list is never `guarded` just because a budget ran out.
+
 Any failure raises `GuardError`, records the status, and leaves the list untouched. Otherwise one transaction does all of this:
 - get or create Items inside `app.mixins.collect_external_rating_item_ids()`, and call `app.tasks.enqueue_external_rating_batches(ids)` on commit (never one ratings task per Item);
 - get or create the `CustomList` by `(owner, *identity)`;
@@ -165,12 +167,26 @@ Any failure raises `GuardError`, records the status, and leaves the list untouch
 
 The `list-media-types` branch is adding `CustomList.locked_media_types`. Once it lands, the writer also sets that lock from `media_types`; that's handled at integration. Don't add a media-type column in this feature.
 
+## Provider budgets
+
+Featured syncs share production's provider keys with the app, so every run (and every dry run) happens inside `app.providers.quota.scope("featured", …)`. Inside it, each `services.api_request` to Hardcover (`api.hardcover.app`) or Open Library (`openlibrary.org`) counts against a per-UTC-day Redis counter: adapter fetches, ISBN lookups, title searches and the writer's metadata fetches for new Items alike. Cached provider answers cost nothing.
+
+| Setting | Default | Why |
+|---|---|---|
+| `FEATURED_HARDCOVER_DAILY_BUDGET` | 1000 | Hardcover has a daily quota on top of ~60 a minute, and the app's search and book pages need the same key. Steady state needs far less (resolutions are cached for 30 days); a first sync of every book list takes a few days. |
+| `FEATURED_OPENLIBRARY_DAILY_BUDGET` | 2000 | Open Library allows 20 a minute per IP, shared with the app. |
+
+- **Budget spent:** the request raises `quota.Deferred` without touching the network until midnight UTC. `0` stops featured calls to that provider entirely.
+- **429 with a long wait:** a 429 asking for more than the 60 s `api_request` would sleep (Hardcover's "Try again in 69163 seconds", in `Retry-After` or the body) blocks the provider for that long. Featured requests then defer at once instead of sleeping; a long 429 the app itself receives blocks featured syncs too. Shorter 429s still wait and retry as before.
+- **Deferred entries** stay unresolved, aren't cached, and don't count toward the resolve rate. A run with deferred entries writes the list only when it wouldn't shrink: a new list appears with what resolved, a growing one keeps its progress, and a current list is otherwise left as it is. Either way the status is `deferred`, `deferred_until` holds the reset time, and the dispatcher retries the list then. An adapter whose own fetch is deferred records the same.
+- The health report shows each list's `deferred_until`, a `deferred` total, and `quota` (budget, used today, blocked until) per provider.
+
 ## Models (one migration in `lists`)
 
 - **`FeaturedListSync`**:
   - Identity: `key` (unique slug); `custom_list` (nullable one-to-one, `SET_NULL`, related name `featured_sync`); `definition_hash`; `fingerprint`.
   - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced).
-  - Run state: `last_attempt_at`; `last_success_at`; `last_status` (`ok|unchanged|guarded|failed|empty`); `last_error` (sanitized, never containing a key); `consecutive_failures`; `lease_until`.
+  - Run state: `last_attempt_at`; `last_success_at`; `last_status` (`ok|unchanged|guarded|failed|empty|deferred`); `last_error` (sanitized, never containing a key); `consecutive_failures`; `lease_until`; `deferred_until` (when a deferred run is retried).
   - Counts: `entry_count`; `resolved_count`; `unresolved` (JSON, at most 50 rows of `{rank, key, title, year, creator}`).
 - **`FeaturedListSnapshot`**: `sync` (foreign key); `taken_on` (date); `edition`; `fingerprint`; `entries` (JSON `[[rank, entry_key, item_id|null], …]`). Unique on `(sync, taken_on)`. Written only when the fingerprint changes.
 
@@ -183,6 +199,7 @@ No new `CustomList` columns.
 - **What the dispatcher queues:** due syncs. A definition is due when:
   - it has never succeeded;
   - its `definition_hash` changed;
+  - its `deferred_until` passed;
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
 - **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first, so one of the worker's two slots is always free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
@@ -273,4 +290,5 @@ All of it is additive.
 ## Integration notes (for the orchestrator)
 
 - `list-media-types` is in progress in another session. It adds migration `0009_customlist_locked_media_types` and lock checks in both sync commands. If it lands first, renumber this feature's migration after it and have the writer set the lock.
+- `lists/0010_featured_deferral_and_entry_notes` (provider deferrals and per-entry notes) follows `0009_featured_list_sync`; renumber both together if another `lists` migration lands first.
 - Production gets the new worker and migration on the first deploy of this branch. Disk was at 99% on 2026-10-21, so watch the image build.

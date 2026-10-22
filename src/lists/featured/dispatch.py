@@ -54,7 +54,8 @@ def due(definition, sync, now, *, definition_hash=None):  # noqa: PLR0911
 
     Due when it never succeeded, its ``definition_hash`` changed, its cadence elapsed
     (all with exponential backoff after failures), or it is inside a live window
-    (from 20 minutes before it starts) and the window's interval elapsed.
+    (from 20 minutes before it starts) and the window's interval elapsed. A run that
+    deferred entries for a provider's quota is due again at ``deferred_until``.
     """
     window = definition.active_live_window(now)
     if is_leased(sync, now):
@@ -68,6 +69,10 @@ def due(definition, sync, now, *, definition_hash=None):  # noqa: PLR0911
         return Decision(due=True, reason="never attempted")
     if sync.consecutive_failures and now - last_attempt < backoff(sync.consecutive_failures, definition.cadence):
         return Decision(due=False, reason="backing off")
+    if sync.deferred_until is not None:
+        if now < sync.deferred_until:
+            return Decision(due=False, reason="deferred")
+        return Decision(due=True, reason="deferral over")
     if sync.last_success_at is None:
         return Decision(due=True, reason="never succeeded")
     if definition_hash is not None and definition_hash != sync.definition_hash:
