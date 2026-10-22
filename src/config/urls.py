@@ -13,6 +13,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.decorators import login_not_required
 from django.urls import include, path, register_converter
+from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from redis.asyncio import Redis as RedisClient
 
@@ -121,5 +122,10 @@ if settings.DEBUG:
 
 # Serve media and static files in development
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # The app loads images with a token, not a site login (nginx serves them in production).
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        view=login_not_required(serve),
+        document_root=settings.MEDIA_ROOT,
+    )
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None)
