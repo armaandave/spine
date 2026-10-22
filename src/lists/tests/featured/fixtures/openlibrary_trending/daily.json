@@ -1,0 +1,51 @@
+{
+ "query": "/trending/daily",
+ "days": 1,
+ "hours": 0,
+ "works": [
+  {
+   "key": "/works/OL17930368W",
+   "title": "Atomic Habits",
+   "author_name": [
+    "James Clear"
+   ],
+   "cover_edition_key": "OL36647151M",
+   "cover_i": 12539702,
+   "first_publish_year": 2016,
+   "editions": {
+    "numFound": 42,
+    "docs": [
+     {
+      "key": "/books/OL27918581M",
+      "title": "Atomic Habits"
+     }
+    ]
+   }
+  },
+  {
+   "key": "/works/OL24390422W",
+   "title": "Twisted Love",
+   "author_name": [
+    "Ana Huang"
+   ],
+   "cover_i": 12940491,
+   "first_publish_year": 2021,
+   "editions": {
+    "numFound": 18,
+    "docs": [
+     {
+      "key": "/books/OL37985553M",
+      "title": "Twisted Love"
+     }
+    ]
+   }
+  },
+  {
+   "key": "/works/OL1W",
+   "title": "No Editions Listed",
+   "author_name": [
+    "Anon"
+   ]
+  }
+ ]
+}

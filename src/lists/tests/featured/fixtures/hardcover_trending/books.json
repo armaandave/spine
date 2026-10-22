@@ -1,0 +1,8 @@
+{
+ "data": {
+  "books": [
+   {"id": 427578, "title": "Project Hail Mary", "release_year": 2021, "cached_image": "https://assets.hardcover.app/editions/3274049/8741341047797682-91mYu67RfUL._SL1500_.jpg", "author_name": "Andy Weir"},
+   {"id": 446681, "title": "Dungeon Crawler Carl", "release_year": 2020, "cached_image": "https://assets.hardcover.app/edition/30408734/dcc.jpg", "author_name": "Matt Dinniman"}
+  ]
+ }
+}

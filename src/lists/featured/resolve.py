@@ -423,7 +423,10 @@ def pick_title_match(entry, results):
             continue
         bucket = exact if normalize_title(title) == wanted else main
         bucket.append((result, year, bool(entry.creator and creators)))
-    candidates = exact or main
+    # A result whose credited creator matched beats one that credits nobody (often an
+    # empty stub record), even when the stub's title is the exact one.
+    confirmed = [candidate for candidate in exact if candidate[2]] or [candidate for candidate in main if candidate[2]]
+    candidates = confirmed or exact or main
     if not candidates:
         return None
     if entry.year:

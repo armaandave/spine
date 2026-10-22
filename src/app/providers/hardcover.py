@@ -104,8 +104,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 "ratings_count": hit["document"].get("ratings_count"),
                 "rating": hit["document"].get("rating"),
                 "edition_count": hit["document"].get("edition_count"),
-                "first_publish_year": hit["document"].get("first_publish_year"),
-                "author_name": hit["document"].get("author_name"),
+                # Hardcover's search documents carry release_year and author_names.
+                "first_publish_year": hit["document"].get("release_year"),
+                "author_name": hit["document"].get("author_names"),
             }
             for hit in hits
         ]
