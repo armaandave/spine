@@ -1,0 +1,240 @@
+{
+ "head": {
+  "vars": [
+   "w",
+   "title",
+   "wins",
+   "year",
+   "creators",
+   "types",
+   "tmdb_movie_",
+   "imdb_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q272036"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Wings"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1929|Q100|"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "William A. Wellman"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1927"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "28966"
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "tt0018578"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q463620"
+    },
+    "title": {
+     "type": "literal",
+     "value": "The Broadway Melody"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1930|Q101|"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Harry Beaumont"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1929"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "65203"
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "tt0019729"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q272599"
+    },
+    "title": {
+     "type": "literal",
+     "value": "All Quiet on the Western Front"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1930|Q102|"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Lewis Milestone"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1930"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "143"
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "tt0020629"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1066948"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Taste of Cherry"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1997||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Abbas Kiarostami"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1997"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "30983"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1189212"
+    },
+    "title": {
+     "type": "literal",
+     "value": "The Eel"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1997||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Shōhei Imamura"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1997"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "37627"
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "nm0000000"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q30122828"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Daniels"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|2022||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q109288825"
+    },
+    "creators": {
+     "type": "literal",
+     "value": ""
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "nm5539842"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q99999"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Undated Winner"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": ""
+    },
+    "year": {
+     "type": "literal",
+     "value": "1950"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "1"
+    }
+   }
+  ]
+ }
+}

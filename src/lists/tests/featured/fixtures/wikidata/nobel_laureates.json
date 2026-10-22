@@ -1,0 +1,44 @@
+{
+ "laureates": [
+  {
+   "id": "647",
+   "knownName": {
+    "en": "Eyvind Johnson"
+   },
+   "wikidata": {
+    "id": "Q206970"
+   }
+  },
+  {
+   "id": "648",
+   "knownName": {
+    "en": "Harry Martinson"
+   },
+   "sameAs": [
+    "https://www.wikidata.org/wiki/Q312663",
+    "https://en.wikipedia.org/wiki/Harry_Martinson"
+   ]
+  },
+  {
+   "id": "1050",
+   "knownName": {
+    "en": "László Krasznahorkai"
+   },
+   "wikidata": {
+    "id": "Q512062"
+   }
+  },
+  {
+   "id": "1067",
+   "knownName": {
+    "en": "Anne Carson"
+   },
+   "wikidata": {
+    "id": "Q2633699"
+   }
+  }
+ ],
+ "meta": {
+  "count": 4
+ }
+}

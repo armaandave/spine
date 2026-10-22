@@ -1,0 +1,112 @@
+{
+ "head": {
+  "vars": [
+   "w",
+   "title",
+   "wins",
+   "year",
+   "creators",
+   "types",
+   "tmdb_movie_",
+   "imdb_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q1"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Grand Illusion"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "c|||1"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Jean Renoir"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1937"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "777"
+    },
+    "imdb_": {
+     "type": "literal",
+     "value": "tt0028950"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q2"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Seven Samurai"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "c|||2;c|||1150"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Akira Kurosawa"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1954"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "346"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q3"
+    },
+    "title": {
+     "type": "literal",
+     "value": "The Seventh Seal"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "c|||11"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Ingmar Bergman"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1957"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "490"
+    }
+   }
+  ]
+ }
+}
