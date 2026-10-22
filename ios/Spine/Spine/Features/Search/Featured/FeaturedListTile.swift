@@ -54,6 +54,9 @@ struct FeaturedPosterStack: View {
             }
         }
         .frame(width: style.width, height: posterSize.height, alignment: .bottomLeading)
+        // One shadow for the whole stack instead of one per poster.
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.32), radius: 4, x: 2, y: 2)
         .accessibilityHidden(true)
     }
 
@@ -76,7 +79,6 @@ struct FeaturedPosterStack: View {
                 RoundedRectangle(cornerRadius: slot.cornerRadius, style: .continuous)
                     .fill(.black.opacity(0.45 * depth))
             }
-            .shadow(color: .black.opacity(0.32), radius: 4, x: 2, y: 2)
             .scaleEffect(1 - 0.08 * depth, anchor: .bottom)
             .overlay(alignment: .topLeading) {
                 if index == 0, let rank = card.rank(at: 0) {
@@ -338,6 +340,8 @@ struct FeaturedListButton<Label: View>: View {
 
     let card: FeaturedListCard
     let sourceKey: String
+    /// Whether the label shows the list's top three, as the Now strip's cards do, so VoiceOver reads them too.
+    var showsTopEntries = false
     let onSelect: (FeaturedListSelection) -> Void
     @ViewBuilder let label: () -> Label
 
@@ -364,9 +368,17 @@ struct FeaturedListButton<Label: View>: View {
             FeaturedListPeek(card: card)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(card.accessibilitySummary)
+        .accessibilityLabel(card.accessibilitySummary(now: .now, includesTopEntries: showsTopEntries))
         .accessibilityHint("Opens list")
         .accessibilityAddTraits(.isButton)
+        .accessibilityActions {
+            // The context menu's "View source", which VoiceOver can't reach on an element that ignores its children.
+            if let url = card.source?.linkURL {
+                Button("View source") {
+                    openURL(url)
+                }
+            }
+        }
     }
 }
 
@@ -386,6 +398,10 @@ private struct FeaturedZoomSource: ViewModifier {
 /// The long-press preview, from data already loaded: the five posters with ranks, the description, source,
 /// cadence and count.
 struct FeaturedListPeek: View {
+    /// The peek is 334 pt wide with 16 pt padding: 302 pt holds five 54 pt artworks 8 pt apart.
+    static let width: CGFloat = 334
+    static let squareSide = PosterSlot.searchRow.size.width
+
     let card: FeaturedListCard
 
     var body: some View {
@@ -411,6 +427,13 @@ struct FeaturedListPeek: View {
                         slot: card.usesSquareArtwork ? .featuredSquare : .searchRow,
                         mediaType: preview.media.ref.mediaType,
                         orientation: card.usesSquareArtwork ? .square : nil
+                    )
+                    // The tile's 60 pt album squares, scaled to the 54 pt poster width so five fit the peek; the
+                    // request stays the tile's, so both share one thumbnail.
+                    .scaleEffect(card.usesSquareArtwork ? Self.squareSide / PosterSlot.featuredSquare.size.width : 1)
+                    .frame(
+                        width: card.usesSquareArtwork ? Self.squareSide : nil,
+                        height: card.usesSquareArtwork ? Self.squareSide : nil
                     )
                     .overlay(alignment: .topLeading) {
                         if let rank = card.rank(at: index) {
@@ -448,15 +471,14 @@ struct FeaturedListPeek: View {
                 .lineLimit(1)
         }
         .padding(16)
-        .frame(width: 334, alignment: .leading)
+        .frame(width: Self.width, alignment: .leading)
         .background(Color(white: 0.09))
         .environment(\.colorScheme, .dark)
     }
 
     /// "Netflix · Weekly · 10 films"
     private var peekFooter: String {
-        let count = "\(card.itemsCount.formatted()) \(FeaturedCountNoun.noun(for: card.mediaTypes, count: card.itemsCount))"
-        return [card.source?.name, card.cadence.label, count]
+        [card.source?.name, card.cadence.label, card.countText]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")

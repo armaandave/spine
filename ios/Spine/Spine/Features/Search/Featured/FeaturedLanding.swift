@@ -77,7 +77,7 @@ private struct FeaturedNowStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 10) {
                     ForEach(shelf.lists) { card in
-                        FeaturedListButton(card: card, sourceKey: shelf.key, onSelect: onSelect) {
+                        FeaturedListButton(card: card, sourceKey: shelf.key, showsTopEntries: true, onSelect: onSelect) {
                             FeaturedChartCard(card: card)
                         }
                     }

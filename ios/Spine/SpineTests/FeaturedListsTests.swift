@@ -425,6 +425,108 @@ final class FeaturedPresentationTests: XCTestCase {
         XCTAssertEqual(FeaturedBadge.resolve(for: card(kind: .award), now: now), .kind(.award))
     }
 
+    func testLiveStateEndsAtItsEndEvenWhenTheServerSaidLive() {
+        // A card restored from the cache keeps the server's "live" past the window's end.
+        let ending = FeaturedLiveState(status: .live, startsAt: now.addingTimeInterval(-3600), endsAt: now.addingTimeInterval(60))
+        XCTAssertTrue(ending.isLive(at: now))
+        XCTAssertFalse(ending.isLive(at: now.addingTimeInterval(60)))
+        XCTAssertFalse(ending.isLive(at: now.addingTimeInterval(86400)))
+
+        // Without an end, a window lasts twelve hours from its start.
+        let noEnd = FeaturedLiveState(status: .live, startsAt: now.addingTimeInterval(-3600))
+        XCTAssertTrue(noEnd.isLive(at: now))
+        XCTAssertFalse(noEnd.isLive(at: now.addingTimeInterval(11 * 3600)))
+
+        // With neither, the server's word is all there is.
+        XCTAssertTrue(FeaturedLiveState(status: .live).isLive(at: now))
+
+        let card = card(live: ending, changed: now.addingTimeInterval(-60), period: "2027")
+        XCTAssertEqual(FeaturedBadge.resolve(for: card, now: now.addingTimeInterval(120)), .updated(now.addingTimeInterval(-60)))
+        XCTAssertFalse(FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [card]),
+        ]).hasLiveList(now: now.addingTimeInterval(120)))
+    }
+
+    func testStaticListsNeverShowTheUpdatedBadge() {
+        let changed = now.addingTimeInterval(-3600)
+        let staticList = FeaturedListCard(
+            id: 1, name: "Canon", itemsCount: 100, mediaTypes: ["movie"], kind: .canon, cadence: .static,
+            contentChangedAt: changed
+        )
+        XCTAssertEqual(FeaturedBadge.resolve(for: staticList, now: now), .kind(.canon))
+
+        let weekly = FeaturedListCard(
+            id: 2, name: "Chart", itemsCount: 10, mediaTypes: ["movie"], kind: .chart, cadence: .weekly,
+            contentChangedAt: changed
+        )
+        XCTAssertEqual(FeaturedBadge.resolve(for: weekly, now: now), .updated(changed))
+    }
+
+    func testPeopleListsCountPeople() {
+        let flagged = FeaturedListCard(id: 1, name: "Nobel", itemsCount: 121, mediaTypes: ["book"], cadence: .yearly, listType: .people)
+        XCTAssertEqual(flagged.countLabel, "121 people · Yearly")
+        XCTAssertEqual(flagged.countText, "121 people")
+
+        let person = PersonListEntry(
+            entryId: 1, personId: "OL1A", source: "openlibrary", name: "Annie Ernaux",
+            profileUrl: nil, knownForDepartment: nil, position: 1, dateAdded: ""
+        )
+        let previewed = FeaturedListCard(id: 2, name: "Nobel", itemsCount: 1, mediaTypes: ["book"], previewPeople: [person])
+        XCTAssertEqual(previewed.countText, "1 person")
+
+        let books = FeaturedListCard(id: 3, name: "Booker", itemsCount: 121, mediaTypes: ["book"], listType: .media)
+        XCTAssertEqual(books.countText, "121 books")
+    }
+
+    func testAccessibilitySummaryReadsTheBadgeAndTheTopThree() throws {
+        func media(_ id: Int, _ title: String, position: Int) throws -> MediaSummary {
+            let json = #"{"item_id": \#(id), "source": "tmdb", "media_type": "movie", "media_id": "\#(id)"}"#
+            return MediaSummary(ref: try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8)), title: title, position: position)
+        }
+        let live = FeaturedListCard(
+            id: 1, name: "Oscars 2027", itemsCount: 7, mediaTypes: ["movie"], kind: .award,
+            source: FeaturedSource(name: "The Academy"), cadence: .live,
+            live: FeaturedLiveState(status: .live, label: "7 of 23 announced")
+        )
+        XCTAssertEqual(
+            live.accessibilitySummary(now: now),
+            "Oscars 2027, Live, 7 of 23 announced, 7 films · Live, The Academy"
+        )
+
+        let chart = FeaturedListCard(
+            id: 2, name: "Netflix Top 10", isRanked: true, itemsCount: 10, mediaTypes: ["movie"], kind: .chart,
+            source: FeaturedSource(name: "Netflix"), cadence: .weekly, contentChangedAt: now.addingTimeInterval(-2 * 3600),
+            previews: [
+                FeaturedPreview(media: try media(1, "One", position: 1), note: "▲2"),
+                FeaturedPreview(media: try media(2, "Two", position: 2), note: "NEW"),
+                FeaturedPreview(media: try media(3, "Three", position: 3)),
+                FeaturedPreview(media: try media(4, "Four", position: 4), note: "▼1"),
+            ]
+        )
+        XCTAssertEqual(
+            chart.accessibilitySummary(now: now),
+            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix"
+        )
+        XCTAssertEqual(
+            chart.accessibilitySummary(now: now, includesTopEntries: true),
+            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix, 1. One, up 2, 2. Two, new, 3. Three"
+        )
+    }
+
+    func testNextLiveStartIsTheEarliestUpcomingWindow() {
+        let soon = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(600)))
+        let later = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(3600)))
+        let started = card(live: FeaturedLiveState(status: .upcoming, startsAt: now.addingTimeInterval(-60)))
+        let response = FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [later, started, soon]),
+        ])
+
+        XCTAssertEqual(response.nextLiveStart(after: now), now.addingTimeInterval(600))
+        XCTAssertNil(FeaturedShelvesResponse(shelves: [
+            FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [started]),
+        ]).nextLiveStart(after: now))
+    }
+
     func testUpcomingWindowCountsAsLiveOnceItStarts() {
         let window = FeaturedLiveState(
             status: .upcoming,
