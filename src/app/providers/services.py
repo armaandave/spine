@@ -263,10 +263,12 @@ def api_request(
                 seconds_to_wait = int(error_resp.headers.get("Retry-After", 5))
             except (TypeError, ValueError):
                 seconds_to_wait = 5
-            seconds_to_wait = min(
-                max(seconds_to_wait, 0),
-                RATE_LIMIT_MAX_WAIT_SECONDS,
-            )
+            # A provider asking for more than our longest wait (Hardcover's daily
+            # cap asks for hours) won't recover in time, so fail now instead of
+            # holding the request through every retry.
+            if seconds_to_wait > RATE_LIMIT_MAX_WAIT_SECONDS:
+                raise error from None
+            seconds_to_wait = max(seconds_to_wait, 0)
             if provider not in EXACT_RETRY_AFTER_PROVIDERS:
                 seconds_to_wait += RATE_LIMIT_RETRY_PADDING_SECONDS
             logger.warning(
@@ -418,11 +420,7 @@ def search(
                 **search_options,
             )
             if source == Sources.OPENLIBRARY.value
-            else hardcover.search(
-                query,
-                page,
-                **search_options,
-            )
+            else _search_hardcover_or_openlibrary(query, page, search_options)
         ),
         MediaTypes.COMIC.value: lambda: comicvine.search(
             query,
@@ -436,6 +434,17 @@ def search(
         ),
     }
     return search_handlers[media_type]()
+
+
+def _search_hardcover_or_openlibrary(query, page, search_options):
+    """Search Hardcover, or Open Library while Hardcover is rate limited."""
+    try:
+        return hardcover.search(query, page, **search_options)
+    except ProviderAPIError as error:
+        if error.status_code != requests.codes.too_many_requests:
+            raise
+        logger.warning("Hardcover is rate limited; searching Open Library instead")
+        return openlibrary.search(query, page, **search_options)
 
 
 def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count"):

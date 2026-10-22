@@ -122,6 +122,23 @@ class ServicesTests(TestCase):
         self.assertEqual(mock_get.call_count, services.RATE_LIMIT_MAX_RETRIES + 1)
         self.assertEqual(mock_sleep.call_count, services.RATE_LIMIT_MAX_RETRIES)
 
+    @patch("app.providers.services.time.sleep")
+    @patch("app.providers.services.session.post")
+    def test_rate_limit_longer_than_max_wait_fails_at_once(self, mock_post, mock_sleep):
+        """A daily cap that asks for hours fails without sleeping or retrying."""
+        mock_post.side_effect = self._rate_limited_then_ok("68281")
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            services.api_request(
+                Sources.HARDCOVER.value,
+                "POST",
+                "https://api.hardcover.app/v1/graphql",
+                params={"query": "{}"},
+            )
+
+        mock_post.assert_called_once()
+        mock_sleep.assert_not_called()
+
     def _rate_limited_then_ok(self, retry_after):
         limited = MagicMock(status_code=429, headers={"Retry-After": retry_after})
         error = requests.exceptions.HTTPError("429 Too Many Requests")
