@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 
@@ -413,6 +414,8 @@ def search_author_by_name(name):
                 }
                 cache.set(cache_key, out, timeout=86400)
                 return out
+        except SoftTimeLimitExceeded:
+            raise
         except Exception as e:  # noqa: BLE001
             logger.debug("OpenLibrary author search variant %r failed: %s", v, e)
             continue

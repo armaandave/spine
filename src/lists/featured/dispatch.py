@@ -4,6 +4,7 @@
 The beat entry runs ``dispatch_featured_lists`` every 60 seconds.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -11,9 +12,10 @@ from celery import shared_task
 from django.db.models import Q
 from django.utils import timezone
 
-from lists.featured import engine, order, registry
-from lists.models import FeaturedListSync
+from lists.featured import engine, order, ratings, registry
+from lists.models import CustomList, FeaturedListSync
 
+logger = logging.getLogger(__name__)
 DISPATCH_TASK = "Dispatch featured lists"
 SYNC_TASK = "Sync featured list"
 QUEUE = "featured"
@@ -132,11 +134,37 @@ def poll_offsets(definition, now):
     return [int(step * index) for index in range(int(DISPATCH_PERIOD.total_seconds() // step))]
 
 
+def retire_orphans(definitions):
+    """Unfeature lists the engine synced whose definition left the registry.
+
+    A list whose sync row's key is gone, and whose identity no definition claims (a
+    re-keyed definition keeps its list), would otherwise count as manually featured.
+    Only ``is_featured`` is cleared: the list, its items, sync row and snapshots stay.
+    Returns the unfeatured list IDs.
+    """
+    keys = [definition.key for definition in definitions]
+    identities = {definition.identity for definition in definitions}
+    rows = (
+        FeaturedListSync.objects.filter(custom_list__is_featured=True)
+        .exclude(key__in=keys)
+        .values_list("key", "custom_list_id", "custom_list__import_source", "custom_list__import_source_id")
+    )
+    retired = {list_id: key for key, list_id, source, source_id in rows if (source, source_id) not in identities}
+    if retired:
+        CustomList.objects.filter(pk__in=retired).update(is_featured=False)
+        logger.info("Featured lists retired (no definition): %s", ", ".join(sorted(retired.values())))
+    return sorted(retired)
+
+
 def dispatch(now=None):
-    """Lease and queue every due definition; return the queued keys."""
+    """Retire orphaned lists, trickle new Items' ratings, then lease and queue every
+    due definition; return the queued keys.
+    """
     now = now or timezone.now()
     definitions = registry.all_definitions()
-    syncs = {sync.key: sync for sync in FeaturedListSync.objects.all()}
+    retire_orphans(definitions)
+    ratings.drain()
+    syncs = {sync.key: sync for sync in FeaturedListSync.objects.defer(*engine.LARGE_FIELDS)}
     hashes = {definition.key: engine.compute_hash(definition) for definition in definitions}
     queued = []
     for definition in plan(definitions, syncs, now, hashes=hashes):
@@ -153,7 +181,10 @@ def dispatch(now=None):
             # A later poll skips itself if any run started after its own slot.
             sync_featured_list.apply_async(
                 args=[definition.key],
-                kwargs={"dispatched_at": (now + timedelta(seconds=offset)).isoformat()},
+                kwargs={
+                    "dispatched_at": (now + timedelta(seconds=offset)).isoformat(),
+                    "lease_until": (now + lease).isoformat(),
+                },
                 queue=QUEUE,
                 countdown=offset or None,
                 expires=lease.total_seconds() + offset,
@@ -171,8 +202,12 @@ def dispatch_featured_lists():
 
 
 @shared_task(name=SYNC_TASK)
-def sync_featured_list(key, dispatched_at=None):
-    """Sync one featured list by key."""
+def sync_featured_list(key, dispatched_at=None, lease_until=None):
+    """Sync one featured list by key.
+
+    ``lease_until`` is the lease the dispatcher took for this task: a skipped poll
+    releases only that lease, never one a newer run holds.
+    """
     definition = registry.get(key)
     if definition is None:
         FeaturedListSync.objects.filter(key=key).update(lease_until=None)
@@ -180,7 +215,11 @@ def sync_featured_list(key, dispatched_at=None):
     sync = FeaturedListSync.objects.filter(key=key).first()
     if dispatched_at and sync is not None and sync.last_attempt_at:
         if sync.last_attempt_at > datetime.fromisoformat(dispatched_at):
-            FeaturedListSync.objects.filter(key=key).update(lease_until=None)
+            if lease_until:
+                FeaturedListSync.objects.filter(
+                    key=key,
+                    lease_until=datetime.fromisoformat(lease_until),
+                ).update(lease_until=None)
             return {"key": key, "status": "skipped", "message": "Already ran since it was queued."}
     FeaturedListSync.objects.filter(key=key).update(
         lease_until=timezone.now() + lease_for(definition),

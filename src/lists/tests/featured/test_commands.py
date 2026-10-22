@@ -71,3 +71,4 @@ class ReportCommandTests(FeaturedTestCase):
         self.assertFalse(row["stale"])
         self.assertEqual(data["problems"], [])
         self.assertEqual(data["orphans"], [])
+        self.assertIsInstance(data["ratings_pending"], int)  # new Items waiting for ratings

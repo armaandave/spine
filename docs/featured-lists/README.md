@@ -149,7 +149,7 @@ The existing lists keep their identities: `("mdblist", "155837")` and `("nyt", <
 4. ISBNs: Hardcover, then Open Library, in today's `_resolve_book` order.
 5. A strict title search per media type: exact normalized title, year ±1, creator when available. No fuzzy guessing.
 
-Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 30 days, misses for 1 day. Title searches are capped per run (default 50). Unresolved entries go to the health report.
+Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 45 days (longer than the longest cadence, 33 days; each hit refreshes the TTL), misses for 1 day. Title searches are capped per run (default 50); entries past the cap are deferred for an hour, not unresolved, so the next run searches the next batch. Unresolved entries go to the health report.
 
 **Writer guards**, in order:
 1. `require_exact_count`
@@ -160,7 +160,7 @@ Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 30 da
 Entries deferred by a provider budget (below) don't count toward the resolve rate, so a list is never `guarded` just because a budget ran out.
 
 Any failure raises `GuardError`, records the status, and leaves the list untouched. Otherwise one transaction does all of this:
-- get or create Items inside `app.mixins.collect_external_rating_item_ids()`, and call `app.tasks.enqueue_external_rating_batches(ids)` on commit (never one ratings task per Item);
+- get or create Items inside `app.mixins.collect_external_rating_item_ids()`, and on commit hand the new IDs to `ratings.add_pending(ids)` (never one ratings task per Item; see "External ratings" below);
 - get or create the `CustomList` by `(owner, *identity)`;
 - set its fields (public, ranked, `is_featured`, `featured_position`, source URL, `last_synced_at`);
 - replace the items only when the content fingerprint changed, and set `content_changed_at` when it does;
@@ -170,7 +170,7 @@ The `list-media-types` branch is adding `CustomList.locked_media_types`. Once it
 
 ## Provider budgets
 
-Featured syncs share production's provider keys with the app, so every run (and every dry run) happens inside `app.providers.quota.scope("featured", …)`. Inside it, each `services.api_request` to Hardcover (`api.hardcover.app`) or Open Library (`openlibrary.org`) counts against a per-UTC-day Redis counter: adapter fetches, ISBN lookups, title searches and the writer's metadata fetches for new Items alike. Cached provider answers cost nothing.
+Featured syncs share production's provider keys with the app, so every run (and every dry run) happens inside `app.providers.quota.scope("featured", …)`. Inside it, each `services.api_request` to Hardcover (`api.hardcover.app`) or Open Library (`openlibrary.org`) counts against a per-UTC-day Redis counter: adapter fetches, ISBN lookups, title searches, the writer's metadata fetches for new Items, and the ratings batches for those Items alike. Cached provider answers cost nothing.
 
 | Setting | Default | Why |
 |---|---|---|
@@ -181,6 +181,15 @@ Featured syncs share production's provider keys with the app, so every run (and 
 - **429 with a long wait:** a 429 asking for more than the 60 s `api_request` would sleep (Hardcover's "Try again in 69163 seconds", in `Retry-After` or the body) blocks the provider for that long. Featured requests then defer at once instead of sleeping; a long 429 the app itself receives blocks featured syncs too. Shorter 429s still wait and retry as before.
 - **Deferred entries** stay unresolved, aren't cached, and don't count toward the resolve rate. A run with deferred entries writes the list only when it wouldn't shrink: a new list appears with what resolved, a growing one keeps its progress, and a current list is otherwise left as it is. Either way the status is `deferred`, `deferred_until` holds the reset time, and the dispatcher retries the list then. An adapter whose own fetch is deferred records the same.
 - The health report shows each list's `deferred_until`, a `deferred` total, and `quota` (budget, used today, blocked until) per provider.
+
+## External ratings for new Items
+
+`ratings.py` trickles new Items' ratings onto the default worker instead of queueing them all at once (a first deploy creates thousands of Items):
+- The writer adds new Item IDs to a Redis set (`services.redis_db`).
+- Each dispatcher tick queues one `Enrich featured list ratings` batch of at most 50 on the default queue, only when the previous batch has finished (or 30 minutes passed), so app tasks never wait behind a featured backlog.
+- The batch runs `enrich_external_ratings_batch` inside the featured quota scope, so its Hardcover and Open Library metadata calls count against the featured budgets. Book Items whose provider has no featured budget left today, or is blocked by a long 429, stay pending until it resets.
+- The health report shows `ratings_pending`. If Redis loses the set, list detail still enriches Items when someone opens them.
+- Known gap: a transient failure inside a batch retries that Item through the app's own `enrich_external_ratings` task, outside the featured scope, as it would for any Item.
 
 ## Models (one migration in `lists`)
 
@@ -196,16 +205,18 @@ No new `CustomList` columns.
 ## Scheduling
 
 - **Worker:** a second Celery worker consumes the `featured` queue: a new `[program:celery-featured]` in `supervisord.conf`, with the same flags as `celery` plus `-Q featured -n featured@%h --concurrency 2`, `stopasgroup=true` and `stopwaitsecs=60`. The default worker keeps the `celery` queue, so long imports never block an award night.
-- **Routing and beat:** `CELERY_TASK_ROUTES` sends `Dispatch featured lists` and `Sync featured list` to `featured`. The beat entry `dispatch_featured_lists` runs every 60 s with `{"queue": "featured", "expires": 55}`.
+- **Routing and beat:** `CELERY_TASK_ROUTES` sends `Dispatch featured lists` and `Sync featured list` to `featured`. The beat entry `dispatch_featured_lists` runs every 60 s with `{"queue": "featured", "expire_seconds": 55}` (`django_celery_beat`'s `DatabaseScheduler` ignores `expires`).
 - **What the dispatcher queues:** due syncs. A definition is due when:
   - it has never succeeded;
   - its `definition_hash` changed;
   - its `deferred_until` passed;
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
-- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
+- **Retired lists:** each tick first unfeatures retired lists (`dispatch.retire_orphans`, see the legacy endpoint below).
+- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first (never-synced lists before any other). Equally stale lists, such as every list that has never synced after a deploy, follow the curated shelf order (`order.py`: each shelf's first list, then each shelf's second, and so on), then `position`, so flagship lists fill first. The cap keeps one of the worker's two slots free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs. A poll that finds a newer run already started skips itself and releases only the lease the dispatcher took for it (`lease_until` in its kwargs), never a running sync's.
+- **Killed runs back off:** each attempt counts as a failure from the moment it starts (`consecutive_failures + 1`); success resets it and a deferral takes it back. A run killed outright (SIGKILL, `time_limit`, OOM, a deploy restart) therefore still backs off. While a run is in progress, the health report shows it with one failure more than it had and `leased: true`.
 - **TaskResult noise:** skip the dispatcher in `app/signals.py:create_task_result_on_publish`, and set `ignore_result=True` on it.
-- **Legacy entries:** the `Sync NYT featured lists` and `Sync Letterboxd Top 500 featured list` beat entries stay. The commands they call become thin wrappers over the engine and keep their CLI, messages and tests. `django_celery_beat` never deletes rows, so never remove those task names.
+- **Legacy entries:** production's beat already runs `Sync NYT featured lists`, so that entry and task name stay. It now skips charts the engine synced successfully in the last 12 hours (`sync_nyt_featured_lists --skip-synced-within 12`). `django_celery_beat` never deletes rows, so never remove that task name. The `Sync Letterboxd Top 500 featured list` entry never shipped and is gone: the dispatcher syncs that list. The commands stay thin wrappers over the engine and keep their CLI, messages and tests.
 
 ## API
 
@@ -214,6 +225,7 @@ All of it is additive.
 **`GET /api/v1/lists/featured/` (legacy):**
 - Same shape as today.
 - By default `results` holds only `headline=True` lists plus any manually featured list that isn't in the registry, so installed builds keep seeing today's six. `?view=all` returns every featured list.
+- "Manually featured" means no `FeaturedListSync` row. A list the engine synced whose definition is gone (no definition has its sync key or its identity, such as a past ceremony) is *retired*: every endpoint hides it, and the dispatcher sets `is_featured=False` on it each tick. It's never deleted.
 - Each result gains an optional `featured` object, in the card shape below without `preview_items` (`null` when the list has no card). Manually featured lists get one too, with `kind: "editorial"`, `cadence: "static"` and media types taken from their items.
 
 **`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
@@ -257,7 +269,7 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 
 ```json
 {"id": 12, "name": "Netflix Top 10: Films", "slug": "netflix-top-10-films", "description": "…",
- "is_ranked": true, "items_count": 10, "media_types": ["movie"], "kind": "chart",
+ "is_ranked": true, "list_type": "media", "items_count": 10, "media_types": ["movie"], "kind": "chart",
  "source": {"name": "Netflix", "url": "https://www.netflix.com/tudum/top10"},
  "cadence": "weekly", "period_label": "Week of Oct 13",
  "content_changed_at": "…", "last_synced_at": "…",
@@ -266,11 +278,12 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
  "preview_people": ["people lists only: …≤5, the same person objects list_payload returns in preview_people"]}
 ```
 
+- `list_type` is `media` or `people` (added later: older payloads lack it, so decode it as optional and fall back to `media`). It's also in the `featured` block on the legacy endpoint and list detail.
 - `cadence` is one of `live`, `daily`, `weekly`, `monthly`, `yearly`, `static`.
 - `live` is either `null` or `{"status": "upcoming"|"live"|"done", "label": "7 of 23 announced", "starts_at": "…", "ends_at": "…"}`.
 - `source.name` and `source.url` may be `null`. `period_label` is the sync's edition, or `null`.
 - Each preview item's `note` is chart movement against the list's previous content: `"▲2"`, `"▼1"` or `"NEW"`; `null` when its position didn't change, on a list's first sync, and for every kind other than `chart`. The writer stores it as `FeaturedListSync.item_notes` (`{"<item_id>": note}`) whenever it replaces a chart's items, so requests never scan snapshots.
-- People lists count people in `items_count`; their `preview_items` is empty and `preview_people` holds their first five people, in list order. Media-list cards have no `preview_people` key, and neither does the `featured` block on the legacy endpoint and list detail.
+- People lists (`list_type: "people"`) count people in `items_count`; their `preview_items` is empty and `preview_people` holds their first five people, in list order. Media-list cards have no `preview_people` key, and neither does the `featured` block on the legacy endpoint and list detail.
 
 **`GET /api/v1/lists/featured/health/`:** allowed for staff, or with the header `X-Spine-Report-Token` matching `settings.FEATURED_REPORT_TOKEN`, compared with `hmac.compare_digest`. The setting defaults to `""`, which disables the token path. Everyone else gets a 404. `manage.py featured_lists_report [--json]` prints the same report.
 

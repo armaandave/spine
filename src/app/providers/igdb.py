@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from enum import IntEnum
 
 import requests
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 from django.utils.text import slugify
@@ -895,6 +896,8 @@ def get_game_covers(media_id):
                         })
             else:
                 logger.warning("No covers returned from IGDB for game %s", media_id)
+        except SoftTimeLimitExceeded:
+            raise
         except Exception as e:
             logger.error("Error fetching covers for game %s: %s", media_id, e, exc_info=True)
         

@@ -6,20 +6,19 @@ from django.core.management import call_command
 # Registers "Dispatch featured lists" and "Sync featured list" (featured queue).
 from lists.featured.dispatch import dispatch_featured_lists, sync_featured_list  # noqa: F401
 
-LETTERBOXD_TOP_500_MDBLIST_URL = "https://mdblist.com/lists/davearmaan12/external/155837"
+# Registers "Enrich featured list ratings" (default queue).
+from lists.featured.ratings import enrich_featured_ratings  # noqa: F401
+
+
+# The featured-lists dispatcher syncs the NYT charts too; skip any it synced recently.
+NYT_SKIP_SYNCED_WITHIN_HOURS = 12
 
 
 @shared_task(name="Sync NYT featured lists")
 def sync_nyt_featured_lists():
-    """Refresh the approved NYT Best Sellers lists owned by Spine."""
-    return call_command("sync_nyt_featured_lists", owner="Spine")
-
-
-@shared_task(name="Sync Letterboxd Top 500 featured list")
-def sync_letterboxd_top_500_featured_list():
-    """Refresh Spine's Letterboxd Top 500 list from its MDBList mirror."""
+    """Refresh the approved NYT Best Sellers lists owned by Spine (production's beat)."""
     return call_command(
-        "sync_mdblist_featured_list",
-        LETTERBOXD_TOP_500_MDBLIST_URL,
+        "sync_nyt_featured_lists",
         owner="Spine",
+        skip_synced_within=NYT_SKIP_SYNCED_WITHIN_HOURS,
     )

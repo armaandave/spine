@@ -16,6 +16,7 @@ from django.db.models import (
     Case,
     CharField,
     Count,
+    Exists,
     F,
     Max,
     OuterRef,
@@ -302,6 +303,9 @@ def build_stats_payload(*, user, viewer, request, stats_range):
 def _list_progress(*, user, viewer, request):
     """Return completion for visible owned and featured media lists.
 
+    A featured list counts only once the user has completed at least one of its
+    items; the user's own and collaborated lists show even at 0%.
+
     Counts and completed members come from the database in a fixed number of
     queries, so up to a thousand items in each of the featured lists are
     never loaded; only the shown lists' poster rows are.
@@ -323,7 +327,16 @@ def _list_progress(*, user, viewer, request):
             owner=user,
             visibility=CustomList.Visibility.UNLISTED,
         )
-    names = dict(lists.order_by("name", "id").values_list("id", "name"))
+    rows = lists.annotate(
+        collaborating=Exists(
+            CustomList.collaborators.through.objects.filter(customlist_id=OuterRef("pk"), user_id=user.pk),
+        ),
+    ).order_by("name", "id").values_list("id", "name", "owner_id", "collaborating")
+    names, mine = {}, set()
+    for list_id, name, owner_id, collaborating in rows:
+        names[list_id] = name
+        if owner_id == user.pk or collaborating:
+            mine.add(list_id)
     if not names:
         return []
 
@@ -367,7 +380,7 @@ def _list_progress(*, user, viewer, request):
             ),
         }
         for list_id, name in names.items()
-        if totals[list_id]
+        if totals[list_id] and (list_id in mine or completed[list_id])
     ]
     progress = _sorted_progress(progress)[:PROGRESS_COLLECTION_LIMIT]
 

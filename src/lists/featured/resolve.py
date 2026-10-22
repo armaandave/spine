@@ -15,18 +15,21 @@ Order, first hit wins:
    title may match, when the year or creator agrees and only one result qualifies.
    Capped per run by ``Guards.max_title_searches``.
 
-Steps 4-6 are cached under ``featured:resolve:…``: hits for 30 days, misses for one
-day. Provider errors and an exhausted budget are never cached. An entry whose lookup
-hit a provider's daily budget or rate limit (``app.providers.quota``) is *deferred*:
-unresolved, uncached, and left out of the resolve rate until the next run.
+Steps 4-6 are cached under ``featured:resolve:…``: hits for 45 days (longer than the
+longest cadence, and refreshed on every hit), misses for one day. Provider errors and
+an exhausted budget are never cached. An entry whose lookup hit a provider's daily
+budget or rate limit (``app.providers.quota``), or that the run's title-search cap
+cut off, is *deferred*: unresolved, uncached, and left out of the resolve rate until
+the next run.
 """
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from django.core.cache import cache
+from django.utils import timezone
 
 from app.models import PRIMARY_MEDIA_TYPES, MediaTypes, Sources
 from app.providers import hardcover, igdb, openlibrary, quota, services, tmdb
@@ -44,9 +47,12 @@ from lists.featured.types import PERSON_MEDIA_TYPE, Match
 logger = logging.getLogger(__name__)
 
 CACHE_PREFIX = "featured:resolve:"
-HIT_TTL = 60 * 60 * 24 * 30
+HIT_TTL = 60 * 60 * 24 * 45  # longer than the longest cadence (33 days)
 MISS_TTL = 60 * 60 * 24
 MISS = {"miss": True}
+# Entries cut off by Guards.max_title_searches wait this long for the next run, which
+# finds the earlier ones cached and searches the next batch.
+TITLE_SEARCH_RETRY = timedelta(hours=1)
 
 ITEM_SOURCES = {
     MediaTypes.MOVIE.value: (Sources.TMDB.value,),
@@ -161,7 +167,11 @@ def deferred_resolution(entry, error):
 
 
 class _Uncacheable(Exception):  # noqa: N818
-    """The answer depends on a transient condition (an error or the budget)."""
+    """The answer depends on a transient condition (a provider error)."""
+
+
+class _TitleSearchesSpent(Exception):  # noqa: N818
+    """This run's title-search cap is used up; the entry waits for the next run."""
 
 
 class Resolver:
@@ -283,11 +293,14 @@ class Resolver:
             if cached == MISS:
                 return Resolution(entry, None, "cache", "no match (cached)")
             if cached:
+                cache.touch(cache_key, HIT_TTL)
                 return self._checked(entry, Match.from_cache(cached), "cache")
         try:
             match, how = self._network(entry)
         except _Uncacheable as reason:
             return Resolution(entry, None, "", str(reason))
+        except _TitleSearchesSpent as reason:
+            return Resolution(entry, None, "deferred", str(reason), retry_at=timezone.now() + TITLE_SEARCH_RETRY)
         except quota.Deferred as error:
             return deferred_resolution(entry, error)
         if self.use_cache:
@@ -357,8 +370,8 @@ class Resolver:
 
     def _spend_search(self):
         if self.title_searches >= self.title_budget:
-            msg = "title search budget used up"
-            raise _Uncacheable(msg)
+            msg = f"this run's {self.title_budget} title searches are used up"
+            raise _TitleSearchesSpent(msg)
         self.title_searches += 1
 
     def _from_title(self, entry):

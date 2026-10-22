@@ -23,7 +23,7 @@ from app.external_ratings import eligible_rating_sources
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
 from app.models import Item, MediaTypes
 from app.providers import quota, services
-from app.tasks import enqueue_external_rating_batches
+from lists.featured import ratings
 from lists.featured.helpers import sanitize
 from lists.featured.resolve import PROVIDER_ERRORS, Resolution, deferred_resolution
 from lists.featured.types import GuardError
@@ -298,7 +298,7 @@ def ensure_items(rows):
     """Return ``{ref: Item}``, creating missing Items in bulk.
 
     Call inside ``collect_external_rating_item_ids()``: new Items that have rating
-    sources are collected for one batched enqueue instead of one task each.
+    sources are collected (instead of one task each) for ``ratings.add_pending``.
     """
     matches = [match for _, _, match in rows]
     existing = _existing_items(matches)
@@ -476,11 +476,8 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
                     )
                     sync.item_notes = movement_notes(previous, rows, items)
                 _replace_media(custom_list, rows, items)
-                if new_item_ids:
-                    transaction.on_commit(
-                        partial(enqueue_external_rating_batches, sorted(new_item_ids)),
-                        robust=True,
-                    )
+                if new_item_ids:  # trickled onto the default worker by the dispatcher
+                    transaction.on_commit(partial(ratings.add_pending, sorted(new_item_ids)), robust=True)
 
         sync.entry_notes = entry_notes(resolutions, _note_keys(people, rows, items), sync.item_notes)
 

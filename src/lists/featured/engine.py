@@ -8,13 +8,14 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db.models import F
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from app.providers import quota
 from lists.featured import overrides, registry, writer
 from lists.featured.adapters import ADAPTERS
-from lists.featured.helpers import sanitize
+from lists.featured.helpers import failure_summary, sanitize
 from lists.featured.resolve import Resolver
 from lists.featured.types import AdapterError, FetchResult, GuardError
 from lists.models import FeaturedListSync
@@ -26,6 +27,8 @@ LOCK_PREFIX = "featured:lock:"
 LOCK_GRACE_SECONDS = 120
 SUCCESS_STATUSES = (FeaturedListSync.Status.OK, FeaturedListSync.Status.UNCHANGED)
 QUOTA_SCOPE = "featured"
+# Report-only JSON columns the dispatcher and the shelves never read.
+LARGE_FIELDS = ("unresolved", "item_notes", "entry_notes")
 
 
 def provider_budgets():
@@ -99,26 +102,10 @@ def _resolve(definition, owner, fetch, resolver):
 
 
 def _record_failure(sync, status, message, resolutions=None):
+    """Record a failed outcome; ``_start`` already counted the attempt as a failure."""
     sync.last_status = status
     sync.last_error = sanitize(message)
     sync.deferred_until = None  # a failure retries on the backoff schedule instead
-    fields = ["last_status", "last_error", "consecutive_failures", "deferred_until"]
-    if resolutions is not None:
-        counted = writer.countable(resolutions)
-        sync.entry_count = len(counted)
-        sync.resolved_count = sum(1 for resolution in counted if resolution.match is not None)
-        sync.unresolved = writer.unresolved_rows(resolutions)
-        fields += ["entry_count", "resolved_count", "unresolved"]
-    sync.consecutive_failures = F("consecutive_failures") + 1
-    sync.save(update_fields=fields)
-    sync.refresh_from_db(fields=["consecutive_failures"])
-
-
-def _record_deferral(sync, message, until, resolutions=None):
-    """Leave the list as it is and retry at ``until``; neither a success nor a failure."""
-    sync.last_status = FeaturedListSync.Status.DEFERRED
-    sync.last_error = sanitize(message)
-    sync.deferred_until = until
     fields = ["last_status", "last_error", "deferred_until"]
     if resolutions is not None:
         counted = writer.countable(resolutions)
@@ -127,6 +114,41 @@ def _record_deferral(sync, message, until, resolutions=None):
         sync.unresolved = writer.unresolved_rows(resolutions)
         fields += ["entry_count", "resolved_count", "unresolved"]
     sync.save(update_fields=fields)
+
+
+def _record_deferral(sync, message, until, resolutions=None):
+    """Leave the list as it is and retry at ``until``; neither a success nor a failure,
+    so the failure ``_start`` counted is taken back.
+    """
+    sync.last_status = FeaturedListSync.Status.DEFERRED
+    sync.last_error = sanitize(message)
+    sync.deferred_until = until
+    sync.consecutive_failures = Greatest(F("consecutive_failures") - 1, Value(0))
+    fields = ["last_status", "last_error", "deferred_until", "consecutive_failures"]
+    if resolutions is not None:
+        counted = writer.countable(resolutions)
+        sync.entry_count = len(counted)
+        sync.resolved_count = sum(1 for resolution in counted if resolution.match is not None)
+        sync.unresolved = writer.unresolved_rows(resolutions)
+        fields += ["entry_count", "resolved_count", "unresolved"]
+    sync.save(update_fields=fields)
+    sync.refresh_from_db(fields=["consecutive_failures"])
+
+
+def _start(key, now):
+    """Record the attempt, counted as a failure until an outcome replaces it.
+
+    A run killed outright (SIGKILL, ``time_limit``, OOM, a deploy restart) never
+    reaches its ``finally``; counting the attempt up front makes the dispatcher back
+    off from such a list instead of retrying it every lease period.
+    """
+    sync, _ = FeaturedListSync.objects.get_or_create(key=key)
+    FeaturedListSync.objects.filter(pk=sync.pk).update(
+        last_attempt_at=now,
+        consecutive_failures=F("consecutive_failures") + 1,
+    )
+    sync.refresh_from_db(fields=["last_attempt_at", "consecutive_failures"])
+    return sync
 
 
 def dry_run(definition, owner=None, *, fetch_result=None, resolver=None):
@@ -171,13 +193,18 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
     token = uuid.uuid4().hex
     if not cache.add(lock_key, token, timeout=definition.soft_time_limit + LOCK_GRACE_SECONDS):
         return RunResult(definition.key, "locked", "Another sync of this list is running.")
-    now = now or timezone.now()
-    sync, _ = FeaturedListSync.objects.get_or_create(key=definition.key)
-    FeaturedListSync.objects.filter(pk=sync.pk).update(last_attempt_at=now)
-    sync.last_attempt_at = now
-    fetch, resolutions = None, None
-    logger.info("Featured list %s: sync started (%s)", definition.key, trigger)
     try:
+        return _run_locked(definition, owner, trigger, now or timezone.now(), fetch_result, resolver)
+    finally:
+        if cache.get(lock_key) == token:
+            cache.delete(lock_key)
+
+
+def _run_locked(definition, owner, trigger, now, fetch_result, resolver):  # noqa: PLR0911
+    sync, fetch, resolutions = None, None, None
+    try:
+        sync = _start(definition.key, now)
+        logger.info("Featured list %s: sync started (%s)", definition.key, trigger)
         with quota.scope(QUOTA_SCOPE, provider_budgets()):
             owner = owner or default_owner()
             if fetch_result is None:
@@ -209,6 +236,7 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
         return RunResult(definition.key, error.status, str(error), fetch, resolutions or [], error=error)
     except SoftTimeLimitExceeded as error:
         _record_failure(sync, FeaturedListSync.Status.FAILED, "Timed out.", resolutions)
+        logger.warning("Featured list %s: timed out", definition.key)
         return RunResult(definition.key, FeaturedListSync.Status.FAILED, "Timed out.", fetch, error=error)
     except AdapterError as error:
         message = sanitize(error) or "The source failed."
@@ -217,13 +245,12 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
         return RunResult(definition.key, FeaturedListSync.Status.FAILED, message, error=error)
     except Exception as error:
         message = sanitize(error) or type(error).__name__
-        logger.exception("Featured list %s failed: %s", definition.key, message)
-        _record_failure(sync, FeaturedListSync.Status.FAILED, message, resolutions)
+        logger.error("Featured list %s failed: %s", definition.key, failure_summary(error))  # noqa: TRY400
+        if sync is not None:
+            _record_failure(sync, FeaturedListSync.Status.FAILED, message, resolutions)
         return RunResult(definition.key, FeaturedListSync.Status.FAILED, message, fetch, resolutions or [], error=error)
     finally:
-        FeaturedListSync.objects.filter(pk=sync.pk).update(lease_until=None)
-        if cache.get(lock_key) == token:
-            cache.delete(lock_key)
+        FeaturedListSync.objects.filter(key=definition.key).update(lease_until=None)
     logger.info(
         "Featured list %s: %s, %s/%s resolved",
         definition.key,

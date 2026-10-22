@@ -129,6 +129,24 @@ class ListProgressTests(TestCase):
             [mixed.id, top.id],
         )
 
+    def test_featured_lists_need_one_completed_item(self):
+        films = [self.item() for _ in range(3)]
+        self.complete(films[0])
+        started = self.make_list("Started", films)
+        self.make_list("Untouched", films[1:])
+        own = self.make_list("My untouched list", films[1:], owner=self.subject, featured=False)
+        shared = self.make_list("Shared featured", films[1:])
+        shared.collaborators.add(self.subject)
+
+        progress = self.progress()
+
+        self.assertEqual(
+            [(row["name"], row["completion"]["completed_count"]) for row in progress],
+            [("Started", 1), ("My untouched list", 0), ("Shared featured", 0)],
+        )
+        self.assertNotIn("Untouched", [row["name"] for row in progress])
+        self.assertEqual({row["id"] for row in progress}, {started.id, own.id, shared.id})
+
     @override_settings(MUSIC_ENABLED=False)
     def test_hidden_media_types_are_not_counted(self):
         film = self.item()

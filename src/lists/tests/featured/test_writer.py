@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from app.models import Item, MediaTypes, Sources
 from app.providers import services
+from lists.featured import ratings
 from lists.featured.registry import Guards
 from lists.featured.writer import combine_notes
 from lists.featured.types import Entry, FetchResult
@@ -106,17 +107,22 @@ class WriterTests(FeaturedTestCase):
         self.assertEqual(result.custom_list.slug, "old-slug")
         self.assertEqual(result.custom_list.name, "Test List")
 
-    def test_new_items_enqueue_external_ratings_once_in_batches(self):
+    def test_new_items_wait_for_the_ratings_trickle(self):
         Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.MOVIE.value, media_id="1", title="Existing", image="https://x/1.jpg")
         with (
-            patch("lists.featured.writer.enqueue_external_rating_batches") as enqueue,
+            patch("app.tasks.enqueue_external_rating_batches") as enqueue,
+            patch("app.tasks.enrich_external_ratings_batch.delay") as batch,
             patch("app.signals.enrich_external_ratings.delay") as single,
             self.captureOnCommitCallbacks(execute=True),
         ):
             self.run_list(make_definition(), movies("1", "2", "3"))
         new_ids = sorted(Item.objects.filter(media_id__in=["2", "3"]).values_list("id", flat=True))
-        enqueue.assert_called_once_with(new_ids)
+        # Nothing reaches the default queue from the write itself (lists.featured.ratings).
+        enqueue.assert_not_called()
+        batch.assert_not_called()
         single.assert_not_called()
+        self.assertEqual(ratings.pending_count(), 2)
+        self.assertEqual(sorted(int(value) for value in services.redis_db.smembers(ratings.PENDING_KEY)), new_ids)
 
     def test_missing_art_is_fetched_once_and_failures_become_unresolved(self):
         entries = [

@@ -109,6 +109,30 @@ class LegacyFeaturedEndpointTests(FeaturedApiTestCase):
         self.assertEqual((manual["featured"]["kind"], manual["featured"]["cadence"]), ("editorial", "static"))
         self.assertEqual(headline["preview_items"][0]["title"], "hf 1")
 
+    def test_lists_whose_definition_is_gone_are_hidden(self):
+        # The registry dropped a list the engine synced (a past live ceremony): it is
+        # not "manually featured", even before the dispatcher unfeatures it.
+        self.definitions = [item for item in self.definitions if item.key not in ("headline-films", "chart-films")]
+        legacy = self.get("/api/v1/lists/featured/", view="all")
+        self.assertEqual([row["name"] for row in legacy.data["results"]][:2], ["Staff Picks", "Both Types"])
+        names = [row["name"] for row in legacy.data["results"]]
+        self.assertNotIn("Headline Films", names)
+        self.assertNotIn("Chart Films", names)
+        self.assertEqual(
+            [row["name"] for row in self.get("/api/v1/lists/featured/").data["results"]],
+            ["Staff Picks"],
+        )
+        slugs = {
+            card["slug"]
+            for shelf in self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+            for card in shelf["lists"]
+        }
+        self.assertNotIn("headline-films", slugs)
+        self.assertNotIn("chart-films", slugs)
+        self.assertIn("staff-picks", slugs)
+        chart = CustomList.objects.get(import_source_id="chart-films")
+        self.assertIsNone(self.get(f"/api/v1/lists/{chart.id}/").data.get("featured"))
+
     def test_list_detail_carries_the_featured_block(self):
         chart = CustomList.objects.get(import_source_id="chart-films")
         response = self.get(f"/api/v1/lists/{chart.id}/")
@@ -201,10 +225,11 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(
             set(live),
             {
-                "id", "name", "slug", "description", "is_ranked", "items_count", "media_types", "kind", "source",
+                "id", "name", "slug", "description", "is_ranked", "list_type", "items_count", "media_types", "kind", "source",
                 "cadence", "period_label", "content_changed_at", "last_synced_at", "live", "preview_items",
             },
         )
+        self.assertEqual(live["list_type"], "media")
         self.assertEqual(live["live"]["status"], "live")
         self.assertEqual(live["live"]["label"], "Ceremony")
         self.assertEqual(live["cadence"], "daily")
@@ -268,6 +293,15 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
             self.shelves(media_type="movie")
         self.assertLessEqual(max(landing, by_type), QUERY_CEILING)
 
+    def test_report_only_sync_columns_are_not_loaded(self):
+        with CaptureQueriesContext(connection) as context:
+            self.shelves()
+            self.get("/api/v1/lists/featured/", view="all")
+        sql = "\n".join(query["sql"] for query in context.captured_queries)
+        self.assertIn('"item_notes"', sql)  # chart cards show it
+        self.assertNotIn('"unresolved"', sql)
+        self.assertNotIn('"entry_notes"', sql)
+
     def test_people_cards_count_people(self):
         book = self.shelves()["shelves"][3]
         self.assertEqual(book["lists"][0]["items_count"], PersonListItem.objects.count())
@@ -291,6 +325,7 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         expected = list_payload(laureates, request=drf_request, include_preview_items=True)["preview_people"][:5]
 
         card = self.shelves()["shelves"][3]["lists"][0]
+        self.assertEqual(card["list_type"], "people")
         self.assertEqual(card["items_count"], 8)
         self.assertEqual(card["preview_items"], [])
         self.assertEqual(card["preview_people"], expected)
