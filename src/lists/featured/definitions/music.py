@@ -10,6 +10,7 @@ from datetime import timedelta
 from lists.featured.registry import FeaturedList, Guards
 
 DAILY = timedelta(days=1)
+EVERY_OTHER_DAY = timedelta(days=2)  # weekly charts: the card still reads "weekly"
 WEEKLY = timedelta(days=7)
 # Yearly lists: re-checked about monthly so a new edition, or a winner MusicBrainz
 # editors add after the ceremony, appears within weeks. Over 32 days reads "yearly".
@@ -77,7 +78,9 @@ CHARTS = [
         position=702,
         adapter="official_charts",
         params={"chart": "albums-chart", "min_entries": 95},  # a top 100
-        cadence=WEEKLY,
+        # The chart comes out on Fridays; a weekly cadence counted from the first sync could
+        # lag it by six days. Re-reads are cheap: MusicBrainz answers are cached.
+        cadence=EVERY_OTHER_DAY,
         source_name="Official Charts",
         source_url="https://www.officialcharts.com/charts/albums-chart/",
         description="The UK's best-selling and most-streamed albums of the week.",

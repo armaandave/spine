@@ -1,6 +1,6 @@
 """Music adapters: MusicBrainz series, Apple Music, ListenBrainz, 1001 Albums Generator, Official Charts."""
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 import requests
@@ -354,6 +354,11 @@ class AlbumsGeneratorTests(FeaturedTestCase):
 
 
 class OfficialChartsTests(FeaturedTestCase):
+    def test_the_friday_chart_is_read_within_two_days(self):
+        uk = registry.get("official-charts-uk-albums")
+        self.assertLessEqual(uk.cadence, timedelta(days=2))
+        self.assertEqual(registry.cadence_label(uk), "weekly")
+
     def test_parse_chart(self):
         rows, start = official_charts.parse_chart(load_fixture("music", "albums_chart.html"))
         self.assertEqual(
