@@ -127,7 +127,7 @@ def drain():
     return ready
 
 
-@shared_task(name=TASK, ignore_result=True)
+@shared_task(name=TASK)  # its result completes the TaskResult row the publish signal creates
 def enrich_featured_ratings(item_ids):
     """Enrich one featured batch inside the featured provider budgets (default queue)."""
     name, budgets = _scope()
