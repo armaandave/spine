@@ -245,7 +245,7 @@ Rules:
 - Open `ios/Spine/Spine.xcodeproj` in Xcode.
 - Select iPhone simulator → Run (⌘R).
 - API base URL: `ios/Spine/Spine/Core/Environment/AppConfig.swift`
-- Scheme: **Debug**, which builds Spine Dev. It talks to `http://127.0.0.1:8001` (a local dev server), never production.
+- Scheme: **Debug**, which builds Spine Dev. It talks to `http://127.0.0.1:8001` (a local dev server), never production. On a physical iPhone that address is the phone itself, so install to the phone with `scripts/ios/build-to-iphone.sh` (`scripts/ios/TEST_ON_IPHONE.md`), not Xcode's Run.
 
 ### Local backend (Simulator)
 

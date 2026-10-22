@@ -45,5 +45,12 @@ final class AppConfigTests: XCTestCase {
                 .absoluteString,
             "http://Armaans-MacBook-Pro.local:8001"
         )
+        for value in ["https://API.Spine-API.com", "http://127.0.0.1:8000", "http://localhost:8000/"] {
+            XCTAssertEqual(
+                AppConfig.resolvedAPIBaseURL(environment: ["SPINE_API_BASE_URL": value], infoDictionary: nil).absoluteString,
+                AppConfig.localAPIBaseURL,
+                value
+            )
+        }
     }
 }

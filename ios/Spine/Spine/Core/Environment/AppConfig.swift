@@ -24,12 +24,11 @@ enum AppConfig {
     /// Debug builds (the "Spine Dev" app) never talk to production: they use the launch environment's
     /// SPINE_API_BASE_URL (Simulator launches), then the SpineAPIBaseURL Info.plist key, which a phone
     /// build points at this Mac's backend (`scripts/ios/build-to-iphone.sh`), then `localAPIBaseURL`.
-    /// A value naming the production host is ignored.
+    /// A value naming production (its host, or port 8000 on this Mac) is ignored.
     static func resolvedAPIBaseURL(environment: [String: String], infoDictionary: [String: Any]?) -> URL {
         #if DEBUG
-        let production = URL(string: productionAPIBaseURL)
         let candidates = [environment["SPINE_API_BASE_URL"], infoDictionary?["SpineAPIBaseURL"] as? String]
-        for case let url? in candidates.map(usableURL) where url.host != production?.host {
+        for case let url? in candidates.map(usableURL) where !isProduction(url) {
             return url
         }
         return URL(string: localAPIBaseURL)!
@@ -44,6 +43,13 @@ enum AppConfig {
         }
         return url
         #endif
+    }
+
+    /// Production's public host, or the production stack's port on the server Mac.
+    private static func isProduction(_ url: URL) -> Bool {
+        let host = url.host?.lowercased()
+        if host == URL(string: productionAPIBaseURL)?.host?.lowercased() { return true }
+        return url.port == 8000 && ["127.0.0.1", "localhost", "::1"].contains(host)
     }
 
     private static func usableURL(_ value: String?) -> URL? {

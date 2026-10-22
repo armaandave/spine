@@ -35,6 +35,8 @@ scheme_file="$project/xcshareddata/xcschemes/$scheme.xcscheme"
 [ -f "$scheme_file" ] || die "no $scheme scheme at $scheme_file"
 app_name=$(awk '/BuildableName = ".*\.app"/ { sub(/.*BuildableName = "/, ""); sub(/".*/, ""); print; exit }' "$scheme_file")
 [ -n "$app_name" ] || die "could not read the app name from the scheme"
+grep -q 'PRODUCT_BUNDLE_IDENTIFIER = com.armaan.Spine.dev;' "$project/project.pbxproj" ||
+  die "this checkout predates Spine Dev, so its Debug build would replace the real Spine app. Merge origin/myapp-main into the branch first; nothing was built."
 # Debug is the Spine Dev app; it reads the SpineAPIBaseURL Info.plist key and never uses
 # production. Release (com.armaan.Spine) is only built by Xcode Cloud for TestFlight.
 configuration=Debug
@@ -84,9 +86,6 @@ app="$build_dir/Build/Products/$configuration-iphoneos/$app_name"
 bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
 api=$(/usr/libexec/PlistBuddy -c 'Print :SpineAPIBaseURL' "$app/Info.plist" 2>/dev/null || echo unknown)
 echo "Built:    $app_name ($bundle_id), talks to $api"
-if [ "$bundle_id" = com.armaan.Spine ]; then
-  die "this checkout predates Spine Dev, so its Debug build would replace the real Spine app. Merge origin/myapp-main into the branch first; nothing was installed."
-fi
 if [ "$api" != "$local_api" ]; then
   die "the build talks to $api instead of $local_api; nothing was installed"
 fi
