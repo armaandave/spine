@@ -4,14 +4,15 @@ import UIKit
 
 /// The color behind an album page, taken from its cover the way Apple Music's album pages do it, but darker and
 /// calmer than Apple's so the cover stays the brightest thing on the page.
-enum AlbumBackdropColor {
-    struct HSB: Equatable {
+/// `nonisolated` (the app module defaults to `@MainActor`) so the pixel work runs off the main thread.
+nonisolated enum AlbumBackdropColor {
+    nonisolated struct HSB: Equatable, Sendable {
         var hue: Double
         var saturation: Double
         var brightness: Double
     }
 
-    private struct Bucket {
+    private nonisolated struct Bucket {
         var red = 0.0
         var green = 0.0
         var blue = 0.0
@@ -21,7 +22,8 @@ enum AlbumBackdropColor {
     private static let sampleSide = 32
 
     /// The hero has usually shown the cover already, so its bytes come from the pipeline's disk cache, and the
-    /// thumbnail decodes straight to a few dozen pixels.
+    /// thumbnail decodes straight to a few dozen pixels. `@concurrent` keeps it off the opening page's main thread.
+    @concurrent
     static func load(url: URL) async -> Color? {
         var request = ImageRequest(url: url)
         request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: 64)
@@ -98,15 +100,22 @@ enum AlbumBackdropColor {
             return HSB(hue: color.hue, saturation: min(color.saturation, 0.12), brightness: 0.12)
         }
         var degrees = color.hue * 360
-        // Darkened yellows turn olive; pulling them toward orange makes them brown, as Apple Music's are.
-        if (38...66).contains(degrees) {
-            degrees -= (degrees - 30) * 0.6
+        // Darkened yellows turn olive; easing 30°–70° toward its orange end makes them brown, as Apple Music's
+        // are. The curve meets the unshifted hues at both ends, so neighbouring covers get neighbouring colors.
+        if (30...70).contains(degrees) {
+            let position = (degrees - 30) / 40
+            degrees = 30 + 40 * position * position
         }
-        return HSB(hue: degrees / 360, saturation: min(color.saturation, 0.62), brightness: 0.24)
+        return HSB(
+            hue: degrees / 360,
+            saturation: min(color.saturation, 0.62),
+            // Never brighter than the cover's own color, so a very dark cover keeps a very dark page.
+            brightness: min(0.24, max(color.brightness, 0.12))
+        )
     }
 }
 
-extension AlbumBackdropColor.HSB {
+nonisolated extension AlbumBackdropColor.HSB {
     init(red: Double, green: Double, blue: Double) {
         var hue: CGFloat = 0
         var saturation: CGFloat = 0

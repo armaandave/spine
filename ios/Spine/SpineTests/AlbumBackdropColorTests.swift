@@ -72,8 +72,23 @@ final class AlbumBackdropColorTests: XCTestCase {
     func testDarkenedYellowLeansOrangeSoItReadsBrownNotOlive() {
         let tint = AlbumBackdropColor.tint(for: .init(hue: 42 / 360, saturation: 0.7, brightness: 0.95))
 
-        XCTAssertEqual(tint.hue * 360, 34.8, accuracy: 0.1)
+        XCTAssertEqual(tint.hue * 360, 33.6, accuracy: 0.1)
         XCTAssertEqual(tint.brightness, 0.24, accuracy: 0.001)
+    }
+
+    func testYellowShiftHasNoJumpAtEitherEnd() {
+        func tintedDegrees(_ degrees: Double) -> Double {
+            AlbumBackdropColor.tint(for: .init(hue: degrees / 360, saturation: 0.7, brightness: 0.9)).hue * 360
+        }
+
+        XCTAssertEqual(tintedDegrees(29.9), tintedDegrees(30.1), accuracy: 0.5)
+        XCTAssertEqual(tintedDegrees(69.9), tintedDegrees(70.1), accuracy: 0.5)
+    }
+
+    func testVeryDarkCoverIsNotBrightenedPastItsOwnColor() {
+        let tint = AlbumBackdropColor.tint(for: .init(hue: 230 / 360, saturation: 0.8, brightness: 0.16))
+
+        XCTAssertEqual(tint.brightness, 0.16, accuracy: 0.001)
     }
 
     func testBlueHueIsNotShifted() {

@@ -1897,10 +1897,11 @@ private struct MediaDetailPageView: View {
         )
     }
 
-    /// The cover an album page takes its background color from; nil for every other media type.
+    /// The image an album page takes its background color from, the one its hero draws; nil for every other
+    /// media type.
     private var albumArtworkURL: URL? {
         guard let detail = viewModel.detail, detail.ref.mediaType == "music" else { return nil }
-        return detail.displayPosterURL.flatMap(URL.init(string:))
+        return (detail.displayBackdropURL ?? detail.displayPosterURL).flatMap(URL.init(string:))
     }
 
     private func applyPendingPosterSave() {
