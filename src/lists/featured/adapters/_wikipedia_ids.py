@@ -66,6 +66,7 @@ PROPERTIES = {
 MULTI_VALUED = {"P2969", "P648"}
 PART_OF_SERIES = "P179"
 ENTITY_PREFIX = "http://www.wikidata.org/entity/"
+QID = re.compile(r"^Q[1-9]\d*$")  # what goes into a SPARQL VALUES clause, nothing else
 
 _HARDCOVER_QUERY = """
 query GoodreadsMappings($ids: [String!]) {
@@ -125,12 +126,15 @@ def wikidata_items(site, titles):
                 seen.add(current)
                 current = redirects[current]
             qid = items.get(current) if current else None
-            if qid:
+            if qid and QID.match(str(qid)):
                 found[title] = qid
     return found
 
 
 def _sparql(qids, properties):
+    qids = [qid for qid in qids if QID.match(str(qid))]
+    if not qids:
+        return {}
     values = " ".join(f"wd:{qid}" for qid in qids)
     pairs = " ".join(f'("{pid}" p:{pid} ps:{pid})' for pid in properties)
     query = (

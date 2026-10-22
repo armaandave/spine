@@ -398,6 +398,25 @@ class WikidataIdTests(SimpleTestCase):
         with api_routes({SPARQL: sparql(rows)}):
             return wikidata.provider_ids(media_type, {row[0] for row in rows})
 
+    def test_only_well_formed_qids_reach_the_sparql_query(self):
+        injected = "Q1 } ?x ?y ?z . { wd:Q2"
+        with api_routes({SPARQL: sparql([("Q1", "P4947", "550")])}) as api:
+            result = wikidata.provider_ids("movie", ["Q1", injected, "Q0", "P31", ""])
+        self.assertEqual(result, {"Q1": ({"tmdb": "550"}, "")})
+        query = api.call_args.kwargs["params"]["query"]
+        self.assertIn("VALUES ?item { wd:Q1 }", query)
+        self.assertNotIn("?x", query)
+        with api_routes({}):  # nothing valid: no request at all
+            self.assertEqual(wikidata.provider_ids("movie", [injected]), {})
+
+    def test_page_props_without_a_qid_give_no_item(self):
+        pages = [
+            {"title": "Fight Club", "pageprops": {"wikibase_item": "Q190050"}},
+            {"title": "Odd", "pageprops": {"wikibase_item": "Q1 } ?x"}},
+        ]
+        with api_routes({WIKIPEDIA: {"query": {"pages": pages}}}):
+            self.assertEqual(wikidata.wikidata_items("en", ["Fight Club", "Odd"]), {"Fight Club": "Q190050"})
+
     def test_igdb_needs_the_numeric_qualifier_else_steam(self):
         result = self.ids(
             "game",
