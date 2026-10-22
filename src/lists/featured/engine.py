@@ -101,7 +101,8 @@ def _resolve(definition, owner, fetch, resolver):
 def _record_failure(sync, status, message, resolutions=None):
     sync.last_status = status
     sync.last_error = sanitize(message)
-    fields = ["last_status", "last_error", "consecutive_failures"]
+    sync.deferred_until = None  # a failure retries on the backoff schedule instead
+    fields = ["last_status", "last_error", "consecutive_failures", "deferred_until"]
     if resolutions is not None:
         counted = writer.countable(resolutions)
         sync.entry_count = len(counted)
