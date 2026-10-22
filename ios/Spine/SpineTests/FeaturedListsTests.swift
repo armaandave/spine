@@ -157,6 +157,69 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertNil(FeaturedDate.parse(nil))
     }
 
+    func testPeopleCardsDecodePreviewPeopleAndStackThem() throws {
+        let card = try decodeCard("""
+        {"id": 60, "name": "Nobel Prize in Literature", "is_ranked": true, "items_count": 121, "media_types": ["book"],
+         "kind": "award", "preview_items": [],
+         "preview_people": [
+           \(FeaturedFixtures.personJSON(entryId: 1, name: "Annie Ernaux", position: 1)),
+           {"entry_id": 2, "name": "No id or source"},
+           \(FeaturedFixtures.personJSON(entryId: 3, name: "Abdulrazak Gurnah", profileURL: nil, position: nil)),
+           "oops"
+         ]}
+        """)
+
+        XCTAssertEqual(card.previews, [])
+        XCTAssertEqual(card.previewPeople.map(\.name), ["Annie Ernaux", "Abdulrazak Gurnah"])
+        XCTAssertEqual(card.previewPeople.first?.profileUrl, "https://example.com/people/1.jpg")
+        XCTAssertEqual(card.previewPeople.first?.ref, PersonRef(source: "openlibrary", id: "OL1A"))
+        XCTAssertEqual(card.stackPeople.map(\.entryId), [1, 3])
+        XCTAssertEqual(card.itemsCount, 121)
+        // A ranked list's rank chip uses each person's position, else their place in the preview.
+        XCTAssertEqual(card.rank(at: 0), 1)
+        XCTAssertEqual(card.rank(at: 1), 2)
+        XCTAssertNil(card.rank(at: 2))
+        XCTAssertNil(FeaturedPersonPhoto.url(for: card.previewPeople[1]))
+        XCTAssertEqual(card.tileArtworkRequests().count, 1)
+    }
+
+    func testMissingOrMalformedPreviewPeopleDecodeEmpty() throws {
+        let missing = try decodeCard(#"{"id": 1, "name": "Films", "preview_items": []}"#)
+        let malformed = try decodeCard(#"{"id": 2, "name": "People", "preview_people": "oops"}"#)
+
+        XCTAssertEqual(missing.previewPeople, [])
+        XCTAssertEqual(malformed.previewPeople, [])
+        XCTAssertEqual(malformed.itemsCount, 0)
+    }
+
+    func testMediaPreviewsWinOverPeopleInTheStack() throws {
+        let card = try decodeCard("""
+        {"id": 4, "name": "Both", "preview_items": [\(FeaturedFixtures.mediaJSON(id: "1", type: "movie", title: "One"))],
+         "preview_people": [\(FeaturedFixtures.personJSON(entryId: 1, name: "Someone", position: 1))]}
+        """)
+
+        XCTAssertEqual(card.previewPeople.count, 1)
+        XCTAssertEqual(card.stackPeople, [])
+    }
+
+    func testDiskCacheRoundTripsPreviewPeople() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = FeaturedShelvesDiskCache(directory: directory)
+        let response = try decode("""
+        {"shelves": [{"key": "book", "title": "Books", "media_type": "book", "lists": [
+          {"id": 60, "name": "Nobel", "media_types": ["book"], "items_count": 2, "preview_items": [],
+           "preview_people": [\(FeaturedFixtures.personJSON(entryId: 1, name: "Annie Ernaux", position: 1))]}
+        ]}]}
+        """)
+
+        cache.save(FeaturedShelvesCacheEntry(savedAt: .now, response: response), key: "landing")
+        let entry = try XCTUnwrap(cache.load(key: "landing"))
+
+        XCTAssertEqual(entry.response, response)
+        XCTAssertEqual(entry.response.allCards.first?.previewPeople.map(\.name), ["Annie Ernaux"])
+    }
+
     private func decode(_ json: String) throws -> FeaturedShelvesResponse {
         try JSONDecoder.api.decode(FeaturedShelvesResponse.self, from: Data(json.utf8))
     }
@@ -562,6 +625,20 @@ private enum FeaturedFixtures {
         return """
         {"ref": {"item_id": null, "source": "tmdb", "media_type": "\(type)", "media_id": "\(id)", "season_number": null, "episode_number": null},
          "title": "\(title)", "poster_url": "https://image.tmdb.org/t/p/w342/\(id).jpg", "position": \(position.map(String.init) ?? "null")\(noteJSON)}
+        """
+    }
+
+    /// A person as `person_list_item_payload` sends them.
+    static func personJSON(
+        entryId: Int,
+        name: String,
+        profileURL: String? = "https://example.com/people/1.jpg",
+        position: Int?
+    ) -> String {
+        """
+        {"entry_id": \(entryId), "id": "OL\(entryId)A", "source": "openlibrary", "name": "\(name)",
+         "profile_url": \(profileURL.map { "\"\($0)\"" } ?? "null"), "known_for_department": null,
+         "position": \(position.map(String.init) ?? "null"), "date_added": "2026-10-21T18:00:00.123456Z", "completion": null}
         """
     }
 

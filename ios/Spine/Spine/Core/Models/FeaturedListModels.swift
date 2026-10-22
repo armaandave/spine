@@ -206,6 +206,8 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
     let lastSyncedAt: Date?
     let live: FeaturedLiveState?
     let previews: [FeaturedPreview]
+    /// A people list's first people (`preview_people`); empty for media lists.
+    let previewPeople: [PersonListEntry]
 
     var previewItems: [MediaSummary] { previews.map(\.media) }
 
@@ -224,7 +226,8 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         contentChangedAt: Date? = nil,
         lastSyncedAt: Date? = nil,
         live: FeaturedLiveState? = nil,
-        previews: [FeaturedPreview] = []
+        previews: [FeaturedPreview] = [],
+        previewPeople: [PersonListEntry] = []
     ) {
         self.id = id
         self.name = name
@@ -241,6 +244,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         self.lastSyncedAt = lastSyncedAt
         self.live = live
         self.previews = previews
+        self.previewPeople = previewPeople
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -260,6 +264,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         case live
         case previews
         case previewItems
+        case previewPeople
     }
 
     init(from decoder: Decoder) throws {
@@ -273,7 +278,9 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
             ?? container.lenient(FeaturedLossyArray<FeaturedPreview>.self, forKey: .previews)?.elements
             ?? []
         self.previews = previews
-        itemsCount = container.lenient(Int.self, forKey: .itemsCount) ?? previews.count
+        let previewPeople = container.lenient(FeaturedLossyArray<PersonListEntry>.self, forKey: .previewPeople)?.elements ?? []
+        self.previewPeople = previewPeople
+        itemsCount = container.lenient(Int.self, forKey: .itemsCount) ?? max(previews.count, previewPeople.count)
         let mediaTypes = container.lenient(FeaturedLossyArray<String>.self, forKey: .mediaTypes)?.elements ?? []
         self.mediaTypes = mediaTypes.isEmpty
             ? FeaturedMediaTypes.derived(from: previews.map(\.media))
@@ -305,6 +312,7 @@ struct FeaturedListCard: Codable, Hashable, Identifiable {
         try container.encodeIfPresent(lastSyncedAt, forKey: .lastSyncedAt)
         try container.encodeIfPresent(live, forKey: .live)
         try container.encode(previews, forKey: .previews)
+        try container.encode(previewPeople, forKey: .previewPeople)
     }
 }
 

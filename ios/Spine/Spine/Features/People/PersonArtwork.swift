@@ -28,6 +28,11 @@ struct PersonArtwork: View {
     }
 
     private var initials: String {
+        Self.initials(for: name)
+    }
+
+    /// Up to two initials, or "?".
+    static func initials(for name: String) -> String {
         let initials = name
             .split(whereSeparator: \.isWhitespace)
             .prefix(2)
