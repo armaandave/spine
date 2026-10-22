@@ -123,9 +123,10 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
 
 ### 5.1 Planned base URL
 
-- Default and release: `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`). Release builds always use it.
-- Debug builds use, in order: the launch environment's `SPINE_API_BASE_URL`, then the `SpineAPIBaseURL` Info.plist key (`ios/Spine/Configs/Info.plist`, from the `SPINE_API_BASE_URL` build setting, which is production unless a build overrides it), then production.
-- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh`, opted into per Simulator launch (see "Local backend (Simulator)" under Run). On a phone, `scripts/ios/build-to-iphone.sh --local` bakes a local backend's address into the build (`scripts/ios/TEST_ON_IPHONE.md`). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
+- Two apps, one target:
+  - **Release** is **Spine** (`com.armaan.Spine`): what Xcode Cloud archives for TestFlight, and the user's real app. It always uses `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`).
+  - **Debug** is **Spine Dev** (`com.armaan.Spine.dev`, display name "Spine Dev", icon `AppIcon-Dev` with an orange DEV band). It installs next to Spine and **never talks to production**: it uses the launch environment's `SPINE_API_BASE_URL`, then the `SpineAPIBaseURL` Info.plist key (`ios/Spine/Configs/Info.plist`, from the `SPINE_API_BASE_URL` build setting, empty in Debug), then `AppConfig.localAPIBaseURL` (`http://127.0.0.1:8001`). A value naming production's host is ignored.
+- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh` is the Simulator's default (see "Local backend (Simulator)" under Run). On a phone, `scripts/ios/build-to-iphone.sh` bakes a local backend's address into the build (`scripts/ios/TEST_ON_IPHONE.md`). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
 - Config via `Info.plist` or xcconfig — **never hardcode secrets**.
 
 ### 5.2 v1 endpoints (target)
@@ -244,24 +245,24 @@ Rules:
 - Open `ios/Spine/Spine.xcodeproj` in Xcode.
 - Select iPhone simulator → Run (⌘R).
 - API base URL: `ios/Spine/Spine/Core/Environment/AppConfig.swift`
-- Scheme: **Debug**. Without an override it talks to production (`https://api.spine-api.com`).
+- Scheme: **Debug**, which builds Spine Dev. It talks to `http://127.0.0.1:8001` (a local dev server), never production.
 
 ### Local backend (Simulator)
 
-Production is the default on purpose. Use the local backend only when you mean to, and say which backend you used when reporting results.
+Debug builds (Spine Dev) always use a local backend, so a Simulator run needs one running.
 
 1. Start the backend from the repo root: `./start-dev.sh` (Django on `http://127.0.0.1:8001`; set `SPINE_DEV_PORT` to change the port). Check `curl http://127.0.0.1:8001/api/v1/health/` returns 200.
-2. Launch with `SPINE_API_BASE_URL` set:
-   - simctl: `SIMCTL_CHILD_SPINE_API_BASE_URL=http://127.0.0.1:8001 xcrun simctl launch --terminate-running-process <UDID> com.armaan.Spine`
-   - XcodeBuildMCP: `build_run_sim` cannot pass launch environment, so it always launches against production. Build (or build and run), then `stop_app_sim`, then `launch_app_sim` with `env: {"SPINE_API_BASE_URL": "http://127.0.0.1:8001"}`.
+2. Launch normally (`build_run_sim`, simctl, or Xcode): Debug builds default to `http://127.0.0.1:8001`. For another port, set `SPINE_API_BASE_URL` in the launch environment:
+   - simctl: `SIMCTL_CHILD_SPINE_API_BASE_URL=http://127.0.0.1:8002 xcrun simctl launch --terminate-running-process <UDID> com.armaan.Spine.dev`
+   - XcodeBuildMCP: `build_run_sim` cannot pass launch environment. Build (or build and run), then `stop_app_sim`, then `launch_app_sim` with `env: {"SPINE_API_BASE_URL": "http://127.0.0.1:8002"}`.
    - Xcode: duplicate the scheme with **Shared** unchecked and set the variable in its Run action. Never add it to the shared `Spine.xcscheme`.
 3. Confirm the app's requests show up in the `runserver` output.
 
-To open signed in as a passwordless dev user, start the backend with `scripts/ios/local-backend.sh` instead (it prints its port), and launch with `--dev-sign-in` after the bundle ID (`simctl launch ... com.armaan.Spine --dev-sign-in`). Only a local backend answers it; production answers 404.
+To open signed in as a passwordless dev user, start the backend with `scripts/ios/local-backend.sh` instead (it prints its port), and launch with `--dev-sign-in` after the bundle ID (`simctl launch ... com.armaan.Spine.dev --dev-sign-in`). Only a local backend answers it; production answers 404.
 
-Never point a "local" build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
+Never point a build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
 
-Release builds always use `AppConfig.productionAPIBaseURL`. Installed Debug builds use production unless they were built with `scripts/ios/build-to-iphone.sh --local`; don't change the `SPINE_API_BASE_URL` build setting's default to a local URL.
+Release builds always use `AppConfig.productionAPIBaseURL`. Debug builds never do; don't give the Debug `SPINE_API_BASE_URL` build setting a production URL, and don't change the Debug bundle ID back to `com.armaan.Spine` (it would replace the user's TestFlight app).
 
 ### Codex Desktop simulator mirror
 

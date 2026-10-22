@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # Summarize what the current checkout's branch changed relative to origin/myapp-main,
-# which is what production runs, and how to build it for the iPhone.
+# which is what production runs. Every phone test builds the same way (Spine Dev against
+# this checkout's own backend, scripts/ios/TEST_ON_IPHONE.md); the verdict says what a
+# ship would change on the backend.
 # Read-only: never modifies the repo, the phone, or production.
 #
 # Usage: run from inside the checkout (worktree) you want to test.
 #   scripts/ios/feature-status.sh
 #
 # Last line is machine-readable: "VERDICT: <value>" where value is one of
-#   no-backend     no backend changes; a normal phone build (production) tests it
+#   no-backend     no backend changes
 #   backend-live   the backend part is already on origin/myapp-main, so production runs it
-#   local-backend  backend changes production doesn't have (committed or not); test with
-#                  scripts/ios/build-to-iphone.sh --local, nothing is deployed
+#   local-backend  backend changes production doesn't have (committed or not); a ship
+#                  deploys them
 set -euo pipefail
 source "$(dirname "$0")/lib/changes.sh"
 
@@ -83,15 +85,14 @@ if [ ${#migrations[@]} -gt 0 ] || [ ${#dirty_migrations[@]} -gt 0 ]; then
   echo "Production applies them when a deploy's new container starts, after the pre-deploy backup."
 fi
 if [ "$needs_local" = yes ]; then
-  echo "Backend changes that production doesn't have. Test them on the phone with this checkout's"
-  echo "backend: start scripts/ios/local-backend.sh, then scripts/ios/build-to-iphone.sh --local."
-  echo "Nothing needs to be deployed."
+  echo "Backend changes that production doesn't have. The phone test runs them on this checkout's"
+  echo "own backend; nothing needs to be deployed."
   verdict=local-backend
 elif [ ${#backend[@]} -gt 0 ] || [ ${#migrations[@]} -gt 0 ]; then
-  echo "The backend part is already on $base, so production runs it. Build straight to the phone."
+  echo "The backend part is already on $base, so production runs it."
   verdict=backend-live
 else
-  echo "No backend changes. Build straight to the phone; it talks to production."
+  echo "No backend changes."
   verdict=no-backend
 fi
 echo "VERDICT: $verdict"

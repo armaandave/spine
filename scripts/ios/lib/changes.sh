@@ -30,7 +30,7 @@ spine_area() {
     ios/*) echo ios ;;
     src/*/migrations/*) echo migration ;;
     src/*/tests/*|src/*/tests.py) echo tests ;;
-    scripts/*|.github/*|.agents/*|.claude/*|.cursor/*|.codex/*|.gitignore) echo tooling ;;
+    scripts/*|.github/*|.agents/*|.claude/*|.cursor/*|.codex/*|.xcodebuildmcp/*|.mcp.json|.gitignore) echo tooling ;;
     docs/*|*.md) echo docs ;;
     *) echo backend ;;
   esac

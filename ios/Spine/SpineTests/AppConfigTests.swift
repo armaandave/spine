@@ -21,14 +21,29 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "http://Armaans-MacBook-Pro.local:8001")
     }
 
-    func testMissingOrEmptyValuesFallBackToProduction() {
+    func testDebugBuildsFallBackToTheLocalServerNotProduction() {
+        let local = URL(string: AppConfig.localAPIBaseURL)!
         let cases: [([String: String], [String: Any]?)] = [
             ([:], nil),
             ([:], [:]),
             (["SPINE_API_BASE_URL": ""], ["SpineAPIBaseURL": ""]),
         ]
         for (environment, info) in cases {
-            XCTAssertEqual(AppConfig.resolvedAPIBaseURL(environment: environment, infoDictionary: info), production)
+            XCTAssertEqual(AppConfig.resolvedAPIBaseURL(environment: environment, infoDictionary: info), local)
         }
+    }
+
+    func testDebugBuildsIgnoreProductionOverrides() {
+        let url = AppConfig.resolvedAPIBaseURL(
+            environment: ["SPINE_API_BASE_URL": production.absoluteString],
+            infoDictionary: ["SpineAPIBaseURL": production.absoluteString]
+        )
+
+        XCTAssertEqual(url.absoluteString, AppConfig.localAPIBaseURL)
+        XCTAssertEqual(
+            AppConfig.resolvedAPIBaseURL(environment: ["SPINE_API_BASE_URL": production.absoluteString], infoDictionary: localBuild)
+                .absoluteString,
+            "http://Armaans-MacBook-Pro.local:8001"
+        )
     }
 }
