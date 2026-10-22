@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Summarize what the current checkout's branch changed relative to origin/myapp-main,
-# which is what production runs. Every phone test builds the same way (Spine Dev against
-# this checkout's own backend, scripts/ios/TEST_ON_IPHONE.md); the verdict says what a
-# ship would change on the backend.
+# which is what production runs, and whether a phone test needs the test backend to serve
+# this checkout (scripts/ios/TEST_ON_IPHONE.md).
 # Read-only: never modifies the repo, the phone, or production.
 #
 # Usage: run from inside the checkout (worktree) you want to test.
@@ -11,8 +10,8 @@
 # Last line is machine-readable: "VERDICT: <value>" where value is one of
 #   no-backend     no backend changes
 #   backend-live   the backend part is already on origin/myapp-main, so production runs it
-#   local-backend  backend changes production doesn't have (committed or not); a ship
-#                  deploys them
+#   local-backend  backend changes production doesn't have (committed or not); a phone
+#                  test serves them first (scripts/ios/test-backend.sh use); a ship deploys them
 set -euo pipefail
 source "$(dirname "$0")/lib/changes.sh"
 
@@ -85,8 +84,8 @@ if [ ${#migrations[@]} -gt 0 ] || [ ${#dirty_migrations[@]} -gt 0 ]; then
   echo "Production applies them when a deploy's new container starts, after the pre-deploy backup."
 fi
 if [ "$needs_local" = yes ]; then
-  echo "Backend changes that production doesn't have. The phone test runs them on this checkout's"
-  echo "own backend; nothing needs to be deployed."
+  echo "Backend changes that production doesn't have. For a phone test, serve them from the test"
+  echo "backend first (scripts/ios/test-backend.sh use); nothing needs to be deployed."
   verdict=local-backend
 elif [ ${#backend[@]} -gt 0 ] || [ ${#migrations[@]} -gt 0 ]; then
   echo "The backend part is already on $base, so production runs it."

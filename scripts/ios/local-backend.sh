@@ -13,7 +13,8 @@
 #
 # It stays in the foreground (the server plus a Celery worker). Run it under the
 # cleanup wrapper, in the background:
-#   ~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend -- scripts/ios/local-backend.sh
+#   ~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend --timeout 14400 -- scripts/ios/local-backend.sh
+# (The always-on test backend, scripts/ios/test-backend.sh, runs this under launchd instead.)
 # Once it answers it prints "LOCAL_API: http://<this Mac>.local:<port>".
 #
 # Usage: scripts/ios/local-backend.sh [--port <n>]  (default: first free port from 8001)
