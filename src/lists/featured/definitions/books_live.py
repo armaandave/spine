@@ -1,8 +1,10 @@
-"""Live book, comic and manga lists: charts, trending lists and book clubs.
+"""Live book and manga lists: charts, trending lists and book clubs.
 
-Positions: books 340-369, comics 420-429, manga 460-479. The five headline NYT charts
-live in ``headline.py``; every other active NYT chart is here, read from one shared
-``lists/overview.json`` response (``adapters/nyt_overview.py``).
+Positions: books 340-369, manga 460-479. Comics (420-429) have none yet: ICv2's
+BookScan chart parses cleanly, but its English volume titles matched only 4 of 14
+series. The five headline NYT charts live in ``headline.py``; every other active NYT
+chart is here, read from one shared ``lists/overview.json`` response
+(``adapters/nyt_overview.py``).
 """
 
 from datetime import timedelta
