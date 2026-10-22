@@ -1,2 +1,4 @@
 scope,entry_key,ref,note
 nobel-prize-literature,wikidata:Q7884119,openlibrary:person:OL198800A,"Wikidata has no Open Library id; OL198800A is J. M. G. Le Clézio (born 13 April 1940, Le procès-verbal)"
+international-booker-prize,wikidata:Q134547019,openlibrary:book:OL57557009M,"Wikidata has no Open Library id; OL57557009M is the English cover edition of work OL42418897W, Heart Lamp by Banu Mushtaq (2025)"
+womens-prize-fiction,wikidata:Q7761069,openlibrary:book:OL7764655M,"Wikidata has no Open Library id and the title is too common to search; OL7764655M is the cover edition of work OL477532W, The Road Home by Rose Tremain"

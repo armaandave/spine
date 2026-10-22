@@ -452,8 +452,8 @@ booker-prize,1970,Q4000425,Troubles,,,-,"won the one-off Lost Man Booker Prize (
 international-booker-prize,2023,Q118946932,Time Shelter,,,-,duplicate item of the 2023 winner
 international-booker-prize,2021,Q113859354,At Night All Blood Is Black,,,-,duplicate item of the 2021 winner
 international-booker-prize,2021,Q125509557,The Perfect Nine,,,-,"shortlisted in 2021, not the winner"
-hugo-best-novel,2011,Q11681262,All Clear,,,-,"volume of the 2011 winner Blackout/All Clear, which is listed"
-hugo-best-novel,2011,Q18366291,Blackout,,,-,"volume of the 2011 winner Blackout/All Clear, which is listed"
+hugo-best-novel,2011,Q11681262,All Clear,,,-,second volume of the 2011 winner Blackout/All Clear; the first volume stands for it
+hugo-best-novel,2011,Q2905261,Blackout/All Clear,,,-,"a book series, which Spine can't list; its first volume Blackout stands for it"
 womens-prize-fiction,2026,Q138964814,The Correspondent,Virginia Evans,,,Wikipedia winners table; Wikidata lacks it
 womens-prize-fiction,2025,Q132638069,The Persians,,,-,not the 2025 winner (The Safekeep)
 womens-prize-fiction,2025,Q130749180,The Safekeep,Yael van der Wouden,,,Wikipedia winners table; Wikidata lacks it
@@ -472,7 +472,7 @@ womens-prize-fiction,2005,Q2107910,We Need to Talk About Kevin,Lionel Shriver,,,
 womens-prize-fiction,2003,Q7250211,Property,Valerie Martin,,,Wikipedia winners table; Wikidata lacks it
 womens-prize-fiction,2001,Q7741334,The Idea of Perfection,Kate Grenville,,,Wikipedia winners table; Wikidata lacks it
 womens-prize-fiction,2000,Q16963195,When I Lived in Modern Times,Linda Grant,,,Wikipedia winners table; Wikidata lacks it
-womens-prize-fiction,1999,Q4656184,A Crime in the Neighborhood,Suzanne Berne,,,Wikipedia winners table; Wikidata lacks it
+womens-prize-fiction,1999,,A Crime in the Neighborhood,Suzanne Berne,1997,,Wikipedia winners table; Wikidata lacks it (the Wikidata item names the wrong author)
 womens-prize-fiction,1998,Q6489841,Larry's Party,Carol Shields,,,Wikipedia winners table; Wikidata lacks it
 womens-prize-fiction,1998,Q1472202,The House Gun,,,-,not the 1998 winner (Larry's Party)
 womens-prize-fiction,1997,Q5507274,Fugitive Pieces,Anne Michaels,,,Wikipedia winners table; Wikidata lacks it
