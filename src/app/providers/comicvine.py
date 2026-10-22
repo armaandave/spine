@@ -18,7 +18,9 @@ headers = {
     "User-Agent": "Mozilla/5.0",
 }
 
-COMIC_SEARCH_CACHE_VERSION = "v2"
+COMIC_SEARCH_CACHE_VERSION = "v3"
+# Comic Vine's search endpoint gives every volume this stand-in cover.
+PLACEHOLDER_IMAGE_SUFFIX = "-blank.png"
 LOCALIZED_EDITION_PENALTY = 50
 LOCALIZED_RELATED_EDITION_PENALTY = 20
 LOCALIZED_EDITION_WORDS = (
@@ -128,6 +130,7 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
         except requests.exceptions.HTTPError as error:
             handle_error(error)
 
+        _fill_placeholder_covers(response["results"], timeout=timeout)
         results = build_search_results(response["results"], query=query)
         results = rank_results(
             query,
@@ -147,6 +150,43 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
         cache.set(cache_key, data)
 
     return data
+
+
+def _fill_placeholder_covers(items, timeout=None):
+    """Swap search's stand-in covers for the real ones from the volumes list."""
+    ids = [
+        str(item["id"])
+        for item in items
+        if get_image(item).endswith(PLACEHOLDER_IMAGE_SUFFIX)
+    ]
+    if not ids:
+        return
+
+    params = {
+        "api_key": settings.COMICVINE_API,
+        "format": "json",
+        "filter": f"id:{'|'.join(ids)}",
+        "field_list": "id,image",
+        "limit": len(ids),
+    }
+    try:
+        response = services.api_request(
+            Sources.COMICVINE.value,
+            "GET",
+            f"{base_url}/volumes/",
+            params=params,
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.exceptions.RequestException:
+        # Placeholder covers beat failing the whole search.
+        logger.warning("Failed to fetch Comic Vine covers", exc_info=True)
+        return
+
+    images = {volume["id"]: volume.get("image") for volume in response["results"]}
+    for item in items:
+        if images.get(item["id"]):
+            item["image"] = images[item["id"]]
 
 
 def build_search_results(items, query=None):
