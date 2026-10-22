@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from app import helpers
-from app.models import MediaTypes, Sources
+from app.models import Item, MediaTypes, Sources
 from app.providers import services
 from app.providers.search_rank import rank_results
 
@@ -529,6 +529,36 @@ def book(media_id):
         cache.set(cache_key, data)
 
     return data
+
+
+def saved_book(media_id):
+    """Return a basic page for a saved book while Hardcover is rate limited."""
+    item = Item.objects.filter(
+        source=Sources.HARDCOVER.value,
+        media_type=MediaTypes.BOOK.value,
+        media_id=str(media_id),
+    ).first()
+    if not item:
+        return None
+    release_date = item.release_date.isoformat() if item.release_date else None
+    return {
+        "media_id": int(media_id),
+        "source": Sources.HARDCOVER.value,
+        "source_url": None,
+        "media_type": MediaTypes.BOOK.value,
+        "title": item.title,
+        "max_progress": item.total_pages,
+        "image": item.image or settings.IMG_NONE,
+        "synopsis": "No synopsis available.",
+        "genres": [],
+        "score": None,
+        "score_count": 0,
+        "details": {
+            "number_of_pages": item.total_pages,
+            "release_date": release_date,
+        },
+        "related": {},
+    }
 
 
 def get_featured_series(series_data):

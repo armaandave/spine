@@ -43,6 +43,8 @@ SUPPORTED_PERSON_SOURCES = (
     Sources.MANGAUPDATES.value,
     "anilist",
 )
+# Marks search results from a fallback provider while the usual one is rate limited.
+RATE_LIMIT_FALLBACK = "rate_limit_fallback"
 PERSON_SEARCH_CACHE_VERSION = "v1"
 PERSON_SEARCH_TTL = 60 * 60
 
@@ -275,6 +277,11 @@ def api_request(
                 seconds_to_wait = int(error_resp.headers.get("Retry-After", 5))
             except (TypeError, ValueError):
                 seconds_to_wait = 5
+            # A provider asking for more than every retry could wait (Hardcover's
+            # daily cap asks for hours) won't recover in time, so fail now instead
+            # of holding the request through every retry.
+            if seconds_to_wait > RATE_LIMIT_MAX_WAIT_SECONDS * RATE_LIMIT_MAX_RETRIES:
+                raise error from None
             seconds_to_wait = min(
                 max(seconds_to_wait, 0),
                 RATE_LIMIT_MAX_WAIT_SECONDS,
@@ -432,11 +439,7 @@ def search(
                 **search_options,
             )
             if source == Sources.OPENLIBRARY.value
-            else hardcover.search(
-                query,
-                page,
-                **search_options,
-            )
+            else _search_hardcover_or_openlibrary(query, page, search_options)
         ),
         MediaTypes.COMIC.value: lambda: comicvine.search(
             query,
@@ -450,6 +453,18 @@ def search(
         ),
     }
     return search_handlers[media_type]()
+
+
+def _search_hardcover_or_openlibrary(query, page, search_options):
+    """Search Hardcover, or Open Library while Hardcover is rate limited."""
+    try:
+        return hardcover.search(query, page, **search_options)
+    except ProviderAPIError as error:
+        if error.status_code != requests.codes.too_many_requests:
+            raise
+        logger.warning("Hardcover is rate limited; searching Open Library instead")
+        # Flagged so callers don't cache it in place of Hardcover's results.
+        return {**openlibrary.search(query, page, **search_options), RATE_LIMIT_FALLBACK: True}
 
 
 def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count"):
