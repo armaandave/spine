@@ -822,6 +822,44 @@ final class FeaturedEntryNoteTests: XCTestCase {
         XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture", nil])
     }
 
+    func testEditingAFeaturedListKeepsItsFeaturedBlockAndNotes() async throws {
+        let repository = FeaturedNotesListRepository(
+            items: [MediaSummary(ref: try ref(1), title: "Winner", position: 1, note: "Winner · Best Picture")],
+            featuredJSON: #"{"id": 12, "name": "Oscars", "kind": "award", "media_types": ["movie"], "items_count": 1}"#
+        )
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        XCTAssertEqual(viewModel.list?.featured?.kind, .award)
+
+        let saved = await viewModel.update(CustomListWriteRequest(name: "Oscars", description: "Edited"))
+
+        XCTAssertTrue(saved)
+        XCTAssertEqual(repository.updateCalls, 1)
+        XCTAssertEqual(viewModel.list?.featured?.kind, .award)
+        XCTAssertEqual(viewModel.displayedItems.map(\.note), ["Winner · Best Picture"])
+        XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture"])
+    }
+
+    func testEditingAnOrdinaryListDoesNotReload() async throws {
+        let repository = FeaturedNotesListRepository(items: [MediaSummary(ref: try ref(1), title: "One", position: 1)])
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+
+        _ = await viewModel.update(CustomListWriteRequest(name: "Renamed"))
+
+        XCTAssertEqual(repository.detailCalls, 1)
+    }
+
     private func ref(_ itemId: Int) throws -> MediaRef {
         let json = #"{"item_id": \#(itemId), "source": "tmdb", "media_type": "movie", "media_id": "\#(itemId)"}"#
         return try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8))
@@ -831,20 +869,31 @@ final class FeaturedEntryNoteTests: XCTestCase {
 @MainActor
 private final class FeaturedNotesListRepository: ListRepository {
     let items: [MediaSummary]
+    let featuredJSON: String?
+    var detailCalls = 0
+    var updateCalls = 0
 
-    init(items: [MediaSummary]) {
+    init(items: [MediaSummary], featuredJSON: String? = nil) {
         self.items = items
+        self.featuredJSON = featuredJSON
     }
 
     func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { [] }
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary] { [] }
 
     func detail(id: Int) async throws -> CustomListDetail {
+        detailCalls += 1
+        return try Self.detail(itemsCount: items.count, featuredJSON: featuredJSON)
+    }
+
+    /// The list as `GET /lists/{id}/` sends it, or, without `featuredJSON`, as a PATCH answers: no featured block.
+    private static func detail(itemsCount: Int, featuredJSON: String?) throws -> CustomListDetail {
+        let featured = featuredJSON.map { #", "featured": \#($0)"# } ?? ""
         let json = """
         {"id": 12, "name": "Oscars", "slug": "oscars", "description": "", "visibility": "public",
          "is_ranked": true, "list_type": "media",
          "owner": {"id": 1, "username": "Spine", "display_name": "Spine", "avatar_url": null},
-         "items_count": \(items.count), "like_count": 0, "items": []}
+         "items_count": \(itemsCount), "like_count": 0, "items": []\(featured)}
         """
         return try JSONDecoder.api.decode(CustomListDetail.self, from: Data(json.utf8))
     }
@@ -854,7 +903,11 @@ private final class FeaturedNotesListRepository: ListRepository {
     }
 
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary { fatalError("unused") }
-    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail { fatalError("unused") }
+    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail {
+        updateCalls += 1
+        return try Self.detail(itemsCount: items.count, featuredJSON: nil)
+    }
+
     func delete(id: Int) async throws {}
     func addItem(listId: Int, ref: MediaRef) async throws -> MediaSummary { fatalError("unused") }
     func removeItem(listId: Int, itemId: Int) async throws {}
