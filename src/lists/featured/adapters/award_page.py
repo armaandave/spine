@@ -26,6 +26,10 @@ Params:
   differently from the nominee file.
 - ``infobox``: ``{infobox field: category}``; ``awardN_type``/``awardN_winner``
   pairs are read without it.
+- ``titles``: ``{nominee title: [other title, …]}`` when the page may name a
+  nominee differently ("GTA Online" / "Grand Theft Auto Online"). Titles already
+  match in full or before a subtitle, ignoring case, punctuation and Roman sequel
+  numbers.
 - ``edition``: the period label ("2026").
 - ``wiki``: the wiki host (default ``en.wikipedia.org``).
 
@@ -34,6 +38,7 @@ are published they rise to the top in category order ("Winner · <Category>").
 """
 
 import csv
+import dataclasses
 import hashlib
 import logging
 import re
@@ -62,7 +67,7 @@ STATE_TTL = 60 * 60 * 24 * 21
 STATE_VERSION = 1
 PARSER_VERSION = "1"  # bump when wikitext reading changes, to re-sync every award list
 DEFAULT_WIKI = "en.wikipedia.org"
-PARAMS = {"pages", "ceremony", "aliases", "infobox", "edition", "wiki"}
+PARAMS = {"pages", "ceremony", "aliases", "infobox", "titles", "edition", "wiki"}
 _WIKI_HOST = re.compile(r"^[a-z][a-z-]*\.wikipedia\.org$")
 NO_MATCH_NOMINEE = "nominee has no Spine match"
 NO_MATCH_WINNER = "winner has no Spine match"
@@ -180,6 +185,15 @@ def labels_for(definition, nominees):
     return labels
 
 
+def with_titles(definition, nominees):
+    """Attach the ``titles`` param's other titles to their nominees."""
+    titles = definition.params.get("titles") or {}
+    return [
+        dataclasses.replace(nominee, aliases=tuple(titles.get(nominee.title, ()))) if nominee.title in titles else nominee
+        for nominee in nominees
+    ]
+
+
 def _wiki(definition):
     host = definition.params.get("wiki", DEFAULT_WIKI)
     if not isinstance(host, str) or not _WIKI_HOST.match(host):
@@ -207,12 +221,17 @@ def validate(definition):
     known = set(categories(nominees))
     aliases = definition.params.get("aliases") or {}
     infobox = definition.params.get("infobox") or {}
-    if not isinstance(aliases, Mapping) or not isinstance(infobox, Mapping):
-        msg = "aliases and infobox must be mappings"
+    titles = definition.params.get("titles") or {}
+    if not all(isinstance(value, Mapping) for value in (aliases, infobox, titles)):
+        msg = "aliases, infobox and titles must be mappings"
         raise ValueError(msg)
-    for category, values in aliases.items():
+    for name, values in [*aliases.items(), *titles.items()]:
         if isinstance(values, str) or not all(isinstance(value, str) for value in values):
-            msg = f"aliases for {category!r} must be a list of labels"
+            msg = f"{name!r} needs a list of names"
+            raise ValueError(msg)
+    for title in titles:
+        if nominees and title not in {nominee.title for nominee in nominees}:
+            msg = f"{title!r} is not a nominee title in static/nominees/{path.name}"
             raise ValueError(msg)
     for category in [*aliases, *infobox.values()]:
         if nominees and category not in known:
@@ -496,6 +515,7 @@ def fetch(definition):
         nominees = read_nominees(nominee_path(definition), set(definition.media_types))
     except (OSError, ValueError) as error:
         raise AdapterError(str(error)) from None
+    nominees = with_titles(definition, nominees)
     edition = str(definition.params.get("edition") or "")
     if not nominees:
         return FetchResult(entries=[], edition=edition)

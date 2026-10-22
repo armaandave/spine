@@ -396,6 +396,8 @@ class NomineeFileTests(SimpleTestCase):
                 "wiki must be": {"pages": ["X"], "ceremony": "tga-2025", "wiki": "evil.example.com"},
                 "is not a category": {"pages": ["X"], "ceremony": "tga-2025", "aliases": {"Best Picture": ["X"]}},
                 "section must be": {"pages": [{"title": "X", "section": ""}], "ceremony": "tga-2025"},
+                "is not a nominee title": {"pages": ["X"], "ceremony": "tga-2025", "titles": {"Halo": ["Halo CE"]}},
+                "needs a list of names": {"pages": ["X"], "ceremony": "tga-2025", "titles": {"Hades II": "Hades 2"}},
             }
             for message, params in cases.items():
                 with self.subTest(message), self.assertRaisesMessage(ValueError, message):
@@ -502,6 +504,25 @@ class ReaderTests(SimpleTestCase):
         self.assertEqual(outcome["Game of the Year"].winners, (rows[0].ref,))
         self.assertEqual(outcome["Best Picture"].state, NONE)
 
+    def test_titles_match_before_a_subtitle_across_roman_numerals_and_by_alias(self):
+        rows = [
+            nominee("Game of the Year", "Slay the Spire 2"),
+            nominee("Game of the Year", "Huna: A Memoir of Revolution, Prison, and Becoming"),
+            Nominee(category="Game of the Year", rank=None, title="GTA Online", ref="x:gta", aliases=("Grand Theft Auto Online",)),
+        ]
+        cases = {
+            "* '''''[[Slay the Spire II]]'''''": rows[0].ref,
+            "* '''''[[Huna]]''''' – Abdelrahman ElGendy": rows[1].ref,
+            "* '''''[[Grand Theft Auto Online]]'''''": "x:gta",
+        }
+        for line, ref in cases.items():
+            with self.subTest(line):
+                outcome = evaluate(read_page(goty_page(line), labels("Game of the Year")), rows)["Game of the Year"]
+                self.assertEqual(outcome.winners, (ref,))
+        plain = [*rows[:2], Nominee(category="Game of the Year", rank=None, title="GTA Online", ref="x:gta")]
+        page = goty_page("* '''''[[Grand Theft Auto Online]]'''''")
+        self.assertEqual(evaluate(read_page(page, labels("Game of the Year")), plain)["Game of the Year"].state, REVIEW)
+
     def test_conflicting_marks_are_reviewed(self):
         page = (
             "{{Infobox award\n| award1_type = Game of the Year\n| award1_winner = ''[[Hades II]]''\n}}\n"
@@ -536,3 +557,4 @@ class ReviewIdTests(SimpleTestCase):
         self.assertEqual((resolution.match, resolution.reason), (None, "not a nominee"))
         overridden = Resolver(definition, overrides={row.key: "igdb:game:119133"}).resolve_one(row)
         self.assertEqual(overridden.match.ref, "igdb:game:119133")
+

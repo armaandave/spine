@@ -53,6 +53,8 @@ _TIE = re.compile(
 )
 _PIECES = re.compile(r"\s+[–—-]\s+|\s*[,;/()\[\]]\s*|\s+as\s+|\s+from\s+|\s+for\s+", re.I)
 _WINNER_HEADER = {"winner", "winners", "winner s", "won"}
+# Sequel numbers compare equal either way ("Slay the Spire II" is "Slay the Spire 2").
+_ROMAN = {"ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
 _NON_ARTICLE = ("file:", "image:", "category:", "media:")
 
 # Templates shown as their last positional argument, their first, or joined.
@@ -117,6 +119,16 @@ def strip_noise(text):
     return _NOWIKI.sub("", _REF.sub("", _COMMENT.sub("", str(text or ""))))
 
 
+def loose(form):
+    """Return a normalized title with Roman sequel numbers as digits."""
+    return " ".join(_ROMAN.get(word, word) for word in form.split())
+
+
+def forms(title):
+    """Return the comparable forms of a title: in full and before any subtitle."""
+    return {loose(form) for form in title_forms(title)}
+
+
 def _target_name(target):
     target = target.split("#", 1)[0]
     return re.sub(r"\s*\([^()]*\)\s*$", "", target).replace("_", " ")
@@ -138,10 +150,10 @@ def names(raw):
     text = plain(raw)
     found.add(text)
     found.update(piece for piece in _PIECES.split(text))
-    forms = set()
+    found_forms = set()
     for name in found:
-        forms |= title_forms(name.replace("‡", "").strip())
-    return frozenset(form for form in forms if form)
+        found_forms |= forms(name.replace("‡", "").strip())
+    return frozenset(form for form in found_forms if form)
 
 
 def _color(value):
@@ -530,6 +542,7 @@ class Nominee:
     creator: str = ""
     ref: str = ""
     note: str = ""
+    aliases: tuple = ()  # other titles the page may use
 
     @property
     def key(self):
@@ -537,9 +550,12 @@ class Nominee:
         return self.ref or f"t:{normalize_title(self.title)}"
 
     @property
-    def form(self):
-        """Return the normalized title compared with page names."""
-        return normalize_title(self.title)
+    def forms(self):
+        """Return the title forms compared with page names (full and main title)."""
+        found = set()
+        for title in (self.title, *self.aliases):
+            found |= forms(title)
+        return found
 
 
 @dataclass(frozen=True)
@@ -574,7 +590,7 @@ def evaluate(reading, nominees):
         winners, reasons = set(), []
         marks = [mark for mark in reading.marks if mark.category == category]
         for mark in marks:
-            keys = _pick(mark, [row for row in rows if row.form in mark.names])
+            keys = _pick(mark, [row for row in rows if row.forms & mark.names])
             if len(keys) == 1:
                 winners |= keys
             elif keys:
