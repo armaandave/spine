@@ -39,6 +39,7 @@ import json
 import logging
 import re
 from collections import defaultdict
+from dataclasses import replace
 from functools import cache as memoize
 from pathlib import Path
 
@@ -59,7 +60,7 @@ SUPPLEMENT = Path(__file__).resolve().parent.parent / "static" / "supplements" /
 SUPPLEMENT_COLUMNS = ["list", "year", "qid", "title", "creator", "published", "ref", "why"]
 
 # Bump when the query or the parsing changes, so every Wikidata list re-syncs.
-QUERY_VERSION = "1"
+QUERY_VERSION = "2"
 SPARQL_TTL = 60 * 60 * 12
 LOOKUP_HIT_TTL = 60 * 60 * 24 * 30
 LOOKUP_MISS_TTL = 60 * 60 * 24
@@ -716,6 +717,19 @@ def work_editions(work_id):
     return _cached("olwork", work_id, compute)
 
 
+def _main_title(entry):
+    """Search a book by its main title: "Wilmington's Lie: The Murderous Coup…" -> "Wilmington's Lie".
+
+    The strict title search accepts a result whose main title equals the entry's
+    title, but not the reverse, and catalogs often drop long subtitles. The match
+    stays exact on the main title, the author and the year.
+    """
+    head = entry.title.split(":", 1)[0].strip()
+    if head == entry.title or len(normalize_title(head)) < 3:  # noqa: PLR2004
+        return entry
+    return replace(entry, title=head)
+
+
 def _book_ids(pairs):
     """Give book entries a Hardcover id, else an Open Library edition, from their work ids."""
     works = {}
@@ -760,7 +774,7 @@ def _book_ids(pairs):
     entries = []
     for index, (entry, _) in enumerate(pairs):
         if index not in found:
-            entries.append(entry)
+            entries.append(_main_title(entry) if "ref" not in entry.ids else entry)
             continue
         ids, image = found[index]
         entries.append(

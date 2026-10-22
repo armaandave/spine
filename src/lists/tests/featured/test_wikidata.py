@@ -230,7 +230,12 @@ class SupplementTests(WikidataTestCase):
 @override_settings(HARDCOVER_API="test-hardcover-key")
 class BookTests(WikidataTestCase):
     def fetch(self, **routes):
-        definition = award_definition(media_types=("book",), position=330, params={"mode": "award", "awards": ["Q160082"], "author_statements": True})
+        definition = award_definition(
+            key="wikidata-test",
+            media_types=("book",),
+            position=330,
+            params={"mode": "award", "awards": ["Q160082"], "author_statements": True},
+        )
         openlibrary = {
             "/works/OL2W/editions.json": http_error(404),
             "/works/OL2W.json": load_fixture("wikidata", "work_OL2W_redirect.json"),
@@ -278,6 +283,19 @@ class BookTests(WikidataTestCase):
     def test_an_open_library_failure_leaves_the_entry_to_title_search(self):
         entries = {entry.title: entry for entry in self.fetch(**{"/works/OL2W.json": http_error(500)}).entries}
         self.assertEqual(entries["Prophet Song"].ids, {"wikidata": "Q116"})
+
+    def test_books_left_to_title_search_use_the_main_title(self):
+        body = (
+            "wikidata-test,2021,,Wilmington's Lie: The Murderous Coup of 1898,David Zucchino,2020,,\n"
+            "wikidata-test,2020,,Big: A Short One,Vashti Harrison,2019,,\n"
+            "wikidata-test,2019,,Ok: Two Letters,Someone,2018,,\n"
+        )
+        with supplement(body):
+            entries = {entry.creator: entry for entry in self.fetch().entries}
+        self.assertEqual(entries["David Zucchino"].title, "Wilmington's Lie")
+        self.assertEqual(entries["David Zucchino"].key, "t:wilmingtons lie|2020")
+        self.assertEqual(entries["Vashti Harrison"].title, "Big")
+        self.assertEqual(entries["Someone"].title, "Ok: Two Letters")  # too short to search alone
 
     @override_settings(HARDCOVER_API="")
     def test_without_a_hardcover_key_books_use_open_library(self):
