@@ -1643,6 +1643,7 @@ struct ProfileListDetailView: View {
                 }
                 }
 
+                if list.isOwned(by: currentUserId) {
                 Menu {
                     Button("Edit List", systemImage: "slider.horizontal.3") {
                         Task {
@@ -1660,6 +1661,7 @@ struct ProfileListDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isSaving)
+                }
             }
         }
     }
