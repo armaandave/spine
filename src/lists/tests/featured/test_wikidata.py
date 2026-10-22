@@ -251,6 +251,23 @@ class BookTests(WikidataTestCase):
         ):
             return ADAPTERS["wikidata"].fetch(definition)
 
+    @override_settings(HARDCOVER_API="test-hardcover-key")
+    def test_unreadable_hardcover_answers_are_adapter_errors(self):
+        for answer, message in (
+            (["not", "an", "object"], "unreadable answer"),
+            ({"data": ["odd"]}, "unreadable answer"),
+            ({"errors": [{"message": "x"}]}, "rejected"),
+        ):
+            with (
+                self.subTest(answer=answer),
+                patch("app.providers.services.api_request", return_value=answer),
+                self.assertRaisesMessage(AdapterError, message),
+            ):
+                wd.hardcover_books(["/works/OL1W"])
+        mappings = {"data": {"book_mappings": ["odd", {"external_id": "/works/OL1W", "book": {"id": 7}}]}}
+        with patch("app.providers.services.api_request", return_value=mappings):
+            self.assertEqual(wd.hardcover_books(["/works/OL1W"])["/works/OL1W"]["id"], "7")
+
     def test_works_become_hardcover_books_or_open_library_editions(self):
         entries = {entry.title: entry for entry in self.fetch().entries}
         orbital = entries["Orbital"]

@@ -79,8 +79,17 @@ def _year_of(timestamp):
 
 
 def _from_config(raw, year):
-    config = json.loads(html.unescape(raw))
-    votes = ((config.get("definitions") or {}).get("votes")) or []
+    try:
+        config = json.loads(html.unescape(raw))
+    except ValueError:
+        msg = "The Steam Awards page's embedded config is not readable JSON."
+        raise AdapterError(msg) from None
+    if not isinstance(config, dict):
+        msg = "The Steam Awards page's embedded config is not an object."
+        raise AdapterError(msg)
+    definitions = config.get("definitions") or {}
+    votes = (definitions.get("votes") if isinstance(definitions, dict) else None) or []
+    votes = [vote for vote in votes if isinstance(vote, dict)] if isinstance(votes, list) else []
     years = {_year_of(vote.get("start_time")) or _year_of(vote.get("reveal_time")) for vote in votes}
     if years != {year}:
         return None
@@ -93,7 +102,9 @@ def _from_config(raw, year):
                 name=str(vote.get("internal_name") or localization.get("title") or ""),
                 title=str(localization.get("title") or vote.get("internal_name") or ""),
                 winner=str(winner) if winner else "",
-                nominees=tuple(str(app["appid"]) for app in vote.get("app_discounts") or () if app.get("appid")),
+                nominees=tuple(
+                    str(app["appid"]) for app in vote.get("app_discounts") or () if isinstance(app, dict) and app.get("appid")
+                ),
             ),
         )
     return categories

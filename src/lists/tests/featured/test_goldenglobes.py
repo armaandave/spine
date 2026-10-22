@@ -110,3 +110,30 @@ class GoldenGlobesAdapterTests(FeaturedTestCase):
         }
         with api_routes(routes), self.assertRaisesMessage(AdapterError, "records missing"):
             ADAPTERS["goldenglobes"].fetch(get("golden-globes-best-television-series-drama"))
+
+    def test_malformed_responses_are_adapter_errors(self):
+        definition = get("golden-globes-best-television-series-drama")
+        category = load_fixture("goldenglobes", "category_33.json")
+        bad = (
+            ({"award-categories/33": ["not", "a", "term"]}, "unexpected award-categories response"),
+            ({"award-categories/33": category, "/nomination": {"code": "rest_error"}}, "unexpected nomination response"),
+            ({"award-categories/33": category, "/nomination": ["oops"]}, "unreadable nomination"),
+            (
+                {
+                    "award-categories/33": category,
+                    "/nomination": [{"id": 9, "acf": {"is_winner": True, "film_tv_show": 1, "year": "TBA"}}],
+                },
+                "nomination 9 has an unreadable year",
+            ),
+            (
+                {
+                    "award-categories/33": category,
+                    "/nomination": [{"id": 9, "acf": {"is_winner": True, "film_tv_show": 1, "year": 2026}}],
+                    "/tv-show": [{"title": {"rendered": "No id"}}],
+                },
+                "unreadable tv-show record",
+            ),
+        )
+        for routes, message in bad:
+            with self.subTest(message), api_routes(routes), self.assertRaisesMessage(AdapterError, message):
+                ADAPTERS["goldenglobes"].fetch(definition)
