@@ -363,6 +363,10 @@ protocol ListRepository {
     func list() async throws -> [CustomListSummary]
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary]
     func featured() async throws -> [CustomListSummary]
+    /// The Search landing's featured shelves.
+    func featuredShelves() async throws -> FeaturedShelvesResponse
+    /// One media type's featured lists, one shelf per kind (`"mixed"` for Across Media).
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse
     func detail(id: Int) async throws -> CustomListDetail
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary
     func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail
@@ -389,6 +393,15 @@ extension ListRepository {
 
     func featured() async throws -> [CustomListSummary] {
         []
+    }
+
+    /// Without a shelves endpoint, featured lists are grouped by their preview items' media types.
+    func featuredShelves() async throws -> FeaturedShelvesResponse {
+        FeaturedShelvesResponse.legacy(try await featured())
+    }
+
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse {
+        FeaturedShelvesResponse.legacy(try await featured(), mediaType: mediaType)
     }
 }
 
@@ -1292,6 +1305,27 @@ struct APIListRepository: ListRepository {
             authenticated: true
         )
         return response.results
+    }
+
+    func featuredShelves() async throws -> FeaturedShelvesResponse {
+        do {
+            return try await client.get("/lists/featured/shelves/", authenticated: true)
+        } catch APIError.httpStatus(404, _) {
+            // An older backend without shelves.
+            return FeaturedShelvesResponse.legacy(try await featured())
+        }
+    }
+
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse {
+        do {
+            return try await client.get(
+                "/lists/featured/shelves/",
+                query: [URLQueryItem(name: "media_type", value: mediaType)],
+                authenticated: true
+            )
+        } catch APIError.httpStatus(404, _) {
+            return FeaturedShelvesResponse.legacy(try await featured(), mediaType: mediaType)
+        }
     }
 
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary {
