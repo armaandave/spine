@@ -1695,6 +1695,7 @@ struct ProfileListDetailView: View {
     }
 
     private func listHeader(_ list: CustomListDetail, backdropURL: String?) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
         ZStack(alignment: .bottomLeading) {
             if let backdropURL {
                 ProfileListBackdropArtwork(urlString: backdropURL)
@@ -1706,6 +1707,13 @@ struct ProfileListDetailView: View {
                 .padding(.top, backdropURL == nil ? 18 : topSafeAreaInset + 112)
         }
         .frame(maxWidth: .infinity, minHeight: backdropURL == nil ? nil : topSafeAreaInset + 408, alignment: .bottomLeading)
+
+        // The description and a featured list's source line sit below the backdrop, so the
+        // title stays where it is on every list however much the list says about itself.
+        listHeaderDetails(list)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 4)
+        }
     }
 
     private func listHeaderText(_ list: CustomListDetail) -> some View {
@@ -1807,20 +1815,26 @@ struct ProfileListDetailView: View {
             if !list.tags.isEmpty {
                 tagRow(list.tags)
             }
+        }
+    }
 
-            let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !description.isEmpty {
-                Text(description)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(4)
-                    .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
-            }
+    @ViewBuilder
+    private func listHeaderDetails(_ list: CustomListDetail) -> some View {
+        let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !description.isEmpty || featuredCard != nil {
+            VStack(alignment: .leading, spacing: 9) {
+                if !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(4)
+                }
 
-            if let featured = featuredCard {
-                FeaturedListDetailMeta(card: featured)
-                    .padding(.top, 2)
+                if let featured = featuredCard {
+                    FeaturedListDetailMeta(card: featured)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
