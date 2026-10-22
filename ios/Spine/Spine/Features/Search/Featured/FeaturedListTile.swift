@@ -80,12 +80,6 @@ struct FeaturedPosterStack: View {
                     .fill(.black.opacity(0.45 * depth))
             }
             .scaleEffect(1 - 0.08 * depth, anchor: .bottom)
-            .overlay(alignment: .topLeading) {
-                if index == 0, let rank = card.rank(at: 0) {
-                    FeaturedRankChip(rank: rank)
-                        .padding(4)
-                }
-            }
             .offset(x: CGFloat(index) * step)
             .zIndex(Double(-index))
     }
@@ -143,23 +137,6 @@ extension FeaturedListCard {
     }
 }
 
-/// The people grid's rank chip, smaller: black on a white capsule.
-struct FeaturedRankChip: View {
-    let rank: Int
-
-    var body: some View {
-        Text("\(rank)")
-            .font(.system(size: 11, weight: .heavy, design: .rounded))
-            .foregroundStyle(.black)
-            .monospacedDigit()
-            .padding(.horizontal, 5)
-            .frame(minWidth: 18)
-            .frame(height: 18)
-            .background(.white, in: Capsule())
-            .accessibilityLabel("Number \(rank)")
-    }
-}
-
 /// A red dot that pulses while a list is live, and holds still under Reduce Motion.
 struct FeaturedLiveDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -185,18 +162,18 @@ struct FeaturedLiveDot: View {
     static let color = Color(red: 1.0, green: 0.27, blue: 0.27)
 }
 
-/// A tile's one status line: live, recently updated, its period, or its kind.
+/// A tile's one status line: live, its period, or its kind.
 struct FeaturedStatusBadge: View {
     let card: FeaturedListCard
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            content(FeaturedBadge.resolve(for: card, now: context.date), now: context.date)
+            content(FeaturedBadge.resolve(for: card, now: context.date))
         }
     }
 
     @ViewBuilder
-    private func content(_ badge: FeaturedBadge, now: Date) -> some View {
+    private func content(_ badge: FeaturedBadge) -> some View {
         switch badge {
         case let .live(label):
             HStack(spacing: 5) {
@@ -206,11 +183,6 @@ struct FeaturedStatusBadge: View {
                     .foregroundStyle(FeaturedLiveDot.color)
                     .lineLimit(1)
             }
-        case let .updated(date):
-            Text(FeaturedRelativeTime.updatedLabel(from: date, now: now))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(card.accentColor)
-                .lineLimit(1)
         case let .period(label):
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
@@ -253,7 +225,7 @@ struct FeaturedListTile: View {
                 .lineLimit(2, reservesSpace: true)
                 .padding(.top, 4)
 
-            Text(card.countLabel)
+            Text(card.countText)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.5))
                 .lineLimit(1)
@@ -297,7 +269,7 @@ struct FeaturedMediumTile: View {
                 .lineLimit(1)
                 .padding(.top, 2)
 
-            Text(card.countLabel)
+            Text(card.countText)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.5))
                 .lineLimit(1)
@@ -340,8 +312,6 @@ struct FeaturedListButton<Label: View>: View {
 
     let card: FeaturedListCard
     let sourceKey: String
-    /// Whether the label shows the list's top three, as the Now strip's cards do, so VoiceOver reads them too.
-    var showsTopEntries = false
     let onSelect: (FeaturedListSelection) -> Void
     @ViewBuilder let label: () -> Label
 
@@ -368,7 +338,7 @@ struct FeaturedListButton<Label: View>: View {
             FeaturedListPeek(card: card)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(card.accessibilitySummary(now: .now, includesTopEntries: showsTopEntries))
+        .accessibilityLabel(card.accessibilitySummary(now: .now))
         .accessibilityHint("Opens list")
         .accessibilityAddTraits(.isButton)
         .accessibilityActions {
@@ -395,8 +365,7 @@ private struct FeaturedZoomSource: ViewModifier {
     }
 }
 
-/// The long-press preview, from data already loaded: the five posters with ranks, the description, source,
-/// cadence and count.
+/// The long-press preview, from data already loaded: the five posters, the description, source and count.
 struct FeaturedListPeek: View {
     /// The peek is 334 pt wide with 16 pt padding: 302 pt holds five 54 pt artworks 8 pt apart.
     static let width: CGFloat = 334
@@ -407,20 +376,14 @@ struct FeaturedListPeek: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(card.stackPeople.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { index, person in
+                ForEach(Array(card.stackPeople.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { _, person in
                     FeaturedPersonPhoto(
                         person: person,
                         size: PosterSlot.searchRow.artworkSize(mediaType: card.singleMediaType, orientation: nil),
                         cornerRadius: PosterSlot.searchRow.cornerRadius
                     )
-                    .overlay(alignment: .topLeading) {
-                        if let rank = card.rank(at: index) {
-                            FeaturedRankChip(rank: rank)
-                                .padding(4)
-                        }
-                    }
                 }
-                ForEach(Array(card.previews.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { index, preview in
+                ForEach(Array(card.previews.prefix(FeaturedPosterStack.maxPosters).enumerated()), id: \.offset) { _, preview in
                     MediaArtwork(
                         url: preview.media.displayPosterURL,
                         title: preview.media.title,
@@ -435,12 +398,6 @@ struct FeaturedListPeek: View {
                         width: card.usesSquareArtwork ? Self.squareSide : nil,
                         height: card.usesSquareArtwork ? Self.squareSide : nil
                     )
-                    .overlay(alignment: .topLeading) {
-                        if let rank = card.rank(at: index) {
-                            FeaturedRankChip(rank: rank)
-                                .padding(4)
-                        }
-                    }
                 }
             }
 
@@ -476,9 +433,9 @@ struct FeaturedListPeek: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// "Netflix · Weekly · 10 films"
+    /// "Netflix · 10 films"
     private var peekFooter: String {
-        [card.source?.name, card.cadence.label, card.countText]
+        [card.source?.name, card.countText]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")

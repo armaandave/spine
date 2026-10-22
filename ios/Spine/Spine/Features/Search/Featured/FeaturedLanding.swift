@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// What Search shows while the field is idle: with "All Media", the Now strip and one shelf per media type; with
-/// one media type, that type's lists grouped by kind.
+/// What Search shows while the field is idle: with "All Media", one shelf per media type; with one media type,
+/// that type's lists grouped by kind.
 struct FeaturedLanding: View {
     let store: FeaturedListsStore
     let selectedMediaType: String
@@ -34,11 +34,7 @@ private struct FeaturedShelvesLanding: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 30) {
                             ForEach(shelves) { shelf in
-                                if shelf.isNow {
-                                    FeaturedNowStrip(shelf: shelf, onSelect: onSelect)
-                                } else {
-                                    FeaturedShelfSection(store: store, shelf: shelf, onSelect: onSelect)
-                                }
+                                FeaturedShelfSection(store: store, shelf: shelf, onSelect: onSelect)
                             }
                         }
                         .padding(.top, 14)
@@ -61,35 +57,6 @@ private struct FeaturedShelvesLanding: View {
     }
 }
 
-/// "Now": live lists and freshly changed charts, as paged chart cards.
-private struct FeaturedNowStrip: View {
-    let shelf: FeaturedShelf
-    let onSelect: (FeaturedListSelection) -> Void
-
-    var body: some View {
-        SpineSection(title: shelf.title, headerInset: 16) {
-            if shelf.liveCount > 0 || shelf.lists.contains(where: { $0.isLive(at: .now) }) {
-                FeaturedLiveDot()
-            }
-        } trailing: {
-            EmptyView()
-        } content: {
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 10) {
-                    ForEach(shelf.lists) { card in
-                        FeaturedListButton(card: card, sourceKey: shelf.key, showsTopEntries: true, onSelect: onSelect) {
-                            FeaturedChartCard(card: card)
-                        }
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .contentMargins(.horizontal, 16, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
-        }
-    }
-}
-
 /// One media type's shelf (or "Across Media"): up to 12 tiles, then a "See all" end cap.
 private struct FeaturedShelfSection: View {
     static let maxTiles = 12
@@ -100,7 +67,7 @@ private struct FeaturedShelfSection: View {
 
     var body: some View {
         let cards = Array(shelf.lists.prefix(Self.maxTiles))
-        SpineSection(title: shelf.title, headerInset: 16) {
+        SpineSection(title: shelf.title, titleColor: titleColor, headerInset: 16) {
             MediaTypeGlyph(theme: MediaTypeTheme.theme(for: glyphType), size: 12)
                 .accessibilityHidden(true)
         } trailing: {
@@ -151,6 +118,11 @@ private struct FeaturedShelfSection: View {
 
     private var glyphType: String {
         shelf.isMixed ? APIConstants.allMedia : (shelf.mediaType ?? APIConstants.allMedia)
+    }
+
+    /// The media type's color; "Across Media" stays white.
+    private var titleColor: Color {
+        shelf.isMixed ? .white : MediaTypeTheme.theme(for: glyphType).statsColor
     }
 
     private var hasSeeAll: Bool {

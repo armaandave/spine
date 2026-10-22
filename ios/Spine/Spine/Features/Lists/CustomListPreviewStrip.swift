@@ -19,7 +19,8 @@ struct CustomListPreviewStrip: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 8) {
-                    ForEach(media) { item in
+                    // By index: a featured list can hold the same title more than once.
+                    ForEach(Array(media.enumerated()), id: \.offset) { _, item in
                         MediaArtwork(
                             url: item.displayPosterURL,
                             title: item.title,

@@ -51,27 +51,6 @@ nonisolated enum FeaturedCadence: String, Codable, Hashable {
         let raw = try? decoder.singleValueContainer().decode(String.self)
         self = raw.flatMap(FeaturedCadence.init(rawValue:)) ?? .unknown
     }
-
-    /// "Weekly", or nil for lists that don't refresh on a schedule.
-    var label: String? {
-        switch self {
-        case .live: "Live"
-        case .daily: "Daily"
-        case .weekly: "Weekly"
-        case .monthly: "Monthly"
-        case .yearly: "Yearly"
-        case .static, .unknown: nil
-        }
-    }
-
-    /// "Refreshes weekly", for the list detail's metadata line.
-    var refreshLabel: String? {
-        switch self {
-        case .live: "Updates live"
-        case .daily, .weekly, .monthly, .yearly: label.map { "Refreshes \($0.lowercased())" }
-        case .static, .unknown: nil
-        }
-    }
 }
 
 nonisolated enum FeaturedLiveStatus: String, Codable, Hashable {
