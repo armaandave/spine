@@ -188,6 +188,39 @@ class TitleSearchTests(ResolverTestCase):
         # Without a creator to confirm, the exact title still wins.
         self.assertEqual(pick_title_match(Entry(1, "Anatomy", year=2022), [stub, real]), stub)
 
+    def test_entry_subtitle_falls_back_to_the_main_title(self):
+        senate = {"media_id": 7, "source": "hardcover", "title": "Master of the Senate", "author_name": ["Robert A. Caro"], "first_publish_year": 2002}
+        entry = Entry(1, "Master of the Senate: The Years of Lyndon Johnson", year=2002, creator="Robert A. Caro")
+        self.assertEqual(pick_title_match(entry, [senate]), senate)
+        # Both sides subtitled differently still share the main title.
+        other = {**senate, "title": "Master of the Senate: Volume III"}
+        self.assertEqual(pick_title_match(entry, [other]), other)
+        # The year and creator checks still apply to the fallback.
+        self.assertIsNone(pick_title_match(Entry(1, entry.title, year=2010, creator="Robert A. Caro"), [senate]))
+        self.assertIsNone(pick_title_match(Entry(1, entry.title, year=2002, creator="Someone Else"), [senate]))
+        # Without a year or creator to agree, a main title alone is too weak.
+        self.assertIsNone(pick_title_match(Entry(1, entry.title), [senate]))
+
+    def test_entry_main_title_shared_by_two_books_is_unresolved(self):
+        results = [
+            {"media_id": 1, "source": "hardcover", "title": "Empire", "first_publish_year": 2003},
+            {"media_id": 2, "source": "hardcover", "title": "Empire: Book One", "first_publish_year": 2004},
+        ]
+        self.assertIsNone(pick_title_match(Entry(1, "Empire: A Novel", year=2003), results))
+        self.assertEqual(pick_title_match(Entry(1, "Empire: A Novel", year=2003), results[:1]), results[0])
+
+    def test_exact_title_beats_the_entry_main_title_fallback(self):
+        exact = {"media_id": 1, "source": "tmdb", "title": "Mission: Impossible", "release_date": "1996-05-22"}
+        short = {"media_id": 2, "source": "tmdb", "title": "Mission", "release_date": "1996-01-01"}
+        self.assertEqual(pick_title_match(Entry(1, "Mission: Impossible", year=1996), [short, exact]), exact)
+
+    def test_main_title_fallback_resolves_through_the_search(self):
+        senate = {"media_id": 7, "source": "hardcover", "title": "Master of the Senate", "author_name": ["Robert A. Caro"], "first_publish_year": 2002}
+        entry = Entry(1, "Master of the Senate: The Years of Lyndon Johnson", year=2002, creator="Robert A. Caro")
+        resolution, search, _ = self.search(entry, [senate], media_types=("book",), position=350)
+        self.assertEqual((resolution.match.ref, resolution.how), ("hardcover:book:7", "title"))
+        self.assertEqual(search.call_args.args[1], entry.title)
+
     def test_pick_title_match_reads_provider_years(self):
         igdb_result = {"media_id": 1, "title": "Hades", "first_release_date": 1600387200}
         self.assertEqual(pick_title_match(Entry(1, "Hades", year=2020), [igdb_result]), igdb_result)

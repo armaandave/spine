@@ -9,10 +9,11 @@ Order, first hit wins:
    ``olid`` editions, ``mbid_rg``, ``comicvine``; people: ``<source>_person``), no network;
 4. ``imdb`` through ``tmdb.find`` and ``steam`` through ``igdb.external_game``;
 5. ISBNs: Hardcover, then Open Library, per ISBN (``lookup_isbns``);
-6. a strict title search per media type: exact normalized title (or the main title
-   before a subtitle), year within ±1, creator when both sides have one. Without a
-   year or creator the exact title must be unique. Capped per run by
-   ``Guards.max_title_searches``.
+6. a strict title search per media type: exact normalized title (or the result's main
+   title before a subtitle), year within ±1, creator when both sides have one. Without
+   a year or creator the exact title must be unique. As a fallback the entry's own main
+   title may match, when the year or creator agrees and only one result qualifies.
+   Capped per run by ``Guards.max_title_searches``.
 
 Steps 4-6 are cached under ``featured:resolve:…``: hits for 30 days, misses for one
 day. Provider errors and an exhausted budget are never cached.
@@ -405,15 +406,30 @@ def _result_creators(result):
 
 
 def pick_title_match(entry, results):
-    """Return the one search result that strictly matches the entry, or None."""
+    """Return the one search result that strictly matches the entry, or None.
+
+    The entry's whole title must equal a result's title, or the result's main title
+    before a subtitle. Only when nothing matches that way, the entry's own main title
+    is tried too ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of
+    the Senate"); such a match needs the year or the creator to agree, and exactly one
+    result to qualify.
+    """
     wanted = normalize_title(entry.title)
     if not wanted:
         return None
-    exact, main = [], []
+    heads = title_forms(entry.title) - {wanted}
+    exact, main, loose = [], [], []
     for result in results:
         title = result.get("title") or result.get("name") or ""
+        full = normalize_title(title)
         forms = title_forms(title)
-        if wanted not in forms:
+        if full == wanted:
+            bucket = exact
+        elif wanted in forms:
+            bucket = main
+        elif heads & forms:
+            bucket = loose
+        else:
             continue
         year = _result_year(result)
         if entry.year and year and abs(year - entry.year) > 1:
@@ -421,14 +437,16 @@ def pick_title_match(entry, results):
         creators = _result_creators(result)
         if entry.creator and not creators_match(entry.creator, creators):
             continue
-        bucket = exact if normalize_title(title) == wanted else main
-        bucket.append((result, year, bool(entry.creator and creators)))
+        credited = bool(entry.creator and creators)
+        if bucket is loose and not (credited or (entry.year and year)):
+            continue
+        bucket.append((result, year, credited))
+    if not exact and not main:
+        return loose[0][0] if len(loose) == 1 else None
     # A result whose credited creator matched beats one that credits nobody (often an
     # empty stub record), even when the stub's title is the exact one.
     confirmed = [candidate for candidate in exact if candidate[2]] or [candidate for candidate in main if candidate[2]]
     candidates = confirmed or exact or main
-    if not candidates:
-        return None
     if entry.year:
         same_year = [candidate for candidate in candidates if candidate[1] == entry.year]
         return (same_year or candidates)[0][0]

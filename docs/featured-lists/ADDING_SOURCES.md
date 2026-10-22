@@ -88,7 +88,7 @@ Rules:
 - `note`: free text shown later ("Winner", "Best Picture · 2027").
 - `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it.
 
-Anything without a direct id goes to a strict title search: exact normalized title (or the main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); the rest stay unresolved until the next run. Results (hits 30 days, misses 1 day) are cached under `featured:resolve:…`, so a re-run is cheap.
+Anything without a direct id goes to a strict title search: exact normalized title (or the result's main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. When nothing matches that way, the entry's own main title is tried ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of the Senate"), but only when the year or creator agrees and exactly one result qualifies, so adapters no longer need to strip subtitles themselves. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); the rest stay unresolved until the next run. Results (hits 30 days, misses 1 day) are cached under `featured:resolve:…`, so a re-run is cheap.
 
 ## A definitions module
 
