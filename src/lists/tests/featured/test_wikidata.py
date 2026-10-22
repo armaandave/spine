@@ -420,6 +420,13 @@ class NobelTests(WikidataTestCase):
             "https://commons.wikimedia.org/wiki/Special:FilePath/Eyvind_Johnson.jpg?width=400",
         )
 
+    def test_wrong_api_qids_are_corrected(self):
+        laureates = [
+            {"id": "818", "knownName": {"en": "J. M. G. Le Clézio"}, "wikidata": {"id": "Q7884119"}},  # an essay
+            {"id": "1050", "wikidata": {"id": "Q512062"}},
+        ]
+        self.assertEqual(nobel_adapter.laureate_qids(laureates), {"818": "Q42037", "1050": "Q512062"})
+
     def test_failures_and_validation(self):
         with patch("app.providers.services.api_request", side_effect=http_error(524)), self.assertRaisesMessage(
             AdapterError,
