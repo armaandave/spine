@@ -1,0 +1,32 @@
+{
+ "feed": {
+  "title": "Top Paid",
+  "updated": "Thu, 22 Oct 2026 03:12:45 +0000",
+  "results": [
+   {
+    "artistName": "Lee Child & Andrew Child",
+    "id": "6758229442",
+    "name": "Chain Reaction",
+    "releaseDate": "2026-10-20",
+    "kind": "books",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Publication221/v4/83/4d/88/834d8835-dce4-e1bc-5203-7eee79bea52d/9798217375165.d.jpg/100x152bb.png"
+   },
+   {
+    "artistName": "Lisa Regan",
+    "id": "6797884355",
+    "name": "Her Last Kiss",
+    "releaseDate": "2026-10-20",
+    "kind": "books",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Publication211/v4/96/15/9b/96159b74-0cad-9ca0-fc52-e8f18e6c58f6/Her-Last-Kiss-Apple.jpg/100x151bb.png"
+   },
+   {
+    "artistName": "Lee Child & Andrew Child",
+    "id": "1875458452",
+    "name": "Chain Reaction: A Reacher Novel (Unabridged)",
+    "releaseDate": "2026-10-20",
+    "kind": "audio-books",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/04/e3/9d/04e39dd6-7edb-853e-d999-80577c835819/9798217409440.d.jpg/100x100bb.png"
+   }
+  ]
+ }
+}
