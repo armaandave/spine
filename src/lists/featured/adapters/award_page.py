@@ -62,6 +62,7 @@ COLUMNS = ["category", "rank", "title", "year", "creator", "ref", "note"]
 HOLD_SECONDS = 60
 MAX_TITLES = 50  # MediaWiki's limit per request
 MAX_REVISIONS = 10  # revisions read per changed page per poll
+TIMEOUT = 15  # seconds; polls run every 30 s, so a hung request must not hold the worker
 STATE_PREFIX = "featured:award:"
 STATE_TTL = 60 * 60 * 24 * 21
 STATE_VERSION = 1
@@ -256,6 +257,7 @@ def _query(host, params):
         "wikipedia",
         f"https://{host}/w/api.php",
         params={"action": "query", "format": "json", "formatversion": "2", **params},
+        timeout=TIMEOUT,
     )
     if not isinstance(data, dict):
         msg = "Wikipedia returned an unreadable response."
