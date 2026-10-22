@@ -8,9 +8,10 @@ enum AppConfig {
     /// Example after setup: https://api.yourdomain.com
     static let productionAPIBaseURL = "https://api.spine-api.com"
 
-    /// Where Debug builds go when nothing else is set: a dev server on this Mac (`./start-dev.sh`),
-    /// which the Simulator reaches as 127.0.0.1. Never port 8000, which is production on the server Mac.
-    static let localAPIBaseURL = "http://127.0.0.1:8001"
+    /// Where Debug builds go when nothing else is set: the always-on test backend on this Mac
+    /// (`scripts/ios/test-backend.sh`), which the Simulator reaches as 127.0.0.1. Never port 8000, which is
+    /// production on the server Mac.
+    static let localAPIBaseURL = "http://127.0.0.1:8010"
 
     /// Override in the Xcode scheme with SPINE_API_BASE_URL when local development needs localhost.
     static var apiBaseURL: URL {

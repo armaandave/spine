@@ -29,6 +29,7 @@ requests.http
 TODO.txt
 .codex
 .claude/worktrees/
+.claude/test-backend/
 .cache
 *.xcuserstate
 xcuserdata/
