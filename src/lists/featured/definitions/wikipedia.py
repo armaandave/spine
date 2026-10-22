@@ -23,6 +23,7 @@ def award(key, name, media_type, position, page, *, source_name, description, co
     """Return an all-time award winners list read from one Wikipedia page."""
     guards = options.pop("guards", Guards(min_resolve_rate=0.7, max_title_searches=120))
     winners = options.pop("winners", "only")
+    soft_time_limit = options.pop("soft_time_limit", 600)
     return FeaturedList(
         key=key,
         name=name,
@@ -37,6 +38,7 @@ def award(key, name, media_type, position, page, *, source_name, description, co
         description=description,
         is_ranked=False,
         guards=guards,
+        soft_time_limit=soft_time_limit,
     )
 
 
@@ -275,6 +277,8 @@ MANGA = [
 NBA_COLUMNS = {"year": "Year", "title": r"Title(\(s\))?", "creator": "Author", "result": "Result"}
 NBA_TRANSLATED_COLUMNS = {"title": "Title", "creator": "Author", "result": "Result"}
 BOOK_GUARDS = Guards(min_resolve_rate=0.7, max_title_searches=120)
+# A first sync can run 100+ strict title searches, and Open Library allows 20 a minute.
+BOOK_TIME_LIMIT = 1500
 
 
 def national_book_award(  # noqa: PLR0913
@@ -300,6 +304,7 @@ def national_book_award(  # noqa: PLR0913
         columns=columns,
         min_entries=min_entries,
         guards=BOOK_GUARDS,
+        soft_time_limit=BOOK_TIME_LIMIT,
         main_title=True,
         **options,
     )
@@ -360,6 +365,7 @@ OPRAH = FeaturedList(
     description="Every Oprah's Book Club selection since 1996, newest first.",
     is_ranked=False,
     guards=Guards(min_resolve_rate=0.7, max_title_searches=150),
+    soft_time_limit=BOOK_TIME_LIMIT,
 )
 
 GOODREADS_PAGE = "Goodreads Choice Awards"
