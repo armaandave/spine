@@ -222,6 +222,11 @@ class CustomListItem(models.Model):
     custom_list = models.ForeignKey(CustomList, on_delete=models.CASCADE)
     position = models.PositiveIntegerField(null=True, blank=True)
     date_added = models.DateTimeField(auto_now_add=True)
+    # Which repeat of the item this row is. People's lists hold an item once (always
+    # 0); featured award histories list a work once per win (Succession: 0, 1, 2).
+    occurrence = models.PositiveSmallIntegerField(default=0, db_default=0)
+    # Featured lists only: what the row shows under the poster ("2023", "▲2 · $12.4M").
+    note = models.CharField(max_length=200, blank=True, default="", db_default="")
 
     objects = CustomListItemManager()
 
@@ -231,8 +236,8 @@ class CustomListItem(models.Model):
         ordering = [models.F("position").asc(nulls_last=True), "date_added"]
         constraints = [
             models.UniqueConstraint(
-                fields=["item", "custom_list"],
-                name="%(app_label)s_customlistitem_unique_item_list",
+                fields=["item", "custom_list", "occurrence"],
+                name="%(app_label)s_customlistitem_unique_item_list_occurrence",
             ),
         ]
 
@@ -338,7 +343,9 @@ class FeaturedListSync(models.Model):
     # Charts only: {"<item_id>": "▲2" | "▼1" | "NEW"} against the previous content.
     item_notes = models.JSONField(blank=True, default=dict)
     # Every list: what each entry shows ("Winner · Best Picture", "▲2 · $12.4M"), keyed
-    # by item ID, or by "<source>:person:<id>" in people lists.
+    # by item ID, or by "<source>:person:<id>" in people lists. The API reads media
+    # rows' notes from CustomListItem.note (one per row); this per-item copy remains
+    # for people lists and for older code.
     entry_notes = models.JSONField(blank=True, default=dict)
 
     class Meta:

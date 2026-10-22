@@ -1011,6 +1011,22 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(CustomListItem.objects.get(custom_list=ranked, item=ranked_item).position, 5)
         self.assertIsNone(CustomListItem.objects.get(custom_list=normal, item=normal_item).position)
 
+    def test_adding_an_item_twice_keeps_one_row(self):
+        user = get_user_model().objects.create_user(username="list-add-twice", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
+        (item,) = self._create_movie_items(1, title_prefix="Twice", media_id_prefix="twice")
+        self.client.force_authenticate(user)
+        ref = {"ref": {"source": item.source, "media_type": item.media_type, "media_id": item.media_id}}
+
+        for _ in range(2):
+            response = self.client.post(f"/api/v1/lists/{custom_list.id}/items/", ref, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.assertEqual(
+            list(CustomListItem.objects.filter(custom_list=custom_list).values_list("item_id", "position", "occurrence")),
+            [(item.id, 1, 0)],
+        )
+
     def test_ranked_delete_renumbers_remaining_items(self):
         user = get_user_model().objects.create_user(username="list-delete-ranked", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)

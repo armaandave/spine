@@ -100,7 +100,8 @@ def featured_entry_notes(custom_list):
 
     Only lists the featured-lists engine writes have them; their items gain a ``note``
     key (``"Winner · Best Picture"``, ``"▲2 · $12.4M"`` or null), other lists' items
-    keep their shape.
+    keep their shape. People's notes come from here; media rows carry their own
+    (``CustomListItem.note``), since an award history lists one work once per win.
     """
     return (
         FeaturedListSync.objects.filter(custom_list=custom_list)
@@ -203,7 +204,7 @@ def list_payload(
                 )
                 item["position"] = list_item.position
                 if notes is not None:
-                    item["note"] = notes.get(str(list_item.item_id))
+                    item["note"] = list_item.note or None
                 items.append(item)
         if include_preview_items:
             data["preview_items"] = items
@@ -663,7 +664,7 @@ class ListItemsView(APIView):
                     "your_rating": f"{list_item.user_rating:.1f}"
                     if list_item.user_rating is not None
                     else None,
-                    **({"note": notes.get(str(list_item.item_id))} if notes is not None else {}),
+                    **({"note": list_item.note or None} if notes is not None else {}),
                 }
                 for list_item in page
             ],
@@ -690,7 +691,13 @@ class ListItemsView(APIView):
                 CustomListItem.objects.filter(custom_list=custom_list).aggregate(Max("position"))["position__max"] or 0
             )
             defaults["position"] = max_position + 1
-        _, created = CustomListItem.objects.get_or_create(custom_list=custom_list, item=item, defaults=defaults)
+        # A person adds an item once; only award histories repeat one (occurrence 1+).
+        _, created = CustomListItem.objects.get_or_create(
+            custom_list=custom_list,
+            item=item,
+            occurrence=0,
+            defaults=defaults,
+        )
         if created:
             Activity.objects.create(
                 actor=request.user,
