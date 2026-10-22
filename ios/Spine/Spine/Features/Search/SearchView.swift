@@ -699,6 +699,7 @@ private struct SearchEmptyState: View {
     }
 }
 
+// Unused since the featured shelves replaced it; remove once the list-media-types branch, which edits it, lands.
 private struct FeaturedListsDiscovery: View {
     let lists: [CustomListSummary]
     let isLoading: Bool

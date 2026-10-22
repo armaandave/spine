@@ -296,7 +296,7 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 - **See all:** opens the media type grouped by kind.
 - **Peek:** a long-press shows a context-menu preview.
 - **List detail:** gains a metadata line, a live banner and a source link.
-- **Edit and Delete:** shown only to the list's owner. Today every user sees them on Spine's lists.
+- **Edit and Delete:** Edit is shown to the list's owner and collaborators, Delete only to its owner, matching what the server allows. Before this feature every user saw both on Spine's lists.
 - **Legacy fallback:** if `shelves/` returns 404, fall back to the legacy endpoint.
 - **Decoding:** tolerant: `decodeIfPresent`, with unknown-value fallbacks for every enum.
 
