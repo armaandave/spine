@@ -558,3 +558,55 @@ class ReviewIdTests(SimpleTestCase):
         overridden = Resolver(definition, overrides={row.key: "igdb:game:119133"}).resolve_one(row)
         self.assertEqual(overridden.match.ref, "igdb:game:119133")
 
+
+class CeremonyDefinitionTests(SimpleTestCase):
+    """This season's definitions against their real nominee files."""
+
+    def nominees(self, key):
+        definition = registry.get(key)
+        rows = award_page.with_titles(definition, award_page.read_nominees(award_page.nominee_path(definition), set(definition.media_types)))
+        return definition, rows, award_page.labels_for(definition, rows)
+
+    def test_every_booker_shortlist_title_matches_the_live_page(self):
+        definition, rows, page_labels = self.nominees("booker-prize-2026")
+        page = load_fixture("award_page", "booker-2026-page.wiki")
+        self.assertEqual(evaluate(read_page(page, page_labels), rows)["The Booker Prize"].state, NONE)
+        self.assertEqual(len(rows), 6)
+        for row in rows:
+            with self.subTest(row.title):
+                link = page.index(f"{row.title}]]")
+                shaded = page.rindex("background: lightgrey", 0, link)
+                won = page[:shaded] + "background: gold" + page[shaded + len("background: lightgrey") :]
+                outcome = evaluate(read_page(won, page_labels), rows)["The Booker Prize"]
+                self.assertEqual((outcome.state, outcome.winners), (WINNERS, (row.ref,)))
+
+    def test_golden_joysticks_read_a_2026_section_like_2025s(self):
+        definition, rows, page_labels = self.nominees("golden-joystick-awards-2026")
+        wikipedia_labels = {
+            "Still Playing - Mobile": "Still Playing Award (Mobile)",
+            "Still Playing - PC & Console": "Still Playing Award (PC & Console)",
+        }
+        firsts = {}
+        for row in rows:
+            firsts.setdefault(row.category, row)
+        body = "".join(
+            f"|-\n|'''{wikipedia_labels.get(category, category)}'''\n|''[[{row.title}]]'' ({row.creator})\n"
+            for category, row in firsts.items()
+        )
+        page = "=== 2025 ===\nOlder.\n=== 2026 ===\n{| class=\"wikitable\"\n|-\n!'''Award'''\n!'''Winner'''\n" + body + "|}\n"
+        outcomes = evaluate(read_page(page, page_labels, section="2026"), rows)
+        self.assertEqual({category: outcome.winners for category, outcome in outcomes.items()}, {category: (row.ref,) for category, row in firsts.items()})
+        gta = next(row for row in rows if row.title == "GTA Online")
+        self.assertIn("grand theft auto online", gta.forms)
+
+    def test_ceremonies_are_unranked_award_lists_polled_every_30_seconds(self):
+        keys = set()
+        for definition in registry.all_definitions():
+            if definition.adapter != "award_page":
+                continue
+            keys.add(definition.key)
+            with self.subTest(definition.key):
+                self.assertEqual((definition.kind, definition.is_ranked), ("award", False))
+                self.assertEqual([window.interval for window in definition.live_windows], [POLL])
+                self.assertEqual(definition.guards.max_title_searches, 0)
+        self.assertGreaterEqual(len(keys), 8)

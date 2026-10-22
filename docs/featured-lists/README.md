@@ -257,6 +257,7 @@ All of it is additive.
   Anything else goes to `unresolved` for review.
 - **Nobel:** uses the official API at `api.nobelprize.org/2.1`.
 - **Windows:** live windows in the registry are stored in UTC, built from each award's local time zone.
+- **How-to:** `LIVE_AWARDS.md` explains adding a ceremony's nominees and window, and reviewing a night.
 
 ## iOS: shelves on Search
 
