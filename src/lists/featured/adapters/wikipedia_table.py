@@ -1,8 +1,14 @@
 """Awards and curated lists read from Wikipedia tables.
 
-Each page is fetched through the MediaWiki API (``action=parse``, one request per page)
-and its ``wikitable`` tables are read row by row, with ``rowspan`` and ``colspan``
-expanded so a year cell spanning a ceremony's nominees applies to each of them.
+Each page is fetched through the MediaWiki API and its ``wikitable`` tables are read row
+by row, with ``rowspan`` and ``colspan`` expanded so a year cell spanning a ceremony's
+nominees applies to each of them.
+
+A page is read as its newest revision that is at least ``STABLE_AGE`` (30 minutes) old:
+one ``prop=revisions`` request finds it, then ``action=parse`` renders that revision. A
+vandal edit is usually reverted within minutes, so one present at sync time can't stick
+for the list's whole cadence. A page with no revision that old (it was just created)
+defers the run until it has one. Live award pages (``award_page``) have their own rule.
 
 Params:
 
@@ -46,11 +52,13 @@ lists every year. Linked titles get provider IDs through Wikidata
 
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
+from django.utils import timezone
 
+from app.providers import quota
 from lists.featured.adapters import _wikipedia_ids as wikidata
 from lists.featured.helpers import get_json
 from lists.featured.text import normalize_title, parse_year
@@ -67,6 +75,7 @@ BRACKETED_NOTE = re.compile(r"\[\s*[^\]]{0,12}\s*\]")
 TRAILING_PARENTHETICAL = re.compile(r"\s*\([^()]*\)\s*$")
 EMPTY_TITLES = {"", "-", "—", "–", "n/a", "tba", "tbd", "none", "not awarded", "no award"}
 MAX_SPAN = 500
+STABLE_AGE = timedelta(minutes=30)  # read the newest revision at least this old
 SITE = re.compile(r"^[a-z]{2,3}$")
 # Links into these namespaces are never the work itself (ja: 特別 is Special).
 NAMESPACES = {"File", "Image", "Help", "Wikipedia", "Category", "Template", "Special", "Portal", "特別", "ファイル"}
@@ -420,26 +429,69 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
 # Fetch ----------------------------------------------------------------------------
 
 
-def fetch_page(site, title):
-    """Return ``(html, revid)`` for a page, or ``(None, None)`` when it doesn't exist."""
+def stable_revision(site, title, now=None):
+    """Return the id of the newest revision of ``title`` at least ``STABLE_AGE`` old.
+
+    Redirects are followed. None when the page doesn't exist; ``quota.Deferred`` when
+    every revision is newer (the page was just created), so the run is retried later.
+    """
+    now = now or timezone.now()
+    data = get_json(
+        "wikipedia",
+        wikidata.api_url(site),
+        params={
+            "action": "query",
+            "prop": "revisions",
+            "titles": title,
+            "redirects": "1",
+            "rvprop": "ids|timestamp",
+            "rvlimit": "1",
+            "rvdir": "older",
+            "rvstart": (now - STABLE_AGE).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "format": "json",
+            "formatversion": "2",
+        },
+    )
+    query = data.get("query") if isinstance(data, dict) else None
+    pages = query.get("pages") if isinstance(query, dict) else None
+    if not isinstance(pages, list) or not pages or not isinstance(pages[0], dict):
+        error = (data.get("error") or {}) if isinstance(data, dict) else {}
+        code = error.get("code") if isinstance(error, dict) else None
+        msg = f"Wikipedia could not list the revisions of {title!r}: {code or 'no pages'}."
+        raise AdapterError(msg)
+    page = pages[0]
+    if page.get("missing"):
+        return None
+    if page.get("invalid"):
+        msg = f"Wikipedia rejected the page title {title!r}."
+        raise AdapterError(msg)
+    revisions = page.get("revisions") or []
+    if not revisions or not revisions[0].get("revid"):
+        minutes = int(STABLE_AGE.total_seconds() // 60)
+        raise quota.Deferred("wikipedia", now + STABLE_AGE, f"page {title!r} is under {minutes} minutes old")
+    return revisions[0]["revid"]
+
+
+def fetch_page(site, title, now=None):
+    """Return ``(html, revid)`` for a page's stable revision, or ``(None, None)`` when it doesn't exist."""
+    revid = stable_revision(site, title, now)
+    if revid is None:
+        return None, None
     data = get_json(
         "wikipedia",
         wikidata.api_url(site),
         params={
             "action": "parse",
-            "page": title,
+            "oldid": str(revid),
             "prop": "text|revid",
-            "redirects": "1",
             "disableeditsection": "1",
             "disablelimitreport": "1",
             "format": "json",
             "formatversion": "2",
         },
     )
-    error = data.get("error") or {}
-    if error.get("code") == "missingtitle":
-        return None, None
-    parsed = data.get("parse") or {}
+    error = (data.get("error") or {}) if isinstance(data, dict) else {"code": "unreadable"}
+    parsed = (data.get("parse") or {}) if isinstance(data, dict) else {}
     if error or not isinstance(parsed.get("text"), str):
         msg = f"Wikipedia could not parse {title!r}: {error.get('code') or 'no text'}."
         raise AdapterError(msg)
