@@ -178,14 +178,14 @@ No new `CustomList` columns.
 
 ## Scheduling
 
-- **Worker:** a second Celery worker consumes the `featured` queue: a new `[program:celery-featured]` in `supervisord.conf`, with the same flags as `celery` plus `-Q featured -n featured@%h`, `stopasgroup=true` and `stopwaitsecs=60`. The default worker keeps the `celery` queue, so long imports never block an award night.
+- **Worker:** a second Celery worker consumes the `featured` queue: a new `[program:celery-featured]` in `supervisord.conf`, with the same flags as `celery` plus `-Q featured -n featured@%h --concurrency 2`, `stopasgroup=true` and `stopwaitsecs=60`. The default worker keeps the `celery` queue, so long imports never block an award night.
 - **Routing and beat:** `CELERY_TASK_ROUTES` sends `Dispatch featured lists` and `Sync featured list` to `featured`. The beat entry `dispatch_featured_lists` runs every 60 s with `{"queue": "featured", "expires": 55}`.
 - **What the dispatcher queues:** due syncs. A definition is due when:
   - it has never succeeded;
   - its `definition_hash` changed;
   - `cadence` has elapsed (with exponential backoff after failures);
   - or it's inside a live window and its interval has elapsed.
-- **Priority:** live windows come first. Non-live work is capped at 5 per tick, ordered by staleness. Leases stop double runs.
+- **Priority:** live windows come first. Non-live work is capped at one sync queued or running at a time (`MAX_NON_LIVE`), stalest first, so one of the worker's two slots is always free for live polls and the dispatcher. A live window polled more often than the dispatcher runs gets one poll per interval each tick (`countdown` 0 and 30 s for a 30 s interval). Leases stop double runs.
 - **TaskResult noise:** skip the dispatcher in `app/signals.py:create_task_result_on_publish`, and set `ignore_result=True` on it.
 - **Legacy entries:** the `Sync NYT featured lists` and `Sync Letterboxd Top 500 featured list` beat entries stay. The commands they call become thin wrappers over the engine and keep their CLI, messages and tests. `django_celery_beat` never deletes rows, so never remove those task names.
 
