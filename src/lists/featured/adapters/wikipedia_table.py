@@ -28,6 +28,9 @@ Params:
   award year isn't the work's year (a TV series winning in its fifth season).
 - ``split_creator``: a separator such as ``" by "`` when the title cell also names
   the creator ("Pluto by Naoki Urasawa").
+- ``main_title``: keep only the title before ": " ("Master of the Senate: The Years of
+  Lyndon Johnson"): providers often store books without the subtitle, and the strict
+  title search compares the whole entry title.
 - ``strip_parenthetical``: drop a trailing "(Season 2)" or "(Dark Horse Comics)"
   from titles (off by default: book titles end in parentheses too).
 - ``min_entries``: fail when fewer rows parse, so a reshaped page never shrinks a list.
@@ -351,6 +354,7 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
     winners_only = params.get("winners", "all") == "only"
     split_creator = params.get("split_creator", "")
     strip_parenthetical = bool(params.get("strip_parenthetical"))
+    main_title = bool(params.get("main_title"))
     rows, matched_tables = [], 0
     for index, table in enumerate(soup.select("table.wikitable")):
         if not _table_matches(table, index, selector):
@@ -396,6 +400,8 @@ def parse_rows(html, params):  # noqa: C901, PLR0912
                 )
                 if title.casefold() in EMPTY_TITLES:
                     continue
+                if main_title and ": " in title:
+                    title = title.split(": ", 1)[0].strip()
                 rank_match = re.search(r"\d+", cell_text(cell_at("rank")))
                 rows.append(
                     Row(

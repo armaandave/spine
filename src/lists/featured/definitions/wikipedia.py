@@ -300,6 +300,7 @@ def national_book_award(  # noqa: PLR0913
         columns=columns,
         min_entries=min_entries,
         guards=BOOK_GUARDS,
+        main_title=True,
         **options,
     )
 
@@ -346,6 +347,7 @@ OPRAH = FeaturedList(
         "pages": ["Oprah's Book Club", "Oprah's Book Club 2.0"],
         "columns": {"year": "Date", "date": "Date", "title": "Title", "creator": "Author"},
         "min_entries": 100,
+        "main_title": True,
     },
     cadence=MONTHLY,
     source_name="Oprah's Book Club",

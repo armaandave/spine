@@ -109,6 +109,15 @@ class ParseTests(SimpleTestCase):
             ],
         )
 
+    def test_main_title_drops_the_subtitle(self):
+        params = {"pages": ["P"], "columns": {"title": "Program"}, "winners": "all", "main_title": True}
+        rows, _ = wikipedia_table.parse_rows(
+            "<table class='wikitable'><tr><th>Year</th><th>Program</th></tr>"
+            "<tr><td>2002</td><td><i>Master of the Senate: The Years of Lyndon Johnson</i></td></tr></table>",
+            params,
+        )
+        self.assertEqual(rows[0].title, "Master of the Senate")
+
     def test_rowspan_weeks_fold_into_one_album_with_its_latest_week(self):
         rows = self.rows("billboard.html", definition_for("billboard-200-number-one-albums").params)
         self.assertEqual(
