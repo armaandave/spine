@@ -10,7 +10,7 @@ args = ["-c", "root=$(git rev-parse --show-toplevel) && cd \"$root\" && exec xco
 [mcp_servers.xcodebuildmcp_spine.env]
 XCODEBUILDMCP_PROJECT_PATH = "ios/Spine/Spine.xcodeproj"
 XCODEBUILDMCP_SCHEME = "Spine"
-XCODEBUILDMCP_BUNDLE_ID = "com.armaan.Spine"
+XCODEBUILDMCP_BUNDLE_ID = "com.armaan.Spine.dev"
 
 # The user-level `xcodebuildmcp` server starts in pylon/ios with Pylon's defaults,
 # and project entries merge with it. Turn it off for Spine threads only. Codex
