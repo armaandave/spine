@@ -18,6 +18,17 @@ final class GameTrackingContractTests: XCTestCase {
         XCTAssertEqual(try draft.values().percentage, 100)
     }
 
+    func testDeletingTheCompletionEmptiesAnEyeMarkedWatchedLocally() {
+        var picker = MediaRatingPickerState()
+        picker.open()
+        picker.dismiss()
+        XCTAssertTrue(picker.hasLocallyWatched)
+        picker.syncCompleted(true)
+        XCTAssertTrue(picker.hasLocallyWatched, "Completed on the server keeps the eye filled.")
+        picker.syncCompleted(false)
+        XCTAssertFalse(picker.hasLocallyWatched, "Deleting the play entry removes Completed, so the eye empties.")
+    }
+
     func testProgressRejectsInvalidNumbers() throws {
         for input in ["-1", "1.5", "101", "x"] {
             XCTAssertThrowsError(try GameProgressDraft(percentage: input).values())

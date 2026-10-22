@@ -672,6 +672,12 @@ struct MediaRatingPickerState: Equatable {
         hasLocallyWatched = false
     }
 
+    /// The local watch only bridges the wait for the server. Once the server says the item
+    /// isn't completed (a deleted playthrough, completion or log), the eye follows it.
+    mutating func syncCompleted(_ isCompleted: Bool) {
+        if !isCompleted { hasLocallyWatched = false }
+    }
+
     mutating func resetAfterUnwatch() {
         self = MediaRatingPickerState()
     }
@@ -1278,6 +1284,8 @@ private struct MediaDetailPageView: View {
     @State private var editingBookJourney: BookJourneyState?
     @State private var editingGamePlaythrough: GamePlaythroughState?
     @State private var pendingGameProgress: GamePlaythroughState?
+    @State private var progressGamePlaythrough: GamePlaythroughState?
+    @State private var pendingGameEdit: GamePlaythroughState?
     @State private var pendingGameCompletion: GameCompletionPresentation?
     @State private var gameCompletionPresentation: GameCompletionPresentation?
     @State private var isQuickActionAlertPresented = false
@@ -1484,7 +1492,6 @@ private struct MediaDetailPageView: View {
                             onLog: { openBookCompletion(for: detail) },
                             onProgress: { openProgressUpdate(for: detail) },
                             onRemove: { if await viewModel.removeTracking(for: detail) { presentedSheet = nil; await viewModel.load() } })
-                            .presentationDetents([.medium, .large])
                     } else {
                     BookGameActionSheet(
                         mediaType: detail.ref.mediaType,
@@ -1530,6 +1537,20 @@ private struct MediaDetailPageView: View {
                         onUnauthorized: onUnauthorized
                     )
                 }
+            }
+        }
+        .sheet(item: $progressGamePlaythrough, onDismiss: presentPendingGameSheet) { playthrough in
+            if let detail = viewModel.detail {
+                GameProgressSheet(detail: detail, playthrough: playthrough,
+                    onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail) },
+                    onAction: { await viewModel.performGameAction($0, for: detail) },
+                    onDelete: { await viewModel.deleteGamePlaythrough(playthrough, for: detail) },
+                    onFinish: { openBookCompletion(for: detail) },
+                    onEditDates: {
+                        pendingGameEdit = playthrough
+                        progressGamePlaythrough = nil
+                    },
+                    errorMessage: { viewModel.quickActionErrorMessage })
             }
         }
         .sheet(item: $editingGamePlaythrough, onDismiss: presentPendingGameSheet) { playthrough in
@@ -1828,6 +1849,9 @@ private struct MediaDetailPageView: View {
         }
         .onChange(of: viewModel.detail?.userState?.rating) { _, rating in
             ratingPicker.syncConfirmed(ratingHalfSteps(rating))
+        }
+        .onChange(of: viewModel.detail.map { isEyeCompleted($0) } ?? false) { _, isCompleted in
+            ratingPicker.syncCompleted(isCompleted)
         }
         .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
             Swift.Task<Void, Never> { await viewModel.load() }
@@ -2198,10 +2222,11 @@ private struct MediaDetailPageView: View {
             let presentation = GameCompletionPresentation(
                 playthroughId: gameState(detail)?.hasLivePlaythrough == true ? gameState(detail)?.currentPlaythrough?.id : nil,
                 liked: liked, ratingSteps: ratingSteps)
-            if presentedSheet != nil || editingGamePlaythrough != nil {
+            if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil {
                 pendingGameCompletion = presentation
                 presentedSheet = nil
                 editingGamePlaythrough = nil
+                progressGamePlaythrough = nil
             } else { gameCompletionPresentation = presentation }
             return
         }
@@ -2220,7 +2245,7 @@ private struct MediaDetailPageView: View {
             if presentedSheet != nil {
                 pendingGameProgress = playthrough
                 presentedSheet = nil
-            } else { editingGamePlaythrough = playthrough }
+            } else { progressGamePlaythrough = playthrough }
         } else {
             presentedSheet = nil
             progressUpdateDetail = detail
@@ -2236,6 +2261,9 @@ private struct MediaDetailPageView: View {
     private func presentPendingGameSheet() {
         if let playthrough = pendingGameProgress {
             pendingGameProgress = nil
+            progressGamePlaythrough = playthrough
+        } else if let playthrough = pendingGameEdit {
+            pendingGameEdit = nil
             editingGamePlaythrough = playthrough
         } else if let presentation = pendingGameCompletion {
             pendingGameCompletion = nil
@@ -2872,11 +2900,6 @@ private struct MediaDetailPageView: View {
             VStack(alignment: .leading, spacing: 28) {
                 SynopsisText(text: synopsisPreview(detail))
                 trackingSummarySection(detail)
-                if detail.ref.mediaType == "game", let game = gameState(detail) {
-                    GamePlayHistorySection(game: game,
-                        onEdit: { editingGamePlaythrough = $0 },
-                        onDeleteUndated: { Task { if !(await viewModel.performGameAction("delete_undated_completion", for: detail)) { isQuickActionAlertPresented = true } } })
-                }
                 if detail.ref.mediaType == "book", let book = bookState(detail) {
                     BookReadingHistorySection(
                         book: book,
@@ -2968,6 +2991,11 @@ private struct MediaDetailPageView: View {
                     }
                 ) { item in
                     presentedRef = item.ref
+                }
+                if detail.ref.mediaType == "game", let game = gameState(detail) {
+                    GamePlayHistorySection(game: game,
+                        onEdit: { editingGamePlaythrough = $0 },
+                        onDeleteUndated: { Task { if !(await viewModel.performGameAction("delete_undated_completion", for: detail)) { isQuickActionAlertPresented = true } } })
                 }
             }
             .padding(.horizontal, 14)

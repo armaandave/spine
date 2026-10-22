@@ -6,22 +6,9 @@ struct GameProgressFields: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Total hours this playthrough").font(.subheadline.weight(.semibold))
-            HStack {
-                TextField("Hours", text: $draft.hours).accessibilityLabel("Total hours this playthrough")
-                Text("h")
-                TextField("Minutes", text: $draft.minutes).accessibilityLabel("Minutes")
-                Text("m")
-                Button("Clear time") { draft.hours = ""; draft.minutes = "" }
-                    .font(.caption)
-                    .buttonStyle(.borderless)
-            }
-            HStack {
-                TextField("Percentage", text: $draft.percentage).accessibilityLabel("Percentage")
-                Text("%")
-                Button("Clear percentage") { draft.percentage = "" }.font(.caption).buttonStyle(.borderless)
-            }
-            Text("Blank means unknown. Zero means zero. Time replaces the total; it does not add a session.")
+            field("Hours played", text: hours, unit: "h")
+            field("Percent complete", text: $draft.percentage, unit: "%")
+            Text("Leave either blank if you don't know.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .keyboardType(.numberPad)
@@ -31,6 +18,23 @@ struct GameProgressFields: View {
                 Spacer()
                 Button("Done") { focused = false }
             }
+        }
+    }
+
+    /// Whole hours only: typing hours drops any minutes left over from an import.
+    private var hours: Binding<String> {
+        Binding(get: { draft.hours }, set: { draft.hours = $0; draft.minutes = "" })
+    }
+
+    private func field(_ title: String, text: Binding<String>, unit: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            TextField("–", text: text)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 90)
+                .accessibilityLabel(title)
+            Text(unit).foregroundStyle(.secondary)
         }
     }
 }
@@ -99,7 +103,7 @@ struct GamePlaythroughEditor: View {
             }
             .disabled(saving)
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(playthrough.status == "Dropped" ? "Edit Playthrough" : "Update Progress")
+            .navigationTitle("Edit Playthrough")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
@@ -157,6 +161,7 @@ struct GamePlaythroughEditor: View {
     }
 }
 
+/// The plus button's sheet for a game: the book sheet's grid, sized to its buttons.
 struct GameActionSheet: View {
     let status: String?
     let game: GameTrackingState?
@@ -168,49 +173,347 @@ struct GameActionSheet: View {
     let onRemove: () async -> Void
     @State private var confirmDrop = false
     @State private var confirmRemove = false
+    @State private var contentHeight: CGFloat = 320
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
-                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
-                    statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
-                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { Task { await onAction(.stopped) } } } label: {
-                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
-                    }.disabled(status == "Dropped")
-                    if status == "Paused" { Button("Resume") { Task { await onAction(.currently) } } }
-                    Button("Log Completion", systemImage: "square.and.pencil", action: onLog)
-                }
-                if game?.hasLivePlaythrough == true {
-                    Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
-                }
-                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3", action: onProgress) }
-                if status != nil {
-                    Section {
-                        Button("Remove from Library", role: .destructive) { confirmRemove = true }
-                            .disabled(game?.canRemoveTracking == false)
-                        if game?.canRemoveTracking == false {
-                            Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-            }
-            .navigationTitle("Track this game").navigationBarTitleDisplayMode(.inline)
-            .disabled(isSaving)
-            .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
-                Button("Drop", role: .destructive) { Task { await onAction(.stopped) } }
-            } message: { Text("Your progress will be kept in history.") }
-            .confirmationDialog("Remove from Library?", isPresented: $confirmRemove, titleVisibility: .visible) {
-                Button("Remove", role: .destructive) { Task { await onRemove() } }
-            } message: { Text("This clears current rating and heart. Custom lists stay unchanged.") }
-        }.preferredColorScheme(.dark)
+    private var isLive: Bool { game?.hasLivePlaythrough == true }
+
+    private var playingTitle: String {
+        switch status {
+        case "Paused": "Resume Playing"
+        case "In progress": "Playing"
+        default: "Start Playing"
+        }
     }
 
-    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
-        Button { Task { await onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
-            .disabled(disabled ?? selected)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Track this game").font(.title3.weight(.bold))
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                actionButton(status == "Planning" ? "Planning" : "Add to Planning", systemImage: "bookmark",
+                             disabled: status == "Planning" || isLive) { await onAction(.planning) }
+                actionButton(playingTitle, systemImage: "play.fill",
+                             disabled: game?.hasPlayingPlaythrough == true) { await onAction(.currently) }
+                if isLive {
+                    actionButton("Update Progress", systemImage: "slider.horizontal.3") { onProgress() }
+                    actionButton("Pause", systemImage: "pause.fill", disabled: status == "Paused") { await onAction(.paused) }
+                    actionButton("Drop", systemImage: "xmark") { confirmDrop = true }
+                } else {
+                    actionButton("Paused", systemImage: "pause.fill", disabled: status == "Paused") { await onAction(.paused) }
+                    actionButton("Dropped", systemImage: "xmark", disabled: status == "Dropped") { await onAction(.stopped) }
+                }
+                actionButton("Log Completion", systemImage: "square.and.pencil") { onLog() }
+                if !isLive, game?.canUpdateProgress == true {
+                    actionButton("Update Progress", systemImage: "slider.horizontal.3") { onProgress() }
+                }
+            }
+            if isLive {
+                Text("Pause, drop or finish this playthrough before moving the game to Planning.")
+                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            }
+            if status != nil {
+                Button(role: .destructive) { confirmRemove = true } label: {
+                    Label("Remove from Library", systemImage: "trash").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isSaving || game?.canRemoveTracking == false)
+                if game?.canRemoveTracking == false {
+                    Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.")
+                        .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                }
+            }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.red.opacity(0.92))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 26)
+        .padding(.bottom, 18)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.height(contentHeight)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(.regularMaterial)
+        .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
+            Button("Drop", role: .destructive) { Task { await onAction(.stopped) } }
+        } message: { Text("Your progress will be kept in history.") }
+        .confirmationDialog("Remove from Library?", isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) { Task { await onRemove() } }
+        } message: { Text("This clears current rating and heart. Custom lists stay unchanged.") }
+    }
+
+    private func actionButton(_ title: String, systemImage: String, disabled: Bool = false,
+                              action: @escaping () async -> Void) -> some View {
+        Button { Task { await action() } } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity, minHeight: 46)
+        }
+        .buttonStyle(.bordered)
+        .tint(.white.opacity(0.84))
+        .disabled(isSaving || disabled)
+    }
+}
+
+/// Update Progress for a game, laid out like the book progress panel: one number,
+/// hours or percent, against the last saved value.
+struct GameProgressSheet: View {
+    private enum Mode: String, CaseIterable, Identifiable {
+        case hours = "Hours"
+        case percent = "Percent"
+        var id: String { rawValue }
+    }
+
+    private enum PendingAction: Identifiable {
+        case drop, restart, delete
+        var id: Self { self }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    let detail: MediaDetail
+    let playthrough: GamePlaythroughState
+    let onSave: (GamePlaythroughWriteRequest) async -> Bool
+    let onAction: (String) async -> Bool
+    let onDelete: () async -> Bool
+    let onFinish: () -> Void
+    let onEditDates: () -> Void
+    let errorMessage: () -> String?
+    @State private var mode: Mode
+    @State private var input = ""
+    @State private var saving = false
+    @State private var error: String?
+    @State private var pending: PendingAction?
+    @State private var contentHeight: CGFloat = 300
+    @FocusState private var focused: Bool
+
+    init(detail: MediaDetail, playthrough: GamePlaythroughState,
+         onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) async -> Bool,
+         onDelete: @escaping () async -> Bool, onFinish: @escaping () -> Void, onEditDates: @escaping () -> Void,
+         errorMessage: @escaping () -> String?) {
+        self.detail = detail
+        self.playthrough = playthrough
+        self.onSave = onSave
+        self.onAction = onAction
+        self.onDelete = onDelete
+        self.onFinish = onFinish
+        self.onEditDates = onEditDates
+        self.errorMessage = errorMessage
+        let startsWithPercent = playthrough.totalMinutes == nil && playthrough.percentage != nil
+        _mode = State(initialValue: startsWithPercent ? .percent : .hours)
+    }
+
+    private var lastValue: Int? {
+        mode == .hours ? playthrough.totalMinutes.map { $0 / 60 } : playthrough.percentage
+    }
+
+    private var lastText: String {
+        switch mode {
+        case .hours: playthrough.totalMinutes.map(GameProgressValues.timeLabel) ?? "--"
+        case .percent: playthrough.percentage.map { "\($0)%" } ?? "--"
+        }
+    }
+
+    private var newValue: Int? { Int(input) }
+
+    private var validation: String? {
+        guard let newValue, mode == .percent, newValue > 100 else { return nil }
+        return "Enter a percentage from 0 to 100."
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            header
+            HStack(spacing: 8) {
+                lastStat
+                nowStat
+            }
+            if let message = validation ?? error {
+                Text(message)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            saveButton
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 22)
+        .padding(.bottom, 16)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .disabled(saving)
+        .presentationDetents([.height(contentHeight)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color(uiColor: .secondarySystemBackground))
+        .interactiveDismissDisabled(saving)
+        .onAppear { focused = true }
+        .onChange(of: mode) { input = "" }
+        .onChange(of: input) { _, value in
+            let digits = String(value.filter(\.isNumber).prefix(mode == .hours ? 5 : 3))
+            if digits != value { input = digits }
+        }
+        .confirmationDialog(confirmationTitle, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+                            titleVisibility: .visible) {
+            Button(confirmationButton, role: .destructive) {
+                let action = pending
+                pending = nil
+                switch action {
+                case .drop: run { await onAction("drop") }
+                case .restart: run { await onAction("restart") }
+                case .delete: run { await onDelete() }
+                case nil: break
+                }
+            }
+            Button("Cancel", role: .cancel) { pending = nil }
+        } message: { Text(confirmationMessage) }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            MediaArtwork(url: detail.displayPosterURL, title: detail.title, slot: .searchRow,
+                         mediaType: detail.ref.mediaType, orientation: detail.posterOrientation)
+                .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Update progress").font(.headline.weight(.semibold))
+                Picker("Progress as", selection: $mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 180)
+            }
+            Spacer(minLength: 0)
+            Menu { menuItems } label: {
+                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Playthrough actions")
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").font(.system(size: 14, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Close")
+        }
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
+        if playthrough.status == "In progress" {
+            Button("Pause", systemImage: "pause.fill") { run { await onAction("pause") } }
+        }
+        if playthrough.status == "Paused" {
+            Button("Resume", systemImage: "play.fill") { run { await onAction("resume") } }
+        }
+        if playthrough.isUnfinished {
+            Button("Finish & Log", systemImage: "checkmark", action: onFinish)
+            Button("Drop", systemImage: "xmark") { pending = .drop }
+            Button("Restart from Beginning", systemImage: "arrow.counterclockwise") { pending = .restart }
+        }
+        Button("Edit Dates", systemImage: "calendar", action: onEditDates)
+        if playthrough.isUnfinished {
+            Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }
+        }
+    }
+
+    private var lastStat: some View {
+        VStack(spacing: 6) {
+            Text("Last").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(lastText)
+                .font(.title3.monospacedDigit().weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 72)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var nowStat: some View {
+        VStack(spacing: 6) {
+            Text("Now").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 2) {
+                TextField(lastValue.map(String.init) ?? "0", text: $input)
+                    .keyboardType(.numberPad)
+                    .focused($focused)
+                    .multilineTextAlignment(.center)
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .fixedSize()
+                    .accessibilityLabel(mode == .hours ? "Hours played" : "Percent complete")
+                Text(mode == .hours ? "h" : "%")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 72)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+    }
+
+    private var saveButton: some View {
+        let enabled = newValue != nil && validation == nil && !saving
+        return Button(action: save) {
+            Group {
+                if saving { ProgressView() } else { Text("Save Progress").font(.headline.weight(.semibold)) }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .foregroundStyle(enabled ? .black : .white.opacity(0.48))
+            .background(enabled ? Color.white : Color.white.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func save() {
+        guard let value = newValue, validation == nil else { return }
+        var request = GamePlaythroughWriteRequest(progressedOn: CalendarDateCodec.string(from: Date()))
+        switch mode {
+        case .hours:
+            request.totalMinutes = value * 60
+            request.includesMinutes = true
+        case .percent:
+            request.percentage = value
+            request.includesPercentage = true
+        }
+        run { await onSave(request) }
+    }
+
+    private var confirmationTitle: String {
+        switch pending {
+        case .restart: "Restart from Beginning?"
+        case .delete: "Delete this playthrough?"
+        default: "Drop this playthrough?"
+        }
+    }
+    private var confirmationButton: String {
+        switch pending {
+        case .restart: "Restart"
+        case .delete: "Delete Playthrough"
+        default: "Drop"
+        }
+    }
+    private var confirmationMessage: String {
+        switch pending {
+        case .restart: "The previous attempt and its progress will remain in history as Dropped."
+        case .delete: "This deletes this attempt and all its progress. Earlier attempts and logs stay unchanged."
+        default: "Your progress will be kept in history."
+        }
+    }
+
+    private func run(_ operation: @escaping () async -> Bool) {
+        guard !saving else { return }
+        saving = true
+        error = nil
+        Task {
+            if await operation() { dismiss() }
+            else { error = errorMessage() ?? "Could not save. Try again." }
+            saving = false
+        }
     }
 }
 
