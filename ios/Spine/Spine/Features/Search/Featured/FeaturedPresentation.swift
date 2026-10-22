@@ -37,6 +37,15 @@ enum FeaturedBadge: Equatable {
     }
 }
 
+/// A featured list row's note as the list detail shows it ("Winner · Best Picture", "▲2 · $12.4M"), or nil when
+/// the server sent none.
+enum FeaturedEntryNote {
+    static func text(_ note: String?) -> String? {
+        guard let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else { return nil }
+        return note
+    }
+}
+
 /// A chart entry's movement, read from its note ("▲2", "▼1", "NEW").
 enum FeaturedMovement: Equatable {
     case up(Int)

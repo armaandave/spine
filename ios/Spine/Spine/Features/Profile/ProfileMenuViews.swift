@@ -1851,6 +1851,9 @@ struct ProfileListDetailView: View {
                                 .foregroundStyle(.white.opacity(0.72))
                                 .frame(maxWidth: .infinity)
                         }
+                        if let note = FeaturedEntryNote.text(item.note) {
+                            entryNote(note)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
@@ -1910,6 +1913,10 @@ struct ProfileListDetailView: View {
                                     .foregroundStyle(.white.opacity(0.5))
                                     .lineLimit(1)
                             }
+
+                            if let note = FeaturedEntryNote.text(person.note) {
+                                entryNote(note)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                         .contentShape(Rectangle())
@@ -1926,6 +1933,16 @@ struct ProfileListDetailView: View {
         }
     }
 
+    /// A featured entry's note under its poster or name: small and secondary.
+    private func entryNote(_ note: String) -> some View {
+        Text(note)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity)
+    }
+
     private func detailCountLabel(_ list: CustomListDetail) -> String {
         let count = list.listType == .people ? list.entriesCount : list.itemsCount
         let noun = list.listType == .people
@@ -1939,7 +1956,8 @@ struct ProfileListDetailView: View {
             ? person.position.map { "Rank \($0), " } ?? ""
             : ""
         let department = person.knownForDepartment.map { ", \($0)" } ?? ""
-        return "\(rank)\(person.name)\(department)"
+        let note = FeaturedEntryNote.text(person.note).map { ", \($0)" } ?? ""
+        return "\(rank)\(person.name)\(department)\(note)"
     }
 
     private var deleteConfirmationMessage: String {

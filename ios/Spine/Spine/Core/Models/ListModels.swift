@@ -14,6 +14,8 @@ struct PersonListEntry: Codable, Identifiable, Hashable {
     let knownForDepartment: String?
     let position: Int?
     let dateAdded: String
+    /// Featured lists only: the entry's note ("Inducted 2019").
+    let note: String?
 
     var id: Int {
         entryId
@@ -32,6 +34,7 @@ struct PersonListEntry: Codable, Identifiable, Hashable {
         case knownForDepartment
         case position
         case dateAdded
+        case note
     }
 
     init(
@@ -42,7 +45,8 @@ struct PersonListEntry: Codable, Identifiable, Hashable {
         profileUrl: String?,
         knownForDepartment: String?,
         position: Int?,
-        dateAdded: String
+        dateAdded: String,
+        note: String? = nil
     ) {
         self.entryId = entryId
         self.personId = personId
@@ -52,6 +56,7 @@ struct PersonListEntry: Codable, Identifiable, Hashable {
         self.knownForDepartment = knownForDepartment
         self.position = position
         self.dateAdded = dateAdded
+        self.note = note
     }
 
     init(from decoder: Decoder) throws {
@@ -64,6 +69,7 @@ struct PersonListEntry: Codable, Identifiable, Hashable {
         knownForDepartment = try container.decodeIfPresent(String.self, forKey: .knownForDepartment)
         position = try container.decodeIfPresent(Int.self, forKey: .position)
         dateAdded = try container.decode(String.self, forKey: .dateAdded)
+        note = (try? container.decodeIfPresent(String.self, forKey: .note)) ?? nil
     }
 }
 

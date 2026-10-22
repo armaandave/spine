@@ -653,6 +653,116 @@ final class FeaturedListsStoreTests: XCTestCase {
 
 // MARK: - Fixtures and fakes
 
+// Featured lists' rows carry their entry's note ("Winner · Best Picture", "▲2 · $12.4M").
+@MainActor
+final class FeaturedEntryNoteTests: XCTestCase {
+    func testListItemsDecodeTheirNoteTolerantly() throws {
+        let json = """
+        {"count": 4, "next": null, "previous": null, "results": [
+          \(FeaturedFixtures.mediaJSON(id: "1", type: "movie", title: "One", position: 1, note: "▲2 · $12.4M")),
+          {"ref": {"item_id": 2, "source": "tmdb", "media_type": "movie", "media_id": "2"}, "title": "Two", "position": 2, "note": null},
+          {"ref": {"item_id": 3, "source": "tmdb", "media_type": "movie", "media_id": "3"}, "title": "Three", "position": 3},
+          {"ref": {"item_id": 4, "source": "tmdb", "media_type": "movie", "media_id": "4"}, "title": "Four", "position": 4, "note": 7}
+        ]}
+        """
+        let page = try JSONDecoder.api.decode(PagedResponse<MediaSummary>.self, from: Data(json.utf8))
+
+        XCTAssertEqual(page.results.map(\.title), ["One", "Two", "Three", "Four"])
+        XCTAssertEqual(page.results.map(\.note), ["▲2 · $12.4M", nil, nil, nil])
+    }
+
+    func testPeopleDecodeTheirNoteTolerantly() throws {
+        func person(_ note: String) throws -> PersonListEntry {
+            let json = """
+            {"entry_id": 1, "id": "OL1A", "source": "openlibrary", "name": "Annie Ernaux", "profile_url": null,
+             "known_for_department": null, "position": 1, "date_added": "2026-10-21T18:00:00Z"\(note)}
+            """
+            return try JSONDecoder.api.decode(PersonListEntry.self, from: Data(json.utf8))
+        }
+
+        XCTAssertEqual(try person(#", "note": "2022""#).note, "2022")
+        XCTAssertNil(try person("").note)
+        XCTAssertNil(try person(#", "note": ["2022"]"#).note)
+    }
+
+    func testNoteTextIgnoresBlankNotes() {
+        XCTAssertEqual(FeaturedEntryNote.text("  Nominee · Fiction "), "Nominee · Fiction")
+        XCTAssertNil(FeaturedEntryNote.text("   "))
+        XCTAssertNil(FeaturedEntryNote.text(nil))
+    }
+
+    func testListDetailKeepsEachItemsNote() async throws {
+        let repository = FeaturedNotesListRepository(items: [
+            MediaSummary(ref: try ref(1), title: "Winner", position: 1, note: "Winner · Best Picture"),
+            MediaSummary(ref: try ref(2), title: "Nominee", position: 2),
+        ])
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.displayedItems.map(\.note), ["Winner · Best Picture", nil])
+        XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture", nil])
+    }
+
+    private func ref(_ itemId: Int) throws -> MediaRef {
+        let json = #"{"item_id": \#(itemId), "source": "tmdb", "media_type": "movie", "media_id": "\#(itemId)"}"#
+        return try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8))
+    }
+}
+
+@MainActor
+private final class FeaturedNotesListRepository: ListRepository {
+    let items: [MediaSummary]
+
+    init(items: [MediaSummary]) {
+        self.items = items
+    }
+
+    func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { [] }
+    func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary] { [] }
+
+    func detail(id: Int) async throws -> CustomListDetail {
+        let json = """
+        {"id": 12, "name": "Oscars", "slug": "oscars", "description": "", "visibility": "public",
+         "is_ranked": true, "list_type": "media",
+         "owner": {"id": 1, "username": "Spine", "display_name": "Spine", "avatar_url": null},
+         "items_count": \(items.count), "like_count": 0, "items": []}
+        """
+        return try JSONDecoder.api.decode(CustomListDetail.self, from: Data(json.utf8))
+    }
+
+    func items(listId: Int, page: String?, filter: MediaFilterState) async throws -> PagedResponse<MediaSummary> {
+        PagedResponse(count: items.count, next: nil, previous: nil, results: items)
+    }
+
+    func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary { fatalError("unused") }
+    func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail { fatalError("unused") }
+    func delete(id: Int) async throws {}
+    func addItem(listId: Int, ref: MediaRef) async throws -> MediaSummary { fatalError("unused") }
+    func removeItem(listId: Int, itemId: Int) async throws {}
+    func reorderItems(listId: Int, itemIds: [Int]) async throws -> CustomListDetail { fatalError("unused") }
+
+    func people(listId: Int, page: String?) async throws -> PagedResponse<PersonListEntry> {
+        PagedResponse(count: 0, next: nil, previous: nil, results: [])
+    }
+
+    func addPerson(listId: Int, ref: PersonRef) async throws -> PersonListEntry { fatalError("unused") }
+    func removePerson(listId: Int, entryId: Int) async throws {}
+    func reorderPeople(listId: Int, entryIds: [Int]) async throws -> CustomListDetail { fatalError("unused") }
+}
+
+@MainActor
+private final class FeaturedNotesFilterRepository: FilterOptionsRepository {
+    func options(scope: MediaFilterScope, filter: MediaFilterState) async throws -> MediaFilterOptionsResponse {
+        .empty
+    }
+}
+
 @MainActor
 private enum FeaturedFixtures {
     static func date(_ value: String) -> Date {
