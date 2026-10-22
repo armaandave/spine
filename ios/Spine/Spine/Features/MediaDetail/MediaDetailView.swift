@@ -5421,7 +5421,7 @@ struct SynopsisText: View {
     }
 }
 
-private struct DetailFactRow: Identifiable {
+struct DetailFactRow: Identifiable {
     let label: String
     var value: String?
     var people: [MediaPersonCredit]
@@ -5505,7 +5505,7 @@ private struct MediaFactsSection: View {
     }
 }
 
-private struct DetailFactRowView: View {
+struct DetailFactRowView: View {
     private static let iconWidth: CGFloat = 20
     private static let iconSpacing: CGFloat = 10
 
@@ -5559,23 +5559,14 @@ private struct DetailFactRowView: View {
         }
     }
 
-    /// Sits the value beside its label when it fits on one line, and under it when it doesn't.
+    /// Sits the value beside its label, wrapping a long one onto more lines against the trailing edge.
     private func layout(trailingSymbol: String?) -> some View {
         HStack(spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    label
-                    Spacer(minLength: 16)
-                    values(alignment: .trailing)
-                        .fixedSize()
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    label
-                    values(alignment: .leading)
-                        .padding(.leading, Self.iconWidth + Self.iconSpacing)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                label
+                    .fixedSize()
+                values
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if let trailingSymbol {
@@ -5607,49 +5598,47 @@ private struct DetailFactRowView: View {
     }
 
     @ViewBuilder
-    private func values(alignment: HorizontalAlignment) -> some View {
-        let textAlignment: TextAlignment = alignment == .trailing ? .trailing : .leading
-
+    private var values: some View {
         if !row.people.isEmpty {
-            VStack(alignment: alignment, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 6) {
                 ForEach(row.people, id: \.self) { person in
                     if row.people.count > 1, let personRef = person.personRef {
                         Button {
                             onPersonSelected(personRef)
                         } label: {
-                            linkedValue(person.name, alignment: textAlignment)
+                            linkedValue(person.name)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(person.name)")
                     } else {
-                        valueText(person.name, alignment: textAlignment)
+                        valueText(person.name)
                     }
                 }
             }
         } else if !row.companies.isEmpty {
-            VStack(alignment: alignment, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 6) {
                 ForEach(row.companies) { company in
                     if row.companies.count > 1 {
                         Button {
                             onCompanySelected(company.ref)
                         } label: {
-                            linkedValue(company.name, alignment: textAlignment)
+                            linkedValue(company.name)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(company.name)")
                     } else {
-                        valueText(company.name, alignment: textAlignment)
+                        valueText(company.name)
                     }
                 }
             }
         } else {
-            valueText(row.value ?? "", alignment: textAlignment)
+            valueText(row.value ?? "")
         }
     }
 
-    private func linkedValue(_ text: String, alignment: TextAlignment) -> some View {
+    private func linkedValue(_ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
-            valueText(text, alignment: alignment)
+            valueText(text)
             Image(systemName: "chevron.right")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white.opacity(0.3))
@@ -5658,11 +5647,11 @@ private struct DetailFactRowView: View {
         .contentShape(Rectangle())
     }
 
-    private func valueText(_ text: String, alignment: TextAlignment) -> some View {
+    private func valueText(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white.opacity(0.92))
-            .multilineTextAlignment(alignment)
+            .multilineTextAlignment(.trailing)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
