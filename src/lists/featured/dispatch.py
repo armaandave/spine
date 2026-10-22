@@ -17,7 +17,10 @@ from lists.models import FeaturedListSync
 DISPATCH_TASK = "Dispatch featured lists"
 SYNC_TASK = "Sync featured list"
 QUEUE = "featured"
-MAX_NON_LIVE = 5  # non-live syncs queued or running at once (and so per tick)
+# Non-live syncs queued or running at once. The featured worker runs two at a time
+# (supervisord.conf), so one slot is always free for live polls and the dispatcher.
+MAX_NON_LIVE = 1
+DISPATCH_PERIOD = timedelta(seconds=60)  # the beat interval of dispatch_featured_lists
 BACKOFF_BASE = timedelta(minutes=5)
 BACKOFF_MAX = timedelta(hours=24)
 LEASE_GRACE = timedelta(seconds=120)
@@ -107,6 +110,18 @@ def lease_for(definition):
     return timedelta(seconds=definition.soft_time_limit) + LEASE_GRACE
 
 
+def poll_offsets(definition, now):
+    """Return the countdowns (seconds) to queue this tick: ``[0]``, or for a live
+    window polled more often than the dispatcher runs, one per interval until the
+    next tick (``[0, 30]`` for a 30 s interval).
+    """
+    window = definition.active_live_window(now)
+    if window is None or window.interval >= DISPATCH_PERIOD:
+        return [0]
+    step = window.interval.total_seconds()
+    return [int(step * index) for index in range(int(DISPATCH_PERIOD.total_seconds() // step))]
+
+
 def dispatch(now=None):
     """Lease and queue every due definition; return the queued keys."""
     now = now or timezone.now()
@@ -124,14 +139,17 @@ def dispatch(now=None):
         )
         if not acquired:
             continue
-        sync_featured_list.apply_async(
-            args=[definition.key],
-            kwargs={"dispatched_at": now.isoformat()},
-            queue=QUEUE,
-            expires=lease.total_seconds(),
-            soft_time_limit=definition.soft_time_limit,
-            time_limit=definition.soft_time_limit + 60,
-        )
+        for offset in poll_offsets(definition, now):
+            # A later poll skips itself if any run started after its own slot.
+            sync_featured_list.apply_async(
+                args=[definition.key],
+                kwargs={"dispatched_at": (now + timedelta(seconds=offset)).isoformat()},
+                queue=QUEUE,
+                countdown=offset or None,
+                expires=lease.total_seconds() + offset,
+                soft_time_limit=definition.soft_time_limit,
+                time_limit=definition.soft_time_limit + 60,
+            )
         queued.append(definition.key)
     return queued
 
