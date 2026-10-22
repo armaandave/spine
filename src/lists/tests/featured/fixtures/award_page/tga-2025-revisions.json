@@ -1,0 +1,876 @@
+{
+ "title": "The Game Awards 2025",
+ "pageid": 81382602,
+ "source": "https://en.wikipedia.org/w/index.php?title=The_Game_Awards_2025&action=history",
+ "license": "Wikipedia text, CC BY-SA 4.0",
+ "note": "Real revisions recorded from the MediaWiki API; each revision's text is trimmed to the infobox and the Game of the Year and Best Family Game cells.",
+ "revisions": [
+  {
+   "revid": 1326987792,
+   "parentid": 1326978384,
+   "timestamp": "2025-12-12T00:32:08Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 0
+  },
+  {
+   "revid": 1326987842,
+   "parentid": 1326987792,
+   "timestamp": "2025-12-12T00:32:25Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 0
+  },
+  {
+   "revid": 1326987956,
+   "parentid": 1326987842,
+   "timestamp": "2025-12-12T00:33:06Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 0
+  },
+  {
+   "revid": 1326988226,
+   "parentid": 1326987956,
+   "timestamp": "2025-12-12T00:34:31Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 1
+  },
+  {
+   "revid": 1326988292,
+   "parentid": 1326988226,
+   "timestamp": "2025-12-12T00:34:53Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326988956,
+   "parentid": 1326988292,
+   "timestamp": "2025-12-12T00:38:48Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326989254,
+   "parentid": 1326988956,
+   "timestamp": "2025-12-12T00:40:42Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326989717,
+   "parentid": 1326989254,
+   "timestamp": "2025-12-12T00:43:45Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326990190,
+   "parentid": 1326989717,
+   "timestamp": "2025-12-12T00:46:36Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326990792,
+   "parentid": 1326990190,
+   "timestamp": "2025-12-12T00:51:04Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326991618,
+   "parentid": 1326990792,
+   "timestamp": "2025-12-12T00:57:25Z",
+   "tags": [
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 3
+  },
+  {
+   "revid": 1326991658,
+   "parentid": 1326991618,
+   "timestamp": "2025-12-12T00:57:49Z",
+   "tags": [
+    "mw-undo",
+    "twinkle"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326991743,
+   "parentid": 1326991658,
+   "timestamp": "2025-12-12T00:58:31Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326991986,
+   "parentid": 1326991743,
+   "timestamp": "2025-12-12T01:00:15Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326993808,
+   "parentid": 1326991986,
+   "timestamp": "2025-12-12T01:11:56Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326995244,
+   "parentid": 1326993808,
+   "timestamp": "2025-12-12T01:22:08Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326996160,
+   "parentid": 1326995244,
+   "timestamp": "2025-12-12T01:28:28Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326996732,
+   "parentid": 1326996160,
+   "timestamp": "2025-12-12T01:32:19Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326996756,
+   "parentid": 1326996732,
+   "timestamp": "2025-12-12T01:32:28Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326996853,
+   "parentid": 1326996756,
+   "timestamp": "2025-12-12T01:33:00Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997048,
+   "parentid": 1326996853,
+   "timestamp": "2025-12-12T01:34:09Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997133,
+   "parentid": 1326997048,
+   "timestamp": "2025-12-12T01:34:38Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997207,
+   "parentid": 1326997133,
+   "timestamp": "2025-12-12T01:35:00Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997250,
+   "parentid": 1326997207,
+   "timestamp": "2025-12-12T01:35:15Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997269,
+   "parentid": 1326997250,
+   "timestamp": "2025-12-12T01:35:23Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997330,
+   "parentid": 1326997269,
+   "timestamp": "2025-12-12T01:35:47Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997414,
+   "parentid": 1326997330,
+   "timestamp": "2025-12-12T01:36:20Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997529,
+   "parentid": 1326997414,
+   "timestamp": "2025-12-12T01:37:03Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326997700,
+   "parentid": 1326997529,
+   "timestamp": "2025-12-12T01:38:00Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326998298,
+   "parentid": 1326997700,
+   "timestamp": "2025-12-12T01:41:49Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326998433,
+   "parentid": 1326998298,
+   "timestamp": "2025-12-12T01:42:45Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326998458,
+   "parentid": 1326998433,
+   "timestamp": "2025-12-12T01:42:55Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1326998630,
+   "parentid": 1326998458,
+   "timestamp": "2025-12-12T01:44:02Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000262,
+   "parentid": 1326998630,
+   "timestamp": "2025-12-12T01:54:35Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000361,
+   "parentid": 1327000262,
+   "timestamp": "2025-12-12T01:55:08Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000415,
+   "parentid": 1327000361,
+   "timestamp": "2025-12-12T01:55:33Z",
+   "tags": [
+    "possible vandalism",
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000429,
+   "parentid": 1327000415,
+   "timestamp": "2025-12-12T01:55:38Z",
+   "tags": [
+    "mw-rollback"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000515,
+   "parentid": 1327000429,
+   "timestamp": "2025-12-12T01:56:21Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000650,
+   "parentid": 1327000515,
+   "timestamp": "2025-12-12T01:57:23Z",
+   "tags": [
+    "possible vandalism",
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000691,
+   "parentid": 1327000650,
+   "timestamp": "2025-12-12T01:57:42Z",
+   "tags": [
+    "mw-undo",
+    "twinkle",
+    "mw-reverted"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000766,
+   "parentid": 1327000691,
+   "timestamp": "2025-12-12T01:58:13Z",
+   "tags": [
+    "possible vandalism",
+    "mw-manual-revert",
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000820,
+   "parentid": 1327000766,
+   "timestamp": "2025-12-12T01:58:32Z",
+   "tags": [
+    "mw-undo",
+    "twinkle",
+    "mw-reverted"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000885,
+   "parentid": 1327000820,
+   "timestamp": "2025-12-12T01:59:02Z",
+   "tags": [
+    "possible vandalism",
+    "mw-manual-revert",
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000943,
+   "parentid": 1327000885,
+   "timestamp": "2025-12-12T01:59:29Z",
+   "tags": [
+    "mw-undo",
+    "twinkle",
+    "mw-reverted"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327000981,
+   "parentid": 1327000943,
+   "timestamp": "2025-12-12T01:59:49Z",
+   "tags": [
+    "possible vandalism",
+    "mw-manual-revert",
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327001026,
+   "parentid": 1327000981,
+   "timestamp": "2025-12-12T02:00:03Z",
+   "tags": [
+    "mw-rollback"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327001841,
+   "parentid": 1327001026,
+   "timestamp": "2025-12-12T02:05:53Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327002737,
+   "parentid": 1327001841,
+   "timestamp": "2025-12-12T02:13:04Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327003097,
+   "parentid": 1327002737,
+   "timestamp": "2025-12-12T02:15:54Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327003537,
+   "parentid": 1327003097,
+   "timestamp": "2025-12-12T02:19:07Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327003853,
+   "parentid": 1327003537,
+   "timestamp": "2025-12-12T02:21:39Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004046,
+   "parentid": 1327003853,
+   "timestamp": "2025-12-12T02:23:08Z",
+   "tags": [
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004117,
+   "parentid": 1327004046,
+   "timestamp": "2025-12-12T02:23:43Z",
+   "tags": [
+    "mw-undo",
+    "twinkle",
+    "mw-reverted"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004163,
+   "parentid": 1327004117,
+   "timestamp": "2025-12-12T02:24:06Z",
+   "tags": [
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004243,
+   "parentid": 1327004163,
+   "timestamp": "2025-12-12T02:24:39Z",
+   "tags": [
+    "mw-reverted",
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004257,
+   "parentid": 1327004243,
+   "timestamp": "2025-12-12T02:24:43Z",
+   "tags": [
+    "mw-manual-revert",
+    "twinkle"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004293,
+   "parentid": 1327004257,
+   "timestamp": "2025-12-12T02:24:58Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004532,
+   "parentid": 1327004293,
+   "timestamp": "2025-12-12T02:26:36Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004562,
+   "parentid": 1327004532,
+   "timestamp": "2025-12-12T02:26:50Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327004654,
+   "parentid": 1327004562,
+   "timestamp": "2025-12-12T02:27:23Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 2
+  },
+  {
+   "revid": 1327005977,
+   "parentid": 1327004654,
+   "timestamp": "2025-12-12T02:37:12Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327006270,
+   "parentid": 1327005977,
+   "timestamp": "2025-12-12T02:39:43Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007239,
+   "parentid": 1327006270,
+   "timestamp": "2025-12-12T02:46:46Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007377,
+   "parentid": 1327007239,
+   "timestamp": "2025-12-12T02:47:41Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007616,
+   "parentid": 1327007377,
+   "timestamp": "2025-12-12T02:49:25Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007662,
+   "parentid": 1327007616,
+   "timestamp": "2025-12-12T02:49:48Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007790,
+   "parentid": 1327007662,
+   "timestamp": "2025-12-12T02:50:51Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327007990,
+   "parentid": 1327007790,
+   "timestamp": "2025-12-12T02:52:26Z",
+   "tags": [
+    "visualeditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327008413,
+   "parentid": 1327007990,
+   "timestamp": "2025-12-12T02:55:49Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327008685,
+   "parentid": 1327008413,
+   "timestamp": "2025-12-12T02:57:47Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327009187,
+   "parentid": 1327008685,
+   "timestamp": "2025-12-12T03:01:46Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327009356,
+   "parentid": 1327009187,
+   "timestamp": "2025-12-12T03:03:00Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327009826,
+   "parentid": 1327009356,
+   "timestamp": "2025-12-12T03:06:19Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327009906,
+   "parentid": 1327009826,
+   "timestamp": "2025-12-12T03:06:53Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327010590,
+   "parentid": 1327009906,
+   "timestamp": "2025-12-12T03:11:51Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327011630,
+   "parentid": 1327010590,
+   "timestamp": "2025-12-12T03:20:23Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327012028,
+   "parentid": 1327011630,
+   "timestamp": "2025-12-12T03:23:58Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327012488,
+   "parentid": 1327012028,
+   "timestamp": "2025-12-12T03:27:35Z",
+   "tags": [
+    "mobile edit",
+    "mobile web edit",
+    "Section blanking",
+    "mw-reverted"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327012538,
+   "parentid": 1327012488,
+   "timestamp": "2025-12-12T03:27:55Z",
+   "tags": [
+    "mw-undo",
+    "twinkle"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327013788,
+   "parentid": 1327012538,
+   "timestamp": "2025-12-12T03:37:04Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327014047,
+   "parentid": 1327013788,
+   "timestamp": "2025-12-12T03:39:08Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327014526,
+   "parentid": 1327014047,
+   "timestamp": "2025-12-12T03:42:05Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327014568,
+   "parentid": 1327014526,
+   "timestamp": "2025-12-12T03:42:28Z",
+   "tags": [],
+   "content": 4
+  },
+  {
+   "revid": 1327014738,
+   "parentid": 1327014568,
+   "timestamp": "2025-12-12T03:43:58Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 4
+  },
+  {
+   "revid": 1327014960,
+   "parentid": 1327014738,
+   "timestamp": "2025-12-12T03:45:33Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 5
+  },
+  {
+   "revid": 1327016660,
+   "parentid": 1327014960,
+   "timestamp": "2025-12-12T03:58:00Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 5
+  },
+  {
+   "revid": 1327017160,
+   "parentid": 1327016660,
+   "timestamp": "2025-12-12T04:02:11Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 6
+  },
+  {
+   "revid": 1327017416,
+   "parentid": 1327017160,
+   "timestamp": "2025-12-12T04:04:18Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 6
+  },
+  {
+   "revid": 1327017516,
+   "parentid": 1327017416,
+   "timestamp": "2025-12-12T04:04:57Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 6
+  },
+  {
+   "revid": 1327017684,
+   "parentid": 1327017516,
+   "timestamp": "2025-12-12T04:06:16Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 6
+  },
+  {
+   "revid": 1327019786,
+   "parentid": 1327017684,
+   "timestamp": "2025-12-12T04:23:51Z",
+   "tags": [
+    "visualeditor",
+    "editcheck-newreference"
+   ],
+   "content": 6
+  },
+  {
+   "revid": 1327020409,
+   "parentid": 1327019786,
+   "timestamp": "2025-12-12T04:29:13Z",
+   "tags": [
+    "wikieditor"
+   ],
+   "content": 6
+  }
+ ],
+ "contents": [
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n* ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n* ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n* ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* ''[[The Alters]]'' – [[11 Bit Studios]]\n* ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n* ''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]\n* ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n* ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n* ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* ''[[The Alters]]'' – [[11 Bit Studios]]\n* ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n* ''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]\n* ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n* ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n* ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* ''[[The Alters]]'' – [[11 Bit Studios]]\n* ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n* ''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]\n* ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n* ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n* ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* ''[[The Alters]]'' – [[11 Bit Studios]]\n* ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n* ''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]\n* ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n* ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n* ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* '''''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]'''{{double-dagger}}\n** ''[[The Alters]]'' – [[11 Bit Studios]]\n** ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n** ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n** ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n** ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = \n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* ''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]\n* ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n* ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n* ''[[Hades II]]'' – [[Supergiant Games]]\n* ''[[Hollow Knight: Silksong]]'' – Team Cherry\n* ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* '''''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]'''{{double-dagger}}\n** ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n** ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n** ''[[Hades II]]'' – [[Supergiant Games]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* '''''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]'''{{double-dagger}}\n** ''[[The Alters]]'' – [[11 Bit Studios]]\n** ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n** ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n** ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n** ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n",
+  "{{Infobox award\n| award1_type      = {{nowrap|[[The Game Award for Game of the Year|Game of the Year]]{{nbs|en}}}}\n| award1_winner    = ''Clair Obscur: Expedition 33''\n}}\n\n=== Awards ===\n{| class=wikitable\n|-\n! style=\"background:#eedd82; width:50em;\" | [[The Game Award for Game of the Year|Game of the Year]]\n! style=\"background:#eedd82; width:50em;\" | {{color|black|Best Game Direction}}\n|-\n| valign=\"top\" |\n* '''''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]'''{{double-dagger}}\n** ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n** ''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]\n** ''[[Hades II]]'' – [[Supergiant Games]]\n** ''[[Hollow Knight: Silksong]]'' – Team Cherry\n** ''[[Kingdom Come: Deliverance II]]'' – [[Warhorse Studios]] / [[Deep Silver]]\n| valign=\"top\" |\n* '''''[[Clair Obscur: Expedition 33]]'' – Sandfall Interactive / [[Kepler Interactive]]'''{{double-dagger}}\n** ''[[Death Stranding 2: On the Beach]]'' – [[Kojima Productions]] / [[Sony Interactive Entertainment]]\n** ''[[Ghost of Yōtei]]'' – [[Sucker Punch Productions]] / Sony Interactive Entertainment\n** ''[[Hades II]]'' – [[Supergiant Games]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n|-\n! style=\"background:#eedd82\" | {{color|black|Best Family Game}}\n! style=\"background:#eedd82\" | {{color|black|Best Sim / Strategy Game}}\n|-\n| valign=\"top\" |\n* '''''[[Donkey Kong Bananza]]'' – [[Nintendo EPD]] / [[Nintendo]]'''{{double-dagger}}\n** ''[[Lego Party]]'' – [[SMG Studio]] / [[Fictions (company)|Fictions]]\n** ''[[Lego Voyagers]]'' – Light Brick Studios / [[Annapurna Interactive]]\n** ''[[Mario Kart World]]'' – [[Nintendo EPD]] / Nintendo\n** ''[[Sonic Racing: CrossWorlds]]'' – [[Sonic Team]] / [[Sega]]\n** ''[[Split Fiction]]'' – [[Hazelight Studios]] / [[Electronic Arts]]\n| valign=\"top\" |\n* '''''[[Final Fantasy Tactics: The Ivalice Chronicles]]'' – [[Square Enix]]'''{{double-dagger}}\n** ''[[The Alters]]'' – [[11 Bit Studios]]\n** ''[[Civilization VII]]'' – [[Firaxis Games]] / [[2K (company)|2K]]\n** ''[[Jurassic World Evolution 3]]'' – [[Frontier Developments]]\n** ''[[Tempest Rising]]'' – [[Slipgate Ironworks]] / [[3D Realms]]\n** ''[[Two Point Museum]]'' – [[Two Point Studios]] / [[Sega]]\n|}\n"
+ ]
+}

@@ -3,6 +3,7 @@
 Order, first hit wins:
 
 1. an override from ``overrides/*.csv`` (``-`` skips the entry);
+   an entry with a ``review`` id (its reason) is otherwise always unresolved;
 2. the entry's ``ref``;
 3. a direct provider ID (``tmdb``, ``igdb``, ``mal``, ``mangaupdates``, ``hardcover``,
    ``olid`` editions, ``mbid_rg``, ``comicvine``; people: ``<source>_person``), no network;
@@ -135,7 +136,7 @@ class Resolution:
 
     entry: object
     match: Match | None
-    how: str = ""  # override, ref, id, imdb, steam, isbn, title, cache, skip
+    how: str = ""  # override, ref, id, imdb, steam, isbn, title, cache, skip, review
     reason: str = ""  # why it is unresolved
 
     @property
@@ -184,6 +185,8 @@ class Resolver:
             return Resolution(entry, None, "skip")
         if override:
             return self._checked(entry, match_from_ref(override, entry), "override")
+        if entry.ids.get("review"):  # held for review: only an override can match it
+            return Resolution(entry, None, "review", entry.ids["review"])
         if entry.ids.get("ref"):
             try:
                 return self._checked(entry, match_from_ref(entry.ids["ref"], entry), "ref")

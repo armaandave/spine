@@ -80,6 +80,7 @@ Rules:
 | `mbid_rg` | `musicbrainz:music:<release-group mbid>` |
 | `comicvine` | `comicvine:comic:<id>` |
 | `wikidata`, `goodreads`, `anilist` | identity only (used in the key; not resolvable) |
+| `review` | never resolves: the entry goes to `unresolved` with this text as its reason, unless an override matches its key (award winners that aren't pre-matched nominees) |
 | `<source>_person` | people lists: `tmdb_person`, `openlibrary_person`, `hardcover_person`, `musicbrainz_person`, `mal_person`, `mangaupdates_person` |
 
 - `isbns`: every ISBN you have, best first. Books try Hardcover, then Open Library, per ISBN.
