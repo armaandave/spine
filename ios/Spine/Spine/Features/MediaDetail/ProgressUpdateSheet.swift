@@ -208,6 +208,7 @@ struct ProgressUpdateSheet: View {
     let onDismiss: () -> Void
     let onLogFinished: () -> Void
     let onPause: (() async -> Bool)?
+    let onResume: (() async -> Bool)?
     let onDrop: (() async -> Bool)?
     let onRestart: (() async -> Bool)?
     let onDelete: (() async -> Bool)?
@@ -222,6 +223,7 @@ struct ProgressUpdateSheet: View {
         onDismiss: @escaping () -> Void,
         onLogFinished: @escaping () -> Void,
         onPause: (() async -> Bool)? = nil,
+        onResume: (() async -> Bool)? = nil,
         onDrop: (() async -> Bool)? = nil,
         onRestart: (() async -> Bool)? = nil,
         onDelete: (() async -> Bool)? = nil
@@ -234,6 +236,7 @@ struct ProgressUpdateSheet: View {
         self.onDismiss = onDismiss
         self.onLogFinished = onLogFinished
         self.onPause = onPause
+        self.onResume = onResume
         self.onDrop = onDrop
         self.onRestart = onRestart
         self.onDelete = onDelete
@@ -251,7 +254,7 @@ struct ProgressUpdateSheet: View {
             ProgressKeyboardPresenter(
                 viewModel: viewModel,
                 isActive: $isInputActive,
-                accessoryHeight: 264,
+                accessoryHeight: viewModel.detail.ref.mediaType == "book" ? 392 : 264,
                 accessory: panel
             ) {
                 onDismiss()
@@ -321,6 +324,8 @@ struct ProgressUpdateSheet: View {
         switch action {
         case .pause:
             if await onPause?() == true { close() }
+        case .resume:
+            if await onResume?() == true { close() }
         case .didNotFinish:
             if await onDrop?() == true { close() }
         case .finish:
@@ -341,6 +346,7 @@ struct ProgressUpdateSheet: View {
 
 private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     case pause
+    case resume
     case didNotFinish
     case finish
     case restart
@@ -350,6 +356,7 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .pause: "Pause"
+        case .resume: "Resume Reading"
         case .didNotFinish: "Mark as DNF"
         case .finish: "Finish & Log"
         case .restart: "Restart from Beginning"
@@ -359,6 +366,7 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .pause: "pause.fill"
+        case .resume: "play.fill"
         case .didNotFinish: "xmark"
         case .finish: "checkmark"
         case .restart: "arrow.counterclockwise"
@@ -403,7 +411,28 @@ private struct ProgressUpdatePanel: View {
 
             header
             progressSummary
+            if viewModel.detail.ref.mediaType == "book" {
+                ProgressStatusRow(choices: [
+                    ProgressStatusChoice(title: "Reading", systemImage: "book.pages",
+                                         isCurrent: journeyStatus == "In progress") { onJourneyAction(.resume) },
+                    ProgressStatusChoice(title: "Paused", systemImage: "pause.fill",
+                                         isCurrent: journeyStatus == "Paused") { onJourneyAction(.pause) },
+                    ProgressStatusChoice(title: "Finished", systemImage: "checkmark", isCurrent: false) { onJourneyAction(.finish) },
+                    ProgressStatusChoice(title: "DNF", systemImage: "xmark", isCurrent: false) { onJourneyAction(.didNotFinish) },
+                ])
+                .disabled(isSaving)
+            }
             saveButton
+            if viewModel.detail.ref.mediaType == "book" {
+                HStack(spacing: 22) {
+                    Button("Restart") { onJourneyAction(.restart) }
+                    Button("Delete Journey", role: .destructive) { onJourneyAction(.delete) }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.borderless)
+                .disabled(isSaving)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 18)
@@ -442,26 +471,6 @@ private struct ProgressUpdatePanel: View {
 
             Spacer()
 
-            if viewModel.detail.ref.mediaType == "book" {
-                Menu {
-                    ForEach(availableJourneyActions) { action in
-                        Button(role: action == .delete ? .destructive : nil) {
-                            onJourneyAction(action)
-                        } label: {
-                            Label(action.title, systemImage: action.systemImage)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .disabled(isSaving)
-                .accessibilityLabel("Reading journey actions")
-            }
-
             Button {
                 onClose()
             } label: {
@@ -472,12 +481,6 @@ private struct ProgressUpdatePanel: View {
             .buttonBorderShape(.circle)
             .controlSize(.regular)
             .accessibilityLabel("Close")
-        }
-    }
-
-    private var availableJourneyActions: [BookJourneyMenuAction] {
-        BookJourneyMenuAction.allCases.filter { action in
-            action != .pause || journeyStatus == "In progress"
         }
     }
 

@@ -1522,8 +1522,6 @@ private struct MediaDetailPageView: View {
                             }
                         }
                     )
-                    .presentationDetents(detail.ref.mediaType == "book" ? [.medium, .large] : [.height(detail.ref.mediaType == "music" ? 292 : 224)])
-                    .presentationDragIndicator(.visible)
                     }
                 }
             case .addToList:
@@ -1898,6 +1896,9 @@ private struct MediaDetailPageView: View {
                 },
                 onPause: {
                     await viewModel.performBookAction("pause", for: detail)
+                },
+                onResume: {
+                    await viewModel.performBookAction("resume", for: detail)
                 },
                 onDrop: {
                     await viewModel.performBookAction("drop", for: detail)
@@ -4103,6 +4104,8 @@ private struct BookGameActionSheet: View {
                 errorView
             }
             .presentationBackground(.regularMaterial)
+            .presentationDetents([.height(mediaType == "music" ? 292 : 224)])
+            .presentationDragIndicator(.visible)
             .confirmationDialog("Remove album tracking?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
                 Button("Remove Tracking", role: .destructive) {
                     Task { await onRemove() }
@@ -4114,78 +4117,51 @@ private struct BookGameActionSheet: View {
         }
     }
 
+    /// The same list as the game sheet, sized to its rows.
     private var bookActions: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Track this book")
-                    .font(.title3.weight(.bold))
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    bookActionButton(
-                        status == "Planning" ? "To Read" : "Add to To Read",
-                        systemImage: "bookmark",
-                        disabled: status == "Planning" || bookState?.hasLiveJourney == true
-                    ) { await onAction(.planning) }
-                    bookActionButton(
-                        status == "Paused" ? "Resume Reading" : "Currently Reading",
-                        systemImage: "book.pages",
-                        disabled: status == "In progress"
-                    ) { await onAction(.currently) }
-
-                    if bookState?.hasLiveJourney == true {
-                        bookActionButton("Update Progress", systemImage: "slider.horizontal.3") {
-                            onUpdateProgress()
-                        }
-                        bookActionButton("Pause", systemImage: "pause.fill", disabled: status == "Paused") {
-                            await onAction(.paused)
-                        }
-                        bookActionButton("Mark as DNF", systemImage: "xmark") {
-                            isDNFConfirmationPresented = true
-                        }
-                    } else {
-                        bookActionButton("Paused", systemImage: "pause.fill", disabled: status == "Paused") {
-                            await onAction(.paused)
-                        }
-                        bookActionButton("Did Not Finish", systemImage: "xmark", disabled: status == "Dropped") {
-                            await onAction(.stopped)
-                        }
+        NavigationStack {
+            List {
+                Section {
+                    bookStatusButton("To Read", systemImage: "bookmark", action: .planning,
+                                     selected: status == "Planning",
+                                     disabled: status == "Planning" || bookState?.hasLiveJourney == true)
+                    bookStatusButton("Currently Reading", systemImage: "book.pages", action: .currently,
+                                     selected: isInProgress, disabled: isInProgress)
+                    bookStatusButton("Paused", systemImage: "pause.fill", action: .paused,
+                                     selected: status == "Paused", disabled: status == "Paused")
+                    Button {
+                        if bookState?.hasLiveJourney == true { isDNFConfirmationPresented = true }
+                        else { Task { await onAction(.stopped) } }
+                    } label: {
+                        Label(status == "Dropped" ? "Did Not Finish ✓" : "Did Not Finish", systemImage: "xmark")
                     }
-
-                    bookActionButton("Log Read", systemImage: "square.and.pencil") {
-                        onLog()
-                    }
+                    .disabled(status == "Dropped")
+                    if status == "Paused" { Button("Resume Reading") { Task { await onAction(.currently) } } }
+                    Button("Log Read", systemImage: "square.and.pencil", action: onLog)
                 }
-
                 if bookState?.hasLiveJourney == true {
                     Text(bookState?.actionReasons["planning"] ?? "Pause or finish the active journey before moving this book to To Read.")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Update Progress", systemImage: "slider.horizontal.3", action: onUpdateProgress)
                 }
-
                 if status != nil {
-                    Button(role: .destructive) {
-                        if bookState?.canRemoveTracking != false {
-                            isRemoveConfirmationPresented = true
+                    Section {
+                        Button("Remove Tracking", role: .destructive) {
+                            if bookState?.canRemoveTracking != false { isRemoveConfirmationPresented = true }
                         }
-                    } label: {
-                        Label("Remove Tracking", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isSaving || bookState?.canRemoveTracking == false)
-
-                    if bookState?.canRemoveTracking == false, let reason = bookState?.removeTrackingReason {
-                        Text(reason)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        .disabled(bookState?.canRemoveTracking == false)
+                        if bookState?.canRemoveTracking == false, let reason = bookState?.removeTrackingReason {
+                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
-
-                errorView
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            .padding(18)
+            .fitsSheetToContent()
+            .navigationTitle("Track this book").navigationBarTitleDisplayMode(.inline)
+            .disabled(isSaving)
         }
-        .presentationBackground(.regularMaterial)
+        .preferredColorScheme(.dark)
         .confirmationDialog("Mark this book as Did Not Finish?", isPresented: $isDNFConfirmationPresented, titleVisibility: .visible) {
             Button("Mark as DNF", role: .destructive) {
                 Task { await onAction(.stopped) }
@@ -4204,22 +4180,12 @@ private struct BookGameActionSheet: View {
         }
     }
 
-    private func bookActionButton(
-        _ title: String,
-        systemImage: String,
-        disabled: Bool = false,
-        action: @escaping () async -> Void
-    ) -> some View {
-        Button {
-            Task { await action() }
-        } label: {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.bold))
-                .frame(maxWidth: .infinity, minHeight: 46)
+    private func bookStatusButton(_ title: String, systemImage: String, action: MediaDetailQuickAction,
+                                  selected: Bool, disabled: Bool) -> some View {
+        Button { Task { await onAction(action) } } label: {
+            Label(selected ? "\(title) ✓" : title, systemImage: systemImage)
         }
-        .buttonStyle(.bordered)
-        .tint(.white.opacity(0.84))
-        .disabled(isSaving || disabled)
+        .disabled(disabled)
     }
 
     @ViewBuilder

@@ -161,7 +161,27 @@ struct GamePlaythroughEditor: View {
     }
 }
 
-/// The plus button's sheet for a game: the book sheet's grid, sized to its buttons.
+/// Sizes a sheet to its list's rows, so it opens with no empty space and has no taller
+/// height to drag into. Apply it to the List inside the sheet.
+struct FitsSheetToContent: ViewModifier {
+    @State private var height: CGFloat = 320
+
+    func body(content: Content) -> some View {
+        content
+            .listSectionSpacing(.compact)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
+            } action: { _, newHeight in
+                height = newHeight
+            }
+            .presentationDetents([.height(height)])
+    }
+}
+
+extension View {
+    func fitsSheetToContent() -> some View { modifier(FitsSheetToContent()) }
+}
+
 struct GameActionSheet: View {
     let status: String?
     let game: GameTrackingState?
@@ -173,87 +193,50 @@ struct GameActionSheet: View {
     let onRemove: () async -> Void
     @State private var confirmDrop = false
     @State private var confirmRemove = false
-    @State private var contentHeight: CGFloat = 320
-
-    private var isLive: Bool { game?.hasLivePlaythrough == true }
-
-    private var playingTitle: String {
-        switch status {
-        case "Paused": "Resume Playing"
-        case "In progress": "Playing"
-        default: "Start Playing"
-        }
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Track this game").font(.title3.weight(.bold))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                actionButton(status == "Planning" ? "Planning" : "Add to Planning", systemImage: "bookmark",
-                             disabled: status == "Planning" || isLive) { await onAction(.planning) }
-                actionButton(playingTitle, systemImage: "play.fill",
-                             disabled: game?.hasPlayingPlaythrough == true) { await onAction(.currently) }
-                if isLive {
-                    actionButton("Update Progress", systemImage: "slider.horizontal.3") { onProgress() }
-                    actionButton("Pause", systemImage: "pause.fill", disabled: status == "Paused") { await onAction(.paused) }
-                    actionButton("Drop", systemImage: "xmark") { confirmDrop = true }
-                } else {
-                    actionButton("Paused", systemImage: "pause.fill", disabled: status == "Paused") { await onAction(.paused) }
-                    actionButton("Dropped", systemImage: "xmark", disabled: status == "Dropped") { await onAction(.stopped) }
+        NavigationStack {
+            List {
+                Section {
+                    statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
+                    statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
+                    statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
+                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { Task { await onAction(.stopped) } } } label: {
+                        Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
+                    }.disabled(status == "Dropped")
+                    if status == "Paused" { Button("Resume") { Task { await onAction(.currently) } } }
+                    Button("Log Completion", systemImage: "square.and.pencil", action: onLog)
                 }
-                actionButton("Log Completion", systemImage: "square.and.pencil") { onLog() }
-                if !isLive, game?.canUpdateProgress == true {
-                    actionButton("Update Progress", systemImage: "slider.horizontal.3") { onProgress() }
+                if game?.hasLivePlaythrough == true {
+                    Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
                 }
-            }
-            if isLive {
-                Text("Pause, drop or finish this playthrough before moving the game to Planning.")
-                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            }
-            if status != nil {
-                Button(role: .destructive) { confirmRemove = true } label: {
-                    Label("Remove from Library", systemImage: "trash").frame(maxWidth: .infinity)
+                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3", action: onProgress) }
+                if status != nil {
+                    Section {
+                        Button("Remove from Library", role: .destructive) { confirmRemove = true }
+                            .disabled(game?.canRemoveTracking == false)
+                        if game?.canRemoveTracking == false {
+                            Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(isSaving || game?.canRemoveTracking == false)
-                if game?.canRemoveTracking == false {
-                    Text("Delete playthroughs and completion logs first. Custom lists stay unchanged.")
-                        .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.red.opacity(0.92))
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 26)
-        .padding(.bottom, 18)
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(contentHeight)])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(.regularMaterial)
-        .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
-            Button("Drop", role: .destructive) { Task { await onAction(.stopped) } }
-        } message: { Text("Your progress will be kept in history.") }
-        .confirmationDialog("Remove from Library?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Remove", role: .destructive) { Task { await onRemove() } }
-        } message: { Text("This clears current rating and heart. Custom lists stay unchanged.") }
+            .fitsSheetToContent()
+            .navigationTitle("Track this game").navigationBarTitleDisplayMode(.inline)
+            .disabled(isSaving)
+            .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
+                Button("Drop", role: .destructive) { Task { await onAction(.stopped) } }
+            } message: { Text("Your progress will be kept in history.") }
+            .confirmationDialog("Remove from Library?", isPresented: $confirmRemove, titleVisibility: .visible) {
+                Button("Remove", role: .destructive) { Task { await onRemove() } }
+            } message: { Text("This clears current rating and heart. Custom lists stay unchanged.") }
+        }.preferredColorScheme(.dark)
     }
 
-    private func actionButton(_ title: String, systemImage: String, disabled: Bool = false,
-                              action: @escaping () async -> Void) -> some View {
-        Button { Task { await action() } } label: {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.bold))
-                .frame(maxWidth: .infinity, minHeight: 46)
-        }
-        .buttonStyle(.bordered)
-        .tint(.white.opacity(0.84))
-        .disabled(isSaving || disabled)
+    private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
+        Button { Task { await onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
+            .disabled(disabled ?? selected)
     }
 }
 
@@ -335,7 +318,27 @@ struct GameProgressSheet: View {
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if playthrough.isUnfinished {
+                ProgressStatusRow(choices: [
+                    ProgressStatusChoice(title: "Playing", systemImage: "play.fill",
+                                         isCurrent: playthrough.status == "In progress") { run { await onAction("resume") } },
+                    ProgressStatusChoice(title: "Paused", systemImage: "pause.fill",
+                                         isCurrent: playthrough.status == "Paused") { run { await onAction("pause") } },
+                    ProgressStatusChoice(title: "Finished", systemImage: "checkmark", isCurrent: false, action: onFinish),
+                    ProgressStatusChoice(title: "Dropped", systemImage: "xmark", isCurrent: false) { pending = .drop },
+                ])
+            }
             saveButton
+            HStack(spacing: 22) {
+                Button("Edit Dates", action: onEditDates)
+                if playthrough.isUnfinished {
+                    Button("Restart") { pending = .restart }
+                    Button("Delete", role: .destructive) { pending = .delete }
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .buttonStyle(.borderless)
         }
         .padding(.horizontal, 16)
         .padding(.top, 22)
@@ -384,37 +387,12 @@ struct GameProgressSheet: View {
                 .frame(maxWidth: 180)
             }
             Spacer(minLength: 0)
-            Menu { menuItems } label: {
-                Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold))
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Playthrough actions")
             Button { dismiss() } label: {
                 Image(systemName: "xmark").font(.system(size: 14, weight: .semibold))
             }
             .buttonStyle(.bordered)
             .buttonBorderShape(.circle)
             .accessibilityLabel("Close")
-        }
-    }
-
-    @ViewBuilder
-    private var menuItems: some View {
-        if playthrough.status == "In progress" {
-            Button("Pause", systemImage: "pause.fill") { run { await onAction("pause") } }
-        }
-        if playthrough.status == "Paused" {
-            Button("Resume", systemImage: "play.fill") { run { await onAction("resume") } }
-        }
-        if playthrough.isUnfinished {
-            Button("Finish & Log", systemImage: "checkmark", action: onFinish)
-            Button("Drop", systemImage: "xmark") { pending = .drop }
-            Button("Restart from Beginning", systemImage: "arrow.counterclockwise") { pending = .restart }
-        }
-        Button("Edit Dates", systemImage: "calendar", action: onEditDates)
-        if playthrough.isUnfinished {
-            Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }
         }
     }
 
@@ -513,6 +491,48 @@ struct GameProgressSheet: View {
             if await operation() { dismiss() }
             else { error = errorMessage() ?? "Could not save. Try again." }
             saving = false
+        }
+    }
+}
+
+/// One status option in an update-progress panel.
+struct ProgressStatusChoice: Identifiable {
+    let title: String
+    let systemImage: String
+    let isCurrent: Bool
+    let action: () -> Void
+    var id: String { title }
+}
+
+/// The status of the current playthrough or journey as a row of plain choices, the
+/// current one highlighted, so changing status sits next to the progress itself.
+struct ProgressStatusRow: View {
+    let choices: [ProgressStatusChoice]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Status").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(choices) { choice in
+                    Button(action: choice.action) {
+                        VStack(spacing: 4) {
+                            Image(systemName: choice.systemImage).font(.system(size: 15, weight: .semibold))
+                            Text(choice.title)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .foregroundStyle(choice.isCurrent ? Color.black : Color.primary)
+                        .background(choice.isCurrent ? Color.white : Color.primary.opacity(0.1),
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(choice.isCurrent)
+                    .accessibilityAddTraits(choice.isCurrent ? .isSelected : [])
+                }
+            }
         }
     }
 }
