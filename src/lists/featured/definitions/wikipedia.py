@@ -277,7 +277,16 @@ NBA_TRANSLATED_COLUMNS = {"title": "Title", "creator": "Author", "result": "Resu
 BOOK_GUARDS = Guards(min_resolve_rate=0.7, max_title_searches=120)
 
 
-def national_book_award(key, category, position, *, columns=NBA_COLUMNS, description=None, min_entries=30):
+def national_book_award(  # noqa: PLR0913
+    key,
+    category,
+    position,
+    *,
+    columns=NBA_COLUMNS,
+    description=None,
+    min_entries=30,
+    **options,
+):
     """Return one National Book Award category's winners."""
     page = f"National Book Award for {category}"
     return award(
@@ -291,12 +300,22 @@ def national_book_award(key, category, position, *, columns=NBA_COLUMNS, descrip
         columns=columns,
         min_entries=min_entries,
         guards=BOOK_GUARDS,
+        **options,
     )
 
 
 NATIONAL_BOOK_AWARDS = [
     national_book_award("national-book-award-fiction", "Fiction", 370),
-    national_book_award("national-book-award-nonfiction", "Nonfiction", 371),
+    national_book_award(
+        "national-book-award-nonfiction",
+        "Nonfiction",
+        371,
+        # The single Nonfiction award (1950-1963, 1984 on). The page also tabulates the
+        # 1935-1940 awards and the 1964-1983 category awards (Arts and Letters, History,
+        # the Sciences…), which were separate prizes.
+        tables={"caption": r"Nonfiction winners and finalists|nonfiction books, 19[56]0.1963"},
+        description="Every winner of the National Book Award for Nonfiction (1950-1963 and since 1984), newest first.",
+    ),
     national_book_award("national-book-award-poetry", "Poetry", 372),
     national_book_award(
         "national-book-award-translated-literature",
@@ -379,6 +398,7 @@ BILLBOARD = FeaturedList(
     params={
         "pages": [BILLBOARD_PAGE],
         "fallback_previous_year": True,
+        "musicbrainz_search": True,
         "tables": {"heading": "Chart history"},
         "columns": {"date": "Issue date", "title": "Album", "creator": r"Artist(\(s\))?"},
     },

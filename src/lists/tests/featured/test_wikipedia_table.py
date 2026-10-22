@@ -258,11 +258,23 @@ class FetchTests(SimpleTestCase):
             ),
             SPARQL: sparql([("Q8", "P436", "a1b2c3d4-0000-0000-0000-000000000000"), ("Q9", "P436", "ffff")]),
         }
-        with api_routes(routes):
+        albums = {
+            "release-groups": [
+                {"id": "single", "title": "I'm the Problem", "primary-type": "Single", "artist-credit": [{"name": "Morgan Wallen"}]},
+                {"id": "rg-problem", "title": "I'm the Problem", "primary-type": "Album", "artist-credit": [{"name": "Morgan Wallen"}]},
+                {"id": "other", "title": "I'm the Problem", "primary-type": "Album", "artist-credit": [{"name": "Someone Else"}]},
+            ],
+        }
+
+        def search(query, limit):
+            self.assertEqual(limit, 25)
+            return albums if query.startswith("I'm the Problem") else {}
+
+        with api_routes(routes), patch.object(wikidata.musicbrainz, "search_release_groups", side_effect=search):
             result = wikipedia_table.fetch(definition)
         ids = {entry.title: entry.ids for entry in result.entries}
         self.assertEqual(ids["The Life of a Showgirl"]["mbid_rg"], "a1b2c3d4-0000-0000-0000-000000000000")
-        self.assertEqual(ids["I'm the Problem"], {})
+        self.assertEqual(ids["I'm the Problem"], {"mbid_rg": "rg-problem"})
         # The cell links a section of the band's discography, not an album article.
         self.assertEqual(ids["Golden Hour: Part.5"], {})
 
@@ -285,7 +297,8 @@ class FetchTests(SimpleTestCase):
             ),
         ):
             clock.now.return_value.year = 2027
-            result = wikipedia_table.fetch(definition)
+            with patch.object(wikidata.musicbrainz, "search_release_groups", return_value={}):
+                result = wikipedia_table.fetch(definition)
         self.assertEqual(result.edition, "2026")
         self.assertEqual(len(result.entries), 3)
 
@@ -314,6 +327,28 @@ class FetchTests(SimpleTestCase):
             self.assertRaises(AdapterError),
         ):
             wikipedia_table.fetch(definition)
+
+
+class AnimeSeasonTests(SimpleTestCase):
+    def test_a_series_mal_id_is_kept_only_for_the_series_title(self):
+        definition = make_definition(
+            key="test-anime",
+            adapter="wikipedia_table",
+            media_types=("anime",),
+            position=630,
+            is_ranked=False,
+            params={"pages": ["P"], "columns": {"title": "Anime"}},
+        )
+        rows = [
+            wikipedia_table.Row(title="Attack on Titan: The Final Season Part 1", link="Attack on Titan (TV series)"),
+            wikipedia_table.Row(title="Jujutsu Kaisen", link="Jujutsu Kaisen (TV series)"),
+        ]
+        with (
+            patch.object(wikidata, "wikidata_items", return_value={row.link: f"Q{i}" for i, row in enumerate(rows)}),
+            patch.object(wikidata, "provider_ids", return_value={"Q0": ({"mal": "16498"}, ""), "Q1": ({"mal": "40748"}, "")}),
+        ):
+            entries = wikipedia_table._entries(definition, rows)
+        self.assertEqual([entry.ids for entry in entries], [{"wikidata": "Q0"}, {"mal": "40748", "wikidata": "Q1"}])
 
 
 class WikidataIdTests(SimpleTestCase):
@@ -409,6 +444,37 @@ class WikidataIdTests(SimpleTestCase):
         with api_routes({"api.mangaupdates.com/v1/series/search": search}):
             found = wikidata.mangaupdates_by_title(["環と周", "Her", "ボールアンドチェイン"])
         self.assertEqual(found, {"環と周": ({"mangaupdates": "20894714508"}, "https://i/t")})
+
+    def test_musicbrainz_album_replaces_an_unconfirmed_wikidata_id(self):
+        definition = make_definition(
+            key="test-billboard",
+            adapter="wikipedia_table",
+            media_types=("music",),
+            position=750,
+            is_ranked=False,
+            params={**definition_for("billboard-200-number-one-albums").params, "pages": ["B"]},
+        )
+        response = {
+            "release-groups": [
+                {"id": "rg-album", "title": "The Life of a Showgirl", "primary-type": "Album", "artist-credit": [{"name": "Taylor Swift"}]},
+                {"id": "rg-live", "title": "The Life of a Showgirl", "primary-type": "Album", "secondary-types": ["Live"], "artist-credit": [{"name": "Taylor Swift"}]},
+            ],
+        }
+        routes = {
+            WIKIPEDIA: wiki({"B": parse_response("billboard.html")}, items={"The Life of a Showgirl": "Q8"}),
+            SPARQL: sparql([("Q8", "P436", "a-release-id")]),
+        }
+        with (
+            api_routes(routes),
+            patch.object(
+                wikidata.musicbrainz,
+                "search_release_groups",
+                side_effect=lambda query, limit: response if "Showgirl" in query else {},  # noqa: ARG005
+            ),
+        ):
+            result = wikipedia_table.fetch(definition)
+        showgirl = next(entry for entry in result.entries if entry.title == "The Life of a Showgirl")
+        self.assertEqual(showgirl.ids, {"mbid_rg": "rg-album", "wikidata": "Q8"})
 
     @override_settings(HARDCOVER_API="test-key")
     def test_hardcover_errors_stop_the_run(self):

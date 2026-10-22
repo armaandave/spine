@@ -33,9 +33,12 @@ its IDs would resolve worse, so the run stops and the list stays as it was.
 import re
 import unicodedata
 
+import requests
 from django.conf import settings
 
-from lists.featured.helpers import get_json, post_json
+from app.providers import musicbrainz, services
+from lists.featured.helpers import get_json, post_json, sanitize
+from lists.featured.text import creators_match, normalize_title
 from lists.featured.types import AdapterError
 
 BATCH = 50
@@ -368,3 +371,42 @@ def mangaupdates_by_title(titles):
             image = ((record.get("image") or {}).get("url") or {}).get("original") or ""
             found[title] = ({"mangaupdates": series_id}, image)
     return found
+
+
+ALBUM_TYPES = ("Album", "EP")
+
+
+def musicbrainz_album(title, artist):
+    """Return the MusicBrainz album or EP release groups named ``title`` by ``artist``.
+
+    Strict: the normalized title must be equal and the artist credited. Several
+    candidates (a single and its album share a title) narrow to plain albums without
+    secondary types (live, compilation). The caller uses the result only when it is one.
+    """
+    if not title or not artist:
+        return []
+    try:
+        response = musicbrainz.search_release_groups(f"{title} {artist}", limit=25)
+    except (services.ProviderAPIError, requests.RequestException) as error:
+        msg = f"MusicBrainz search failed: {sanitize(error, 160)}"
+        raise AdapterError(msg) from None
+    wanted = normalize_title(title)
+    candidates = []
+    for group in response.get("release-groups") or []:
+        credits = [credit.get("name") or (credit.get("artist") or {}).get("name") for credit in group.get("artist-credit") or []]
+        credits = [name for name in credits if name]
+        if (
+            normalize_title(group.get("title")) == wanted
+            and group.get("primary-type") in ALBUM_TYPES
+            and credits
+            and creators_match(artist, credits)
+        ):
+            candidates.append(group)
+    if len(candidates) > 1:
+        candidates = [group for group in candidates if not group.get("secondary-types")]
+    return list(dict.fromkeys(str(group["id"]) for group in candidates))
+
+
+def musicbrainz_albums(rows):
+    """Return ``{(title, artist): [release group mbid, …]}`` from strict album searches."""
+    return {(title, artist): musicbrainz_album(title, artist) for title, artist in dict.fromkeys(rows)}

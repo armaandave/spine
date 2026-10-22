@@ -31,6 +31,8 @@ Params:
 - ``strip_parenthetical``: drop a trailing "(Season 2)" or "(Dark Horse Comics)"
   from titles (off by default: book titles end in parentheses too).
 - ``min_entries``: fail when fewer rows parse, so a reshaped page never shrinks a list.
+- ``musicbrainz_search``: music rows also get a strict MusicBrainz search by title and
+  artist (albums and EPs only); its one result wins over an unconfirmed Wikidata ID.
 - ``mangaupdates_search``: manga rows without Wikidata IDs try MangaUpdates, accepting
   only one series whose matched name equals the title exactly (Japanese titles too).
 
@@ -146,6 +148,9 @@ def validate(definition):
         raise ValueError(msg)
     if params.get("mangaupdates_search") and definition.media_types != ("manga",):
         msg = "mangaupdates_search is for manga lists"
+        raise ValueError(msg)
+    if params.get("musicbrainz_search") and definition.media_types != ("music",):
+        msg = "musicbrainz_search is for music lists"
         raise ValueError(msg)
 
 
@@ -467,6 +472,13 @@ def _merge(rows, params):
     return merged
 
 
+def _names_article(row):
+    """Return whether the row's title is its linked article's title (disambiguation aside)."""
+    article = TRAILING_PARENTHETICAL.sub("", row.link).strip()
+    title = TRAILING_PARENTHETICAL.sub("", row.title).strip()
+    return normalize_title(article) == normalize_title(title)
+
+
 def _entries(definition, rows):
     media_type = definition.media_types[0]
     site = definition.params.get("site", "en")
@@ -478,10 +490,22 @@ def _entries(definition, rows):
     if definition.params.get("mangaupdates_search"):
         missing = [row.title for row in rows if qids.get(row.link, "") not in ids_by_qid]
         by_title = wikidata.mangaupdates_by_title(missing) if missing else {}
+    albums = {}
+    if definition.params.get("musicbrainz_search"):
+        albums = wikidata.musicbrainz_albums((row.title, row.creator) for row in rows)
     entries = []
     for row in rows:
         qid = qids.get(row.link, "")
         ids, image = ids_by_qid.get(qid) or by_title.get(row.title) or ({}, "")
+        if media_type == "anime" and ids and not _names_article(row):
+            # Spine stores anime per season, and a series article's MAL ID is its first
+            # season's: "Attack on Titan: The Final Season" linking "Attack on Titan".
+            ids, image = {}, ""
+        found = albums.get((row.title, row.creator)) or []
+        # Wikidata's P436 sometimes holds a release, not its release group: an ID the
+        # strict search doesn't confirm gives way to the one album it does find.
+        if len(found) == 1 and ids.get("mbid_rg") not in found:
+            ids, image = {"mbid_rg": found[0]}, ""
         entries.append(
             Entry(
                 rank=row.rank if definition.is_ranked else None,
