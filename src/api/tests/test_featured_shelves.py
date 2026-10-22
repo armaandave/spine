@@ -225,10 +225,11 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(
             set(live),
             {
-                "id", "name", "slug", "description", "is_ranked", "items_count", "media_types", "kind", "source",
+                "id", "name", "slug", "description", "is_ranked", "list_type", "items_count", "media_types", "kind", "source",
                 "cadence", "period_label", "content_changed_at", "last_synced_at", "live", "preview_items",
             },
         )
+        self.assertEqual(live["list_type"], "media")
         self.assertEqual(live["live"]["status"], "live")
         self.assertEqual(live["live"]["label"], "Ceremony")
         self.assertEqual(live["cadence"], "daily")
@@ -324,6 +325,7 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         expected = list_payload(laureates, request=drf_request, include_preview_items=True)["preview_people"][:5]
 
         card = self.shelves()["shelves"][3]["lists"][0]
+        self.assertEqual(card["list_type"], "people")
         self.assertEqual(card["items_count"], 8)
         self.assertEqual(card["preview_items"], [])
         self.assertEqual(card["preview_people"], expected)

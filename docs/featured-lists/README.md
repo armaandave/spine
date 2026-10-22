@@ -269,7 +269,7 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 
 ```json
 {"id": 12, "name": "Netflix Top 10: Films", "slug": "netflix-top-10-films", "description": "…",
- "is_ranked": true, "items_count": 10, "media_types": ["movie"], "kind": "chart",
+ "is_ranked": true, "list_type": "media", "items_count": 10, "media_types": ["movie"], "kind": "chart",
  "source": {"name": "Netflix", "url": "https://www.netflix.com/tudum/top10"},
  "cadence": "weekly", "period_label": "Week of Oct 13",
  "content_changed_at": "…", "last_synced_at": "…",
@@ -278,11 +278,12 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
  "preview_people": ["people lists only: …≤5, the same person objects list_payload returns in preview_people"]}
 ```
 
+- `list_type` is `media` or `people` (added later: older payloads lack it, so decode it as optional and fall back to `media`). It's also in the `featured` block on the legacy endpoint and list detail.
 - `cadence` is one of `live`, `daily`, `weekly`, `monthly`, `yearly`, `static`.
 - `live` is either `null` or `{"status": "upcoming"|"live"|"done", "label": "7 of 23 announced", "starts_at": "…", "ends_at": "…"}`.
 - `source.name` and `source.url` may be `null`. `period_label` is the sync's edition, or `null`.
 - Each preview item's `note` is chart movement against the list's previous content: `"▲2"`, `"▼1"` or `"NEW"`; `null` when its position didn't change, on a list's first sync, and for every kind other than `chart`. The writer stores it as `FeaturedListSync.item_notes` (`{"<item_id>": note}`) whenever it replaces a chart's items, so requests never scan snapshots.
-- People lists count people in `items_count`; their `preview_items` is empty and `preview_people` holds their first five people, in list order. Media-list cards have no `preview_people` key, and neither does the `featured` block on the legacy endpoint and list detail.
+- People lists (`list_type: "people"`) count people in `items_count`; their `preview_items` is empty and `preview_people` holds their first five people, in list order. Media-list cards have no `preview_people` key, and neither does the `featured` block on the legacy endpoint and list detail.
 
 **`GET /api/v1/lists/featured/health/`:** allowed for staff, or with the header `X-Spine-Report-Token` matching `settings.FEATURED_REPORT_TOKEN`, compared with `hmac.compare_digest`. The setting defaults to `""`, which disables the token path. Everyone else gets a 404. `manage.py featured_lists_report [--json]` prints the same report.
 
