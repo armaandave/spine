@@ -39,7 +39,10 @@ def _sync_chart(owner, definition, chart):
         featured,
         owner,
         trigger="command",
-        fetch_result=nyt_adapter.fetch_result_from_chart(chart),
+        fetch_result=nyt_adapter.fetch_result_from_chart(
+            chart,
+            monthly=bool(featured.params.get("monthly")),
+        ),
         resolver=Resolver(
             featured,
             isbn_lookup=lambda isbns: _resolve_book({"isbns": isbns}),

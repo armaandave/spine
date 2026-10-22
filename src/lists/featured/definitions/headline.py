@@ -26,6 +26,7 @@ LETTERBOXD_TOP_500 = FeaturedList(
 )
 
 NYT_TAGS = ("NYT Best Sellers", "Books")
+NYT_MONTHLY = {"business-books", "graphic-books-and-manga"}  # NYT moved these to monthly
 
 NYT_CHARTS = [
     FeaturedList(
@@ -35,7 +36,11 @@ NYT_CHARTS = [
         kind="chart",
         position=chart["featured_position"],
         adapter="nyt",
-        params={"slug": chart["slug"], "fallback_name": chart["fallback_name"]},
+        params={
+            "slug": chart["slug"],
+            "fallback_name": chart["fallback_name"],
+            **({"monthly": True} if chart["slug"] in NYT_MONTHLY else {}),
+        },
         cadence=timedelta(days=1),
         source_name="The New York Times",
         source_url=f"https://www.nytimes.com/books/best-sellers/{chart['slug']}/",

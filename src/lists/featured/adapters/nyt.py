@@ -1,6 +1,7 @@
 """One New York Times Best Sellers chart.
 
-Params: ``{"slug": "combined-print-and-e-book-fiction", "fallback_name": "…"}``.
+Params: ``{"slug": "combined-print-and-e-book-fiction", "fallback_name": "…"}``, plus
+``"monthly": True`` for charts NYT now publishes monthly (the edition reads "October 2026").
 Entries carry every ISBN the chart lists, so the resolver tries Hardcover then Open
 Library per ISBN before a strict title + author search.
 """
@@ -35,16 +36,18 @@ def _note(book):
     return ""
 
 
-def edition_label(published_date):
-    """Return "Week of Oct 25, 2026" for an ISO publication date."""
+def edition_label(published_date, *, monthly=False):
+    """Return "Week of Oct 25, 2026" (or "October 2026") for an ISO publication date."""
     try:
         published = date.fromisoformat(published_date)
     except (TypeError, ValueError):
         return ""
+    if monthly:
+        return f"{published:%B} {published.year}"
     return f"Week of {published:%b} {published.day}, {published.year}"
 
 
-def fetch_result_from_chart(chart):
+def fetch_result_from_chart(chart, *, monthly=False):
     """Turn ``nytbooks.get_current_chart()`` output into a ``FetchResult``."""
     published = chart.get("published_date") or ""
     entries = [
@@ -61,7 +64,7 @@ def fetch_result_from_chart(chart):
     ]
     return FetchResult(
         entries=entries,
-        edition=edition_label(published),
+        edition=edition_label(published, monthly=monthly),
         name=chart.get("name") or None,
         description=(
             f"The New York Times Best Sellers list published {published}."
@@ -81,7 +84,7 @@ def fetch(definition):
         )
     except nytbooks.NYTBooksError as error:
         raise AdapterError(str(error)) from None
-    return fetch_result_from_chart(chart)
+    return fetch_result_from_chart(chart, monthly=bool(params.get("monthly")))
 
 
 ADAPTER = Adapter(key="nyt", fetch=fetch, validate=validate)

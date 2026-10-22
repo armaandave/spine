@@ -154,6 +154,7 @@ class NYTAdapterTests(SimpleTestCase):
 
     def test_edition_label_tolerates_missing_dates(self):
         self.assertEqual(nyt_adapter.edition_label(""), "")
+        self.assertEqual(nyt_adapter.edition_label("2026-10-01", monthly=True), "October 2026")
 
 
 class StaticAdapterTests(SimpleTestCase):
