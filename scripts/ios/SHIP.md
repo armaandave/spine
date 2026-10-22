@@ -108,9 +108,10 @@ Run from the feature worktree unless a step says otherwise.
    - Tag the commit `ios-<version>-build<N>` and push the tag. Tags don't trigger
      builds.
 10. **Clean up.** Remove the feature worktree and the merged branch, local and remote.
-    Then delete the feature's scratch simulators, from the main checkout:
-    `scripts/ios/delete-scratch-sims.sh .claude/worktrees/<name>`. The cleanup helper only
-    shuts them down, and each keeps a few GB on this Mac's nearly full disk.
+    Then, from the main checkout, delete any scratch simulators the feature left behind:
+    `scripts/ios/delete-scratch-sims.sh .claude/worktrees/<name>`. The cleanup helper deletes
+    each run's simulator when the run ends; this catches any it didn't, at a few GB each on
+    this Mac's nearly full disk. Report any it skips.
 11. **Report** the deploy (or why it was skipped), the CI result, migrations, the build
     number and whether it's in "Me", and anything left to do.
 

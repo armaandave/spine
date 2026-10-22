@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Delete the scratch simulators made for one checkout: the ones agent-cleanup created for runs
-# started inside it. scripts/ios/SHIP.md runs this when a feature ships. The helper shuts its
-# simulators down but never deletes or reuses them, and each keeps a few GB on this Mac's
-# nearly full disk.
+# Delete the scratch simulators left behind for one checkout: the ones agent-cleanup created
+# for runs started inside it. scripts/ios/SHIP.md runs this when a feature ships. The helper
+# deletes each run's simulator when the run ends; this catches finished runs' simulators it
+# didn't delete (runs from before it did that, or a failed delete), which keep a few GB each
+# on this Mac's nearly full disk. A crashed run's simulator is left for review.
 # It reads the helper's run receipts and deletes a simulator only when its run has finished,
 # it is shut down, and it still has the name the helper gave it (agent-cleanup-<run_id>).
 # Simulators from runs started in other checkouts, including the worktrees under the main
@@ -50,7 +51,8 @@ for path in sorted(state.glob("*/receipt.json")):
         continue
     name = device["name"]
     if receipt.get("state") != "finished":
-        print(f"SKIPPED: {name}: its run is still going; stop the run first")
+        print(f"SKIPPED: {name}: its run hasn't finished (still going, or crashed); "
+              f"see agent-cleanup status {receipt.get('run_id')}")
     elif device["state"] != "Shutdown":
         print(f"SKIPPED: {name} is {device['state']}, not shut down")
     elif name != f"agent-cleanup-{receipt.get('run_id')}":
