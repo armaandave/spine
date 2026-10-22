@@ -1,0 +1,263 @@
+rank,title,year,creator,ref,image,note
+1,"Jeanne Dielman, 23 Quai du Commerce, 1080 Bruxelles",1975,Chantal Akerman,tmdb:movie:44012,https://image.tmdb.org/t/p/w342/fqfSu8Y1YSVFkoCJyiTXI6woYma.jpg,
+2,Vertigo,1958,Alfred Hitchcock,tmdb:movie:426,https://image.tmdb.org/t/p/w342/15uOEfqBNTVtDUT7hGBVCka0rZz.jpg,
+3,Citizen Kane,1941,Orson Welles,tmdb:movie:15,https://image.tmdb.org/t/p/w342/sav0jxhqiH0bPr2vZFU0Kjt2nZL.jpg,
+4,Tokyo Story,1953,Yasujirō Ozu,tmdb:movie:18148,https://image.tmdb.org/t/p/w342/g2YbTYKpY7N2yDSk7BfXZ18I5QV.jpg,
+5,In the Mood for Love,2000,Wong Kar Wai,tmdb:movie:843,https://image.tmdb.org/t/p/w342/8BgGbbWiLNhPtkMkN0gGTnbtvBv.jpg,
+6,2001: A Space Odyssey,1968,Stanley Kubrick,tmdb:movie:62,https://image.tmdb.org/t/p/w342/ve72VxNqjGM69Uky4WTo2bK6rfq.jpg,
+7,Beau travail,1998,Claire Denis,tmdb:movie:14626,https://image.tmdb.org/t/p/w342/5ySa1aQaT7kMcAbKwlS1HXxp2hM.jpg,
+8,Mulholland Dr.,2001,David Lynch,tmdb:movie:1018,https://image.tmdb.org/t/p/w342/x7A59t6ySylr1L7aubOQEA480vM.jpg,
+9,Man with a Movie Camera,1929,Dziga Vertov,tmdb:movie:26317,https://image.tmdb.org/t/p/w342/vJgAdgJWX54v0oXfIvhwjlZnmgn.jpg,
+10,Singin' in the Rain,1951,"Gene Kelly, Stanley Donen",tmdb:movie:872,https://image.tmdb.org/t/p/w342/zjrpWniKbzu0zFR5sUI1Ptdfl9y.jpg,
+11,Sunrise  A Song of Two Humans,1927,F.W. Murnau,tmdb:movie:631,https://image.tmdb.org/t/p/w342/5V9jDm4u2QemGHbqjUyP5HmFmzf.jpg,
+12,The Godfather,1972,Francis Ford Coppola,tmdb:movie:238,https://image.tmdb.org/t/p/w342/3bhkrj58Vtu7enYsRolD1fZdja1.jpg,
+13,La Règle du jeu,1939,Jean Renoir,tmdb:movie:776,https://image.tmdb.org/t/p/w342/8JOzt7uFZyshcuzCBmYU6CDJL4D.jpg,
+14,Cléo from 5 to 7,1962,Agnès Varda,tmdb:movie:499,https://image.tmdb.org/t/p/w342/oelBStY4xpguaplRv15P3Za7Xsr.jpg,
+15,The Searchers,1956,John Ford,tmdb:movie:3114,https://image.tmdb.org/t/p/w342/jLBmgW0epNzJ1N9uzaVCjbyT94v.jpg,
+16,Meshes of the Afternoon,1943,"Maya Deren, Alexander Hackenschmied",tmdb:movie:27040,https://image.tmdb.org/t/p/w342/yHjEjRU81RcxKFNU5hhiPYMzlsu.jpg,
+17,Close-up,1989,Abbas Kiarostami,tmdb:movie:30017,https://image.tmdb.org/t/p/w342/m9HG2N9ZKCmNN9qOHJTNyy18wn3.jpg,
+18,Persona,1966,Ingmar Bergman,tmdb:movie:797,https://image.tmdb.org/t/p/w342/cl0HEZT8UfzLqaMrYTvGNHOfPYj.jpg,
+19,Apocalypse Now,1979,Francis Ford Coppola,tmdb:movie:28,https://image.tmdb.org/t/p/w342/gQB8Y5RCMkv2zwzFHbUJX3kAhvA.jpg,
+20,Seven Samurai,1954,Akira Kurosawa,tmdb:movie:346,https://image.tmdb.org/t/p/w342/lOMGc8bnSwQhS4XyE1S99uH8NXf.jpg,
+21,The Passion of Joan of Arc,1927,Carl Th. Dreyer,tmdb:movie:780,https://image.tmdb.org/t/p/w342/tAgV9yxY6AC1bsPt3qJJQpD4s8.jpg,Joint 21
+22,Late Spring,1949,Yasujirō Ozu,tmdb:movie:20530,https://image.tmdb.org/t/p/w342/iNtRSY2AGjW1VDXDR79bKsNUdus.jpg,Joint 21
+23,Playtime,1967,Jacques Tati,tmdb:movie:10227,https://image.tmdb.org/t/p/w342/kQOrS0DLUXYsqPMedM2G6NJcJBq.jpg,
+24,Do the Right Thing,1989,Spike Lee,tmdb:movie:925,https://image.tmdb.org/t/p/w342/63rmSDPahrH7C1gEFYzRuIBAN9W.jpg,
+25,Au hasard Balthazar,1966,Robert Bresson,tmdb:movie:20108,https://image.tmdb.org/t/p/w342/lkLO1HDzzaXpTXtAgnGpVqIQkvF.jpg,Joint 25
+26,The Night of the Hunter,1955,Charles Laughton,tmdb:movie:3112,https://image.tmdb.org/t/p/w342/rBka0nFWiHxabHRLr0KfIA8Yiaq.jpg,Joint 25
+27,Shoah,1985,Claude Lanzmann,tmdb:movie:42044,https://image.tmdb.org/t/p/w342/8hr8NdnMygKF2Mbu3eDDQCB5lKg.jpg,
+28,Daisies,1966,Věra Chytilová,tmdb:movie:46919,https://image.tmdb.org/t/p/w342/8sxMhdn3i1Pn8OlGCBBjr9rjP1y.jpg,
+29,Taxi Driver,1976,Martin Scorsese,tmdb:movie:103,https://image.tmdb.org/t/p/w342/ekstpH614fwDX8DUln1a2Opz0N8.jpg,
+30,Portrait of a Lady on Fire,2019,Céline Sciamma,tmdb:movie:531428,https://image.tmdb.org/t/p/w342/2LquGwEhbg3soxSCs9VNyh5VJd9.jpg,
+31,Mirror,1975,Andrei Tarkovsky,tmdb:movie:1396,https://image.tmdb.org/t/p/w342/AttDP5OEsMxtHPPN7Z92p2Ntnmd.jpg,Joint 31
+32,Psycho,1960,Alfred Hitchcock,tmdb:movie:539,https://image.tmdb.org/t/p/w342/yz4QVqPx3h1hD1DfqqQkCq3rmxW.jpg,Joint 31
+33,8½,1963,Federico Fellini,tmdb:movie:422,https://image.tmdb.org/t/p/w342/23VIf7zNxAgaXwIlvzd3IvOd9sY.jpg,Joint 31
+34,L'Atalante,1934,Jean Vigo,tmdb:movie:43904,https://image.tmdb.org/t/p/w342/yDTHSZGk1G33Q3nBNqhnpgmkyk7.jpg,
+35,Pather Panchali,1955,Satyajit Ray,tmdb:movie:5801,https://image.tmdb.org/t/p/w342/frZj5djlU9hFEjMcL21RJZVuG5O.jpg,
+36,City Lights,1931,Charles Chaplin,tmdb:movie:901,https://image.tmdb.org/t/p/w342/bXNvzjULc9jrOVhGfjcc64uKZmZ.jpg,Joint 36
+37,M,1931,Fritz Lang,tmdb:movie:832,https://image.tmdb.org/t/p/w342/bTdZk3q2DWpBRnLiaaItKFWOVhI.jpg,Joint 36
+38,Some Like It Hot,1959,Billy Wilder,tmdb:movie:239,https://image.tmdb.org/t/p/w342/hVIKyTK13AvOGv7ICmJjK44DTzp.jpg,Joint 38
+39,À bout de souffle,1960,Jean-Luc Godard,tmdb:movie:269,https://image.tmdb.org/t/p/w342/9Wx0Wdn2EOqeCZU4SP6tlS3LOml.jpg,Joint 38
+40,Rear Window,1954,Alfred Hitchcock,tmdb:movie:567,https://image.tmdb.org/t/p/w342/ILVF0eJxHMddjxeQhswFtpMtqx.jpg,Joint 38
+41,Bicycle Thieves,1948,Vittorio De Sica,tmdb:movie:5156,https://image.tmdb.org/t/p/w342/iPdVqIpmR3bRvOQJPrn4pr2KR3q.jpg,Joint 41
+42,Rashomon,1950,Akira Kurosawa,tmdb:movie:548,https://image.tmdb.org/t/p/w342/ijWibsAU1iBcCD8tuIZfTmDzMVE.jpg,Joint 41
+43,Killer of Sheep,1977,Charles Burnett,tmdb:movie:27432,https://image.tmdb.org/t/p/w342/z1CqJKI6gmdAMprD1NOYSCHVXEv.jpg,Joint 43
+44,Stalker,1979,Andrei Tarkovsky,tmdb:movie:1398,https://image.tmdb.org/t/p/w342/1qhOyf5C4s9ZdvY8d5JDx9DFMeT.jpg,Joint 43
+45,The Battle of Algiers,1966,Gillo Pontecorvo,tmdb:movie:17295,https://image.tmdb.org/t/p/w342/2p3AFtOHFvP6OeVMqlnL1zLKOqL.jpg,Joint 45
+46,North by Northwest,1959,Alfred Hitchcock,tmdb:movie:213,https://image.tmdb.org/t/p/w342/kNOFPQrel9YFCVzI0DF8FnCEpCw.jpg,Joint 45
+47,Barry Lyndon,1975,Stanley Kubrick,tmdb:movie:3175,https://image.tmdb.org/t/p/w342/A0byHUHMwZ7dtBQtfZ44QIgDbjo.jpg,Joint 45
+48,Wanda,1970,Barbara Loden,tmdb:movie:80560,https://image.tmdb.org/t/p/w342/izuJ7cUhcihFnTpfsdSnkMCHsRQ.jpg,Joint 48
+49,Ordet,1955,Carl Th. Dreyer,tmdb:movie:48035,https://image.tmdb.org/t/p/w342/c9Oef9uQEuadZlnvv8hphRmTIgx.jpg,Joint 48
+50,The 400 Blows,1959,François Truffaut,tmdb:movie:147,https://image.tmdb.org/t/p/w342/12PuU23kkDLvTd0nb8hMlE3oShB.jpg,Joint 50
+51,The Piano,1992,Jane Campion,tmdb:movie:713,https://image.tmdb.org/t/p/w342/rx8RKXn8OtuS6lqloYsjyrGOUp4.jpg,Joint 50
+52,Fear Eats the Soul,1974,Rainer Werner Fassbinder,tmdb:movie:216,https://image.tmdb.org/t/p/w342/cRL8j5RhL4YUviwcfTiCVHfrBFM.jpg,Joint 52
+53,News from Home,1976,Chantal Akerman,tmdb:movie:86814,https://image.tmdb.org/t/p/w342/nWqWaEySdo8hAKJsd1IS9mdnZpF.jpg,Joint 52
+54,Blade Runner,1982,Ridley Scott,tmdb:movie:78,https://image.tmdb.org/t/p/w342/63N9uy8nd9j7Eog2axPQ8lbr3Wj.jpg,Joint 54
+55,Battleship Potemkin,1925,Sergei M. Eisenstein,tmdb:movie:643,https://image.tmdb.org/t/p/w342/hZmsRLsCnE9Zshf1YJONUpCOhds.jpg,Joint 54
+56,Le Mépris,1963,Jean-Luc Godard,tmdb:movie:266,https://image.tmdb.org/t/p/w342/kNElbRcp4Qz6wmJ9kH5vdY004Hq.jpg,Joint 54
+57,Sherlock Jr.,1924,Buster Keaton,tmdb:movie:992,https://image.tmdb.org/t/p/w342/1G9r3rqtbFAQuyWKOZm4Y5J5s7Q.jpg,Joint 54
+58,The Apartment,1960,Billy Wilder,tmdb:movie:284,https://image.tmdb.org/t/p/w342/hhSRt1KKfRT0yEhEtRW3qp31JFU.jpg,Joint 54
+59,Sans soleil,1982,Chris Marker,tmdb:movie:1563,https://image.tmdb.org/t/p/w342/2ZmVbnecEeGoZCimxMhpY0Nz7eh.jpg,
+60,Moonlight,2016,Barry Jenkins,tmdb:movie:376867,https://image.tmdb.org/t/p/w342/qLnfEmPrDjJfPyyddLJPkXmshkp.jpg,Joint 60
+61,La dolce vita,1960,Federico Fellini,tmdb:movie:439,https://image.tmdb.org/t/p/w342/dZ2v0DAX4aCZartCzZdg4ZinSW2.jpg,Joint 60
+62,Daughters of the Dust,1991,Julie Dash,tmdb:movie:68427,https://image.tmdb.org/t/p/w342/sk5qednzLeDZMIhto6Oa9QFKOon.jpg,Joint 60
+63,Casablanca,1942,Michael Curtiz,tmdb:movie:289,https://image.tmdb.org/t/p/w342/lGCEKlJo2CnWydQj7aamY7s1S7Q.jpg,Joint 63
+64,GoodFellas,1990,Martin Scorsese,tmdb:movie:769,https://image.tmdb.org/t/p/w342/9OkCLM73MIU2CrKZbqiT8Ln1wY2.jpg,Joint 63
+65,The Third Man,1949,Carol Reed,tmdb:movie:1092,https://image.tmdb.org/t/p/w342/vqnFHTx1phgTAsLfxZoejSbMVHA.jpg,Joint 63
+66,Touki Bouki,1973,Djibril Diop Mambéty,tmdb:movie:77771,https://image.tmdb.org/t/p/w342/kcBYKHyg9GcQqa6DWq0AuQDhtPI.jpg,
+67,The Gleaners and I,2000,Agnès Varda,tmdb:movie:44379,https://image.tmdb.org/t/p/w342/6IdCTKi4Eu7i897jpe59wIDGCri.jpg,Joint 67
+68,La Jetée,1962,Chris Marker,tmdb:movie:662,https://image.tmdb.org/t/p/w342/elGidsRHXkk8UyrtLbcMhaptDyp.jpg,Joint 67
+69,Andrei Rublev,1966,Andrei Tarkovsky,tmdb:movie:895,https://image.tmdb.org/t/p/w342/jUihkn16SwPPIjuOyo6orHWUep6.jpg,Joint 67
+70,Metropolis,1927,Fritz Lang,tmdb:movie:19,https://image.tmdb.org/t/p/w342/kr9wXRN23zLuWJIelahas1mtnYj.jpg,Joint 67
+71,The Red Shoes,1948,"Michael Powell, Emeric Pressburger",tmdb:movie:19542,https://image.tmdb.org/t/p/w342/vPvpBWFWDvEXuQBkoYgA6A89GVp.jpg,Joint 67
+72,My Neighbour Totoro,1988,Hayao Miyazaki,tmdb:movie:8392,https://image.tmdb.org/t/p/w342/rtGDOeG9LzoerkDGZF9dnVeLppL.jpg,Joint 72
+73,Journey to Italy,1954,Roberto Rossellini,tmdb:movie:2748,https://image.tmdb.org/t/p/w342/d470qCzer5cTLRdeN0iTCQCJiOc.jpg,Joint 72
+74,L'avventura,1960,Michelangelo Antonioni,tmdb:movie:5165,https://image.tmdb.org/t/p/w342/7kUXAS8K7Ihw1T1mhARjnLuMVk3.jpg,Joint 72
+75,Imitation of Life,1959,Douglas Sirk,tmdb:movie:34148,https://image.tmdb.org/t/p/w342/xt3cUn7lsjpaGuB279A4v8zAYRn.jpg,Joint 75
+76,Sansho the Bailiff,1954,Kenji Mizoguchi,tmdb:movie:20532,https://image.tmdb.org/t/p/w342/cOBsWxFtEoqXIPx4JZP5E7g1WEo.jpg,Joint 75
+77,Spirited Away,2001,Hayao Miyazaki,tmdb:movie:129,https://image.tmdb.org/t/p/w342/jUo8cNmU400WtZiJss45HNXlQ2e.jpg,Joint 75
+78,Sátántangó,1994,Béla Tarr,tmdb:movie:31414,https://image.tmdb.org/t/p/w342/hySy5g6xncM3U1iRsdPgYyahXM0.jpg,Joint 78
+79,A Brighter Summer Day,1991,Edward Yang,tmdb:movie:15804,https://image.tmdb.org/t/p/w342/3l8fOAwiN3N5n3hHnZ51eog7Zu2.jpg,Joint 78
+80,Céline and Julie Go Boating,1974,Jacques Rivette,tmdb:movie:27019,https://image.tmdb.org/t/p/w342/h62tGTMdVVUThFwl5b4EP18cBhb.jpg,Joint 78
+81,Sunset Blvd.,1950,Billy Wilder,tmdb:movie:599,https://image.tmdb.org/t/p/w342/zt8aQ6ksqK6p1AopC5zVTDS9pKT.jpg,Joint 78
+82,Modern Times,1936,Charles Chaplin,tmdb:movie:3082,https://image.tmdb.org/t/p/w342/AthaPakkuCLROdKxtRbKWclkDBK.jpg,Joint 78
+83,A Matter of Life and Death,1946,"Michael Powell, Emeric Pressburger",tmdb:movie:28162,https://image.tmdb.org/t/p/w342/H74LWKnhOeIFSk9gNjBcPjIov3.jpg,Joint 78
+85,Pierrot le fou,1965,Jean-Luc Godard,tmdb:movie:2786,https://image.tmdb.org/t/p/w342/i124H6iQB4CawrgFW9aZaZs7OBO.jpg,Joint 85
+86,The Spirit of the Beehive,1973,Víctor Erice,tmdb:movie:4495,https://image.tmdb.org/t/p/w342/o6pUTkoCh4r6EA2dHNFKA40OmH2.jpg,Joint 85
+87,Blue Velvet,1986,David Lynch,tmdb:movie:793,https://image.tmdb.org/t/p/w342/6v1zYh2FKOYVddY5pCQhd4PO9uX.jpg,Joint 85
+88,CHUNGKING EXPRESS,1994,Wong Kar Wai,tmdb:movie:11104,https://image.tmdb.org/t/p/w342/43I9DcNoCzpyzK8JCkJYpHqHqGG.jpg,Joint 88
+89,The Shining,1980,Stanley Kubrick,tmdb:movie:694,https://image.tmdb.org/t/p/w342/uAR0AWqhQL1hQa69UDEbb2rE5Wx.jpg,Joint 88
+90,Madame de...,1953,Max Ophuls,tmdb:movie:27030,https://image.tmdb.org/t/p/w342/xAgA99X8BjkCUX91ukgiK10Z6La.jpg,Joint 90
+91,The Leopard,1962,Luchino Visconti,tmdb:movie:1040,https://image.tmdb.org/t/p/w342/riSUxwoK3xjkOgy6YJSvPhi7cO6.jpg,Joint 90
+92,Ugetsu Monogatari,1953,Kenji Mizoguchi,tmdb:movie:14696,https://image.tmdb.org/t/p/w342/r8RiuKTIYIJBjczBVsfeP5C00CJ.jpg,Joint 90
+93,Yi Yi,1999,Edward Yang,tmdb:movie:25538,https://image.tmdb.org/t/p/w342/mR8dSQZI8X6Z1NClJhFrtJp636z.jpg,Joint 90
+94,Parasite,2019,Bong Joon-ho,tmdb:movie:496243,https://image.tmdb.org/t/p/w342/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg,Joint 90
+95,Get Out,2017,Jordan Peele,tmdb:movie:419430,https://image.tmdb.org/t/p/w342/48O0FoGU9OwZ5kCEtrwoEPcJztR.jpg,Joint 95
+96,Tropical Malady,2004,Apichatpong Weerasethakul,tmdb:movie:11534,https://image.tmdb.org/t/p/w342/9WJ8ZSZp2NC7jSvweFLskldpzzg.jpg,Joint 95
+97,Black Girl,1965,Ousmane Sembène,tmdb:movie:95597,https://image.tmdb.org/t/p/w342/hYYAk9I9KkscSr8DC30KyDjzsVu.jpg,Joint 95
+98,The General,1926,"Buster Keaton, Clyde Bruckman",tmdb:movie:961,https://image.tmdb.org/t/p/w342/4NmV1Wei4LxT2lpjViCAScgCZLq.jpg,Joint 95
+99,A Man Escaped,1956,Robert Bresson,tmdb:movie:15244,https://image.tmdb.org/t/p/w342/gkoZ8fFib24zhB2DKpjQ09SK9FU.jpg,Joint 95
+100,Once upon a Time in the West,1968,Sergio Leone,tmdb:movie:335,https://image.tmdb.org/t/p/w342/qbYgqOczabWNn2XKwgMtVrntD6P.jpg,Joint 95
+101,Rio Bravo,1958,Howard Hawks,tmdb:movie:301,https://image.tmdb.org/t/p/w342/4gI4KKmoi0d3yfsF71YU3S0I5t8.jpg,Joint 101
+102,The House Is Black,1962,Forough Farokhzad,tmdb:movie:44065,https://image.tmdb.org/t/p/w342/wPiSeBkcIRL0r3XQ0FeNhh19mW0.jpg,Joint 101
+103,Vagabond,1985,Agnès Varda,tmdb:movie:44018,https://image.tmdb.org/t/p/w342/2KFfwiPct1hwqi9dkKqoom0BenC.jpg,Joint 101
+104,La Maman et la Putain,1973,Jean Eustache,tmdb:movie:48693,https://image.tmdb.org/t/p/w342/qUBmGLgADWnWd7SCCl3KR7EggKj.jpg,Joint 104
+105,Come and See,1985,Elem Klimov,tmdb:movie:25237,https://image.tmdb.org/t/p/w342/qNbMsKVzigERgJUbwf8pKyZogpb.jpg,Joint 104
+106,Jaws,1975,Steven Spielberg,tmdb:movie:578,https://image.tmdb.org/t/p/w342/lxM6kqilAdpdhqUl2biYp5frUxE.jpg,Joint 104
+107,The Godfather Part II,1974,Francis Ford Coppola,tmdb:movie:240,https://image.tmdb.org/t/p/w342/8a1lJs7mFyGhGhZZDT1azJUoQiZ.jpg,Joint 104
+108,"Goodbye, Dragon Inn",2003,Tsai Ming-liang,tmdb:movie:56616,https://image.tmdb.org/t/p/w342/js1uTY2FuKspVRQWLudFkEteFI5.jpg,Joint 108
+109,The Wizard of Oz,1939,Victor Fleming,tmdb:movie:630,https://image.tmdb.org/t/p/w342/uCC3j4pV9eOZwzDUWp2ilbcTf1f.jpg,Joint 108
+110,Wild Strawberries,1957,Ingmar Bergman,tmdb:movie:614,https://image.tmdb.org/t/p/w342/iyTD2QnySNMPUPE3IedZQipSWfz.jpg,Joint 108
+111,Touch of Evil,1958,Orson Welles,tmdb:movie:1480,https://image.tmdb.org/t/p/w342/1pvRgmfBaoMczIJBOi9gCOZ4FMC.jpg,Joint 108
+112,The Man Who Shot Liberty Valance,1962,John Ford,tmdb:movie:11697,https://image.tmdb.org/t/p/w342/4C1R0LEivLjbv3swAzJfzh0tzXl.jpg,Joint 108
+113,Bringing Up Baby,1938,Howard Hawks,tmdb:movie:900,https://image.tmdb.org/t/p/w342/vTNNOtemaYmtx3k2NpsLMRJKEwZ.jpg,Joint 108
+114,To Be or Not to Be,1942,Ernst Lubitsch,tmdb:movie:198,https://image.tmdb.org/t/p/w342/dDQRpEoyjHT4fzw9cNklIvZuXYg.jpg,Joint 114
+115,A Woman under the Influence,1974,John Cassavetes,tmdb:movie:29845,https://image.tmdb.org/t/p/w342/6EJ4JoTxnH1QmGTE9pPzgtW1cLW.jpg,Joint 114
+116,Nashville,1975,Robert Altman,tmdb:movie:3121,https://image.tmdb.org/t/p/w342/twl4ovyjb8muFKvZmcCDzPR0hy1.jpg,Joint 114
+117,Don't Look Now,1973,Nicolas Roeg,tmdb:movie:931,https://image.tmdb.org/t/p/w342/ivWsU3QtcstImCTOjItsH0SAbNn.jpg,Joint 114
+118,"Aguirre, Wrath of God",1972,Werner Herzog,tmdb:movie:2000,https://image.tmdb.org/t/p/w342/zU1FLiGJw3m3iFrakwA0SzFvIPV.jpg,Joint 118
+119,The Conformist,1970,Bernardo Bertolucci,tmdb:movie:8416,https://image.tmdb.org/t/p/w342/nLJjFRqIJAK8qz0OKYnpKCblZNK.jpg,Joint 118
+120,The Texas Chain Saw Massacre,1974,Tobe Hooper,tmdb:movie:30497,https://image.tmdb.org/t/p/w342/mpgkRPH1GNkMCgdPk2OMyHzAks7.jpg,Joint 118
+121,The Thing,1982,John Carpenter,tmdb:movie:1091,https://image.tmdb.org/t/p/w342/tzGY49kseSE9QAKk47uuDGwnSCu.jpg,Joint 118
+122,There Will Be Blood,2007,Paul Thomas Anderson,tmdb:movie:7345,https://image.tmdb.org/t/p/w342/fa0RDkAlCec0STeMNAhPaF89q6U.jpg,Joint 122
+123,The Matrix,1999,The Wachowskis,tmdb:movie:603,https://image.tmdb.org/t/p/w342/dXNAPwY7VrqMAo51EKhhCJfaGb5.jpg,Joint 122
+124,The Colour of Pomegranates,1968,Sergei Paradjanov,tmdb:movie:26302,https://image.tmdb.org/t/p/w342/rMUbQf7RgsYgQ47AFf1wpoSt4dX.jpg,Joint 122
+125,Johnny Guitar,1954,Nicholas Ray,tmdb:movie:26596,https://image.tmdb.org/t/p/w342/bap37yOCwcR9x4YDsNUaSo9nIp9.jpg,Joint 122
+126,The Umbrellas of Cherbourg,1964,Jacques Demy,tmdb:movie:5967,https://image.tmdb.org/t/p/w342/tAgTf64XKK5ir7w5C7dnB53jWWG.jpg,Joint 122
+127,Only Angels Have Wings,1939,Howard Hawks,tmdb:movie:43832,https://image.tmdb.org/t/p/w342/lqcwiWancAkjtAQPHr9V3SfJjBM.jpg,Joint 122
+128,The Ascent,1976,Larissa Shepitko,tmdb:movie:50183,https://image.tmdb.org/t/p/w342/nbGyTnH1TREKgZXLxEJNnDVohYC.jpg,
+129,Fanny and Alexander,1982,Ingmar Bergman,tmdb:movie:5961,https://image.tmdb.org/t/p/w342/q8jlA3Wc1Z987hNKRFA44g5OugC.jpg,Joint 129
+130,His Girl Friday,1939,Howard Hawks,tmdb:movie:3085,https://image.tmdb.org/t/p/w342/lu86Y9zTPH3neCiUzLzHCEFHf7f.jpg,Joint 129
+131,Raging Bull,1980,Martin Scorsese,tmdb:movie:1578,https://image.tmdb.org/t/p/w342/1WV7WlTS8LI1L5NkCgjWT9GSW3O.jpg,Joint 129
+132,Pulp Fiction,1994,Quentin Tarantino,tmdb:movie:680,https://image.tmdb.org/t/p/w342/vQWk5YBFWF4bZaofAbv0tShwBvQ.jpg,Joint 129
+133,Lawrence of Arabia,1962,David Lean,tmdb:movie:947,https://image.tmdb.org/t/p/w342/AiAm0EtDvyGqNpVoieRw4u65vD1.jpg,Joint 133
+134,Notorious,1946,Alfred Hitchcock,tmdb:movie:303,https://image.tmdb.org/t/p/w342/e7DHQGgivZyMvM4z7mA7gMNvOHg.jpg,Joint 133
+135,It's a Wonderful Life,1947,Frank Capra,tmdb:movie:1585,https://image.tmdb.org/t/p/w342/bSqt9rhDZx1Q7UZ86dBPKdNomp2.jpg,Joint 133
+136,La ciénaga,2001,Lucrecia Martel,tmdb:movie:58429,https://image.tmdb.org/t/p/w342/fcgRKfCRudyWggyHIT9LOPgU3qW.jpg,Joint 136
+137,Les Enfants du paradis,1945,Marcel Carné,tmdb:movie:2457,https://image.tmdb.org/t/p/w342/yiy9stl1jjVhW44ypkWMFDT8Ix3.jpg,Joint 136
+138,The Wild Bunch,1969,Sam Peckinpah,tmdb:movie:576,https://image.tmdb.org/t/p/w342/8j9yEC3xjy1PJDSizIbaxcHaSph.jpg,Joint 136
+139,Sambizanga,1972,Sarah Maldoror,tmdb:movie:87392,https://image.tmdb.org/t/p/w342/isnDnTWjOE9EJqsKXvCwZQrIkeE.jpg,Joint 136
+140,Trouble in Paradise,1932,Ernst Lubitsch,tmdb:movie:195,https://image.tmdb.org/t/p/w342/FBxuoLRD3Biyul14unT5m3PYNS.jpg,Joint 136
+141,The Seventh Seal,1957,Ingmar Bergman,tmdb:movie:490,https://image.tmdb.org/t/p/w342/wcZ21zrOsy0b52AfAF50XpTiv75.jpg,Joint 136
+142,Pickpocket,1959,Robert Bresson,tmdb:movie:690,https://image.tmdb.org/t/p/w342/szulf6uQyZp0QPVOvzavETdVYXI.jpg,Joint 136
+143,Partie de campagne,1936,Jean Renoir,tmdb:movie:43878,https://image.tmdb.org/t/p/w342/r490HjrQJrYXJp1zkzbflwEIegT.jpg,Joint 136
+144,All That Heaven Allows,1955,Douglas Sirk,tmdb:movie:43316,https://image.tmdb.org/t/p/w342/wlSmIk6iQ8yQhBG795UOOBUs4gF.jpg,Joint 136
+145,Gertrud,1964,Carl Th. Dreyer,tmdb:movie:34181,https://image.tmdb.org/t/p/w342/kHjqxHcJlwd5fL8G6pDuLfOCaPW.jpg,Joint 136
+146,The Watermelon Woman,1997,Cheryl Dunye,tmdb:movie:44479,https://image.tmdb.org/t/p/w342/mBBqKfkvzSk6Rk7bfRXU9kR916N.jpg,Joint 146
+147,Vampyr,1932,Carl Th. Dreyer,tmdb:movie:779,https://image.tmdb.org/t/p/w342/yt3JS5JSoZseSohYkhs6FLU9B0O.jpg,Joint 146
+148,Alien,1979,Ridley Scott,tmdb:movie:348,https://image.tmdb.org/t/p/w342/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg,Joint 146
+149,India Song,1975,Marguerite Duras,tmdb:movie:85927,https://image.tmdb.org/t/p/w342/kCAla6EHtwymFS73o0Gu3lRbGMl.jpg,Joint 146
+150,La Grande Illusion,1937,Jean Renoir,tmdb:movie:777,https://image.tmdb.org/t/p/w342/lWg41zE0FVixkNsFgxnlRyvDYv9.jpg,Joint 146
+151,Chinatown,1974,Roman Polanski,tmdb:movie:829,https://image.tmdb.org/t/p/w342/kZRSP3FmOcq0xnBulqpUQngJUXY.jpg,Joint 146
+153,West Indies: The Fugitive Slaves of Liberty,1979,Med Hondo,tmdb:movie:271858,https://image.tmdb.org/t/p/w342/px8QJjA5i0l8r9kWov2FNpkpP47.jpg,Joint 152
+154,Days of Heaven,1978,Terrence Malick,tmdb:movie:16642,https://image.tmdb.org/t/p/w342/rwxTYjOZmX2rGhz7avLe1qsjNqe.jpg,Joint 152
+155,Meghe Dhaka Tara,1960,Ritwik Ghatak,tmdb:movie:59239,https://image.tmdb.org/t/p/w342/uIlt1x2eBMzuQHwyU54CNPTSK6A.jpg,Joint 152
+156,Le Bonheur,1965,Agnès Varda,tmdb:movie:53023,https://image.tmdb.org/t/p/w342/nNW4ewpsqxEQQoHXv4PAUsFuDmd.jpg,Joint 152
+157,West of the Tracks,2002,Wang Bing,tmdb:movie:86282,https://image.tmdb.org/t/p/w342/hRH0ToR9tgCtNpyzOpqzYv1G47W.jpg,Joint 157
+158,Orlando,1992,Sally Potter,tmdb:movie:9300,https://image.tmdb.org/t/p/w342/seRawEs8eQ8rWfkBm6QC39EQEAU.jpg,Joint 157
+159,A City of Sadness,1989,Hou Hsiao-Hsien,tmdb:movie:49982,https://image.tmdb.org/t/p/w342/n1aIYLgnrlsUrh77G2OdQT9NV1.jpg,Joint 157
+160,All about My Mother,1999,Pedro Almodóvar,tmdb:movie:99,https://image.tmdb.org/t/p/w342/hjQhzhkGYXPNM96k0mOgob6HMmn.jpg,Joint 157
+161,Where Is the Friend's House?,1987,Abbas Kiarostami,tmdb:movie:49964,https://image.tmdb.org/t/p/w342/lrrtMVv2X8PNO7UA0Ce0gTtfuC8.jpg,Joint 157
+162,The Gospel According to St. Matthew,1964,Pier Paolo Pasolini,tmdb:movie:24192,https://image.tmdb.org/t/p/w342/oifi2CQkKbb6Y2x6J5K6CjaKab9.jpg,Joint 157
+163,Once upon a Time in America,1983,Sergio Leone,tmdb:movie:311,https://image.tmdb.org/t/p/w342/i0enkzsL5dPeneWnjl1fCWm6L7k.jpg,Joint 157
+164,Amarcord,1972,Federico Fellini,tmdb:movie:7857,https://image.tmdb.org/t/p/w342/kS7i093sQpkLTawUEdgf4HVOHSc.jpg,Joint 157
+165,Vivre sa vie,1962,Jean-Luc Godard,tmdb:movie:1626,https://image.tmdb.org/t/p/w342/A0BjScjASfMFgyGI5sU0CwfKh3l.jpg,Joint 157
+166,Out of the Past,1947,Jacques Tourneur,tmdb:movie:678,https://image.tmdb.org/t/p/w342/lnUK6Cg5ARM0qaq0B5SG20VAM0h.jpg,Joint 157
+167,Ikiru,1952,Akira Kurosawa,tmdb:movie:3782,https://image.tmdb.org/t/p/w342/dgNTS4EQDDVfkzJI5msKuHu2Ei3.jpg,Joint 157
+168,Los olvidados,1950,Luis Buñuel,tmdb:movie:800,https://image.tmdb.org/t/p/w342/cDCvmYoyqFg4CuSMtGMvCpfOIEw.jpg,Joint 157
+169,Last Year at Marienbad,1961,Alain Resnais,tmdb:movie:4024,https://image.tmdb.org/t/p/w342/syIJCqiSkGRJTlyaBtyI5jqPtE7.jpg,Joint 169
+170,L'Argent,1983,Robert Bresson,tmdb:movie:42112,https://image.tmdb.org/t/p/w342/tqt9D4TH702ZXEUKWa3e6UdFAvY.jpg,Joint 169
+171,Un chien andalou,1928,Luis Buñuel,tmdb:movie:626,https://image.tmdb.org/t/p/w342/obvE7ElAvCUhKtWFwDSvNbPw9PV.jpg,Joint 169
+172,Out 1,1990,Jacques Rivette,tmdb:movie:94528,https://image.tmdb.org/t/p/w342/vcyr1IZOHtPriQkm0NP6oMXDeLS.jpg,Joint 169
+173,Symbiopsychotaxiplasm: Take One,1967,William Greaves,tmdb:movie:44783,https://image.tmdb.org/t/p/w342/wMRtQ3A4pOmG2dXKOxx9tTerFi6.jpg,Joint 169
+174,Heat,1995,Michael Mann,tmdb:movie:949,https://image.tmdb.org/t/p/w342/umSVjVdbVwtx5ryCA2QXL44Durm.jpg,Joint 169
+175,Under the Skin,2013,Jonathan Glazer,tmdb:movie:97370,https://image.tmdb.org/t/p/w342/55wmcXJIDYITr7JDijJTdvwSaAv.jpg,Joint 169
+176,The Exterminating Angel,1962,Luis Buñuel,tmdb:movie:29264,https://image.tmdb.org/t/p/w342/qqZXHvBFxUpo8Pfbyvgh4SYMiWm.jpg,Joint 169
+177,Memories of Underdevelopment,1968,Tomás Gutiérrez Alea,tmdb:movie:47576,https://image.tmdb.org/t/p/w342/av7zEHpOyzmm86VPRa68zOLaBqf.jpg,Joint 169
+178,Black Narcissus,1947,"Michael Powell, Emeric Pressburger",tmdb:movie:16391,https://image.tmdb.org/t/p/w342/jSbFWWbkUq5N5ikewJHNATcWnxS.jpg,Joint 169
+179,Red Desert,1964,Michelangelo Antonioni,tmdb:movie:26638,https://image.tmdb.org/t/p/w342/rGcTVdyhaGzMxPPRVApXre6F7SD.jpg,Joint 169
+180,"The Good, the Bad and the Ugly",1966,Sergio Leone,tmdb:movie:429,https://image.tmdb.org/t/p/w342/bX2xnavhMYjWDoZp1VM6VnU1xwe.jpg,Joint 169
+181,Charulata,1964,Satyajit Ray,tmdb:movie:35790,https://image.tmdb.org/t/p/w342/ei2YaCcnUBudyc6BQSc6mpCSJTx.jpg,Joint 169
+182,Letter from an Unknown Woman,1948,Max Ophuls,tmdb:movie:946,https://image.tmdb.org/t/p/w342/gRGRW7DKyK8qBtKJTWguULMGbHG.jpg,Joint 169
+183,Hiroshima mon amour,1959,Alain Resnais,tmdb:movie:5544,https://image.tmdb.org/t/p/w342/zieczjWnvalaxwX5EQASEx0on5f.jpg,Joint 169
+184,The Magnificent Ambersons,1942,Orson Welles,tmdb:movie:965,https://image.tmdb.org/t/p/w342/g5EosvM0delNPkgBDGYYZvJl46n.jpg,Joint 169
+185,Magnolia,1999,Paul Thomas Anderson,tmdb:movie:334,https://image.tmdb.org/t/p/w342/tpfC325Jk6S38VTe5dDWjWtoyxr.jpg,Joint 185
+186,Wings of Desire,1987,Wim Wenders,tmdb:movie:144,https://image.tmdb.org/t/p/w342/iZQs2vUeCzvS1KfZJ6uYNCGJBBV.jpg,Joint 185
+187,Pyaasa,1957,Guru Dutt,tmdb:movie:41053,https://image.tmdb.org/t/p/w342/lQu1gBTKIF4BGC0f3GZPEbQYzWq.jpg,Joint 185
+188,Ran,1985,Akira Kurosawa,tmdb:movie:11645,https://image.tmdb.org/t/p/w342/dGgiXMWDcS5aJTBEFu7bmaQPNox.jpg,Joint 185
+189,Greed,1923,Erich von Stroheim,tmdb:movie:1405,https://image.tmdb.org/t/p/w342/eur2vc2BGiOocBuBLVPXySO7lRh.jpg,Joint 185
+190,Love Streams,1984,John Cassavetes,tmdb:movie:52109,https://image.tmdb.org/t/p/w342/c5uyQfWvzCVsCHL13J5JBZ61SQJ.jpg,Joint 185
+191,An Autumn Afternoon,1962,Yasujirō Ozu,tmdb:movie:50759,https://image.tmdb.org/t/p/w342/4RtWkqywkzxonlnGBwv4RpSw4Rb.jpg,Joint 185
+192,The River,1951,Jean Renoir,tmdb:movie:45218,https://image.tmdb.org/t/p/w342/rC1k4xkffb5sdQlktiP2TyiBxT2.jpg,Joint 185
+193,The Birds,1963,Alfred Hitchcock,tmdb:movie:571,https://image.tmdb.org/t/p/w342/ADoJaT1s9Jlcfx3Tw2MIZ1BMxo.jpg,Joint 185
+194,Les Demoiselles de Rochefort,1967,Jacques Demy,tmdb:movie:2433,https://image.tmdb.org/t/p/w342/jtxhyGaYhurH6KsjvP1jV3dDypz.jpg,Joint 185
+195,"Paris, Texas",1984,Wim Wenders,tmdb:movie:655,https://image.tmdb.org/t/p/w342/sP27Qm4THyRZyHjHYMfIDtJP6YE.jpg,Joint 185
+196,Paris Is Burning,1990,Jennie Livingston,tmdb:movie:31225,https://image.tmdb.org/t/p/w342/90rCWH41mj9hjHUEy2SOHfuAOl3.jpg,Joint 196
+197,The Headless Woman,2008,Lucrecia Martel,tmdb:movie:8898,https://image.tmdb.org/t/p/w342/qzDfJLfKQZY9D6zpaadFiugtphK.jpg,Joint 196
+198,Uncle Boonmee Who Can Recall His Past Lives,2010,Apichatpong Weerasethakul,tmdb:movie:38368,https://image.tmdb.org/t/p/w342/kPFkC9EBvllCIuDTR7A0DSEK6gJ.jpg,Joint 196
+199,The Tree of Life,2010,Terrence Malick,tmdb:movie:8967,https://image.tmdb.org/t/p/w342/l8cwuB5WJSoj4uMAsnzuHBOMaSJ.jpg,Joint 196
+200,Mad Max: Fury Road,2015,George Miller,tmdb:movie:76341,https://image.tmdb.org/t/p/w342/ulcAi4dKpAjHwYGS08vNyx9H6I9.jpg,Joint 196
+201,Zama,2017,Lucrecia Martel,tmdb:movie:326382,https://image.tmdb.org/t/p/w342/kpp9R6iYKSIXxfyW0feVYrk0jsg.jpg,Joint 196
+202,Paisan,1946,Roberto Rossellini,tmdb:movie:8429,https://image.tmdb.org/t/p/w342/r5IGAFASCXmp8m51vUbER3WwVcB.jpg,Joint 196
+203,Nosferatu,1922,F.W. Murnau,tmdb:movie:653,https://image.tmdb.org/t/p/w342/zv7J85D8CC9qYagAEhPM63CIG6j.jpg,Joint 196
+204,One Way or Another,1977,Sara Gómez,tmdb:movie:162505,https://image.tmdb.org/t/p/w342/zEoCB6uzjiI0Wpivlf2Azbw9bVi.jpg,Joint 196
+205,Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb,1963,Stanley Kubrick,tmdb:movie:935,https://image.tmdb.org/t/p/w342/gHm96BRW4GoI339rF1vYoYTB6Qe.jpg,Joint 196
+206,Double Indemnity,1944,Billy Wilder,tmdb:movie:996,https://image.tmdb.org/t/p/w342/rVNYZZgfhwqVMMWlBmxOfWqnwCj.jpg,Joint 196
+207,L' eclisse,1962,Michelangelo Antonioni,tmdb:movie:21135,https://image.tmdb.org/t/p/w342/oXoe0Fp92Yw3mMJ9Vq0hPlaMELg.jpg,Joint 196
+208,I Know Where I’m Going!,1945,"Michael Powell, Emeric Pressburger",tmdb:movie:56137,https://image.tmdb.org/t/p/w342/woAOLgYVUmLBtWNxTJgAnqGwyuL.jpg,Joint 196
+209,Wavelength,1967,Michael Snow,tmdb:movie:88421,https://image.tmdb.org/t/p/w342/EJrUlzZ7kTrCP3czxqtb5dfS5i.jpg,Joint 196
+210,The Life and Death of Colonel Blimp,1943,"Michael Powell, Emeric Pressburger",tmdb:movie:25037,https://image.tmdb.org/t/p/w342/kgyd5uyndsXiLYKlVgH0sm7Jfkv.jpg,Joint 196
+211,Limite,1931,Mário Peixoto,tmdb:movie:8353,https://image.tmdb.org/t/p/w342/lRx6OsS1PXKs9k6pfUw4DhGkjNZ.jpg,Joint 211
+212,Raiders of the Lost Ark,1981,Steven Spielberg,tmdb:movie:85,https://image.tmdb.org/t/p/w342/ceG9VzoRAVGwivFU403Wc3AHRys.jpg,Joint 211
+213,Pink Flamingos,1972,John Waters,tmdb:movie:692,https://image.tmdb.org/t/p/w342/10N8SvTQwUqyWgocPam1P18Jgr.jpg,Joint 211
+214,Twin Peaks: Fire Walk with Me,1992,David Lynch,tmdb:movie:1923,https://image.tmdb.org/t/p/w342/mxsGXqetGnirf99qapYd5MMY1VL.jpg,Joint 211
+215,Twenty Years Later,1984,Eduardo Coutinho,tmdb:movie:86320,https://image.tmdb.org/t/p/w342/gqLIvOGAUQOIQh6PEbkL6yz00Ch.jpg,Joint 211
+216,Melancholia,2011,Lars von Trier,tmdb:movie:62215,https://image.tmdb.org/t/p/w342/fMneszMiQuTKY8JUXrGGB5vwqJf.jpg,Joint 211
+217,Army of Shadows,1969,Jean-Pierre Melville,tmdb:movie:15383,https://image.tmdb.org/t/p/w342/aqNZWM9bspt8zaDvVRIRiWxRVJ7.jpg,Joint 211
+218,The Deer Hunter,1978,Michael Cimino,tmdb:movie:11778,https://image.tmdb.org/t/p/w342/bbGtogDZOg09bm42KIpCXUXICkh.jpg,Joint 211
+219,In a Lonely Place,1950,Nicholas Ray,tmdb:movie:17057,https://image.tmdb.org/t/p/w342/jBlYBQdDGqE0RdhEvuEdyqNOkcb.jpg,Joint 211
+220,Suspiria,1977,Dario Argento,tmdb:movie:11906,https://image.tmdb.org/t/p/w342/f4EJQrq5bKCqJK6I5moST9kur2p.jpg,Joint 211
+221,Brief Encounter,1945,David Lean,tmdb:movie:851,https://image.tmdb.org/t/p/w342/jC9EwLJcGhYMSQAHu2LxkKN5v7O.jpg,Joint 211
+222,All about Eve,1950,Joseph L. Mankiewicz,tmdb:movie:705,https://image.tmdb.org/t/p/w342/blBzZaatPWVuWpXEnPscMA4Xp6m.jpg,Joint 211
+223,Duck Soup,1933,Leo McCarey,tmdb:movie:3063,https://image.tmdb.org/t/p/w342/31t63plEGKHhYuuCpC9bFWO9SBS.jpg,Joint 211
+224,By the Bluest of Seas,1935,Boris Barnet,tmdb:movie:110733,https://image.tmdb.org/t/p/w342/fQDPRwilsf5Ma0OPqOLqXNhSXTD.jpg,Joint 211
+225,The Green Ray,1986,Eric Rohmer,tmdb:movie:54898,https://image.tmdb.org/t/p/w342/1E3pliSC7lXWw6zJhMvG6ba0UNX.jpg,Joint 225
+226,Grave of the Fireflies,1988,Isao Takahata,tmdb:movie:12477,https://image.tmdb.org/t/p/w342/k9tv1rXZbOhH7eiCk378x61kNQ1.jpg,Joint 225
+227,Blue,1993,Derek Jarman,tmdb:movie:94794,https://image.tmdb.org/t/p/w342/6dcmkKOAcHGJJVKY04dNscAKpOM.jpg,Joint 225
+228,Crash,1996,David Cronenberg,tmdb:movie:884,https://image.tmdb.org/t/p/w342/gpai5oUFyFGLHOCsYTvVMqlbY7A.jpg,Joint 225
+229,Happy Together,1997,Wong Kar Wai,tmdb:movie:18329,https://image.tmdb.org/t/p/w342/kO4KjUkQOfWSBw06Bdl7m6AlEP7.jpg,Joint 225
+230,Flowers of Shanghai,1998,Hou Hsiao-Hsien,tmdb:movie:45935,https://image.tmdb.org/t/p/w342/9N3TdNbr5pyT69M5cHODmfc4zTs.jpg,Joint 225
+231,"As I Was Moving Ahead, Occasionally I Saw Brief Glimpses of Beauty",2000,Jonas Mekas,tmdb:movie:130824,https://image.tmdb.org/t/p/w342/tDaxB5juEGwXD7oZwh8IXsnisar.jpg,Joint 225
+232,Petite maman,2021,Céline Sciamma,tmdb:movie:749004,https://image.tmdb.org/t/p/w342/fMghdAE1eRk8PdpDftsA574zs0S.jpg,Joint 225
+233,"Je, tu, il, elle",1974,Chantal Akerman,tmdb:movie:93934,https://image.tmdb.org/t/p/w342/4arnTs41WSLWsnENWdljFKo0pu1.jpg,Joint 225
+234,A Touch of Zen,1969,King Hu,tmdb:movie:44154,https://image.tmdb.org/t/p/w342/pgveqayMFUIZbFqN87ghiKmmxt3.jpg,Joint 225
+235,The Crowd,1928,King Vidor,tmdb:movie:3061,https://image.tmdb.org/t/p/w342/jftzHLCZLE2DOLQWY0mENOIPjxc.jpg,Joint 225
+236,Napoléon,1927,Abel Gance,tmdb:movie:42536,https://image.tmdb.org/t/p/w342/kwudEzOQcihoNhCYZPhT9XqU4hG.jpg,Joint 225
+237,Europa '51,1952,Roberto Rossellini,tmdb:movie:41464,https://image.tmdb.org/t/p/w342/hw9MEW5kslyRwpJp8AgpIlBxtmr.jpg,Joint 225
+238,The Hour of the Furnaces,1968,Fernando Solanas,tmdb:movie:89681,https://image.tmdb.org/t/p/w342/750AVmOtNEXAaOzW9ArwbP8IrRv.jpg,Joint 225
+239,Intolerance,1916,D.W. Griffith,tmdb:movie:3059,https://image.tmdb.org/t/p/w342/lJCabs4TMOsKfnl0BmA5Hf16Ezb.jpg,Joint 225
+240,Star Wars,1977,George Lucas,tmdb:movie:11,https://image.tmdb.org/t/p/w342/fai0rspsNeJCS69wHNjOdWxcI7P.jpg,Joint 225
+241,Cries and Whispers,1972,Ingmar Bergman,tmdb:movie:10238,https://image.tmdb.org/t/p/w342/a1bMgB09YDvvRN9SitCclUYragr.jpg,Joint 225
+242,"Harlan County, USA",1976,Barbara Kopple,tmdb:movie:33324,https://image.tmdb.org/t/p/w342/4TQwyqULcE87BHCOIt7NvCEzfQi.jpg,Joint 225
+243,The Last Laugh,1924,F.W. Murnau,tmdb:movie:5991,https://image.tmdb.org/t/p/w342/7Y6Dxr3oYt1w7ew70YNdLLDYEjk.jpg,Joint 243
+244,The Quince Tree Sun,1992,Víctor Erice,tmdb:movie:94706,https://image.tmdb.org/t/p/w342/wH3VuGHcf0jTzeRGLZlPfqTIHS1.jpg,Joint 243
+245,Taste of Cherry,1997,Abbas Kiarostami,tmdb:movie:30020,https://image.tmdb.org/t/p/w342/vgPwjgbSdbYWrS1ty8TIZtmi6Tn.jpg,Joint 243
+246,Werckmeister Harmonies,2000,Béla Tarr,tmdb:movie:23160,https://image.tmdb.org/t/p/w342/ix3pquGqTkCW86UbVTdRcrhGEFm.jpg,Joint 243
+247,In Vanda's Room,2000,Pedro Costa,tmdb:movie:87063,https://image.tmdb.org/t/p/w342/wi70RuDNiYqIyruZtXPeBOHTtj2.jpg,Joint 243
+248,Morvern Callar,2001,Lynne Ramsay,tmdb:movie:18602,https://image.tmdb.org/t/p/w342/kKGUF97v8a62MtSKM0V6fqDxGTS.jpg,Joint 243
+249,The Intruder,2004,Claire Denis,tmdb:movie:47143,https://image.tmdb.org/t/p/w342/zGsSkKVZq8RRB2TDuqfeqqYnyL2.jpg,Joint 243
+250,Syndromes and a Century,2006,Apichatpong Weerasethakul,tmdb:movie:27904,https://image.tmdb.org/t/p/w342/1XUMd93PRMUkCtE2NWn0zQb1NC6.jpg,Joint 243
+251,Nostalgia for the Light,2010,Patricio Guzmán,tmdb:movie:72721,https://image.tmdb.org/t/p/w342/j8NsCokx3dveFDL1YAvJPWHkrDx.jpg,Joint 243
+252,"Distant Voices, Still Lives",1988,Terence Davies,tmdb:movie:41799,https://image.tmdb.org/t/p/w342/7tixkjzGHY2tBh6j6L4azkx6OQc.jpg,Joint 243
+253,Soleil Ô,1970,Med Hondo,tmdb:movie:195841,https://image.tmdb.org/t/p/w342/l23NdXYuqkhFiXZHAES3XJkfBkN.jpg,Joint 243
+254,Possession,1981,Andrzej Zulawski,tmdb:movie:21484,https://image.tmdb.org/t/p/w342/A9bnRn05riOKWftvQlLKa2gl51n.jpg,Joint 243
+255,Videodrome,1983,David Cronenberg,tmdb:movie:837,https://image.tmdb.org/t/p/w342/qqqkiZSU9EBGZ1KiDmfn07S7qvv.jpg,Joint 243
+256,A Canterbury Tale,1944,"Michael Powell, Emeric Pressburger",tmdb:movie:15696,https://image.tmdb.org/t/p/w342/mhqTQo0NN7Zm6cIzTapZ568WMpN.jpg,Joint 243
+257,A Clockwork Orange,1971,Stanley Kubrick,tmdb:movie:185,https://image.tmdb.org/t/p/w342/4sHeTAp65WrSSuc05nRBKddhBxO.jpg,Joint 243
+258,Mouchette,1966,Robert Bresson,tmdb:movie:1561,https://image.tmdb.org/t/p/w342/cITZsSQ7VG122xQ0xAN3NHZF0OH.jpg,Joint 243
+259,My Darling Clementine,1946,John Ford,tmdb:movie:3088,https://image.tmdb.org/t/p/w342/o7G5klSt9i8LQZdUNvrWUJbbxAO.jpg,Joint 243
+260,Earth,1930,Alexander Dovzhenko,tmdb:movie:46594,https://image.tmdb.org/t/p/w342/zXRpYOJFZ8wWzhCYWILSiw1ouOy.jpg,Joint 243
+261,Annie Hall,1977,Woody Allen,tmdb:movie:703,https://image.tmdb.org/t/p/w342/dEtjPywhDbAXYjoFfhBC4U9unU7.jpg,Joint 243
+262,Sullivan's Travels,1941,Preston Sturges,tmdb:movie:16305,https://image.tmdb.org/t/p/w342/z5cqIM0ysVjkCmaDfyTQnlozdIp.jpg,Joint 243
+263,Pandora's Box,1928,G.W. Pabst,tmdb:movie:905,https://image.tmdb.org/t/p/w342/3B2A5g8t3HZltKp1fplNn2xW4us.jpg,Joint 243
+264,Born in Flames,1983,Lizzie Borden,tmdb:movie:36832,https://image.tmdb.org/t/p/w342/oTznCn0JG8eXm7C4B3GOtNg2uJg.jpg,Joint 243
