@@ -1,0 +1,90 @@
+{
+ "response": {
+  "start_date": 1791849600,
+  "ranks": [
+   {
+    "rank": 1,
+    "appid": 4435490,
+    "item": {
+     "item_type": 0,
+     "id": 4435490,
+     "success": 1,
+     "visible": true,
+     "name": "Call of Duty®: Modern Warfare® 4",
+     "appid": 4435490,
+     "type": 0,
+     "is_coming_soon": true
+    },
+    "last_week_rank": 26,
+    "consecutive_weeks": 3
+   },
+   {
+    "rank": 2,
+    "appid": 3393110,
+    "item": {
+     "item_type": 0,
+     "id": 3393110,
+     "success": 1,
+     "visible": true,
+     "name": "AION 2",
+     "appid": 3393110,
+     "type": 0,
+     "is_free": true
+    },
+    "last_week_rank": 3,
+    "consecutive_weeks": 5
+   },
+   {
+    "rank": 3,
+    "appid": 730,
+    "item": {
+     "item_type": 0,
+     "id": 730,
+     "success": 1,
+     "visible": true,
+     "name": "Counter-Strike 2",
+     "appid": 730,
+     "type": 0,
+     "is_free": true
+    },
+    "last_week_rank": 6,
+    "consecutive_weeks": 741
+   },
+   {
+    "rank": 13,
+    "appid": 1675200,
+    "item": {
+     "item_type": 0,
+     "id": 1675200,
+     "success": 1,
+     "visible": true,
+     "name": "Steam Deck",
+     "appid": 1675200,
+     "type": 10
+    },
+    "last_week_rank": 18,
+    "consecutive_weeks": 21
+   },
+   {
+    "rank": 21,
+    "appid": 3816030,
+    "item": {
+     "item_type": 0,
+     "id": 3816030,
+     "success": 1,
+     "visible": true,
+     "name": "DayZ Badlands",
+     "appid": 3816030,
+     "type": 4
+    },
+    "last_week_rank": null,
+    "consecutive_weeks": 1
+   },
+   {
+    "rank": 101,
+    "packageid": 12345
+   }
+  ],
+  "next_page_start": 100
+ }
+}

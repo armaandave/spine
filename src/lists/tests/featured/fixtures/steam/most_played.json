@@ -1,0 +1,69 @@
+{
+ "response": {
+  "rollup_date": 1792454400,
+  "ranks": [
+   {
+    "rank": 1,
+    "appid": 730,
+    "item": {
+     "item_type": 0,
+     "id": 730,
+     "success": 1,
+     "visible": true,
+     "name": "Counter-Strike 2",
+     "appid": 730,
+     "type": 0,
+     "is_free": true
+    },
+    "last_week_rank": 1,
+    "peak_in_game": 1205009
+   },
+   {
+    "rank": 2,
+    "appid": 570,
+    "item": {
+     "item_type": 0,
+     "id": 570,
+     "success": 1,
+     "visible": true,
+     "name": "Dota 2",
+     "appid": 570,
+     "type": 0,
+     "is_free": true
+    },
+    "last_week_rank": 2,
+    "peak_in_game": 907099
+   },
+   {
+    "rank": 4,
+    "appid": 431960,
+    "item": {
+     "item_type": 0,
+     "id": 431960,
+     "success": 1,
+     "visible": true,
+     "name": "Wallpaper Engine",
+     "appid": 431960,
+     "type": 6
+    },
+    "last_week_rank": 4,
+    "peak_in_game": 111106
+   },
+   {
+    "rank": 13,
+    "appid": 1938090,
+    "item": {
+     "item_type": 0,
+     "id": 1938090,
+     "success": 1,
+     "visible": true,
+     "name": "Call of Duty®",
+     "appid": 1938090,
+     "type": 0
+    },
+    "last_week_rank": 50,
+    "peak_in_game": 112541
+   }
+  ]
+ }
+}

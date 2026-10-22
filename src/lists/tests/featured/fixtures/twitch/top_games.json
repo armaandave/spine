@@ -1,0 +1,41 @@
+{
+ "data": [
+  {
+   "id": "509658",
+   "name": "Just Chatting",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg",
+   "igdb_id": ""
+  },
+  {
+   "id": "32982",
+   "name": "Grand Theft Auto V",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/32982_IGDB-{width}x{height}.jpg",
+   "igdb_id": "1020"
+  },
+  {
+   "id": "32399",
+   "name": "Counter-Strike",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/32399-{width}x{height}.jpg",
+   "igdb_id": ""
+  },
+  {
+   "id": "29595",
+   "name": "Dota 2",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/29595-{width}x{height}.jpg",
+   "igdb_id": ""
+  },
+  {
+   "id": "498592",
+   "name": "I'm Only Sleeping",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/498592_IGDB-{width}x{height}.jpg",
+   "igdb_id": "71001"
+  },
+  {
+   "id": "1288749557",
+   "name": "Dressmaker (2026)",
+   "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/1288749557-{width}x{height}.jpg",
+   "igdb_id": ""
+  }
+ ],
+ "pagination": {}
+}
