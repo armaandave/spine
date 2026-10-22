@@ -88,7 +88,7 @@ Rules:
 - `note`: free text shown later ("Winner", "Best Picture · 2027").
 - `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it.
 
-Anything without a direct id goes to a strict title search: exact normalized title (or the result's main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. When nothing matches that way, the entry's own main title is tried ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of the Senate"), but only when the year or creator agrees and exactly one result qualifies, so adapters no longer need to strip subtitles themselves. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); the rest stay unresolved until the next run. Results (hits 30 days, misses 1 day) are cached under `featured:resolve:…`, so a re-run is cheap.
+Anything without a direct id goes to a strict title search: exact normalized title (or the result's main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. When nothing matches that way, the entry's own main title is tried ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of the Senate"), but only when the year or creator agrees and exactly one result qualifies, so adapters no longer need to strip subtitles themselves. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); entries past the cap are deferred and searched on a later run. Results are cached under `featured:resolve:…` (hits 45 days, refreshed on every hit; misses 1 day), so a re-run is cheap.
 
 ## A definitions module
 
@@ -122,6 +122,7 @@ DEFINITIONS = [
 - `list_type="people"` writes people (`PersonListItem`) instead of Items; use positions 900+. Name search for people needs `params["person_source"]` (`openlibrary`, `tmdb`, …).
 - `live_windows=(live_window("2027-03-14 16:00", "America/Los_Angeles", timedelta(hours=4), interval=timedelta(seconds=30), label="The Oscars"),)`: polled every `interval` from 20 minutes before the start; cards show `upcoming`/`live`/`done` from 24 h before to 24 h after.
 - `Guards`: `require_exact_count` (entries must equal `FetchResult.expected_count`), `min_resolve_rate` (0.5), `max_drop` (0.5) once the previous count is at least `drop_check_min_previous` (20), `max_title_searches` (50). A failed guard leaves the list untouched and records `guarded` in the health report.
+- The drop guard only judges lists that held at least 20 entries, so fixed-size charts also set `params["min_entries"]` (10 for a top 10) and call `adapters/_rows.require()`: a source that returns fewer rows raises `AdapterError` and the list stays as it was.
 - `tags` sets `CustomList.tags`; `soft_time_limit` (600 s) bounds one run.
 
 ## Static lists
