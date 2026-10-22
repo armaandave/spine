@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
+from django_celery_beat.schedulers import ModelEntry
 
 from app.signals import create_task_result_on_publish
 from lists.featured import dispatch, order, registry
@@ -212,7 +213,7 @@ class SchedulingConfigTests(SimpleTestCase):
     def test_beat_routes_and_task_names(self):
         self.assertEqual(
             settings.CELERY_BEAT_SCHEDULE["dispatch_featured_lists"],
-            {"task": "Dispatch featured lists", "schedule": 60, "options": {"queue": "featured", "expires": 55}},
+            {"task": "Dispatch featured lists", "schedule": 60, "options": {"queue": "featured", "expire_seconds": 55}},
         )
         self.assertEqual(settings.CELERY_TASK_ROUTES["Dispatch featured lists"], {"queue": "featured"})
         self.assertEqual(settings.CELERY_TASK_ROUTES["Sync featured list"], {"queue": "featured"})
@@ -221,6 +222,14 @@ class SchedulingConfigTests(SimpleTestCase):
         self.assertEqual(dispatch.sync_featured_list.name, "Sync featured list")
         for legacy in ("sync_nyt_featured_lists", "sync_letterboxd_top_500_featured_list"):
             self.assertIn(legacy, settings.CELERY_BEAT_SCHEDULE)
+
+    def test_database_scheduler_keeps_the_dispatcher_expiry(self):
+        # Production beat runs django_celery_beat's DatabaseScheduler, which keeps only
+        # the options _unpack_options knows: "expires" would be dropped silently.
+        options = settings.CELERY_BEAT_SCHEDULE["dispatch_featured_lists"]["options"]
+        unpacked = ModelEntry._unpack_options(**options)
+        self.assertEqual(unpacked["expire_seconds"], 55)
+        self.assertEqual(unpacked["queue"], "featured")
 
     def test_dispatcher_publishes_no_task_result(self):
         with patch("app.signals.TaskResult.objects.store_result") as store:

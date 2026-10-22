@@ -709,7 +709,8 @@ CELERY_BEAT_SCHEDULE = {
     "dispatch_featured_lists": {
         "task": "Dispatch featured lists",
         "schedule": 60,  # every minute; queues only the lists that are due
-        "options": {"queue": "featured", "expires": 55},
+        # django_celery_beat's DatabaseScheduler reads "expire_seconds" and drops "expires".
+        "options": {"queue": "featured", "expire_seconds": 55},
     },
 }
 

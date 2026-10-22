@@ -196,7 +196,7 @@ No new `CustomList` columns.
 ## Scheduling
 
 - **Worker:** a second Celery worker consumes the `featured` queue: a new `[program:celery-featured]` in `supervisord.conf`, with the same flags as `celery` plus `-Q featured -n featured@%h --concurrency 2`, `stopasgroup=true` and `stopwaitsecs=60`. The default worker keeps the `celery` queue, so long imports never block an award night.
-- **Routing and beat:** `CELERY_TASK_ROUTES` sends `Dispatch featured lists` and `Sync featured list` to `featured`. The beat entry `dispatch_featured_lists` runs every 60 s with `{"queue": "featured", "expires": 55}`.
+- **Routing and beat:** `CELERY_TASK_ROUTES` sends `Dispatch featured lists` and `Sync featured list` to `featured`. The beat entry `dispatch_featured_lists` runs every 60 s with `{"queue": "featured", "expire_seconds": 55}` (`django_celery_beat`'s `DatabaseScheduler` ignores `expires`).
 - **What the dispatcher queues:** due syncs. A definition is due when:
   - it has never succeeded;
   - its `definition_hash` changed;
