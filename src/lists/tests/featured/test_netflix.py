@@ -232,3 +232,46 @@ class TMDBMatchTests(FeaturedTestCase):
             second = tmdb_match.best_match("tv", ["Die Falle"])
         self.assertEqual((first["id"], second["id"]), (283371, 283371))
         self.assertEqual(api.call_count, 1)
+
+
+class NetflixSharedDownloadTests(FeaturedTestCase):
+    WEEKLY = (
+        "netflix-top-10-films-english",
+        "netflix-top-10-films-non-english",
+        "netflix-top-10-tv-english",
+        "netflix-top-10-tv-non-english",
+    )
+
+    def downloads(self, api, file):
+        return [call for call in api.call_args_list if call.args[2].endswith(file)]
+
+    def test_the_weekly_lists_share_one_download(self):
+        weekly = load_fixture("netflix", "weekly.tsv")
+        weekly += "2026-10-18\tFilms (Non-English)\t1\tLa Grazia\tN/A\t1\t2.1\t1\t1\n"
+        routes = {"all-weeks-global.tsv": weekly, "/search/": tmdb_search(SEARCHES)}
+        with no_overrides(), api_routes(routes) as api:
+            results = [ADAPTERS["netflix"].fetch(few_rows(get(key))) for key in self.WEEKLY]
+        self.assertEqual(len(self.downloads(api, "all-weeks-global.tsv")), 1)
+        self.assertEqual([len(result.entries) for result in results], [2, 1, 2, 2])
+
+    def test_the_cache_keeps_each_categorys_latest_week_only(self):
+        rows = netflix.parse_tsv(load_fixture("netflix", "weekly.tsv"), "weekly")
+        self.assertIn("2026-10-11", {row["week"] for row in rows})
+        self.assertEqual({row["week"] for row in netflix.latest_weeks(rows)}, {"2026-10-18"})
+
+    def test_the_most_popular_lists_share_one_download(self):
+        routes = {"most-popular.tsv": load_fixture("netflix", "most-popular.tsv"), "/search/": tmdb_search({})}
+        with no_overrides(), api_routes(routes) as api:
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-tv")))
+            ADAPTERS["netflix"].fetch(few_rows(get("netflix-most-popular-films")))
+        self.assertEqual(len(self.downloads(api, "most-popular.tsv")), 1)
+
+    def test_a_failed_download_is_not_cached(self):
+        header = load_fixture("netflix", "weekly.tsv").splitlines()[0]
+        with api_routes({"all-weeks-global.tsv": header + "\n"}), self.assertRaises(AdapterError):
+            ADAPTERS["netflix"].fetch(get("netflix-top-10-films-english"))
+        routes = {"all-weeks-global.tsv": load_fixture("netflix", "weekly.tsv"), "/search/": tmdb_search(SEARCHES)}
+        with no_overrides(), api_routes(routes) as api:
+            result_ = ADAPTERS["netflix"].fetch(few_rows(get("netflix-top-10-films-english")))
+        self.assertEqual(len(self.downloads(api, "all-weeks-global.tsv")), 1)
+        self.assertEqual(len(result_.entries), 2)

@@ -15,6 +15,9 @@ Categories: "Films (English)", "Films (Non-English)", "TV (English)",
 then the series name from ``season_title``; the most popular exact match in the
 category's language (English or not) wins.
 
+Every list of a file shares one download, cached for ``CACHE_TTL`` seconds (the weekly
+file is about 900 KB), so a pass over the four weekly lists fetches it once.
+
 ``"min_entries"`` is the rows a complete chart has: 10 for the latest week of a weekly
 category, 10 per category for most-popular. Fewer fail the run, so a file caught
 mid-update never shrinks a list.
@@ -24,6 +27,8 @@ import csv
 import io
 import re
 from datetime import date, timedelta
+
+from django.core.cache import cache
 
 from lists.featured.adapters import _rows
 from lists.featured.adapters._tmdb_match import with_tmdb_match
@@ -43,6 +48,8 @@ COLUMNS = {
     "most-popular": {"category", "rank", "show_title", "season_title", "views_first_91_days"},
 }
 NONE = {"", "N/A"}
+CACHE_PREFIX = "featured:netflix:"
+CACHE_TTL = 30 * 60
 # ": Season 2", " - Part 3", ": Limited Series", ": Volume 1", ": Book 2", " Season 4"
 _SEASON_SUFFIX = re.compile(
     r"(?:\s*[:\-–—]\s*|\s+)(?:(?:season|series|part|volume|vol\.?|chapter|book|collection)\s+[\w.]+"
@@ -122,6 +129,32 @@ def parse_tsv(text, file):
         msg = f"Netflix {FILES[file]} is missing columns {sorted(missing)}."
         raise AdapterError(msg)
     return list(reader)
+
+
+def latest_weeks(rows):
+    """Keep each category's latest week only: all the weekly lists read."""
+    latest = {}
+    for row in rows:
+        category = row.get("category")
+        latest[category] = max(latest.get(category, ""), row.get("week") or "")
+    return [row for row in rows if row.get("week") == latest.get(row.get("category"))]
+
+
+def file_rows(file):
+    """Return one file's rows, downloading it at most once per ``CACHE_TTL``.
+
+    The weekly file is trimmed to each category's latest week before caching.
+    """
+    cache_key = f"{CACHE_PREFIX}{file}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    rows = parse_tsv(get_text("netflix", BASE_URL + FILES[file]), file)
+    if file == "weekly":
+        rows = latest_weeks(rows)
+    if rows:
+        cache.set(cache_key, rows, CACHE_TTL)
+    return rows
 
 
 def edition_label(week):
@@ -220,9 +253,9 @@ def _most_popular(definition, rows):
 
 
 def fetch(definition):
-    """Fetch the TSV and build one list."""
+    """Read the (shared) TSV and build one list."""
     file = definition.params["file"]
-    rows = parse_tsv(get_text("netflix", BASE_URL + FILES[file]), file)
+    rows = file_rows(file)
     return _weekly(definition, rows) if file == "weekly" else _most_popular(definition, rows)
 
 
