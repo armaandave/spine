@@ -29,6 +29,7 @@ from api.views.lists import (
     LIST_PREVIEW_ITEM_LIMIT,
     _list_type_query,
     _person_list_payloads,
+    person_list_item_payload,
 )
 from app import exposure
 from app.models import MediaTypes
@@ -311,8 +312,12 @@ def featured_cards(now, lists=None):
     return cards
 
 
-def card_payload(featured, request, *, items_count, previews=None, now=None):
-    """Return the card shape; ``previews=None`` omits ``preview_items``."""
+def card_payload(featured, request, *, items_count, previews=None, people=None, now=None):
+    """Return the card shape; ``previews=None`` omits ``preview_items``.
+
+    People lists also get ``preview_people`` from ``people`` alongside the
+    empty ``preview_items``.
+    """
     custom_list, definition, sync = featured.custom_list, featured.definition, featured.sync
     window = featured.live_window
     payload = {
@@ -348,6 +353,10 @@ def card_payload(featured, request, *, items_count, previews=None, now=None):
             }
             for row in previews
         ]
+        if custom_list.list_type == CustomList.ListType.PEOPLE:
+            payload["preview_people"] = [
+                person_list_item_payload(row, request=request) for row in people or []
+            ]
     return payload
 
 
@@ -389,12 +398,16 @@ def _counts_for(cards):
 
 
 class _CardRenderer:
-    """Renders cards with one batched count query and one preview query."""
+    """Renders cards with one batched count query and a preview query per list type."""
 
     def __init__(self, request, cards, shown):
         self.request = request
         self.counts = _counts_for(cards)
         self.previews = preview_items([card.custom_list.id for card in shown], CARD_PREVIEW_LIMIT)
+        self.people = _preview_people(
+            [card.custom_list.id for card in shown if card.custom_list.list_type == CustomList.ListType.PEOPLE],
+            CARD_PREVIEW_LIMIT,
+        )
         prime_collection_items(
             [row.item for rows in self.previews.values() for row in rows],
             request.user,
@@ -407,6 +420,7 @@ class _CardRenderer:
             self.request,
             items_count=self.counts.get(card.custom_list.id, 0),
             previews=self.previews.get(card.custom_list.id, []) if with_previews else None,
+            people=self.people.get(card.custom_list.id, []),
             now=self.now,
         )
 

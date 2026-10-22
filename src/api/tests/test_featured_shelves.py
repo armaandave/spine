@@ -263,6 +263,34 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(book["lists"][0]["items_count"], PersonListItem.objects.count())
         self.assertEqual(book["lists"][0]["preview_items"], [])
 
+    def test_people_cards_preview_up_to_five_people(self):
+        laureates = CustomList.objects.get(import_source_id="laureates")
+        PersonListItem.objects.bulk_create([
+            PersonListItem(
+                custom_list=laureates,
+                source=PersonListItem.Source.OPENLIBRARY,
+                person_id=f"OL{number}A",
+                name=f"Laureate {number}",
+                profile_url=f"https://p/{number}.jpg",
+                position=number,
+            )
+            for number in range(2, 9)
+        ])
+        drf_request = Request(APIRequestFactory().get("/api/v1/lists/featured/"))
+        drf_request.user = self.viewer
+        expected = list_payload(laureates, request=drf_request, include_preview_items=True)["preview_people"][:5]
+
+        card = self.shelves()["shelves"][3]["lists"][0]
+        self.assertEqual(card["items_count"], 8)
+        self.assertEqual(card["preview_items"], [])
+        self.assertEqual(card["preview_people"], expected)
+        self.assertEqual([person["name"] for person in card["preview_people"]][:2], ["Annie Ernaux", "Laureate 2"])
+        self.assertEqual(self.shelves(media_type="book")["shelves"][0]["lists"][0]["preview_people"], expected)
+        movie = self.shelves()["shelves"][1]
+        self.assertTrue(all("preview_people" not in media_card for media_card in movie["lists"]))
+        detail = self.get(f"/api/v1/lists/{laureates.id}/").data
+        self.assertNotIn("preview_people", detail["featured"])
+
     def test_requires_authentication(self):
         self.assertEqual(APIClient().get("/api/v1/lists/featured/shelves/").status_code, 401)
 

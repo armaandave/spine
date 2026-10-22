@@ -1315,7 +1315,8 @@ private extension CustomListDetail {
             items: items,
             people: people,
             completion: completion,
-            collaborators: collaborators
+            collaborators: collaborators,
+            featured: featured
         )
     }
 
@@ -1339,7 +1340,8 @@ private extension CustomListDetail {
             items: items,
             people: people,
             completion: completion,
-            collaborators: collaborators
+            collaborators: collaborators,
+            featured: featured
         )
     }
 }
@@ -1375,6 +1377,12 @@ struct ProfileListDetailView: View {
     private let onUnauthorized: () -> Void
     /// The featured card the list was opened from, for its metadata, live banner and source link.
     private let featured: FeaturedListCard?
+
+    /// The tapped card, else the list's own featured block, so a featured list opened from a profile or a link
+    /// shows its metadata too.
+    private var featuredCard: FeaturedListCard? {
+        featured ?? viewModel.list?.featured
+    }
 
     init(
         listId: Int,
@@ -1694,7 +1702,7 @@ struct ProfileListDetailView: View {
         let isOwnerCurrentUser = list.owner.id == currentUserId
 
         return VStack(alignment: .leading, spacing: 7) {
-            if let featured {
+            if let featured = featuredCard {
                 FeaturedListLiveBanner(card: featured)
             }
 
@@ -1799,7 +1807,7 @@ struct ProfileListDetailView: View {
                     .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
             }
 
-            if let featured {
+            if let featured = featuredCard {
                 FeaturedListDetailMeta(card: featured)
                     .padding(.top, 2)
             }

@@ -126,10 +126,19 @@ extension FeaturedListCard {
         return [count, cadence.label].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// The rank to show on a preview, when the list is ranked.
+    /// The people a tile stacks in place of posters: a people list's, when it has no media previews.
+    var stackPeople: [PersonListEntry] {
+        previews.isEmpty ? previewPeople : []
+    }
+
+    /// The rank to show on a preview, or on a person in place of previews, when the list is ranked.
     func rank(at index: Int) -> Int? {
-        guard isRanked, previews.indices.contains(index) else { return nil }
-        return previews[index].media.position ?? index + 1
+        guard isRanked else { return nil }
+        if previews.indices.contains(index) {
+            return previews[index].media.position ?? index + 1
+        }
+        guard stackPeople.indices.contains(index) else { return nil }
+        return stackPeople[index].position ?? index + 1
     }
 
     /// "CHART · Netflix · Updated 2h ago · Refreshes weekly", for the list detail.
