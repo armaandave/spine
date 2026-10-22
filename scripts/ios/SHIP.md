@@ -84,6 +84,8 @@ Run from the feature worktree unless a step says otherwise.
      `git merge --no-ff <branch>`.
    - Run `scripts/check.sh` on the merged `myapp-main`, then `git push origin myapp-main`.
    - Commit as `armaandave@outlook.com`, with the trailers your instructions require.
+   - Run `scripts/ios/test-backend.sh update`, so the always-on test backend (the one
+     Spine Dev talks to) serves the new `myapp-main`.
 7. **CI and the deploy.** Find the run with `gh run list --commit <sha>`, then
    `gh run watch <run-id> --exit-status`.
    - Red checks: nothing was deployed. Fix forward on a branch and ship again.
@@ -107,7 +109,9 @@ Run from the feature worktree unless a step says otherwise.
    - Confirm with `asc.mjs status` that "Me" lists the build.
    - Tag the commit `ios-<version>-build<N>` and push the tag. Tags don't trigger
      builds.
-10. **Clean up.** Remove the feature worktree and the merged branch, local and remote.
+10. **Clean up.** If `scripts/ios/test-backend.sh status` says it serves the feature
+    worktree, run `scripts/ios/test-backend.sh release` from it. Then remove the feature
+    worktree and the merged branch, local and remote.
 11. **Report** the deploy (or why it was skipped), the CI result, migrations, the build
     number and whether it's in "Me", and anything left to do.
 
