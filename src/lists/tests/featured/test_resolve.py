@@ -181,6 +181,13 @@ class TitleSearchTests(ResolverTestCase):
             again = self.resolver().resolve_one(entry)
         self.assertEqual((again.match.ref, again.how), (resolution.match.ref, "cache"))
 
+    def test_creator_confirmed_result_beats_an_uncredited_exact_title(self):
+        stub = {"media_id": 1, "source": "hardcover", "title": "Anatomy"}
+        real = {"media_id": 2, "source": "hardcover", "title": "Anatomy: A Love Story", "author_name": ["Dana Schwartz"]}
+        self.assertEqual(pick_title_match(Entry(1, "Anatomy", creator="Dana Schwartz"), [stub, real]), real)
+        # Without a creator to confirm, the exact title still wins.
+        self.assertEqual(pick_title_match(Entry(1, "Anatomy", year=2022), [stub, real]), stub)
+
     def test_pick_title_match_reads_provider_years(self):
         igdb_result = {"media_id": 1, "title": "Hades", "first_release_date": 1600387200}
         self.assertEqual(pick_title_match(Entry(1, "Hades", year=2020), [igdb_result]), igdb_result)
