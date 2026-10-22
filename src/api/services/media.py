@@ -973,6 +973,33 @@ def refresh_music_detail(*, source, media_id, include_music_enrichment):
     )
 
 
+def _fetch_detail_metadata(*, cache_key, source, media_type, media_id, season_number, episode_number):
+    season_numbers = [season_number] if season_number is not None else None
+    try:
+        metadata = provider_services.get_media_metadata(
+            media_type,
+            media_id,
+            source,
+            season_numbers,
+            episode_number,
+        )
+    except provider_services.ProviderAPIError as error:
+        # While Hardcover is rate limited, a saved book still opens from its saved
+        # title, cover and pages. Not cached, so the full page returns once
+        # Hardcover answers again.
+        metadata = (
+            hardcover.saved_book(media_id)
+            if source == Sources.HARDCOVER.value
+            and error.status_code == requests.codes.too_many_requests
+            else None
+        )
+        if metadata is None:
+            raise
+        return metadata
+    cache.set(cache_key, metadata, DETAIL_TTL)
+    return metadata
+
+
 def media_detail(
     *,
     source,
@@ -1020,28 +1047,14 @@ def media_detail(
     else:
         metadata = cache.get(cache_key)
         if metadata is None:
-            season_numbers = [season_number] if season_number is not None else None
-            try:
-                metadata = provider_services.get_media_metadata(
-                    media_type,
-                    media_id,
-                    source,
-                    season_numbers,
-                    episode_number,
-                )
-                cache.set(cache_key, metadata, DETAIL_TTL)
-            except provider_services.ProviderAPIError as error:
-                # While Hardcover is rate limited, a saved book still opens from its
-                # saved title, cover and pages. Not cached, so the full page returns
-                # once Hardcover answers again.
-                metadata = (
-                    hardcover.saved_book(media_id)
-                    if source == Sources.HARDCOVER.value
-                    and error.status_code == requests.codes.too_many_requests
-                    else None
-                )
-                if metadata is None:
-                    raise
+            metadata = _fetch_detail_metadata(
+                cache_key=cache_key,
+                source=source,
+                media_type=media_type,
+                media_id=media_id,
+                season_number=season_number,
+                episode_number=episode_number,
+            )
 
     primary_metadata = metadata
     if media_type == MediaTypes.ANIME.value:
