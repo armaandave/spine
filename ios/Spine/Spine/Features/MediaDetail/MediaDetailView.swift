@@ -1286,6 +1286,7 @@ private struct MediaDetailPageView: View {
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var edgeDragOffset: CGFloat = 0
     @State private var ratingPicker = MediaRatingPickerState()
+    @State private var albumBackdropTint: Color?
 
     private let mediaRepository: MediaRepository
     private let musicRepository: MusicRepository
@@ -1366,6 +1367,12 @@ private struct MediaDetailPageView: View {
                     content: content
                 )
                     .spineContentTransition(value: contentPhase)
+                    .background {
+                        if let albumBackdropTint {
+                            AlbumBackdrop(tint: albumBackdropTint)
+                                .transition(.opacity)
+                        }
+                    }
             }
             .onScrollPhaseChange { _, phase in
                 if phase != .idle {
@@ -1806,6 +1813,16 @@ private struct MediaDetailPageView: View {
         .task(id: viewModel.externalRatingsPollingID) {
             await viewModel.pollExternalRatingsIfNeeded()
         }
+        .task(id: albumArtworkURL) {
+            var tint: Color?
+            if let albumArtworkURL {
+                tint = await AlbumBackdropColor.load(url: albumArtworkURL)
+            }
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: reduceMotion ? SpineMotion.reducedDuration : 0.45)) {
+                albumBackdropTint = tint
+            }
+        }
         .onChange(of: viewModel.detail?.id) {
             showsTitleLogo = true
         }
@@ -1878,6 +1895,13 @@ private struct MediaDetailPageView: View {
             hasContent: viewModel.detail != nil,
             hasError: viewModel.errorMessage != nil
         )
+    }
+
+    /// The image an album page takes its background color from, the one its hero draws; nil for every other
+    /// media type.
+    private var albumArtworkURL: URL? {
+        guard let detail = viewModel.detail, detail.ref.mediaType == "music" else { return nil }
+        return (detail.displayBackdropURL ?? detail.displayPosterURL).flatMap(URL.init(string:))
     }
 
     private func applyPendingPosterSave() {
@@ -2345,7 +2369,7 @@ private struct MediaDetailPageView: View {
             .padding(.top, resolvedTopSafeAreaInset + MediaDetailLayout.heroPosterTopOffset)
             .padding(.bottom, 18)
             .background {
-                HeroArtwork(detail: detail)
+                HeroArtwork(detail: detail, fadesToTransparent: true)
                     .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
             }
 
@@ -4374,20 +4398,47 @@ struct HeroArtwork: View {
     private let artworkURL: URL?
     private let usesPosterFallback: Bool
     private let accentColor: Color
+    /// Fades out to whatever is behind it instead of into the page's near-black, so an album page's color
+    /// can continue below the hero.
+    private let fadesToTransparent: Bool
 
-    init(detail: MediaDetail) {
+    init(detail: MediaDetail, fadesToTransparent: Bool = false) {
         artworkURL = URL(string: detail.displayBackdropURL ?? detail.displayPosterURL ?? "")
         usesPosterFallback = detail.displayBackdropURL == nil && detail.displayPosterURL != nil
         accentColor = Color(hex: detail.posterAccentColor) ?? SpinePalette.pageBackground
+        self.fadesToTransparent = fadesToTransparent
     }
 
     init(artworkURL: URL?, accentColor: Color = SpinePalette.pageBackground) {
         self.artworkURL = artworkURL
         usesPosterFallback = artworkURL != nil
         self.accentColor = accentColor
+        fadesToTransparent = false
     }
 
+    @ViewBuilder
     var body: some View {
+        if fadesToTransparent {
+            // The same curve as the near-black fade below, as opacity.
+            layers.mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0.48),
+                        .init(color: .white.opacity(0.88), location: 0.62),
+                        .init(color: .white.opacity(0.55), location: 0.78),
+                        .init(color: .white.opacity(0.18), location: 0.9),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            layers
+        }
+    }
+
+    private var layers: some View {
         ZStack {
             SpinePalette.pageBackground
 
@@ -4426,17 +4477,19 @@ struct HeroArtwork: View {
                 endPoint: .bottom
             )
 
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.48),
-                    .init(color: SpinePalette.pageBackground.opacity(0.12), location: 0.62),
-                    .init(color: SpinePalette.pageBackground.opacity(0.45), location: 0.78),
-                    .init(color: SpinePalette.pageBackground.opacity(0.82), location: 0.9),
-                    .init(color: SpinePalette.pageBackground, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            if !fadesToTransparent {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.48),
+                        .init(color: SpinePalette.pageBackground.opacity(0.12), location: 0.62),
+                        .init(color: SpinePalette.pageBackground.opacity(0.45), location: 0.78),
+                        .init(color: SpinePalette.pageBackground.opacity(0.82), location: 0.9),
+                        .init(color: SpinePalette.pageBackground, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
 
             RadialGradient(
                 colors: [.clear, .black.opacity(0.1)],
@@ -5724,21 +5777,20 @@ private struct MusicAlbumTracklistSection: View {
             if enrichmentState == .loading {
                 LazyVStack(spacing: 0) {
                     ForEach(1...4, id: \.self) { position in
-                        HStack(spacing: 12) {
-                            Text("\(position)")
-                                .frame(width: 28, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Loading track title")
-                                Text("Loading artist")
-                                    .font(.caption)
-                            }
-                            Spacer()
+                        MusicAlbumTrackRowLayout(number: "\(position)") {
+                            Text("Loading track title")
+                                .font(.body)
+                        } accessory: {
+                            EmptyView()
                         }
-                        .padding(.vertical, 10)
+                        if position < 4 {
+                            MusicAlbumTrackSeparator()
+                        }
                     }
                 }
                 .redacted(reason: .placeholder)
                 .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, -MusicTracklistMetrics.pageInset)
                 .accessibilityHidden(true)
                 .accessibilityIdentifier("music.tracklist.loading")
             } else if let release, hasTracks(release) {
@@ -5754,13 +5806,13 @@ private struct MusicAlbumTracklistSection: View {
                                 onSelect: { onSelectTrack(track) }
                             )
                             if track.id != medium.tracks.last?.id {
-                                Divider()
-                                    .overlay(.white.opacity(0.12))
-                                    .padding(.leading, 40)
+                                MusicAlbumTrackSeparator()
                             }
                         }
                     }
                 }
+                // Rows run edge to edge, so a pressed row highlights the full width, as in Apple Music.
+                .padding(.horizontal, -MusicTracklistMetrics.pageInset)
             } else {
                 ContentUnavailableView(
                     "Tracklist unavailable",
@@ -5792,52 +5844,99 @@ private struct MusicAlbumTracklistSection: View {
         }
         .foregroundStyle(.white.opacity(0.62))
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, MusicTracklistMetrics.margin)
         .padding(.top, 14)
         .padding(.bottom, 6)
     }
 }
 
-private struct MusicAlbumTrackRow: View {
-    @ScaledMetric(relativeTo: .caption) private var numberWidth = 28
+/// Apple Music's album tracklist, measured from its iOS 26 app: 20 pt margins, the track number centred
+/// 31 pt from the screen edge, titles 51 pt in, the trailing control 27 pt in, and 52 pt rows.
+private enum MusicTracklistMetrics {
+    /// The page's own horizontal padding, which the tracklist cancels to run edge to edge.
+    static let pageInset: CGFloat = 14
+    static let margin: CGFloat = 20
+    static let numberWidth: CGFloat = 22
+    static let numberSpacing: CGFloat = 9
+    static let rowHeight: CGFloat = 51
+}
 
+private struct MusicAlbumTrackRowLayout<Label: View, Accessory: View>: View {
+    @ScaledMetric(relativeTo: .body) private var numberWidth = MusicTracklistMetrics.numberWidth
+    @ScaledMetric(relativeTo: .body) private var minHeight = MusicTracklistMetrics.rowHeight
+
+    let number: String
+    @ViewBuilder let label: Label
+    @ViewBuilder let accessory: Accessory
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(number)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.5))
+                // Centred like Apple's; three-digit numbers spill evenly to both sides.
+                .fixedSize()
+                .frame(width: numberWidth)
+                .padding(.trailing, MusicTracklistMetrics.numberSpacing)
+
+            label
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            accessory
+                .padding(.leading, 16)
+                .padding(.trailing, 7)
+        }
+        .padding(.vertical, 11)
+        .frame(minHeight: minHeight)
+        .padding(.horizontal, MusicTracklistMetrics.margin)
+    }
+}
+
+/// Starts under the titles and stops at the right margin, like Apple Music's.
+private struct MusicAlbumTrackSeparator: View {
+    @ScaledMetric(relativeTo: .body) private var numberWidth = MusicTracklistMetrics.numberWidth
+
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.13))
+            .frame(height: 1)
+            .padding(.leading, MusicTracklistMetrics.margin + numberWidth + MusicTracklistMetrics.numberSpacing)
+            .padding(.trailing, MusicTracklistMetrics.margin)
+    }
+}
+
+private struct MusicAlbumTrackRow: View {
     let track: MusicTrack
     let albumCredits: [MusicArtistCredit]
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(track.number)
-                    .font(.system(size: 16, weight: .regular).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: numberWidth, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 3) {
+            MusicAlbumTrackRowLayout(number: track.number) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(track.title)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.94))
+                        .font(.body)
+                        .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                     if let artist = MusicAlbumPresentation.differingArtistCredit(
                         track: track,
                         albumCredits: albumCredits
                     ) {
                         Text(artist)
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.52))
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
-
-                Spacer(minLength: 10)
-
+            } accessory: {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    // Apple's "•••" is 15 pt wide; the chevron sits centred where it would.
+                    .frame(width: 15)
             }
-            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, 6)
+        .buttonStyle(MediaDetailRowButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MusicAlbumPresentation.trackAccessibilityLabel(track: track, albumCredits: albumCredits))
         .accessibilityHint("Opens song details")
