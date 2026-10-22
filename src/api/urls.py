@@ -11,6 +11,11 @@ from api.views.auth import (
     RegisterView,
 )
 from api.views.diary import DiaryDetailView, DiaryLikeView, DiaryListView, DiaryTagsView
+from api.views.featured import (
+    FeaturedHealthView,
+    FeaturedListsView,
+    FeaturedShelvesView,
+)
 from api.views.health import HealthView, MetaView
 from api.views.imports import (
     ExportCSVView,
@@ -20,7 +25,6 @@ from api.views.imports import (
     ImportTaskView,
 )
 from api.views.lists import (
-    FeaturedListsView,
     ListCollaboratorDetailView,
     ListCollaboratorsView,
     ListDetailView,
@@ -217,6 +221,8 @@ urlpatterns = [
     path("stats/me/most-logged/", MyStatsMostLoggedView.as_view(), name="api-my-stats-most-logged"),
     path("lists/", ListsView.as_view(), name="api-lists"),
     path("lists/featured/", FeaturedListsView.as_view(), name="api-featured-lists"),
+    path("lists/featured/shelves/", FeaturedShelvesView.as_view(), name="api-featured-shelves"),
+    path("lists/featured/health/", FeaturedHealthView.as_view(), name="api-featured-health"),
     path("lists/<int:list_id>/", ListDetailView.as_view(), name="api-list-detail"),
     path("lists/<int:list_id>/items/", ListItemsView.as_view(), name="api-list-items"),
     path("lists/<int:list_id>/items/reorder/", ListItemsReorderView.as_view(), name="api-list-items-reorder"),

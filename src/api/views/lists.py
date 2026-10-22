@@ -428,37 +428,6 @@ class ListsView(APIView):
         return Response(list_payload(custom_list, request=request), status=status.HTTP_201_CREATED)
 
 
-class FeaturedListsView(APIView):
-    """Return public lists selected for Search discovery."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        list_type = _list_type_query(request)
-        lists = (
-            CustomList.objects.filter(
-                is_featured=True,
-                visibility=CustomList.Visibility.PUBLIC,
-            )
-            .select_related("owner")
-            .prefetch_related("collaborators")
-            .order_by("featured_position", "id")
-        )
-        if list_type != "all":
-            lists = lists.filter(list_type=list_type)
-        return Response(
-            {
-                "count": lists.count(),
-                "next": None,
-                "previous": None,
-                "results": [
-                    list_payload(custom_list, request=request, include_preview_items=True)
-                    for custom_list in lists
-                ],
-            },
-        )
-
-
 class ListDetailView(APIView):
     """Read/update/delete a custom list."""
 
@@ -487,14 +456,22 @@ class ListDetailView(APIView):
         custom_list = self.get_object(request, list_id, include_items=include_items)
         if custom_list is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(
-            list_payload(
-                custom_list,
-                request=request,
-                include_items=include_items,
-                include_completion=True,
-            ),
+        from api.views.featured import featured_block
+
+        payload = list_payload(
+            custom_list,
+            request=request,
+            include_items=include_items,
+            include_completion=True,
         )
+        featured = featured_block(
+            custom_list,
+            request,
+            items_count=payload["entries_count"],
+        )
+        if featured is not None:
+            payload["featured"] = featured
+        return Response(payload)
 
     def patch(self, request, list_id):
         custom_list = get_object_or_404(CustomList, id=list_id)

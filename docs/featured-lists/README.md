@@ -169,7 +169,7 @@ The `list-media-types` branch is adding `CustomList.locked_media_types`. Once it
 
 - **`FeaturedListSync`**:
   - Identity: `key` (unique slug); `custom_list` (nullable one-to-one, `SET_NULL`, related name `featured_sync`); `definition_hash`; `fingerprint`.
-  - Content: `edition`; `content_changed_at`; `live_label`.
+  - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced).
   - Run state: `last_attempt_at`; `last_success_at`; `last_status` (`ok|unchanged|guarded|failed|empty`); `last_error` (sanitized, never containing a key); `consecutive_failures`; `lease_until`.
   - Counts: `entry_count`; `resolved_count`; `unresolved` (JSON, at most 50 rows of `{rank, key, title, year, creator}`).
 - **`FeaturedListSnapshot`**: `sync` (foreign key); `taken_on` (date); `edition`; `fingerprint`; `entries` (JSON `[[rank, entry_key, item_id|null], …]`). Unique on `(sync, taken_on)`. Written only when the fingerprint changes.
@@ -196,7 +196,9 @@ All of it is additive.
 **`GET /api/v1/lists/featured/` (legacy):**
 - Same shape as today.
 - By default `results` holds only `headline=True` lists plus any manually featured list that isn't in the registry, so installed builds keep seeing today's six. `?view=all` returns every featured list.
-- Each result gains an optional `featured` object, in the card shape below without `preview_items`.
+- Each result gains an optional `featured` object, in the card shape below without `preview_items` (`null` when the list has no card). Manually featured lists get one too, with `kind: "editorial"`, `cadence: "static"` and media types taken from their items.
+
+**`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
 
 **`GET /api/v1/lists/featured/shelves/`:**
 
@@ -219,7 +221,7 @@ All of it is additive.
 - **"Now":** lists inside or within 24 h of a live window, then charts whose content changed in the last 7 days. Live lists first, then `content_changed_at` descending. At most 10.
 - **Within a shelf:** live, then content changed in the last 7 days, then `position`.
 
-**`GET /api/v1/lists/featured/shelves/?media_type=movie`** returns `{"generated_at", "media_type": "movie", "shelves": [...]}`. There's one shelf per kind with lists, in the order chart, award, canon, community, curator, editorial, with titles "Charts", "Awards", "Critics & Canon", "Community", "Curators' Picks" and "Editorial". Each shelf holds all of its cards.
+**`GET /api/v1/lists/featured/shelves/?media_type=movie`** returns `{"generated_at", "media_type": "movie", "shelves": [...]}`. There's one shelf per kind with lists, in the order chart, award, canon, community, curator, editorial, with titles "Charts", "Awards", "Critics & Canon", "Community", "Curators' Picks" and "Editorial". Each shelf holds all of its cards, ordered like the landing shelf. `?media_type=mixed` does the same for "Across Media" (lists with 3 or more media types). An unknown value is a 400; a media type hidden by `app.exposure` is a 404. Empty shelves are left out, including "Now".
 
 **Card shape:**
 
@@ -230,11 +232,14 @@ All of it is additive.
  "cadence": "weekly", "period_label": "Week of Oct 13",
  "content_changed_at": "…", "last_synced_at": "…",
  "live": null,
- "preview_items": ["…≤5, the same MediaSummary objects list_payload already returns in preview_items, using w342 TMDB posters"]}
+ "preview_items": ["…≤5, the same MediaSummary objects list_payload already returns in preview_items, using w342 TMDB posters, each with an optional \"note\""]}
 ```
 
 - `cadence` is one of `live`, `daily`, `weekly`, `monthly`, `yearly`, `static`.
 - `live` is either `null` or `{"status": "upcoming"|"live"|"done", "label": "7 of 23 announced", "starts_at": "…", "ends_at": "…"}`.
+- `source.name` and `source.url` may be `null`. `period_label` is the sync's edition, or `null`.
+- Each preview item's `note` is chart movement against the list's previous content: `"▲2"`, `"▼1"` or `"NEW"`; `null` when its position didn't change, on a list's first sync, and for every kind other than `chart`. The writer stores it as `FeaturedListSync.item_notes` (`{"<item_id>": note}`) whenever it replaces a chart's items, so requests never scan snapshots.
+- People lists count people in `items_count`; their `preview_items` is empty.
 
 **`GET /api/v1/lists/featured/health/`:** allowed for staff, or with the header `X-Spine-Report-Token` matching `settings.FEATURED_REPORT_TOKEN`, compared with `hmac.compare_digest`. The setting defaults to `""`, which disables the token path. Everyone else gets a 404. `manage.py featured_lists_report [--json]` prints the same report.
 
