@@ -1379,6 +1379,7 @@ struct ProfileListDetailView: View {
     @State private var selectedPerson: PersonRef?
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var listHeaderWidth: CGFloat = 0
     @State private var edgeDragOffset: CGFloat = 0
 
     private let listRepository: ListRepository
@@ -1710,19 +1711,26 @@ struct ProfileListDetailView: View {
 
     private func listHeader(_ list: CustomListDetail, backdropURL: String?) -> some View {
         let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The same 3:2 backdrop strip as the media page, with the owner and title over its lower edge.
+        let stripHeight = BackdropLayout.stripHeight(width: listHeaderWidth, topInset: topSafeAreaInset)
         return VStack(alignment: .leading, spacing: 0) {
-        ZStack(alignment: .bottomLeading) {
-            if let backdropURL {
-                ProfileListBackdropArtwork(urlString: backdropURL)
+        listHeaderText(list)
+            .padding(.horizontal, 18)
+            // A description is the header's next line, just below the title.
+            .padding(.bottom, description.isEmpty ? 20 : 7)
+            .padding(
+                .top,
+                backdropURL == nil ? 18 : max(topSafeAreaInset + 56, stripHeight - 96)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .top) {
+                if let backdropURL {
+                    ProfileListBackdropArtwork(urlString: backdropURL)
+                        .frame(height: stripHeight)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
             }
-
-            listHeaderText(list)
-                .padding(.horizontal, 18)
-                // A description is the header's next line, just below the backdrop.
-                .padding(.bottom, description.isEmpty ? 20 : 7)
-                .padding(.top, backdropURL == nil ? 18 : topSafeAreaInset + 112)
-        }
-        .frame(maxWidth: .infinity, minHeight: backdropURL == nil ? nil : topSafeAreaInset + 408, alignment: .bottomLeading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listHeaderWidth = $0 }
 
         // The description sits below the backdrop, so the title stays where it is on every
         // list however long the description is.
