@@ -1,6 +1,7 @@
 """Independent checks for alternate game mutation paths and shared opinions."""
 
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -172,3 +173,29 @@ class GameTrackingEntryPointTests(TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.post(path, payload, format="json").status_code, 401)
         self.assertFalse(Game.objects.exists())
+
+    def test_first_planning_reuses_the_existing_item_without_a_provider_fetch(self):
+        """The first Planning PATCH on a known game skips the provider round trip."""
+        with patch(
+            "api.services.tracking.provider_services.get_media_metadata",
+            side_effect=AssertionError("provider fetch"),
+        ):
+            response = self.client.patch(self.url, {"status": Status.PLANNING.value}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["status"], Status.PLANNING.value)
+        self.assertEqual(Game.objects.get().item, self.item)
+
+    def test_first_planning_without_an_item_still_fetches_and_creates_it(self):
+        """An unknown game still gets its Item from provider metadata."""
+        with patch(
+            "api.services.tracking.provider_services.get_media_metadata",
+            return_value={"title": "Fetched game"},
+        ) as fetch:
+            response = self.client.patch(
+                "/api/v1/tracking/igdb/game/1942/", {"status": Status.PLANNING.value}, format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.data)
+        fetch.assert_called_once()
+        item = Item.objects.get(source="igdb", media_type="game", media_id="1942")
+        self.assertEqual(item.title, "Fetched game")
+        self.assertEqual(Game.objects.get(item=item).status, Status.PLANNING.value)
