@@ -5,11 +5,14 @@ from unittest.mock import patch
 from app.models import Item, MediaTypes, Sources
 from app.providers import services
 from lists.featured import ratings
-from lists.featured.registry import Guards
+from lists.featured.registry import Guards, live_window
 from lists.featured.writer import combine_notes
 from lists.featured.types import Entry, FetchResult
 from lists.models import CustomList, CustomListItem, FeaturedListSnapshot, FeaturedListSync, PersonListItem
 from lists.tests.featured.helpers import FeaturedTestCase, entry, make_definition
+
+
+CEREMONY = live_window("2027-03-14 16:00", "America/Los_Angeles", timedelta(hours=4))
 
 
 def movies(*media_ids, start=1):
@@ -151,18 +154,72 @@ class WriterTests(FeaturedTestCase):
             entry(2, "A again", media_type="movie", ids={"ref": "tmdb:movie:1"}, image="https://x/1.jpg", note="Nominee · Best Director"),
             entry(3, "B", media_type="movie", ids={"tmdb": "2"}, image="https://x/2.jpg"),
         ]
-        definition = make_definition(kind="award")
+        # A live ceremony: one film in two categories is one row.
+        definition = make_definition(kind="award", live_windows=(CEREMONY,))
         self.run_list(definition, entries)
         sync = FeaturedListSync.objects.get(key="test-list")
         first = str(Item.objects.get(media_id="1").pk)
         self.assertEqual(sync.entry_notes, {first: "Winner · Best Picture; Nominee · Best Director"})
         self.assertEqual(sync.item_notes, {})
+        self.assertEqual(
+            list(CustomListItem.objects.values_list("note", flat=True)),
+            ["Winner · Best Picture; Nominee · Best Director", ""],
+        )
 
         # Notes refresh even when the content is unchanged.
         changed = [replace(entries[0], note="Winner · Best Picture · 2027"), entries[2]]
         self.assertEqual(self.run_list(definition, changed).status, "unchanged")
         sync.refresh_from_db()
         self.assertEqual(sync.entry_notes, {first: "Winner · Best Picture · 2027"})
+        self.assertEqual(list(CustomListItem.objects.values_list("note", flat=True)), ["Winner · Best Picture · 2027", ""])
+
+    def test_award_history_keeps_a_row_per_win(self):
+        def show(media_id, note):
+            return entry(None, f"Show {media_id}", media_type="tv", ids={"tmdb": media_id}, image=f"https://x/{media_id}.jpg", note=note)
+
+        entries = [
+            show("1", "2023"),
+            show("2", "2021 · tie"),
+            show("3", "2021 · tie"),
+            show("1", "2022"),
+            show("1", "2022"),  # the same win twice in the source: one row
+            show("1", "2020"),
+        ]
+        definition = make_definition(kind="award", media_types=("tv",), is_ranked=False, cadence=timedelta(days=7))
+        result = self.run_list(definition, entries)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.stored_count, 5)
+        self.assertListRefs(result.custom_list, ["tmdb:tv:1", "tmdb:tv:2", "tmdb:tv:3", "tmdb:tv:1", "tmdb:tv:1"])
+        self.assertEqual(
+            list(result.custom_list.customlistitem_set.values_list("position", "occurrence", "note")),
+            [(1, 0, "2023"), (2, 0, "2021 · tie"), (3, 0, "2021 · tie"), (4, 1, "2022"), (5, 2, "2020")],
+        )
+        self.assertEqual(Item.objects.filter(media_id="1").count(), 1)
+
+        # A note that changes without the rows changing is rewritten on its own row.
+        changed = [replace(entries[0], note="2023 · tie"), *entries[1:]]
+        self.assertEqual(self.run_list(definition, changed).status, "unchanged")
+        self.assertEqual(
+            list(result.custom_list.customlistitem_set.values_list("occurrence", "note")),
+            [(0, "2023 · tie"), (0, "2021 · tie"), (0, "2021 · tie"), (1, "2022"), (2, "2020")],
+        )
+
+    def test_only_award_histories_keep_repeats(self):
+        repeated = [
+            entry(1, "A", media_type="movie", ids={"tmdb": "1"}, image="https://x/1.jpg", note="Week 1"),
+            entry(2, "A", media_type="movie", ids={"tmdb": "1"}, image="https://x/1.jpg", note="Week 2"),
+        ]
+        self.assertTrue(make_definition(kind="award").keeps_repeats)
+        for definition in (
+            make_definition(),  # a chart
+            make_definition(kind="award", live_windows=(CEREMONY,)),
+        ):
+            with self.subTest(kind=definition.kind, live=bool(definition.live_windows)):
+                self.assertFalse(definition.keeps_repeats)
+                result = self.run_list(definition, repeated)
+                self.assertListRefs(result.custom_list, ["tmdb:movie:1"])
+        self.assertFalse(make_definition(kind="award", list_type="people", media_types=("book",), position=950).keeps_repeats)
 
     def test_chart_movement_and_notes_combine(self):
         definition = make_definition()

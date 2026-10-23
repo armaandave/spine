@@ -82,14 +82,19 @@ export SPINE_DEV_SIGN_IN=1
 export REDIS_URL=redis://localhost:6379/5
 export CELERY_REDIS_URL=redis://localhost:6379/5
 export REDIS_PREFIX="local-$(basename "$top"):"
-# Dev shares production's Hardcover key, so featured-list syncs never spend it here.
-export FEATURED_HARDCOVER_DAILY_BUDGET=0
+# Cache provider metadata like production, so phone timings match it.
+export DEV_CACHE=redis
+# Dev shares production's Hardcover key (5,000 requests a day), so featured-list syncs
+# here get a small slice of it: enough to match new books, never enough to starve prod.
+export FEATURED_HARDCOVER_DAILY_BUDGET=500
 
 cd "$top/src"
 vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
 [ "$vendor" = sqlite ] || die "the settings use '$vendor', not this checkout's SQLite database"
 echo "Migrating this checkout's SQLite database..."
 uv run --locked python manage.py migrate --noinput >/dev/null
+# Start from an empty cache (this checkout's prefix only), so a restart serves this code's data.
+uv run --locked python manage.py shell -c 'from django.core.cache import cache; cache.delete_pattern("*")' >/dev/null
 
 pids=()
 cleanup() { [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true; }

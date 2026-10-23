@@ -55,7 +55,7 @@ Rules:
 - Fetch through `lists.featured.helpers`: `get_json(provider, url, params=, headers=)`, `get_text(...)` (HTML), `post_json(provider, url, json=|data=, headers=)`. They send `User-Agent: Spine/1.0 (+https://github.com/armaandave/spine)`, use the shared rate-limited session, and raise `AdapterError` with a key-free message. Tests mock them all by patching `app.providers.services.api_request`.
 - To call Spine's providers, go through the module (`from app.providers import tmdb` then `tmdb.find(...)`), never `from app.providers.tmdb import find`, so patches keep working.
 - On a source failure raise `AdapterError("…")`. Never put a key, token or keyed URL in a message (`helpers.sanitize()` strips configured keys if you must include provider text).
-- Return entries in source order. Ranked lists are sorted by `rank`; entries with the same `key` are dropped after the first.
+- Return entries in source order. Ranked lists are sorted by `rank`; entries with the same `key` are dropped after the first. All-time award lists are the exception: return one entry per win, noted with its year alone ("2026", "2025 · tie"), and don't merge a work's wins; there only an entry with the same `key` *and* `note` is dropped (README, "Award histories").
 - `version(definition) -> str` is optional: a hash of local inputs (the static adapter hashes its CSV) so editing them re-syncs the list.
 
 ## Entries
@@ -85,7 +85,7 @@ Rules:
 
 - `isbns`: every ISBN you have, best first. Books try Hardcover, then Open Library, per ISBN.
 - `image`: a poster URL lets the writer create a new Item without a provider call. Without one (or without a title) the writer fetches the provider's metadata once; if that fails, the entry is unresolved instead of getting placeholder art.
-- `note`: free text shown later ("Winner", "Best Picture · 2027").
+- `note`: free text shown later ("Winner · Best Picture", "▲2", "Inducted 2019"); on all-time award lists, the year alone ("2027").
 - `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it.
 
 Anything without a direct id goes to a strict title search: exact normalized title (or the result's main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. When nothing matches that way, the entry's own main title is tried ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of the Senate"), but only when the year or creator agrees and exactly one result qualifies, so adapters no longer need to strip subtitles themselves. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); entries past the cap are deferred and searched on a later run. Results are cached under `featured:resolve:…` (hits 45 days, refreshed on every hit; misses 1 day), so a re-run is cheap.
@@ -155,7 +155,7 @@ uv run --locked python manage.py sync_featured_list steam-weekly-top-sellers    
 uv run --locked python manage.py featured_lists_report                                   # or --json
 ```
 
-The dry run prints every entry as `#rank title (year) / creator -> ref [how]  {entry_key}`, then `Resolved n/m (…%); k unique items; u unresolved; s title searches.`, the unresolved rows, and what the guards would say. `--show N` prints only the first N entries. Wrap long runs in `agent-cleanup` as `README.md` describes.
+The dry run prints every entry as `#rank title (year) / creator -> ref [how]  {entry_key}`, then `Resolved n/m (…%); k rows; u unresolved; s title searches.`, the unresolved rows, and what the guards would say. `--show N` prints only the first N entries. Wrap long runs in `agent-cleanup` as `README.md` describes.
 
 ## Tests
 

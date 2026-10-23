@@ -5,6 +5,19 @@ extension Notification.Name {
     static let authenticatedRequestSucceeded = Notification.Name("spine.authenticatedRequestSucceeded")
 }
 
+/// A response type that a successful empty body (a 204) decodes to.
+protocol EmptyBodyDecodable {
+    static var emptyBodyValue: Self { get }
+}
+
+extension EmptyResponse: EmptyBodyDecodable {
+    static var emptyBodyValue: EmptyResponse { EmptyResponse() }
+}
+
+extension Optional: EmptyBodyDecodable where Wrapped: Decodable {
+    static var emptyBodyValue: Wrapped? { nil }
+}
+
 struct APIClient: Sendable {
     static let defaultSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -227,8 +240,8 @@ struct APIClient: Sendable {
         }
 
         do {
-            if data.isEmpty, T.self == EmptyResponse.self {
-                return EmptyResponse() as! T
+            if data.isEmpty, let type = T.self as? EmptyBodyDecodable.Type {
+                return type.emptyBodyValue as! T
             }
             return try JSONDecoder.api.decode(T.self, from: data)
         } catch {

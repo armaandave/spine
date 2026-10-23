@@ -124,6 +124,16 @@ class AwardTests(WikidataTestCase):
         # A person's IMDb id is not a title id.
         self.assertNotIn("imdb", result.entries[1].ids)
 
+    def test_a_work_that_won_twice_is_an_entry_per_win(self):
+        rows = "wikidata-test,1931,Q272036,,,,,won again\nwikidata-test,1929,Q272036,,,,,won first\n"
+        with supplement(rows):
+            result, _ = self.fetch()
+        self.assertEqual(
+            [(entry.title, entry.note, entry.key) for entry in result.entries if entry.title == "Wings"],
+            [("Wings", "1931", "tmdb:movie:28966"), ("Wings", "1929", "tmdb:movie:28966")],
+        )
+        self.assertEqual([entry.title for entry in result.entries].index("Wings"), 2)  # 1931, after the 1997 tie
+
     def test_non_works_and_undated_winners_are_left_out(self):
         result, _ = self.fetch()
         titles = {entry.title for entry in result.entries}

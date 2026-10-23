@@ -260,6 +260,7 @@ SpecialModels = [
     "MediaSeriesItem",
     "ItemFilterFacet",
     "BookCreditOverride",
+    "MusicGenreAlbum",
     "UserMessage",
 ]
 for model in app_models:
