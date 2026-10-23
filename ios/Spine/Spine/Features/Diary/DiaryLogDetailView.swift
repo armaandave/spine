@@ -814,7 +814,7 @@ private struct DiaryLogEditSheet: View {
                     }
                 }
             }
-            .background { SpinePageBackground() }
+            .background { LogBackdrop(url: URL(string: viewModel.entry.media.displayPosterURL ?? "")) }
             .navigationTitle("Edit Log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

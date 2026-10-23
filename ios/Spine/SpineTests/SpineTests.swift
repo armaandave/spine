@@ -7235,14 +7235,6 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testLogRatingCardShowsTheStarValue() {
-        XCTAssertEqual(LogRatingCard.value(for: 1), "0.5")
-        XCTAssertEqual(LogRatingCard.value(for: 8), "4")
-        XCTAssertEqual(LogRatingCard.value(for: 9), "4.5")
-        XCTAssertEqual(LogRatingCard.value(for: 10), "5")
-    }
-
-    @MainActor
     func testMediaLogCreatesFinishedDiaryLog() async {
         let diary = RecordingDiaryRepository()
         let tracking = RecordingTrackingRepository()

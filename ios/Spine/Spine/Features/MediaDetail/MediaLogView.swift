@@ -504,22 +504,11 @@ struct MediaLogView: View {
         )
     }
 
-    /// A flat tint in the artwork's color. A blurred image here is redrawn on every frame
-    /// the form scrolls or the keyboard moves, which made the sheet stutter.
     private var backdrop: some View {
-        ZStack(alignment: .top) {
-            SpinePalette.pageBackground
-
-            LinearGradient(
-                colors: [(Color(hex: viewModel.detail.posterAccentColor) ?? .clear).opacity(0.4), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 380)
-        }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
+        LogBackdrop(
+            url: URL(string: viewModel.detail.displayBackdropURL ?? viewModel.detail.displayPosterURL ?? ""),
+            accentColor: Color(hex: viewModel.detail.posterAccentColor)
+        )
     }
 
     @ViewBuilder

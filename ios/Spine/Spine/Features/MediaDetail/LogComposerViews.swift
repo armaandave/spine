@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 /// Rows shared by the log sheet (`MediaLogView`) and the Edit Log sheet. Both are
@@ -91,6 +92,62 @@ final class LogTagDraft {
     }
 }
 
+/// A faint, blurred wash of the media's artwork behind the top of a log form, with a soft
+/// sheen, fading into the page. The blur and color boost are baked into the cached image when
+/// it loads, so nothing is re-blurred while the form scrolls or the keyboard moves.
+struct LogBackdrop: View {
+    let url: URL?
+    var accentColor: Color?
+
+    private static let height: CGFloat = 380
+
+    static let processors: [any ImageProcessing] = [
+        ImageProcessors.GaussianBlur(radius: 22),
+        ImageProcessors.CoreImageFilter(
+            name: "CIColorControls",
+            parameters: ["inputSaturation": 1.35],
+            identifier: "spine.log-backdrop.saturation-1.35"
+        ),
+    ]
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            SpinePalette.pageBackground
+
+            SpineAsyncImage(url: url, thumbnailSize: CGSize(width: 180, height: 110), processors: Self.processors) { phase in
+                if case let .success(image) = phase {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    (accentColor ?? .clear).opacity(0.3)
+                }
+            }
+            .frame(height: Self.height)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .opacity(0.75)
+
+            LinearGradient(colors: [.white.opacity(0.08), .clear], startPoint: .top, endPoint: .center)
+                .frame(height: Self.height)
+
+            LinearGradient(
+                stops: [
+                    .init(color: SpinePalette.pageBackground.opacity(0.2), location: 0),
+                    .init(color: SpinePalette.pageBackground.opacity(0.55), location: 0.45),
+                    .init(color: SpinePalette.pageBackground, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: Self.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
 /// Poster, title and subtitle at the top of a log form.
 struct LogHeader: View {
     let title: String
@@ -139,7 +196,7 @@ struct LogHeader: View {
     }
 }
 
-/// The rating card: stars with their value, and Like and Rewatch under them.
+/// The rating card: stars, and Like and Rewatch under them.
 struct LogRatingCard: View {
     @Binding var ratingSteps: Int
     @Binding var liked: Bool
@@ -151,24 +208,12 @@ struct LogRatingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                LogStars(
-                    steps: $ratingSteps,
-                    accessibilityValue: ratingLabel,
-                    accessibilityIdentifier: ratingIdentifier,
-                    onScrub: onScrub
-                )
-
-                Spacer(minLength: 8)
-
-                if ratingSteps > 0 {
-                    Text(Self.value(for: ratingSteps))
-                        .font(.title3.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                }
-            }
+            LogStars(
+                steps: $ratingSteps,
+                accessibilityValue: ratingLabel,
+                accessibilityIdentifier: ratingIdentifier,
+                onScrub: onScrub
+            )
 
             HStack(spacing: 24) {
                 toggle(liked ? "Liked" : "Like", systemImage: liked ? "heart.fill" : "heart", tint: .pink, isOn: liked) {
@@ -186,11 +231,6 @@ struct LogRatingCard: View {
             }
         }
         .padding(.vertical, 6)
-    }
-
-    /// "4.5" for nine half-steps, "4" for eight.
-    static func value(for steps: Int) -> String {
-        steps.isMultiple(of: 2) ? "\(steps / 2)" : "\(steps / 2).5"
     }
 
     private func toggle(
