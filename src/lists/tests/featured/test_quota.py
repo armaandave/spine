@@ -1,5 +1,6 @@
 """Provider budgets and 429 back-off for featured syncs (``app.providers.quota``)."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -199,16 +200,39 @@ class EngineDeferralTests(FeaturedTestCase):
         return FeaturedListSync.objects.get(key="test-list")
 
     def test_a_new_list_is_written_with_what_resolved_and_retried_at_midnight(self):
-        result = self.run_list(self.definition, [*books(1), *isbn_books(2, 3)], now=NOW)
+        # 9 of 10 matched clears the 90% bar even with the waiting entry counted as missing.
+        result = self.run_list(self.definition, [*books(*range(1, 10)), *isbn_books(10)], now=NOW)
 
         self.assertEqual(result.status, "deferred")
-        self.assertListRefs(result.custom_list, ["hardcover:book:1"])
+        self.assertListRefs(result.custom_list, [f"hardcover:book:{number}" for number in range(1, 10)])
         sync = self.sync()
         self.assertEqual((sync.last_status, sync.consecutive_failures), ("deferred", 0))
         self.assertEqual(sync.deferred_until, MIDNIGHT)
         self.assertIn("daily budget of 0 requests", sync.last_error)
-        self.assertEqual((sync.entry_count, sync.resolved_count), (3, 1))
+        self.assertEqual((sync.entry_count, sync.resolved_count), (10, 9))
         self.assertTrue(all("deferred until" in row["reason"] for row in sync.unresolved))
+
+    def test_waiting_entries_count_as_missing_against_the_bar(self):
+        # Production on 2026-10-23: 1 of 15 books matched and 14 waited for Hardcover's
+        # budget. 1 of 15 is below the default 50% bar, so the list doesn't appear yet.
+        definition = make_definition(media_types=("book",), position=350)
+        result = self.run_list(definition, [*books(1), *isbn_books(*range(2, 16))], now=NOW)
+
+        self.assertEqual(result.status, "deferred")
+        self.assertIn("the list was left as it is", result.message)
+        self.assertFalse(CustomList.objects.exists())
+        sync = self.sync()
+        self.assertEqual((sync.last_status, sync.deferred_until, sync.consecutive_failures), ("deferred", MIDNIGHT, 0))
+        self.assertEqual((sync.entry_count, sync.resolved_count, sync.last_success_at), (15, 1, None))
+        self.assertEqual(len(sync.unresolved), 14)
+
+    def test_a_list_that_clears_its_bar_with_waiting_entries_counted_as_missing_is_written(self):
+        definition = make_definition(media_types=("book",), position=350)
+        result = self.run_list(definition, [*books(*range(1, 9)), *isbn_books(*range(9, 16))], now=NOW)  # 8 of 15
+
+        self.assertEqual(result.status, "deferred")
+        self.assertEqual(result.custom_list.items.count(), 8)
+        self.assertEqual((self.sync().deferred_until, self.sync().resolved_count), (MIDNIGHT, 8))
 
     def test_a_current_list_is_left_as_it_is_rather_than_shrunk(self):
         with override_settings(FEATURED_HARDCOVER_DAILY_BUDGET=100):
@@ -236,7 +260,8 @@ class EngineDeferralTests(FeaturedTestCase):
         self.assertEqual(result.status, "guarded")  # 1 of 2 non-deferred entries resolved
 
     def test_metadata_for_new_items_counts_and_defers(self):
-        result = self.run_list(self.definition, [*books(1), entry(2, "", media_type="book", ids={"hardcover": "2"})], now=NOW)
+        definition = replace(self.definition, guards=Guards(min_resolve_rate=0.5))  # 1 of 2 clears it
+        result = self.run_list(definition, [*books(1), entry(2, "", media_type="book", ids={"hardcover": "2"})], now=NOW)
         self.assertEqual(result.status, "deferred")
         self.assertListRefs(result.custom_list, ["hardcover:book:1"])
         self.assertIn("deferred until", self.sync().unresolved[0]["reason"])

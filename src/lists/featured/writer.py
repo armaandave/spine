@@ -5,8 +5,9 @@ only network step), ``check_guards`` refuses suspicious results, and ``commit`` 
 everything else in one transaction.
 
 Entries deferred by a provider's budget or rate limit (``Resolution.deferred``) don't
-count toward the resolve rate. A run with deferred entries writes only when the list
-wouldn't shrink (``writes_despite_deferrals``), and is retried at ``deferred_until``.
+count toward the guards' resolve rate. A run with deferred entries writes only when the
+list clears its resolve rate with them counted as unmatched and wouldn't shrink
+(``writes_despite_deferrals``), and is retried at ``deferred_until``.
 """
 
 import hashlib
@@ -73,9 +74,15 @@ def retry_at(resolutions):
 def writes_despite_deferrals(definition, resolutions, previous_count):
     """Return whether a run with deferred entries should still write the list.
 
-    Only when the list wouldn't shrink: a new list appears with what resolved, and a
-    growing one keeps its progress, but a current list is never cut short for a day.
+    Only when it clears the list's ``min_resolve_rate`` with the waiting entries counted
+    as unmatched, so a list never appears with 1 of its 15 books, and only when it
+    wouldn't shrink: a new list appears once it clears that bar, and a growing one keeps
+    its progress, but a current list is never cut short for a day.
     """
+    counted = countable(resolutions)
+    matched = sum(1 for resolution in counted if resolution.match is not None)
+    if matched / len(counted) < definition.guards.min_resolve_rate:
+        return False
     stored = len(ordered_matches(definition, resolutions))
     return stored > 0 and stored >= previous_count
 
