@@ -83,6 +83,7 @@ The app uses `python-decouple` for configuration. You can set environment variab
 - `DEBUG=True` - Enable debug mode (default: False)
 - `SECRET_KEY=your-secret-key` - Django secret key
 - `REDIS_URL=redis://localhost:6379` - Redis connection URL (optional for dev)
+- `DEV_CACHE=redis` - Use the Redis cache even with `DEBUG=True` (default: no cache in debug)
 - `TMDB_API=your-api-key` - TMDB API key (optional)
 - `MAL_API=your-api-key` - MyAnimeList API key (optional)
 - Other API keys as needed

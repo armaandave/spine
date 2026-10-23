@@ -5530,9 +5530,18 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["backdrop_url"], "https://example.com/game-backdrop.jpg")
 
-    def test_community_stats_include_truthful_rating_distribution(self):
-        user = get_user_model().objects.create_user(username="rater", password="strong-password-123")
-        other = get_user_model().objects.create_user(username="other", password="strong-password-123")
+    def test_community_stats_count_each_persons_current_rating_once(self):
+        def person(name, *, private=False):
+            user = get_user_model().objects.create_user(username=name, password="strong-password-123")
+            if private:
+                user.profile_private = True
+                user.save(update_fields=["profile_private"])
+            return user
+
+        relogger = person("relogger")
+        rail_rater = person("railrater")
+        hidden = person("hidden", private=True)
+        unrated = person("unrated")
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.MOVIE.value,
@@ -5541,19 +5550,25 @@ class ApiV1FoundationTests(TestCase):
             image="https://example.com/fight-club.jpg",
         )
         now = timezone.now()
-        DiaryEntry.objects.create(user=user, item=item, consumed_at=now, rating="8.0", visibility="public")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating="8.0", visibility="followers")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating="9.0", visibility="private")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating=None, visibility="public")
+        # Logged twice: only the current rating, 4.5 stars, counts.
+        DiaryEntry.objects.create(user=relogger, item=item, consumed_at=now, rating="6.0", visibility="public")
+        DiaryEntry.objects.create(user=relogger, item=item, consumed_at=now, rating="9.0", visibility="public")
+        Movie.objects.create(user=relogger, item=item, status=Status.COMPLETED.value, score="9.0")
+        # Rated from the rail without a log: counts.
+        Movie.objects.create(user=rail_rater, item=item, status=Status.COMPLETED.value, score="8.0")
+        # A private account's rating stays out.
+        Movie.objects.create(user=hidden, item=item, status=Status.COMPLETED.value, score="2.0")
+        # Watched without a rating: nothing to count.
+        Movie.objects.create(user=unrated, item=item, status=Status.COMPLETED.value)
 
         response = self.client.get("/api/v1/media/tmdb/movie/550/community/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["average_rating"], "4.17")
-        self.assertEqual(response.data["rating_count"], 3)
+        self.assertEqual(response.data["average_rating"], "4.25")
+        self.assertEqual(response.data["rating_count"], 2)
         self.assertEqual(
             response.data["rating_distribution"],
-            [{"rating": "4.0", "count": 2}, {"rating": "4.5", "count": 1}],
+            [{"rating": "4.0", "count": 1}, {"rating": "4.5", "count": 1}],
         )
 
     def test_media_reviews_endpoint_returns_public_review_cards(self):

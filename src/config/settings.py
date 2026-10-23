@@ -21,6 +21,8 @@ from decouple import (
 from django.core.cache import CacheKeyWarning
 from django.core.exceptions import ImproperlyConfigured
 
+from config.cache_settings import cache_settings
+
 BASE_URL = config("BASE_URL", default=None)
 if BASE_URL:
     FORCE_SCRIPT_NAME = BASE_URL
@@ -249,20 +251,13 @@ else:
 CACHE_TIMEOUT = 86400  # 24 hours
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379")
 KEY_PREFIX = f"{REDIS_PREFIX}" if REDIS_PREFIX else ""
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.dummy.DummyCache",
-    } if DEBUG else {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
-        "TIMEOUT": CACHE_TIMEOUT,
-        "VERSION": 16,
-        "KEY_PREFIX": KEY_PREFIX,
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
-    },
-}
+CACHES = cache_settings(
+    debug=DEBUG,
+    dev_cache=config("DEV_CACHE", default=""),
+    redis_url=REDIS_URL,
+    key_prefix=KEY_PREFIX,
+    timeout=CACHE_TIMEOUT,
+)
 
 # not using Memcached, ignore CacheKeyWarning
 # https://docs.djangoproject.com/en/stable/topics/cache/#cache-key-warnings
