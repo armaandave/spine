@@ -632,6 +632,7 @@ def get_user_poster_image(item, user):
     if not all([source, media_type, media_id]):
         return default_image
     
+    from app.curation import curated_image_url
     from app.models import CustomPosterPreference, Item
     try:
         # First try to get the Item instance
@@ -647,10 +648,12 @@ def get_user_poster_image(item, user):
         db_item = Item.objects.filter(**filters).first()
         if db_item is None:
             return default_image
-        # Then get the custom preference
-        pref = CustomPosterPreference.objects.get(user=user, item=db_item)
+        # Then get the custom preference, else an admin's pick
+        pref = CustomPosterPreference.objects.filter(user=user, item=db_item).first()
+        if pref is None:
+            return curated_image_url(CustomPosterPreference, db_item) or default_image
         return pref.custom_image_url
-    except (CustomPosterPreference.DoesNotExist, AttributeError):
+    except AttributeError:
         return default_image
 
 

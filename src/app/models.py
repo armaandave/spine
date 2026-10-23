@@ -2666,6 +2666,8 @@ class CustomPosterPreference(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
     custom_image_url = models.URLField()
+    # Tints the picker's own detail page; the Item's color follows the default poster.
+    accent_color = models.CharField(max_length=8, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

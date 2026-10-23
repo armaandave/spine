@@ -34,6 +34,7 @@ from rest_framework.exceptions import ValidationError
 from api.serializers.common import media_summary_from_item, prime_collection_items
 from api.services import completion as completion_service
 from app import config, exposure
+from app.curation import prime_curated_artwork
 from app.models import (
     USER_OWNED_MEDIA_TYPES,
     DiaryEntry,
@@ -452,10 +453,13 @@ def _series_progress(*, user, request):
     tracked_ids = completion_service.tracked_item_ids(user)
     if not tracked_ids:
         return []
-    series_rows = (
+    series_rows = list(
         MediaSeries.objects.filter(items__id__in=tracked_ids)
         .prefetch_related("memberships__item")
-        .distinct()
+        .distinct(),
+    )
+    prime_curated_artwork(
+        membership.item for series in series_rows for membership in list(series.memberships.all())[:3]
     )
     progress = []
     for series in series_rows:

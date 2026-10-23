@@ -40,6 +40,7 @@ from api.services import filters as filter_service
 from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
+from app.curation import prime_curated_artwork
 from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
@@ -212,6 +213,7 @@ def list_payload(
             if include_preview_items and not include_items:
                 list_items = list_items[:LIST_PREVIEW_ITEM_LIMIT]
             list_items = list(list_items)
+            prime_curated_artwork(list_item.item for list_item in list_items)
             summaries = _list_item_summaries(
                 [list_item.item for list_item in list_items],
                 request,

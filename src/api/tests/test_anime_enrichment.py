@@ -519,7 +519,7 @@ class AnimeArtworkTests(TestCase):
         self.assertTrue(backdrops[0]["is_selected"])
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#abcdef"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#abcdef")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#abcdef")
     def test_anime_artwork_preferences_use_existing_models(
         self,
         _accent_mock,
