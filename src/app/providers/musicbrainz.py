@@ -397,6 +397,9 @@ def refresh_genre_albums():
     if failed * 10 > len(artist_mbids):
         msg = f"ListenBrainz failed for {failed} of {len(artist_mbids)} artists."
         raise RuntimeError(msg)
+    if not albums:
+        msg = "ListenBrainz returned no albums."
+        raise RuntimeError(msg)
 
     page_views = _wikipedia_page_views(
         {
@@ -457,13 +460,12 @@ def _wikipedia_page_views(album_titles):
             headers=_headers(),
             request_session=services.genre_refresh_session,
         )
-        sitelinks = {}
+        best = {}
         for row in data["results"]["bindings"]:
-            release_group_mbid = row["rg"]["value"]
-            links = _positive_int(row["links"]["value"])
-            if links >= sitelinks.get(release_group_mbid, -1):
-                sitelinks[release_group_mbid] = links
-                articles[release_group_mbid] = row["title"]["value"]
+            # Most sitelinks wins; the title breaks ties so every week picks the same.
+            candidate = (_positive_int(row["links"]["value"]), row["title"]["value"])
+            best[row["rg"]["value"]] = max(candidate, best.get(row["rg"]["value"], candidate))
+        articles.update({mbid: title for mbid, (_, title) in best.items()})
     sharing = {}
     for release_group_mbid in release_group_mbids:
         if release_group_mbid in articles:

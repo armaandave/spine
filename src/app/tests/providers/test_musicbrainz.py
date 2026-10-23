@@ -622,6 +622,26 @@ class MusicBrainzTests(TestCase):
 
         self.assertTrue(MusicGenreAlbum.objects.filter(release_group_mbid="gkmc").exists())
 
+    @override_settings(LISTENBRAINZ_TOKEN="lb-token")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_keeps_old_albums_when_listenbrainz_is_empty(
+        self,
+        api_request,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="hip hop",
+            release_group_mbid="gkmc",
+            title="good kid, m.A.A.d city",
+            listeners=85_000,
+            listens=850_000,
+        )
+        api_request.return_value = {"payload": {"artists": []}}
+
+        with self.assertRaisesMessage(RuntimeError, "ListenBrainz returned no albums."):
+            musicbrainz.refresh_genre_albums()
+
+        self.assertTrue(MusicGenreAlbum.objects.filter(release_group_mbid="gkmc").exists())
+
     @override_settings(LISTENBRAINZ_TOKEN="")
     @patch("app.providers.musicbrainz.services.api_request")
     def test_refresh_genre_albums_needs_a_listenbrainz_token(self, api_request):
