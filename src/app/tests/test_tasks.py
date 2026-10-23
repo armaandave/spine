@@ -27,6 +27,7 @@ from app.tasks import (
     enrich_external_ratings_batch,
     enqueue_external_rating_batches,
     queue_stale_external_ratings,
+    refresh_music_genre_albums,
 )
 from config.celery import app as celery_app
 
@@ -422,3 +423,22 @@ class ExternalRatingTaskTests(TestCase):
         self.assertEqual(result, {"selected": 2, "batches": 1})
         enqueue_mock.assert_called_once_with([3, 7])
         refresh_mock.assert_not_called()
+
+
+class MusicGenreAlbumsTaskTests(TestCase):
+    """Test the weekly music genre album refresh."""
+
+    @patch("app.providers.musicbrainz.refresh_genre_albums")
+    def test_weekly_refresh_runs_on_the_featured_worker(self, refresh_mock):
+        refresh_mock.return_value = {"albums": 3}
+
+        self.assertEqual(refresh_music_genre_albums(), {"albums": 3})
+        refresh_mock.assert_called_once_with()
+        self.assertEqual(
+            settings.CELERY_BEAT_SCHEDULE["refresh_music_genre_albums"]["task"],
+            "Refresh music genre albums",
+        )
+        self.assertEqual(
+            settings.CELERY_TASK_ROUTES["Refresh music genre albums"],
+            {"queue": "featured"},
+        )
