@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.templatetags.app_tags import get_user_poster_image
 from app.utils.color import build_accent_palette
+from lists.models import CustomList, CustomListItem
 
 PROVIDER_POSTER = "https://example.com/provider-poster.jpg"
 CURATED_POSTER = "https://example.com/curated-poster.jpg"
@@ -34,6 +35,14 @@ AUTOMATIC_LOGO = {
     "height": 400,
     "aspect_ratio": 3.0,
 }
+
+
+def _admin_pick_queries(queries):
+    """Count artwork-pick queries filtered to admins (``is_staff`` = true)."""
+    return sum(
+        "preference" in query["sql"] and '"is_staff"' in query["sql"].split("WHERE", 1)[-1]
+        for query in queries.captured_queries
+    )
 
 
 def _movie_metadata(media_id="550"):
@@ -172,11 +181,37 @@ class CuratedArtworkTests(TestCase):
                 self.assertEqual(media["poster_url"], CURATED_POSTER)
                 self.assertEqual(media["backdrop_url"], CURATED_BACKDROP)
             MediaLike.objects.filter(user=self.viewer).delete()
-            # Admin picks are the only artwork queries that join on is_staff.
-            return sum("is_staff" in query["sql"] for query in queries.captured_queries)
+            return _admin_pick_queries(queries)
 
         self.assertEqual(curator_queries(1), 2)
         self.assertEqual(curator_queries(4), 2)
+
+    def test_list_detail_loads_curator_artwork_in_bounded_queries(self):
+        self.client.force_authenticate(self.viewer)
+
+        def curator_queries(count):
+            custom_list = CustomList.objects.create(owner=self.viewer, name=f"Books {count}")
+            for index in range(count):
+                item = Item.objects.create(
+                    source=Sources.OPENLIBRARY.value,
+                    media_type=MediaTypes.BOOK.value,
+                    media_id=f"OL{count}-{index}M",
+                    title=f"Book {index}",
+                    image=PROVIDER_POSTER,
+                )
+                self._curate(CustomPosterPreference, CURATED_POSTER, item=item)
+                CustomListItem.objects.create(custom_list=custom_list, item=item, position=index)
+            with CaptureQueriesContext(connection) as queries:
+                response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                {item["poster_url"] for item in response.data["items"]},
+                {CURATED_POSTER},
+            )
+            return _admin_pick_queries(queries)
+
+        self.assertEqual(curator_queries(1), 2)
+        self.assertEqual(curator_queries(5), 2)
 
     @patch("api.services.media.get_poster_accent_from_url", return_value="#112233")
     def test_non_curator_poster_pick_stays_private(self, _accent_mock):
