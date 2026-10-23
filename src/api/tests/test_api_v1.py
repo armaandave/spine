@@ -882,6 +882,50 @@ class ApiV1FoundationTests(TestCase):
         )
         metadata_mock.assert_called_once_with(MediaTypes.GAME.value, game.media_id, Sources.IGDB.value)
 
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {**metadata, "backdrop": "https://example.com/berserk-banner.jpg"},
+    )
+    @patch("app.providers.services.get_media_metadata", return_value={"media_id": "2"})
+    def test_list_detail_uses_the_manga_page_backdrop(self, metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-first-manga", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga")
+        manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id="2", title="Berserk")
+        CustomListItem.objects.create(custom_list=custom_list, item=manga, position=1)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["items"][0]["backdrop_url"], "https://example.com/berserk-banner.jpg")
+        enrich_mock.assert_called_once()
+
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {
+            **metadata,
+            "backdrop": "https://example.com/second-banner.jpg" if metadata["media_id"] == "second" else None,
+        },
+    )
+    @patch(
+        "app.providers.services.get_media_metadata",
+        side_effect=lambda _media_type, media_id, _source: {"media_id": media_id},
+    )
+    def test_list_header_falls_back_to_the_next_title_with_a_backdrop(self, _metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-next-backdrop", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga Awards")
+        for position, media_id in enumerate(["first", "second", "third"], start=1):
+            manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id=media_id, title=media_id)
+            CustomListItem.objects.create(custom_list=custom_list, item=manga, position=position)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        backdrops = [row["backdrop_url"] for row in response.data["results"]]
+        self.assertEqual(backdrops, [None, "https://example.com/second-banner.jpg", None])
+        self.assertEqual(enrich_mock.call_count, 2)
+
     @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
     @patch(
         "app.providers.services.get_media_metadata",
