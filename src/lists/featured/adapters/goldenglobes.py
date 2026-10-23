@@ -7,7 +7,7 @@ media type picks the record type: ``movie`` reads ``/film``, ``tv`` reads ``/tv-
 Each nomination has ``acf.year`` (the ceremony), ``acf.is_winner`` and
 ``acf.film_tv_show``, the id of its film or show record. Winners come newest first,
 unranked, with the ceremony year as the note; a show that won several times appears
-once, noted "2024, 2022, 2020". Titles are matched to TMDB here (``_tmdb_match``):
+once per win ("2024", "2022", "2020"). Titles are matched to TMDB here (``_tmdb_match``):
 films by title within a year of their release (or of the year before the ceremony),
 shows by title among those that premiered before their first win; the most-voted
 exact match wins.
@@ -16,6 +16,7 @@ exact match wins.
 import html
 import math
 import re
+from dataclasses import replace
 
 from lists.featured.adapters._tmdb_match import with_tmdb_match
 from lists.featured.helpers import get_json
@@ -126,13 +127,13 @@ def records(record_type, ids):
 
 
 def _entry(definition, media_type, record, years):
+    """Return the record's entry, matched to TMDB once; ``fetch`` copies it per win."""
     title, title_year = display_title((record.get("title") or {}).get("rendered"))
     first_win = min(years)
-    note = ", ".join(str(year) for year in sorted(years, reverse=True))
     if media_type == "movie":
         released = parse_year(str((record.get("acf") or {}).get("release_date") or ""))
         year = released or title_year or first_win - 1
-        entry = Entry(rank=None, title=title, year=year, media_type=media_type, note=note)
+        entry = Entry(rank=None, title=title, year=year, media_type=media_type)
         return with_tmdb_match(
             definition,
             entry,
@@ -141,7 +142,7 @@ def _entry(definition, media_type, record, years):
             max_year=min(year + 1, first_win),
             prefer="vote_count",
         )
-    entry = Entry(rank=None, title=title, media_type=media_type, note=note)
+    entry = Entry(rank=None, title=title, media_type=media_type)
     bounds = {"min_year": title_year - 1, "max_year": min(title_year + 1, first_win)} if title_year else {}
     return with_tmdb_match(definition, entry, [title], **{"max_year": first_win, **bounds}, prefer="vote_count")
 
@@ -165,8 +166,9 @@ def fetch(definition):
     if missing:
         msg = f"Golden Globes {RECORDS[media_type]} records missing: {missing[:10]}"
         raise AdapterError(msg)
-    ordered = sorted(by_record.items(), key=lambda item: (-max(item[1]), item[0]))
-    entries = [_entry(definition, media_type, found[record_id], years) for record_id, years in ordered]
+    matched = {record_id: _entry(definition, media_type, found[record_id], years) for record_id, years in by_record.items()}
+    wins = sorted({(year, record_id) for year, record_id in won}, key=lambda win: (-win[0], win[1]))
+    entries = [replace(matched[record_id], note=str(year)) for year, record_id in wins]
     return FetchResult(entries=entries, edition=str(max(year for year, _ in won)))
 
 

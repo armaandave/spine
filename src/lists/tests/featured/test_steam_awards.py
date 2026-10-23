@@ -116,6 +116,18 @@ class SteamAwardsAdapterTests(SimpleTestCase):
         self.assertEqual(fetched[0], "https://store.steampowered.com/steamawards/2026")
         self.assertEqual(len(fetched), 9)  # 2026 back to 2018
 
+    def test_a_category_lists_each_win_and_a_year_joins_a_games_categories(self):
+        winners = [("10", "2025", "Ten"), ("20", "2024", "Twenty"), ("10", "2023", "Ten")]
+        self.assertEqual(
+            [(entry.title, entry.note) for entry in steam_awards._entries(winners, {}, merge=False)],
+            [("Ten", "2025"), ("Twenty", "2024"), ("Ten", "2023")],
+        )
+        categories = [("10", "Game of the Year", "Ten"), ("20", "Best Soundtrack", "Twenty"), ("10", "Best Story", "Ten")]
+        self.assertEqual(
+            [(entry.title, entry.note) for entry in steam_awards._entries(categories, {})],
+            [("Ten", "Game of the Year · Best Story"), ("Twenty", "Best Soundtrack")],
+        )
+
     def test_validate(self):
         validate = ADAPTERS["steam_awards"].validate
         validate(awards_definition(year=2025))

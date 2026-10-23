@@ -82,8 +82,9 @@ export SPINE_DEV_SIGN_IN=1
 export REDIS_URL=redis://localhost:6379/5
 export CELERY_REDIS_URL=redis://localhost:6379/5
 export REDIS_PREFIX="local-$(basename "$top"):"
-# Dev shares production's Hardcover key, so featured-list syncs never spend it here.
-export FEATURED_HARDCOVER_DAILY_BUDGET=0
+# Dev shares production's Hardcover key (5,000 requests a day), so featured-list syncs
+# here get a small slice of it: enough to match new books, never enough to starve prod.
+export FEATURED_HARDCOVER_DAILY_BUDGET=500
 
 cd "$top/src"
 vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)

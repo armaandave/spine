@@ -4,6 +4,7 @@ import SwiftUI
 /// trailing accessory, such as a count and "See all".
 struct SpineSection<Leading: View, Trailing: View, Content: View>: View {
     private let title: String
+    private let titleColor: Color
     private let headerInset: CGFloat
     private let leading: Leading
     private let trailing: Trailing
@@ -11,12 +12,14 @@ struct SpineSection<Leading: View, Trailing: View, Content: View>: View {
 
     init(
         title: String,
+        titleColor: Color = .white,
         headerInset: CGFloat = 0,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
+        self.titleColor = titleColor
         self.headerInset = headerInset
         self.leading = leading()
         self.trailing = trailing()
@@ -30,7 +33,7 @@ struct SpineSection<Leading: View, Trailing: View, Content: View>: View {
 
                 Text(title.uppercased())
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(titleColor)
                     .tracking(0.8)
                     .accessibilityAddTraits(.isHeader)
 

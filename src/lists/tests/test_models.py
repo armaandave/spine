@@ -85,6 +85,15 @@ class CustomListModelTest(TestCase):
                 custom_list=self.custom_list,
             )
 
+    def test_repeats_need_their_own_occurrence(self):
+        """Only a featured award history repeats an item, each repeat numbered."""
+        CustomListItem.objects.create(item=self.item, custom_list=self.custom_list, position=1)
+        repeat = CustomListItem.objects.create(item=self.item, custom_list=self.custom_list, position=2, occurrence=1)
+        self.assertEqual((repeat.note, self.custom_list.items.count()), ("", 2))
+
+        with self.assertRaises(IntegrityError):
+            CustomListItem.objects.create(item=self.item, custom_list=self.custom_list, occurrence=1)
+
 
 class CustomListManagerTest(TestCase):
     """Test case for the CustomListManager."""

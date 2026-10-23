@@ -375,14 +375,25 @@ def resolved_item_backdrop_urls(item, request=None, user=None):
     if curated_backdrop_url:
         return absolute_url(request, curated_backdrop_url), None
 
-    if item.media_type not in [MediaTypes.MOVIE.value, MediaTypes.TV.value, MediaTypes.GAME.value]:
+    if item.media_type not in [
+        MediaTypes.MOVIE.value,
+        MediaTypes.TV.value,
+        MediaTypes.GAME.value,
+        MediaTypes.ANIME.value,
+        MediaTypes.MANGA.value,
+    ]:
         return None, custom_backdrop_url
 
-    from api.services.media import resolved_backdrop_urls
+    from api.services import media as media_service
     from app.providers import services as provider_services
 
     metadata = provider_services.get_media_metadata(item.media_type, item.media_id, item.source)
-    return resolved_backdrop_urls(
+    # Anime and manga pages take their backdrop from AniList's banner; match them.
+    if item.media_type == MediaTypes.ANIME.value:
+        metadata = media_service._enrich_anime_metadata(metadata, item.source)
+    elif item.media_type == MediaTypes.MANGA.value:
+        metadata = media_service._enrich_manga_metadata(metadata, item.source)
+    return media_service.resolved_backdrop_urls(
         source=item.source,
         media_type=item.media_type,
         media_id=item.media_id,

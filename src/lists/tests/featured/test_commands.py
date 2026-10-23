@@ -31,7 +31,7 @@ class SyncFeaturedListCommandTests(FeaturedTestCase):
         self.assertIn("Test List (test-list) via test: 2 entries, edition 'Week of Oct 13'", output)
         self.assertIn("#1 Known (2000) -> tmdb:movie:1 [id]", output)
         self.assertIn("#2 Mystery (1999) / Nobody -> UNRESOLVED (no match)", output)
-        self.assertIn("Resolved 1/2 (50.0%); 1 unique items; 1 unresolved; 0 title searches.", output)
+        self.assertIn("Resolved 1/2 (50.0%); 1 rows; 1 unresolved; 0 title searches.", output)
         self.assertIn("Unresolved:", output)
         self.assertIn("{t:mystery|1999}", output)
         self.assertIn("Dry run, nothing written. guards pass", output)

@@ -13,7 +13,7 @@ Params:
   - ``"date"``: ``number`` is a ``YYYY.MM.DD`` date; newest first, only the last
     ``window_days`` days (Pitchfork's Best New Album);
   - ``"winners"``: only entries numbered ``"YYYY winner"``, newest first (Grammys,
-    Mercury Prize), noted ``"<note_label> · YYYY"``.
+    Mercury Prize), each noted with its year alone (``"2026"``).
 - ``limit``: keep at most this many entries.
 """
 
@@ -145,14 +145,14 @@ def _by_date(relations, window_days, today):
     ], cutoff
 
 
-def _winners(relations, label):
+def _winners(relations):
     won = []
     for relation in relations:
         match = _WINNER_NUMBER.match(_number(relation))
         if match:
             won.append((int(match.group(1)), relation))
     won.sort(key=lambda pair: pair[0], reverse=True)
-    return [_entry(relation, note=f"{label} · {year}" if label else str(year)) for year, relation in won], won
+    return [_entry(relation, note=str(year)) for year, relation in won], won
 
 
 def fetch(definition):
@@ -172,7 +172,7 @@ def fetch(definition):
         entries, cutoff = _by_date(relations, int(params["window_days"]), timezone.localdate())
         edition = f"Since {cutoff:%b} {cutoff.day}, {cutoff.year}"
     elif order == "winners":
-        entries, won = _winners(relations, params.get("note_label", ""))
+        entries, won = _winners(relations)
         if won:
             edition = f"{won[-1][0]}–{won[0][0]}"
     else:

@@ -47,8 +47,10 @@ Params:
 - ``mangaupdates_search``: manga rows without Wikidata IDs try MangaUpdates, accepting
   only one series whose matched name equals the title exactly (Japanese titles too).
 
-Rows naming the same work (a series winning three times) become one entry whose note
-lists every year. Linked titles get provider IDs through Wikidata
+On award lists every row is its own entry, noted with its year alone: a series that
+won three times appears three times ("2023", "2022", "2020"). On other lists rows
+naming the same work (an album at number one in several weeks) become one entry whose
+note lists every date. Linked titles get provider IDs through Wikidata
 (``_wikipedia_ids``); the rest go to the resolver's strict title search.
 """
 
@@ -510,35 +512,50 @@ def fetch_page(site, title, now=None):
     return parsed["text"], parsed.get("revid")
 
 
-def _merge(rows, params):
-    """Order rows and fold repeats of one work into a single row."""
+def _merge(rows, params, *, repeats=False):
+    """Order rows and fold repeats of one work into a single row.
+
+    With ``repeats`` (award histories) every row stays its own entry, noted with its
+    year alone, and shares its work's link.
+    """
     if params.get("latest_only"):
         latest = max((row.year for row in rows if row.year), default=None)
         rows = [row for row in rows if row.year == latest]
     if params.get("order", "newest") == "newest":
         rows = sorted(reversed(rows), key=lambda row: -(row.year or 0))
-    merged, by_title = [], {}
+    works, by_title = [], {}  # [(first row, every row of the work)]
     for row in rows:
-        note = " · ".join(part for part in (row.date or (str(row.year) if row.year else ""), row.label) if part)
         # The same work: the same title, and no two different links (Wikipedia often
         # links only a title's first appearance; two seasons share a title, not a link).
         title_key = (normalize_title(row.title), normalize_title(row.creator))
-        existing = next(
+        work = next(
             (
                 candidate
                 for candidate in by_title.get(title_key, [])
-                if not (candidate.link and row.link and candidate.link != row.link)
+                if not (candidate[0].link and row.link and candidate[0].link != row.link)
             ),
             None,
         )
-        if existing is not None:
-            existing.link = existing.link or row.link
-            if note and note not in existing.notes:
-                existing.notes.append(note)
-            continue
-        row.notes = [note] if note else []
-        by_title.setdefault(title_key, []).append(row)
-        merged.append(row)
+        if work is None:
+            work = (row, [])
+            by_title.setdefault(title_key, []).append(work)
+            works.append(work)
+        work[0].link = work[0].link or row.link
+        work[1].append(row)
+    if repeats:
+        for first, group in works:
+            for row in group:
+                row.link = first.link
+                row.notes = [str(row.year)] if row.year else []
+        return rows
+    merged = []
+    for first, group in works:
+        first.notes = []
+        for row in group:
+            note = " · ".join(part for part in (row.date or (str(row.year) if row.year else ""), row.label) if part)
+            if note and note not in first.notes:
+                first.notes.append(note)
+        merged.append(first)
     return merged
 
 
@@ -621,7 +638,7 @@ def fetch(definition):
     if len(rows) < minimum:
         msg = f"Only {len(rows)} rows parsed (expected at least {minimum}); the page layout may have changed."
         raise AdapterError(msg)
-    rows = _merge(rows, params)
+    rows = _merge(rows, params, repeats=definition.keeps_repeats)
     latest = max((row.year for row in rows if row.year), default=None)
     if "{year}" in "".join(params["pages"]):
         edition = str(edition_year)
