@@ -11,7 +11,9 @@ from datetime import UTC, datetime
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 
+from app.models import Sources
 from app.providers import igdb, services
 from lists.featured.helpers import post_json, sanitize
 from lists.featured.types import AdapterError
@@ -41,9 +43,25 @@ def auth_headers():
     return {"Client-ID": settings.IGDB_ID, "Authorization": f"Bearer {token}"}
 
 
+def authorized(request, *args, **kwargs):
+    """Call ``request`` (``get_json`` or ``post_json``) with ``auth_headers()``.
+
+    Twitch can revoke the cached token before it expires, so an HTTP 401 drops it and
+    retries once with a fresh one, as ``igdb.handle_error`` does.
+    """
+    headers = auth_headers()
+    try:
+        return request(*args, headers=headers, **kwargs)
+    except AdapterError as error:
+        if "(HTTP 401)" not in str(error):
+            raise
+    cache.delete(f"{Sources.IGDB.value}_access_token")
+    return request(*args, headers=auth_headers(), **kwargs)
+
+
 def query(endpoint, body):
     """POST an Apicalypse ``body`` to ``api.igdb.com/v4/<endpoint>``."""
-    result = post_json("igdb", f"{igdb.base_url}/{endpoint}", data=body, headers=auth_headers())
+    result = authorized(post_json, "igdb", f"{igdb.base_url}/{endpoint}", data=body)
     if not isinstance(result, list):
         msg = f"IGDB {endpoint} returned an unexpected response."
         raise AdapterError(msg)

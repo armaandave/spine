@@ -112,7 +112,7 @@ def entries_from_rows(rows, by_igdb, by_twitch):
 def fetch(definition):
     """Fetch the top categories and match them to IGDB."""
     limit = int(definition.params.get("limit", MAX_LIMIT))
-    data = get_json("twitch", URL, params={"first": limit}, headers=_igdb_games.auth_headers())
+    data = _igdb_games.authorized(get_json, "twitch", URL, params={"first": limit})
     rows = (data or {}).get("data") if isinstance(data, dict) else None
     if not rows:
         msg = "Twitch returned no top games."

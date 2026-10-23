@@ -228,6 +228,28 @@ class ServicesTests(TestCase):
 
         self.assertEqual(cm.exception.provider, Sources.IGDB.value)
 
+    @patch("app.providers.igdb.cache")
+    @patch("app.providers.igdb.services.api_request")
+    def test_igdb_token_refused_with_unauthorized_raises_provider_error(
+        self,
+        mock_api_request,
+        mock_cache,
+    ):
+        """Test a 401 from the IGDB token endpoint raises a provider error."""
+        mock_cache.get.return_value = None
+        mock_response = MagicMock()
+        mock_response.status_code = 401  # Unauthorized
+
+        error = requests.exceptions.HTTPError("401 Unauthorized")
+        error.response = mock_response
+        mock_api_request.side_effect = error
+
+        with self.assertRaises(services.ProviderAPIError) as cm:
+            igdb.get_access_token()
+
+        self.assertEqual(cm.exception.provider, Sources.IGDB.value)
+        mock_cache.set.assert_not_called()
+
     def test_handle_error_tmdb_unauthorized(self):
         """Test the handle_error function with TMDB unauthorized error."""
         mock_response = MagicMock()
