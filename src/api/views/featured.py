@@ -117,6 +117,20 @@ def is_retired(definition, sync):
     return definition is None and sync is not None
 
 
+def is_partial(definition, sync, stored_count):
+    """Return whether a featured list holds too little of its source to show on Search.
+
+    The bar is the list's own ``min_resolve_rate``, the one a sync must clear to write
+    it. Both its latest run's match rate and the rows it holds must fall below it: a
+    guarded or deferred run records its own counts but leaves the stored list as it was,
+    so a full list is never hidden by one refused run.
+    """
+    if definition is None or sync is None or not sync.entry_count:
+        return False
+    bar = definition.guards.min_resolve_rate
+    return sync.resolved_count / sync.entry_count < bar and stored_count / sync.entry_count < bar
+
+
 def featured_lists():
     """Return public featured lists with owner, collaborators and sync state loaded.
 
@@ -452,12 +466,23 @@ def _counts_for(cards):
     return counts
 
 
-class _CardRenderer:
-    """Renders cards with one batched count query and a preview query per list type."""
+def shelf_cards(now):
+    """Return ``(cards, counts)``: the cards Search shows and every card's stored count.
 
-    def __init__(self, request, cards, shown):
+    Lists below their own bar (``is_partial``) are left out.
+    """
+    cards = featured_cards(now)
+    counts = _counts_for(cards)
+    shown = [card for card in cards if not is_partial(card.definition, card.sync, counts.get(card.custom_list.id, 0))]
+    return shown, counts
+
+
+class _CardRenderer:
+    """Renders cards from ``shelf_cards``' counts and a preview query per list type."""
+
+    def __init__(self, request, counts, shown):
         self.request = request
-        self.counts = _counts_for(cards)
+        self.counts = counts
         self.previews = preview_items([card.custom_list.id for card in shown], CARD_PREVIEW_LIMIT)
         self.people = _preview_people(
             [card.custom_list.id for card in shown if card.custom_list.list_type == CustomList.ListType.PEOPLE],
@@ -503,7 +528,7 @@ def _kind_counts(cards):
     return counts
 
 
-def landing_shelves(request, cards, now):
+def landing_shelves(request, cards, now, counts):
     """Return the landing shelves: Now, one per media type, then Across Media."""
     now_cards = _now_cards(cards)
     by_type = {}
@@ -515,7 +540,7 @@ def landing_shelves(request, cards, now):
     shown = {card.custom_list.id: card for card in now_cards}
     for media_type in shelf_order:
         shown.update({card.custom_list.id: card for card in by_type[media_type][:SHELF_LIMIT]})
-    render = _CardRenderer(request, cards, list(shown.values()))
+    render = _CardRenderer(request, counts, list(shown.values()))
     shelves = []
     if now_cards:
         shelves.append(_shelf("now", None, now_cards, NOW_LIMIT, render))
@@ -534,13 +559,13 @@ def landing_shelves(request, cards, now):
     return shelves
 
 
-def media_type_shelves(request, cards, media_type):
+def media_type_shelves(request, cards, media_type, counts):
     """Return one shelf per kind for a media type (or ``mixed``), with every card."""
     selected = _shelf_sorted(
         (card for card in cards if media_type in _shelf_types(card)),
         media_type,
     )
-    render = _CardRenderer(request, selected, selected)
+    render = _CardRenderer(request, counts, selected)
     return [
         _shelf(kind, media_type, kind_cards, None, render)
         for kind in KIND_TITLES
@@ -568,9 +593,13 @@ class FeaturedListsView(APIView):
                 continue
             if show_all or definition is None or definition.headline:
                 selected.append(custom_list)
-        payloads = list_payloads(selected, request)
-        cards = {card.custom_list.id: card for card in featured_cards(now, selected)}
-        for payload, custom_list in zip(payloads, selected, strict=True):
+        rows = [
+            (payload, custom_list)
+            for payload, custom_list in zip(list_payloads(selected, request), selected, strict=True)
+            if not is_partial(*definition_for(custom_list), payload["entries_count"])
+        ]
+        cards = {card.custom_list.id: card for card in featured_cards(now, [custom_list for _, custom_list in rows])}
+        for payload, custom_list in rows:
             card = cards.get(custom_list.id)
             payload["featured"] = (
                 card_payload(card, request, items_count=payload["entries_count"], now=now)
@@ -579,10 +608,10 @@ class FeaturedListsView(APIView):
             )
         return Response(
             {
-                "count": len(payloads),
+                "count": len(rows),
                 "next": None,
                 "previous": None,
-                "results": payloads,
+                "results": [payload for payload, _ in rows],
             },
         )
 
@@ -597,18 +626,20 @@ class FeaturedShelvesView(APIView):
         now = timezone.now()
         media_type = request.query_params.get("media_type")
         if media_type in (None, ""):
+            cards, counts = shelf_cards(now)
             return Response({
                 "generated_at": now,
-                "shelves": landing_shelves(request, featured_cards(now), now),
+                "shelves": landing_shelves(request, cards, now, counts),
             })
         if media_type != MIXED:
             if media_type not in SHELF_MEDIA_TYPES:
                 raise ValidationError({"media_type": [f"Use one of {', '.join((*SHELF_MEDIA_TYPES, MIXED))}."]})
             exposure.require_media_type(media_type)
+        cards, counts = shelf_cards(now)
         return Response({
             "generated_at": now,
             "media_type": media_type,
-            "shelves": media_type_shelves(request, featured_cards(now), media_type),
+            "shelves": media_type_shelves(request, cards, media_type, counts),
         })
 
 

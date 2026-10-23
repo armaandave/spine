@@ -258,6 +258,7 @@ All of it is additive.
 
 - **Shelf order:** `now`; then each exposed media type that has lists, in the order movie, tv, anime, manga, game, book, comic, music; then `mixed`.
 - **Hidden media types:** lists whose media types are all hidden by `app.exposure` are omitted (music when it's off, for example).
+- **Lists below their bar:** a list is omitted, here and on the legacy endpoint, while both its sync's `resolved_count / entry_count` and its stored rows / `entry_count` are below its own `min_resolve_rate`. List detail still serves it.
 - **"Now":** lists inside or within 24 h of a live window come first (inside before near, then by `position`). Then the charts in `order.NOW_PRIORITY` whose content changed in the last 7 days, in that order, at most 2 per media type (a chart with two media types counts against both; live lists don't count). At most 10 cards in all. A chart not in `NOW_PRIORITY` never appears in "Now".
 - **Within a shelf:** live lists (inside a window) first; then the keys in `order.SHELF_ORDER[<media type>]`, in that order; then every other list by `position`, then name. A list with two media types follows each shelf's own order. "Across Media" has no curated order.
 
