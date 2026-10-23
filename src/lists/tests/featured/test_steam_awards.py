@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, override_settings
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import steam_awards
 from lists.featured.types import AdapterError
-from lists.tests.featured.game_routes import external, igdb_game, igdb_routes
+from lists.tests.featured.game_routes import TOKEN_KEY, external, http_error, igdb_game, igdb_routes, rejected_once
 from lists.tests.featured.helpers import api_routes, load_fixture, make_definition
 
 PAGE_2025 = load_fixture("steam_awards", "2025.html")
@@ -97,6 +97,25 @@ class SteamAwardsAdapterTests(SimpleTestCase):
             result = ADAPTERS["steam_awards"].fetch(awards_definition(year=2025))
         self.assertEqual(result.live_label, "2 of 3 announced")
         self.assertEqual(len(result.entries), 1)
+
+    def test_a_revoked_token_is_dropped_and_igdb_retried(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        routes = awards_routes()
+        routes["v4/external_games"] = rejected_once(routes["v4/external_games"])
+        with api_routes(routes) as api:
+            result = ADAPTERS["steam_awards"].fetch(awards_definition(year=2025))
+
+        self.assertEqual(result.entries[0].key, "igdb:115289")
+        sent = [call.kwargs["headers"]["Authorization"] for call in api.call_args_list if "v4/external_games" in call.args[2]]
+        self.assertEqual(sent, ["Bearer revoked-token", "Bearer test-token"])
+        self.assertEqual(cache.get(TOKEN_KEY), "test-token")
+
+    def test_an_igdb_token_rejected_twice_fails(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        routes = {**awards_routes(), "v4/external_games": http_error(401)}
+        with api_routes(routes) as api, self.assertRaisesMessage(AdapterError, "igdb request failed (HTTP 401)."):
+            ADAPTERS["steam_awards"].fetch(awards_definition(year=2025))
+        self.assertEqual(len([call for call in api.call_args_list if "v4/external_games" in call.args[2]]), 2)
 
     def test_year_without_a_page(self):
         with api_routes(awards_routes()), self.assertRaisesMessage(AdapterError, "no Steam Awards page for 2026"):

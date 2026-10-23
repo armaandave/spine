@@ -1,7 +1,32 @@
 """IGDB routes for the game adapter tests (``api_routes`` values)."""
 
+import requests
+
+from app.models import Sources
+
 TOKEN_URL = "id.twitch.tv/oauth2/token"
 TOKEN = {"access_token": "test-token", "expires_in": 3600}
+TOKEN_KEY = f"{Sources.IGDB.value}_access_token"  # igdb.get_access_token's cache key
+
+
+def http_error(status):
+    """Return the error ``services.api_request`` raises for HTTP ``status``."""
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(response=response)
+
+
+def rejected_once(payload):
+    """A route that answers HTTP 401 (Twitch revoked the token) once, then ``payload``."""
+    calls = []
+
+    def respond(url, params):  # noqa: ARG001
+        calls.append(url)
+        if len(calls) == 1:
+            raise http_error(401)
+        return payload
+
+    return respond
 
 
 def igdb_game(igdb_id, name, released=None, cover=None):
