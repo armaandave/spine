@@ -4291,8 +4291,15 @@ def enrich_episodes(metadata, source, user):
     return payload
 
 
+def _rating_shown(rating_source, media_type):
+    """Letterboxd is a film site, so its rating only appears on movies."""
+    return rating_source != "letterboxd" or media_type == MediaTypes.MOVIE.value
+
+
 def _normalized_external_rating(*, metadata, rating_source, rating, media_type, media_id):
     """Normalize a provider-supplied rating or link-only rating hint."""
+    if not _rating_shown(rating_source, media_type):
+        return None
     value = rating.get("value") or rating.get("score")
     url = _third_party_rating_url(
         metadata=metadata,
@@ -4388,6 +4395,8 @@ def _stored_external_ratings(item, metadata):
     )
     for rating in stored:
         if not rating_source_is_exposed(rating.rating_source):
+            continue
+        if not _rating_shown(rating.rating_source, item.media_type):
             continue
         if rating.rating_source == item.source and metadata.get("score") is not None:
             continue

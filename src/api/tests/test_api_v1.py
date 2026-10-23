@@ -3342,8 +3342,8 @@ class ApiV1FoundationTests(TestCase):
 
         self.assertEqual(movie_ratings[0]["url"], "https://letterboxd.com/tmdb/550")
         self.assertIsNone(movie_ratings[1]["url"])
+        self.assertEqual([rating["source"] for rating in tv_ratings], ["Rotten Tomatoes"])
         self.assertIsNone(tv_ratings[0]["url"])
-        self.assertIsNone(tv_ratings[1]["url"])
         self.assertFalse(Item.objects.filter(media_id__in=["550", "1399"]).exists())
 
     @patch("app.providers.mdblist.get_media_ratings")
@@ -3434,7 +3434,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertFalse(item.external_ratings.exists())
 
     @patch("app.providers.mdblist.get_media_ratings")
-    def test_tv_and_season_rating_urls_use_available_series_pages(self, ratings_mock):
+    def test_tv_and_season_rating_urls_use_available_series_pages_without_letterboxd(self, ratings_mock):
         ratings_mock.return_value = {
             "imdb": {"value": "9.2", "votes": 2500000},
             "letterboxd": {
@@ -3453,7 +3453,6 @@ class ApiV1FoundationTests(TestCase):
         }
         expected_urls = {
             "IMDb": "https://www.imdb.com/title/tt0944947/",
-            "Letterboxd": "https://letterboxd.com/film/a-supported-limited-series/",
             "Rotten Tomatoes": "https://www.rottentomatoes.com/tv/example_show",
         }
 
@@ -3473,6 +3472,43 @@ class ApiV1FoundationTests(TestCase):
                 {rating["source"]: rating["url"] for rating in ratings},
                 expected_urls,
             )
+
+    @patch("app.tasks.enrich_external_ratings.delay")
+    def test_tracked_tv_and_season_hide_stored_letterboxd_rating(self, _enqueue_mock):
+        now = timezone.now()
+        for media_type, season_number in [
+            (MediaTypes.TV.value, None),
+            (MediaTypes.SEASON.value, 1),
+        ]:
+            item = Item.objects.create(
+                source=Sources.TMDB.value,
+                media_type=media_type,
+                media_id="1399",
+                season_number=season_number,
+                title="Game of Thrones",
+                image="https://example.com/got.jpg",
+            )
+            for source, value, maximum in (("imdb", "9.2", 10), ("letterboxd", "4.6", 5)):
+                ExternalRating.objects.create(
+                    item=item,
+                    rating_source=source,
+                    value=value,
+                    max_value=maximum,
+                    status=ExternalRating.Status.AVAILABLE,
+                    last_attempted_at=now,
+                    last_success_at=now,
+                )
+
+            ratings = external_ratings(
+                metadata={},
+                source=item.source,
+                media_type=media_type,
+                media_id=item.media_id,
+                season_number=season_number,
+                item=item,
+            )
+
+            self.assertEqual([rating["source"] for rating in ratings], ["IMDb"])
 
     @patch("api.services.media.provider_services.get_media_metadata")
     def test_landscape_only_artwork_marks_poster_orientation(self, metadata_mock):
