@@ -708,13 +708,19 @@ CELERY_BEAT_SCHEDULE = {
         # django_celery_beat's DatabaseScheduler reads "expire_seconds" and drops "expires".
         "options": {"queue": "featured", "expire_seconds": 55},
     },
+    "refresh_music_genre_albums": {
+        "task": "Refresh music genre albums",
+        "schedule": crontab(hour=4, minute=30, day_of_week="mon"),  # weekly
+    },
 }
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
-# on the default queue never delay an award night.
+# on the default queue never delay an award night. The music genre refresh (about
+# an hour of ListenBrainz and Wikipedia requests) runs there too, off the default queue.
 CELERY_TASK_ROUTES = {
     "Dispatch featured lists": {"queue": "featured"},
     "Sync featured list": {"queue": "featured"},
+    "Refresh music genre albums": {"queue": "featured"},
 }
 
 # Lets the weekly review agent read /api/v1/lists/featured/health/ with the

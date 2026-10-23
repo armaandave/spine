@@ -85,6 +85,15 @@ person_search_session = LimiterSession(
     bucket_kwargs={"redis": redis_db, "bucket_key": bucket_key},
 )
 
+# The weekly music genre refresh makes thousands of ListenBrainz and Wikipedia
+# requests, so it gets its own limit instead of spending the shared one.
+genre_refresh_session = LimiterSession(per_second=20)
+genre_refresh_session.mount(
+    # ListenBrainz allows 30 requests per 10 seconds.
+    "https://api.listenbrainz.org",
+    LimiterAdapter(per_second=2),
+)
+
 session.mount("http://", HTTPAdapter(max_retries=3))
 session.mount("https://", HTTPAdapter(max_retries=3))
 

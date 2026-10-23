@@ -6,6 +6,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from urllib.parse import unquote
 
 import fakeredis
 import requests
@@ -14,7 +15,7 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from pyrate_limiter import Duration, Rate, RateItem, RedisBucket
 
-from app.models import MediaTypes, Sources
+from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import musicbrainz, services
 
 RUN_PROVIDER_TESTS = os.environ.get("RUN_PROVIDER_TESTS") == "1"
@@ -268,6 +269,364 @@ class MusicBrainzTests(TestCase):
             "genre is required for MusicBrainz discovery.",
         ):
             musicbrainz.discover(genre="   ")
+
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_discover_genre_pages_through_stored_albums_most_read_first(
+        self,
+        api_request,
+    ):
+        MusicGenreAlbum.objects.bulk_create(
+            [
+                MusicGenreAlbum(
+                    genre="hip hop",
+                    release_group_mbid=f"album-{index}",
+                    title=f"Album {index}",
+                    artist="Artist",
+                    release_date="2012-10-22",
+                    page_views=index // 2 + 1,
+                    listeners=index % 2,
+                    listens=index,
+                )
+                for index in range(musicbrainz.SEARCH_CANDIDATE_LIMIT)
+            ]
+            + [
+                MusicGenreAlbum(
+                    genre="hip hop",
+                    release_group_mbid="unread-album",
+                    title="Unread Album",
+                    listeners=1_000_000,
+                    listens=1_000_000,
+                ),
+                MusicGenreAlbum(
+                    genre="rock",
+                    release_group_mbid="rock-album",
+                    title="Rock Album",
+                    page_views=10_000,
+                    listeners=10_000,
+                    listens=10_000,
+                ),
+            ],
+        )
+
+        first = musicbrainz.discover(genre="  Hip  Hop ", page=1, page_size=3)
+        second = musicbrainz.discover(genre="hip hop", page=2, page_size=3)
+        last = musicbrainz.discover(genre="hip hop", page=34, page_size=3)
+
+        self.assertEqual(first["total_results"], musicbrainz.SEARCH_CANDIDATE_LIMIT + 1)
+        self.assertEqual(first["per_page"], 3)
+        self.assertEqual(
+            [result["media_id"] for result in first["results"] + second["results"]],
+            ["album-99", "album-98", "album-97", "album-96", "album-95", "album-94"],
+        )
+        self.assertEqual(
+            [result["media_id"] for result in last["results"]],
+            ["album-0", "unread-album"],
+        )
+        self.assertEqual(
+            first["results"][0],
+            {
+                "media_id": "album-99",
+                "source": Sources.MUSICBRAINZ.value,
+                "media_type": MediaTypes.MUSIC.value,
+                "title": "Album 99",
+                "release_date": "2012-10-22",
+                "image": (
+                    f"{musicbrainz.COVER_ART_URL}/release-group/album-99/front-500"
+                ),
+                "poster_width": 500,
+                "poster_height": 500,
+                "poster_aspect_ratio": 1.0,
+                "subtitle": "Artist · 2012 · Album",
+            },
+        )
+        api_request.assert_not_called()
+
+    @patch("app.providers.musicbrainz.lookup_release_group_popularity")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_discover_genre_lists_few_stored_albums_before_searched_ones(
+        self,
+        api_request,
+        lookup_popularity,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="jazz rap",
+            release_group_mbid=THRILLER_ALBUM_MBID,
+            title="Popular Album",
+            artist="Popular Artist",
+            release_date="1982",
+            listeners=50_000,
+            listens=900_000,
+        )
+        api_request.return_value = {
+            "count": 98_000,
+            "release-groups": [
+                {"id": RELEASE_GROUP_MBID, "title": "Searched Album"},
+                {"id": THRILLER_ALBUM_MBID, "title": "Popular Album"},
+            ],
+        }
+        lookup_popularity.return_value = {}
+
+        result = musicbrainz.discover(genre="jazz rap", page=1, page_size=24)
+
+        self.assertEqual(result["total_results"], 2)
+        self.assertEqual(
+            [item["media_id"] for item in result["results"]],
+            [THRILLER_ALBUM_MBID, RELEASE_GROUP_MBID],
+        )
+        self.assertEqual(
+            result["results"][0]["subtitle"],
+            "Popular Artist · 1982 · Album",
+        )
+
+    @override_settings(LISTENBRAINZ_TOKEN="lb-token")
+    @patch("app.providers.musicbrainz.GENRE_ALBUMS_PER_ARTIST", 3)
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_files_top_artists_albums_under_their_genres(
+        self,
+        api_request,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="stale genre",
+            release_group_mbid="old-album",
+            title="Old Album",
+            listeners=1,
+            listens=1,
+        )
+
+        def album(mbid, name, listeners, genres, *, release_type="Album"):
+            return {
+                "release_group_mbid": mbid,
+                "release_group": {"name": name, "type": release_type, "date": "2012-10-22"},
+                "artist": {"name": "Kendrick Lamar"},
+                "total_user_count": listeners,
+                "total_listen_count": listeners * 10,
+                "tag": {
+                    "artist": [{"tag": "jazz", "count": 50, "genre_mbid": "g-jazz"}],
+                    "release_group": [
+                        {"tag": tag, "count": count, **({"genre_mbid": f"g-{tag}"} if genre else {})}
+                        for tag, count, genre in genres
+                    ],
+                },
+            }
+
+        artist_albums = {
+            "kendrick": [
+                album(
+                    "gkmc",
+                    "good kid, m.A.A.d city",
+                    85_000,
+                    [
+                        ("hip hop", 9, True),
+                        ("West Coast  Hip Hop", 5, True),
+                        ("pop rap", 4, True),
+                        ("gangsta rap", 2, True),
+                        ("car on cover", 9, False),
+                    ],
+                ),
+                album("single", "Not Like Us", 99_000, [("hip hop", 9, True)], release_type="Single"),
+                album("bootleg", "Bootleg", 10, [("hip hop", 1, True)]),
+                album("tpab", "To Pimp a Butterfly", 14_000, [("jazz rap", 10, True)]),
+                album(
+                    "gkmc-deluxe",
+                    "good kid, m.A.A.d city (Deluxe)",
+                    90_000,
+                    [("hip hop", 9, True)],
+                ),
+            ],
+            "sza": [album("tpab", "To Pimp a Butterfly", 1, [("r&b", 10, True)])],
+            "beatles": [album("abbey-road", "Abbey Road", 60_000, [("rock", 3, True)])],
+        }
+
+        def respond(
+            provider,
+            method,
+            url,
+            params=None,
+            data=None,
+            headers=None,
+            request_session=None,
+        ):
+            if url == musicbrainz.WIKIDATA_SPARQL_URL:
+                self.assertEqual(data["format"], "json")
+                self.assertIn('"gkmc-deluxe" "gkmc" "tpab" "abbey-road"', data["query"])
+                rows = [
+                    ("gkmc", "28", "good kid, m.A.A.d city"),
+                    ("gkmc", "3", "good kid, m.A.A.d city (deluxe)"),
+                    ("tpab", "29", "To Pimp a Butterfly"),
+                    ("gkmc-deluxe", "28", "good kid, m.A.A.d city"),
+                ]
+                return {
+                    "results": {
+                        "bindings": [
+                            {
+                                "rg": {"value": rg},
+                                "links": {"value": links},
+                                "title": {"value": title},
+                            }
+                            for rg, links, title in rows
+                        ],
+                    },
+                }
+            if url.startswith(f"{musicbrainz.WIKIPEDIA_PAGEVIEWS_URL}/"):
+                article = url.removeprefix(f"{musicbrainz.WIKIPEDIA_PAGEVIEWS_URL}/")
+                article = unquote(article.split("/monthly/")[0])
+                if article == "To_Pimp_a_Butterfly":
+                    raise http_error(404)
+                self.assertEqual(article, "good_kid,_m.A.A.d_city")
+                return {"items": [{"views": 100}, {"views": 50}]}
+            if url == musicbrainz.LISTENBRAINZ_TOP_ARTISTS_URL:
+                self.assertEqual(headers["Authorization"], "Token lb-token")
+                artists = {
+                    "all_time": [
+                        {"artist_mbid": "kendrick", "artist_name": "Kendrick Lamar"},
+                        {"artist_mbid": None, "artist_name": "The Beatles"},
+                    ],
+                    "this_year": [
+                        {"artist_mbid": "kendrick", "artist_name": "Kendrick Lamar"},
+                        {"artist_mbid": "sza", "artist_name": "SZA"},
+                        {
+                            "artist_mbid": musicbrainz.VARIOUS_ARTISTS_MBID,
+                            "artist_name": "Various Artists",
+                        },
+                    ],
+                }[params["range"]]
+                return {"payload": {"artists": artists}}
+            if url == f"{musicbrainz.MUSICBRAINZ_URL}/artist":
+                self.assertEqual(params["query"], 'artist:"The Beatles"')
+                return {
+                    "artists": [
+                        {"id": "beatles-tribute", "name": "The Beatles Tribute"},
+                        {"id": "beatles", "name": "The Beatles"},
+                    ],
+                }
+            prefix = f"{musicbrainz.LISTENBRAINZ_ARTIST_ALBUMS_URL}/"
+            self.assertTrue(url.startswith(prefix))
+            return artist_albums[url.removeprefix(prefix)]
+
+        api_request.side_effect = respond
+
+        result = musicbrainz.refresh_genre_albums()
+
+        self.assertEqual(
+            result,
+            {
+                "artists": 3,
+                "failed_artists": 0,
+                "albums": 4,
+                "albums_on_wikipedia": 1,
+                "genre_albums": 5,
+            },
+        )
+        self.assertEqual(
+            set(
+                MusicGenreAlbum.objects.values_list(
+                    "genre",
+                    "release_group_mbid",
+                    "page_views",
+                ),
+            ),
+            {
+                ("hip hop", "gkmc", 150),
+                ("west coast hip hop", "gkmc", 150),
+                ("jazz rap", "tpab", 0),
+                ("hip hop", "gkmc-deluxe", 0),
+                ("rock", "abbey-road", 0),
+            },
+        )
+        gkmc = MusicGenreAlbum.objects.get(genre="hip hop", release_group_mbid="gkmc")
+        self.assertEqual(
+            (gkmc.title, gkmc.artist, gkmc.release_date, gkmc.listeners, gkmc.listens),
+            ("good kid, m.A.A.d city", "Kendrick Lamar", "2012-10-22", 85_000, 850_000),
+        )
+
+    @override_settings(LISTENBRAINZ_TOKEN="lb-token")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_keeps_old_albums_when_wikipedia_fails(
+        self,
+        api_request,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="hip hop",
+            release_group_mbid="old-album",
+            title="Old Album",
+            listeners=1,
+            listens=1,
+        )
+
+        def respond(
+            provider,
+            method,
+            url,
+            params=None,
+            data=None,
+            headers=None,
+            request_session=None,
+        ):
+            if url == musicbrainz.LISTENBRAINZ_TOP_ARTISTS_URL:
+                return {"payload": {"artists": [{"artist_mbid": "kendrick"}]}}
+            if url == musicbrainz.WIKIDATA_SPARQL_URL:
+                return {
+                    "results": {
+                        "bindings": [
+                            {
+                                "rg": {"value": "gkmc"},
+                                "links": {"value": "28"},
+                                "title": {"value": "good kid, m.A.A.d city"},
+                            },
+                        ],
+                    },
+                }
+            if url.startswith(musicbrainz.WIKIPEDIA_PAGEVIEWS_URL):
+                raise http_error(503)
+            return [
+                {
+                    "release_group_mbid": "gkmc",
+                    "release_group": {"name": "good kid, m.A.A.d city", "type": "Album"},
+                    "tag": {"release_group": [{"tag": "hip hop", "count": 9, "genre_mbid": "g"}]},
+                },
+            ]
+
+        api_request.side_effect = respond
+
+        with self.assertRaisesMessage(RuntimeError, "Wikipedia reads failed for 1 of 1 albums."):
+            musicbrainz.refresh_genre_albums()
+
+        self.assertEqual(
+            list(MusicGenreAlbum.objects.values_list("release_group_mbid", flat=True)),
+            ["old-album"],
+        )
+
+    @override_settings(LISTENBRAINZ_TOKEN="lb-token")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_keeps_old_albums_when_listenbrainz_fails(
+        self,
+        api_request,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="hip hop",
+            release_group_mbid="gkmc",
+            title="good kid, m.A.A.d city",
+            listeners=85_000,
+            listens=850_000,
+        )
+
+        def respond(provider, method, url, params=None, headers=None, request_session=None):
+            if url == musicbrainz.LISTENBRAINZ_TOP_ARTISTS_URL:
+                return {"payload": {"artists": [{"artist_mbid": "kendrick"}]}}
+            raise requests.ConnectionError("ListenBrainz is down")
+
+        api_request.side_effect = respond
+
+        with self.assertRaisesMessage(RuntimeError, "ListenBrainz failed for 1 of 1 artists."):
+            musicbrainz.refresh_genre_albums()
+
+        self.assertTrue(MusicGenreAlbum.objects.filter(release_group_mbid="gkmc").exists())
+
+    @override_settings(LISTENBRAINZ_TOKEN="")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_needs_a_listenbrainz_token(self, api_request):
+        self.assertIsNone(musicbrainz.refresh_genre_albums())
+        api_request.assert_not_called()
 
     @override_settings(PER_PAGE=2)
     @patch("app.providers.musicbrainz.search_release_groups")
