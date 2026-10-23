@@ -17,8 +17,9 @@ from lists.models import CustomList, CustomListItem, PersonListItem
 
 # The subject's completed set takes one query per user-owned media type plus
 # episodes. On top of that come the lists, the per-list type counts, the
-# completed members, the poster rows and the two viewer artwork prefetches.
-LIST_PROGRESS_QUERIES = 16
+# completed members, the poster rows, and the two viewer and two curator
+# artwork prefetches.
+LIST_PROGRESS_QUERIES = 18
 
 
 class ListProgressTests(TestCase):
