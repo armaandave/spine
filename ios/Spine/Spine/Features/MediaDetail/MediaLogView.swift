@@ -17,9 +17,7 @@ final class MediaLogViewModel {
     var ratingSteps = 0
     var reviewTitle = ""
     var review = ""
-    var tags: [String] = []
-    var tagQuery = ""
-    var tagSuggestions: [DiaryTagSuggestion] = []
+    let tagDraft = LogTagDraft()
     var containsSpoilers = false
     var visibility = "public"
     var liked = false
@@ -30,7 +28,6 @@ final class MediaLogViewModel {
     var gamePlaythrough: GamePlaythroughState?
     var progressText = ""
     var progressType = "pages"
-    var isLoadingTags = false
     var isSaving = false
     var errorMessage: String?
     let completionJourneyId: Int?
@@ -205,23 +202,10 @@ final class MediaLogViewModel {
         ratingSteps = min(10, Int(ceil((clamped / width) * 10)))
     }
 
+    /// Loads the user's own tags once, for suggestions while they type.
     func loadTags() async {
-        let query = tagQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            tagSuggestions = []
-            isLoadingTags = false
-            return
-        }
-
-        isLoadingTags = true
-        defer { isLoadingTags = false }
         do {
-            try await Task.sleep(for: .milliseconds(250))
-            try Task.checkCancellation()
-            guard query == tagQuery.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-            tagSuggestions = try await diaryRepository.tags(query: query)
-        } catch is CancellationError {
-            return
+            try await tagDraft.load(from: diaryRepository)
         } catch {
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -229,25 +213,9 @@ final class MediaLogViewModel {
         }
     }
 
-    func addTypedTag() {
-        addTag(tagQuery)
-        tagQuery = ""
-        tagSuggestions = []
-    }
-
-    func addTag(_ rawTag: String) {
-        let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
-        tags.append(tag)
-        tagSuggestions = []
-    }
-
-    func removeTag(_ tag: String) {
-        tags.removeAll { $0 == tag }
-    }
-
     func save() async -> Bool {
-        mode == .progress ? await saveProgressOnly() : await saveFinishedLog()
+        tagDraft.commitQuery()
+        return mode == .progress ? await saveProgressOnly() : await saveFinishedLog()
     }
 
     func markOnly() async -> Bool {
@@ -292,7 +260,7 @@ final class MediaLogViewModel {
                     totalMinutes: progress.totalMinutes, percentage: progress.percentage,
                     rating: Self.ratingDecimal(for: ratingSteps, mediaType: "game"),
                     review: review, reviewTitle: reviewTitle, liked: liked, isRewatch: isRepeat,
-                    containsSpoilers: containsSpoilers, tags: tags, mutationId: completionMutationId))
+                    containsSpoilers: containsSpoilers, tags: tagDraft.tags, mutationId: completionMutationId))
                 MediaStateChange.post(ref: selectedRef)
                 return
             } else if selectedRef.mediaType == "book" {
@@ -308,7 +276,7 @@ final class MediaLogViewModel {
                         liked: liked,
                         isRewatch: isRepeat,
                         containsSpoilers: containsSpoilers,
-                        tags: tags,
+                        tags: tagDraft.tags,
                         mutationId: completionMutationId
                     )
                 )
@@ -327,7 +295,7 @@ final class MediaLogViewModel {
                 autoMarkConsumed: true,
                 containsSpoilers: containsSpoilers,
                 visibility: selectedRef.isSingleWeight ? "public" : visibility,
-                tags: tags
+                tags: tagDraft.tags
             ))
         }
     }
@@ -399,12 +367,14 @@ struct MediaLogView: View {
     @FocusState private var focusedField: LogField?
 
     private enum LogField: Hashable {
+        case reviewTitle
         case review
         case tag
         case progress
+        case gameHours
+        case gameMinutes
+        case gamePercentage
     }
-
-    private static let tagEditorAnchor = "mediaLogTagEditor"
 
     init(
         detail: MediaDetail,
@@ -432,566 +402,291 @@ struct MediaLogView: View {
 
     var body: some View {
         NavigationStack {
-            composerContent
-                .toolbar(.hidden, for: .navigationBar)
-        }
-    }
-
-    private var composerContent: some View {
-        ZStack(alignment: .top) {
-            SpinePageBackground()
-            backdrop
-
             ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 20) {
+                Form {
+                    Section {
                         header
-                        modePicker
-                        if viewModel.mode == .progress {
-                            progressFields
-                        } else {
-                            finishedFields
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+
+                    if viewModel.supportsProgress {
+                        Section {
+                            Picker("Log mode", selection: $viewModel.mode) {
+                                Text("Finished").tag(MediaLogMode.finished)
+                                Text("Progress").tag(MediaLogMode.progress)
+                            }
+                            .pickerStyle(.segmented)
                         }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 20)
-                    .disabled(viewModel.isSaving)
+
+                    if viewModel.mode == .progress {
+                        progressSection
+                    } else {
+                        finishedSections
+                    }
                 }
+                .listSectionSpacing(.compact)
+                .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: focusedField) { _, field in
-                    guard field == .tag else { return }
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(Self.tagEditorAnchor, anchor: .bottom)
+                .disabled(viewModel.isSaving)
+                .onChange(of: focusedField) { oldField, newField in
+                    if oldField == .tag, newField != .tag {
+                        viewModel.tagDraft.commitQuery()
+                    }
+                    if newField == .tag {
+                        scrollToTags(proxy)
                     }
                 }
-                .onChange(of: viewModel.tagSuggestions) { _, suggestions in
-                    guard focusedField == .tag, !suggestions.isEmpty else { return }
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(Self.tagEditorAnchor, anchor: .bottom)
+                .onChange(of: LogTagsSection<LogField>.scrollTarget(for: viewModel.tagDraft)) {
+                    if focusedField == .tag {
+                        scrollToTags(proxy)
                     }
                 }
+            }
+            .background(alignment: .top) {
+                backdrop
+            }
+            .navigationTitle(viewModel.mode == .progress ? "Update Progress" : viewModel.primaryActionTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                    .disabled(viewModel.isSaving)
+                    .accessibilityLabel("Close log")
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if viewModel.isSaving {
+                        ProgressView()
+                    } else {
+                        Button(role: .confirm) {
+                            save()
+                        } label: {
+                            Label("Save", systemImage: "checkmark")
+                        }
+                        .accessibilityLabel(viewModel.mode == .progress ? "Save Progress" : viewModel.primaryActionTitle)
+                    }
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
+            .safeAreaBar(edge: .bottom) {
+                errorBanner
             }
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(viewModel.isSaving)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if focusedField == nil {
-                actionsFooter
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            closeButton
-                .padding(.leading, 18)
-                .padding(.top, 12)
+        .task {
+            await viewModel.loadTags()
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .bottom, spacing: 14) {
-                if viewModel.detail.ref.mediaType != "episode" {
-                    MediaArtwork(
-                        url: viewModel.detail.displayPosterURL,
-                        title: viewModel.detail.title,
-                        slot: .logSheet,
-                        mediaType: viewModel.detail.ref.mediaType,
-                        orientation: viewModel.detail.posterOrientation
-                    )
-                    .shadow(color: .black.opacity(0.42), radius: 16, y: 8)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(viewModel.mode == .progress ? "Update Progress" : viewModel.primaryActionTitle)
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .textCase(.uppercase)
-
-                    Text(viewModel.selectedTitle)
-                        .font(.system(size: 28, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.78)
-
-                    if let subtitle = viewModel.detail.subtitle ?? viewModel.detail.releaseDate {
-                        Text(subtitle)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.58))
-                            .lineLimit(1)
-                    }
-                }
-            }
-        }
-        .padding(.top, 92)
-        .padding(.bottom, 6)
+        LogHeader(
+            title: viewModel.selectedTitle,
+            subtitle: viewModel.detail.subtitle ?? viewModel.detail.releaseDate,
+            posterURL: viewModel.detail.displayPosterURL,
+            mediaType: viewModel.detail.ref.mediaType,
+            orientation: viewModel.detail.posterOrientation,
+            showsPoster: viewModel.detail.ref.mediaType != "episode"
+        )
     }
 
     private var backdrop: some View {
         ZStack(alignment: .top) {
+            SpinePalette.pageBackground
+
             HeroArtwork(detail: viewModel.detail)
                 .frame(height: 286)
 
             LinearGradient(
-                colors: [.black.opacity(0.14), SpinePalette.pageBackground.opacity(0.64), SpinePalette.pageBackground],
+                colors: [.black.opacity(0.14), SpinePalette.pageBackground.opacity(0.7), SpinePalette.pageBackground],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .frame(height: 306)
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
-        .offset(y: BackdropLayout.topOffset)
+        .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 
-    private var closeButton: some View {
-        Button {
-            dismiss()
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(.black.opacity(0.34), in: Circle())
-                .overlay {
-                    Circle().stroke(.white.opacity(0.08))
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Close log")
-        .disabled(viewModel.isSaving)
-    }
-
     @ViewBuilder
-    private var modePicker: some View {
-        VStack(spacing: 14) {
-            if viewModel.supportsProgress {
-                Picker("Log mode", selection: $viewModel.mode) {
-                    Text("Finished").tag(MediaLogMode.finished)
-                    Text("Progress").tag(MediaLogMode.progress)
-                }
-                .pickerStyle(.segmented)
-                .tint(.white.opacity(0.9))
-            }
-
-            if viewModel.supportsSeasonLogging {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 8) {
-                        seasonChip(
-                            title: "Whole Show",
-                            seasonNumber: nil
-                        )
-                        ForEach(viewModel.detail.seasons ?? []) { season in
-                            seasonChip(
-                                title: "S\(season.seasonNumber)",
-                                seasonNumber: season.seasonNumber
-                            )
-                        }
+    private var finishedSections: some View {
+        if viewModel.supportsSeasonLogging {
+            Section {
+                Picker("Season", selection: $viewModel.selectedSeasonNumber) {
+                    Text("Whole Show").tag(Int?.none)
+                    ForEach(viewModel.detail.seasons ?? []) { season in
+                        Text(season.title).tag(Int?.some(season.seasonNumber))
                     }
                 }
             }
         }
-    }
 
-    private func seasonChip(
-        title: String,
-        seasonNumber: Int?
-    ) -> some View {
-        Button {
-            viewModel.selectedSeasonNumber = seasonNumber
-        } label: {
-            Text(title)
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(viewModel.selectedSeasonNumber == seasonNumber ? .black : .white.opacity(0.82))
-                .padding(.horizontal, 13)
-                .frame(height: 34)
-                .background(
-                    viewModel.selectedSeasonNumber == seasonNumber ? .white.opacity(0.92) : .black.opacity(0.24),
-                    in: Capsule()
-                )
-                .overlay {
-                    Capsule().stroke(.white.opacity(viewModel.selectedSeasonNumber == seasonNumber ? 0 : 0.1))
-                }
-        }
-        .buttonStyle(.plain)
-        .frame(minHeight: 44)
-    }
-
-    private var finishedFields: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            composerSurface {
-                dateRow
-                if viewModel.detail.ref.mediaType == "game" {
-                    if viewModel.gamePlaythrough == nil {
-                        Toggle("Known start date", isOn: $viewModel.gameHasStartDate)
-                        if viewModel.gameHasStartDate {
-                            DatePicker("Started", selection: $viewModel.gameStartDate, in: ...viewModel.consumedAt, displayedComponents: .date)
-                        }
-                    }
-                    GameProgressFields(draft: $viewModel.gameProgress)
-                    Divider().overlay(.white.opacity(0.1))
-                }
-                Divider().overlay(.white.opacity(0.1))
-                ratingPicker
-                Divider().overlay(.white.opacity(0.1))
-                VStack(alignment: .leading, spacing: 8) {
-                    sectionLabel("Review title")
-                    TextField("Review title", text: $viewModel.reviewTitle)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 17, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white)
-                        .tint(.white)
-                    Divider().overlay(.white.opacity(0.1))
-                    sectionLabel("Review")
-                    TextField("Review", text: $viewModel.review, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .focused($focusedField, equals: .review)
-                        .lineLimit(5...8)
-                        .font(.system(size: 17, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white)
-                        .tint(.white)
-                }
-            }
-
-            tagEditor
-                .id(Self.tagEditorAnchor)
-            options
-        }
-    }
-
-    private var progressFields: some View {
-        composerSurface {
-            VStack(alignment: .leading, spacing: 14) {
-                if viewModel.detail.ref.mediaType == "book" {
-                    Picker("Progress Type", selection: $viewModel.progressType) {
-                        Text("Pages").tag("pages")
-                        Text("Percent").tag("percentage")
-                    }
-                    .pickerStyle(.segmented)
-                    .tint(.white.opacity(0.9))
-                }
-
-                sectionLabel("Progress")
-                HStack {
-                    TextField(viewModel.progressPlaceholder, text: $viewModel.progressText)
-                        .keyboardType(.decimalPad)
-                        .focused($focusedField, equals: .progress)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                    Text(viewModel.progressUnit)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.48))
-                }
-
-                Divider().background(.white.opacity(0.12))
-
-                TextField("Notes", text: $viewModel.review, axis: .vertical)
-                    .lineLimit(3...7)
-                    .font(.system(size: 17, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white)
-                    .tint(.white)
+        Section {
+            LogRatingCard(
+                ratingSteps: $viewModel.ratingSteps,
+                liked: $viewModel.liked,
+                isRepeat: $viewModel.isRepeat,
+                repeatLabel: viewModel.repeatLabel,
+                ratingLabel: viewModel.ratingLabel(),
+                ratingIdentifier: "media-log.rating"
+            ) { locationX, width in
+                viewModel.setRating(locationX: locationX, width: width)
             }
         }
-    }
 
-    private var dateRow: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                sectionLabel(viewModel.selectedRef.consumedDateLabel)
-            }
-
-            Spacer(minLength: 12)
-
+        Section {
             DatePicker(
-                "Date",
+                viewModel.selectedRef.consumedDateLabel,
                 selection: $viewModel.consumedAt,
                 in: Date.distantPast...(viewModel.selectedRef.usesCalendarConsumptionDate ? Date() : Date.distantFuture),
-                displayedComponents: [.date]
+                displayedComponents: .date
             )
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .colorScheme(.dark)
-                .tint(.white)
-        }
-    }
 
-    private var ratingPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("Your rating")
-            HStack(alignment: .center, spacing: 10) {
-                GeometryReader { proxy in
-                    HStack(spacing: 5) {
-                        ForEach(1...5, id: \.self) { star in
-                            Image(systemName: starSystemName(star))
-                                .font(.system(size: 34, weight: .bold))
-                                .foregroundStyle(viewModel.ratingSteps >= star * 2 - 1 ? .yellow : .white.opacity(0.26))
-                                .frame(maxWidth: .infinity)
-                        }
+            if viewModel.detail.ref.mediaType == "game" {
+                if viewModel.gamePlaythrough == nil {
+                    Toggle("Known start date", isOn: $viewModel.gameHasStartDate)
+                    if viewModel.gameHasStartDate {
+                        DatePicker("Started", selection: $viewModel.gameStartDate, in: ...viewModel.consumedAt, displayedComponents: .date)
                     }
-                    .accessibilityHidden(true)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                viewModel.setRating(locationX: value.location.x, width: proxy.size.width)
-                            }
-                    )
                 }
-                .frame(maxWidth: 218)
-                .frame(height: 44)
-                .accessibilityRepresentation {
-                    Slider(value: Binding(get: { Double(viewModel.ratingSteps) }, set: { viewModel.ratingSteps = Int($0) }), in: 0...10, step: 1) {
-                        Text("Rating")
-                    }
-                    .accessibilityValue(viewModel.ratingLabel())
-                    .accessibilityIdentifier("media-log.rating")
-                }
-
-                Spacer(minLength: 0)
-
-                compactIconButton(
-                    systemName: viewModel.liked ? "heart.fill" : "heart",
-                    title: "Like",
-                    isSelected: viewModel.liked
-                ) {
-                    viewModel.liked.toggle()
-                }
-
-                compactIconButton(
-                    systemName: "arrow.clockwise.circle",
-                    title: viewModel.repeatLabel,
-                    isSelected: viewModel.isRepeat
-                ) {
-                    viewModel.isRepeat.toggle()
-                }
+                LogGameProgressRows(
+                    draft: $viewModel.gameProgress,
+                    focus: $focusedField,
+                    hoursFocus: .gameHours,
+                    minutesFocus: .gameMinutes,
+                    percentageFocus: .gamePercentage
+                )
             }
-
-            Text(viewModel.ratingLabel())
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(viewModel.ratingSteps == 0 ? .white.opacity(0.58) : .yellow.opacity(0.9))
-        }
-    }
-
-    private func starSystemName(_ star: Int) -> String {
-        if viewModel.ratingSteps >= star * 2 {
-            return "star.fill"
-        }
-        if viewModel.ratingSteps == star * 2 - 1 {
-            return "star.leadinghalf.filled"
-        }
-        return "star"
-    }
-
-    private var tagEditor: some View {
-        composerSurface {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionLabel("Tags")
-                if !viewModel.tags.isEmpty {
-                    FlowLayout(spacing: 8) {
-                        ForEach(viewModel.tags, id: \.self) { tag in
-                            Button {
-                                viewModel.removeTag(tag)
-                            } label: {
-                                Label(tag, systemImage: "xmark")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .labelStyle(.titleAndIcon)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 30)
-                                    .background(.white.opacity(0.13), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    TextField("Add tags", text: $viewModel.tagQuery)
-                        .textInputAutocapitalization(.never)
-                        .focused($focusedField, equals: .tag)
-                        .onSubmit { viewModel.addTypedTag() }
-                        .task(id: viewModel.tagQuery) {
-                            await viewModel.loadTags()
-                        }
-                    Button {
-                        viewModel.addTypedTag()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 30, height: 30)
-                            .background(.white, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.tagQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityLabel("Add tag")
-                }
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .frame(height: 46)
-                .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(.white.opacity(0.1))
-                }
-            }
-
-            if !viewModel.tagSuggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(viewModel.tagSuggestions, id: \.self) { suggestion in
-                            Button {
-                                viewModel.addTag(suggestion.name)
-                                viewModel.tagQuery = ""
-                            } label: {
-                                Text(suggestion.name)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.84))
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 30)
-                                    .background(.white.opacity(0.09), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+        } footer: {
+            if viewModel.detail.ref.mediaType == "game" {
+                Text(LogComposerStyle.gameProgressFootnote)
             }
         }
-    }
 
-    private var options: some View {
-        composerSurface {
+        Section {
+            TextField("Review title", text: $viewModel.reviewTitle)
+                .focused($focusedField, equals: .reviewTitle)
+                .submitLabel(.next)
+                .onSubmit { focusedField = .review }
+
+            TextField("Add a review…", text: $viewModel.review, axis: .vertical)
+                .lineLimit(4...12)
+                .focused($focusedField, equals: .review)
+        }
+
+        LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag)
+
+        Section {
             if !viewModel.selectedRef.usesCalendarConsumptionDate {
                 Picker("Visibility", selection: $viewModel.visibility) {
                     ForEach(APIConstants.visibilityChoices, id: \.self) { value in
                         Text(value.capitalized).tag(value)
                     }
                 }
-                Divider().overlay(.white.opacity(0.1))
             }
             Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .tint(.red)
         }
-    }
 
-    private func compactIconButton(systemName: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(selectedIconColor(systemName: systemName, isSelected: isSelected))
-                .frame(width: 44, height: 44)
-                .background(isSelected ? .white.opacity(0.94) : .black.opacity(0.24), in: Circle())
-                .overlay {
-                    Circle().stroke(.white.opacity(isSelected ? 0 : 0.1))
+        if viewModel.detail.ref.mediaType == "music" {
+            Section {
+                Button("Mark as Listened") {
+                    markOnly()
                 }
+                .frame(maxWidth: .infinity)
+                .accessibilityHint("Completes tracking without creating a diary log")
+            } footer: {
+                Text("Counts the album as listened without adding a diary entry.")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private func selectedIconColor(systemName: String, isSelected: Bool) -> Color {
-        guard isSelected else { return .white }
-        return systemName == "heart.fill" ? .pink : .black
+    private var progressSection: some View {
+        Section {
+            if viewModel.detail.ref.mediaType == "book" {
+                Picker("Progress type", selection: $viewModel.progressType) {
+                    Text("Pages").tag("pages")
+                    Text("Percent").tag("percentage")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            LabeledContent("Progress") {
+                HStack(spacing: 6) {
+                    TextField(viewModel.progressPlaceholder, text: $viewModel.progressText)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                        .focused($focusedField, equals: .progress)
+                    Text(viewModel.progressUnit)
+                }
+            }
+
+            TextField("Notes", text: $viewModel.review, axis: .vertical)
+                .lineLimit(3...8)
+                .focused($focusedField, equals: .review)
+        }
     }
 
     @ViewBuilder
-    private var errorText: some View {
+    private var errorBanner: some View {
         if let error = viewModel.errorMessage {
             Text(error)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.red.opacity(0.92))
-        }
-    }
-
-    private var actionsFooter: some View {
-        VStack(spacing: 10) {
-            errorText
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
                 .accessibilityIdentifier("media-log.save-error")
-
-            Button {
-                Task {
-                    if await viewModel.save() {
-                        dismiss()
-                    }
-                }
-            } label: {
-                saveLabel(viewModel.mode == .progress ? "Save Progress" : viewModel.primaryActionTitle)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isSaving)
-
-            if viewModel.detail.ref.mediaType == "music", viewModel.mode == .finished {
-                Button {
-                    Task {
-                        if await viewModel.markOnly() {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    Text("Mark Listened")
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(.white.opacity(0.08), in: Capsule())
-                        .overlay { Capsule().stroke(.white.opacity(0.14)) }
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSaving)
-                .accessibilityHint("Completes tracking without creating a diary log")
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-        .background(SpinePalette.pageBackground)
-        .overlay(alignment: .top) {
-            Divider().overlay(.white.opacity(0.1))
         }
     }
 
-    private func saveLabel(_ title: String) -> some View {
-        HStack {
-            Spacer()
-            Group {
-                if viewModel.isSaving {
-                    ProgressView()
-                        .tint(.black)
-                } else {
-                    Text(title)
-                        .font(.system(size: 16, weight: .heavy))
-                }
-            }
-            .spineContentTransition(value: viewModel.isSaving)
-            Spacer()
-        }
-        .foregroundStyle(.black)
-        .frame(height: 54)
-        .background(.white.opacity(0.94), in: Capsule())
-    }
-
-    private func composerSurface<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            content()
-        }
-        .foregroundStyle(.white)
-        .tint(.white)
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SpinePalette.pageBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.09))
+    private func scrollToTags(_ proxy: ScrollViewProxy) {
+        let target = LogTagsSection<LogField>.scrollTarget(for: viewModel.tagDraft)
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(target, anchor: .bottom)
         }
     }
 
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 12, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white.opacity(0.56))
-            .textCase(.uppercase)
+    private func save() {
+        focusedField = nil
+        Task {
+            finishSave(await viewModel.save())
+        }
+    }
+
+    private func markOnly() {
+        focusedField = nil
+        Task {
+            finishSave(await viewModel.markOnly())
+        }
+    }
+
+    private func finishSave(_ saved: Bool) {
+        if saved {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } else if viewModel.errorMessage != nil {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
     }
 }
 

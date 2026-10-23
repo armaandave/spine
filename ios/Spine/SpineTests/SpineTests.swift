@@ -7016,7 +7016,7 @@ final class SpineTests: XCTestCase {
         viewModel.ratingSteps = 9
         viewModel.reviewTitle = "A second spin"
         viewModel.review = "New details emerged."
-        viewModel.tags = ["relisten", "headphones"]
+        viewModel.tagDraft.tags = ["relisten", "headphones"]
         viewModel.liked = true
         viewModel.isRepeat = true
         viewModel.containsSpoilers = true
@@ -7130,7 +7130,7 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testMediaLogTagsLoadOnlyForTypedQueries() async {
+    func testMediaLogLoadsTheUsersOwnTagsOnceAndMatchesThemLocally() async {
         let diary = RecordingDiaryRepository()
         let viewModel = MediaLogViewModel(
             detail: TestFixtures.movieDetail,
@@ -7141,15 +7141,88 @@ final class SpineTests: XCTestCase {
         )
 
         await viewModel.loadTags()
-
-        XCTAssertTrue(diary.tagQueries.isEmpty)
-        XCTAssertTrue(viewModel.tagSuggestions.isEmpty)
-
-        viewModel.tagQuery = "net"
         await viewModel.loadTags()
 
-        XCTAssertEqual(diary.tagQueries, ["net"])
-        XCTAssertEqual(viewModel.tagSuggestions.map(\.name), ["netflix"])
+        XCTAssertEqual(diary.allTagRequests, [true])
+        XCTAssertTrue(diary.tagQueries.isEmpty)
+
+        viewModel.tagDraft.updateQuery("NE")
+
+        XCTAssertEqual(viewModel.tagDraft.suggestions.map(\.name), ["netflix", "new wave"])
+    }
+
+    func testLogTagSuggestionsPutPrefixMatchesFirstAndSkipAddedTags() {
+        let library = [
+            DiaryTagSuggestion(name: "netflix", usageCount: 12),
+            DiaryTagSuggestion(name: "Rainy day", usageCount: 6),
+            DiaryTagSuggestion(name: "summer", usageCount: 5),
+            DiaryTagSuggestion(name: "rain", usageCount: 3),
+            DiaryTagSuggestion(name: "brain food", usageCount: 2),
+            DiaryTagSuggestion(name: "café nights", usageCount: 1),
+        ]
+
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "rai", in: library, excluding: []).map(\.name),
+            ["Rainy day", "rain", "brain food"]
+        )
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "RAI", in: library, excluding: ["Rain"]).map(\.name),
+            ["Rainy day", "brain food"]
+        )
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "", in: library, excluding: ["netflix"], limit: 2).map(\.name),
+            ["Rainy day", "summer"]
+        )
+        XCTAssertEqual(LogTagDraft.suggestions(for: "cafe", in: library, excluding: []).map(\.name), ["café nights"])
+        XCTAssertTrue(LogTagDraft.suggestions(for: "zzz", in: library, excluding: []).isEmpty)
+    }
+
+    @MainActor
+    func testLogTagDraftAddsATagOnReturnOrCommaAndKeepsTheRestTyped() {
+        let draft = LogTagDraft(tags: ["summer"])
+
+        draft.updateQuery("road trip\n")
+        XCTAssertEqual(draft.tags, ["summer", "road trip"])
+        XCTAssertEqual(draft.query, "")
+
+        draft.updateQuery("cozy, Summer, rew")
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "cozy"])
+        XCTAssertEqual(draft.query, "rew")
+
+        draft.commitQuery()
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "cozy", "rew"])
+        XCTAssertEqual(draft.query, "")
+
+        draft.commitQuery()
+        draft.pick("late night")
+        draft.remove("cozy")
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "rew", "late night"])
+    }
+
+    @MainActor
+    func testMediaLogSaveKeepsATagThatIsStillBeingTyped() async {
+        let diary = RecordingDiaryRepository()
+        let viewModel = MediaLogViewModel(
+            detail: TestFixtures.movieDetail,
+            trackingRepository: RecordingTrackingRepository(),
+            diaryRepository: diary,
+            onUnauthorized: {},
+            onSaved: {}
+        )
+        viewModel.tagDraft.updateQuery("late night")
+
+        let didSave = await viewModel.save()
+
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(diary.createdRequests.first?.tags, ["late night"])
+    }
+
+    @MainActor
+    func testLogRatingCardShowsTheStarValue() {
+        XCTAssertEqual(LogRatingCard.value(for: 1), "0.5")
+        XCTAssertEqual(LogRatingCard.value(for: 8), "4")
+        XCTAssertEqual(LogRatingCard.value(for: 9), "4.5")
+        XCTAssertEqual(LogRatingCard.value(for: 10), "5")
     }
 
     @MainActor
@@ -7166,7 +7239,7 @@ final class SpineTests: XCTestCase {
         )
         viewModel.ratingSteps = 9
         viewModel.review = "Still cuts."
-        viewModel.tags = ["noir"]
+        viewModel.tagDraft.tags = ["noir"]
         viewModel.liked = true
         viewModel.isRepeat = true
         viewModel.containsSpoilers = true
@@ -8859,6 +8932,18 @@ private final class RecordingDiaryRepository: DiaryRepository {
     func tags(query: String) async throws -> [DiaryTagSuggestion] {
         tagQueries.append(query)
         return [DiaryTagSuggestion(name: "netflix", usageCount: 12)]
+    }
+
+    var allTagRequests: [Bool] = []
+
+    func allTags(mine: Bool) async throws -> [DiaryTagSuggestion] {
+        allTagRequests.append(mine)
+        return [
+            DiaryTagSuggestion(name: "netflix", usageCount: 12),
+            DiaryTagSuggestion(name: "summer", usageCount: 5),
+            DiaryTagSuggestion(name: "new wave", usageCount: 2),
+            DiaryTagSuggestion(name: "comfort rewatch", usageCount: 1),
+        ]
     }
 }
 
