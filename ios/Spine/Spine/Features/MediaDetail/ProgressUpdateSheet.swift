@@ -207,11 +207,11 @@ struct ProgressUpdateSheet: View {
     let onSave: (ProgressUpdateSaveRequest) async -> Bool
     let onDismiss: () -> Void
     let onLogFinished: () -> Void
-    let onPause: (() async -> Bool)?
-    let onResume: (() async -> Bool)?
-    let onDrop: (() async -> Bool)?
-    let onRestart: (() async -> Bool)?
-    let onDelete: (() async -> Bool)?
+    let onPause: (() -> Void)?
+    let onResume: (() -> Void)?
+    let onDrop: (() -> Void)?
+    let onRestart: (() -> Void)?
+    let onDelete: (() -> Void)?
 
     init(
         detail: MediaDetail,
@@ -222,11 +222,11 @@ struct ProgressUpdateSheet: View {
         onSave: @escaping (ProgressUpdateSaveRequest) async -> Bool,
         onDismiss: @escaping () -> Void,
         onLogFinished: @escaping () -> Void,
-        onPause: (() async -> Bool)? = nil,
-        onResume: (() async -> Bool)? = nil,
-        onDrop: (() async -> Bool)? = nil,
-        onRestart: (() async -> Bool)? = nil,
-        onDelete: (() async -> Bool)? = nil
+        onPause: (() -> Void)? = nil,
+        onResume: (() -> Void)? = nil,
+        onDrop: (() -> Void)? = nil,
+        onRestart: (() -> Void)? = nil,
+        onDelete: (() -> Void)? = nil
     ) {
         _viewModel = State(initialValue: ProgressUpdateViewModel(detail: detail, progress: progress))
         self.isSaving = isSaving
@@ -272,7 +272,7 @@ struct ProgressUpdateSheet: View {
         ) {
             if let action = pendingJourneyAction {
                 Button(action.confirmationButton, role: action.isDestructive ? .destructive : nil) {
-                    Task { await perform(action) }
+                    perform(action)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -295,7 +295,7 @@ struct ProgressUpdateSheet: View {
                 if action.requiresConfirmation {
                     pendingJourneyAction = action
                 } else {
-                    Task { await perform(action) }
+                    perform(action)
                 }
             }
         )
@@ -319,23 +319,26 @@ struct ProgressUpdateSheet: View {
         }
     }
 
-    private func perform(_ action: BookJourneyMenuAction) async {
+    /// Journey changes apply behind the panel, so it closes on the tap.
+    private func perform(_ action: BookJourneyMenuAction) {
         pendingJourneyAction = nil
         switch action {
         case .pause:
-            if await onPause?() == true { close() }
+            onPause?()
         case .resume:
-            if await onResume?() == true { close() }
+            onResume?()
         case .didNotFinish:
-            if await onDrop?() == true { close() }
+            onDrop?()
         case .finish:
             close()
             onLogFinished()
+            return
         case .restart:
-            if await onRestart?() == true { close() }
+            onRestart?()
         case .delete:
-            if await onDelete?() == true { close() }
+            onDelete?()
         }
+        close()
     }
 
     private func close() {

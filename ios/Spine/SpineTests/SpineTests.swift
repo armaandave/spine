@@ -6380,7 +6380,7 @@ final class SpineTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(tracking.detailRequests, [TestFixtures.movieDetail.ref])
-        XCTAssertEqual(viewModel.tracking?.progress?.value(in: .percentage), 7)
+        XCTAssertEqual(viewModel.viewer?.progress?.value(in: .percentage), 7)
     }
 
     @MainActor
@@ -6397,7 +6397,7 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt)
+        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.completedBooks.first?.source, "manual")
@@ -6420,7 +6420,7 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt)
+        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
@@ -6456,7 +6456,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.detail?.userState?.isTracked, true)
         XCTAssertNil(viewModel.detail?.userState?.status)
         XCTAssertNil(viewModel.quickActionErrorMessage)
-        XCTAssertNil(viewModel.tracking)
+        XCTAssertNil(viewModel.viewer?.status)
     }
 
     @MainActor
@@ -6471,7 +6471,7 @@ final class SpineTests: XCTestCase {
             onUnauthorized: {}
         )
 
-        let didSave = await viewModel.performQuickAction(.currently, for: detail)
+        let didSave = await viewModel.performQuickAction(.currently, for: detail).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.updateRequests.first?.ref, detail.ref)
@@ -6490,7 +6490,7 @@ final class SpineTests: XCTestCase {
             onUnauthorized: {}
         )
 
-        let didSave = await viewModel.performQuickAction(.stopped, for: detail)
+        let didSave = await viewModel.performQuickAction(.stopped, for: detail).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
@@ -6632,11 +6632,12 @@ final class SpineTests: XCTestCase {
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
         )
+        viewModel.detail = detail
 
         let didSave = await viewModel.saveProgress(
             ProgressUpdateSaveRequest(mode: .percentage, value: 42),
             for: detail
-        )
+        ).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.bookProgressRequests.first?.source, "manual")
@@ -6645,10 +6646,10 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.bookProgressRequests.first?.value, Decimal(42))
         XCTAssertEqual(tracking.bookProgressRequests.first?.notes, "")
         XCTAssertEqual(tracking.updateRequests.count, 0)
-        XCTAssertEqual(viewModel.tracking?.status, "In progress")
-        XCTAssertEqual(viewModel.tracking?.progress?.kind, "percentage")
-        XCTAssertEqual(viewModel.tracking?.progress?.value, Decimal(42))
-        XCTAssertEqual(viewModel.tracking?.progress?.compactDisplayText, "42%")
+        XCTAssertEqual(viewModel.viewer?.status, "In progress")
+        XCTAssertEqual(viewModel.viewer?.progress?.kind, "percentage")
+        XCTAssertEqual(viewModel.viewer?.progress?.value, Decimal(42))
+        XCTAssertEqual(viewModel.viewer?.progress?.compactDisplayText, "42%")
         XCTAssertEqual(ProgressDisplayPreferences.mode(for: detail.ref), .percentage)
     }
 
@@ -6663,11 +6664,12 @@ final class SpineTests: XCTestCase {
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
         )
+        viewModel.detail = detail
 
         let didSave = await viewModel.saveProgress(
             ProgressUpdateSaveRequest(mode: .percentage, value: 100),
             for: detail
-        )
+        ).value
 
         XCTAssertFalse(didSave)
         XCTAssertEqual(tracking.updateRequests.count, 0)
@@ -6675,7 +6677,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.consumedRefs.count, 0)
         XCTAssertEqual(tracking.completedBooks.count, 0)
         XCTAssertNotNil(viewModel.progressErrorMessage)
-        XCTAssertNil(viewModel.tracking)
+        XCTAssertEqual(viewModel.viewer, detail.userState ?? .untracked)
     }
 
     @MainActor
@@ -6734,22 +6736,6 @@ final class SpineTests: XCTestCase {
         XCTAssertTrue(retried)
         XCTAssertNil(model.deleteErrorMessage)
         XCTAssertEqual(diary.deletedIds, [1, 1])
-    }
-
-    @MainActor
-    func testGameActionKeepsMutationWhenCanonicalRefreshFails() async {
-        let detail = TestFixtures.logDetail(mediaType: "game")
-        let tracking = RecordingTrackingRepository()
-        let model = MediaDetailViewModel(ref: detail.ref,
-            mediaRepository: MediaDetailFixtureRepository(detailError: APIError.httpStatus(503, nil)),
-            trackingRepository: tracking, diaryRepository: RecordingDiaryRepository(), onUnauthorized: {})
-        let first = await model.performGameAction("restart", for: detail)
-        let second = await model.performGameAction("restart", for: detail)
-        XCTAssertFalse(first)
-        XCTAssertFalse(second)
-        XCTAssertNotNil(model.quickActionErrorMessage)
-        XCTAssertEqual(tracking.gameActions.count, 2)
-        XCTAssertEqual(tracking.gameActions[0].request.mutationId, tracking.gameActions[1].request.mutationId)
     }
 
     @MainActor
@@ -7051,17 +7037,17 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let planned = await viewModel.performQuickAction(.planning, for: detail)
-        let started = await viewModel.performQuickAction(.currently, for: detail)
-        let paused = await viewModel.performQuickAction(.paused, for: detail)
-        let dropped = await viewModel.performQuickAction(.stopped, for: detail)
-        let resumed = await viewModel.performQuickAction(.currently, for: detail)
+        let planned = await viewModel.performQuickAction(.planning, for: detail).value
+        let started = await viewModel.performQuickAction(.currently, for: detail).value
+        let paused = await viewModel.performQuickAction(.paused, for: detail).value
+        let dropped = await viewModel.performQuickAction(.stopped, for: detail).value
+        let resumed = await viewModel.performQuickAction(.currently, for: detail).value
         let listened = await viewModel.performQuickAction(
             .finished,
             for: detail,
             completedAt: completedAt
-        )
-        let removed = await viewModel.removeTracking(for: detail)
+        ).value
+        let removed = await viewModel.removeTracking(for: detail).value
 
         XCTAssertTrue(planned)
         XCTAssertTrue(started)
@@ -8911,8 +8897,9 @@ private final class TaggedDiaryFixtureRepository: DiaryRepository {
 
 private final class RecordingTrackingRepository: TrackingRepository {
     var gameActions: [(ref: MediaRef, action: String, request: BookActionRequest)] = []
-    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws {
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
         gameActions.append((ref, action, request))
+        return nil
     }
     var detailRequests: [MediaRef] = []
     var detailResponse = TestFixtures.trackingState

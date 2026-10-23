@@ -43,8 +43,8 @@ struct GamePlaythroughEditor: View {
     @Environment(\.dismiss) private var dismiss
     let playthrough: GamePlaythroughState
     let onSave: (GamePlaythroughWriteRequest) async -> Bool
-    let onAction: (String) async -> Bool
-    let onDelete: () async -> Bool
+    let onAction: (String) -> Void
+    let onDelete: () -> Void
     let onFinish: () -> Void
     let errorMessage: () -> String?
     @State private var draft: GameProgressDraft
@@ -53,11 +53,12 @@ struct GamePlaythroughEditor: View {
     @State private var endDate: Date
     @State private var hasStartDate: Bool
     @State private var saving = false
+    @State private var isClosing = false
     @State private var error: String?
     @State private var confirmation: String?
 
     init(playthrough: GamePlaythroughState, onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool,
-         onAction: @escaping (String) async -> Bool, onDelete: @escaping () async -> Bool,
+         onAction: @escaping (String) -> Void, onDelete: @escaping () -> Void,
          onFinish: @escaping () -> Void, errorMessage: @escaping () -> String?) {
         self.playthrough = playthrough
         self.onSave = onSave
@@ -88,20 +89,22 @@ struct GamePlaythroughEditor: View {
                 if playthrough.isUnfinished {
                     Section("Status") {
                         Button(playthrough.status == "Paused" ? "Resume" : "Pause") {
-                            run { await onAction(playthrough.status == "Paused" ? "resume" : "pause") }
+                            choose { onAction(playthrough.status == "Paused" ? "resume" : "pause") }
                         }
                         Button("Finish", action: onFinish)
                         Button("Drop", role: .destructive) { confirmation = "drop" }
                     }
+                    .disabled(saving)
                     Section {
                         Button("Restart from Beginning") { confirmation = "restart" }
                         Button("Delete Playthrough", role: .destructive) { confirmation = "delete" }
                     }
+                    .disabled(saving)
                 } else if playthrough.status == "Dropped" {
                     Section { Button("Delete Playthrough", role: .destructive) { confirmation = "delete" } }
+                        .disabled(saving)
                 }
             }
-            .disabled(saving)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Playthrough")
             .navigationBarTitleDisplayMode(.inline)
@@ -126,7 +129,7 @@ struct GamePlaythroughEditor: View {
                 Button(confirmation == "restart" ? "Restart" : confirmation == "delete" ? "Delete Playthrough" : "Drop", role: .destructive) {
                     let action = confirmation ?? ""
                     confirmation = nil
-                    run { action == "delete" ? await onDelete() : await onAction(action) }
+                    choose { action == "delete" ? onDelete() : onAction(action) }
                 }
                 Button("Cancel", role: .cancel) { confirmation = nil }
             } message: { Text(confirmationMessage) }
@@ -149,8 +152,16 @@ struct GamePlaythroughEditor: View {
         default: "Your progress will be kept in history."
         }
     }
+    /// Status changes apply behind the sheet, so it closes on the tap. A second tap while it slides away is ignored.
+    private func choose(_ choice: () -> Void) {
+        guard !saving, !isClosing else { return }
+        isClosing = true
+        choice()
+        dismiss()
+    }
+
     private func run(_ operation: @escaping () async -> Bool) {
-        guard !saving else { return }
+        guard !saving, !isClosing else { return }
         saving = true
         error = nil
         Task {
@@ -183,34 +194,44 @@ extension View {
 }
 
 struct GameActionSheet: View {
+    /// What the sheet showed when a choice was made. The rows keep it while the sheet slides away, so neither
+    /// they nor the detent change under the finger, and a second tap is ignored.
+    private struct Snapshot {
+        let status: String?
+        let game: GameTrackingState?
+    }
+
     let status: String?
     let game: GameTrackingState?
-    let isSaving: Bool
-    let errorMessage: String?
-    let onAction: (MediaDetailQuickAction) async -> Void
+    let onAction: (MediaDetailQuickAction) -> Void
     let onLog: () -> Void
     let onProgress: () -> Void
-    let onRemove: () async -> Void
+    let onRemove: () -> Void
+    @State private var committed: Snapshot?
     @State private var confirmDrop = false
     @State private var confirmRemove = false
 
+    private var shown: Snapshot { committed ?? Snapshot(status: status, game: game) }
+
     var body: some View {
+        let status = shown.status
+        let game = shown.game
         NavigationStack {
             List {
                 Section {
                     statusButton("Playing", symbol: "play.fill", action: .currently, selected: status == "In progress", disabled: game?.hasPlayingPlaythrough == true)
                     statusButton("Planning", symbol: "bookmark", action: .planning, selected: status == "Planning", disabled: status == "Planning" || game?.hasLivePlaythrough == true)
                     statusButton("Paused", symbol: "pause.fill", action: .paused, selected: status == "Paused")
-                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { Task { await onAction(.stopped) } } } label: {
+                    Button { if game?.hasLivePlaythrough == true { confirmDrop = true } else { commit { onAction(.stopped) } } } label: {
                         Label(status == "Dropped" ? "Dropped ✓" : "Dropped", systemImage: "stop.fill")
                     }.disabled(status == "Dropped")
-                    if status == "Paused" { Button("Resume") { Task { await onAction(.currently) } } }
-                    Button("Log Completion", systemImage: "square.and.pencil", action: onLog)
+                    if status == "Paused" { Button("Resume") { commit { onAction(.currently) } } }
+                    Button("Log Completion", systemImage: "square.and.pencil") { commit(onLog) }
                 }
                 if game?.hasLivePlaythrough == true {
                     Text("Pause, drop, or delete the unfinished playthrough before choosing Planning.").font(.caption).foregroundStyle(.secondary)
                 }
-                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3", action: onProgress) }
+                if game?.canUpdateProgress == true { Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onProgress) } }
                 if status != nil {
                     Section {
                         Button("Remove from Library", role: .destructive) { confirmRemove = true }
@@ -220,22 +241,26 @@ struct GameActionSheet: View {
                         }
                     }
                 }
-                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
             }
             .fitsSheetToContent()
             .navigationTitle("Track this game").navigationBarTitleDisplayMode(.inline)
-            .disabled(isSaving)
             .confirmationDialog("Drop this playthrough?", isPresented: $confirmDrop, titleVisibility: .visible) {
-                Button("Drop", role: .destructive) { Task { await onAction(.stopped) } }
+                Button("Drop", role: .destructive) { commit { onAction(.stopped) } }
             } message: { Text("Your progress will be kept in history.") }
             .confirmationDialog("Remove from Library?", isPresented: $confirmRemove, titleVisibility: .visible) {
-                Button("Remove", role: .destructive) { Task { await onRemove() } }
+                Button("Remove", role: .destructive) { commit(onRemove) }
             } message: { Text("This clears current rating and heart. Custom lists stay unchanged.") }
         }.preferredColorScheme(.dark)
     }
 
+    private func commit(_ choice: () -> Void) {
+        guard committed == nil else { return }
+        committed = Snapshot(status: status, game: game)
+        choice()
+    }
+
     private func statusButton(_ title: String, symbol: String, action: MediaDetailQuickAction, selected: Bool, disabled: Bool? = nil) -> some View {
-        Button { Task { await onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
+        Button { commit { onAction(action) } } label: { Label(selected ? "\(title) ✓" : title, systemImage: symbol) }
             .disabled(disabled ?? selected)
     }
 }
@@ -258,22 +283,23 @@ struct GameProgressSheet: View {
     let detail: MediaDetail
     let playthrough: GamePlaythroughState
     let onSave: (GamePlaythroughWriteRequest) async -> Bool
-    let onAction: (String) async -> Bool
-    let onDelete: () async -> Bool
+    let onAction: (String) -> Void
+    let onDelete: () -> Void
     let onFinish: () -> Void
     let onEditDates: () -> Void
     let errorMessage: () -> String?
     @State private var mode: Mode
     @State private var input = ""
     @State private var saving = false
+    @State private var isClosing = false
     @State private var error: String?
     @State private var pending: PendingAction?
     @State private var contentHeight: CGFloat = 300
-    @FocusState private var focused: Bool
+    @State private var focusRequest = 0
 
     init(detail: MediaDetail, playthrough: GamePlaythroughState,
-         onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) async -> Bool,
-         onDelete: @escaping () async -> Bool, onFinish: @escaping () -> Void, onEditDates: @escaping () -> Void,
+         onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) -> Void,
+         onDelete: @escaping () -> Void, onFinish: @escaping () -> Void, onEditDates: @escaping () -> Void,
          errorMessage: @escaping () -> String?) {
         self.detail = detail
         self.playthrough = playthrough
@@ -308,6 +334,7 @@ struct GameProgressSheet: View {
     var body: some View {
         VStack(spacing: 18) {
             header
+                .disabled(saving)
             HStack(spacing: 8) {
                 lastStat
                 nowStat
@@ -321,12 +348,13 @@ struct GameProgressSheet: View {
             if playthrough.isUnfinished {
                 ProgressStatusRow(choices: [
                     ProgressStatusChoice(title: "Playing", systemImage: "play.fill",
-                                         isCurrent: playthrough.status == "In progress") { run { await onAction("resume") } },
+                                         isCurrent: playthrough.status == "In progress") { choose { onAction("resume") } },
                     ProgressStatusChoice(title: "Paused", systemImage: "pause.fill",
-                                         isCurrent: playthrough.status == "Paused") { run { await onAction("pause") } },
+                                         isCurrent: playthrough.status == "Paused") { choose { onAction("pause") } },
                     ProgressStatusChoice(title: "Finished", systemImage: "checkmark", isCurrent: false, action: onFinish),
                     ProgressStatusChoice(title: "Dropped", systemImage: "xmark", isCurrent: false) { pending = .drop },
                 ])
+                .disabled(saving)
             }
             saveButton
             HStack(spacing: 22) {
@@ -339,6 +367,7 @@ struct GameProgressSheet: View {
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
             .buttonStyle(.borderless)
+            .disabled(saving)
         }
         .padding(.horizontal, 16)
         .padding(.top, 22)
@@ -346,12 +375,10 @@ struct GameProgressSheet: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         .frame(maxHeight: .infinity, alignment: .top)
-        .disabled(saving)
         .presentationDetents([.height(contentHeight)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color(uiColor: .secondarySystemBackground))
         .interactiveDismissDisabled(saving)
-        .onAppear { focused = true }
         .onChange(of: mode) { input = "" }
         .onChange(of: input) { _, value in
             let digits = String(value.filter(\.isNumber).prefix(mode == .hours ? 5 : 3))
@@ -363,9 +390,9 @@ struct GameProgressSheet: View {
                 let action = pending
                 pending = nil
                 switch action {
-                case .drop: run { await onAction("drop") }
-                case .restart: run { await onAction("restart") }
-                case .delete: run { await onDelete() }
+                case .drop: choose { onAction("drop") }
+                case .restart: choose { onAction("restart") }
+                case .delete: choose(onDelete)
                 case nil: break
                 }
             }
@@ -413,13 +440,9 @@ struct GameProgressSheet: View {
         VStack(spacing: 6) {
             Text("Now").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             HStack(spacing: 2) {
-                TextField(lastValue.map(String.init) ?? "0", text: $input)
-                    .keyboardType(.numberPad)
-                    .focused($focused)
-                    .multilineTextAlignment(.center)
-                    .font(.title3.monospacedDigit().weight(.semibold))
-                    .fixedSize()
-                    .accessibilityLabel(mode == .hours ? "Hours played" : "Percent complete")
+                AutofocusNumberField(text: $input, placeholder: lastValue.map(String.init) ?? "0",
+                                     accessibilityLabel: mode == .hours ? "Hours played" : "Percent complete",
+                                     focusRequest: focusRequest)
                 Text(mode == .hours ? "h" : "%")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -429,7 +452,7 @@ struct GameProgressSheet: View {
         .frame(height: 72)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(Rectangle())
-        .onTapGesture { focused = true }
+        .onTapGesture { focusRequest += 1 }
     }
 
     private var saveButton: some View {
@@ -483,8 +506,16 @@ struct GameProgressSheet: View {
         }
     }
 
+    /// Status changes apply behind the sheet, so it closes on the tap. A second tap while it slides away is ignored.
+    private func choose(_ choice: () -> Void) {
+        guard !saving, !isClosing else { return }
+        isClosing = true
+        choice()
+        dismiss()
+    }
+
     private func run(_ operation: @escaping () async -> Bool) {
-        guard !saving else { return }
+        guard !saving, !isClosing else { return }
         saving = true
         error = nil
         Task {

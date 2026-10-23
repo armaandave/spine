@@ -14,34 +14,34 @@ nonisolated struct GameProgressValues: Codable, Hashable {
 }
 
 nonisolated struct GamePlaythroughState: Codable, Hashable, Identifiable {
-    let id: Int
-    let status: String
-    let origin: String?
-    let startDate: String?
-    let endDate: String?
-    let totalMinutes: Int?
-    let percentage: Int?
-    let completionDiaryEntryId: Int?
-    let isReplay: Bool
+    var id: Int
+    var status: String
+    var origin: String?
+    var startDate: String?
+    var endDate: String?
+    var totalMinutes: Int?
+    var percentage: Int?
+    var completionDiaryEntryId: Int?
+    var isReplay: Bool
 
     var progress: GameProgressValues { GameProgressValues(totalMinutes: totalMinutes, percentage: percentage) }
     var isUnfinished: Bool { ["in progress", "paused"].contains(status.lowercased()) }
 }
 
 nonisolated struct GameTrackingState: Codable, Hashable {
-    let currentPlaythrough: GamePlaythroughState?
-    let playHistory: [GamePlaythroughState]
-    let undatedCompletion: BookUndatedReadState?
-    let statusSource: String?
-    let completionDates: [String]
-    let completedPlaythroughCount: Int
-    let lifetimeCompletionCount: Int
-    let isReplaying: Bool
-    let canRemoveTracking: Bool
-    let availableActions: [String]
-    let actionReasons: [String: String]
-    let importedLifetimeMinutes: Int?
-    let importedLifetimeSource: String?
+    var currentPlaythrough: GamePlaythroughState?
+    var playHistory: [GamePlaythroughState]
+    var undatedCompletion: BookUndatedReadState?
+    var statusSource: String?
+    var completionDates: [String]
+    var completedPlaythroughCount: Int
+    var lifetimeCompletionCount: Int
+    var isReplaying: Bool
+    var canRemoveTracking: Bool
+    var availableActions: [String]
+    var actionReasons: [String: String]
+    var importedLifetimeMinutes: Int?
+    var importedLifetimeSource: String?
 
     var hasLivePlaythrough: Bool { currentPlaythrough?.isUnfinished == true }
     var hasPlayingPlaythrough: Bool { currentPlaythrough?.status == "In progress" }
