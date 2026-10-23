@@ -6189,9 +6189,9 @@ class ApiV1FoundationTests(TestCase):
         self.assertTrue(response.data["posters"][2]["is_selected"])
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#123456", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#123456")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#123456")
     def test_media_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123")
+        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123", is_staff=True)
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.TV.value,
@@ -6218,9 +6218,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#654321", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#654321")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#654321")
     def test_media_book_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="bookposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="bookposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.OPENLIBRARY.value,
             media_type=MediaTypes.BOOK.value,
@@ -6247,9 +6251,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#aabbcc", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#aabbcc")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#aabbcc")
     def test_media_game_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="gameposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="gameposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.IGDB.value,
             media_type=MediaTypes.GAME.value,
@@ -6272,11 +6280,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(item.poster_accent_color, "#aabbcc")
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#d9bc7a", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#d9bc7a")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#d9bc7a")
     def test_media_music_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
         user = get_user_model().objects.create_user(
             username="musicposter2",
             password="strong-password-123",
+            is_staff=True,
         )
         item = Item.objects.create(
             source=Sources.MUSICBRAINZ.value,
@@ -6308,9 +6317,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#abcdef", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#abcdef")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#abcdef")
     def test_media_season_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="seasonposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="seasonposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.SEASON.value,
@@ -6931,7 +6944,6 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.data["backdrop_url"], "https://image.tmdb.org/t/p/original/default-backdrop.jpg")
         self.assertEqual(response.data["custom_backdrop_url"], "https://example.com/custom-backdrop.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     @patch("app.providers.tmdb.get_title_logo", return_value=None)
     @patch("app.providers.tmdb.get_backdrop_images")
     @patch("app.providers.mdblist.get_media_ratings", return_value={})
@@ -6943,7 +6955,11 @@ class ApiV1FoundationTests(TestCase):
         backdrops_mock,
         _logo_mock,
     ):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-curated", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,
@@ -7055,9 +7071,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["backdrop_url"], "https://example.com/only.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     def test_curator_backdrop_save_does_not_overwrite_other_user_preferences(self):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-custom", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,

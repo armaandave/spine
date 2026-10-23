@@ -12,6 +12,7 @@ from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services.social import set_like
 from app import exposure, single_weight
+from app.curation import curated_prefetches
 from app.models import CustomBackdropPreference, CustomPosterPreference, DiaryEntry
 from app.services import delete_diary_entry
 from social.models import ContentLike
@@ -43,6 +44,7 @@ class DiaryListView(APIView):
                     queryset=viewer_backdrops,
                     to_attr="viewer_custom_backdrop_preferences",
                 ),
+                *curated_prefetches("item__"),
             )
             .order_by("-consumed_at", "-id")
         )
