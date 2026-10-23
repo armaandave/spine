@@ -14,7 +14,7 @@ enum LogComposerStyle {
 @Observable
 final class LogTagDraft {
     var tags: [String]
-    private(set) var query = ""
+    var query = ""
     private(set) var library: [DiaryTagSuggestion] = []
     private var hasLoaded = false
 
@@ -30,6 +30,10 @@ final class LogTagDraft {
         guard !hasLoaded else { return }
         library = try await repository.allTags(mine: true)
         hasLoaded = true
+    }
+
+    nonisolated static func containsSeparator(_ text: String) -> Bool {
+        text.contains { $0 == "\n" || $0 == "," }
     }
 
     /// Text typed into the tag field. Everything before a return or comma becomes a tag.
@@ -97,7 +101,7 @@ struct LogHeader: View {
     var showsPoster = true
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .bottom, spacing: 16) {
             if showsPoster {
                 MediaArtwork(
                     url: posterURL,
@@ -106,7 +110,6 @@ struct LogHeader: View {
                     mediaType: mediaType,
                     orientation: orientation
                 )
-                .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -122,9 +125,17 @@ struct LogHeader: View {
                         .lineLimit(2)
                 }
             }
+            .padding(.bottom, 4)
 
             Spacer(minLength: 0)
         }
+    }
+
+    /// "Feb 23, 2017" for an API date like "2017-02-23"; anything else (a bare year) as is.
+    static func dateLabel(_ raw: String) -> String {
+        let parts = raw.prefix(10).split(separator: "-")
+        guard parts.count == 3, let date = CalendarDateCodec.date(from: String(raw.prefix(10))) else { return raw }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }
 
@@ -302,13 +313,20 @@ struct LogTagsSection<Focus: Hashable>: View {
                 }
 
                 // Return adds the tag and keeps the field focused for the next one.
-                // The on-screen keyboard's return arrives as a newline (handled by
-                // `updateQuery`); a hardware return submits instead.
-                TextField("Add tags", text: Binding(get: { draft.query }, set: { draft.updateQuery($0) }), axis: .vertical)
+                // The on-screen keyboard's return types a newline into this
+                // vertical field, which never ends editing; the newline is turned
+                // into a tag after the edit, because a field ignores text rewritten
+                // inside its own edit. A hardware return submits instead.
+                TextField("Add tags", text: $draft.query, axis: .vertical)
                     .lineLimit(1...3)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused(focus, equals: focusValue)
+                    .onChange(of: draft.query) { _, text in
+                        if LogTagDraft.containsSeparator(text) {
+                            draft.updateQuery(text)
+                        }
+                    }
                     .onSubmit {
                         draft.commitQuery()
                         focus.wrappedValue = focusValue

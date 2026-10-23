@@ -482,7 +482,7 @@ struct MediaLogView: View {
                     }
                 }
             }
-            .safeAreaBar(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 errorBanner
             }
         }
@@ -496,7 +496,7 @@ struct MediaLogView: View {
     private var header: some View {
         LogHeader(
             title: viewModel.selectedTitle,
-            subtitle: viewModel.detail.subtitle ?? viewModel.detail.releaseDate,
+            subtitle: viewModel.detail.subtitle ?? viewModel.detail.releaseDate.map { LogHeader.dateLabel($0) },
             posterURL: viewModel.detail.displayPosterURL,
             mediaType: viewModel.detail.ref.mediaType,
             orientation: viewModel.detail.posterOrientation,
@@ -504,19 +504,18 @@ struct MediaLogView: View {
         )
     }
 
+    /// A flat tint in the artwork's color. A blurred image here is redrawn on every frame
+    /// the form scrolls or the keyboard moves, which made the sheet stutter.
     private var backdrop: some View {
         ZStack(alignment: .top) {
             SpinePalette.pageBackground
 
-            HeroArtwork(detail: viewModel.detail)
-                .frame(height: 286)
-
             LinearGradient(
-                colors: [.black.opacity(0.14), SpinePalette.pageBackground.opacity(0.7), SpinePalette.pageBackground],
+                colors: [(Color(hex: viewModel.detail.posterAccentColor) ?? .clear).opacity(0.4), .clear],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 306)
+            .frame(height: 380)
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .ignoresSafeArea()

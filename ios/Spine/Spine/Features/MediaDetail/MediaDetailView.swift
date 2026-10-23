@@ -7750,7 +7750,7 @@ private extension JSONValue {
     }
 }
 
-private extension Color {
+extension Color {
     init?(hex: String?) {
         guard let hex else { return nil }
         let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

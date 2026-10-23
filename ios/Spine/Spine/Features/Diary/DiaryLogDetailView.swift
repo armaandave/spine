@@ -846,7 +846,7 @@ private struct DiaryLogEditSheet: View {
                     }
                 }
             }
-            .safeAreaBar(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let error = viewModel.errorMessage {
                     Text(error)
                         .font(.footnote.weight(.semibold))
