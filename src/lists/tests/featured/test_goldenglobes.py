@@ -36,7 +36,7 @@ class GoldenGlobesHelpersTests(FeaturedTestCase):
 
 
 class GoldenGlobesAdapterTests(FeaturedTestCase):
-    def test_tv_winners_newest_first_with_repeat_wins_merged(self):
+    def test_tv_winners_newest_first_one_row_per_win(self):
         searches = {
             ("tv", "the pitt"): [result(250307, "The Pitt", "2025-01-09", votes=900)],
             ("tv", "succession"): [
@@ -61,16 +61,23 @@ class GoldenGlobesAdapterTests(FeaturedTestCase):
             [(entry.rank, entry.title, entry.key, entry.note) for entry in fetched.entries],
             [
                 (None, "The Pitt", "tmdb:tv:250307", "2026"),
-                (None, "Succession", "tmdb:tv:76331", "2024, 2022"),
+                (None, "Succession", "tmdb:tv:76331", "2024"),
+                (None, "Succession", "tmdb:tv:76331", "2022"),
                 (None, "L.A. Law", "tmdb:tv:732", "1988"),
             ],
         )
+        # The show is matched once, however many times it won.
+        self.assertEqual(sum("/search/" in call.args[2] and "succession" in str(call.kwargs.get("params")).lower() for call in api.call_args_list), 1)
         nomination_call = next(call for call in api.call_args_list if "/nomination" in call.args[2])
         self.assertEqual(nomination_call.kwargs["params"]["award-categories"], 33)
 
         run = self.run_list(get("golden-globes-best-television-series-drama"), fetch_result=fetched)
         self.assertTrue(run.ok, run.message)
-        self.assertListRefs(run.custom_list, ["tmdb:tv:250307", "tmdb:tv:76331", "tmdb:tv:732"])
+        self.assertListRefs(run.custom_list, ["tmdb:tv:250307", "tmdb:tv:76331", "tmdb:tv:76331", "tmdb:tv:732"])
+        self.assertEqual(
+            list(run.custom_list.customlistitem_set.values_list("position", "occurrence", "note")),
+            [(1, 0, "2026"), (2, 0, "2024"), (3, 1, "2022"), (4, 0, "1988")],
+        )
 
     def test_films_use_release_year_and_fall_back_to_tv_show_records(self):
         searches = {

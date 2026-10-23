@@ -2315,9 +2315,9 @@ private struct MediaDetailPageView: View {
                         if let backdropURL = backdropURLString(for: detail) {
                             GeometryReader { proxy in
                                 BackdropArtwork(urlString: backdropURL)
-                                    .frame(height: min(
-                                        resolvedTopSafeAreaInset + MediaDetailLayout.backdropHeight,
-                                        proxy.size.width / MediaDetailLayout.backdropCropAspectRatio
+                                    .frame(height: BackdropLayout.stripHeight(
+                                        width: proxy.size.width,
+                                        topInset: resolvedTopSafeAreaInset
                                     ))
                                     .onLongPressGesture {
                                         openBackdropPicker(for: detail)
@@ -3857,8 +3857,6 @@ private enum MediaDetailLayout {
     static let episodeAccessibilityArtworkHeight: CGFloat = 280
     static let heroPosterTopOffset: CGFloat = 108
     static let backdropTopSpacing: CGFloat = 137.5
-    static let backdropHeight: CGFloat = 352.34375
-    static let backdropCropAspectRatio: CGFloat = 1.5
     static let genrePillHeight: CGFloat = 31
     static let ratingBadgeSize: CGFloat = 24
     static let ratingPillVerticalPadding: CGFloat = 6

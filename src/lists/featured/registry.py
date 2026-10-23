@@ -134,6 +134,16 @@ class FeaturedList:
         object.__setattr__(self, "tags", tuple(self.tags))
         object.__setattr__(self, "params", dict(self.params or {}))
 
+    @property
+    def keeps_repeats(self):
+        """Return whether a work gets a row per entry rather than one row in all.
+
+        All-time award lists list a work once per win (Succession for 2023, 2022 and
+        2020), each row with its own note. Every other list holds an item once: a live
+        ceremony joins one film's categories into one row, and people lists can't repeat.
+        """
+        return self.kind == "award" and not self.live_windows and self.list_type == "media"
+
     def live_window_at(self, now):
         """Return the window nearest to ``now`` that cards should show, if any."""
         for window in self.live_windows:
@@ -151,6 +161,8 @@ def definition_hash(definition, adapter=None, overrides=()):
     """Return a hash of everything that should trigger a re-sync when it changes."""
     payload = asdict(definition)
     payload["engine_version"] = ENGINE_VERSION
+    if definition.keeps_repeats:  # these lists re-synced once into a row per win
+        payload["keeps_repeats"] = True
     if adapter is not None and adapter.version is not None:
         payload["adapter_version"] = adapter.version(definition)
     payload["overrides"] = sorted(overrides)

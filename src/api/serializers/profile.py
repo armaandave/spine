@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from api.serializers.common import image_url, media_summary_from_item
 from app import exposure
+from app.curation import prime_curated_artwork
 from app.models import BasicMedia, DiaryEntry, MediaLike, MediaTypes, Status, Tag
 from social.models import Follow, FollowStatus
 from users.forms import PasswordChangeForm
@@ -112,9 +113,11 @@ def preferences_payload(user):
 
 def hof_payload(user, request=None):
     """Serialize Hall of Fame item map."""
+    items = user.get_hall_of_fame_items()
+    prime_curated_artwork(items.values())
     return {
         media_type: media_summary_from_item(item, request=request, user=user) if item else None
-        for media_type, item in user.get_hall_of_fame_items().items()
+        for media_type, item in items.items()
         if media_type in exposure.media_types()
     }
 

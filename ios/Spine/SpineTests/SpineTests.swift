@@ -199,13 +199,17 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(CustomListReorderMath.rowOffset(for: 2, sourceIndex: 2, targetIndex: 0, activeTranslation: -20, rowHeight: 10), -20)
     }
 
-    func testCustomListBackdropSelectionUsesFirstMovieOrTVBackdrop() {
+    func testCustomListBackdropSelectionUsesFirstItemWithABackdrop() {
         let book = mediaSummary(id: "book", mediaType: "book", backdropURL: "https://example.com/book.jpg")
         let movie = mediaSummary(id: "movie", mediaType: "movie", backdropURL: "https://example.com/movie.jpg")
         let tv = mediaSummary(id: "tv", mediaType: "tv", backdropURL: "https://example.com/tv.jpg", customBackdropURL: "https://example.com/custom-tv.jpg")
 
         XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [book, movie, tv]), "https://example.com/movie.jpg")
         XCTAssertNil(CustomListBackdropSelection.artworkURL(from: [book]))
+        for mediaType in ["game", "anime", "manga"] {
+            let item = mediaSummary(id: mediaType, mediaType: mediaType, backdropURL: "https://example.com/\(mediaType).jpg")
+            XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [book, item]), "https://example.com/\(mediaType).jpg")
+        }
         XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [tv]), "https://example.com/custom-tv.jpg")
         XCTAssertEqual(
             CustomListBackdropSelection.artworkURL(from: [mediaSummary(id: "movie", mediaType: "movie", backdropURL: nil)]),

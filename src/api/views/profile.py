@@ -26,6 +26,7 @@ from api.serializers.profile import (
     profile_payload,
 )
 from app import book_tracking, exposure
+from app.curation import prime_curated_artwork
 from app.models import MediaLike, MediaTypes
 from app.providers import services as provider_services
 from app.services import set_media_like
@@ -96,6 +97,7 @@ class LikedMediaView(APIView):
             likes = likes.filter(item__media_type=media_type)
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(likes, request, view=self)
+        prime_curated_artwork(like.item for like in page)
         return paginator.get_paginated_response(
             [media_summary_from_item(like.item, request=request, user=request.user) for like in page],
         )

@@ -40,6 +40,7 @@ from api.services import filters as filter_service
 from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
+from app.curation import prime_curated_artwork
 from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
@@ -49,15 +50,36 @@ LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
 PERSON_COMPLETION_WORKERS = 8
 PERSON_COMPLETION_TIMEOUT = 25
-HEADER_BACKDROP_MEDIA_TYPES = {MediaTypes.MOVIE.value, MediaTypes.TV.value}
+# Media types whose detail page has a backdrop.
+HEADER_BACKDROP_MEDIA_TYPES = {
+    MediaTypes.MOVIE.value,
+    MediaTypes.TV.value,
+    MediaTypes.GAME.value,
+    MediaTypes.ANIME.value,
+    MediaTypes.MANGA.value,
+}
 
 
-def _header_backdrop_item_id(items):
-    """Return the first movie or TV item: the app shows its backdrop above the list."""
-    return next(
-        (item.id for item in items if item.media_type in HEADER_BACKDROP_MEDIA_TYPES),
-        None,
-    )
+HEADER_BACKDROP_ATTEMPTS = 5
+
+
+def _list_item_summaries(items, request, *, resolve_header):
+    """Serialize items, resolving the header backdrop the app shows above the list.
+
+    The first few items that can have a backdrop are tried in order until one has
+    it, so a list still gets a header when its first title has no backdrop.
+    """
+    attempts = HEADER_BACKDROP_ATTEMPTS if resolve_header else 0
+    found = False
+    summaries = []
+    for item in items:
+        resolve = not found and attempts > 0 and item.media_type in HEADER_BACKDROP_MEDIA_TYPES
+        summary = _list_item_summary(item, request, resolve_backdrop=resolve)
+        if resolve:
+            attempts -= 1
+            found = bool(summary.get("backdrop_url") or summary.get("custom_backdrop_url"))
+        summaries.append(summary)
+    return summaries
 
 
 def _list_item_summary(item, request, *, resolve_backdrop):
@@ -100,7 +122,8 @@ def featured_entry_notes(custom_list):
 
     Only lists the featured-lists engine writes have them; their items gain a ``note``
     key (``"Winner · Best Picture"``, ``"▲2 · $12.4M"`` or null), other lists' items
-    keep their shape.
+    keep their shape. People's notes come from here; media rows carry their own
+    (``CustomListItem.note``), since an award history lists one work once per win.
     """
     return (
         FeaturedListSync.objects.filter(custom_list=custom_list)
@@ -190,20 +213,16 @@ def list_payload(
             if include_preview_items and not include_items:
                 list_items = list_items[:LIST_PREVIEW_ITEM_LIMIT]
             list_items = list(list_items)
-            header_item_id = (
-                _header_backdrop_item_id(list_item.item for list_item in list_items)
-                if include_items
-                else None
+            prime_curated_artwork(list_item.item for list_item in list_items)
+            summaries = _list_item_summaries(
+                [list_item.item for list_item in list_items],
+                request,
+                resolve_header=include_items,
             )
-            for list_item in list_items:
-                item = _list_item_summary(
-                    list_item.item,
-                    request,
-                    resolve_backdrop=list_item.item_id == header_item_id,
-                )
+            for list_item, item in zip(list_items, summaries, strict=True):
                 item["position"] = list_item.position
                 if notes is not None:
-                    item["note"] = notes.get(str(list_item.item_id))
+                    item["note"] = list_item.note or None
                 items.append(item)
         if include_preview_items:
             data["preview_items"] = items
@@ -644,28 +663,24 @@ class ListItemsView(APIView):
         notes = featured_entry_notes(custom_list)
         # Only the plain first page, which the app opens a list with, resolves the
         # header backdrop; filtered, sorted and later pages make no provider calls.
-        header_item_id = (
-            _header_backdrop_item_id(list_item.item for list_item in page)
-            if paginator.page.number == 1
-            and set(request.query_params) <= {"page", "page_size"}
-            else None
+        summaries = _list_item_summaries(
+            [list_item.item for list_item in page],
+            request,
+            resolve_header=paginator.page.number == 1
+            and set(request.query_params) <= {"page", "page_size"},
         )
         response = paginator.get_paginated_response(
             [
                 {
-                    **_list_item_summary(
-                        list_item.item,
-                        request,
-                        resolve_backdrop=list_item.item_id == header_item_id,
-                    ),
+                    **summary,
                     "position": list_item.position,
                     "date_added": list_item.date_added,
                     "your_rating": f"{list_item.user_rating:.1f}"
                     if list_item.user_rating is not None
                     else None,
-                    **({"note": notes.get(str(list_item.item_id))} if notes is not None else {}),
+                    **({"note": list_item.note or None} if notes is not None else {}),
                 }
-                for list_item in page
+                for list_item, summary in zip(page, summaries, strict=True)
             ],
         )
         response.data["completion"] = completion_service.completion_for_items(
@@ -690,7 +705,13 @@ class ListItemsView(APIView):
                 CustomListItem.objects.filter(custom_list=custom_list).aggregate(Max("position"))["position__max"] or 0
             )
             defaults["position"] = max_position + 1
-        _, created = CustomListItem.objects.get_or_create(custom_list=custom_list, item=item, defaults=defaults)
+        # A person adds an item once; only award histories repeat one (occurrence 1+).
+        _, created = CustomListItem.objects.get_or_create(
+            custom_list=custom_list,
+            item=item,
+            occurrence=0,
+            defaults=defaults,
+        )
         if created:
             Activity.objects.create(
                 actor=request.user,

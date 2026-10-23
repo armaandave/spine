@@ -74,7 +74,7 @@ class SeriesTests(FeaturedTestCase):
             result = ADAPTERS["musicbrainz_series"].fetch(definition("grammy-album-of-the-year"))
 
         self.assertEqual([entry.title for entry in result.entries], ["DeBÍ TiRAR MáS FOToS", "COWBOY CARTER", "The Music From Peter Gunn"])
-        self.assertEqual(result.entries[0].note, "Album of the Year · 2026")
+        self.assertEqual([entry.note for entry in result.entries], ["2026", "2025", "1959"])
         self.assertIsNone(result.entries[0].rank)
         self.assertEqual(result.edition, "1959–2026")
 

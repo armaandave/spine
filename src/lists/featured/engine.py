@@ -81,12 +81,17 @@ def compute_hash(definition):
 
 
 def dedupe(definition, fetch):
-    """Drop repeated entry keys (first wins) and order ranked lists by rank."""
+    """Drop repeated entry keys (first wins) and order ranked lists by rank.
+
+    On lists that keep repeats only an entry with the same key and note is a repeat:
+    one work's wins in different years are separate entries.
+    """
     seen, entries = set(), []
     for entry in fetch.entries:
-        if entry.key in seen:
+        identity = (entry.key, entry.note) if definition.keeps_repeats else entry.key
+        if identity in seen:
             continue
-        seen.add(entry.key)
+        seen.add(identity)
         entries.append(entry)
     if definition.is_ranked:
         entries.sort(key=lambda entry: (entry.rank is None, entry.rank or 0))

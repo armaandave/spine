@@ -17,8 +17,9 @@ from lists.models import CustomList, CustomListItem, PersonListItem
 
 # The subject's completed set takes one query per user-owned media type plus
 # episodes. On top of that come the lists, the per-list type counts, the
-# completed members, the poster rows and the two viewer artwork prefetches.
-LIST_PROGRESS_QUERIES = 16
+# completed members, the poster rows, and the two viewer and two curator
+# artwork prefetches.
+LIST_PROGRESS_QUERIES = 18
 
 
 class ListProgressTests(TestCase):
@@ -54,6 +55,16 @@ class ListProgressTests(TestCase):
             for index, item in enumerate(items, start=1)
         ])
         return custom_list
+
+    def test_completion_counts_an_award_historys_repeats_once(self):
+        show, other = self.item(), self.item()
+        self.complete(show)
+        emmys = self.make_list("Emmys", [show, other])
+        CustomListItem.objects.create(custom_list=emmys, item=show, position=3, occurrence=1, note="2022")
+
+        (row,) = self.progress()
+
+        self.assertEqual((row["id"], row["completion"]), (emmys.id, {"completed_count": 1, "total_count": 2}))
 
     def complete(self, *items):
         Movie.objects.bulk_create([

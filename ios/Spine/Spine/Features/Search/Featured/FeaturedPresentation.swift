@@ -17,19 +17,12 @@ extension EnvironmentValues {
 /// The one status line a featured tile shows, highest priority first.
 enum FeaturedBadge: Equatable {
     case live(label: String)
-    case updated(Date)
     case period(String)
     case kind(FeaturedKind)
-
-    static let recentWindow: TimeInterval = 7 * 24 * 60 * 60
 
     static func resolve(for card: FeaturedListCard, now: Date) -> FeaturedBadge {
         if let live = card.live, live.isLive(at: now) {
             return .live(label: live.label)
-        }
-        // A static list changes only when Spine edits it, which isn't news.
-        if card.cadence != .static, card.wasUpdatedRecently(now: now), let changed = card.contentChangedAt {
-            return .updated(changed)
         }
         if let period = card.periodLabel {
             return .period(period)
@@ -47,83 +40,14 @@ enum FeaturedEntryNote {
     }
 }
 
-/// A chart entry's movement, read from its note ("▲2", "▼1", "NEW").
-enum FeaturedMovement: Equatable {
-    case up(Int)
-    case down(Int)
-    case new
-
-    init?(note: String?) {
-        guard let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else { return nil }
-        if note.uppercased().contains("NEW") {
-            self = .new
-            return
-        }
-        for (arrow, make) in [("▲", FeaturedMovement.up), ("▼", FeaturedMovement.down)] {
-            guard let range = note.range(of: arrow) else { continue }
-            let digits = note[range.upperBound...].prefix { $0.isNumber }
-            guard let amount = Int(digits), amount > 0 else { return nil }
-            self = make(amount)
-            return
-        }
-        return nil
-    }
-
-    var text: String {
-        switch self {
-        case let .up(amount): "▲\(amount)"
-        case let .down(amount): "▼\(amount)"
-        case .new: "NEW"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .up: Color(red: 0.34, green: 0.82, blue: 0.48)
-        case .down: Color(red: 0.95, green: 0.38, blue: 0.36)
-        case .new: Color(red: 0.98, green: 0.78, blue: 0.30)
-        }
-    }
-}
-
-enum FeaturedRelativeTime {
-    /// "now", "12m", "2h", "3d", "5w"
-    static func short(from date: Date, now: Date) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        switch seconds {
-        case ..<60: return "now"
-        case ..<3600: return "\(Int(seconds / 60))m"
-        case ..<86400: return "\(Int(seconds / 3600))h"
-        case ..<(7 * 86400): return "\(Int(seconds / 86400))d"
-        default: return "\(Int(seconds / (7 * 86400)))w"
-        }
-    }
-
-    /// "Updated 2h ago", "Updated just now"
-    static func updatedLabel(from date: Date, now: Date) -> String {
-        let short = short(from: date, now: now)
-        return short == "now" ? "Updated just now" : "Updated \(short) ago"
-    }
-}
-
 extension FeaturedListCard {
     func isLive(at now: Date) -> Bool {
         live?.isLive(at: now) == true
     }
 
-    func wasUpdatedRecently(now: Date) -> Bool {
-        guard let contentChangedAt else { return false }
-        return now.timeIntervalSince(contentChangedAt) < FeaturedBadge.recentWindow
-    }
-
     /// The single media type a list is about, or nil when it mixes types.
     var singleMediaType: String? {
         mediaTypes.count == 1 ? mediaTypes.first : nil
-    }
-
-    /// The color of status text: the media type's stats color, or the default for mixed lists.
-    var accentColor: Color {
-        MediaTypeTheme.theme(for: singleMediaType ?? APIConstants.allMedia).statsColor
     }
 
     var usesSquareArtwork: Bool {
@@ -138,78 +62,27 @@ extension FeaturedListCard {
         return "\(itemsCount.formatted()) \(noun)"
     }
 
-    /// "10 films · Weekly"
-    var countLabel: String {
-        [countText, cadence.label].compactMap { $0 }.joined(separator: " · ")
-    }
-
     /// The people a tile stacks in place of posters: a people list's, when it has no media previews.
     var stackPeople: [PersonListEntry] {
         previews.isEmpty ? previewPeople : []
     }
 
-    /// The rank to show on a preview, or on a person in place of previews, when the list is ranked.
-    func rank(at index: Int) -> Int? {
-        guard isRanked else { return nil }
-        if previews.indices.contains(index) {
-            return previews[index].media.position ?? index + 1
-        }
-        guard stackPeople.indices.contains(index) else { return nil }
-        return stackPeople[index].position ?? index + 1
-    }
-
-    /// "CHART · Netflix · Updated 2h ago · Refreshes weekly", for the list detail.
-    func metadataLine(now: Date) -> String {
-        var parts: [String] = []
-        if kind != .unknown {
-            parts.append(kind.badgeLabel)
-        }
-        if let name = source?.name, !name.isEmpty {
-            parts.append(name)
-        }
-        if let changed = contentChangedAt {
-            parts.append(FeaturedRelativeTime.updatedLabel(from: changed, now: now))
-        } else if let period = periodLabel {
-            parts.append(period)
-        }
-        if let refresh = cadence.refreshLabel {
-            parts.append(refresh)
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// What VoiceOver reads for a tile: the name, the status badge, the count and the source, then, for cards that
-    /// show them, the top three entries with their chart movement.
-    func accessibilitySummary(now: Date, includesTopEntries: Bool = false) -> String {
-        var parts = [name, FeaturedBadge.resolve(for: self, now: now).accessibilityText(now: now), countLabel, source?.name]
-        if includesTopEntries {
-            parts += previews.prefix(3).enumerated().map { index, preview in
-                let movement = FeaturedMovement(note: preview.note).map { ", \($0.accessibilityText)" } ?? ""
-                return "\(rank(at: index) ?? index + 1). \(preview.media.displayTitle)\(movement)"
-            }
-        }
-        return parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    /// What VoiceOver reads for a tile: the name, the status badge, the count and the source.
+    func accessibilitySummary(now: Date) -> String {
+        [name, FeaturedBadge.resolve(for: self, now: now).accessibilityText, countText, source?.name]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
     }
 }
 
 extension FeaturedBadge {
-    /// The badge as VoiceOver reads it ("Live, 7 of 23 announced", "Updated 2h ago", "Award").
-    func accessibilityText(now: Date) -> String? {
+    /// The badge as VoiceOver reads it ("Live, 7 of 23 announced", "2026", "Award").
+    var accessibilityText: String? {
         switch self {
         case let .live(label): label.isEmpty ? "Live" : "Live, \(label)"
-        case let .updated(date): FeaturedRelativeTime.updatedLabel(from: date, now: now)
         case let .period(label): label
         case let .kind(kind): kind == .unknown ? nil : kind.rawValue.capitalized
-        }
-    }
-}
-
-extension FeaturedMovement {
-    var accessibilityText: String {
-        switch self {
-        case let .up(amount): "up \(amount)"
-        case let .down(amount): "down \(amount)"
-        case .new: "new"
         }
     }
 }
@@ -235,11 +108,14 @@ enum FeaturedCountNoun {
 }
 
 extension FeaturedShelvesResponse {
-    /// The landing's shelves without media types the user turned off. "Now" and "Across Media" keep a list unless
-    /// every one of its media types is off.
+    /// The landing's shelves without media types the user turned off, and without "Now", which the landing doesn't
+    /// show. "Across Media" keeps a list unless every one of its media types is off.
     func visibleShelves(enabledMediaTypes: [String]) -> [FeaturedShelf] {
         let enabled = Set(enabledMediaTypes)
         return shelves.compactMap { shelf in
+            if shelf.isNow {
+                return nil
+            }
             if let mediaType = shelf.mediaType, !shelf.isMixed {
                 return enabled.contains(mediaType) ? shelf : nil
             }
