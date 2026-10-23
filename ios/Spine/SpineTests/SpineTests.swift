@@ -222,6 +222,53 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCustomListHeaderArtworkPrefersABackdropThenBlursTheFirstCover() {
+        let movie = mediaSummary(id: "movie", mediaType: "movie", backdropURL: "https://example.com/movie.jpg")
+        // Books never use a backdrop, even one the server sent.
+        let book = mediaSummary(id: "book", mediaType: "book", backdropURL: "https://example.com/book.jpg")
+        let album = mediaSummary(id: "album", mediaType: "music", backdropURL: nil)
+        let comic = mediaSummary(id: "comic", mediaType: "comic", backdropURL: nil)
+
+        XCTAssertEqual(CustomListBackdropSelection.artwork(from: [movie]), .backdrop("https://example.com/movie.jpg"))
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [book, mediaSummary(id: "book-2", mediaType: "book", backdropURL: nil)]),
+            .blurredCover("https://example.com/book-poster.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [album, comic]),
+            .blurredCover("https://example.com/album-poster.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [book, album, comic, movie]),
+            .backdrop("https://example.com/movie.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [mediaSummary(id: "movie", mediaType: "movie", backdropURL: nil)]),
+            .blurredCover("https://example.com/movie-poster.jpg")
+        )
+    }
+
+    @MainActor
+    func testCustomListHeaderArtworkIsNilWithoutABackdropOrCover() {
+        let coverless = MediaSummary(
+            ref: MediaRef(itemId: nil, source: "openlibrary", mediaType: "book", mediaId: "coverless", seasonNumber: nil, episodeNumber: nil),
+            title: "Coverless"
+        )
+        let blankCover = MediaSummary(
+            ref: MediaRef(itemId: nil, source: "musicbrainz", mediaType: "music", mediaId: "blank", seasonNumber: nil, episodeNumber: nil),
+            title: "Blank",
+            posterUrl: "   "
+        )
+
+        XCTAssertNil(CustomListBackdropSelection.artwork(from: []))
+        XCTAssertNil(CustomListBackdropSelection.artwork(from: [coverless, blankCover]))
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [coverless, mediaSummary(id: "book", mediaType: "book", backdropURL: nil)]),
+            .blurredCover("https://example.com/book-poster.jpg")
+        )
+    }
+
     func testCustomListHeaderClearsTopControlsWithoutBackdropAndPullsUpWithBackdrop() {
         XCTAssertFalse(
             CustomListHeaderLayout.ignoredSafeAreaEdges(hasBackdrop: false).contains(.top)
