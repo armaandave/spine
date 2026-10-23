@@ -149,6 +149,8 @@ The existing lists keep their identities: `("mdblist", "155837")` and `("nyt", <
 4. ISBNs: Hardcover, then Open Library, in today's `_resolve_book` order.
 5. A strict title search per media type: exact normalized title, year ±1, creator when available. No fuzzy guessing.
 
+After the direct IDs that need no network, and before any lookup (`imdb`, `steam`, ISBNs, title search) or the cache, the engine's resolver reuses the list's own past matches: the Item its latest snapshot holds for the entry's key, when that Item still exists and has one of the entry's media types (one snapshot read per run). Overrides and refs still win. Unlike the cache, these survive a deploy.
+
 Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 45 days (longer than the longest cadence, 33 days; each hit refreshes the TTL), misses for 1 day. Title searches are capped per run (default 50); entries past the cap are deferred for an hour, not unresolved, so the next run searches the next batch. Unresolved entries go to the health report.
 
 **Writer guards**, in order:

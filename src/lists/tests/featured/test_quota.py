@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import requests
+from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
 from app.providers import quota, services
@@ -233,6 +234,28 @@ class EngineDeferralTests(FeaturedTestCase):
         self.assertEqual(result.status, "deferred")
         self.assertEqual(result.custom_list.items.count(), 8)
         self.assertEqual((self.sync().deferred_until, self.sync().resolved_count), (MIDNIGHT, 8))
+
+    def test_a_list_rematches_its_own_books_from_its_latest_snapshot(self):
+        # Every deploy clears the Redis cache that held these matches; the list's own
+        # snapshot still knows them, so a spent budget doesn't empty the run.
+        found = {
+            f"97800000000{number:02d}": {"source": "hardcover", "media_id": str(100 + number), "title": f"New {number}", "image": f"https://c/{number}.jpg"}
+            for number in (1, 2, 3)
+        }
+        with (
+            override_settings(FEATURED_HARDCOVER_DAILY_BUDGET=100),
+            patch("app.providers.hardcover.lookup_book_by_isbn", side_effect=found.get),
+        ):
+            first = self.run_list(self.definition, isbn_books(1, 2, 3), now=NOW - timedelta(days=1))
+        self.assertEqual(first.status, "ok")
+        cache.clear()
+
+        result = self.run_list(self.definition, isbn_books(1, 2, 3), now=NOW)
+
+        self.assertEqual(result.status, "unchanged")
+        self.assertEqual({resolution.how for resolution in result.resolutions}, {"snapshot"})
+        self.assertListRefs(result.custom_list, ["hardcover:book:101", "hardcover:book:102", "hardcover:book:103"])
+        self.assertIsNone(self.sync().deferred_until)
 
     def test_a_current_list_is_left_as_it_is_rather_than_shrunk(self):
         with override_settings(FEATURED_HARDCOVER_DAILY_BUDGET=100):
