@@ -82,6 +82,8 @@ export SPINE_DEV_SIGN_IN=1
 export REDIS_URL=redis://localhost:6379/5
 export CELERY_REDIS_URL=redis://localhost:6379/5
 export REDIS_PREFIX="local-$(basename "$top"):"
+# Cache provider metadata like production, so phone timings match it.
+export DEV_CACHE=redis
 # Dev shares production's Hardcover key, so featured-list syncs never spend it here.
 export FEATURED_HARDCOVER_DAILY_BUDGET=0
 
