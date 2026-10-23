@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -15,7 +16,7 @@ from api.views.featured import Featured, list_payloads
 from api.views.lists import list_payload
 from app.models import Item, MediaTypes, Sources
 from lists.featured import order, registry
-from lists.featured.registry import LiveWindow
+from lists.featured.registry import Guards, LiveWindow
 from lists.featured.types import Entry
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
 from lists.tests.featured.helpers import FeaturedTestCase, make_definition
@@ -338,6 +339,56 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
 
     def test_requires_authentication(self):
         self.assertEqual(APIClient().get("/api/v1/lists/featured/shelves/").status_code, 401)
+
+
+class PartialListTests(FeaturedApiTestCase):
+    """Search hides a featured list that holds less of its source than its own bar."""
+
+    def shelf_slugs(self):
+        slugs = set()
+        for params in ({}, {"media_type": "movie"}):
+            for shelf in self.get("/api/v1/lists/featured/shelves/", **params).data["shelves"]:
+                slugs.update(card["slug"] for card in shelf["lists"])
+        return slugs
+
+    def legacy_names(self, **params):
+        return [row["name"] for row in self.get("/api/v1/lists/featured/", **params).data["results"]]
+
+    def record(self, key, entry_count, resolved_count):
+        """Store a sync's counts as the writer, a guard or a deferral would."""
+        FeaturedListSync.objects.filter(key=key).update(entry_count=entry_count, resolved_count=resolved_count)
+
+    def test_a_list_published_below_its_bar_is_hidden(self):
+        # Published with deferred entries left out of the rate: 2 of 15, bar 50%.
+        self.record("headline-films", 15, 2)
+        self.assertNotIn("headline-films", self.shelf_slugs())
+        self.assertEqual(self.legacy_names(), ["Staff Picks"])
+        self.assertEqual(self.get("/api/v1/lists/featured/", view="all").data["count"], 6)
+        self.assertNotIn("Headline Films", self.legacy_names(view="all"))
+        # The list itself stays reachable.
+        headline = CustomList.objects.get(import_source_id="headline-films")
+        self.assertEqual(self.get(f"/api/v1/lists/{headline.id}/").status_code, status.HTTP_200_OK)
+
+    def test_a_list_at_its_bar_shows(self):
+        self.record("headline-films", 4, 2)
+        self.assertIn("headline-films", self.shelf_slugs())
+        self.assertEqual(self.legacy_names(), ["Headline Films", "Staff Picks"])
+
+    def test_each_list_uses_its_own_bar(self):
+        self.record("chart-films", 10, 7)
+        self.assertIn("chart-films", self.shelf_slugs())
+        self.definitions = [
+            replace(item, guards=Guards(min_resolve_rate=0.8)) if item.key == "chart-films" else item
+            for item in self.definitions
+        ]
+        self.assertNotIn("chart-films", self.shelf_slugs())
+        self.assertNotIn("Chart Films", self.legacy_names(view="all"))
+
+    def test_a_refused_run_does_not_hide_the_list_it_left_in_place(self):
+        # A guarded or deferred run records its own counts but keeps the 7 stored films.
+        self.record("chart-films", 7, 1)
+        self.assertIn("chart-films", self.shelf_slugs())
+        self.assertIn("Chart Films", self.legacy_names(view="all"))
 
 
 class CuratedOrderTests(FeaturedApiTestCase):

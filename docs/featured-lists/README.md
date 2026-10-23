@@ -149,6 +149,8 @@ The existing lists keep their identities: `("mdblist", "155837")` and `("nyt", <
 4. ISBNs: Hardcover, then Open Library, in today's `_resolve_book` order.
 5. A strict title search per media type: exact normalized title, year ±1, creator when available. No fuzzy guessing.
 
+After the direct IDs that need no network, and before any lookup (`imdb`, `steam`, ISBNs, title search) or the cache, the engine's resolver reuses the list's own past matches: the Item its latest snapshot holds for the entry's key, when that Item still exists and has one of the entry's media types (one snapshot read per run). Overrides and refs still win. Unlike the cache, these survive a deploy.
+
 Results are cached in Redis under `featured:resolve:<entry.key>`: hits for 45 days (longer than the longest cadence, 33 days; each hit refreshes the TTL), misses for 1 day. Title searches are capped per run (default 50); entries past the cap are deferred for an hour, not unresolved, so the next run searches the next batch. Unresolved entries go to the health report.
 
 **Writer guards**, in order:
@@ -179,7 +181,7 @@ Featured syncs share production's provider keys with the app, so every run (and 
 
 - **Budget spent:** the request raises `quota.Deferred` without touching the network until midnight UTC. `0` stops featured calls to that provider entirely.
 - **429 with a long wait:** a 429 asking for more than the 60 s `api_request` would sleep (Hardcover's "Try again in 69163 seconds", in `Retry-After` or the body) blocks the provider for that long. Featured requests then defer at once instead of sleeping; a long 429 the app itself receives blocks featured syncs too. Shorter 429s still wait and retry as before.
-- **Deferred entries** stay unresolved, aren't cached, and don't count toward the resolve rate. A run with deferred entries writes the list only when it wouldn't shrink: a new list appears with what resolved, a growing one keeps its progress, and a current list is otherwise left as it is. Either way the status is `deferred`, `deferred_until` holds the reset time, and the dispatcher retries the list then. An adapter whose own fetch is deferred records the same.
+- **Deferred entries** stay unresolved, aren't cached, and don't count toward the guards' resolve rate. A run with deferred entries writes the list only when it clears `min_resolve_rate` with the deferred entries counted as unmatched, and wouldn't shrink: a new list appears once it clears that bar (never with 1 of its 15 books), a growing one keeps its progress, and a current list is otherwise left as it is. Either way the status is `deferred`, `deferred_until` holds the reset time, and the dispatcher retries the list then. An adapter whose own fetch is deferred records the same.
 - The health report shows each list's `deferred_until`, a `deferred` total, and `quota` (budget, used today, blocked until) per provider.
 
 ## External ratings for new Items
@@ -258,6 +260,7 @@ All of it is additive.
 
 - **Shelf order:** `now`; then each exposed media type that has lists, in the order movie, tv, anime, manga, game, book, comic, music; then `mixed`.
 - **Hidden media types:** lists whose media types are all hidden by `app.exposure` are omitted (music when it's off, for example).
+- **Lists below their bar:** a list is omitted, here and on the legacy endpoint, while both its sync's `resolved_count / entry_count` and its stored rows / `entry_count` are below its own `min_resolve_rate`. List detail still serves it.
 - **"Now":** lists inside or within 24 h of a live window come first (inside before near, then by `position`). Then the charts in `order.NOW_PRIORITY` whose content changed in the last 7 days, in that order, at most 2 per media type (a chart with two media types counts against both; live lists don't count). At most 10 cards in all. A chart not in `NOW_PRIORITY` never appears in "Now".
 - **Within a shelf:** live lists (inside a window) first; then the keys in `order.SHELF_ORDER[<media type>]`, in that order; then every other list by `position`, then name. A list with two media types follows each shelf's own order. "Across Media" has no curated order.
 

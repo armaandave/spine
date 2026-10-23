@@ -7,6 +7,9 @@ Order, first hit wins:
 2. the entry's ``ref``;
 3. a direct provider ID (``tmdb``, ``igdb``, ``mal``, ``mangaupdates``, ``hardcover``,
    ``olid`` editions, ``mbid_rg``, ``comicvine``; people: ``<source>_person``), no network;
+   then, with ``remember=True`` (the engine's resolver), the Item this list's latest
+   snapshot holds for the entry's key, if it still exists: the database outlives the
+   cache, which every deploy clears;
 4. ``imdb`` through ``tmdb.find`` and ``steam`` through ``igdb.external_game``;
 5. ISBNs: Hardcover, then Open Library, per ISBN (``lookup_isbns``);
 6. a strict title search per media type: exact normalized title (or the result's main
@@ -31,7 +34,7 @@ import requests
 from django.core.cache import cache
 from django.utils import timezone
 
-from app.models import PRIMARY_MEDIA_TYPES, MediaTypes, Sources
+from app.models import PRIMARY_MEDIA_TYPES, Item, MediaTypes, Sources
 from app.providers import hardcover, igdb, openlibrary, quota, services, tmdb
 from lists.featured import overrides as overrides_module
 from lists.featured.helpers import sanitize
@@ -43,6 +46,7 @@ from lists.featured.text import (
     title_forms,
 )
 from lists.featured.types import PERSON_MEDIA_TYPE, Match
+from lists.models import FeaturedListSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +132,24 @@ def lookup_isbns(isbns):
     return None
 
 
+def remembered_items(key):
+    """Return ``{entry_key: Item}`` from the latest snapshot of the list synced as ``key``.
+
+    Two queries: the snapshot, then its Items (deleted ones drop out).
+    """
+    entries = (
+        FeaturedListSnapshot.objects.filter(sync__key=key)
+        .order_by("-taken_on")
+        .values_list("entries", flat=True)
+        .first()
+    )
+    item_ids = {entry_key: item_id for _, entry_key, item_id in entries or () if item_id is not None}
+    if not item_ids:
+        return {}
+    items = Item.objects.only("id", "source", "media_type", "media_id", "title").in_bulk(set(item_ids.values()))
+    return {entry_key: items[item_id] for entry_key, item_id in item_ids.items() if item_id in items}
+
+
 def _match_from_book(result):
     image = result.get("image") or ""
     return Match(
@@ -146,7 +168,7 @@ class Resolution:
 
     entry: object
     match: Match | None
-    how: str = ""  # override, ref, id, imdb, steam, isbn, title, cache, skip, review, deferred
+    how: str = ""  # override, ref, id, snapshot, imdb, steam, isbn, title, cache, skip, review, deferred
     reason: str = ""  # why it is unresolved
     retry_at: datetime | None = None  # deferred: when the provider may be called again
 
@@ -185,8 +207,12 @@ class Resolver:
         use_cache=True,
         isbn_lookup=None,
         max_title_searches=None,
+        remember=False,
     ):
-        """Configure the run; ``isbn_lookup`` replaces ``lookup_isbns`` and disables the cache."""
+        """Configure the run; ``isbn_lookup`` replaces ``lookup_isbns`` and disables the cache.
+
+        ``remember`` reuses the matches in this list's latest snapshot (a database read).
+        """
         self.definition = definition
         self.overrides = overrides_module.for_definition(definition) if overrides is None else overrides
         self.use_cache = use_cache and isbn_lookup is None
@@ -196,6 +222,8 @@ class Resolver:
         )
         self.title_searches = 0
         self.people = definition.list_type == "people"
+        self.remember = remember and not self.people  # people lists' snapshots hold no Items
+        self.remembered = None  # loaded on first use
 
     # Public API -----------------------------------------------------------------
 
@@ -220,6 +248,9 @@ class Resolver:
         direct = self._direct_person(entry) if self.people else self._direct(entry)
         if direct is not None:
             return self._checked(entry, direct, "id")
+        remembered = self._from_snapshot(entry)
+        if remembered is not None:
+            return self._checked(entry, remembered, "snapshot")
         return self._cached_network(entry)
 
     # Steps ----------------------------------------------------------------------
@@ -270,6 +301,20 @@ class Resolver:
         if olid.upper().endswith("M") and MediaTypes.BOOK.value in self._allowed(entry):
             return build(Sources.OPENLIBRARY.value, MediaTypes.BOOK.value, olid.upper())
         return None
+
+    def _from_snapshot(self, entry):
+        """Return a match for the Item this list's latest snapshot holds for the entry.
+
+        The poster stays the entry's own: ``Item.image`` isn't trusted for artwork.
+        """
+        if not self.remember:
+            return None
+        if self.remembered is None:
+            self.remembered = remembered_items(self.definition.key)
+        item = self.remembered.get(entry.key)
+        if item is None or item.media_type not in self._allowed(entry):
+            return None
+        return Match(item.source, item.media_type, item.media_id, item.title or entry.title, entry.image, entry.year)
 
     def _direct_person(self, entry):
         for source in PERSON_SOURCES:

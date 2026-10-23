@@ -1,16 +1,18 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from app.models import Item
 from app.providers import services
 from lists.featured import registry, resolve
 from lists.featured.registry import Guards
 from lists.featured.resolve import Resolver, parse_ref, pick_title_match
 from lists.featured.types import Entry, Match
-from lists.tests.featured.helpers import make_definition
+from lists.models import FeaturedListSnapshot, FeaturedListSync
+from lists.tests.featured.helpers import FeaturedTestCase, make_definition
 
 
 def search_response(*results):
@@ -238,6 +240,52 @@ class TitleSearchTests(ResolverTestCase):
     def test_pick_title_match_reads_provider_years(self):
         igdb_result = {"media_id": 1, "title": "Hades", "first_release_date": 1600387200}
         self.assertEqual(pick_title_match(Entry(1, "Hades", year=2020), [igdb_result]), igdb_result)
+
+
+class SnapshotMemoryTests(FeaturedTestCase):
+    """The list's latest snapshot answers before the cache and the network."""
+
+    def setUp(self):
+        super().setUp()
+        self.definition = make_definition(media_types=("book",), position=350)
+        self.entry = Entry(1, "Remembered", media_type="book", isbns=("9780000000007",), image="https://source/7.jpg")
+        self.book = Item.objects.create(source="hardcover", media_type="book", media_id="7", title="Remembered", image="https://c/7.jpg")
+        older = Item.objects.create(source="hardcover", media_type="book", media_id="6", title="Older", image="https://c/6.jpg")
+        sync = FeaturedListSync.objects.create(key=self.definition.key)
+        FeaturedListSnapshot.objects.create(sync=sync, taken_on=date(2026, 10, 1), fingerprint="a", entries=[[1, self.entry.key, older.pk]])
+        FeaturedListSnapshot.objects.create(
+            sync=sync,
+            taken_on=date(2026, 10, 8),
+            fingerprint="b",
+            entries=[[1, self.entry.key, self.book.pk], [2, "isbn:9780000000008", None]],
+        )
+
+    def test_an_entry_in_the_latest_snapshot_resolves_from_the_database(self):
+        resolver = Resolver(self.definition, overrides={}, remember=True)
+        with (
+            patch("app.providers.services.api_request", side_effect=AssertionError("network")),
+            patch.object(cache, "get", side_effect=AssertionError("cache")),
+            self.assertNumQueries(2),  # the snapshot, then its Items: once per run
+        ):
+            first = resolver.resolve_one(self.entry)
+            again = resolver.resolve_one(self.entry)
+        self.assertEqual((first.match.ref, first.how), ("hardcover:book:7", "snapshot"))
+        self.assertEqual(first.match.title, "Remembered")
+        self.assertEqual(first.match.image, "https://source/7.jpg")  # the source's poster, not Item.image
+        self.assertEqual(again.match, first.match)
+
+    def test_an_override_beats_the_snapshot(self):
+        resolver = Resolver(self.definition, overrides={self.entry.key: "hardcover:book:9"}, remember=True)
+        resolution = resolver.resolve_one(self.entry)
+        self.assertEqual((resolution.match.ref, resolution.how), ("hardcover:book:9", "override"))
+
+    def test_a_deleted_item_falls_through_to_the_lookup(self):
+        self.book.delete()
+        resolver = Resolver(self.definition, overrides={}, remember=True)
+        found = {"source": "hardcover", "media_id": "70", "title": "Remembered", "image": "https://c/70.jpg"}
+        with patch("app.providers.hardcover.lookup_book_by_isbn", return_value=found):
+            resolution = resolver.resolve_one(self.entry)
+        self.assertEqual((resolution.match.ref, resolution.how), ("hardcover:book:70", "isbn"))
 
 
 class PeopleResolutionTests(ResolverTestCase):

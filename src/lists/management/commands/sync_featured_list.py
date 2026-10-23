@@ -32,7 +32,7 @@ class Command(BaseCommand):
         if owner is None and not options["dry_run"]:
             raise CommandError(f"Spine user {options['owner']!r} does not exist.")
 
-        resolver = Resolver(definition)
+        resolver = Resolver(definition, remember=True)
         if options["dry_run"]:
             try:
                 result = engine.dry_run(definition, owner, resolver=resolver)
