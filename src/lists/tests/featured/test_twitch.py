@@ -4,7 +4,15 @@ from django.test import SimpleTestCase, override_settings
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import twitch
 from lists.featured.types import AdapterError
-from lists.tests.featured.game_routes import bodies, external, igdb_game, igdb_routes
+from lists.tests.featured.game_routes import (
+    TOKEN_KEY,
+    bodies,
+    external,
+    http_error,
+    igdb_game,
+    igdb_routes,
+    rejected_once,
+)
 from lists.tests.featured.helpers import api_routes, load_fixture, make_definition
 
 TWITCH_SOURCE = 14
@@ -69,6 +77,24 @@ class TwitchAdapterTests(SimpleTestCase):
         routes = {**twitch_routes(), "api.twitch.tv/helix/games/top": {"data": []}}
         with api_routes(routes), self.assertRaisesMessage(AdapterError, "Twitch returned no top games"):
             ADAPTERS["twitch"].fetch(twitch_definition())
+
+    def test_a_revoked_token_is_dropped_and_helix_retried(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        top = rejected_once(load_fixture("twitch", "top_games.json"))
+        with api_routes({**twitch_routes(), "api.twitch.tv/helix/games/top": top}) as api:
+            result = ADAPTERS["twitch"].fetch(twitch_definition())
+
+        self.assertEqual(len(result.entries), 4)
+        sent = [call.kwargs["headers"]["Authorization"] for call in api.call_args_list if "helix" in call.args[2]]
+        self.assertEqual(sent, ["Bearer revoked-token", "Bearer test-token"])
+        self.assertEqual(cache.get(TOKEN_KEY), "test-token")
+
+    def test_a_token_rejected_twice_fails(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        routes = {**twitch_routes(), "api.twitch.tv/helix/games/top": http_error(401)}
+        with api_routes(routes) as api, self.assertRaisesMessage(AdapterError, "twitch request failed (HTTP 401)."):
+            ADAPTERS["twitch"].fetch(twitch_definition())
+        self.assertEqual(len([call for call in api.call_args_list if "helix" in call.args[2]]), 2)
 
     def test_validate(self):
         validate = ADAPTERS["twitch"].validate
