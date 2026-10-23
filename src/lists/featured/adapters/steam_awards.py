@@ -150,26 +150,32 @@ def _igdb(winners):
     return _igdb_games.games_by_external(appids, igdb.ExternalGameSource.STEAM, IGDB_CORRECTIONS)
 
 
-def _entries(winners, games):
-    """``winners`` is ``[(appid, note, name)]`` in list order; one entry per game."""
+def _entries(winners, games, *, merge=True):
+    """``winners`` is ``[(appid, note, name)]`` in list order.
+
+    With ``merge`` (one year's categories) a game is one entry noted with all its
+    categories; without it (one category's years) each win is its own entry.
+    """
     notes, names, order = {}, {}, []
     for appid, note, name in winners:
-        if appid not in notes:
-            order.append(appid)
-            notes[appid], names[appid] = [], name
-        notes[appid].append(note)
+        key = appid if merge else (appid, note)
+        if key not in notes:
+            order.append(key)
+            notes[key], names[key] = [], name
+        notes[key].append(note)
     entries = []
-    for appid in order:
+    for key in order:
+        appid = key if merge else key[0]
         game = games.get(appid)
         entries.append(
             Entry(
                 rank=len(entries) + 1,
-                title=(game.name if game and game.name else names[appid]),
+                title=(game.name if game and game.name else names[key]),
                 year=game.year if game else None,
                 media_type="game",
                 ids={"steam": appid, "igdb": game.igdb_id if game else None},
                 image=game.image if game else "",
-                note=" · ".join(notes[appid]),
+                note=" · ".join(notes[key]),
             ),
         )
     return entries
@@ -204,7 +210,7 @@ def _category_result(category_name, since, until):
         raise AdapterError(msg)
     games = _igdb(winners)
     years = [int(note) for _, note, _ in winners]
-    return FetchResult(entries=_entries(winners, games), edition=f"{min(years)}–{max(years)}")
+    return FetchResult(entries=_entries(winners, games, merge=False), edition=f"{min(years)}–{max(years)}")
 
 
 def fetch(definition):

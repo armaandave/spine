@@ -91,9 +91,9 @@ def definition_for(key):
 class ParseTests(SimpleTestCase):
     """Table parsing: spans, winners, titles, merging and order."""
 
-    def rows(self, fixture, params):
+    def rows(self, fixture, params, *, repeats=False):
         rows, _ = wikipedia_table.parse_rows(load_fixture("wikipedia_table", fixture), params)
-        return wikipedia_table._merge(rows, params)
+        return wikipedia_table._merge(rows, params, repeats=repeats)
 
     def test_last_year_reads_a_two_year_season_as_its_award_year(self):
         html = """<table class="wikitable"><tr><th>Year</th><th>Anime</th><th>Studio(s)</th></tr>
@@ -111,15 +111,22 @@ class ParseTests(SimpleTestCase):
         self.assertEqual(wikipedia_table.cell_year("2022 / 2023 (8th) [15]", last=True), 2023)
         self.assertIsNone(wikipedia_table.cell_year("TBA", last=True))
 
-    def test_emmy_winners_newest_first_with_repeat_years_merged(self):
+    def test_emmy_winners_newest_first_one_row_per_win(self):
+        definition = definition_for("emmys-outstanding-drama-series")
+        self.assertTrue(definition.keeps_repeats)
+        rows = self.rows("emmy_drama.html", definition.params, repeats=True)
+        self.assertEqual(
+            [(row.title, row.notes) for row in rows],
+            [("Succession", ["2022"]), ("Succession", ["2020"]), ("Game of Thrones", ["2019"])],
+        )
+        # The 2022 row links only its season list; it shares the series link.
+        self.assertEqual([row.link for row in rows[:2]], ["Succession (TV series)", "Succession (TV series)"])
+        self.assertEqual(rows[2].link, "Game of Thrones")
+
+    def test_repeats_merge_on_lists_that_hold_an_item_once(self):
         rows = self.rows("emmy_drama.html", definition_for("emmys-outstanding-drama-series").params)
-        self.assertEqual([row.title for row in rows], ["Succession", "Game of Thrones"])
-        succession, thrones = rows
-        self.assertEqual(succession.notes, ["2022", "2020"])
-        # The 2022 row links only its season list; the merge keeps the series link.
-        self.assertEqual(succession.link, "Succession (TV series)")
-        self.assertEqual(thrones.year, 2019)
-        self.assertEqual(thrones.link, "Game of Thrones")
+        self.assertEqual([(row.title, row.notes) for row in rows], [("Succession", ["2022", "2020"]), ("Game of Thrones", ["2019"])])
+        self.assertEqual(rows[0].link, "Succession (TV series)")
 
     def test_nominees_without_a_winner_yet_are_left_out(self):
         rows = self.rows("emmy_drama.html", {**definition_for("emmys-outstanding-drama-series").params, "winners": "all"})
@@ -173,11 +180,12 @@ class ParseTests(SimpleTestCase):
         self.assertEqual(rows[1].link, "")
 
     def test_two_title_columns_and_creator_in_the_title_cell(self):
-        rows = self.rows("kono_manga_en.html", definition_for("kono-manga-ga-sugoi-number-ones").params)
+        rows = self.rows("kono_manga_en.html", definition_for("kono-manga-ga-sugoi-number-ones").params, repeats=True)
         by_title = {row.title: row for row in rows}
         self.assertEqual(by_title["Pluto"].creator, "Naoki Urasawa")
-        self.assertEqual(by_title["Pluto"].notes, ["2006 · Men's"])
-        self.assertEqual(by_title["Honey and Clover"].notes, ["2007 · Women's", "2006 · Women's"])
+        # Award notes are the year alone, without the edition's label.
+        self.assertEqual(by_title["Pluto"].notes, ["2006"])
+        self.assertEqual([row.notes for row in rows if row.title == "Honey and Clover"], [["2007"], ["2006"]])
         self.assertEqual(by_title["Her"].link, "")  # the cell links the author, not the work
         self.assertEqual(rows[0].year, 2011)
 
@@ -242,6 +250,7 @@ class FetchTests(SimpleTestCase):
         definition = definition_for("emmys-outstanding-drama-series")
         return make_definition(
             key="test-emmys",
+            kind="award",
             adapter="wikipedia_table",
             media_types=("tv",),
             position=230,
@@ -269,9 +278,10 @@ class FetchTests(SimpleTestCase):
 
         with api_routes({WIKIPEDIA: routes[WIKIPEDIA], SPARQL: answer}):
             result = wikipedia_table.fetch(self.tv_definition())
-        succession, thrones = result.entries
+        succession, succession_2020, thrones = result.entries
         self.assertEqual(succession.ids, {"imdb": "tt7660850", "wikidata": "Q1"})
-        self.assertEqual(succession.note, "2022, 2020")
+        self.assertEqual((succession.note, succession_2020.note, thrones.note), ("2022", "2020", "2019"))
+        self.assertEqual(succession_2020.ids, succession.ids)
         self.assertIsNone(succession.year)  # match_year is off for TV
         self.assertIsNone(succession.rank)
         self.assertEqual(thrones.ids, {"tmdb": "1399", "wikidata": "Q2"})

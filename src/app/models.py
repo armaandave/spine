@@ -436,6 +436,43 @@ class ItemFilterFacet(models.Model):
         return f"{self.facet_type}: {self.value}"
 
 
+class MusicGenreAlbum(models.Model):
+    """A popular album filed under one MusicBrainz genre, for genre pages.
+
+    Rebuilt weekly from ListenBrainz and Wikipedia by
+    ``musicbrainz.refresh_genre_albums``.
+    """
+
+    genre = models.CharField(max_length=255)
+    release_group_mbid = models.CharField(max_length=36)
+    title = models.TextField()
+    artist = models.TextField(blank=True, default="")
+    release_date = models.CharField(max_length=10, blank=True, default="")
+    # English Wikipedia reads of the album's article since mid-2015.
+    page_views = models.PositiveBigIntegerField(default=0)
+    listeners = models.PositiveIntegerField()
+    listens = models.PositiveBigIntegerField()
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["genre", "release_group_mbid"],
+                name="app_musicgenrealbum_genre_album_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["genre", "-page_views", "-listeners"],
+                name="app_musicgenrealbum_rank_idx",
+            ),
+        ]
+        ordering = ["-page_views", "-listeners", "-listens", "id"]
+
+    def __str__(self):
+        """Return a readable genre entry."""
+        return f"{self.genre}: {self.title}"
+
+
 class BookCreditOverride(models.Model):
     """Curator decision for one provider book credit on an author page."""
 
@@ -2666,6 +2703,8 @@ class CustomPosterPreference(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
     custom_image_url = models.URLField()
+    # Tints the picker's own detail page; the Item's color follows the default poster.
+    accent_color = models.CharField(max_length=8, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

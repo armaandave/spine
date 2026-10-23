@@ -14,7 +14,13 @@ enum ArtworkPrefetch {
 
     static func upcoming<Item: Identifiable>(after item: Item, in items: [Item]) -> ArraySlice<Item> {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return [] }
+        return upcoming(at: index, in: items)
+    }
+
+    /// The items after `index`, for grids that can hold the same item more than once.
+    static func upcoming<Item>(at index: Int, in items: [Item]) -> ArraySlice<Item> {
         let start = index + 1
+        guard start <= items.count else { return [] }
         return items[start ..< min(start + lookahead, items.count)]
     }
 
@@ -41,6 +47,17 @@ extension View {
     ) -> some View {
         onAppear {
             ArtworkPrefetch.prefetch(ArtworkPrefetch.upcoming(after: item, in: items).compactMap(request))
+        }
+    }
+
+    /// `prefetchingArtwork(after:in:request:)` for the cell at `index`, when the same item can appear twice.
+    func prefetchingArtwork<Item>(
+        at index: Int,
+        in items: [Item],
+        request: @escaping (Item) -> ImageRequest?
+    ) -> some View {
+        onAppear {
+            ArtworkPrefetch.prefetch(ArtworkPrefetch.upcoming(at: index, in: items).compactMap(request))
         }
     }
 }

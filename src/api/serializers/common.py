@@ -8,8 +8,11 @@ from rest_framework import serializers
 
 from api.services import completion as completion_service
 from app import config, single_weight
+from app.curation import curated_image_url, picked_image_urls, prime_curated_artwork
 from app.models import (
     BasicMedia,
+    CustomBackdropPreference,
+    CustomPosterPreference,
     DiaryEntry,
     Item,
     MediaLike,
@@ -114,7 +117,25 @@ def artwork_from_payload(payload, media_type=None, request=None):
 
 def artwork_from_item(item, request=None):
     """Return normalized artwork fields from stored Item data."""
-    return artwork_from_payload({"image": item.image}, item.media_type, request=request)
+    return with_curated_artwork(
+        artwork_from_payload({"image": item.image}, item.media_type, request=request),
+        item,
+        request=request,
+    )
+
+
+def with_curated_artwork(artwork, item, request=None):
+    """Make an admin's poster and backdrop picks the default artwork."""
+    if item is None:
+        return artwork
+    poster = curated_image_url(CustomPosterPreference, item)
+    if poster and artwork["poster_url"] is not None:
+        poster = absolute_url(request, poster)
+        artwork = {**artwork, "image_url": poster, "poster_url": poster}
+    backdrop = curated_image_url(CustomBackdropPreference, item)
+    if backdrop:
+        artwork = {**artwork, "backdrop_url": absolute_url(request, backdrop)}
+    return artwork
 
 
 def _first_image_value(payload, keys):
@@ -272,9 +293,9 @@ def media_summary_from_item(
 def prime_collection_items(items, user, *, media_by_item=None):
     """Attach bounded viewer data once for a paginated collection."""
     items = list(items)
+    prime_curated_artwork(items)
     if not items or not user or not user.is_authenticated:
         return
-    from app.models import CustomBackdropPreference, CustomPosterPreference
 
     prefetch_related_objects(
         items,
@@ -350,15 +371,29 @@ def resolved_item_backdrop_urls(item, request=None, user=None):
     custom_backdrop_url = custom_backdrop_url_for_user(user, media_ref_from_item(item), request=request) if user else None
     if custom_backdrop_url:
         return None, custom_backdrop_url
+    curated_backdrop_url = curated_image_url(CustomBackdropPreference, item)
+    if curated_backdrop_url:
+        return absolute_url(request, curated_backdrop_url), None
 
-    if item.media_type not in [MediaTypes.MOVIE.value, MediaTypes.TV.value, MediaTypes.GAME.value]:
+    if item.media_type not in [
+        MediaTypes.MOVIE.value,
+        MediaTypes.TV.value,
+        MediaTypes.GAME.value,
+        MediaTypes.ANIME.value,
+        MediaTypes.MANGA.value,
+    ]:
         return None, custom_backdrop_url
 
-    from api.services.media import resolved_backdrop_urls
+    from api.services import media as media_service
     from app.providers import services as provider_services
 
     metadata = provider_services.get_media_metadata(item.media_type, item.media_id, item.source)
-    return resolved_backdrop_urls(
+    # Anime and manga pages take their backdrop from AniList's banner; match them.
+    if item.media_type == MediaTypes.ANIME.value:
+        metadata = media_service._enrich_anime_metadata(metadata, item.source)
+    elif item.media_type == MediaTypes.MANGA.value:
+        metadata = media_service._enrich_manga_metadata(metadata, item.source)
+    return media_service.resolved_backdrop_urls(
         source=item.source,
         media_type=item.media_type,
         media_id=item.media_id,
@@ -434,7 +469,11 @@ def media_summary_from_provider(
         **({"relation": payload["relation"]} if payload.get("relation") else {}),
         "subtitle": payload.get("year") or payload.get("subtitle"),
         "overview": synopsis_from_payload(payload),
-        **artwork_from_payload(payload, media_type, request=request),
+        **with_curated_artwork(
+            artwork_from_payload(payload, media_type, request=request),
+            item,
+            request=request,
+        ),
         "poster_accent_color": getattr(item, "poster_accent_color", None) or None,
         "release_date": (
             payload.get("release_date")
@@ -541,12 +580,25 @@ def seasons_from_metadata(metadata, request=None, user=None):
             .select_related("item")
             .prefetch_related("episodes__item")
         }
+    picked_posters = picked_images_by_number(
+        Item.objects.filter(
+            source=metadata.get("source"),
+            media_type=MediaTypes.SEASON.value,
+            media_id=str(metadata.get("media_id") or ""),
+            season_number__in=[value.get("season_number") for value in seasons if isinstance(value, dict)],
+        ),
+        CustomPosterPreference,
+        user,
+        "season_number",
+    )
     return [
         {
             "season_number": season.get("season_number"),
             "title": season.get("season_title") or season.get("title") or season.get("name") or "",
             "episode_count": _season_episode_count(season),
-            "image_url": image_url(request, season.get("image") or season.get("poster_path"))
+            "image_url": absolute_url(request, picked_posters[season.get("season_number")])
+            if season.get("season_number") in picked_posters
+            else image_url(request, season.get("image") or season.get("poster_path"))
             if (season.get("image") or season.get("poster_path"))
             else None,
             "release_date": season.get("first_air_date") or season.get("air_date") or season.get("release_date"),
@@ -574,6 +626,13 @@ def seasons_from_metadata(metadata, request=None, user=None):
     ]
 
 
+def picked_images_by_number(items, model, user, number_field):
+    """Map season or episode numbers to the viewer's own pick, else an admin's."""
+    items = list(items)
+    picks = picked_image_urls(items, model, user)
+    return {getattr(item, number_field): picks[item.pk] for item in items if item.pk in picks}
+
+
 def _season_episode_count(season):
     value = (
         season.get("episode_count")
@@ -589,9 +648,10 @@ def _season_episode_count(season):
         return 0
 
 
-def episodes_from_metadata(metadata, request=None):
+def episodes_from_metadata(metadata, request=None, picked_stills=None):
     """Normalize season episodes into the native episode summary shape."""
     episodes = metadata.get("episodes") or []
+    picked_stills = picked_stills or {}
     return [
         {
             "episode_number": episode.get("episode_number"),
@@ -599,7 +659,9 @@ def episodes_from_metadata(metadata, request=None):
             "overview": episode.get("overview"),
             "air_date": episode.get("air_date"),
             "runtime": episode.get("runtime"),
-            "image_url": image_url(request, episode.get("image") or episode.get("still_path"))
+            "image_url": absolute_url(request, picked_stills[episode.get("episode_number")])
+            if episode.get("episode_number") in picked_stills
+            else image_url(request, episode.get("image") or episode.get("still_path"))
             if (episode.get("image") or episode.get("still_path"))
             else None,
             "image_role": "still",

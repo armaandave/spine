@@ -502,6 +502,29 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         card = next(card for card in movie["lists"] if card["slug"] == "chart-films")
         self.assertEqual([item["note"] for item in card["preview_items"][:3]], ["▲1", "▼1", None])
 
+    def test_award_history_repeats_an_item_with_its_own_position_and_note(self):
+        film, book = movie_entries("am", 1)[0], movie_entries("ab", 1, media_type="book", source="hardcover")[0]
+        custom_list = self.rerun("across", [
+            Entry(1, film.title, media_type="movie", ids=film.ids, image=film.image, note="2024"),
+            Entry(2, book.title, media_type="book", ids=book.ids, image=book.image, note="2023 · tie"),
+            Entry(3, film.title, media_type="movie", ids=film.ids, image=film.image, note="2022"),
+        ])
+        page = self.get(f"/api/v1/lists/{custom_list.id}/items/").data
+        rows = [(item["ref"]["media_id"], item["position"], item["note"]) for item in page["results"]]
+        self.assertEqual(rows, [("am-1", 1, "2024"), ("ab-1", 2, "2023 · tie"), ("am-1", 3, "2022")])
+        self.assertEqual(page["count"], 3)
+        # Completion counts distinct items; the list's size counts rows.
+        self.assertEqual(page["completion"]["total_count"], 2)
+        detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
+        self.assertEqual([(item["position"], item["note"]) for item in detail["items"]], [(1, "2024"), (2, "2023 · tie"), (3, "2022")])
+        self.assertEqual([item["ref"]["media_id"] for item in detail["items"]], ["am-1", "ab-1", "am-1"])
+        self.assertEqual((detail["items_count"], detail["completion"]["total_count"]), (3, 2))
+        shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+        mixed = next(shelf for shelf in shelves if shelf["key"] == "mixed")
+        card = next(card for card in mixed["lists"] if card["slug"] == "across")
+        self.assertEqual(card["items_count"], 3)
+        self.assertEqual([item["position"] for item in card["preview_items"]], [1, 2, 3])
+
     def test_people_list_entries_carry_notes(self):
         custom_list = self.rerun("laureates", [Entry(1, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, image="https://p/1.jpg", note="2022")])
         self.assertEqual(self.get(f"/api/v1/lists/{custom_list.id}/people/").data["results"][0]["note"], "2022")

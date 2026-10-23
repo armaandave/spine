@@ -2,8 +2,9 @@
 
 Params (``mode`` picks the query):
 
-- ``{"mode": "award", "awards": ["Q102427"]}``: every work that won one of these
-  awards, newest first, each with the note ``"<year>"`` or ``"<year> · tie"``. Winners
+- ``{"mode": "award", "awards": ["Q102427"]}``: every win of one of these awards,
+  newest first, each with the note ``"<year>"`` or ``"<year> · tie"``; a work that
+  won in two years is two entries. Winners
   come from the work (``P166`` with ``P585`` for the year and ``P805`` for the
   ceremony). With ``"author_statements": True`` (book lists), a work with no
   statement of its own can also come from its author's statement's ``P1686`` ("for
@@ -488,10 +489,8 @@ def tied_years(candidates):
     }
 
 
-def _note(years, ties):
-    return ", ".join(
-        f"{year} · {TIE}" if year in ties else str(year) for year, _ in sorted(years, reverse=True)
-    )
+def _note(year, ties):
+    return f"{year} · {TIE}" if year in ties else str(year)
 
 
 def _with_supplement_details(work, supplement):
@@ -535,9 +534,9 @@ def _award_entries(definition, works, supplement):
     entries = []
     for work, media_type, years in candidates:
         ids = dict(work["ids"]) if not work["qid"] else _entry_ids(media_type, work)
-        entries.append(
+        entries.extend(  # one entry per win: a work that won twice appears twice
             (
-                max(year for year, _ in years),
+                year,
                 Entry(
                     rank=None,
                     title=work["title"] or work["qid"],
@@ -545,10 +544,11 @@ def _award_entries(definition, works, supplement):
                     creator=work["creator"],
                     media_type=media_type,
                     ids=ids,
-                    note=_note(years, ties),
+                    note=_note(year, ties),
                 ),
                 work,
-            ),
+            )
+            for year, _ in years
         )
     entries.sort(key=lambda item: (-item[0], normalize_title(item[1].title)))
     return [(entry, work) for _, entry, work in entries]

@@ -34,13 +34,12 @@ from api.serializers.common import (
     absolute_url,
     cast_from_metadata,
     crew_from_metadata,
-    custom_backdrop_url_for_user,
-    custom_poster_url_for_user,
     details_for_api,
     episodes_from_metadata,
     find_item,
     get_or_create_item_from_metadata,
     media_summary_from_provider,
+    picked_images_by_number,
     prime_collection_items,
     related_sections_from_payload,
     seasons_from_metadata,
@@ -53,6 +52,7 @@ from api.services.filters import (
     update_item_filter_metadata,
 )
 from app import config, single_weight
+from app.curation import curated_image_url, is_curator, prime_curated_artwork
 from app.external_ratings import (
     RATING_SOURCES,
     eligible_rating_sources,
@@ -84,7 +84,7 @@ from app.models import (
 from app.providers import anilist, hardcover, mal, musicbrainz
 from app.providers import services as provider_services
 from app.providers.search_rank import normalize_search_text, rank_mixed_results
-from app.utils.color import build_accent_palette, compute_and_store_poster_accent
+from app.utils.color import build_accent_palette, get_poster_accent_from_url
 
 SEARCH_TTL = 60 * 60 * 6
 SEARCH_CACHE_VERSION = "v3"
@@ -1083,6 +1083,8 @@ def media_detail(
     item = _external_rating_item(ref, primary_metadata)
     if summary.get("poster_accent_color") is None:
         summary["poster_accent_color"] = poster_accent_color(metadata, ref)
+    viewer_poster = _viewer_poster(user, ref["item_id"])
+    summary["poster_accent_color"] = getattr(viewer_poster, "accent_color", "") or summary["poster_accent_color"]
     logo, custom_logo_url = resolved_logo(
         source=source,
         media_type=media_type,
@@ -1125,7 +1127,21 @@ def media_detail(
         else None
     )
     episodes = (
-        episodes_from_metadata(enriched_episode_metadata, request=request)
+        episodes_from_metadata(
+            enriched_episode_metadata,
+            request=request,
+            picked_stills=picked_images_by_number(
+                Item.objects.filter(
+                    source=source,
+                    media_type=MediaTypes.EPISODE.value,
+                    media_id=media_id,
+                    season_number=season_number,
+                ),
+                CustomBackdropPreference,
+                user,
+                "episode_number",
+            ),
+        )
         if enriched_episode_metadata is not None
         else []
     )
@@ -1188,7 +1204,7 @@ def media_detail(
         "episodes": episodes,
         "completion": completion,
         "custom_backdrop_url": custom_backdrop_url,
-        "custom_poster_url": custom_poster_url_for_user(user, ref, request=request),
+        "custom_poster_url": absolute_url(request, viewer_poster.custom_image_url) if viewer_poster else None,
         "related": metadata.get("related", {}),
         "related_sections": related_sections,
         "providers": watch_providers_for_user(metadata, user),
@@ -1201,6 +1217,13 @@ def media_detail(
         ),
         **rating_payload,
     }
+
+
+def _viewer_poster(user, item_id):
+    """Return the viewer's own poster pick, whose accent tints their detail page."""
+    if not user or not user.is_authenticated or not item_id:
+        return None
+    return CustomPosterPreference.objects.filter(user=user, item_id=item_id).first()
 
 
 def _persist_detail_series(metadata, *, source, media_type):
@@ -1918,6 +1941,7 @@ def _existing_person_credit_items(person_credits):
 def _prime_person_items(items, user):
     """Batch viewer state and artwork preferences for person credit cards."""
     items = list(items)
+    prime_curated_artwork(items)
     if not items or not user or not user.is_authenticated:
         return
     item_ids_by_type = {}
@@ -3161,7 +3185,9 @@ def poster_options(*, source, media_type, media_id, season_number=None, request=
     from app.providers import tmdb
 
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else item.image
+    selected_url = (
+        current.custom_image_url if current else curated_image_url(CustomPosterPreference, item) or item.image
+    )
     original = {
         "url": absolute_poster_url(request, item.image),
         "thumbnail_url": absolute_poster_url(request, item.image),
@@ -3191,7 +3217,7 @@ def poster_options(*, source, media_type, media_id, season_number=None, request=
 
 
 def save_poster_preference(*, source, media_type, media_id, poster_url, user, season_number=None):
-    """Save a user's poster preference and update the stored item image/accent."""
+    """Save a user's poster; an admin's pick also sets the item's cover and accent."""
     if (
         source != Sources.TMDB.value
         or media_type not in [MediaTypes.MOVIE.value, MediaTypes.TV.value, MediaTypes.SEASON.value]
@@ -3211,16 +3237,16 @@ def save_poster_preference(*, source, media_type, media_id, poster_url, user, se
         raise ValueError("poster_url is required.")
 
     item = _customizable_item(source=source, media_type=media_type, media_id=media_id, season_number=season_number)
-    accent = compute_and_store_poster_accent(item, poster_url=poster_url, force=True)
-    palette = build_accent_palette(accent)
+    palette = build_accent_palette(get_poster_accent_from_url(poster_url))
     CustomPosterPreference.objects.update_or_create(
         user=user,
         item=item,
-        defaults={"custom_image_url": poster_url},
+        defaults={"custom_image_url": poster_url, "accent_color": palette["accent"]},
     )
-    item.image = poster_url
-    item.poster_accent_color = palette["accent"]
-    item.save(update_fields=["image", "poster_accent_color"])
+    if is_curator(user):
+        item.image = poster_url
+        item.poster_accent_color = palette["accent"]
+        item.save(update_fields=["image", "poster_accent_color"])
     return {
         "poster_url": poster_url,
         "custom_poster_url": poster_url,
@@ -3240,7 +3266,9 @@ def anime_poster_options(*, source, media_id, request=None, user=None):
         source,
     )
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else item.image
+    selected_url = (
+        current.custom_image_url if current else curated_image_url(CustomPosterPreference, item) or item.image
+    )
     selected_absolute = absolute_poster_url(request, selected_url)
     candidates = list(metadata.get("posters") or [])
     if item.image and item.image not in {candidate.get("url") for candidate in candidates}:
@@ -3294,7 +3322,11 @@ def manga_poster_options(*, source, media_id, request=None, user=None):
         source,
     )
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else metadata.get("image") or item.image
+    selected_url = (
+        current.custom_image_url
+        if current
+        else curated_image_url(CustomPosterPreference, item) or metadata.get("image") or item.image
+    )
     selected_absolute = absolute_poster_url(request, selected_url)
     candidates = list(metadata.get("posters") or [])
     if item.image and item.image not in {
@@ -3347,7 +3379,9 @@ def book_cover_options(*, source, media_id, request=None, user=None):
     item = _customizable_item(source=source, media_type=media_type, media_id=media_id)
     isbns = _book_isbns(source, media_id)
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else item.image
+    selected_url = (
+        current.custom_image_url if current else curated_image_url(CustomPosterPreference, item) or item.image
+    )
     selected_absolute = absolute_poster_url(request, selected_url)
 
     posters = []
@@ -3389,7 +3423,9 @@ def music_cover_options(*, source, media_id, request=None, user=None):
 
     item = _customizable_item(source=source, media_type=media_type, media_id=media_id)
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else item.image
+    selected_url = (
+        current.custom_image_url if current else curated_image_url(CustomPosterPreference, item) or item.image
+    )
     selected_absolute = absolute_poster_url(request, selected_url)
 
     posters = []
@@ -3466,7 +3502,9 @@ def game_cover_options(*, source, media_id, request=None, user=None):
 
     item = _customizable_item(source=source, media_type=MediaTypes.GAME.value, media_id=media_id)
     current = CustomPosterPreference.objects.filter(user=user, item=item).first()
-    selected_url = current.custom_image_url if current else item.image
+    selected_url = (
+        current.custom_image_url if current else curated_image_url(CustomPosterPreference, item) or item.image
+    )
     selected_absolute = absolute_poster_url(request, selected_url)
     from app.providers import igdb, steamgriddb
 
@@ -3792,8 +3830,12 @@ def logo_options(*, source, media_type, media_id, request=None, user=None):
     provider_logos = _provider_logo_options(source, media_type, media_id)
     automatic = title_logo(source=source, media_type=media_type, media_id=media_id)
     preference = CustomLogoPreference.objects.filter(user=user, item=item).first()
-    selected_url = preference.custom_image_url if preference else automatic.get("url") if automatic else None
     automatic_url = automatic.get("url") if automatic else None
+    selected_url = (
+        preference.custom_image_url
+        if preference
+        else curated_image_url(CustomLogoPreference, item) or automatic_url
+    )
 
     logos = [
         {
@@ -3853,7 +3895,7 @@ def save_logo_preference(*, source, media_type, media_id, logo_url, user):
 def resolved_logo(*, source, media_type, media_id, request=None, user=None):
     """Return effective logo metadata and the viewer's custom URL."""
     automatic = title_logo(source=source, media_type=media_type, media_id=media_id)
-    if not _supports_logo(source, media_type) or not user or not user.is_authenticated:
+    if not _supports_logo(source, media_type):
         return automatic, None
 
     item = Item.objects.filter(
@@ -3863,27 +3905,31 @@ def resolved_logo(*, source, media_type, media_id, request=None, user=None):
         season_number=None,
         episode_number=None,
     ).first()
+    if item is None:
+        return automatic, None
     preference = (
         CustomLogoPreference.objects.filter(user=user, item=item).first()
-        if item is not None
+        if user and user.is_authenticated
         else None
     )
-    if preference is None:
+    picked_url = preference.custom_image_url if preference else curated_image_url(CustomLogoPreference, item)
+    if not picked_url:
         return automatic, None
 
-    custom_url = absolute_url(request, preference.custom_image_url)
+    logo_url = absolute_url(request, picked_url)
+    custom_url = logo_url if preference else None
     matched = next(
         (
             logo
             for logo in _provider_logo_options(source, media_type, media_id)
-            if logo["url"] == preference.custom_image_url
+            if logo["url"] == picked_url
         ),
         None,
     )
     if matched:
-        return {**matched, "url": custom_url}, custom_url
+        return {**matched, "url": logo_url}, custom_url
     return {
-        "url": custom_url,
+        "url": logo_url,
         "width": None,
         "height": None,
         "aspect_ratio": None,
@@ -4115,24 +4161,6 @@ def resolved_backdrop_urls(
             _curated_backdrop_url(item, request=request) or raw_default_url,
             _backdrop_preference_url(user, item, request=request),
         )
-    if source != Sources.TMDB.value or media_type not in [
-        MediaTypes.MOVIE.value,
-        MediaTypes.TV.value,
-        MediaTypes.SEASON.value,
-        MediaTypes.EPISODE.value,
-    ]:
-        return raw_default_url, custom_backdrop_url_for_user(
-            user,
-            {
-                "source": source,
-                "media_type": media_type,
-                "media_id": media_id,
-                "season_number": season_number,
-                "episode_number": episode_number,
-            },
-            request=request,
-        )
-
     item = item or Item.objects.filter(
         source=source,
         media_type=media_type,
@@ -4141,6 +4169,13 @@ def resolved_backdrop_urls(
         episode_number=episode_number,
     ).first()
     custom_url = _backdrop_preference_url(user, item, request=request)
+    if source != Sources.TMDB.value or media_type not in [
+        MediaTypes.MOVIE.value,
+        MediaTypes.TV.value,
+        MediaTypes.SEASON.value,
+        MediaTypes.EPISODE.value,
+    ]:
+        return _curated_backdrop_url(item, request=request) or raw_default_url, custom_url
     if media_type == MediaTypes.EPISODE.value:
         default_url = (
             _curated_backdrop_url(item, request=request)
@@ -4179,14 +4214,8 @@ def _backdrop_preference_url(user, item, request=None):
 
 
 def _curated_backdrop_url(item, request=None):
-    curator_username = getattr(settings, "SPINE_CURATOR_USERNAME", None)
-    if not curator_username or item is None:
-        return None
-    preference = CustomBackdropPreference.objects.filter(
-        user__username=curator_username,
-        item=item,
-    ).first()
-    return absolute_url(request, preference.custom_image_url) if preference else None
+    url = curated_image_url(CustomBackdropPreference, item)
+    return absolute_url(request, url) if url else None
 
 
 def _tmdb_vote_sorted_backdrop_url(media_id, media_type, *, raw_default_url=None, tmdb_backdrops=None):

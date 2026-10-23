@@ -12,7 +12,9 @@ struct FeaturedShelfDetailView: View {
             .background(Color.black)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            // Opaque like the pinned chips under it, so nothing scrolls into view above them.
+            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
@@ -133,8 +135,10 @@ struct FeaturedTypeLayer: View {
             }
             .padding(.horizontal, Self.horizontalInset)
         }
+        .frame(maxWidth: .infinity)
         .frame(height: Self.chipBarHeight)
-        .background(Color.black.opacity(0.94))
+        // Opaque and the page's color, so cards scrolled under the pinned chips don't show through.
+        .background(Color.black)
     }
 
     private func kindSection(_ shelf: FeaturedShelf) -> some View {

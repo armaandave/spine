@@ -858,6 +858,74 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(third["backdrop_url"])
         metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
 
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"artworks": [{"image_id": "elden-ring-art"}]},
+    )
+    def test_list_detail_resolves_the_first_game_backdrop(self, metadata_mock):
+        user = get_user_model().objects.create_user(username="list-first-game", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Games")
+        book = Item.objects.create(source=Sources.HARDCOVER.value, media_type=MediaTypes.BOOK.value, media_id="b1", title="A Book")
+        game = Item.objects.create(source=Sources.IGDB.value, media_type=MediaTypes.GAME.value, media_id="119133", title="Elden Ring")
+        CustomListItem.objects.create(custom_list=custom_list, item=book, position=1)
+        CustomListItem.objects.create(custom_list=custom_list, item=game, position=2)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first, second = response.data["items"]
+        self.assertIsNone(first["backdrop_url"])
+        self.assertEqual(
+            second["backdrop_url"],
+            "https://images.igdb.com/igdb/image/upload/t_original/elden-ring-art.jpg",
+        )
+        metadata_mock.assert_called_once_with(MediaTypes.GAME.value, game.media_id, Sources.IGDB.value)
+
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {**metadata, "backdrop": "https://example.com/berserk-banner.jpg"},
+    )
+    @patch("app.providers.services.get_media_metadata", return_value={"media_id": "2"})
+    def test_list_detail_uses_the_manga_page_backdrop(self, metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-first-manga", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga")
+        manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id="2", title="Berserk")
+        CustomListItem.objects.create(custom_list=custom_list, item=manga, position=1)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["items"][0]["backdrop_url"], "https://example.com/berserk-banner.jpg")
+        enrich_mock.assert_called_once()
+
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {
+            **metadata,
+            "backdrop": "https://example.com/second-banner.jpg" if metadata["media_id"] == "second" else None,
+        },
+    )
+    @patch(
+        "app.providers.services.get_media_metadata",
+        side_effect=lambda _media_type, media_id, _source: {"media_id": media_id},
+    )
+    def test_list_header_falls_back_to_the_next_title_with_a_backdrop(self, _metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-next-backdrop", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga Awards")
+        for position, media_id in enumerate(["first", "second", "third"], start=1):
+            manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id=media_id, title=media_id)
+            CustomListItem.objects.create(custom_list=custom_list, item=manga, position=position)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        backdrops = [row["backdrop_url"] for row in response.data["results"]]
+        self.assertEqual(backdrops, [None, "https://example.com/second-banner.jpg", None])
+        self.assertEqual(enrich_mock.call_count, 2)
+
     @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
     @patch(
         "app.providers.services.get_media_metadata",
@@ -1010,6 +1078,22 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(normal_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(CustomListItem.objects.get(custom_list=ranked, item=ranked_item).position, 5)
         self.assertIsNone(CustomListItem.objects.get(custom_list=normal, item=normal_item).position)
+
+    def test_adding_an_item_twice_keeps_one_row(self):
+        user = get_user_model().objects.create_user(username="list-add-twice", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
+        (item,) = self._create_movie_items(1, title_prefix="Twice", media_id_prefix="twice")
+        self.client.force_authenticate(user)
+        ref = {"ref": {"source": item.source, "media_type": item.media_type, "media_id": item.media_id}}
+
+        for _ in range(2):
+            response = self.client.post(f"/api/v1/lists/{custom_list.id}/items/", ref, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.assertEqual(
+            list(CustomListItem.objects.filter(custom_list=custom_list).values_list("item_id", "position", "occurrence")),
+            [(item.id, 1, 0)],
+        )
 
     def test_ranked_delete_renumbers_remaining_items(self):
         user = get_user_model().objects.create_user(username="list-delete-ranked", password="strong-password-123")
@@ -6204,9 +6288,9 @@ class ApiV1FoundationTests(TestCase):
         self.assertTrue(response.data["posters"][2]["is_selected"])
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#123456", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#123456")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#123456")
     def test_media_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123")
+        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123", is_staff=True)
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.TV.value,
@@ -6233,9 +6317,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#654321", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#654321")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#654321")
     def test_media_book_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="bookposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="bookposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.OPENLIBRARY.value,
             media_type=MediaTypes.BOOK.value,
@@ -6262,9 +6350,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#aabbcc", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#aabbcc")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#aabbcc")
     def test_media_game_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="gameposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="gameposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.IGDB.value,
             media_type=MediaTypes.GAME.value,
@@ -6287,11 +6379,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(item.poster_accent_color, "#aabbcc")
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#d9bc7a", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#d9bc7a")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#d9bc7a")
     def test_media_music_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
         user = get_user_model().objects.create_user(
             username="musicposter2",
             password="strong-password-123",
+            is_staff=True,
         )
         item = Item.objects.create(
             source=Sources.MUSICBRAINZ.value,
@@ -6323,9 +6416,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#abcdef", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#abcdef")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#abcdef")
     def test_media_season_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="seasonposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="seasonposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.SEASON.value,
@@ -6946,7 +7043,6 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.data["backdrop_url"], "https://image.tmdb.org/t/p/original/default-backdrop.jpg")
         self.assertEqual(response.data["custom_backdrop_url"], "https://example.com/custom-backdrop.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     @patch("app.providers.tmdb.get_title_logo", return_value=None)
     @patch("app.providers.tmdb.get_backdrop_images")
     @patch("app.providers.mdblist.get_media_ratings", return_value={})
@@ -6958,7 +7054,11 @@ class ApiV1FoundationTests(TestCase):
         backdrops_mock,
         _logo_mock,
     ):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-curated", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,
@@ -7070,9 +7170,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["backdrop_url"], "https://example.com/only.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     def test_curator_backdrop_save_does_not_overwrite_other_user_preferences(self):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-custom", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,

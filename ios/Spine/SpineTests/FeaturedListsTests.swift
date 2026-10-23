@@ -177,10 +177,6 @@ final class FeaturedListsDecodingTests: XCTestCase {
         XCTAssertEqual(card.previewPeople.first?.ref, PersonRef(source: "openlibrary", id: "OL1A"))
         XCTAssertEqual(card.stackPeople.map(\.entryId), [1, 3])
         XCTAssertEqual(card.itemsCount, 121)
-        // A ranked list's rank chip uses each person's position, else their place in the preview.
-        XCTAssertEqual(card.rank(at: 0), 1)
-        XCTAssertEqual(card.rank(at: 1), 2)
-        XCTAssertNil(card.rank(at: 2))
         XCTAssertNil(FeaturedPersonPhoto.url(for: card.previewPeople[1]))
         XCTAssertEqual(card.tileArtworkRequests().count, 1)
     }
@@ -270,10 +266,6 @@ final class FeaturedListsDecodingTests: XCTestCase {
         let featured = try XCTUnwrap(detail.featured)
         XCTAssertEqual(featured.kind, .chart)
         XCTAssertEqual(featured.source?.linkURL, URL(string: "https://www.netflix.com/tudum/top10"))
-        XCTAssertEqual(
-            featured.metadataLine(now: FeaturedFixtures.date("2026-10-21T18:00:00Z")),
-            "CHART · Netflix · Updated 2h ago · Refreshes weekly"
-        )
         XCTAssertEqual(featured.live?.isLive(at: FeaturedFixtures.date("2026-10-21T18:00:00Z")), true)
         XCTAssertEqual(featured.previews, [])
         XCTAssertEqual(detail.name, "Netflix Top 10: Films")
@@ -411,17 +403,15 @@ final class FeaturedLegacyFallbackTests: XCTestCase {
 final class FeaturedPresentationTests: XCTestCase {
     private let now = FeaturedFixtures.date("2026-10-21T18:00:00Z")
 
-    func testBadgePriorityIsLiveThenRecentThenPeriodThenKind() {
+    func testBadgePriorityIsLiveThenPeriodThenKind() {
         let live = FeaturedLiveState(status: .live, label: "7 of 23 announced")
         let recent = now.addingTimeInterval(-2 * 3600)
-        let old = now.addingTimeInterval(-8 * 86400)
 
         XCTAssertEqual(
             FeaturedBadge.resolve(for: card(live: live, changed: recent, period: "2026"), now: now),
             .live(label: "7 of 23 announced")
         )
-        XCTAssertEqual(FeaturedBadge.resolve(for: card(changed: recent, period: "2026"), now: now), .updated(recent))
-        XCTAssertEqual(FeaturedBadge.resolve(for: card(changed: old, period: "2026"), now: now), .period("2026"))
+        XCTAssertEqual(FeaturedBadge.resolve(for: card(changed: recent, period: "2026"), now: now), .period("2026"))
         XCTAssertEqual(FeaturedBadge.resolve(for: card(kind: .award), now: now), .kind(.award))
     }
 
@@ -441,30 +431,22 @@ final class FeaturedPresentationTests: XCTestCase {
         XCTAssertTrue(FeaturedLiveState(status: .live).isLive(at: now))
 
         let card = card(live: ending, changed: now.addingTimeInterval(-60), period: "2027")
-        XCTAssertEqual(FeaturedBadge.resolve(for: card, now: now.addingTimeInterval(120)), .updated(now.addingTimeInterval(-60)))
+        XCTAssertEqual(FeaturedBadge.resolve(for: card, now: now.addingTimeInterval(120)), .period("2027"))
         XCTAssertFalse(FeaturedShelvesResponse(shelves: [
             FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [card]),
         ]).hasLiveList(now: now.addingTimeInterval(120)))
     }
 
-    func testStaticListsNeverShowTheUpdatedBadge() {
-        let changed = now.addingTimeInterval(-3600)
-        let staticList = FeaturedListCard(
-            id: 1, name: "Canon", itemsCount: 100, mediaTypes: ["movie"], kind: .canon, cadence: .static,
-            contentChangedAt: changed
-        )
-        XCTAssertEqual(FeaturedBadge.resolve(for: staticList, now: now), .kind(.canon))
-
+    func testRecentlyChangedListsShowTheirKindNotWhenTheyChanged() {
         let weekly = FeaturedListCard(
             id: 2, name: "Chart", itemsCount: 10, mediaTypes: ["movie"], kind: .chart, cadence: .weekly,
-            contentChangedAt: changed
+            contentChangedAt: now.addingTimeInterval(-3600)
         )
-        XCTAssertEqual(FeaturedBadge.resolve(for: weekly, now: now), .updated(changed))
+        XCTAssertEqual(FeaturedBadge.resolve(for: weekly, now: now), .kind(.chart))
     }
 
     func testPeopleListsCountPeople() {
         let flagged = FeaturedListCard(id: 1, name: "Nobel", itemsCount: 121, mediaTypes: ["book"], cadence: .yearly, listType: .people)
-        XCTAssertEqual(flagged.countLabel, "121 people · Yearly")
         XCTAssertEqual(flagged.countText, "121 people")
 
         let person = PersonListEntry(
@@ -478,39 +460,19 @@ final class FeaturedPresentationTests: XCTestCase {
         XCTAssertEqual(books.countText, "121 books")
     }
 
-    func testAccessibilitySummaryReadsTheBadgeAndTheTopThree() throws {
-        func media(_ id: Int, _ title: String, position: Int) throws -> MediaSummary {
-            let json = #"{"item_id": \#(id), "source": "tmdb", "media_type": "movie", "media_id": "\#(id)"}"#
-            return MediaSummary(ref: try JSONDecoder.api.decode(MediaRef.self, from: Data(json.utf8)), title: title, position: position)
-        }
+    func testAccessibilitySummaryReadsTheBadgeTheCountAndTheSource() {
         let live = FeaturedListCard(
             id: 1, name: "Oscars 2027", itemsCount: 7, mediaTypes: ["movie"], kind: .award,
             source: FeaturedSource(name: "The Academy"), cadence: .live,
             live: FeaturedLiveState(status: .live, label: "7 of 23 announced")
         )
-        XCTAssertEqual(
-            live.accessibilitySummary(now: now),
-            "Oscars 2027, Live, 7 of 23 announced, 7 films · Live, The Academy"
-        )
+        XCTAssertEqual(live.accessibilitySummary(now: now), "Oscars 2027, Live, 7 of 23 announced, 7 films, The Academy")
 
         let chart = FeaturedListCard(
             id: 2, name: "Netflix Top 10", isRanked: true, itemsCount: 10, mediaTypes: ["movie"], kind: .chart,
-            source: FeaturedSource(name: "Netflix"), cadence: .weekly, contentChangedAt: now.addingTimeInterval(-2 * 3600),
-            previews: [
-                FeaturedPreview(media: try media(1, "One", position: 1), note: "▲2"),
-                FeaturedPreview(media: try media(2, "Two", position: 2), note: "NEW"),
-                FeaturedPreview(media: try media(3, "Three", position: 3)),
-                FeaturedPreview(media: try media(4, "Four", position: 4), note: "▼1"),
-            ]
+            source: FeaturedSource(name: "Netflix"), cadence: .weekly, contentChangedAt: now.addingTimeInterval(-2 * 3600)
         )
-        XCTAssertEqual(
-            chart.accessibilitySummary(now: now),
-            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix"
-        )
-        XCTAssertEqual(
-            chart.accessibilitySummary(now: now, includesTopEntries: true),
-            "Netflix Top 10, Updated 2h ago, 10 films · Weekly, Netflix, 1. One, up 2, 2. Two, new, 3. Three"
-        )
+        XCTAssertEqual(chart.accessibilitySummary(now: now), "Netflix Top 10, Chart, 10 films, Netflix")
     }
 
     func testNextLiveStartIsTheEarliestUpcomingWindow() {
@@ -539,25 +501,7 @@ final class FeaturedPresentationTests: XCTestCase {
         XCTAssertFalse(FeaturedLiveState(status: .done).isLive(at: now))
     }
 
-    func testRelativeTimeAndUpdatedLabel() {
-        XCTAssertEqual(FeaturedRelativeTime.short(from: now.addingTimeInterval(-30), now: now), "now")
-        XCTAssertEqual(FeaturedRelativeTime.short(from: now.addingTimeInterval(-12 * 60), now: now), "12m")
-        XCTAssertEqual(FeaturedRelativeTime.short(from: now.addingTimeInterval(-2 * 3600), now: now), "2h")
-        XCTAssertEqual(FeaturedRelativeTime.short(from: now.addingTimeInterval(-3 * 86400), now: now), "3d")
-        XCTAssertEqual(FeaturedRelativeTime.short(from: now.addingTimeInterval(-15 * 86400), now: now), "2w")
-        XCTAssertEqual(FeaturedRelativeTime.updatedLabel(from: now.addingTimeInterval(-2 * 3600), now: now), "Updated 2h ago")
-        XCTAssertEqual(FeaturedRelativeTime.updatedLabel(from: now, now: now), "Updated just now")
-    }
-
-    func testMovementFromNote() {
-        XCTAssertEqual(FeaturedMovement(note: "▲2"), .up(2))
-        XCTAssertEqual(FeaturedMovement(note: "Week 3 · ▼11"), .down(11))
-        XCTAssertEqual(FeaturedMovement(note: "new"), .new)
-        XCTAssertNil(FeaturedMovement(note: "Best Picture · 2027"))
-        XCTAssertNil(FeaturedMovement(note: nil))
-    }
-
-    func testCountLabelAndMetadataLine() {
+    func testCountTextIsJustTheSize() {
         let netflix = FeaturedListCard(
             id: 1,
             name: "Netflix Top 10: Films",
@@ -568,31 +512,29 @@ final class FeaturedPresentationTests: XCTestCase {
             cadence: .weekly,
             contentChangedAt: now.addingTimeInterval(-2 * 3600)
         )
-        XCTAssertEqual(netflix.countLabel, "10 films · Weekly")
-        XCTAssertEqual(netflix.metadataLine(now: now), "CHART · Netflix · Updated 2h ago · Refreshes weekly")
+        XCTAssertEqual(netflix.countText, "10 films")
 
         let mixed = FeaturedListCard(id: 2, name: "Mixed", itemsCount: 1, mediaTypes: ["movie", "book", "game"], cadence: .static)
-        XCTAssertEqual(mixed.countLabel, "1 title")
-        XCTAssertEqual(mixed.metadataLine(now: now), "")
+        XCTAssertEqual(mixed.countText, "1 title")
     }
 
-    func testVisibleShelvesHideDisabledMediaTypes() {
+    func testVisibleShelvesHideNowAndDisabledMediaTypes() {
         let movie = FeaturedListCard(id: 1, name: "Films", itemsCount: 1, mediaTypes: ["movie"])
         let music = FeaturedListCard(id: 2, name: "Albums", itemsCount: 1, mediaTypes: ["music"])
         let mixed = FeaturedListCard(id: 3, name: "All", itemsCount: 1, mediaTypes: ["music", "book", "game"])
+        let mixedMusic = FeaturedListCard(id: 4, name: "Albums Too", itemsCount: 1, mediaTypes: ["music"])
         let response = FeaturedShelvesResponse(shelves: [
             FeaturedShelf(key: "now", title: "Now", mediaType: nil, lists: [movie, music]),
             FeaturedShelf(key: "movie", title: "Movies", mediaType: "movie", lists: [movie]),
             FeaturedShelf(key: "music", title: "Music", mediaType: "music", lists: [music]),
-            FeaturedShelf(key: "mixed", title: "Across Media", mediaType: "mixed", lists: [mixed]),
+            FeaturedShelf(key: "mixed", title: "Across Media", mediaType: "mixed", lists: [mixed, mixedMusic]),
         ])
 
         let visible = response.visibleShelves(enabledMediaTypes: ["movie", "book"])
 
-        XCTAssertEqual(visible.map(\.key), ["now", "movie", "mixed"])
-        XCTAssertEqual(visible[0].lists.map(\.id), [1])
-        XCTAssertEqual(visible[0].count, 1)
-        XCTAssertEqual(visible[2].lists.map(\.id), [3])
+        XCTAssertEqual(visible.map(\.key), ["movie", "mixed"])
+        XCTAssertEqual(visible[1].lists.map(\.id), [3])
+        XCTAssertEqual(visible[1].count, 1)
         XCTAssertEqual(response.visibleShelves(enabledMediaTypes: ["tv"]).map(\.key), [])
     }
 
@@ -924,6 +866,43 @@ final class FeaturedEntryNoteTests: XCTestCase {
         XCTAssertEqual(viewModel.list?.items.map(\.note), ["Winner · Best Picture", nil])
     }
 
+    func testRepeatedTitlesKeepEveryRowAcrossPages() async throws {
+        // An award list has one row per year, so a three-time winner is three rows with the same media.
+        let winner = try ref(1)
+        let repository = FeaturedNotesListRepository(
+            items: [
+                MediaSummary(ref: winner, title: "Winner", position: 1, note: "2019"),
+                MediaSummary(ref: try ref(2), title: "Other", position: 2, note: "2020"),
+                MediaSummary(ref: winner, title: "Winner", position: 3, note: "2021"),
+            ],
+            nextPage: [
+                // The last row of the first page again, as a page that shifted would send it.
+                MediaSummary(ref: winner, title: "Winner", position: 3, note: "2021"),
+                MediaSummary(ref: winner, title: "Winner", position: 4, note: "2023"),
+            ]
+        )
+        let viewModel = ProfileListDetailViewModel(
+            listId: 12,
+            listRepository: repository,
+            filterOptionsRepository: FeaturedNotesFilterRepository(),
+            onUnauthorized: {}
+        )
+
+        await viewModel.load()
+        XCTAssertEqual(viewModel.displayedItems.map(\.position), [1, 2, 3])
+        XCTAssertEqual(viewModel.displayedItems.map(\.note), ["2019", "2020", "2021"])
+
+        // The grid passes the index of the cell that appeared.
+        await viewModel.loadNextFilteredPageIfNeeded(currentIndex: 2)
+
+        XCTAssertEqual(repository.pages, [nil, "2"])
+        XCTAssertEqual(viewModel.displayedItems.map(\.position), [1, 2, 3, 4])
+        XCTAssertEqual(viewModel.displayedItems.map(\.note), ["2019", "2020", "2021", "2023"])
+        XCTAssertEqual(viewModel.list?.items.map(\.position), [1, 2, 3, 4])
+        XCTAssertEqual(ArtworkPrefetch.upcoming(at: 0, in: viewModel.displayedItems).map(\.position), [2, 3, 4])
+        XCTAssertEqual(ArtworkPrefetch.upcoming(at: 3, in: viewModel.displayedItems).count, 0)
+    }
+
     func testEditingAFeaturedListKeepsItsFeaturedBlockAndNotes() async throws {
         let repository = FeaturedNotesListRepository(
             items: [MediaSummary(ref: try ref(1), title: "Winner", position: 1, note: "Winner · Best Picture")],
@@ -971,12 +950,16 @@ final class FeaturedEntryNoteTests: XCTestCase {
 @MainActor
 private final class FeaturedNotesListRepository: ListRepository {
     let items: [MediaSummary]
+    /// A second page of items, when the list has one.
+    let nextPage: [MediaSummary]?
     let featuredJSON: String?
     var detailCalls = 0
     var updateCalls = 0
+    var pages: [String?] = []
 
-    init(items: [MediaSummary], featuredJSON: String? = nil) {
+    init(items: [MediaSummary], nextPage: [MediaSummary]? = nil, featuredJSON: String? = nil) {
         self.items = items
+        self.nextPage = nextPage
         self.featuredJSON = featuredJSON
     }
 
@@ -1001,7 +984,15 @@ private final class FeaturedNotesListRepository: ListRepository {
     }
 
     func items(listId: Int, page: String?, filter: MediaFilterState) async throws -> PagedResponse<MediaSummary> {
-        PagedResponse(count: items.count, next: nil, previous: nil, results: items)
+        pages.append(page)
+        guard let nextPage else {
+            return PagedResponse(count: items.count, next: nil, previous: nil, results: items)
+        }
+        let count = items.count + nextPage.count
+        if page == nil {
+            return PagedResponse(count: count, next: "https://example.com/api/lists/12/items/?page=2", previous: nil, results: items)
+        }
+        return PagedResponse(count: count, next: nil, previous: nil, results: nextPage)
     }
 
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary { fatalError("unused") }

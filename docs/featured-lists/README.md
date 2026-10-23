@@ -54,7 +54,7 @@ class Entry:
     ids: Mapping[str, str] = {}      # tmdb, imdb, wikidata, steam, igdb, mal, anilist, mbid_rg, olid, hardcover, goodreads, ref
     isbns: tuple[str, ...] = ()
     image: str = ""                  # poster hint, so Items can be created without a provider call
-    note: str = ""                   # "Best Picture · 2027", "Winner", "▲2"
+    note: str = ""                   # "2027" (award histories), "Winner · Best Picture", "▲2"
     # .key: the first strong id ("imdb:tt0111161", "isbn:978…", "ref:tmdb:movie:550"),
     # else "t:<normalized title>|<year>"
 
@@ -195,12 +195,20 @@ Featured syncs share production's provider keys with the app, so every run (and 
 
 - **`FeaturedListSync`**:
   - Identity: `key` (unique slug); `custom_list` (nullable one-to-one, `SET_NULL`, related name `featured_sync`); `definition_hash`; `fingerprint`.
-  - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced); `entry_notes` (every list: what each row shows, from the entries' `note` and the chart movement, `{"<item_id>" | "<source>:person:<id>": "Winner · Best Picture" | "▲2 · $12.4M"}`, rewritten on every successful run).
+  - Content: `edition`; `content_changed_at`; `live_label`; `item_notes` (charts: `{"<item_id>": "▲2"|"▼1"|"NEW"}` against the previous content, rewritten whenever the items are replaced); `entry_notes` (every list: what each item or person shows, from the entries' `note` and the chart movement, `{"<item_id>" | "<source>:person:<id>": "Winner · Best Picture" | "▲2 · $12.4M"}`, rewritten on every successful run; the API reads it for people lists only, and media lists keep it for older code).
   - Run state: `last_attempt_at`; `last_success_at`; `last_status` (`ok|unchanged|guarded|failed|empty|deferred`); `last_error` (sanitized, never containing a key); `consecutive_failures`; `lease_until`; `deferred_until` (when a deferred run is retried).
   - Counts: `entry_count`; `resolved_count`; `unresolved` (JSON, at most 50 rows of `{rank, key, title, year, creator}`).
 - **`FeaturedListSnapshot`**: `sync` (foreign key); `taken_on` (date); `edition`; `fingerprint`; `entries` (JSON `[[rank, entry_key, item_id|null], …]`). Unique on `(sync, taken_on)`. Written only when the fingerprint changes.
 
+- **`CustomListItem`** (migration `lists/0011_customlistitem_occurrence_note`): `occurrence` (which repeat of the item the row is; unique with the list and the item, so people's own lists still hold an item once at occurrence 0) and `note` (the row's note, rewritten on every successful run). Both have database defaults, so code from before the migration can still insert rows.
+
 No new `CustomList` columns.
+
+### Award histories: a row per win
+
+All-time award lists (`kind="award"`, no live windows, media lists: `FeaturedList.keeps_repeats`) give each win its own row, even when the poster repeats: Succession's Emmys are three rows noted "2023", "2022" and "2020", each with its own position, and the item's repeats get occurrences 0, 1, 2. Their notes are the year alone, plus " · tie" (Wikidata) or " · shared" (Nobel) where that applies. On these lists two entries are the same row only when both the item and the note match. Every other list holds an item once: a live ceremony joins one film's categories into one row ("Winner · Best Picture; Winner · Best Director"), and the per-year Steam Awards lists join a game's categories.
+
+- **Counts:** `items_count` (and `entries_count`) counts rows, so the Emmy list's size includes each Succession win. Completion (`completion` on list detail and items, and stats' list progress) counts distinct items: watching Succession once completes all three rows.
 
 ## Scheduling
 
@@ -230,7 +238,7 @@ All of it is additive.
 
 **`GET /api/v1/lists/{id}/`** gains the same optional `featured` object when the list is featured and public; other lists' responses are unchanged (no key).
 
-**Entry notes:** on lists the engine writes, every item in `GET /api/v1/lists/{id}/items/` and the detail's `items`, and every person in `GET /api/v1/lists/{id}/people/` and the detail's `people`, gains `note`: a string or `null`. It's the entry's own note ("2023, 2022", "Nominee · Fiction", "Joint 21", "Inducted 2019"), with a chart's movement in front ("▲2 · $12.4M"); a source note that already gives the movement ("New this week") stands alone, and an item listed by several entries joins their notes with "; ". Other lists' items have no `note` key.
+**Entry notes:** on lists the engine writes, every item in `GET /api/v1/lists/{id}/items/` and the detail's `items`, and every person in `GET /api/v1/lists/{id}/people/` and the detail's `people`, gains `note`: a string or `null`. It's the row's own note ("2023", "Nominee · Fiction", "Joint 21", "Inducted 2019"), with a chart's movement in front ("▲2 · $12.4M"); a source note that already gives the movement ("New this week") stands alone, and an item listed by several entries joins their notes with "; " (except on award histories, where each win is its own row). Media rows read it from `CustomListItem.note`, people from `entry_notes`. Other lists' items have no `note` key.
 
 **`GET /api/v1/lists/featured/shelves/`:**
 
@@ -317,4 +325,5 @@ All curation lives in `src/lists/featured/order.py`; the weekly review edits onl
 
 - `list-media-types` is in progress in another session. It adds migration `0009_customlist_locked_media_types` and lock checks in both sync commands. If it lands first, renumber this feature's migration after it and have the writer set the lock.
 - `lists/0010_featured_deferral_and_entry_notes` (provider deferrals and per-entry notes) follows `0009_featured_list_sync`; renumber both together if another `lists` migration lands first.
+- `lists/0011_customlistitem_occurrence_note` adds `CustomListItem.occurrence` and `note`, widens the unique constraint to `(item, custom_list, occurrence)`, and copies each featured list's `entry_notes` onto its existing rows. Award histories re-sync once after it (their definition hash includes `keeps_repeats`).
 - Production gets the new worker and migration on the first deploy of this branch. Disk was at 99% on 2026-10-21, so watch the image build.

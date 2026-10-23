@@ -9,15 +9,45 @@ from urllib.parse import quote, urlsplit, urlunsplit
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from redis.exceptions import LockError, RedisError
 
 from app import helpers
-from app.models import MediaTypes, Sources
+from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import services
 from app.providers.search_rank import rank_results
 
 MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2"
 LISTENBRAINZ_URL = "https://api.listenbrainz.org/1/popularity/release-group"
+LISTENBRAINZ_TOP_ARTISTS_URL = "https://api.listenbrainz.org/1/stats/sitewide/artists"
+LISTENBRAINZ_ARTIST_ALBUMS_URL = (
+    "https://api.listenbrainz.org/1/popularity/top-release-groups-for-artist"
+)
+# ListenBrainz keeps each chart's top 1,000 artists.
+GENRE_ARTIST_RANGES = ("all_time", "this_year")
+GENRE_ARTIST_COUNT = 1000
+GENRE_ALBUMS_PER_ARTIST = 15
+VARIOUS_ARTISTS_MBID = "89ad4ac3-39f7-470e-963a-56509c546377"
+WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
+WIKIDATA_BATCH = 200
+WIKIPEDIA_PAGEVIEWS_URL = (
+    "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/"
+    "en.wikipedia/all-access/user"
+)
+PAGEVIEWS_START = "20150701"  # the first month Wikimedia counts
+# Each release group's English Wikipedia article, through Wikidata. Only album
+# items count: a film can carry its soundtrack's release group ID.
+WIKIPEDIA_ARTICLES_QUERY = """
+SELECT ?rg ?links ?title WHERE {
+  VALUES ?rg { %s }
+  ?album wdt:P436 ?rg ;
+         wdt:P31/wdt:P279* wd:Q482994 ;
+         wikibase:sitelinks ?links .
+  ?article schema:about ?album ;
+           schema:isPartOf <https://en.wikipedia.org/> ;
+           schema:name ?title .
+}
+"""
 COVER_ART_URL = "https://coverartarchive.org"
 COVER_ART_PROVIDER = "cover art archive"
 CACHE_VERSION = "v2"
@@ -156,13 +186,68 @@ def search_people(query, *, limit=10, timeout=None):
 
 
 def discover(*, page=1, page_size=None, genre=None):
-    """Discover popular official release groups carrying an exact genre."""
-    genre = " ".join(str(genre or "").split()).casefold()
+    """Discover a genre's albums, most listened first."""
+    genre = _genre_key(genre)
     if not genre:
         raise ValueError("genre is required for MusicBrainz discovery.")
 
     page = max(1, int(page))
     per_page = page_size or settings.PER_PAGE
+    start = (page - 1) * per_page
+    albums = MusicGenreAlbum.objects.filter(genre=genre)
+    total_results = albums.count()
+    if total_results >= SEARCH_CANDIDATE_LIMIT:
+        results = [
+            _genre_album_result(album) for album in albums[start : start + per_page]
+        ]
+    else:
+        # Too few known popular albums: list them first, then fill in from a
+        # MusicBrainz genre search.
+        ranked = [_genre_album_result(album) for album in albums]
+        known = {result["media_id"] for result in ranked}
+        ranked += [
+            result for result in _search_genre(genre) if result["media_id"] not in known
+        ]
+        total_results = len(ranked)
+        results = ranked[start : start + per_page]
+    data = helpers.format_search_response(
+        page,
+        per_page,
+        total_results,
+        results,
+    )
+    data["per_page"] = per_page
+    return data
+
+
+def _genre_key(value):
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _genre_album_result(album):
+    subtitle = " · ".join(
+        part for part in (album.artist, album.release_date[:4], "Album") if part
+    )
+    return {
+        "media_id": album.release_group_mbid,
+        "source": Sources.MUSICBRAINZ.value,
+        "media_type": MediaTypes.MUSIC.value,
+        "title": album.title,
+        "release_date": album.release_date or None,
+        "image": _cover_art_url(album.release_group_mbid),
+        "poster_width": 500,
+        "poster_height": 500,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": subtitle,
+    }
+
+
+def _search_genre(genre):
+    """Return official release groups tagged with a genre, most listened first.
+
+    MusicBrainz returns its best text matches, not its most popular ones, so
+    these are only the listening order of whichever 100 albums it picked.
+    """
     query = f'tag:"{escape_lucene(genre)}" AND status:official'
     digest = hashlib.sha256(query.encode()).hexdigest()
     response = _cached(
@@ -187,22 +272,7 @@ def discover(*, page=1, page_size=None, genre=None):
     popularity = lookup_release_group_popularity(
         [candidate["media_id"] for candidate in candidates],
     )
-    ranked = _rank_genre_results(candidates, popularity)
-    start = (page - 1) * per_page
-    results = ranked[start : start + per_page]
-    try:
-        total_results = int(response.get("count", len(ranked)))
-    except (TypeError, ValueError):
-        total_results = len(ranked)
-    total_results = min(max(0, total_results), SEARCH_CANDIDATE_LIMIT)
-    data = helpers.format_search_response(
-        page,
-        per_page,
-        total_results,
-        results,
-    )
-    data["per_page"] = per_page
-    return data
+    return _rank_genre_results(candidates, popularity)
 
 
 def _rank_genre_results(candidates, popularity):
@@ -283,6 +353,237 @@ def lookup_release_group_popularity(release_group_mbids):
 
     cache.set(cache_key, popularity, SEARCH_CACHE_TTL)
     return popularity
+
+
+def refresh_genre_albums():
+    """Rebuild the popular albums behind music genre pages.
+
+    ListenBrainz charts only its top 1,000 albums, too few to fill genre pages,
+    so this starts from its most-listened artists instead: each one's
+    most-listened albums, filed under the genres MusicBrainz voters gave them.
+    Pages put the albums most read about on English Wikipedia first; listening
+    on ListenBrainz leans toward 2000s indie, Wikipedia readers toward everyone.
+    The old albums stay if ListenBrainz or Wikipedia fails.
+    """
+    token = str(settings.LISTENBRAINZ_TOKEN or "").strip()
+    if not token:
+        logger.warning("Music genre albums need a ListenBrainz token; skipping.")
+        return None
+
+    artist_mbids = _top_artist_mbids(token)
+    albums = {}
+    failed = 0
+    for artist_mbid in artist_mbids:
+        try:
+            rows = _listenbrainz_get(
+                f"{LISTENBRAINZ_ARTIST_ALBUMS_URL}/{_path_value(artist_mbid)}",
+                token,
+            )
+        except requests.RequestException as error:
+            logger.warning("ListenBrainz albums unavailable for %s: %s", artist_mbid, error)
+            failed += 1
+            continue
+        artist_albums = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and row.get("release_group_mbid")
+            and (row.get("release_group") or {}).get("type") == "Album"
+        ]
+        artist_albums.sort(key=_album_popularity, reverse=True)
+        for row in artist_albums[:GENRE_ALBUMS_PER_ARTIST]:
+            albums.setdefault(row["release_group_mbid"], row)
+
+    if failed * 10 > len(artist_mbids):
+        msg = f"ListenBrainz failed for {failed} of {len(artist_mbids)} artists."
+        raise RuntimeError(msg)
+    if not albums:
+        msg = "ListenBrainz returned no albums."
+        raise RuntimeError(msg)
+
+    page_views = _wikipedia_page_views(
+        {
+            release_group_mbid: (row.get("release_group") or {}).get("name") or ""
+            for release_group_mbid, row in albums.items()
+        },
+    )
+    entries = []
+    for release_group_mbid, row in albums.items():
+        release_group = row.get("release_group") or {}
+        listeners, listens = _album_popularity(row)
+        entries.extend(
+            MusicGenreAlbum(
+                genre=genre,
+                release_group_mbid=release_group_mbid,
+                title=release_group.get("name") or "",
+                artist=(row.get("artist") or {}).get("name") or "",
+                release_date=str(release_group.get("date") or "")[:10],
+                page_views=page_views.get(release_group_mbid, 0),
+                listeners=listeners,
+                listens=listens,
+            )
+            for genre in _album_genres(row)
+        )
+    with transaction.atomic():
+        MusicGenreAlbum.objects.all().delete()
+        MusicGenreAlbum.objects.bulk_create(entries, batch_size=1000)
+    return {
+        "artists": len(artist_mbids),
+        "failed_artists": failed,
+        "albums": len(albums),
+        "albums_on_wikipedia": len(page_views),
+        "genre_albums": len(entries),
+    }
+
+
+def _wikipedia_page_views(album_titles):
+    """Return English Wikipedia reads since mid-2015 for ``{release group: title}``.
+
+    Albums without an English article are left out. When several Wikidata albums
+    carry one release group (Thriller and "Thriller 25"), the one the most
+    Wikipedias cover wins. When several release groups share one article
+    (BLACKPINK's "THE ALBUM" and "THE ALBUM -JP ver.-"), the one titled like the
+    article keeps it.
+    """
+    release_group_mbids = list(album_titles)
+    articles = {}
+    for start in range(0, len(release_group_mbids), WIKIDATA_BATCH):
+        batch = release_group_mbids[start : start + WIKIDATA_BATCH]
+        data = services.api_request(
+            "wikidata",
+            "POST",
+            WIKIDATA_SPARQL_URL,
+            data={
+                "query": WIKIPEDIA_ARTICLES_QUERY % " ".join(f'"{mbid}"' for mbid in batch),
+                "format": "json",
+            },
+            headers=_headers(),
+            request_session=services.genre_refresh_session,
+        )
+        best = {}
+        for row in data["results"]["bindings"]:
+            # Most sitelinks wins; the title breaks ties so every week picks the same.
+            candidate = (_positive_int(row["links"]["value"]), row["title"]["value"])
+            best[row["rg"]["value"]] = max(candidate, best.get(row["rg"]["value"], candidate))
+        articles.update({mbid: title for mbid, (_, title) in best.items()})
+    sharing = {}
+    for release_group_mbid in release_group_mbids:
+        if release_group_mbid in articles:
+            sharing.setdefault(articles[release_group_mbid], []).append(release_group_mbid)
+    for title, mbids in sharing.items():
+        # "The Album (Blackpink album)" is about the album titled "The Album".
+        name = _normalized_title(re.sub(r"\s*\([^)]*\)$", "", title))
+        keep = next(
+            (mbid for mbid in mbids if _normalized_title(album_titles[mbid]) == name),
+            mbids[0],
+        )
+        for mbid in mbids:
+            if mbid != keep:
+                del articles[mbid]
+
+    page_views = {}
+    failed = 0
+    end = date.today().strftime("%Y%m%d")
+    for release_group_mbid, title in articles.items():
+        article = quote(title.replace(" ", "_"), safe="")
+        try:
+            data = services.api_request(
+                "wikipedia",
+                "GET",
+                f"{WIKIPEDIA_PAGEVIEWS_URL}/{article}/monthly/{PAGEVIEWS_START}/{end}",
+                headers=_headers(),
+                request_session=services.genre_refresh_session,
+            )
+        except requests.RequestException as error:
+            # A 404 is an article with no counted reads yet.
+            if getattr(error.response, "status_code", None) != requests.codes.not_found:
+                logger.warning("Wikipedia reads unavailable for %s: %s", title, error)
+                failed += 1
+            continue
+        page_views[release_group_mbid] = sum(
+            _positive_int(item.get("views")) for item in data.get("items") or []
+        )
+
+    if failed * 10 > len(articles):
+        msg = f"Wikipedia reads failed for {failed} of {len(articles)} albums."
+        raise RuntimeError(msg)
+    return page_views
+
+
+def _top_artist_mbids(token):
+    mbids = []
+    unmatched = []
+    for stats_range in GENRE_ARTIST_RANGES:
+        data = _listenbrainz_get(
+            LISTENBRAINZ_TOP_ARTISTS_URL,
+            token,
+            params={"range": stats_range, "count": GENRE_ARTIST_COUNT},
+        )
+        for row in (data.get("payload") or {}).get("artists") or []:
+            if row.get("artist_mbid"):
+                mbids.append(row["artist_mbid"])
+            elif row.get("artist_name"):
+                unmatched.append(row["artist_name"])
+    # A few big artists (The Beatles among them) come without an MBID.
+    mbids.extend(_artist_mbid_by_name(name) for name in dict.fromkeys(unmatched))
+    return [
+        mbid
+        for mbid in dict.fromkeys(mbids)
+        if mbid and mbid != VARIOUS_ARTISTS_MBID
+    ]
+
+
+def _artist_mbid_by_name(name):
+    """Return the MusicBrainz artist named exactly ``name``, if search finds one."""
+    try:
+        response = _musicbrainz_request(
+            "artist",
+            {"query": f'artist:"{escape_lucene(name)}"', "limit": 5},
+        )
+    except services.ProviderAPIError:
+        return None
+    return next(
+        (
+            artist.get("id")
+            for artist in response.get("artists") or []
+            if str(artist.get("name") or "").casefold() == name.casefold()
+        ),
+        None,
+    )
+
+
+def _album_popularity(row):
+    return (
+        _popularity_count(row.get("total_user_count")) or 0,
+        _popularity_count(row.get("total_listen_count")) or 0,
+    )
+
+
+def _album_genres(row):
+    """Return the genres an album's voters mostly agree on.
+
+    A genre needs more than half the votes of the album's top genre, so a famous
+    crossover album (Ed Sheeran's "+" has 3 hip hop votes to 7 for indie rock)
+    doesn't top a genre it only touches.
+    """
+    votes = {}
+    for tag in (row.get("tag") or {}).get("release_group") or []:
+        genre = _genre_key(tag.get("tag"))
+        if tag.get("genre_mbid") and genre:
+            votes[genre] = max(votes.get(genre, 0), _positive_int(tag.get("count")))
+    strongest = max(votes.values(), default=0)
+    return [genre for genre, count in votes.items() if count * 2 > strongest]
+
+
+def _listenbrainz_get(url, token, params=None):
+    return services.api_request(
+        "listenbrainz",
+        "GET",
+        url,
+        params=params,
+        headers={**_headers(), "Authorization": f"Token {token}"},
+        request_session=services.genre_refresh_session,
+    )
 
 
 def lookup_release_group(release_group_mbid):

@@ -78,6 +78,16 @@ def refresh_music_detail(source, media_id, include_music_enrichment):
     )
 
 
+@shared_task(name="Refresh music genre albums")
+def refresh_music_genre_albums():
+    """Rebuild the popular albums behind music genre pages."""
+    from app.providers import musicbrainz
+
+    result = musicbrainz.refresh_genre_albums()
+    logger.info("Music genre albums refreshed counts=%s", result)
+    return result
+
+
 @shared_task(name="Refresh AniList person page", ignore_result=True)
 def refresh_anilist_person_page(person_id, page, marker=None):
     """Refresh one stale AniList filmography page."""
