@@ -93,6 +93,8 @@ vendor=$(uv run --locked python manage.py shell -c 'from django.db import connec
 [ "$vendor" = sqlite ] || die "the settings use '$vendor', not this checkout's SQLite database"
 echo "Migrating this checkout's SQLite database..."
 uv run --locked python manage.py migrate --noinput >/dev/null
+# Start from an empty cache (this checkout's prefix only), so a restart serves this code's data.
+uv run --locked python manage.py shell -c 'from django.core.cache import cache; cache.delete_pattern("*")' >/dev/null
 
 pids=()
 cleanup() { [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true; }
