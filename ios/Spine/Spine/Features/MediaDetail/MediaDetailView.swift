@@ -7531,11 +7531,10 @@ private struct CreditRow: View {
         ) { phase in
             switch phase {
             case let .success(image):
-                // Headshots are portrait; pin the crop to the top so faces stay in the circle.
+                // Centered like the person page: a top-pinned crop cut off faces that fill the headshot.
                 image
                     .resizable()
                     .scaledToFill()
-                    .frame(width: Self.avatarSize, height: Self.avatarSize, alignment: .top)
             default:
                 monogram
             }
