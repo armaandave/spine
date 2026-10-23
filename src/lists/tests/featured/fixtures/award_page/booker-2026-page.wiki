@@ -1,0 +1,84 @@
+<!-- 2026 Booker Prize, revision 1376203706 (2026-09-22), trimmed to the Nominees section. Wikipedia text, CC BY-SA 4.0. -->
+==Nominees==
+All 2026 nominees are novels.
+
+{{legend|gold|indicates the winner}}
+{{legend|lightgrey|indicates shortlisted}}
+
+{| class="wikitable plainrowheaders sortable"
+! scope="col" | Author
+! scope="col" | Title
+! scope="col" | Country
+! scope="col" | Publisher
+|-
+| data-sort-value="Aridjis, Chloe" | [[Chloe Aridjis]]
+| ''[[The Shadow of the Object]]''
+| Mexico/USA
+| [[Chatto & Windus]]
+|-
+| data-sort-value="Cline, Emma" | [[Emma Cline]]
+| ''[[Switzy]]''
+| USA
+| Chatto & Windus
+|-
+| data-sort-value="Goodman, Makenna" | [[Makenna Goodman]]
+| ''[[Helen of Nowhere]]''
+| USA
+| [[Fitzcarraldo Editions]]
+|-
+|-style="background: lightgrey"
+| data-sort-value="Harrison, M. John" | [[M. John Harrison]]
+| ''[[The End of Everything (Harrison novel)|The End of Everything]]''
+| UK
+| [[Serpent's Tail]]
+|-
+|-style="background: lightgrey"
+| data-sort-value="James, Marlon" | [[Marlon James (novelist)|Marlon James]]
+| ''[[The Disappearers]]''
+| Jamaica
+| [[Hamish Hamilton]]
+|-
+|-style="background: lightgrey"
+| data-sort-value="Kennard, Luke" | [[Luke Kennard (poet)|Luke Kennard]]
+| ''[[Black Bag (novel)|Black Bag]]''
+| UK
+| [[John Murray (publishing house)|John Murray]]
+|-
+| data-sort-value="Orhan, Kenan" | [[Kenan Orhan]]
+| ''[[The Renovation (novel)|The Renovation]]''
+| Turkey/USA
+| Hamish Hamilton
+|-
+|-style="background: lightgrey"
+| data-sort-value="Perry, Rebecca" | [[Rebecca Perry]]
+| ''[[May We Feed the King]]''
+| UK
+| [[Granta]]
+|-
+| data-sort-value="Riley, Gwendoline" | [[Gwendoline Riley]]
+| ''[[The Palm House]]''
+| UK
+| [[Picador (imprint)|Picador]]
+|-
+|-style="background: lightgrey"
+| data-sort-value="Strout, Elizabeth" | [[Elizabeth Strout]]
+| ''[[The Things We Never Say]]''
+| USA
+| [[Viking Press]]
+|-
+|-style="background: lightgrey"
+| data-sort-value="Stuart, Douglas" | [[Douglas Stuart (writer)|Douglas Stuart]]
+| ''[[John of John]]''
+| UK/USA
+| Picador
+|-
+| data-sort-value="White, Djamel" | [[Djamel White]]
+| ''[[All Them Dogs]]''
+| Ireland
+| John Murray
+|-
+| data-sort-value="Williams, Missouri" | [[Missouri Williams]]
+| ''[[The Vivisectors]]''
+| UK
+| [[4th Estate (imprint)|4th Estate]]
+|}

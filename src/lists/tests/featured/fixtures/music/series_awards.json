@@ -1,0 +1,126 @@
+{
+ "id": "64249380-b076-4a9d-aa41-e617d81fa1c9",
+ "name": "Grammy Award: Album of the Year nominees",
+ "relations": [
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "2026"
+   },
+   "release_group": {
+    "id": "ae229bdd-2179-440c-bc78-acf0952914d4",
+    "title": "CHROMAKOPIA",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "2024-10-28",
+    "artist-credit": [
+     {
+      "name": "Tyler, The Creator",
+      "joinphrase": "",
+      "artist": {
+       "id": "f6beac20-5dfe-4d1f-ae02-0b0a740aafd6",
+       "name": "Tyler, The Creator"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "2025 winner"
+   },
+   "release_group": {
+    "id": "fa566e7b-254a-4fab-8aa5-ebcb7592d7f2",
+    "title": "COWBOY CARTER",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "2024-03-29",
+    "artist-credit": [
+     {
+      "name": "Beyoncé",
+      "joinphrase": "",
+      "artist": {
+       "id": "859d0860-d480-4efd-970c-c05d5f1776b8",
+       "name": "Beyoncé"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "2026"
+   },
+   "release_group": {
+    "id": "32cb822c-a14e-49ce-a169-f209c5f31e0f",
+    "title": "GNX",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "2024-11-22",
+    "artist-credit": [
+     {
+      "name": "Kendrick Lamar",
+      "joinphrase": "",
+      "artist": {
+       "id": "381086ea-f511-4aba-bdf9-71c753dc5077",
+       "name": "Kendrick Lamar"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "1959 winner"
+   },
+   "release_group": {
+    "id": "3d7debc9-aa10-36a6-9f02-f7287fe05a92",
+    "title": "The Music From Peter Gunn",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "1959",
+    "artist-credit": [
+     {
+      "name": "Henry Mancini",
+      "joinphrase": "",
+      "artist": {
+       "id": "83e71a21-caf7-4e48-8ff7-6512d51e88a3",
+       "name": "Henry Mancini"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "target-type": "release_group",
+   "type": "part of",
+   "attribute-values": {
+    "number": "2026 winner"
+   },
+   "release_group": {
+    "id": "b3073a10-2d7c-484c-b387-e49ae629da3d",
+    "title": "DeBÍ TiRAR MáS FOToS",
+    "primary-type": null,
+    "secondary-types": [],
+    "first-release-date": "2025-01-05",
+    "artist-credit": [
+     {
+      "name": "Bad Bunny",
+      "joinphrase": "",
+      "artist": {
+       "id": "89aa5ecb-59ad-46f5-b3eb-2d424e941f19",
+       "name": "Bad Bunny"
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

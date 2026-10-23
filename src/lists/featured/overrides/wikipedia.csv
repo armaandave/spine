@@ -1,0 +1,59 @@
+scope,entry_key,ref,note
+wikipedia_table,t:new york philharmonic young peoples concerts with leonard bernstein|,tmdb:tv:91130,New York Philharmonic Young People's Concerts (1958) on TMDB
+wikipedia_table,imdb:tt0243435,-,My Name Is Barbra is a TV special TMDB lists as a movie (314691); TV lists can't hold it
+emmys-outstanding-drama-series,t:law and order|,tmdb:tv:549,Law & Order (1990); the title alone matches several series
+emmys-outstanding-drama-series,t:northern exposure|,tmdb:tv:4396,Northern Exposure (1990)
+emmys-outstanding-drama-series,t:police story|,tmdb:tv:9855,Police Story (1973 anthology)
+emmys-outstanding-drama-series,t:net playhouse season 3|,tmdb:tv:15560,NET Playhouse (1966); the winner row names the season
+emmys-outstanding-drama-series,t:hallmark hall of fame the magnificent yankee|,tmdb:tv:4779,"The Magnificent Yankee was a Hallmark Hall of Fame presentation; TMDB has the anthology"
+emmys-outstanding-drama-series,t:disneyland|,tmdb:tv:4231,Disneyland (1954 anthology); Wikidata's TMDB ID for the linked article
+emmys-outstanding-drama-series,t:studio one|,tmdb:tv:4259,Studio One (1948 CBS anthology)
+emmys-outstanding-comedy-series,t:get smart|,tmdb:tv:4455,Get Smart (1965)
+emmys-outstanding-comedy-series,t:the jack benny show|,tmdb:tv:10151,TMDB names it The Jack Benny Program (1950)
+emmys-outstanding-limited-series,imdb:tt6205862,tmdb:tv:64513,The People v. O. J. Simpson is season 1 of American Crime Story; Wikidata's IMDb ID is the season
+emmys-outstanding-limited-series,imdb:tt1291580,-,Behind the Candelabra is a TV film (Outstanding Miniseries or Movie); TMDB lists it as a movie
+emmys-outstanding-limited-series,imdb:tt1848902,-,Game Change is a TV film (Outstanding Miniseries or Movie); TMDB lists it as a movie
+emmys-outstanding-limited-series,t:prime suspect 5 errors of judgement|,tmdb:tv:2583,Prime Suspect 5 is a serial of Prime Suspect (1991) on TMDB
+emmys-outstanding-limited-series,t:prime suspect 3|,tmdb:tv:2583,Prime Suspect 3 is a serial of Prime Suspect (1991) on TMDB
+eisner-best-continuing-series,wikidata:Q130858129,comicvine:comic:160294,Absolute Batman (DC 2024); Comic Vine has same-named volumes and Wikidata has no Comic Vine ID
+eisner-best-continuing-series,wikidata:Q120108014,comicvine:comic:153968,Transformers (Skybound/Image 2023)
+eisner-best-continuing-series,wikidata:Q130541512,comicvine:comic:92569,Nightwing (DC 2016); Tom Taylor's winning run is in this volume
+eisner-best-continuing-series,wikidata:Q96406003,comicvine:comic:121102,Something is Killing the Children (Boom! 2019)
+eisner-best-continuing-series,wikidata:Q98108164,comicvine:comic:115236,Bitter Root (Image 2018)
+eisner-best-continuing-series,wikidata:Q901608,comicvine:comic:119731,Usagi Yojimbo (IDW 2019); the 2021 winner
+eisner-best-continuing-series,wikidata:Q28127374,comicvine:comic:80753,Giant Days (Boom! 2015)
+eisner-best-continuing-series,wikidata:Q21775821,comicvine:comic:85776,Monstress (Image 2015)
+eisner-best-continuing-series,wikidata:Q3790673,comicvine:comic:46568,Saga (Image 2012)
+eisner-best-continuing-series,wikidata:Q20050066,comicvine:comic:73392,Southern Bastards (Image 2014)
+eisner-best-continuing-series,wikidata:Q3702512,comicvine:comic:41410,Daredevil (Marvel 2011); the 2012 winner (the 2003 one was the 1998 volume)
+eisner-best-continuing-series,wikidata:Q2055645,comicvine:comic:26611,Chew (Image 2009)
+eisner-best-continuing-series,wikidata:Q340181,comicvine:comic:18166,The Walking Dead (Image 2003)
+eisner-best-continuing-series,wikidata:Q46689,comicvine:comic:9419,Y: The Last Man (DC/Vertigo 2002)
+eisner-best-continuing-series,wikidata:Q426558,comicvine:comic:10746,Astonishing X-Men (Marvel 2004)
+eisner-best-continuing-series,wikidata:Q3521088,comicvine:comic:18632,The Goon (Dark Horse 2003)
+eisner-best-continuing-series,wikidata:Q165149,comicvine:comic:6306,100 Bullets (DC/Vertigo 1999)
+eisner-best-continuing-series,wikidata:Q1091891,comicvine:comic:6567,Top 10 (DC/America's Best Comics 1999)
+eisner-best-continuing-series,wikidata:Q2823374,comicvine:comic:7230,The Acme Novelty Library (1993)
+eisner-best-continuing-series,wikidata:Q653255,comicvine:comic:5516,Preacher (DC/Vertigo 1995)
+eisner-best-continuing-series,wikidata:Q751282,comicvine:comic:18181,Kurt Busiek's Astro City (1996 volume)
+eisner-best-continuing-series,wikidata:Q162235,comicvine:comic:4691,Bone (Cartoon Books 1991)
+eisner-best-continuing-series,wikidata:Q827099,comicvine:comic:4207,The Sandman (DC 1989)
+eisner-best-continuing-series,wikidata:Q2992220,comicvine:comic:3919,Concrete (Dark Horse 1987)
+crunchyroll-anime-of-the-year,wikidata:Q63686324,mal:anime:60098,My Hero Academia: Final Season (2025); the cell links the whole series
+crunchyroll-anime-of-the-year,wikidata:Q65551313,mal:anime:52299,Solo Leveling season 1 (Jan 2024); the item covers the franchise
+crunchyroll-anime-of-the-year,t:jujutsu kaisen season 2|2023,mal:anime:51009,Jujutsu Kaisen 2nd Season (2023)
+crunchyroll-anime-of-the-year,wikidata:Q63350570,mal:anime:38000,Demon Slayer: Kimetsu no Yaiba season 1 (2019)
+crunchyroll-anime-of-the-year,wikidata:Q22126305,mal:anime:40028,Attack on Titan: The Final Season (Part 1 aired 2020-21); the cell links the whole series
+kono-manga-ga-sugoi-womens-top-10,t:夢とか恋とかてんてんてん|,mangaupdates:manga:11371803367,"Koi Toka Yume Toka Tententen by Serata Minami; Japanese Wikipedia transposes the title (恋とか夢とか)"
+kono-manga-ga-sugoi-number-ones,t:black jack sosaku hiwa tezuka osamu no oshigoto bakara|,mangaupdates:manga:19054413042,Black Jack Sousaku Hiwa: Tezuka Osamu no Shigotoba kara (Miyazaki Masaru and Yoshimoto Kouji)
+kono-manga-ga-sugoi-number-ones,t:umibe no stove oshiro kogani tanpenshu|,mangaupdates:manga:34408746476,Umibe no Stove: Ooshiro Kogani Tanpenshuu (2022)
+eisner-best-graphic-album-new,t:jim hensons tale|2012,comicvine:comic:50573,Jim Henson's Tale of Sand (Archaia 2011); Wikipedia's cell drops "of Sand"
+eisner-best-graphic-album-new,t:the night eaters book 1 she eats the night|2023,comicvine:comic:146736,The Night Eaters (Abrams 2022); book 1 is She Eats the Night
+eisner-best-graphic-album-new,t:building stories|2013,comicvine:comic:52853,Chris Ware Building Stories (Pantheon 2012)
+eisner-best-graphic-album-new,wikidata:Q1091891,comicvine:comic:18032,Top 10: The Forty-Niners (DC 2005); the cell links the Top 10 series
+eisner-best-graphic-album-new,t:the name of the game|2002,comicvine:comic:39809,Will Eisner's The Name of the Game (DC 2001)
+eisner-best-graphic-album-new,t:fairy tales of oscar wilde vol 2|1995,comicvine:comic:45164,Fairy Tales of Oscar Wilde (NBM 1992); volume 2 is part of it
+eisner-best-graphic-album-new,t:acme novelty library 13|2000,comicvine:comic:7230,The Acme Novelty Library; Comic Vine lists issue 13 inside the series
+goodreads-choice-historical-fiction,wikidata:Q135268127,hardcover:book:1561653,Atmosphere: A Love Story by Taylor Jenkins Reid (2025)
+national-book-award-fiction,t:ship fever and other stories|1996,hardcover:book:448348,Hardcover titles it Ship Fever: Stories (Andrea Barrett 1996)
+oprahs-book-club,t:the meanest thing to say the treasure hunt the best way to play|1997,-,Three Little Bill picture books chosen together; no single item

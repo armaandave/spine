@@ -1,0 +1,133 @@
+{
+ "head": {
+  "vars": [
+   "w",
+   "title",
+   "wins",
+   "year",
+   "creators",
+   "types",
+   "olw_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q115"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Orbital"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "a|2024||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q7725634"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Samantha Harvey"
+    },
+    "year": {
+     "type": "literal",
+     "value": "2023"
+    },
+    "olw_": {
+     "type": "literal",
+     "value": "OL1W"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q116"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Prophet Song"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|2023||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q7725634"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Paul Lynch"
+    },
+    "year": {
+     "type": "literal",
+     "value": "2023"
+    },
+    "olw_": {
+     "type": "literal",
+     "value": "OL2W"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q117"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Holiday"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1974||;a|1975||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q7725634"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Stanley Middleton"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1965"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q118"
+    },
+    "title": {
+     "type": "literal",
+     "value": "The Conservationist"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "w|1974||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q7725634"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Nadine Gordimer"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1974"
+    },
+    "olw_": {
+     "type": "literal",
+     "value": "OL5M"
+    }
+   }
+  ]
+ }
+}

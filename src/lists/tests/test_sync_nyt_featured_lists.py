@@ -1,3 +1,4 @@
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import call, patch
 
@@ -5,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 from django.test import TestCase
+from django.utils import timezone
 
 from app.models import Item, MediaTypes, Sources
 from app.providers import nytbooks
@@ -12,7 +14,7 @@ from lists.management.commands.sync_nyt_featured_lists import (
     _resolve_book,
     _sync_chart,
 )
-from lists.models import CustomList, CustomListItem
+from lists.models import CustomList, CustomListItem, FeaturedListSync
 
 
 def chart_payload(definition, *, count=2):
@@ -73,7 +75,7 @@ class SyncNYTFeaturedListsTests(TestCase):
     @patch("lists.management.commands.sync_nyt_featured_lists.nytbooks.get_current_chart")
     def test_command_creates_five_native_ranked_lists(self, get_chart, _lookup):
         get_chart.side_effect = [
-            chart_payload(definition) for definition in nytbooks.FEATURED_CHARTS
+            chart_payload(definition, count=10) for definition in nytbooks.FEATURED_CHARTS
         ]
 
         call_command(
@@ -103,7 +105,7 @@ class SyncNYTFeaturedListsTests(TestCase):
                     flat=True,
                 ),
             ),
-            [1, 2],
+            list(range(1, 11)),
         )
         self.assertEqual(get_chart.call_count, 5)
 
@@ -178,7 +180,7 @@ class SyncNYTFeaturedListsTests(TestCase):
     @patch("lists.management.commands.sync_nyt_featured_lists.nytbooks.get_current_chart")
     def test_rerun_replaces_items_without_replacing_list(self, get_chart, _lookup):
         get_chart.side_effect = [
-            chart_payload(definition, count=1)
+            chart_payload(definition, count=10)  # a complete chart: NYT lists 10 or 15 books
             for definition in nytbooks.FEATURED_CHARTS
         ]
         call_command("sync_nyt_featured_lists", owner="Spine", stdout=StringIO())
@@ -190,14 +192,33 @@ class SyncNYTFeaturedListsTests(TestCase):
         first_id = first.id
 
         get_chart.side_effect = [
-            chart_payload(definition, count=2)
+            chart_payload(definition, count=15)
             for definition in nytbooks.FEATURED_CHARTS
         ]
         call_command("sync_nyt_featured_lists", owner="Spine", stdout=StringIO())
 
         first.refresh_from_db()
         self.assertEqual(first.id, first_id)
-        self.assertEqual(first.items.count(), 2)
+        self.assertEqual(first.items.count(), 15)
+
+    @patch(
+        "lists.management.commands.sync_nyt_featured_lists.hardcover.lookup_book_by_isbn",
+        side_effect=lambda isbn: hardcover_result(isbn),
+    )
+    @patch("lists.management.commands.sync_nyt_featured_lists.nytbooks.get_current_chart")
+    def test_celery_task_skips_charts_the_engine_synced_recently(self, get_chart, _lookup):
+        from lists.tasks import sync_nyt_featured_lists
+
+        first, *others = nytbooks.FEATURED_CHARTS
+        FeaturedListSync.objects.create(key=f"nyt-{first['slug']}", last_success_at=timezone.now() - timedelta(hours=3))
+        FeaturedListSync.objects.create(key=f"nyt-{others[0]['slug']}", last_success_at=timezone.now() - timedelta(hours=13))
+        get_chart.side_effect = [chart_payload(definition, count=15) for definition in others]
+
+        sync_nyt_featured_lists()
+
+        self.assertEqual([call.args[0] for call in get_chart.call_args_list], [definition["slug"] for definition in others])
+        self.assertFalse(CustomList.objects.filter(import_source_id=first["slug"]).exists())
+        self.assertEqual(CustomList.objects.filter(import_source="nyt").count(), len(others))
 
     def test_celery_task_uses_the_management_command(self):
         with patch("lists.tasks.call_command", return_value=None) as command:
@@ -205,7 +226,7 @@ class SyncNYTFeaturedListsTests(TestCase):
 
             sync_nyt_featured_lists()
 
-        command.assert_called_once_with("sync_nyt_featured_lists", owner="Spine")
+        command.assert_called_once_with("sync_nyt_featured_lists", owner="Spine", skip_synced_within=12)
         self.assertEqual(
             settings.CELERY_BEAT_SCHEDULE["sync_nyt_featured_lists"],
             {

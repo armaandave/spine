@@ -81,7 +81,7 @@ from app.models import (
     MediaTypes,
     Sources,
 )
-from app.providers import anilist, mal, musicbrainz
+from app.providers import anilist, hardcover, mal, musicbrainz
 from app.providers import services as provider_services
 from app.providers.search_rank import normalize_search_text, rank_mixed_results
 from app.utils.color import build_accent_palette, compute_and_store_poster_accent
@@ -197,7 +197,8 @@ def _search_data(*, media_type, query, page=1, source=None, preserve_ranking_fie
         data = cache.get(cache_key)
         if data is None:
             data = fetch()
-            cache.set(cache_key, data, SEARCH_TTL)
+            if not data.get(provider_services.RATE_LIMIT_FALLBACK):
+                cache.set(cache_key, data, SEARCH_TTL)
     return source, data
 
 
@@ -352,7 +353,8 @@ def _fetch_candidate(
         elapsed_ms = int((time.monotonic() - started_at) * 1000)
         if search_metrics is not None:
             search_metrics["provider_elapsed_ms"] = elapsed_ms
-    _cache_candidate(cache_key, data)
+    if not data.get(provider_services.RATE_LIMIT_FALLBACK):
+        _cache_candidate(cache_key, data)
     return data, elapsed_ms
 
 
@@ -971,6 +973,33 @@ def refresh_music_detail(*, source, media_id, include_music_enrichment):
     )
 
 
+def _fetch_detail_metadata(*, cache_key, source, media_type, media_id, season_number, episode_number):
+    season_numbers = [season_number] if season_number is not None else None
+    try:
+        metadata = provider_services.get_media_metadata(
+            media_type,
+            media_id,
+            source,
+            season_numbers,
+            episode_number,
+        )
+    except provider_services.ProviderAPIError as error:
+        # While Hardcover is rate limited, a saved book still opens from its saved
+        # title, cover and pages. Not cached, so the full page returns once
+        # Hardcover answers again.
+        metadata = (
+            hardcover.saved_book(media_id)
+            if source == Sources.HARDCOVER.value
+            and error.status_code == requests.codes.too_many_requests
+            else None
+        )
+        if metadata is None:
+            raise
+        return metadata
+    cache.set(cache_key, metadata, DETAIL_TTL)
+    return metadata
+
+
 def media_detail(
     *,
     source,
@@ -1018,15 +1047,14 @@ def media_detail(
     else:
         metadata = cache.get(cache_key)
         if metadata is None:
-            season_numbers = [season_number] if season_number is not None else None
-            metadata = provider_services.get_media_metadata(
-                media_type,
-                media_id,
-                source,
-                season_numbers,
-                episode_number,
+            metadata = _fetch_detail_metadata(
+                cache_key=cache_key,
+                source=source,
+                media_type=media_type,
+                media_id=media_id,
+                season_number=season_number,
+                episode_number=episode_number,
             )
-            cache.set(cache_key, metadata, DETAIL_TTL)
 
     primary_metadata = metadata
     if media_type == MediaTypes.ANIME.value:

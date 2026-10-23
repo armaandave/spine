@@ -863,6 +863,21 @@ def get_image_url(path):
     return settings.IMG_NONE
 
 
+TMDB_IMAGE_PREFIX = "https://image.tmdb.org/t/p/"
+
+
+def sized_image_url(url, size):
+    """Return a TMDB image URL at another size (``w342``, ``original``).
+
+    URLs from other hosts are returned unchanged.
+    """
+    value = str(url or "")
+    if not value.startswith(TMDB_IMAGE_PREFIX):
+        return url
+    _, _, path = value[len(TMDB_IMAGE_PREFIX):].partition("/")
+    return f"{TMDB_IMAGE_PREFIX}{size}/{path}" if path else url
+
+
 def fetch_image(path, size="original"):
     """Fetch TMDB image bytes for a given poster path.
 

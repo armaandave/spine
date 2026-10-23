@@ -1,0 +1,93 @@
+{
+ "data": [
+  {
+   "node": {
+    "id": 21,
+    "title": "One Piece",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/anime/1244/138851.jpg",
+     "large": "https://cdn.myanimelist.net/images/anime/1244/138851l.jpg"
+    },
+    "start_date": "1999-10-20",
+    "start_season": {
+     "year": 1999,
+     "season": "fall"
+    },
+    "studios": [
+     {
+      "id": 18,
+      "name": "Toei Animation"
+     }
+    ]
+   }
+  },
+  {
+   "node": {
+    "id": 61987,
+    "title": "Kusuriya no Hitorigoto 3rd Season",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/anime/1028/160277.jpg",
+     "large": "https://cdn.myanimelist.net/images/anime/1028/160277l.jpg"
+    },
+    "start_date": "2026-10-02",
+    "start_season": {
+     "year": 2026,
+     "season": "fall"
+    },
+    "studios": [
+     {
+      "id": 28,
+      "name": "OLM"
+     }
+    ]
+   }
+  },
+  {
+   "node": {
+    "id": 61967,
+    "title": "Black Clover 2nd Season",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/anime/1857/160133.jpg",
+     "large": "https://cdn.myanimelist.net/images/anime/1857/160133l.jpg"
+    },
+    "start_date": "2026-10-03",
+    "start_season": {
+     "year": 2026,
+     "season": "fall"
+    },
+    "studios": [
+     {
+      "id": 1,
+      "name": "Studio Pierrot"
+     }
+    ]
+   }
+  },
+  {
+   "node": {
+    "id": 61990,
+    "title": "Cyberpunk: Edgerunners 2",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/anime/1431/160542.jpg",
+     "large": "https://cdn.myanimelist.net/images/anime/1431/160542l.jpg"
+    },
+    "start_date": "2026-10-20",
+    "start_season": {
+     "year": 2026,
+     "season": "fall"
+    },
+    "studios": [
+     {
+      "id": 803,
+      "name": "Trigger"
+     }
+    ]
+   }
+  }
+ ],
+ "paging": {},
+ "season": {
+  "year": 2026,
+  "season": "fall"
+ }
+}

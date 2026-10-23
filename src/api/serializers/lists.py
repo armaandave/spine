@@ -78,6 +78,8 @@ class PersonListEntrySerializer(serializers.Serializer):
     position = serializers.IntegerField(allow_null=True)
     date_added = serializers.DateTimeField()
     completion = CompletionProgressSerializer(required=False, allow_null=True)
+    # Featured lists only: the entry's note ("Inducted 2019").
+    note = serializers.CharField(required=False, allow_null=True)
 
 
 class ListPersonWriteResponseSerializer(serializers.Serializer):

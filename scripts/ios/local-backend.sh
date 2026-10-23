@@ -13,7 +13,8 @@
 #
 # It stays in the foreground (the server plus a Celery worker). Run it under the
 # cleanup wrapper, in the background:
-#   ~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend -- scripts/ios/local-backend.sh
+#   ~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend --timeout 14400 -- scripts/ios/local-backend.sh
+# (The always-on test backend, scripts/ios/test-backend.sh, runs this under launchd instead.)
 # Once it answers it prints "LOCAL_API: http://<this Mac>.local:<port>".
 #
 # Usage: scripts/ios/local-backend.sh [--port <n>]  (default: first free port from 8001)
@@ -81,6 +82,8 @@ export SPINE_DEV_SIGN_IN=1
 export REDIS_URL=redis://localhost:6379/5
 export CELERY_REDIS_URL=redis://localhost:6379/5
 export REDIS_PREFIX="local-$(basename "$top"):"
+# Dev shares production's Hardcover key, so featured-list syncs never spend it here.
+export FEATURED_HARDCOVER_DAILY_BUDGET=0
 
 cd "$top/src"
 vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
@@ -92,8 +95,13 @@ pids=()
 cleanup() { [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true; }
 trap cleanup EXIT
 
-uv run --locked celery -A config worker -l warning --concurrency 2 &
+uv run --locked celery -A config worker -l warning --concurrency 2 -Q celery,featured &
 pids+=($!)
+if [ "${SPINE_RUN_SCHEDULER:-0}" = 1 ]; then
+  # The always-on test backend keeps its featured lists current, like production.
+  uv run --locked celery -A config beat -l warning &
+  pids+=($!)
+fi
 uv run --locked python manage.py runserver "0.0.0.0:$port" &
 server=$!
 pids+=($server)

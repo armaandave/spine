@@ -145,6 +145,30 @@ class ImportLetterboxdTests(TestCase):
         self.assertEqual(export.lists[0].name, "Hidden Gems")
         self.assertEqual(export.lists[0].tags, ["underseen", "favorites"])
 
+    def test_reads_real_letterboxd_list_header(self):
+        # Letterboxd's own layout: a header row over one row of values, and HTML descriptions.
+        payload = export_zip(
+            {
+                "lists/quintessential-america.csv": (
+                    "Letterboxd list export v7\n"
+                    "Date,Name,Tags,URL,Description\n"
+                    '2024-03-02,Quintessential Americana,"top2024, yearly_ranking",https://boxd.it/tw0eI,'
+                    "Movies <b>watched</b> in 2024 that were <strong> released</strong> in 2024 &amp; loved.\n"
+                    "\n"
+                    "Position,Name,Year,URL,Description\n"
+                    "1,Film One,1999,https://boxd.it/film-one-watched,Top pick\n"
+                ),
+            },
+        )
+
+        export = parse_export(payload)
+
+        custom_list = export.lists[0]
+        self.assertEqual(custom_list.name, "Quintessential Americana")
+        self.assertEqual(custom_list.tags, ["top2024", "yearly_ranking"])
+        self.assertEqual(custom_list.description, "Movies watched in 2024 that were released in 2024 & loved.")
+        self.assertEqual([row["position"] for row in custom_list.rows], [1])
+
     def test_imports_list_tags(self):
         payload = export_zip(
             {

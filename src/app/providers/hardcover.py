@@ -2,11 +2,12 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 import requests
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 
 from app import helpers
-from app.models import MediaTypes, Sources
+from app.models import Item, MediaTypes, Sources
 from app.providers import services
 from app.providers.search_rank import rank_results
 
@@ -104,8 +105,9 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
                 "ratings_count": hit["document"].get("ratings_count"),
                 "rating": hit["document"].get("rating"),
                 "edition_count": hit["document"].get("edition_count"),
-                "first_publish_year": hit["document"].get("first_publish_year"),
-                "author_name": hit["document"].get("author_name"),
+                # Hardcover's search documents carry release_year and author_names.
+                "first_publish_year": hit["document"].get("release_year"),
+                "author_name": hit["document"].get("author_names"),
             }
             for hit in hits
         ]
@@ -485,6 +487,8 @@ def book(media_id):
                 author_books = author_resp["data"].get("books", [])
                 # Convert to recommendations format
                 recommendations = [{"item_book": book} for book in author_books]
+            except SoftTimeLimitExceeded:
+                raise
             except Exception as e:
                 logger.warning(f"Author fallback failed: {e}")
 
@@ -525,6 +529,36 @@ def book(media_id):
         cache.set(cache_key, data)
 
     return data
+
+
+def saved_book(media_id):
+    """Return a basic page for a saved book while Hardcover is rate limited."""
+    item = Item.objects.filter(
+        source=Sources.HARDCOVER.value,
+        media_type=MediaTypes.BOOK.value,
+        media_id=str(media_id),
+    ).first()
+    if not item:
+        return None
+    release_date = item.release_date.isoformat() if item.release_date else None
+    return {
+        "media_id": int(media_id),
+        "source": Sources.HARDCOVER.value,
+        "source_url": None,
+        "media_type": MediaTypes.BOOK.value,
+        "title": item.title,
+        "max_progress": item.total_pages,
+        "image": item.image or settings.IMG_NONE,
+        "synopsis": "No synopsis available.",
+        "genres": [],
+        "score": None,
+        "score_count": 0,
+        "details": {
+            "number_of_pages": item.total_pages,
+            "release_date": release_date,
+        },
+        "related": {},
+    }
 
 
 def get_featured_series(series_data):
@@ -936,6 +970,8 @@ def series_page(series_id):
             params={"query": query, "variables": {"series_id": int(series_id)}},
             headers={"Authorization": settings.HARDCOVER_API},
         )
+    except SoftTimeLimitExceeded:
+        raise
     except Exception as e:
         logger.warning("Series books failed: %s", e)
         return {

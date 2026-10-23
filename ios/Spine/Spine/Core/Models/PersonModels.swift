@@ -1,6 +1,6 @@
 import Foundation
 
-struct PersonRef: Codable, Hashable, Identifiable {
+nonisolated struct PersonRef: Codable, Hashable, Identifiable {
     let source: String
     let id: String
 

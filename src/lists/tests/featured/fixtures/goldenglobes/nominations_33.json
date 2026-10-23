@@ -1,0 +1,7 @@
+[
+  {"id": 1, "acf": {"year": 2026, "film_tv_show": 192564, "is_winner": true}},
+  {"id": 2, "acf": {"year": 2026, "film_tv_show": 102784, "is_winner": false}},
+  {"id": 3, "acf": {"year": 2024, "film_tv_show": 64626, "is_winner": true}},
+  {"id": 4, "acf": {"year": 2022, "film_tv_show": 64626, "is_winner": true}},
+  {"id": 5, "acf": {"year": 1988, "film_tv_show": 61000, "is_winner": true}}
+]

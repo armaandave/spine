@@ -1026,7 +1026,77 @@ class Search(TestCase):
             "id,name,image,deck,publisher,start_year,count_of_issues",
         )
         self.assertTrue(
-            mock_cache.set.call_args.args[0].startswith("search_v2_comicvine_comic_"),
+            mock_cache.set.call_args.args[0].startswith("search_v3_comicvine_comic_"),
+        )
+        # Real covers came back, so there's no extra cover request.
+        mock_api_request.assert_called_once()
+
+    @patch("app.providers.comicvine.cache")
+    @patch("app.providers.comicvine.services.api_request")
+    def test_comic_search_replaces_placeholder_covers(
+        self,
+        mock_api_request,
+        mock_cache,
+    ):
+        """Test search's stand-in covers are swapped for the volumes' real covers."""
+        mock_cache.get.return_value = None
+        placeholder = {
+            "medium_url": "https://comicvine.gamespot.com/a/uploads/"
+            "scale_medium/11122/111222211/6373148-blank.png",
+        }
+        search_results = [
+            self._comicvine_volume(17993, "Invincible", "2003", 144, "Image"),
+            self._comicvine_volume(91662, "Invincible", "2005", 1, "Image"),
+            self._comicvine_volume(5, "Invincible", "2019", 1, "Other"),
+        ]
+        search_results[0]["image"] = placeholder
+        search_results[1]["image"] = placeholder
+        mock_api_request.side_effect = [
+            {"number_of_total_results": 3, "results": search_results},
+            {
+                "results": [
+                    {"id": 17993, "image": {"medium_url": "https://cv/17993.jpg"}},
+                    {"id": 91662, "image": {"medium_url": "https://cv/91662.jpg"}},
+                ],
+            },
+        ]
+
+        response = comicvine.search("invincible", 1)
+
+        images = {result["media_id"]: result["image"] for result in response["results"]}
+        self.assertEqual(
+            images,
+            {
+                "17993": "https://cv/17993.jpg",
+                "91662": "https://cv/91662.jpg",
+                "5": "https://example.com/5.jpg",
+            },
+        )
+        covers_call = mock_api_request.call_args_list[1]
+        self.assertTrue(covers_call.args[2].endswith("/volumes/"))
+        self.assertEqual(covers_call.kwargs["params"]["filter"], "id:17993|91662")
+
+    @patch("app.providers.comicvine.cache")
+    @patch("app.providers.comicvine.services.api_request")
+    def test_comic_search_keeps_results_when_cover_request_fails(
+        self,
+        mock_api_request,
+        mock_cache,
+    ):
+        """Test a failed cover request still returns the search results."""
+        mock_cache.get.return_value = None
+        volume = self._comicvine_volume(17993, "Invincible", "2003", 144, "Image")
+        volume["image"] = {"medium_url": "https://cv/6373148-blank.png"}
+        mock_api_request.side_effect = [
+            {"number_of_total_results": 1, "results": [volume]},
+            requests.exceptions.Timeout(),
+        ]
+
+        response = comicvine.search("invincible", 1)
+
+        self.assertEqual(
+            [result["image"] for result in response["results"]],
+            ["https://cv/6373148-blank.png"],
         )
 
     @patch("app.providers.comicvine.cache")
@@ -1175,6 +1245,38 @@ class Search(TestCase):
 
         for book in response["results"]:
             self.assertTrue(all(key in book for key in required_keys))
+
+    @patch("app.providers.hardcover.services.api_request")
+    def test_hardcover_search_reads_author_names_and_release_year(self, mock_api_request):
+        """Hardcover documents carry author_names and release_year; search exposes both."""
+        cache.clear()
+        mock_api_request.return_value = {
+            "data": {
+                "search": {
+                    "results": {
+                        "hits": [
+                            {
+                                "document": {
+                                    "id": "427578",
+                                    "title": "Project Hail Mary",
+                                    "image": {"url": "https://example.com/phm.jpg"},
+                                    "author_names": ["Andy Weir"],
+                                    "release_year": 2021,
+                                    "ratings_count": 8593,
+                                },
+                            },
+                        ],
+                        "found": 1,
+                    },
+                },
+            },
+        }
+
+        response = hardcover.search("Project Hail Mary", 1, preserve_ranking_fields=True)
+
+        book = response["results"][0]
+        self.assertEqual(book["author_name"], ["Andy Weir"])
+        self.assertEqual(book["first_publish_year"], 2021)
 
     def test_hardcover_title_query_cap_stops_at_word_boundary(self):
         """Test the long title cap does not split words."""
