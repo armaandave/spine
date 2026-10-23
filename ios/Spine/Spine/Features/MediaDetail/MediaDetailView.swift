@@ -4596,6 +4596,13 @@ private struct IMDbExternalLinkPill: View {
 }
 
 struct HeroArtwork: View {
+    /// How a poster or cover is blurred when there's no backdrop. List headers without one blur a cover the same way.
+    enum PosterFallback {
+        static let blurRadius: CGFloat = 30
+        static let scale: CGFloat = 1.28
+        static let saturation: Double = 1.18
+    }
+
     private let artworkURL: URL?
     private let usesPosterFallback: Bool
     private let accentColor: Color
@@ -4660,7 +4667,7 @@ struct HeroArtwork: View {
                 .blur(radius: blurRadius, opaque: true)
                 .scaleEffect(scale)
                 .brightness(0.02)
-                .saturation(usesPosterFallback ? 1.18 : 1.34)
+                .saturation(usesPosterFallback ? PosterFallback.saturation : 1.34)
                 .frame(width: proxy.size.width, height: proxy.size.height)
             }
 
@@ -4704,11 +4711,11 @@ struct HeroArtwork: View {
     }
 
     private var blurRadius: CGFloat {
-        usesPosterFallback ? 30 : 22
+        usesPosterFallback ? PosterFallback.blurRadius : 22
     }
 
     private var scale: CGFloat {
-        usesPosterFallback ? 1.28 : 1.2
+        usesPosterFallback ? PosterFallback.scale : 1.2
     }
 
 }

@@ -1458,9 +1458,9 @@ struct ProfileListDetailView: View {
     }
 
     var body: some View {
-        let backdropURL = viewModel.list.flatMap { list in
+        let headerArtwork = viewModel.list.flatMap { list in
             list.listType == .media
-                ? CustomListBackdropSelection.artworkURL(from: list.items)
+                ? CustomListBackdropSelection.artwork(from: list.items)
                 : nil
         }
 
@@ -1493,11 +1493,11 @@ struct ProfileListDetailView: View {
                                     ) + 12
                                 )
                         } else if let list = viewModel.list {
-                            listHeader(list, backdropURL: backdropURL)
+                            listHeader(list, artwork: headerArtwork)
                                 .padding(
                                     .top,
                                     CustomListHeaderLayout.topPadding(
-                                        hasBackdrop: backdropURL != nil,
+                                        hasBackdrop: headerArtwork != nil,
                                         topSafeAreaInset: topSafeAreaInset
                                     )
                                 )
@@ -1538,7 +1538,7 @@ struct ProfileListDetailView: View {
             .scrollContentBackground(.hidden)
             .ignoresSafeArea(
                 edges: CustomListHeaderLayout.ignoredSafeAreaEdges(
-                    hasBackdrop: backdropURL != nil
+                    hasBackdrop: headerArtwork != nil
                 )
             )
 
@@ -1709,7 +1709,7 @@ struct ProfileListDetailView: View {
         }
     }
 
-    private func listHeader(_ list: CustomListDetail, backdropURL: String?) -> some View {
+    private func listHeader(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> some View {
         let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
         // The same 3:2 backdrop strip as the media page, with the owner and title over its lower edge.
         let stripHeight = BackdropLayout.stripHeight(width: listHeaderWidth, topInset: topSafeAreaInset)
@@ -1720,12 +1720,12 @@ struct ProfileListDetailView: View {
             .padding(.bottom, description.isEmpty ? 20 : 7)
             .padding(
                 .top,
-                backdropURL == nil ? 18 : max(topSafeAreaInset + 56, stripHeight - 96)
+                artwork == nil ? 18 : max(topSafeAreaInset + 56, stripHeight - 96)
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .top) {
-                if let backdropURL {
-                    ProfileListBackdropArtwork(urlString: backdropURL)
+                if let artwork {
+                    ProfileListBackdropArtwork(artwork: artwork)
                         .frame(height: stripHeight)
                         .frame(maxHeight: .infinity, alignment: .top)
                 }
@@ -2041,15 +2041,39 @@ struct ProfileListDetailView: View {
 }
 
 enum CustomListBackdropSelection {
+    /// What the list header shows, in the media page's order: a backdrop, else a blurred cover.
+    enum Artwork: Equatable {
+        case backdrop(String)
+        /// No item has a backdrop (book, music and comic lists), so the first cover is blurred instead.
+        case blurredCover(String)
+
+        var urlString: String {
+            switch self {
+            case let .backdrop(url), let .blurredCover(url): url
+            }
+        }
+    }
+
     /// Every media type whose detail page has a backdrop (the server resolves the same ones).
     static let mediaTypes: Set<String> = ["movie", "tv", "game", "anime", "manga"]
+
+    static func artwork(from items: [MediaSummary]) -> Artwork? {
+        if let url = artworkURL(from: items) {
+            return .backdrop(url)
+        }
+        return items.lazy.compactMap { nonBlank($0.displayPosterURL) }.first.map(Artwork.blurredCover)
+    }
 
     static func artworkURL(from items: [MediaSummary]) -> String? {
         items.lazy.compactMap { item -> String? in
             guard mediaTypes.contains(item.ref.mediaType) else { return nil }
-            let url = item.displayBackdropURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return url?.isEmpty == false ? url : nil
+            return nonBlank(item.displayBackdropURL)
         }.first
+    }
+
+    private static func nonBlank(_ url: String?) -> String? {
+        let url = url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return url?.isEmpty == false ? url : nil
     }
 }
 
@@ -2116,20 +2140,29 @@ private struct ProfileListCircleIconLabel: View {
 }
 
 private struct ProfileListBackdropArtwork: View {
-    let urlString: String
+    let artwork: CustomListBackdropSelection.Artwork
     private let pageBackground = Color(red: 0.07, green: 0.07, blue: 0.065)
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                SpineAsyncImage(url: URL(string: urlString)) { phase in
+                SpineAsyncImage(url: URL(string: artwork.urlString)) { phase in
                     switch phase {
                     case let .success(image):
-                        image
+                        let fitted = image
                             .resizable()
                             .scaledToFill()
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
+                        if case .blurredCover = artwork {
+                            // Blurred like the media page's poster fallback; the shading below is the same.
+                            fitted
+                                .blur(radius: HeroArtwork.PosterFallback.blurRadius, opaque: true)
+                                .scaleEffect(HeroArtwork.PosterFallback.scale)
+                                .saturation(HeroArtwork.PosterFallback.saturation)
+                        } else {
+                            fitted
+                        }
                     default:
                         Color.clear
                     }
