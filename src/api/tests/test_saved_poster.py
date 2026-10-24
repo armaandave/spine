@@ -32,7 +32,6 @@ def _movie_metadata(media_id="129"):
 @patch("app.providers.tmdb.get_title_logo", return_value=None)
 @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
 @patch("app.providers.mdblist.get_media_ratings", return_value={})
-@patch("api.services.media.provider_services.get_media_metadata", return_value=_movie_metadata())
 class SavedPosterTests(TestCase):
     """A pick wins; without one, the saved poster beats the provider's current one."""
 
@@ -50,6 +49,7 @@ class SavedPosterTests(TestCase):
             image=SAVED_POSTER,
         )
 
+    @patch("api.services.media.provider_services.get_media_metadata", return_value=_movie_metadata())
     def test_media_page_matches_list_cards_when_nobody_picked(self, *_mocks):
         self.client.force_authenticate(self.viewer)
         viewer = self.client.get("/api/v1/media/tmdb/movie/129/")
@@ -64,6 +64,7 @@ class SavedPosterTests(TestCase):
             self.assertEqual(response.data["image_url"], SAVED_POSTER)
             self.assertIsNone(response.data["custom_poster_url"])
 
+    @patch("api.services.media.provider_services.get_media_metadata", return_value=_movie_metadata())
     def test_picks_still_win_over_the_saved_poster(self, *_mocks):
         CustomPosterPreference.objects.create(user=self.curator, item=self.item, custom_image_url=CURATED_POSTER)
 
@@ -104,6 +105,7 @@ class SavedPosterTests(TestCase):
         self.assertEqual(not_in_spine["poster_url"], PROVIDER_POSTER)
         self.assertIsNone(episode_card["poster_url"])
 
+    @patch("api.services.media.provider_services.get_media_metadata")
     def test_tv_season_rows_show_saved_season_posters(self, metadata_mock, *_mocks):
         metadata_mock.return_value = {
             "media_id": "1399",
