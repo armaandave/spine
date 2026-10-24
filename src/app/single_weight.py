@@ -414,8 +414,17 @@ def couple_current_to_log(tracking, entry):
     return tracking
 
 
-def update_current_from_source_log(tracking, entry, changed_fields):
-    """Update current state only when the edited log remains its source."""
+def fill_empty_current_rating(tracking, entry, previous_rating):
+    """Make an edited log the source of an empty current rating once it gains a new rating."""
+    if tracking.score is not None or entry.rating is None or entry.rating == previous_rating:
+        return False
+    tracking.score = entry.rating
+    tracking.rating_source = entry
+    return True
+
+
+def update_current_from_source_log(tracking, entry, changed_fields, *, previous_rating):
+    """Update current state when the edited log is its source or rates an empty one."""
     fields = []
     if "rating" in changed_fields and tracking.rating_source_id == entry.id:
         tracking.score = entry.rating
@@ -423,6 +432,8 @@ def update_current_from_source_log(tracking, entry, changed_fields):
         if entry.rating is None:
             tracking.rating_source = None
             fields.append("rating_source")
+    elif fill_empty_current_rating(tracking, entry, previous_rating):
+        fields.extend(["score", "rating_source"])
     if "liked" in changed_fields and tracking.like_source_id == entry.id:
         _set_like_row(tracking.user, tracking.item, bool(entry.liked))
     if fields:
@@ -510,6 +521,7 @@ def update_log(entry, data, *, tags=None):
     tracking = _locked_tracking(entry.user, entry.item)
     rating_is_source = bool(tracking and tracking.rating_source_id == entry.id)
     like_is_source = bool(tracking and tracking.like_source_id == entry.id)
+    previous_rating = entry.rating
     fields = []
     if "consumed_at" in data:
         entry.consumed_at = calendar_datetime(data["consumed_at"])
@@ -556,6 +568,8 @@ def update_log(entry, data, *, tags=None):
             if entry.rating is None:
                 tracking.rating_source = None
                 tracking_fields.append("rating_source")
+        elif fill_empty_current_rating(tracking, entry, previous_rating):
+            tracking_fields.extend(["score", "rating_source"])
         if like_is_source and "liked" in data:
             _set_like_row(entry.user, entry.item, entry.liked)
         if "consumed_at" in data:

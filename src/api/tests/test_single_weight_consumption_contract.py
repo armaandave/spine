@@ -166,6 +166,32 @@ class SingleWeightDomainTests(TestCase):
         self.assertIsNone(tracking.score)
         self.assertIsNone(tracking.rating_source_id)
 
+    def test_rating_an_unrated_log_fills_an_empty_current_rating(self):
+        item = self.item()
+        older = self.log(item, date(2026, 1, 1))
+        newer = self.log(item, date(2026, 1, 2))
+        tracking = Movie.objects.get(user=self.user, item=item)
+        self.assertIsNone(tracking.score)
+
+        single_weight.update_log(newer, {"rating": Decimal(6)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(6), newer.id))
+
+        # Once filled, other logs follow SW-104 and leave it alone.
+        single_weight.update_log(older, {"rating": Decimal(2)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(6), newer.id))
+
+        # A deliberately cleared rating stays cleared when a log is re-saved unchanged,
+        # but a log rating the user changes fills it again.
+        single_weight.set_rating(self.user, item, None)
+        single_weight.update_log(older, {"rating": Decimal(2), "review": "Still good"})
+        tracking.refresh_from_db()
+        self.assertIsNone(tracking.score)
+        single_weight.update_log(older, {"rating": Decimal(4)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(4), older.id))
+
     def test_heart_couples_including_off_and_direct_change_decouples(self):
         item = self.item()
         single_weight.set_like(self.user, item, liked=True)
@@ -475,6 +501,35 @@ class SingleWeightAPITests(TestCase):
             format="json",
         )
         self.assertEqual(forbidden.status_code, 404)
+
+    def test_rating_an_imported_unrated_log_shows_on_the_media_page(self):
+        item = Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.MOVIE.value,
+            media_id="imported-unrated",
+            title="Imported Unrated",
+            image="https://example.com/poster.jpg",
+        )
+        imported = single_weight.import_logs(
+            self.user,
+            item,
+            [{"source_id": "lb-1", "consumed_at": date(2026, 10, 16), "review": "brittle"}],
+            source="letterboxd",
+        )[0]
+
+        edited = self.client.patch(
+            f"/api/v1/diary/{imported.id}/",
+            {"consumed_at": "2026-10-16", "rating": "3.0", "review": "brittle", "liked": False},
+            format="json",
+        )
+        self.assertEqual(edited.status_code, 200)
+
+        tracking = self.client.get("/api/v1/tracking/manual/movie/imported-unrated/")
+        community = self.client.get("/api/v1/media/manual/movie/imported-unrated/community/")
+        self.assertEqual(tracking.data["rating"], "3.0")
+        self.assertEqual(community.data["rating_count"], 1)
+        self.assertEqual(community.data["average_rating"], "3.00")
+        self.assertEqual(community.data["review_count"], 1)
 
     @override_settings(TIME_ZONE="America/New_York")
     @patch("api.services.diary.provider_services.get_media_metadata")
