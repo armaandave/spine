@@ -98,14 +98,15 @@ def escape_lucene(term):
 
 def search_release_groups(query, *, limit=settings.PER_PAGE, offset=0, timeout=None):
     """Search MusicBrainz release groups and return the raw response."""
-    query = str(query)
-    digest = hashlib.sha256(query.encode()).hexdigest()
+    lucene = _release_group_query(str(query))
+    # Keyed by the MusicBrainz query, so a change to it doesn't reuse old answers.
+    digest = hashlib.sha256(lucene.encode()).hexdigest()
     return _cached(
         f"musicbrainz_{CACHE_VERSION}_release_group_search_{digest}_{limit}_{offset}",
         SEARCH_CACHE_TTL,
         lambda: _musicbrainz_request(
             "release-group",
-            {"query": _release_group_query(query), "limit": limit, "offset": offset},
+            {"query": lucene, "limit": limit, "offset": offset},
             timeout=timeout,
         ),
     )
@@ -1396,8 +1397,38 @@ def _cached(cache_key, timeout, fetch, *, missing_timeout=None):
 
 
 def _release_group_query(query):
+    """Rank albums with every word first, then albums with any of them.
+
+    Each word may be in the title or the artist ("kanye west my beautiful"), and the
+    last may be unfinished, since search runs as you type. Any word alone lets
+    MusicBrainz rank "Dark Age" by Dark Age above "My Beautiful Dark Twisted Fantasy"
+    for "my beautiful dark", past the 100 that search re-ranks; it stays as the
+    fallback so a typo still finds something.
+    """
     escaped = escape_lucene(query)
-    return f"(releasegroup:({escaped}) OR artist:({escaped}))"
+    any_word = f"(releasegroup:({escaped}) OR artist:({escaped}))"
+    # Lowercase, so a typed AND, OR or NOT stays a word.
+    words = [word.lower() for word in query.split() if any(char.isalnum() for char in word)]
+    if not words:
+        return any_word
+    clauses = [f"releasegroup:{escape_lucene(word)} OR artist:{escape_lucene(word)}" for word in words]
+    prefix = _unfinished_word(words[-1])
+    if prefix:
+        clauses[-1] += f" OR releasegroup:{prefix}* OR artist:{prefix}*"
+    every_word = " AND ".join(f"({clause})" for clause in clauses)
+    return f"({every_word})^10 OR {any_word}"
+
+
+def _unfinished_word(word):
+    """Return the last word as a prefix to search, or None when it can't help.
+
+    Prefixes may skip MusicBrainz's accent folding, so it's done here. One letter
+    would match most of MusicBrainz.
+    """
+    folded = "".join(
+        char for char in unicodedata.normalize("NFKD", word) if not unicodedata.combining(char)
+    )
+    return folded if len(folded) > 1 and folded.isalnum() else None
 
 
 def _search_result(group):
