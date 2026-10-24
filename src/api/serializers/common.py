@@ -124,6 +124,20 @@ def artwork_from_item(item, request=None):
     )
 
 
+def saved_poster_url(item, request=None):
+    """Return the poster saved on an Item as list cards show it, else None."""
+    if item is None or not item.image or item.image == settings.IMG_NONE:
+        return None
+    return artwork_from_payload({"image": item.image}, item.media_type, request=request)["poster_url"]
+
+
+def saved_still_url(item, request=None):
+    """Return the still saved on an episode Item as list cards show it, else None."""
+    if item is None or not item.image or item.image == settings.IMG_NONE:
+        return None
+    return artwork_from_payload({"image": item.image}, item.media_type, request=request)["backdrop_url"]
+
+
 def with_curated_artwork(artwork, item, request=None):
     """Make an admin's poster and backdrop picks the default artwork."""
     if item is None:
@@ -451,6 +465,11 @@ def media_summary_from_provider(
             season_number=season_number,
             episode_number=episode_number,
         ).first()
+    artwork = artwork_from_payload(payload, media_type, request=request)
+    saved_poster = saved_poster_url(item, request=request)
+    if saved_poster:
+        # Match list cards: the saved poster, not the provider's current one.
+        artwork = {**artwork, "image_url": saved_poster, "poster_url": saved_poster}
     return {
         "ref": {
             "item_id": item.id if item else None,
@@ -469,11 +488,7 @@ def media_summary_from_provider(
         **({"relation": payload["relation"]} if payload.get("relation") else {}),
         "subtitle": payload.get("year") or payload.get("subtitle"),
         "overview": synopsis_from_payload(payload),
-        **with_curated_artwork(
-            artwork_from_payload(payload, media_type, request=request),
-            item,
-            request=request,
-        ),
+        **with_curated_artwork(artwork, item, request=request),
         "poster_accent_color": getattr(item, "poster_accent_color", None) or None,
         "release_date": (
             payload.get("release_date")
@@ -580,24 +595,30 @@ def seasons_from_metadata(metadata, request=None, user=None):
             .select_related("item")
             .prefetch_related("episodes__item")
         }
-    picked_posters = picked_images_by_number(
+    season_items = list(
         Item.objects.filter(
             source=metadata.get("source"),
             media_type=MediaTypes.SEASON.value,
             media_id=str(metadata.get("media_id") or ""),
             season_number__in=[value.get("season_number") for value in seasons if isinstance(value, dict)],
         ),
-        CustomPosterPreference,
-        user,
-        "season_number",
     )
+    # A pick wins; otherwise a season shows the poster saved on it, as list cards do.
+    season_posters = {
+        **{
+            item.season_number: poster
+            for item in season_items
+            if (poster := saved_poster_url(item, request=request))
+        },
+        **picked_images_by_number(season_items, CustomPosterPreference, user, "season_number"),
+    }
     return [
         {
             "season_number": season.get("season_number"),
             "title": season.get("season_title") or season.get("title") or season.get("name") or "",
             "episode_count": _season_episode_count(season),
-            "image_url": absolute_url(request, picked_posters[season.get("season_number")])
-            if season.get("season_number") in picked_posters
+            "image_url": absolute_url(request, season_posters[season.get("season_number")])
+            if season.get("season_number") in season_posters
             else image_url(request, season.get("image") or season.get("poster_path"))
             if (season.get("image") or season.get("poster_path"))
             else None,
@@ -631,6 +652,22 @@ def picked_images_by_number(items, model, user, number_field):
     items = list(items)
     picks = picked_image_urls(items, model, user)
     return {getattr(item, number_field): picks[item.pk] for item in items if item.pk in picks}
+
+
+def episode_stills_by_number(items, user, request=None):
+    """Map episode numbers to a viewer pick, else an admin's, else the saved still."""
+    from app.providers import tmdb
+
+    items = list(items)
+    return {
+        # Rows are thumbnails, so saved TMDB stills load at w500 like live ones.
+        **{
+            item.episode_number: tmdb.sized_image_url(still, "w500")
+            for item in items
+            if (still := saved_still_url(item, request=request))
+        },
+        **picked_images_by_number(items, CustomBackdropPreference, user, "episode_number"),
+    }
 
 
 def _season_episode_count(season):

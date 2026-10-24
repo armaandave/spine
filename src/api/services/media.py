@@ -35,13 +35,15 @@ from api.serializers.common import (
     cast_from_metadata,
     crew_from_metadata,
     details_for_api,
+    episode_stills_by_number,
     episodes_from_metadata,
     find_item,
     get_or_create_item_from_metadata,
     media_summary_from_provider,
-    picked_images_by_number,
     prime_collection_items,
     related_sections_from_payload,
+    saved_poster_url,
+    saved_still_url,
     seasons_from_metadata,
     synopsis_from_payload,
 )
@@ -52,7 +54,12 @@ from api.services.filters import (
     update_item_filter_metadata,
 )
 from app import config, single_weight
-from app.curation import curated_image_url, is_curator, prime_curated_artwork
+from app.curation import (
+    curated_image_url,
+    is_curator,
+    picked_image_urls,
+    prime_curated_artwork,
+)
 from app.external_ratings import (
     RATING_SOURCES,
     eligible_rating_sources,
@@ -1130,16 +1137,15 @@ def media_detail(
         episodes_from_metadata(
             enriched_episode_metadata,
             request=request,
-            picked_stills=picked_images_by_number(
+            picked_stills=episode_stills_by_number(
                 Item.objects.filter(
                     source=source,
                     media_type=MediaTypes.EPISODE.value,
                     media_id=media_id,
                     season_number=season_number,
                 ),
-                CustomBackdropPreference,
                 user,
-                "episode_number",
+                request=request,
             ),
         )
         if enriched_episode_metadata is not None
@@ -2371,6 +2377,27 @@ def _person_series_summary(
         "item_count": item_count,
         "items": books,
     })
+    # A pick, else the saved poster, else the provider's, as on every other surface.
+    covers = books[:3]
+    cover_items = {
+        (item.source, item.media_type, item.media_id): item
+        for item in Item.objects.filter(
+            source__in={book.get("source") or source for book in covers},
+            media_type__in={book.get("media_type") or media_type for book in covers},
+            media_id__in=[str(book["media_id"]) for book in covers if book.get("media_id")],
+            season_number__isnull=True,
+            episode_number__isnull=True,
+        )
+    }
+    picks = picked_image_urls(cover_items.values(), CustomPosterPreference, user)
+    poster_urls = []
+    for book in covers:
+        item = cover_items.get(
+            (book.get("source") or source, book.get("media_type") or media_type, str(book.get("media_id") or "")),
+        )
+        poster = (picks.get(item.pk) if item else None) or saved_poster_url(item, request=request) or book.get("image")
+        if poster:
+            poster_urls.append(absolute_url(request, poster))
     return {
         "id": str(series.get("series_id") or ""),
         "source": source,
@@ -2378,11 +2405,7 @@ def _person_series_summary(
         "name": series.get("name") or "",
         "item_count": item_count,
         "book_count": series.get("book_count") or len(books),
-        "poster_urls": [
-            absolute_url(request, book.get("image"))
-            for book in books[:3]
-            if book.get("image")
-        ],
+        "poster_urls": poster_urls,
         "completion": (
             completion_service.completion_for_items(
                 user,
@@ -3325,7 +3348,7 @@ def manga_poster_options(*, source, media_id, request=None, user=None):
     selected_url = (
         current.custom_image_url
         if current
-        else curated_image_url(CustomPosterPreference, item) or metadata.get("image") or item.image
+        else curated_image_url(CustomPosterPreference, item) or saved_poster_url(item) or metadata.get("image")
     )
     selected_absolute = absolute_poster_url(request, selected_url)
     candidates = list(metadata.get("posters") or [])
@@ -3596,6 +3619,9 @@ def backdrop_options(
     raw_default_url = backdrop_url(metadata)
     from app.providers import tmdb
 
+    if media_type == MediaTypes.EPISODE.value:
+        # The page shows the saved still, so the picker offers it as the original.
+        raw_default_url = tmdb.sized_image_url(saved_still_url(item, request=request), "original") or raw_default_url
     tmdb_backdrops = (
         tmdb.get_season_backdrop_images(media_id, season_number)
         if media_type == MediaTypes.SEASON.value
@@ -4177,8 +4203,12 @@ def resolved_backdrop_urls(
     ]:
         return _curated_backdrop_url(item, request=request) or raw_default_url, custom_url
     if media_type == MediaTypes.EPISODE.value:
+        from app.providers import tmdb
+
         default_url = (
             _curated_backdrop_url(item, request=request)
+            # The still list cards show, at full size for the page.
+            or tmdb.sized_image_url(saved_still_url(item, request=request), "original")
             or raw_default_url
             or (tmdb_backdrops[0]["url"] if tmdb_backdrops else None)
         )

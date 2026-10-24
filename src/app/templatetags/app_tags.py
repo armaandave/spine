@@ -641,17 +641,20 @@ def get_user_poster_image(item, user):
             'media_type': media_type,
             'media_id': media_id,
         }
-        if media_type == 'season':
+        if media_type in ('season', 'episode'):
             season_number = item.season_number if hasattr(item, 'season_number') else item.get('season_number')
             filters['season_number'] = season_number
+        if media_type == 'episode':
+            filters['episode_number'] = item.episode_number if hasattr(item, 'episode_number') else item.get('episode_number')
 
         db_item = Item.objects.filter(**filters).first()
         if db_item is None:
             return default_image
-        # Then get the custom preference, else an admin's pick
+        # Then get the custom preference, else an admin's pick, else the saved poster
         pref = CustomPosterPreference.objects.filter(user=user, item=db_item).first()
         if pref is None:
-            return curated_image_url(CustomPosterPreference, db_item) or default_image
+            saved = db_item.image if db_item.image and db_item.image != settings.IMG_NONE else None
+            return curated_image_url(CustomPosterPreference, db_item) or saved or default_image
         return pref.custom_image_url
     except AttributeError:
         return default_image

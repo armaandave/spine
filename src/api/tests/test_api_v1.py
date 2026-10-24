@@ -3141,7 +3141,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(manga["display_title"], "Attack on Titan")
         self.assertEqual(
             manga["poster_url"],
-            "https://example.com/manga-default.jpg",
+            "https://example.com/default.jpg",
         )
         self.assertEqual(
             manga["custom_poster_url"],
@@ -4068,7 +4068,7 @@ class ApiV1FoundationTests(TestCase):
             media_type=MediaTypes.ANIME.value,
             media_id="16498",
             title="Attack on Titan",
-            image="https://img.anilist.co/stale-aot-anime.jpg",
+            image="https://img.anilist.co/saved-aot-anime.jpg",
         )
         user = get_user_model().objects.create_user(
             username="anime-person-posters",
@@ -4099,7 +4099,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(anime_credit["ref"]["media_id"], "16498")
         self.assertEqual(
             anime_credit["poster_url"],
-            "https://cdn.myanimelist.net/aot-anime.jpg",
+            "https://img.anilist.co/saved-aot-anime.jpg",
         )
         self.assertEqual(
             anime_credit["custom_poster_url"],
@@ -4825,7 +4825,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(response.data["poster_orientation"])
         self.assertEqual(
             response.data["backdrop_url"],
-            "https://image.tmdb.org/t/p/original/e2.jpg",
+            "https://example.com/e2.jpg",
         )
         self.assertEqual(response.data["overview"], "The royal party travels south.")
         self.assertEqual(response.data["release_date"], "2011-04-24")
@@ -6734,12 +6734,13 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(
             [backdrop["url"] for backdrop in response.data["backdrops"]],
             [
+                "https://example.com/original-episode.jpg",
                 "https://image.tmdb.org/t/p/original/original-episode.jpg",
                 "https://example.com/alternate-episode.jpg",
             ],
         )
         self.assertTrue(response.data["backdrops"][0]["is_original"])
-        self.assertTrue(response.data["backdrops"][1]["is_selected"])
+        self.assertTrue(response.data["backdrops"][2]["is_selected"])
         metadata_mock.assert_called_once_with(
             MediaTypes.EPISODE.value,
             "1399",
@@ -7032,7 +7033,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         self.assertEqual(
             response.data["backdrop_url"],
-            "https://image.tmdb.org/t/p/original/original-episode.jpg",
+            "https://example.com/original-episode.jpg",
         )
         self.assertEqual(
             response.data["custom_backdrop_url"],
