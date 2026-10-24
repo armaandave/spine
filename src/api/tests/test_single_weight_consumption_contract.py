@@ -1,10 +1,12 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -39,6 +41,27 @@ class SingleWeightDomainTests(TestCase):
             consumed_at=day,
             **kwargs,
         )[0]
+
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_migration_restores_logs_that_saving_moved_a_day_early(self):
+        migration = import_module("app.migrations.0083_restore_shifted_log_dates")
+        item = self.item(media_id="shifted")
+        shifted = self.log(item, date(2026, 10, 8))
+        for day in (7, 6):  # Two saves, each a day earlier.
+            shifted.consumed_at = datetime(2026, 10, day, tzinfo=UTC)
+            shifted.save()
+        Movie.objects.filter(user=self.user, item=item).update(end_date=shifted.consumed_at)
+        moved = self.log(self.item(media_id="moved"), date(2026, 10, 1))
+        moved.consumed_at = datetime(2026, 10, 4, tzinfo=UTC)
+        moved.save()
+
+        migration.restore_shifted_log_dates(django_apps, None)
+
+        shifted.refresh_from_db()
+        moved.refresh_from_db()
+        self.assertEqual(shifted.consumed_at, datetime(2026, 10, 8, tzinfo=UTC))
+        self.assertEqual(Movie.objects.get(user=self.user, item=item).end_date, datetime(2026, 10, 8, tzinfo=UTC))
+        self.assertEqual(moved.consumed_at, datetime(2026, 10, 4, tzinfo=UTC))
 
     def test_direct_consumption_rating_and_like_are_undated_and_unique(self):
         for media_type, model in ((MediaTypes.MOVIE.value, Movie), (MediaTypes.MUSIC.value, Music)):
@@ -452,6 +475,25 @@ class SingleWeightAPITests(TestCase):
             format="json",
         )
         self.assertEqual(forbidden.status_code, 404)
+
+    @override_settings(TIME_ZONE="America/New_York")
+    @patch("api.services.diary.provider_services.get_media_metadata")
+    def test_saving_a_log_west_of_utc_keeps_its_date(self, metadata):
+        # Production runs on New York time, where a stored date read back
+        # as local time is the day before.
+        metadata.return_value = self.metadata
+        ref = {"source": "tmdb", "media_type": "movie", "media_id": "keeps-date"}
+
+        logged = self.client.post("/api/v1/diary/", {"ref": ref, "consumed_at": "2026-10-08"}, format="json")
+        path = f"/api/v1/diary/{logged.data['id']}/"
+        for review in ("First pass.", "Second pass."):
+            saved = self.client.patch(path, {"consumed_at": "2026-10-08", "review": review}, format="json")
+            self.assertEqual(saved.status_code, 200)
+
+        self.assertEqual(logged.data["consumed_at"], "2026-10-08")
+        self.assertEqual(saved.data["consumed_at"], "2026-10-08")
+        tracking = Movie.objects.get(user=self.user, item__media_id="keeps-date")
+        self.assertEqual(single_weight.calendar_date(tracking.end_date), date(2026, 10, 8))
 
     @patch("api.services.diary.provider_services.get_media_metadata")
     def test_api_rejects_missing_future_and_invalid_half_star_dates(self, metadata):
