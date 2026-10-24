@@ -510,6 +510,8 @@ struct APIClient: Sendable {
 
         if !query.isEmpty {
             components.queryItems = query
+            // URLComponents leaves "+" as is, and the server reads it as a space ("C++" would arrive as "C").
+            components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         }
         guard let url = components.url else {
             throw APIError.invalidURL

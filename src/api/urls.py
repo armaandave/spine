@@ -36,6 +36,7 @@ from api.views.lists import (
     ListPeopleView,
     ListPersonDetailView,
     ListsView,
+    TaggedListsView,
 )
 from api.views.media import (
     AniListReviewsView,
@@ -223,6 +224,7 @@ urlpatterns = [
     path("lists/featured/", FeaturedListsView.as_view(), name="api-featured-lists"),
     path("lists/featured/shelves/", FeaturedShelvesView.as_view(), name="api-featured-shelves"),
     path("lists/featured/health/", FeaturedHealthView.as_view(), name="api-featured-health"),
+    path("lists/tagged/", TaggedListsView.as_view(), name="api-lists-tagged"),
     path("lists/<int:list_id>/", ListDetailView.as_view(), name="api-list-detail"),
     path("lists/<int:list_id>/items/", ListItemsView.as_view(), name="api-list-items"),
     path("lists/<int:list_id>/items/reorder/", ListItemsReorderView.as_view(), name="api-list-items-reorder"),

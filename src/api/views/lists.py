@@ -3,7 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import requests
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Max, Q
+from django.db.models import BooleanField, Exists, ExpressionWrapper, Max, OuterRef, Q
+from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -44,7 +45,14 @@ from app.curation import prime_curated_artwork
 from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
-from social.models import Activity, ContentLike, SocialAuditLog
+from social.models import (
+    Activity,
+    Block,
+    ContentLike,
+    Follow,
+    FollowStatus,
+    SocialAuditLog,
+)
 
 LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
@@ -361,6 +369,54 @@ def _can_view_list(user, custom_list):
     )
 
 
+def _browsable_lists(user):
+    """Return the lists a user can browse, annotated with ``is_mine``.
+
+    Their own lists and the ones they help edit, whatever their visibility; public
+    featured lists, as on Search; and other people's public lists when the user may
+    see their profile (``can_view_user_profile``). Unlisted lists are left out: only
+    their link opens them.
+    """
+    collaborating = CustomList.collaborators.through.objects.filter(
+        customlist_id=OuterRef("pk"),
+        user_id=user.pk,
+    )
+    following = Follow.objects.filter(
+        from_user=user,
+        status=FollowStatus.ACCEPTED,
+    ).values("to_user")
+    public = Q(visibility=CustomList.Visibility.PUBLIC)
+    return (
+        CustomList.objects.annotate(is_collaborator=Exists(collaborating))
+        .filter(
+            Q(owner=user)
+            | (
+                ~Q(owner__in=Block.objects.filter(blocker=user).values("blocked"))
+                & ~Q(owner__in=Block.objects.filter(blocked=user).values("blocker"))
+                & (
+                    Q(is_collaborator=True)
+                    | (public & Q(is_featured=True))
+                    | (public & (Q(owner__profile_private=False) | Q(owner__in=following)))
+                )
+            ),
+        )
+        .annotate(
+            is_mine=ExpressionWrapper(
+                Q(owner=user) | Q(is_collaborator=True),
+                output_field=BooleanField(),
+            ),
+        )
+    )
+
+
+def _has_tag(tags, tag):
+    """Return whether a list's tags hold ``tag``, ignoring case and outer spaces."""
+    wanted = tag.strip().casefold()
+    return isinstance(tags, list) and any(
+        isinstance(value, str) and value.strip().casefold() == wanted for value in tags
+    )
+
+
 def _item_from_ref(ref):
     exposure.require_media_type(ref["media_type"])
     item = find_item(ref)
@@ -511,6 +567,39 @@ class ListsView(APIView):
             },
         )
         return Response(list_payload(custom_list, request=request), status=status.HTTP_201_CREATED)
+
+
+class TaggedListsView(APIView):
+    """Every list the viewer can browse that has a tag: theirs first, then A to Z."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    def get(self, request):
+        from api.views.featured import list_payloads
+
+        tag = request.query_params.get("tag", "").strip()
+        if not tag:
+            raise ValidationError({"tag": ["This field is required."]})
+        # Tags are a JSON list, so the match runs here: the same on SQLite and Postgres,
+        # and Unicode-aware. Only the ID and tags of each tagged list are read for it.
+        rows = (
+            _browsable_lists(request.user)
+            .exclude(tags=[])
+            .order_by("-is_mine", Lower("name"), "id")
+            .values_list("id", "tags")
+        )
+        list_ids = [list_id for list_id, tags in rows if _has_tag(tags, tag)]
+        paginator = StandardResultsSetPagination()
+        page_ids = paginator.paginate_queryset(list_ids, request, view=self)
+        lists = (
+            CustomList.objects.select_related("owner")
+            .prefetch_related("collaborators")
+            .in_bulk(page_ids)
+        )
+        return paginator.get_paginated_response(
+            list_payloads([lists[list_id] for list_id in page_ids], request),
+        )
 
 
 class ListDetailView(APIView):

@@ -127,6 +127,7 @@ current page of rows.
 | GET | `/api/v1/diary/tags/` | Yes |
 | POST/DELETE | `/api/v1/diary/{id}/like/` | Yes |
 | GET/POST | `/api/v1/lists/` | Yes |
+| GET | `/api/v1/lists/tagged/` | Yes |
 | GET/PATCH/DELETE | `/api/v1/lists/{id}/` | Yes |
 | GET/POST | `/api/v1/lists/{id}/items/` | Yes |
 | PATCH | `/api/v1/lists/{id}/items/reorder/` | Yes |
@@ -186,6 +187,16 @@ To create a people list:
 `list_type=people` for people lists or `list_type=all` for both types. The same
 filter is supported by the featured-lists endpoint. A list's type cannot be
 changed by `PATCH`; attempting to do so returns `400`.
+
+`GET /api/v1/lists/tagged/?tag=<tag>` backs the list page's tag links. It
+returns, in the standard paged shape with list summaries (`preview_items` and
+`preview_people` included), every list of either type that the user can browse
+and whose `tags` hold that tag, ignoring case and surrounding spaces: their own
+lists and the ones they collaborate on, at any visibility; public featured
+lists; and other people's public lists when the user can see their profile
+(not blocked either way, and a private account only to accepted followers).
+Unlisted lists are left out. The user's own and collaborated lists come first,
+then the rest, each A to Z by name. A missing or blank `tag` returns `400`.
 
 All summary and detail payloads add `list_type` and `entries_count`.
 `entries_count` is the number of entries of the list's declared type and

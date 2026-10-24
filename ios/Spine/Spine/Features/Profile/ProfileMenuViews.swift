@@ -866,14 +866,25 @@ private struct ProfileCreatedListDestination: Identifiable, Hashable {
 
 struct ProfileListRow: View {
     let list: CustomListSummary
+    /// Shown under the name, for a list someone else owns.
+    var ownerName: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                Text(list.name)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(list.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(2)
+
+                    if let ownerName {
+                        Text("by \(ownerName)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.52))
+                            .lineLimit(1)
+                    }
+                }
 
                 Spacer(minLength: 0)
 
@@ -939,7 +950,7 @@ struct ProfileListRowContainer<PrimaryControl: View>: View {
     }
 }
 
-private extension CustomListSummary {
+extension CustomListSummary {
     var countLabel: String {
         let count = listType == .people ? entriesCount : itemsCount
         let noun = listType == .people
@@ -1848,16 +1859,39 @@ struct ProfileListDetailView: View {
         }
     }
 
+    /// The list's tags, each opening the lists that share it, as a log's tags open its tag page.
     private func tagRow(_ tags: [String]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.76))
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(.white.opacity(0.13), in: Capsule())
+                    NavigationLink {
+                        TaggedListsView(
+                            tag: tag,
+                            profileRepository: profileRepository,
+                            listRepository: listRepository,
+                            peopleRepository: peopleRepository,
+                            mediaRepository: mediaRepository,
+                            trackingRepository: trackingRepository,
+                            diaryRepository: diaryRepository,
+                            activityRepository: activityRepository,
+                            importCoordinator: importCoordinator,
+                            storygraphImportCoordinator: storygraphImportCoordinator,
+                            goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+                            currentUserId: currentUserId,
+                            onLogout: onLogout,
+                            onOpenDiary: onOpenDiary,
+                            onOpenLibrary: onOpenLibrary,
+                            selectedTab: selectedTab,
+                            onSelectTab: onSelectTab,
+                            onUnauthorized: onUnauthorized
+                        )
+                    } label: {
+                        DiaryLogChip(text: tag, systemImage: "tag")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Tag: \(tag)")
+                    .accessibilityHint("Shows lists with this tag")
                 }
             }
         }
