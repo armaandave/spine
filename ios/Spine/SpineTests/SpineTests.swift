@@ -154,6 +154,16 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(movie.gradientColors, boardGame.gradientColors)
     }
 
+    func testMediaTypeThemeSeasonAndEpisodeUseTVIcon() {
+        let season = MediaTypeTheme.theme(for: "season")
+        let episode = MediaTypeTheme.theme(for: "episode")
+
+        XCTAssertEqual(season.symbolName, "tv")
+        XCTAssertEqual(season.displayName, "Season")
+        XCTAssertEqual(episode.symbolName, "tv")
+        XCTAssertEqual(episode.displayName, "Episode")
+    }
+
     func testMediaTypeThemeUnknownFallback() {
         let theme = MediaTypeTheme.theme(for: "podcast")
 
