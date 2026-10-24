@@ -5720,6 +5720,37 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual([entry["id"] for entry in response.data["results"]], [recent.id, old_import.id])
 
+    def test_diary_list_orders_same_day_logs_newest_logged_first(self):
+        user = get_user_model().objects.create_user(username="diary-day-order", password="strong-password-123")
+        day = datetime(2026, 10, 10, tzinfo=UTC)
+
+        def log(title, **fields):
+            item = Item.objects.create(
+                source=Sources.TMDB.value,
+                media_type=MediaTypes.MOVIE.value,
+                media_id=title,
+                title=title,
+            )
+            return DiaryEntry.objects.create(user=user, item=item, consumed_at=day, **fields)
+
+        # Imports create logs film by film, so ids don't follow the export's row order.
+        logged_second = log("Zulu", import_source="letterboxd", import_source_order=2)
+        logged_first = log("Alpha", import_source="letterboxd", import_source_order=1)
+        logged_in_spine = log("Mike")
+        self.client.force_authenticate(user)
+
+        newest_first = self.client.get("/api/v1/diary/")
+        oldest_first = self.client.get("/api/v1/diary/", {"direction": "asc"})
+
+        self.assertEqual(
+            [entry["id"] for entry in newest_first.data["results"]],
+            [logged_in_spine.id, logged_second.id, logged_first.id],
+        )
+        self.assertEqual(
+            [entry["id"] for entry in oldest_first.data["results"]],
+            [logged_first.id, logged_second.id, logged_in_spine.id],
+        )
+
     def test_diary_list_filters_by_multi_word_tag(self):
         user = get_user_model().objects.create_user(username="diary-tag", password="strong-password-123")
         theater_item = Item.objects.create(
