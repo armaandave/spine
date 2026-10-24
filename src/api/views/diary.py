@@ -83,6 +83,9 @@ class DiaryListView(APIView):
             your_rating_field="rating",
             default_sort="consumed_at",
             extra_sorts={"consumed_at": "consumed_at", "created_at": "created_at"},
+            # Same-day logs go latest-logged first. Imports keep their export's row
+            # order; logs made in Spine have none and count as logged after them.
+            tiebreaks={"consumed_at": ("import_source_order", "id")},
             rating_scope_queryset=rating_scope_queryset,
         )
 
