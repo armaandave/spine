@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import requests
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import BooleanField, Exists, ExpressionWrapper, Max, OuterRef, Q
+from django.db.models import Exists, Max, OuterRef, Q
 from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 
 from api.exceptions import ListTypeMismatch, PersonProviderUnavailable
 from api.pagination import StandardResultsSetPagination
-from api.permissions import users_blocked
+from api.permissions import can_view_user_profile, users_blocked
 from api.serializers.common import (
     absolute_url,
     find_item,
@@ -45,14 +45,7 @@ from app.curation import prime_curated_artwork
 from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
-from social.models import (
-    Activity,
-    Block,
-    ContentLike,
-    Follow,
-    FollowStatus,
-    SocialAuditLog,
-)
+from social.models import Activity, ContentLike, SocialAuditLog
 
 LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
@@ -369,43 +362,25 @@ def _can_view_list(user, custom_list):
     )
 
 
-def _browsable_lists(user):
-    """Return the lists a user can browse, annotated with ``is_mine``.
+def _lists_visible_to(viewer, owner):
+    """Return ``owner``'s lists that ``viewer`` may browse.
 
-    Their own lists and the ones they help edit, whatever their visibility; public
-    featured lists, as on Search; and other people's public lists when the user may
-    see their profile (``can_view_user_profile``). Unlisted lists are left out: only
-    their link opens them.
+    All of them for the owner. Anyone else must be able to see the owner's profile
+    (``can_view_user_profile``: no block either way, and a private account only for
+    accepted followers), then gets the public ones and any they help edit. Unlisted
+    lists open only from their link.
     """
-    collaborating = CustomList.collaborators.through.objects.filter(
+    lists = CustomList.objects.filter(owner=owner)
+    if viewer == owner:
+        return lists
+    if not can_view_user_profile(viewer, owner):
+        return lists.none()
+    helps_edit = CustomList.collaborators.through.objects.filter(
         customlist_id=OuterRef("pk"),
-        user_id=user.pk,
+        user_id=viewer.pk,
     )
-    following = Follow.objects.filter(
-        from_user=user,
-        status=FollowStatus.ACCEPTED,
-    ).values("to_user")
-    public = Q(visibility=CustomList.Visibility.PUBLIC)
-    return (
-        CustomList.objects.annotate(is_collaborator=Exists(collaborating))
-        .filter(
-            Q(owner=user)
-            | (
-                ~Q(owner__in=Block.objects.filter(blocker=user).values("blocked"))
-                & ~Q(owner__in=Block.objects.filter(blocked=user).values("blocker"))
-                & (
-                    Q(is_collaborator=True)
-                    | (public & Q(is_featured=True))
-                    | (public & (Q(owner__profile_private=False) | Q(owner__in=following)))
-                )
-            ),
-        )
-        .annotate(
-            is_mine=ExpressionWrapper(
-                Q(owner=user) | Q(is_collaborator=True),
-                output_field=BooleanField(),
-            ),
-        )
+    return lists.annotate(helps_edit=Exists(helps_edit)).filter(
+        Q(visibility=CustomList.Visibility.PUBLIC) | Q(helps_edit=True),
     )
 
 
@@ -570,7 +545,7 @@ class ListsView(APIView):
 
 
 class TaggedListsView(APIView):
-    """Every list the viewer can browse that has a tag: theirs first, then A to Z."""
+    """One user's lists with a tag, as far as the viewer may see them, A to Z."""
 
     permission_classes = [IsAuthenticated]
 
@@ -579,14 +554,21 @@ class TaggedListsView(APIView):
         from api.views.featured import list_payloads
 
         tag = request.query_params.get("tag", "").strip()
-        if not tag:
-            raise ValidationError({"tag": ["This field is required."]})
+        username = request.query_params.get("owner", "").strip()
+        missing = {
+            field: ["This field is required."]
+            for field, value in (("tag", tag), ("owner", username))
+            if not value
+        }
+        if missing:
+            raise ValidationError(missing)
+        owner = get_object_or_404(get_user_model(), username=username)
         # Tags are a JSON list, so the match runs here: the same on SQLite and Postgres,
-        # and Unicode-aware. Only the ID and tags of each tagged list are read for it.
+        # and Unicode-aware. Only the ID and tags of the owner's tagged lists are read.
         rows = (
-            _browsable_lists(request.user)
+            _lists_visible_to(request.user, owner)
             .exclude(tags=[])
-            .order_by("-is_mine", Lower("name"), "id")
+            .order_by(Lower("name"), "id")
             .values_list("id", "tags")
         )
         list_ids = [list_id for list_id, tags in rows if _has_tag(tags, tag)]

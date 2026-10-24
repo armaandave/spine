@@ -2,7 +2,7 @@ import Foundation
 @testable import Spine
 import XCTest
 
-// A list page's tag opens the lists that share it (GET /api/v1/lists/tagged/).
+// A list page's tag opens its owner's lists with that tag (GET /api/v1/lists/tagged/).
 @MainActor
 final class TaggedListsTests: XCTestCase {
     override func tearDown() {
@@ -10,19 +10,20 @@ final class TaggedListsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testRequestSendsTheTagAndPageAndDecodesListSummaries() async throws {
+    func testRequestSendsTheTagOwnerAndPageAndDecodesListSummaries() async throws {
         var requestedURL: URL?
         TaggedListsURLProtocol.handler = { request in
             requestedURL = request.url
             return TaggedListsURLProtocol.response(request, body: Self.pageJSON(ids: [4], next: nil))
         }
 
-        let response = try await makeRepository().tagged("C++ & Rock/Roll", page: "2")
+        let response = try await makeRepository().tagged("C++ & Rock/Roll", owner: "Spine", page: "2")
 
         let url = try XCTUnwrap(requestedURL)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         XCTAssertEqual(components.path, "/api/v1/lists/tagged/")
         XCTAssertEqual(components.queryItems?.first { $0.name == "tag" }?.value, "C++ & Rock/Roll")
+        XCTAssertEqual(components.queryItems?.first { $0.name == "owner" }?.value, "Spine")
         XCTAssertEqual(components.queryItems?.first { $0.name == "page" }?.value, "2")
         // The server reads a bare "+" as a space.
         XCTAssertFalse(components.percentEncodedQuery?.contains("+") ?? true)
@@ -43,17 +44,17 @@ final class TaggedListsTests: XCTestCase {
             return TaggedListsURLProtocol.response(request, body: Self.pageJSON(ids: [], next: nil))
         }
 
-        _ = try await makeRepository().tagged("horror", page: nil)
+        _ = try await makeRepository().tagged("horror", owner: "maya", page: nil)
 
-        XCTAssertEqual(queryNames, ["tag"])
+        XCTAssertEqual(queryNames, ["tag", "owner"])
     }
 
-    func testLoadThenNextPageAppendsOnlyNewLists() async throws {
+    func testLoadThenNextPageAppendsOnlyNewListsOfTheSameOwner() async throws {
         let repository = ScriptedTaggedListRepository(results: [
             .success(try Self.page(ids: [1, 2], count: 3, next: "https://example.com/api/v1/lists/tagged/?page=2&tag=horror")),
             .success(try Self.page(ids: [2, 3], count: 3, next: nil)),
         ])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: {})
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
 
         await viewModel.load()
 
@@ -66,6 +67,7 @@ final class TaggedListsTests: XCTestCase {
 
         XCTAssertEqual(viewModel.lists.map(\.id), [1, 2, 3])
         XCTAssertEqual(repository.requests.map { $0.tag }, ["horror", "horror"])
+        XCTAssertEqual(repository.requests.map { $0.owner }, ["maya", "maya"])
         XCTAssertEqual(repository.requests.map { $0.page }, [nil, "2"])
     }
 
@@ -74,7 +76,7 @@ final class TaggedListsTests: XCTestCase {
             .success(try Self.page(ids: Array(1...10), count: 12, next: "https://example.com/api/v1/lists/tagged/?page=2&tag=horror")),
             .success(try Self.page(ids: [11, 12], count: 12, next: nil)),
         ])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: {})
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
         await viewModel.load()
 
         await viewModel.loadNextPageIfNeeded(currentList: viewModel.lists[0])
@@ -91,7 +93,7 @@ final class TaggedListsTests: XCTestCase {
             .failure(APIError.httpStatus(500, "Server error")),
             .success(try Self.page(ids: [2], count: 2, next: nil)),
         ])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: {})
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
         await viewModel.load()
 
         await viewModel.loadNextPage()
@@ -111,7 +113,7 @@ final class TaggedListsTests: XCTestCase {
             .success(try Self.page(ids: [1], count: 2, next: "https://example.com/api/v1/lists/tagged/?page=2&tag=horror")),
             .failure(CancellationError()),
         ])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: {})
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
         await viewModel.load()
 
         await viewModel.loadNextPage()
@@ -123,7 +125,7 @@ final class TaggedListsTests: XCTestCase {
     func testFailedLoadShowsAnErrorAndSignsOutWhenUnauthorized() async {
         var signOuts = 0
         let repository = ScriptedTaggedListRepository(results: [.failure(APIError.unauthorized)])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: { signOuts += 1 })
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: { signOuts += 1 })
 
         await viewModel.load()
 
@@ -138,7 +140,7 @@ final class TaggedListsTests: XCTestCase {
             .success(try Self.page(ids: [1, 2], count: 2, next: nil)),
             .success(try Self.page(ids: [2], count: 1, next: nil)),
         ])
-        let viewModel = TaggedListsViewModel(tag: "horror", listRepository: repository, onUnauthorized: {})
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
         await viewModel.load()
 
         await viewModel.load()
@@ -187,14 +189,14 @@ final class TaggedListsTests: XCTestCase {
 
 private final class ScriptedTaggedListRepository: ListRepository {
     private var results: [Result<PagedResponse<CustomListSummary>, Error>]
-    private(set) var requests: [(tag: String, page: String?)] = []
+    private(set) var requests: [(tag: String, owner: String, page: String?)] = []
 
     init(results: [Result<PagedResponse<CustomListSummary>, Error>]) {
         self.results = results
     }
 
-    func tagged(_ tag: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
-        requests.append((tag: tag, page: page))
+    func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
+        requests.append((tag: tag, owner: owner, page: page))
         return try results.removeFirst().get()
     }
 

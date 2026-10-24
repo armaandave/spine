@@ -11,13 +11,16 @@ final class TaggedListsViewModel {
     var nextPageErrorMessage: String?
 
     private let tag: String
+    private let owner: String
     private let listRepository: ListRepository
     private let onUnauthorized: () -> Void
     private var nextPage: String?
     private var requestGeneration = 0
 
-    init(tag: String, listRepository: ListRepository, onUnauthorized: @escaping () -> Void) {
+    /// `owner` is the username whose lists the tag covers.
+    init(tag: String, owner: String, listRepository: ListRepository, onUnauthorized: @escaping () -> Void) {
         self.tag = tag
+        self.owner = owner
         self.listRepository = listRepository
         self.onUnauthorized = onUnauthorized
     }
@@ -35,7 +38,7 @@ final class TaggedListsViewModel {
         }
 
         do {
-            let response = try await listRepository.tagged(tag, page: nil)
+            let response = try await listRepository.tagged(tag, owner: owner, page: nil)
             guard generation == requestGeneration else { return }
             lists = response.results
             totalCount = response.count
@@ -72,7 +75,7 @@ final class TaggedListsViewModel {
         }
 
         do {
-            let response = try await listRepository.tagged(tag, page: page)
+            let response = try await listRepository.tagged(tag, owner: owner, page: page)
             guard generation == requestGeneration else { return }
             let existingIDs = Set(lists.map(\.id))
             lists += response.results.filter { !existingIDs.contains($0.id) }
@@ -90,11 +93,12 @@ final class TaggedListsViewModel {
     }
 }
 
-/// The lists a list page's tag leads to: the user's own first, then featured and other people's public lists.
+/// Where a list page's tag leads: that list owner's lists with the tag.
 struct TaggedListsView: View {
     @State private var viewModel: TaggedListsViewModel
 
     private let tag: String
+    private let owner: UserSummary
     private let profileRepository: ProfileRepository
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
@@ -116,6 +120,7 @@ struct TaggedListsView: View {
 
     init(
         tag: String,
+        owner: UserSummary,
         profileRepository: ProfileRepository,
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
@@ -137,6 +142,7 @@ struct TaggedListsView: View {
     ) {
         let trimmedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
         self.tag = trimmedTag
+        self.owner = owner
         self.profileRepository = profileRepository
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
@@ -157,6 +163,7 @@ struct TaggedListsView: View {
         self.onUnauthorized = onUnauthorized
         _viewModel = State(initialValue: TaggedListsViewModel(
             tag: trimmedTag,
+            owner: owner.username,
             listRepository: listRepository,
             onUnauthorized: onUnauthorized
         ))
@@ -219,14 +226,21 @@ struct TaggedListsView: View {
 
     @ViewBuilder
     private var listsContent: some View {
-        Text("\(viewModel.totalCount.formatted()) \(viewModel.totalCount == 1 ? "list" : "lists")")
-            .font(.system(size: 28, weight: .black))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 2)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(viewModel.totalCount.formatted()) \(viewModel.totalCount == 1 ? "list" : "lists")")
+                .font(.system(size: 28, weight: .black))
+                .foregroundStyle(.white)
+
+            if owner.id != currentUserId {
+                Text("by \(owner.username)")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 2)
 
         ForEach(viewModel.lists) { list in
-            let ownerName = list.owner.id == currentUserId ? nil : list.owner.username
             ProfileListRowContainer {
                 NavigationLink {
                     ProfileListDetailView(
@@ -251,10 +265,10 @@ struct TaggedListsView: View {
                         onUnauthorized: onUnauthorized
                     )
                 } label: {
-                    ProfileListRow(list: list, ownerName: ownerName)
+                    ProfileListRow(list: list)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(ownerName.map { "\(list.name), by \($0), \(list.countLabel)" } ?? list.accessibilityLabel)
+                .accessibilityLabel(list.accessibilityLabel)
                 .accessibilityHint("Opens list")
             }
             .task {

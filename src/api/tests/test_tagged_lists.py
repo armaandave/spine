@@ -16,7 +16,7 @@ PRIVATE = CustomList.Visibility.PRIVATE
 
 
 class TaggedListsApiTests(TestCase):
-    """GET /api/v1/lists/tagged/: the list page's tag links."""
+    """GET /api/v1/lists/tagged/: a list page's tag links, scoped to its owner."""
 
     def setUp(self):
         self.viewer = self.user("viewer")
@@ -29,21 +29,36 @@ class TaggedListsApiTests(TestCase):
     def make_list(self, owner, name, tags, visibility=PUBLIC, **fields):
         return CustomList.objects.create(owner=owner, name=name, tags=tags, visibility=visibility, **fields)
 
-    def names(self, tag="horror", **params):
-        response = self.client.get(URL, {"tag": tag, **params})
+    def names(self, owner, tag="horror", **params):
+        response = self.client.get(URL, {"tag": tag, "owner": owner.username, **params})
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         return [result["name"] for result in response.data["results"]]
 
-    def test_requires_a_tag(self):
-        for params in ({}, {"tag": ""}, {"tag": "   "}):
+    def test_requires_a_tag_and_an_owner(self):
+        for params in ({}, {"owner": "viewer"}, {"tag": "horror"}, {"tag": " ", "owner": "viewer"}):
             response = self.client.get(URL, params)
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_unknown_owner_is_not_found(self):
+        response = self.client.get(URL, {"tag": "horror", "owner": "nobody"})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_requires_sign_in(self):
         self.assertIn(
-            APIClient().get(URL, {"tag": "horror"}).status_code,
+            APIClient().get(URL, {"tag": "horror", "owner": "viewer"}).status_code,
             {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
         )
+
+    def test_shows_only_the_owners_lists(self):
+        other = self.user("other")
+        self.make_list(self.viewer, "Mine", ["horror"])
+        self.make_list(other, "Theirs", ["horror"])
+        shared = self.make_list(other, "Theirs, shared with me", ["horror"])
+        shared.collaborators.add(self.viewer)
+
+        self.assertEqual(self.names(self.viewer), ["Mine"])
+        self.assertEqual(self.names(other), ["Theirs", "Theirs, shared with me"])
 
     def test_matches_whole_tags_ignoring_case_and_outer_spaces(self):
         self.make_list(self.viewer, "Shouty", ["HORROR"])
@@ -51,38 +66,42 @@ class TaggedListsApiTests(TestCase):
         self.make_list(self.viewer, "Comedy", ["horror comedy"])
         self.make_list(self.viewer, "Untagged", [])
 
-        self.assertEqual(self.names(), ["Padded", "Shouty"])
-        self.assertEqual(self.names(tag="  hOrRoR "), ["Padded", "Shouty"])
+        self.assertEqual(self.names(self.viewer), ["Padded", "Shouty"])
+        self.assertEqual(self.names(self.viewer, tag="  hOrRoR "), ["Padded", "Shouty"])
 
     def test_matches_non_ascii_tags(self):
         self.make_list(self.viewer, "Paris", ["Ciné Français"])
 
-        self.assertEqual(self.names(tag="ciné français"), ["Paris"])
-        self.assertEqual(self.names(tag="cine francais"), [])
+        self.assertEqual(self.names(self.viewer, tag="ciné français"), ["Paris"])
+        self.assertEqual(self.names(self.viewer, tag="cine francais"), [])
 
-    def test_shows_only_lists_the_viewer_can_browse(self):
-        stranger = self.user("stranger")
-        self.make_list(self.viewer, "Mine, private", ["horror"], PRIVATE)
-        self.make_list(self.viewer, "Mine, unlisted", ["horror"], UNLISTED)
-        self.make_list(stranger, "Public", ["horror"])
-        self.make_list(stranger, "Unlisted", ["horror"], UNLISTED)
-        self.make_list(stranger, "Private", ["horror"], PRIVATE)
-        shared = self.make_list(stranger, "Shared with me", ["horror"], PRIVATE)
-        shared.collaborators.add(self.viewer)
+    def test_owner_sees_every_list_of_theirs(self):
+        self.make_list(self.viewer, "Private", ["horror"], PRIVATE)
+        self.make_list(self.viewer, "Unlisted", ["horror"], UNLISTED)
+        self.make_list(self.viewer, "Public", ["horror"])
 
-        self.assertEqual(self.names(), ["Mine, private", "Mine, unlisted", "Shared with me", "Public"])
+        self.assertEqual(self.names(self.viewer), ["Private", "Public", "Unlisted"])
 
-    def test_private_accounts_show_their_lists_to_accepted_followers_only(self):
+    def test_others_see_public_lists_and_ones_they_help_edit(self):
+        owner = self.user("owner")
+        self.make_list(owner, "Public", ["horror"])
+        self.make_list(owner, "Unlisted", ["horror"], UNLISTED)
+        self.make_list(owner, "Private", ["horror"], PRIVATE)
+        shared = self.make_list(owner, "Private, shared with me", ["horror"], PRIVATE)
+        shared.collaborators.add(self.viewer, self.user("helper"))
+
+        self.assertEqual(self.names(owner), ["Private, shared with me", "Public"])
+
+    def test_private_accounts_show_lists_to_accepted_followers_only(self):
         followed = self.user("followed", private=True)
         pending = self.user("pending", private=True)
-        unknown = self.user("unknown", private=True)
         Follow.objects.create(from_user=self.viewer, to_user=followed, status=FollowStatus.ACCEPTED)
         Follow.objects.create(from_user=self.viewer, to_user=pending, status=FollowStatus.PENDING)
         self.make_list(followed, "Followed", ["horror"])
         self.make_list(pending, "Pending", ["horror"])
-        self.make_list(unknown, "Unknown", ["horror"])
 
-        self.assertEqual(self.names(), ["Followed"])
+        self.assertEqual(self.names(followed), ["Followed"])
+        self.assertEqual(self.names(pending), [])
 
     def test_blocks_hide_lists_both_ways(self):
         blocker = self.user("blocker")
@@ -90,42 +109,39 @@ class TaggedListsApiTests(TestCase):
         Block.objects.create(blocker=blocker, blocked=self.viewer)
         Block.objects.create(blocker=self.viewer, blocked=blocked)
         self.make_list(blocker, "From blocker", ["horror"])
-        self.make_list(blocked, "From blocked", ["horror"])
         shared = self.make_list(blocker, "Shared by blocker", ["horror"], PRIVATE)
         shared.collaborators.add(self.viewer)
+        self.make_list(blocked, "From blocked", ["horror"])
 
-        self.assertEqual(self.names(), [])
+        self.assertEqual(self.names(blocker), [])
+        self.assertEqual(self.names(blocked), [])
 
-    def test_public_featured_lists_show_like_on_search(self):
-        spine = self.user("Spine", private=True)
+    def test_featured_lists_belong_to_their_owner(self):
+        spine = self.user("Spine")
         self.make_list(spine, "Hardcover Fiction", ["NYT Best Sellers", "Books"], is_featured=True)
         self.make_list(spine, "Hidden chart", ["NYT Best Sellers"], PRIVATE, is_featured=True)
-        self.make_list(spine, "Not featured", ["NYT Best Sellers"])
+        self.make_list(self.viewer, "My Best Sellers", ["NYT Best Sellers"])
 
-        self.assertEqual(self.names(tag="nyt best sellers"), ["Hardcover Fiction"])
+        self.assertEqual(self.names(spine, tag="nyt best sellers"), ["Hardcover Fiction"])
 
-    def test_lists_the_viewers_own_first_then_a_to_z(self):
-        other = self.user("other")
-        self.make_list(other, "apple", ["horror"])
-        self.make_list(other, "Zebra", ["horror"])
-        self.make_list(self.viewer, "yours", ["horror"])
-        self.make_list(self.viewer, "Banana", ["horror"])
-        shared = self.make_list(other, "Cherry", ["horror"], PRIVATE)
-        shared.collaborators.add(self.viewer)
+    def test_lists_a_to_z(self):
+        for name in ["banana", "Cherry", "apple"]:
+            self.make_list(self.viewer, name, ["horror"])
 
-        self.assertEqual(self.names(), ["Banana", "Cherry", "yours", "apple", "Zebra"])
+        self.assertEqual(self.names(self.viewer), ["apple", "banana", "Cherry"])
 
     def test_pages_like_other_collections(self):
         for number in range(30):
             self.make_list(self.viewer, f"List {number:02d}", ["horror"])
 
-        first = self.client.get(URL, {"tag": "horror"}).data
+        first = self.client.get(URL, {"tag": "horror", "owner": "viewer"}).data
         self.assertEqual(first["count"], 30)
         self.assertEqual(len(first["results"]), 25)
         self.assertIn("page=2", first["next"])
         self.assertIn("tag=horror", first["next"])
+        self.assertIn("owner=viewer", first["next"])
 
-        second = self.client.get(URL, {"tag": "horror", "page": 2}).data
+        second = self.client.get(URL, {"tag": "horror", "owner": "viewer", "page": 2}).data
         self.assertEqual([result["name"] for result in second["results"]], [f"List {number}" for number in range(25, 30)])
         self.assertIsNone(second["next"])
 
@@ -142,7 +158,7 @@ class TaggedListsApiTests(TestCase):
         people = self.make_list(self.viewer, "People", ["horror"], list_type=CustomList.ListType.PEOPLE)
         PersonListItem.objects.create(custom_list=people, source="tmdb", person_id="3636", name="Shelley Duvall", position=1)
 
-        response = self.client.get(URL, {"tag": "horror"})
+        response = self.client.get(URL, {"tag": "horror", "owner": "viewer"})
 
         movie_list, people_list = response.data["results"]
         self.assertEqual(movie_list["id"], movies.id)
@@ -158,11 +174,11 @@ class TaggedListsApiTests(TestCase):
         self.assertEqual([person["name"] for person in people_list["preview_people"]], ["Shelley Duvall"])
 
     def test_query_count_does_not_grow_with_lists(self):
-        other = self.user("other")
+        owner = self.user("owner")
 
         def add_lists(start, count):
             for number in range(start, start + count):
-                custom_list = self.make_list(other if number % 2 else self.viewer, f"List {number}", ["horror"])
+                custom_list = self.make_list(owner, f"List {number}", ["horror"])
                 custom_list.collaborators.add(self.user(f"helper-{number}"))
                 item = Item.objects.create(
                     source=Sources.TMDB.value,
@@ -175,7 +191,8 @@ class TaggedListsApiTests(TestCase):
 
         def count_queries():
             with CaptureQueriesContext(connection) as context:
-                self.assertEqual(self.client.get(URL, {"tag": "horror"}).status_code, status.HTTP_200_OK)
+                response = self.client.get(URL, {"tag": "horror", "owner": "owner"})
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
             return len(context)
 
         add_lists(0, 2)

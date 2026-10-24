@@ -866,25 +866,14 @@ private struct ProfileCreatedListDestination: Identifiable, Hashable {
 
 struct ProfileListRow: View {
     let list: CustomListSummary
-    /// Shown under the name, for a list someone else owns.
-    var ownerName: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(list.name)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .lineLimit(2)
-
-                    if let ownerName {
-                        Text("by \(ownerName)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.52))
-                            .lineLimit(1)
-                    }
-                }
+                Text(list.name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(2)
 
                 Spacer(minLength: 0)
 
@@ -1854,19 +1843,20 @@ struct ProfileListDetailView: View {
             }
 
             if !list.tags.isEmpty {
-                tagRow(list.tags)
+                tagRow(list.tags, owner: list.owner)
             }
         }
     }
 
-    /// The list's tags, each opening the lists that share it, as a log's tags open its tag page.
-    private func tagRow(_ tags: [String]) -> some View {
+    /// The list's tags, each opening the owner's lists with that tag, as a log's tags open its tag page.
+    private func tagRow(_ tags: [String], owner: UserSummary) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(tags, id: \.self) { tag in
                     NavigationLink {
                         TaggedListsView(
                             tag: tag,
+                            owner: owner,
                             profileRepository: profileRepository,
                             listRepository: listRepository,
                             peopleRepository: peopleRepository,

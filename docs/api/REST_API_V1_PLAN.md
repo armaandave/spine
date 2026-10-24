@@ -188,15 +188,16 @@ To create a people list:
 filter is supported by the featured-lists endpoint. A list's type cannot be
 changed by `PATCH`; attempting to do so returns `400`.
 
-`GET /api/v1/lists/tagged/?tag=<tag>` backs the list page's tag links. It
-returns, in the standard paged shape with list summaries (`preview_items` and
-`preview_people` included), every list of either type that the user can browse
-and whose `tags` hold that tag, ignoring case and surrounding spaces: their own
-lists and the ones they collaborate on, at any visibility; public featured
-lists; and other people's public lists when the user can see their profile
-(not blocked either way, and a private account only to accepted followers).
-Unlisted lists are left out. The user's own and collaborated lists come first,
-then the rest, each A to Z by name. A missing or blank `tag` returns `400`.
+`GET /api/v1/lists/tagged/?tag=<tag>&owner=<username>` backs the list page's
+tag links: tags belong to the user who owns the list, so it returns that
+user's lists whose `tags` hold the tag, ignoring case and surrounding spaces,
+A to Z by name, in the standard paged shape with list summaries
+(`preview_items` and `preview_people` included). The owner gets all of their
+lists. Anyone else must be able to see the owner's profile (not blocked either
+way, and a private account only to accepted followers) and then gets the
+public lists and any they collaborate on; unlisted lists are left out. A
+missing or blank `tag` or `owner` returns `400`; an unknown owner returns
+`404`.
 
 All summary and detail payloads add `list_type` and `entries_count`.
 `entries_count` is the number of entries of the list's declared type and
