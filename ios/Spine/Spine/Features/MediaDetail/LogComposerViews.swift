@@ -210,7 +210,7 @@ struct LogHeader: View {
     }
 }
 
-/// The rating card: stars, and Like and Rewatch under them.
+/// The rating card: one row with the stars, then Like and Rewatch on the right.
 struct LogRatingCard: View {
     @Binding var ratingSteps: Int
     @Binding var liked: Bool
@@ -221,7 +221,7 @@ struct LogRatingCard: View {
     let onScrub: (_ locationX: CGFloat, _ width: CGFloat) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 8) {
             LogStars(
                 steps: $ratingSteps,
                 accessibilityValue: ratingLabel,
@@ -229,15 +229,17 @@ struct LogRatingCard: View {
                 onScrub: onScrub
             )
 
-            GlassEffectContainer(spacing: 10) {
-                HStack(spacing: 10) {
+            Spacer(minLength: 0)
+
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
                     Button {
                         liked.toggle()
                     } label: {
                         Image(systemName: liked ? "heart.fill" : "heart")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 36, height: 36)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -251,15 +253,25 @@ struct LogRatingCard: View {
                     Button {
                         isRepeat.toggle()
                     } label: {
-                        Label(repeatLabel, systemImage: "arrow.clockwise")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .frame(height: 44)
-                            .contentShape(Capsule())
+                        // On a narrow phone the pill drops its icon, then its word, before the row overflows.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                Text(repeatLabel)
+                            }
+                            Text(repeatLabel)
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .frame(minWidth: 36, minHeight: 36)
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .glassEffect(isRepeat ? .regular.tint(.green).interactive() : .regular.interactive(), in: .capsule)
+                    .accessibilityLabel(repeatLabel)
                     .accessibilityAddTraits(isRepeat ? .isSelected : [])
                     .sensoryFeedback(.selection, trigger: isRepeat)
                 }
@@ -267,7 +279,7 @@ struct LogRatingCard: View {
             .animation(.snappy(duration: 0.2), value: liked)
             .animation(.snappy(duration: 0.2), value: isRepeat)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
     }
 }
 
@@ -279,14 +291,14 @@ struct LogStars: View {
     let accessibilityIdentifier: String
     let onScrub: (_ locationX: CGFloat, _ width: CGFloat) -> Void
 
-    private static let starWidth: CGFloat = 40
+    private static let starWidth: CGFloat = 34
     private static let width = starWidth * 5
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(1...5, id: \.self) { star in
                 Image(systemName: symbol(for: star))
-                    .font(.system(size: 32))
+                    .font(.system(size: 28))
                     .foregroundStyle(steps >= star * 2 - 1 ? LogComposerStyle.starGold : Color(.tertiaryLabel))
                     .frame(width: Self.starWidth, height: 44)
             }
