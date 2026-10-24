@@ -3141,7 +3141,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(manga["display_title"], "Attack on Titan")
         self.assertEqual(
             manga["poster_url"],
-            "https://example.com/manga-default.jpg",
+            "https://example.com/default.jpg",
         )
         self.assertEqual(
             manga["custom_poster_url"],
@@ -4068,7 +4068,7 @@ class ApiV1FoundationTests(TestCase):
             media_type=MediaTypes.ANIME.value,
             media_id="16498",
             title="Attack on Titan",
-            image="https://img.anilist.co/stale-aot-anime.jpg",
+            image="https://img.anilist.co/saved-aot-anime.jpg",
         )
         user = get_user_model().objects.create_user(
             username="anime-person-posters",
@@ -4099,7 +4099,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(anime_credit["ref"]["media_id"], "16498")
         self.assertEqual(
             anime_credit["poster_url"],
-            "https://cdn.myanimelist.net/aot-anime.jpg",
+            "https://img.anilist.co/saved-aot-anime.jpg",
         )
         self.assertEqual(
             anime_credit["custom_poster_url"],
