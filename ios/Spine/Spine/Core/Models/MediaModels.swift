@@ -854,14 +854,14 @@ struct MediaDetail: Decodable, Identifiable {
     let logoAspectRatio: Double?
     let releaseDate: String?
     let defaultSource: String?
-    let userState: UserMediaState?
+    var userState: UserMediaState?
     let backdropUrl: String?
     let details: [String: JSONValue]?
     let music: MusicDetail?
     let related: [String: JSONValue]?
     let externalLinks: [String: String]
     let providers: JSONValue?
-    let community: CommunityStats?
+    var community: CommunityStats?
     let externalRatings: [ExternalRating]?
     let externalRatingsPreparation: MediaExternalRatingsPreparation?
     let reviews: [MediaReview]?
@@ -871,7 +871,7 @@ struct MediaDetail: Decodable, Identifiable {
     let relatedSections: [RelatedMediaSection]?
     let episodes: [EpisodeSummary]?
     let seasons: [SeasonSummary]?
-    let completion: CompletionProgress?
+    var completion: CompletionProgress?
     let customPosterUrl: String?
     let customBackdropUrl: String?
     let customLogoUrl: String?
@@ -1473,23 +1473,26 @@ struct HallOfFameItemsResponse: Codable, Equatable {
 }
 
 nonisolated struct UserMediaState: Codable, Hashable {
-    let isTracked: Bool
-    let trackingId: Int?
-    let status: String?
-    let rating: String?
-    let progress: ProgressState?
-    let diaryEntryId: Int?
-    let diaryCount: Int?
-    let diaryRating: String?
-    let diaryConsumedAt: String?
-    let inLists: [Int]
-    let hasLiked: Bool
-    let directConsumption: Bool?
-    let ratingSourceDiaryEntryId: Int?
-    let likeSourceDiaryEntryId: Int?
-    let likeIsIndependent: Bool?
-    let book: BookTrackingState?
-    let game: GameTrackingState?
+    var isTracked: Bool
+    var trackingId: Int?
+    var status: String?
+    var rating: String?
+    var progress: ProgressState?
+    /// Client-only: the tracking row's start date for non-game types, folded in from a TrackingState. The detail
+    /// payload doesn't carry it, so it is never decoded or encoded.
+    var startDate: String?
+    var diaryEntryId: Int?
+    var diaryCount: Int?
+    var diaryRating: String?
+    var diaryConsumedAt: String?
+    var inLists: [Int]
+    var hasLiked: Bool
+    var directConsumption: Bool?
+    var ratingSourceDiaryEntryId: Int?
+    var likeSourceDiaryEntryId: Int?
+    var likeIsIndependent: Bool?
+    var book: BookTrackingState?
+    var game: GameTrackingState?
 
     enum CodingKeys: String, CodingKey {
         case isTracked
@@ -1517,6 +1520,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         status: String? = nil,
         rating: String? = nil,
         progress: ProgressState? = nil,
+        startDate: String? = nil,
         diaryEntryId: Int? = nil,
         diaryCount: Int? = nil,
         diaryRating: String? = nil,
@@ -1535,6 +1539,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         self.status = status
         self.rating = rating
         self.progress = progress
+        self.startDate = startDate
         self.diaryEntryId = diaryEntryId
         self.diaryCount = diaryCount
         self.diaryRating = diaryRating
@@ -1592,47 +1597,15 @@ nonisolated struct UserMediaState: Codable, Hashable {
     }
 
     func replacingHasLiked(_ liked: Bool) -> UserMediaState {
-        UserMediaState(
-            isTracked: isTracked,
-            trackingId: trackingId,
-            status: status,
-            rating: rating,
-            progress: progress,
-            diaryEntryId: diaryEntryId,
-            diaryCount: diaryCount,
-            diaryRating: diaryRating,
-            diaryConsumedAt: diaryConsumedAt,
-            inLists: inLists,
-            hasLiked: liked,
-            directConsumption: directConsumption,
-            ratingSourceDiaryEntryId: ratingSourceDiaryEntryId,
-            likeSourceDiaryEntryId: likeSourceDiaryEntryId,
-            likeIsIndependent: likeIsIndependent,
-            book: book,
-            game: game
-        )
+        var copy = self
+        copy.hasLiked = liked
+        return copy
     }
 
     func replacingIsTracked(_ isTracked: Bool) -> UserMediaState {
-        UserMediaState(
-            isTracked: isTracked,
-            trackingId: trackingId,
-            status: status,
-            rating: rating,
-            progress: progress,
-            diaryEntryId: diaryEntryId,
-            diaryCount: diaryCount,
-            diaryRating: diaryRating,
-            diaryConsumedAt: diaryConsumedAt,
-            inLists: inLists,
-            hasLiked: hasLiked,
-            directConsumption: directConsumption,
-            ratingSourceDiaryEntryId: ratingSourceDiaryEntryId,
-            likeSourceDiaryEntryId: likeSourceDiaryEntryId,
-            likeIsIndependent: likeIsIndependent,
-            book: book,
-            game: game
-        )
+        var copy = self
+        copy.isTracked = isTracked
+        return copy
     }
 }
 
@@ -1641,7 +1614,7 @@ struct MediaLikeResponse: Codable, Equatable {
     let media: MediaSummary?
 }
 
-struct CommunityStats: Codable {
+struct CommunityStats: Codable, Equatable {
     let averageRating: String?
     let ratingCount: Int
     let diaryCount: Int

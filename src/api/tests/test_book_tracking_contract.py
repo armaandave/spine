@@ -465,11 +465,9 @@ class BookTrackingContractTests(TestCase):
             media_type=item.media_type,
             media_id=item.media_id,
         )
-        self.assertEqual(community["average_rating"], "4.25")
-        self.assertEqual(
-            community["rating_distribution"],
-            [{"rating": "4.0", "count": 1}, {"rating": "4.5", "count": 1}],
-        )
+        # One reader, counted once at their current rating, however many logs they made.
+        self.assertEqual(community["average_rating"], "4.50")
+        self.assertEqual(community["rating_distribution"], [{"rating": "4.5", "count": 1}])
 
         second_retry = self.complete(
             item,

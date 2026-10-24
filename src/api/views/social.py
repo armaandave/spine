@@ -10,6 +10,7 @@ from api.pagination import FeedCursorPagination
 from api.serializers.social import LikeSerializer
 from api.services import social as social_service
 from app import exposure
+from app.curation import prime_curated_artwork
 from social.models import Follow, FollowStatus
 
 
@@ -28,6 +29,7 @@ class FeedView(APIView):
             queryset = queryset.filter(item__media_type=media_type)
         paginator = FeedCursorPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
+        prime_curated_artwork(activity.item for activity in page)
         data = [
             social_service.activity_payload(activity, request=request, viewer=request.user)
             for activity in page
@@ -47,6 +49,7 @@ class UserActivityView(APIView):
         )
         paginator = FeedCursorPagination()
         page = paginator.paginate_queryset(queryset, request, view=self)
+        prime_curated_artwork(activity.item for activity in page)
         data = [
             social_service.activity_payload(activity, request=request, viewer=request.user)
             for activity in page

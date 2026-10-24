@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -15,7 +16,7 @@ from api.views.featured import Featured, list_payloads
 from api.views.lists import list_payload
 from app.models import Item, MediaTypes, Sources
 from lists.featured import order, registry
-from lists.featured.registry import LiveWindow
+from lists.featured.registry import Guards, LiveWindow
 from lists.featured.types import Entry
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
 from lists.tests.featured.helpers import FeaturedTestCase, make_definition
@@ -340,6 +341,56 @@ class ShelvesEndpointTests(FeaturedApiTestCase):
         self.assertEqual(APIClient().get("/api/v1/lists/featured/shelves/").status_code, 401)
 
 
+class PartialListTests(FeaturedApiTestCase):
+    """Search hides a featured list that holds less of its source than its own bar."""
+
+    def shelf_slugs(self):
+        slugs = set()
+        for params in ({}, {"media_type": "movie"}):
+            for shelf in self.get("/api/v1/lists/featured/shelves/", **params).data["shelves"]:
+                slugs.update(card["slug"] for card in shelf["lists"])
+        return slugs
+
+    def legacy_names(self, **params):
+        return [row["name"] for row in self.get("/api/v1/lists/featured/", **params).data["results"]]
+
+    def record(self, key, entry_count, resolved_count):
+        """Store a sync's counts as the writer, a guard or a deferral would."""
+        FeaturedListSync.objects.filter(key=key).update(entry_count=entry_count, resolved_count=resolved_count)
+
+    def test_a_list_published_below_its_bar_is_hidden(self):
+        # Published with deferred entries left out of the rate: 2 of 15, bar 50%.
+        self.record("headline-films", 15, 2)
+        self.assertNotIn("headline-films", self.shelf_slugs())
+        self.assertEqual(self.legacy_names(), ["Staff Picks"])
+        self.assertEqual(self.get("/api/v1/lists/featured/", view="all").data["count"], 6)
+        self.assertNotIn("Headline Films", self.legacy_names(view="all"))
+        # The list itself stays reachable.
+        headline = CustomList.objects.get(import_source_id="headline-films")
+        self.assertEqual(self.get(f"/api/v1/lists/{headline.id}/").status_code, status.HTTP_200_OK)
+
+    def test_a_list_at_its_bar_shows(self):
+        self.record("headline-films", 4, 2)
+        self.assertIn("headline-films", self.shelf_slugs())
+        self.assertEqual(self.legacy_names(), ["Headline Films", "Staff Picks"])
+
+    def test_each_list_uses_its_own_bar(self):
+        self.record("chart-films", 10, 7)
+        self.assertIn("chart-films", self.shelf_slugs())
+        self.definitions = [
+            replace(item, guards=Guards(min_resolve_rate=0.8)) if item.key == "chart-films" else item
+            for item in self.definitions
+        ]
+        self.assertNotIn("chart-films", self.shelf_slugs())
+        self.assertNotIn("Chart Films", self.legacy_names(view="all"))
+
+    def test_a_refused_run_does_not_hide_the_list_it_left_in_place(self):
+        # A guarded or deferred run records its own counts but keeps the 7 stored films.
+        self.record("chart-films", 7, 1)
+        self.assertIn("chart-films", self.shelf_slugs())
+        self.assertIn("Chart Films", self.legacy_names(view="all"))
+
+
 class CuratedOrderTests(FeaturedApiTestCase):
     """Shelves and "Now" follow ``lists.featured.order``."""
 
@@ -501,6 +552,29 @@ class FeaturedItemNotesTests(FeaturedApiTestCase):
         movie = next(shelf for shelf in shelves if shelf["key"] == "movie")
         card = next(card for card in movie["lists"] if card["slug"] == "chart-films")
         self.assertEqual([item["note"] for item in card["preview_items"][:3]], ["▲1", "▼1", None])
+
+    def test_award_history_repeats_an_item_with_its_own_position_and_note(self):
+        film, book = movie_entries("am", 1)[0], movie_entries("ab", 1, media_type="book", source="hardcover")[0]
+        custom_list = self.rerun("across", [
+            Entry(1, film.title, media_type="movie", ids=film.ids, image=film.image, note="2024"),
+            Entry(2, book.title, media_type="book", ids=book.ids, image=book.image, note="2023 · tie"),
+            Entry(3, film.title, media_type="movie", ids=film.ids, image=film.image, note="2022"),
+        ])
+        page = self.get(f"/api/v1/lists/{custom_list.id}/items/").data
+        rows = [(item["ref"]["media_id"], item["position"], item["note"]) for item in page["results"]]
+        self.assertEqual(rows, [("am-1", 1, "2024"), ("ab-1", 2, "2023 · tie"), ("am-1", 3, "2022")])
+        self.assertEqual(page["count"], 3)
+        # Completion counts distinct items; the list's size counts rows.
+        self.assertEqual(page["completion"]["total_count"], 2)
+        detail = self.get(f"/api/v1/lists/{custom_list.id}/").data
+        self.assertEqual([(item["position"], item["note"]) for item in detail["items"]], [(1, "2024"), (2, "2023 · tie"), (3, "2022")])
+        self.assertEqual([item["ref"]["media_id"] for item in detail["items"]], ["am-1", "ab-1", "am-1"])
+        self.assertEqual((detail["items_count"], detail["completion"]["total_count"]), (3, 2))
+        shelves = self.get("/api/v1/lists/featured/shelves/").data["shelves"]
+        mixed = next(shelf for shelf in shelves if shelf["key"] == "mixed")
+        card = next(card for card in mixed["lists"] if card["slug"] == "across")
+        self.assertEqual(card["items_count"], 3)
+        self.assertEqual([item["position"] for item in card["preview_items"]], [1, 2, 3])
 
     def test_people_list_entries_carry_notes(self):
         custom_list = self.rerun("laureates", [Entry(1, "Annie Ernaux", ids={"openlibrary_person": "OL1A"}, image="https://p/1.jpg", note="2022")])

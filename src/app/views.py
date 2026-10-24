@@ -28,6 +28,7 @@ from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status
 from app.providers import igdb, manual, mdblist, services, tmdb
 from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices, User
+from app.curation import curated_image_url, is_curator
 from app.forms import DiaryEntryForm
 from app.models import DiaryEntry, MediaLike
 from app.utils.color import (
@@ -1447,7 +1448,7 @@ def poster_selection_modal(request, media_type, media_id, source):
             )
             current_poster = current_preference.custom_image_url
         except CustomPosterPreference.DoesNotExist:
-            current_poster = item.image
+            current_poster = curated_image_url(CustomPosterPreference, item) or item.image
             
         context = {
             "item": item,
@@ -1588,7 +1589,7 @@ def game_cover_selection_content(request, source, media_id):
             current_preference = CustomPosterPreference.objects.get(user=request.user, item=item)
             current_poster = current_preference.custom_image_url
         except CustomPosterPreference.DoesNotExist:
-            current_poster = item.image
+            current_poster = curated_image_url(CustomPosterPreference, item) or item.image
         
         context = {
             "item": item,
@@ -1674,7 +1675,7 @@ def season_poster_selection_modal(request, source, media_id, season_number):
             )
             current_poster = current_preference.custom_image_url
         except CustomPosterPreference.DoesNotExist:
-            current_poster = item.image
+            current_poster = curated_image_url(CustomPosterPreference, item) or item.image
             
         context = {
             "item": item,
@@ -1723,22 +1724,19 @@ def save_poster_preference(request):
         # Update or create the preference
         from app.models import CustomPosterPreference
 
-        accent = compute_and_store_poster_accent(
-            item,
-            poster_url=custom_image_url,
-            force=True,
-        )
-        palette = build_accent_palette(accent)
+        palette = build_accent_palette(get_poster_accent_from_url(custom_image_url))
 
         CustomPosterPreference.objects.update_or_create(
             user=request.user,
             item=item,
-            defaults={"custom_image_url": custom_image_url}
+            defaults={"custom_image_url": custom_image_url, "accent_color": palette["accent"]}
         )
 
-        item.image = custom_image_url
-        item.poster_accent_color = palette["accent"]
-        item.save(update_fields=["image", "poster_accent_color"])
+        # Only an admin's pick becomes everyone's cover.
+        if is_curator(request.user):
+            item.image = custom_image_url
+            item.poster_accent_color = palette["accent"]
+            item.save(update_fields=["image", "poster_accent_color"])
 
         return JsonResponse(
             {

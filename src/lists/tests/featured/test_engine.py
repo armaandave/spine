@@ -111,7 +111,8 @@ class EngineTests(FeaturedTestCase):
 
 class TitleSearchCapTests(FeaturedTestCase):
     def test_entries_past_the_cap_wait_for_the_next_run(self):
-        definition = make_definition(guards=Guards(max_title_searches=1, min_resolve_rate=0.9))
+        # Waiting entries count as unmatched against the bar: 1 of 3 clears 30%.
+        definition = make_definition(guards=Guards(max_title_searches=1, min_resolve_rate=0.3))
         entries = [entry(rank, f"Film {rank}", year=2000) for rank in (1, 2, 3)]
 
         def search(media_type, title, page, **kwargs):

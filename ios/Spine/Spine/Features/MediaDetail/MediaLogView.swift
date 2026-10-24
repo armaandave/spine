@@ -7,6 +7,14 @@ enum MediaLogMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// What a saved log changed, so the presenting page can fold it in without a reload. `tracking` is nil when the
+/// save returns no state the page can apply (tv, season and episode logs).
+struct MediaLogSaveResult {
+    let ref: MediaRef
+    let tracking: TrackingState?
+    let diaryEntry: DiaryEntry?
+}
+
 @MainActor
 @Observable
 final class MediaLogViewModel {
@@ -35,7 +43,9 @@ final class MediaLogViewModel {
 
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
+    private let stateChangeOrigin: UUID?
     private let onUnauthorized: () -> Void
+    private let onResult: ((MediaLogSaveResult) -> Void)?
     private let onSaved: () -> Void
 
     init(
@@ -46,6 +56,8 @@ final class MediaLogViewModel {
         completionJourneyId: Int? = nil,
         preselectedLiked: Bool? = nil,
         preselectedRatingSteps: Int? = nil,
+        stateChangeOrigin: UUID? = nil,
+        onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void
     ) {
@@ -53,7 +65,9 @@ final class MediaLogViewModel {
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.completionJourneyId = completionJourneyId
+        self.stateChangeOrigin = stateChangeOrigin
         self.onUnauthorized = onUnauthorized
+        self.onResult = onResult
         self.onSaved = onSaved
         if detail.ref.isSingleWeight {
             let state = detail.userState
@@ -233,15 +247,21 @@ final class MediaLogViewModel {
                     episodeNumber: episodeNumber,
                     watchedAt: consumedAt
                 )
+                return result(tracking: nil)
             } else if ref.mediaType == "season", let seasonNumber = ref.seasonNumber {
                 _ = try await trackingRepository.watchSeason(source: ref.source, mediaId: ref.mediaId, seasonNumber: seasonNumber)
+                return result(tracking: nil)
             } else if ref.mediaType == "book" {
-                _ = try await trackingRepository.completeBook(source: ref.source, mediaId: ref.mediaId, completedAt: consumedAt)
+                return result(tracking: try await trackingRepository.completeBook(
+                    source: ref.source,
+                    mediaId: ref.mediaId,
+                    completedAt: consumedAt
+                ))
             } else {
-                _ = try await trackingRepository.consume(
+                return result(tracking: try await trackingRepository.consume(
                     ref: ref,
                     consumedAt: ref.isSingleWeight ? nil : consumedAt
-                )
+                ))
             }
         }
     }
@@ -253,7 +273,7 @@ final class MediaLogViewModel {
             }
             if selectedRef.mediaType == "game" {
                 let progress = try gameProgress.values()
-                _ = try await trackingRepository.completeGame(ref: selectedRef, request: GameCompletionWriteRequest(
+                let response = try await trackingRepository.completeGame(ref: selectedRef, request: GameCompletionWriteRequest(
                     playthroughId: gamePlaythrough?.id,
                     completionDate: CalendarDateCodec.string(from: consumedAt),
                     startDate: gamePlaythrough == nil && gameHasStartDate ? CalendarDateCodec.string(from: gameStartDate) : nil,
@@ -261,8 +281,7 @@ final class MediaLogViewModel {
                     rating: Self.ratingDecimal(for: ratingSteps, mediaType: "game"),
                     review: review, reviewTitle: reviewTitle, liked: liked, isRewatch: isRepeat,
                     containsSpoilers: containsSpoilers, tags: tagDraft.tags, mutationId: completionMutationId))
-                MediaStateChange.post(ref: selectedRef)
-                return
+                return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
             } else if selectedRef.mediaType == "book" {
                 let response = try await trackingRepository.completeBook(
                     source: selectedRef.source,
@@ -280,11 +299,9 @@ final class MediaLogViewModel {
                         mutationId: completionMutationId
                     )
                 )
-                MediaStateChange.post(ref: selectedRef)
-                _ = response
-                return
+                return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
             }
-            _ = try await diaryRepository.create(DiaryEntryWriteRequest(
+            let entry = try await diaryRepository.create(DiaryEntryWriteRequest(
                 ref: selectedRef,
                 consumedAt: consumedAt,
                 rating: Self.ratingDecimal(for: ratingSteps, mediaType: selectedRef.mediaType),
@@ -297,6 +314,8 @@ final class MediaLogViewModel {
                 visibility: selectedRef.isSingleWeight ? "public" : visibility,
                 tags: tagDraft.tags
             ))
+            // A diary create returns no tracking state, so the page refreshes in full.
+            return result(tracking: nil, diaryEntry: entry)
         }
     }
 
@@ -306,35 +325,42 @@ final class MediaLogViewModel {
                 throw MediaLogError.invalidProgress
             }
             if detail.ref.mediaType == "book" {
-                _ = try await trackingRepository.updateBookProgress(
+                return result(tracking: try await trackingRepository.updateBookProgress(
                     source: detail.ref.source,
                     mediaId: detail.ref.mediaId,
                     progressType: progressType,
                     value: value,
                     notes: review
-                )
-            } else {
-                _ = try await trackingRepository.update(
-                    ref: detail.ref,
-                    request: TrackingWriteRequest(
-                        status: "In progress",
-                        progress: NSDecimalNumber(decimal: value).intValue,
-                        notes: review.isEmpty ? nil : review
-                    )
-                )
+                ))
             }
+            return result(tracking: try await trackingRepository.update(
+                ref: detail.ref,
+                request: TrackingWriteRequest(
+                    status: "In progress",
+                    progress: NSDecimalNumber(decimal: value).intValue,
+                    notes: review.isEmpty ? nil : review
+                )
+            ))
         }
     }
 
-    private func performSave(_ operation: () async throws -> Void) async -> Bool {
+    /// Tv, season and episode states can't be folded in by the page, so their results carry no tracking.
+    private func result(tracking: TrackingState?, diaryEntry: DiaryEntry? = nil) -> MediaLogSaveResult {
+        let ref = selectedRef
+        let foldable = !["tv", "season", "episode"].contains(ref.mediaType)
+        return MediaLogSaveResult(ref: ref, tracking: foldable ? tracking : nil, diaryEntry: diaryEntry)
+    }
+
+    private func performSave(_ operation: () async throws -> MediaLogSaveResult) async -> Bool {
         guard !isSaving else { return false }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
         do {
-            try await operation()
-            MediaStateChange.post(ref: selectedRef)
+            let result = try await operation()
+            MediaStateChange.post(ref: result.ref, origin: stateChangeOrigin)
+            onResult?(result)
             onSaved()
             return true
         } catch {
@@ -384,6 +410,8 @@ struct MediaLogView: View {
         completionJourneyId: Int? = nil,
         preselectedLiked: Bool? = nil,
         preselectedRatingSteps: Int? = nil,
+        stateChangeOrigin: UUID? = nil,
+        onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void
     ) {
@@ -395,6 +423,8 @@ struct MediaLogView: View {
             completionJourneyId: completionJourneyId,
             preselectedLiked: preselectedLiked,
             preselectedRatingSteps: preselectedRatingSteps,
+            stateChangeOrigin: stateChangeOrigin,
+            onResult: onResult,
             onUnauthorized: onUnauthorized,
             onSaved: onSaved
         ))

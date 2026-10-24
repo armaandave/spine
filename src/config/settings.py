@@ -21,6 +21,8 @@ from decouple import (
 from django.core.cache import CacheKeyWarning
 from django.core.exceptions import ImproperlyConfigured
 
+from config.cache_settings import cache_settings
+
 BASE_URL = config("BASE_URL", default=None)
 if BASE_URL:
     FORCE_SCRIPT_NAME = BASE_URL
@@ -162,7 +164,6 @@ MIDDLEWARE = [
 ]
 
 YAMTRACK_AUTO_LOGIN_USERNAME = config("YAMTRACK_AUTO_LOGIN_USERNAME", default=None)
-SPINE_CURATOR_USERNAME = config("SPINE_CURATOR_USERNAME", default=None)
 if YAMTRACK_AUTO_LOGIN_USERNAME:
     _index = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware")
     # This allows auto-login if the user is not already authenticated.
@@ -250,20 +251,13 @@ else:
 CACHE_TIMEOUT = 86400  # 24 hours
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379")
 KEY_PREFIX = f"{REDIS_PREFIX}" if REDIS_PREFIX else ""
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.dummy.DummyCache",
-    } if DEBUG else {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
-        "TIMEOUT": CACHE_TIMEOUT,
-        "VERSION": 16,
-        "KEY_PREFIX": KEY_PREFIX,
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
-    },
-}
+CACHES = cache_settings(
+    debug=DEBUG,
+    dev_cache=config("DEV_CACHE", default=""),
+    redis_url=REDIS_URL,
+    key_prefix=KEY_PREFIX,
+    timeout=CACHE_TIMEOUT,
+)
 
 # not using Memcached, ignore CacheKeyWarning
 # https://docs.djangoproject.com/en/stable/topics/cache/#cache-key-warnings
@@ -708,13 +702,19 @@ CELERY_BEAT_SCHEDULE = {
         # django_celery_beat's DatabaseScheduler reads "expire_seconds" and drops "expires".
         "options": {"queue": "featured", "expire_seconds": 55},
     },
+    "refresh_music_genre_albums": {
+        "task": "Refresh music genre albums",
+        "schedule": crontab(hour=4, minute=30, day_of_week="mon"),  # weekly
+    },
 }
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
-# on the default queue never delay an award night.
+# on the default queue never delay an award night. The music genre refresh (about
+# an hour of ListenBrainz and Wikipedia requests) runs there too, off the default queue.
 CELERY_TASK_ROUTES = {
     "Dispatch featured lists": {"queue": "featured"},
     "Sync featured list": {"queue": "featured"},
+    "Refresh music genre albums": {"queue": "featured"},
 }
 
 # Lets the weekly review agent read /api/v1/lists/featured/health/ with the

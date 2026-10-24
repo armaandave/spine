@@ -81,12 +81,17 @@ def compute_hash(definition):
 
 
 def dedupe(definition, fetch):
-    """Drop repeated entry keys (first wins) and order ranked lists by rank."""
+    """Drop repeated entry keys (first wins) and order ranked lists by rank.
+
+    On lists that keep repeats only an entry with the same key and note is a repeat:
+    one work's wins in different years are separate entries.
+    """
     seen, entries = set(), []
     for entry in fetch.entries:
-        if entry.key in seen:
+        identity = (entry.key, entry.note) if definition.keeps_repeats else entry.key
+        if identity in seen:
             continue
-        seen.add(entry.key)
+        seen.add(identity)
         entries.append(entry)
     if definition.is_ranked:
         entries.sort(key=lambda entry: (entry.rank is None, entry.rank or 0))
@@ -95,7 +100,7 @@ def dedupe(definition, fetch):
 
 def _resolve(definition, owner, fetch, resolver):
     fetch = dedupe(definition, fetch)
-    resolutions = (resolver or Resolver(definition)).resolve(fetch.entries)
+    resolutions = (resolver or Resolver(definition, remember=True)).resolve(fetch.entries)
     resolutions = writer.prepare(definition, resolutions)
     previous = writer.current_count(writer.find_list(definition, owner))
     return fetch, resolutions, previous
@@ -187,7 +192,7 @@ def run(definition, owner=None, trigger="manual", *, now=None, fetch_result=None
     """Sync one definition. Never raises for source or guard failures; see ``status``.
 
     ``fetch_result`` skips the adapter (legacy wrappers that already fetched) and
-    ``resolver`` replaces the default ``Resolver(definition)``.
+    ``resolver`` replaces the default ``Resolver(definition, remember=True)``.
     """
     lock_key = f"{LOCK_PREFIX}{definition.key}"
     token = uuid.uuid4().hex

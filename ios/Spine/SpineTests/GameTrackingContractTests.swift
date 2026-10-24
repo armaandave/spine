@@ -18,6 +18,17 @@ final class GameTrackingContractTests: XCTestCase {
         XCTAssertEqual(try draft.values().percentage, 100)
     }
 
+    func testDeletingTheCompletionEmptiesAnEyeMarkedWatchedLocally() {
+        var picker = MediaRatingPickerState()
+        picker.open()
+        picker.dismiss()
+        XCTAssertTrue(picker.hasLocallyWatched)
+        picker.syncCompleted(true)
+        XCTAssertTrue(picker.hasLocallyWatched, "Completed on the server keeps the eye filled.")
+        picker.syncCompleted(false)
+        XCTAssertFalse(picker.hasLocallyWatched, "Deleting the play entry removes Completed, so the eye empties.")
+    }
+
     func testProgressRejectsInvalidNumbers() throws {
         for input in ["-1", "1.5", "101", "x"] {
             XCTAssertThrowsError(try GameProgressDraft(percentage: input).values())
@@ -209,11 +220,42 @@ final class GameTrackingContractTests: XCTestCase {
         GameTrackingURLProtocol.status = 204
         let repository = APITrackingRepository(client: Self.client())
         let ref = Self.ref
-        try await repository.performGameAction(ref: ref, action: "undo_completed", request: BookActionRequest())
+        let undone = try await repository.performGameAction(ref: ref, action: "undo_completed", request: BookActionRequest())
+        XCTAssertNil(undone)
         XCTAssertEqual(GameTrackingURLProtocol.requests.last!.url!.absoluteString, "https://example.com/api/v1/tracking/igdb/game/42/actions/undo_completed/")
-        try await repository.deleteGamePlaythrough(ref: ref, playthroughId: 41)
+        let deleted = try await repository.deleteGamePlaythrough(ref: ref, playthroughId: 41)
+        XCTAssertNil(deleted)
         XCTAssertEqual(GameTrackingURLProtocol.requests.last?.httpMethod, "DELETE")
         XCTAssertEqual(GameTrackingURLProtocol.requests.last!.url!.absoluteString, "https://example.com/api/v1/tracking/igdb/game/42/playthroughs/41/")
+    }
+
+    func testRepositoryActionAndDeletionDecodeTheReturnedState() async throws {
+        _ = try makeComposer()
+        GameTrackingURLProtocol.response = Self.tracking
+        let repository = APITrackingRepository(client: Self.client())
+        let started = try await repository.performGameAction(ref: Self.ref, action: "start", request: BookActionRequest())
+        XCTAssertEqual(started?.trackingId, 7)
+        XCTAssertEqual(started?.game?.currentPlaythrough?.id, 41)
+        let deleted = try await repository.deleteGamePlaythrough(ref: Self.ref, playthroughId: 40)
+        XCTAssertEqual(deleted?.game?.currentPlaythrough?.id, 41)
+    }
+
+    func testPlaythroughDeleteReportsAnAlreadyDeletedPlaythrough() async throws {
+        _ = try makeComposer()
+        GameTrackingURLProtocol.status = 404
+        do {
+            _ = try await APITrackingRepository(client: Self.client()).deleteGamePlaythrough(ref: Self.ref, playthroughId: 41)
+            XCTFail("The view model maps a 404 to a full refresh, so the repository must report it.")
+        } catch APIError.httpStatus(404, _) {}
+    }
+
+    func testCommunityStatsUseTheMediaRoute() async throws {
+        _ = try makeComposer()
+        GameTrackingURLProtocol.response = Data(#"{"average_rating":"4.5","rating_count":2,"diary_count":3,"review_count":1,"liked_count":1,"rating_distribution":[]}"#.utf8)
+        let stats = try await APIMediaRepository(client: Self.client()).community(ref: Self.ref)
+        XCTAssertEqual(stats, CommunityStats(averageRating: "4.5", ratingCount: 2, diaryCount: 3, reviewCount: 1, likedCount: 1))
+        XCTAssertEqual(GameTrackingURLProtocol.requests.last?.httpMethod, "GET")
+        XCTAssertEqual(GameTrackingURLProtocol.requests.last!.url!.absoluteString, "https://example.com/api/v1/media/igdb/game/42/community/")
     }
 
     private func makeComposer(liked: Bool? = nil, ratingSteps: Int? = nil) throws -> MediaLogViewModel {

@@ -110,23 +110,15 @@ final class MediaDetailArtworkTests: XCTestCase {
         let viewModel = makeViewModel(
             mediaRepository: ArtworkScriptedMediaRepository(results: [.success(loadedDetail)])
         )
-        viewModel.detail = loadedDetail
-        viewModel.tracking = TrackingState(
-            trackingId: 44,
-            status: "In progress",
-            rating: nil,
-            progress: nil,
-            repeats: nil,
-            startDate: nil,
-            endDate: nil,
-            notes: nil,
-            updatedAt: nil
-        )
+        var tracked = loadedDetail
+        tracked.userState = UserMediaState(isTracked: true, trackingId: 44, status: "In progress")
+        viewModel.detail = tracked
 
         await viewModel.load()
 
         XCTAssertNotNil(viewModel.detail)
-        XCTAssertNil(viewModel.tracking)
+        XCTAssertEqual(viewModel.viewer?.isTracked, false)
+        XCTAssertNil(viewModel.viewer?.status)
     }
 
     func testPendingExternalRatingsPollUntilReadyWithoutReloadingDetail() async throws {

@@ -5,8 +5,9 @@ only network step), ``check_guards`` refuses suspicious results, and ``commit`` 
 everything else in one transaction.
 
 Entries deferred by a provider's budget or rate limit (``Resolution.deferred``) don't
-count toward the resolve rate. A run with deferred entries writes only when the list
-wouldn't shrink (``writes_despite_deferrals``), and is retried at ``deferred_until``.
+count toward the guards' resolve rate. A run with deferred entries writes only when the
+list clears its resolve rate with them counted as unmatched and wouldn't shrink
+(``writes_despite_deferrals``), and is retried at ``deferred_until``.
 """
 
 import hashlib
@@ -73,9 +74,15 @@ def retry_at(resolutions):
 def writes_despite_deferrals(definition, resolutions, previous_count):
     """Return whether a run with deferred entries should still write the list.
 
-    Only when the list wouldn't shrink: a new list appears with what resolved, and a
-    growing one keeps its progress, but a current list is never cut short for a day.
+    Only when it clears the list's ``min_resolve_rate`` with the waiting entries counted
+    as unmatched, so a list never appears with 1 of its 15 books, and only when it
+    wouldn't shrink: a new list appears once it clears that bar, and a growing one keeps
+    its progress, but a current list is never cut short for a day.
     """
+    counted = countable(resolutions)
+    matched = sum(1 for resolution in counted if resolution.match is not None)
+    if matched / len(counted) < definition.guards.min_resolve_rate:
+        return False
     stored = len(ordered_matches(definition, resolutions))
     return stored > 0 and stored >= previous_count
 
@@ -96,14 +103,26 @@ def unresolved_rows(resolutions, limit=MAX_UNRESOLVED_ROWS):
     ][:limit]
 
 
+def row_identity(definition, entry, match):
+    """Return what makes two resolved entries one row.
+
+    The matched item; on lists that keep repeats (award histories), the item and the
+    entry's note, so each year's win is its own row.
+    """
+    return (match.ref, entry.note) if definition.keeps_repeats else match.ref
+
+
 def ordered_matches(definition, resolutions):
     """Return ``[(position, entry, match)]``: resolved, de-duplicated, in list order."""
     rows, seen = [], set()
     for resolution in resolutions:
         match = resolution.match
-        if match is None or resolution.skipped or match.ref in seen:
+        if match is None or resolution.skipped:
             continue
-        seen.add(match.ref)
+        identity = row_identity(definition, resolution.entry, match)
+        if identity in seen:
+            continue
+        seen.add(identity)
         rows.append((resolution.entry, match))
     return [
         (
@@ -361,6 +380,8 @@ def entry_notes(resolutions, key_for, movement=None):
 
     ``key_for(match)`` names the row (an item ID, or a person ref) or returns None. An
     item listed by several entries (one nominee in two categories) joins their notes.
+    The API reads people lists' notes from here and media rows' from
+    ``CustomListItem.note``; media lists keep this per-item copy for older code.
     """
     movement = movement or {}
     collected = {}
@@ -382,26 +403,81 @@ def entry_notes(resolutions, key_for, movement=None):
     return combined
 
 
+def row_notes(definition, resolutions, rows, items, movement=None):
+    """Return each row's note, in ``rows`` order: its entries' notes after the chart movement.
+
+    Entries that make one row (an item listed twice in a ceremony) join their notes
+    with "; "; on lists that keep repeats each year's row has its own note ("2023").
+    """
+    movement = movement or {}
+    collected = {}
+    for resolution in resolutions:
+        match = resolution.match
+        if match is None or resolution.skipped:
+            continue
+        notes = collected.setdefault(row_identity(definition, resolution.entry, match), [])
+        if resolution.entry.note and resolution.entry.note not in notes:
+            notes.append(resolution.entry.note)
+    found = []
+    for _, entry, match in rows:
+        item = items.get(match.ref)
+        moved = movement.get(str(item.pk), "") if item is not None else ""
+        note = "; ".join(collected.get(row_identity(definition, entry, match), []))
+        found.append(combine_notes(moved, note)[:MAX_NOTE_LENGTH])
+    return found
+
+
+def _stored_items(rows):
+    """Return ``{ref: Item}`` for rows whose Items already exist."""
+    existing = _existing_items([match for _, _, match in rows])
+    return {match.ref: existing[_item_key(match)] for _, _, match in rows if _item_key(match) in existing}
+
+
 def _note_keys(people, rows, items):
     """Return ``key_for(match)`` for ``entry_notes``: person refs, or item IDs."""
     if people:
         return lambda match: match.ref
     if not items:  # content unchanged: the Items already exist
-        existing = _existing_items([match for _, _, match in rows])
-        items = {match.ref: existing[_item_key(match)] for _, _, match in rows if _item_key(match) in existing}
+        items = _stored_items(rows)
     return lambda match: str(items[match.ref].pk) if match.ref in items else None
 
 
-def _replace_media(custom_list, rows, items):
+def media_rows(custom_list, rows, items, notes):
+    """Return unsaved ``CustomListItem`` rows; an item's repeats get occurrences 0, 1, 2…"""
+    occurrences = defaultdict(int)
+    planned = []
+    for (position, _, match), note in zip(rows, notes, strict=True):
+        item = items.get(match.ref)
+        if item is None:
+            continue
+        planned.append(
+            CustomListItem(
+                custom_list=custom_list,
+                item=item,
+                position=position,
+                occurrence=occurrences[item.pk],
+                note=note,
+            ),
+        )
+        occurrences[item.pk] += 1
+    return planned
+
+
+def _replace_media(custom_list, planned):
     CustomListItem.objects.filter(custom_list=custom_list).delete()
-    CustomListItem.objects.bulk_create(
-        [
-            CustomListItem(custom_list=custom_list, item=items[match.ref], position=position)
-            for position, _, match in rows
-            if match.ref in items
-        ],
-        batch_size=500,
-    )
+    CustomListItem.objects.bulk_create(planned, batch_size=500)
+
+
+def _update_media_notes(custom_list, planned):
+    """Rewrite the stored rows' notes; the content is unchanged, so the rows match."""
+    wanted = {(row.item_id, row.occurrence): row.note for row in planned}
+    stale = []
+    for stored in CustomListItem.objects.filter(custom_list=custom_list).only("id", "item_id", "occurrence", "note"):
+        note = wanted.get((stored.item_id, stored.occurrence), "")
+        if stored.note != note:
+            stored.note = note
+            stale.append(stored)
+    CustomListItem.objects.bulk_update(stale, ["note"], batch_size=500)
 
 
 def _replace_people(custom_list, rows):
@@ -475,9 +551,14 @@ def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash)
                         CustomListItem.objects.filter(custom_list=custom_list).values_list("item_id", "position"),
                     )
                     sync.item_notes = movement_notes(previous, rows, items)
-                _replace_media(custom_list, rows, items)
+                notes = row_notes(definition, resolutions, rows, items, sync.item_notes)
+                _replace_media(custom_list, media_rows(custom_list, rows, items, notes))
                 if new_item_ids:  # trickled onto the default worker by the dispatcher
                     transaction.on_commit(partial(ratings.add_pending, sorted(new_item_ids)), robust=True)
+        elif not people:  # same rows; a source note ("$12.4M") may still have changed
+            items = _stored_items(rows)
+            notes = row_notes(definition, resolutions, rows, items, sync.item_notes)
+            _update_media_notes(custom_list, media_rows(custom_list, rows, items, notes))
 
         sync.entry_notes = entry_notes(resolutions, _note_keys(people, rows, items), sync.item_notes)
 

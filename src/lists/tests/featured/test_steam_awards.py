@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, override_settings
 from lists.featured.adapters import ADAPTERS
 from lists.featured.adapters import steam_awards
 from lists.featured.types import AdapterError
-from lists.tests.featured.game_routes import external, igdb_game, igdb_routes
+from lists.tests.featured.game_routes import TOKEN_KEY, external, http_error, igdb_game, igdb_routes, rejected_once
 from lists.tests.featured.helpers import api_routes, load_fixture, make_definition
 
 PAGE_2025 = load_fixture("steam_awards", "2025.html")
@@ -98,6 +98,25 @@ class SteamAwardsAdapterTests(SimpleTestCase):
         self.assertEqual(result.live_label, "2 of 3 announced")
         self.assertEqual(len(result.entries), 1)
 
+    def test_a_revoked_token_is_dropped_and_igdb_retried(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        routes = awards_routes()
+        routes["v4/external_games"] = rejected_once(routes["v4/external_games"])
+        with api_routes(routes) as api:
+            result = ADAPTERS["steam_awards"].fetch(awards_definition(year=2025))
+
+        self.assertEqual(result.entries[0].key, "igdb:115289")
+        sent = [call.kwargs["headers"]["Authorization"] for call in api.call_args_list if "v4/external_games" in call.args[2]]
+        self.assertEqual(sent, ["Bearer revoked-token", "Bearer test-token"])
+        self.assertEqual(cache.get(TOKEN_KEY), "test-token")
+
+    def test_an_igdb_token_rejected_twice_fails(self):
+        cache.set(TOKEN_KEY, "revoked-token")
+        routes = {**awards_routes(), "v4/external_games": http_error(401)}
+        with api_routes(routes) as api, self.assertRaisesMessage(AdapterError, "igdb request failed (HTTP 401)."):
+            ADAPTERS["steam_awards"].fetch(awards_definition(year=2025))
+        self.assertEqual(len([call for call in api.call_args_list if "v4/external_games" in call.args[2]]), 2)
+
     def test_year_without_a_page(self):
         with api_routes(awards_routes()), self.assertRaisesMessage(AdapterError, "no Steam Awards page for 2026"):
             ADAPTERS["steam_awards"].fetch(awards_definition(year=2026))
@@ -115,6 +134,18 @@ class SteamAwardsAdapterTests(SimpleTestCase):
         fetched = [call.args[2] for call in api.call_args_list if "steamawards" in call.args[2]]
         self.assertEqual(fetched[0], "https://store.steampowered.com/steamawards/2026")
         self.assertEqual(len(fetched), 9)  # 2026 back to 2018
+
+    def test_a_category_lists_each_win_and_a_year_joins_a_games_categories(self):
+        winners = [("10", "2025", "Ten"), ("20", "2024", "Twenty"), ("10", "2023", "Ten")]
+        self.assertEqual(
+            [(entry.title, entry.note) for entry in steam_awards._entries(winners, {}, merge=False)],
+            [("Ten", "2025"), ("Twenty", "2024"), ("Ten", "2023")],
+        )
+        categories = [("10", "Game of the Year", "Ten"), ("20", "Best Soundtrack", "Twenty"), ("10", "Best Story", "Ten")]
+        self.assertEqual(
+            [(entry.title, entry.note) for entry in steam_awards._entries(categories, {})],
+            [("Ten", "Game of the Year · Best Story"), ("Twenty", "Best Soundtrack")],
+        )
 
     def test_validate(self):
         validate = ADAPTERS["steam_awards"].validate

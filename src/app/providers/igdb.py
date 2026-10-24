@@ -106,6 +106,8 @@ def get_access_token(*, timeout=None):
             )
         except requests.exceptions.HTTPError as error:
             handle_error(error)
+            # handle_error only returns on a 401; a fresh token can't fix refused credentials
+            raise services.ProviderAPIError(Sources.IGDB.value, error) from None
 
         access_token = response["access_token"]
         cache.set(

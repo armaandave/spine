@@ -12,6 +12,7 @@ from api.permissions import can_view_user_profile
 from api.serializers.common import media_summary_from_item
 from api.services import stats as stats_service
 from app import statistics as legacy_stats
+from app.curation import prime_curated_artwork
 
 
 def stats_payload(user, request):
@@ -31,6 +32,7 @@ def stats_payload(user, request):
     if request.user == user:
         score_distribution, top_rated = legacy_stats.get_score_distribution(user_media)
         score_distribution = _wire_score_distribution(score_distribution, user_media)
+        prime_curated_artwork(media.item for media in top_rated)
         legacy_top_rated = [
             {
                 "media": media_summary_from_item(

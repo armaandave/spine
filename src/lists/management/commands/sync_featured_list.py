@@ -32,7 +32,7 @@ class Command(BaseCommand):
         if owner is None and not options["dry_run"]:
             raise CommandError(f"Spine user {options['owner']!r} does not exist.")
 
-        resolver = Resolver(definition)
+        resolver = Resolver(definition, remember=True)
         if options["dry_run"]:
             try:
                 result = engine.dry_run(definition, owner, resolver=resolver)
@@ -72,7 +72,7 @@ class Command(BaseCommand):
         resolved = sum(1 for resolution in counted if resolution.match is not None)
         rate = f"{resolved / len(counted):.1%}" if counted else "n/a"
         self.stdout.write(
-            f"Resolved {resolved}/{len(counted)} ({rate}); {result.stored_count} unique items; "
+            f"Resolved {resolved}/{len(counted)} ({rate}); {result.stored_count} rows; "
             f"{len(counted) - resolved} unresolved; {resolver.title_searches} title searches.",
         )
         unresolved = result.unresolved
