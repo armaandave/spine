@@ -60,10 +60,12 @@ def _stored_offers(title_type, tmdb_id, region):
 def where_to_watch(*, source, media_type, media_id, metadata, user=None, request=None):
     """Return the detail page's ``where_to_watch`` object, or None (ST-200).
 
-    Movies and shows use the stored snapshot for the effective country when
-    it is fresh and otherwise the detail metadata, which covers every
-    country. Seasons always use their own season-level metadata. Makes no
-    provider request.
+    ``providers`` lists the services that stream the title in the effective
+    country, once each, keeping only the user's services and major ones: the
+    user's come first, then display priority decides. Movies and shows use
+    the stored snapshot for the effective country when it is fresh and
+    otherwise the detail metadata, which covers every country. Seasons always
+    use their own season-level metadata. Makes no provider request.
     """
     if source != Sources.TMDB.value or media_type not in WHERE_TO_WATCH_MEDIA_TYPES:
         return None
@@ -80,46 +82,40 @@ def where_to_watch(*, source, media_type, media_id, metadata, user=None, request
         region_data = providers.get(region) if isinstance(providers, dict) else None
         link, offers = tmdb.region_link(region_data), tmdb.parse_offers(region_data)
 
-    groups = []
-    for monetization, label in services.OFFER_GROUPS:
-        group = sorted(
-            (offer for offer in offers if offer.monetization == monetization),
-            key=lambda offer: (
-                offer.provider_id not in mine,
-                offer.display_priority,
-                offer.name.casefold(),
-                offer.provider_id,
-            ),
-        )
-        if group:
-            groups.append(
-                {
-                    "type": monetization,
-                    "label": label,
-                    "providers": [
-                        {
-                            **provider_payload(
-                                offer.provider_id,
-                                offer.name,
-                                offer.logo_path,
-                                offer.display_priority,
-                            ),
-                            "is_mine": offer.provider_id in mine,
-                        }
-                        for offer in group
-                    ],
-                },
-            )
+    shown = {}
+    for offer in offers:
+        if offer.monetization not in STREAMABLE_MONETIZATIONS:
+            continue
+        if offer.provider_id not in mine and offer.provider_id not in services.MAJOR_PROVIDER_IDS:
+            continue
+        current = shown.get(offer.provider_id)
+        if current is None or offer.display_priority < current.display_priority:
+            shown[offer.provider_id] = offer
+    ordered = sorted(
+        shown.values(),
+        key=lambda offer: (
+            offer.provider_id not in mine,
+            offer.display_priority,
+            offer.name.casefold(),
+            offer.provider_id,
+        ),
+    )
     return {
         "region": region,
         "region_name": services.region_name(region, fetch=False),
         "link": link or None,
-        "has_services": bool(mine),
-        "on_my_services": any(
-            offer.provider_id in mine and offer.monetization in STREAMABLE_MONETIZATIONS
-            for offer in offers
-        ),
-        "groups": groups,
+        "providers": [
+            {
+                **provider_payload(
+                    offer.provider_id,
+                    offer.name,
+                    offer.logo_path,
+                    offer.display_priority,
+                ),
+                "is_mine": offer.provider_id in mine,
+            }
+            for offer in ordered
+        ],
         "attribution": dict(services.ATTRIBUTION),
     }
 

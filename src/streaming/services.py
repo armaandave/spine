@@ -17,12 +17,22 @@ from streaming.region_names import REGION_NAMES
 ATTRIBUTION = {"name": "JustWatch", "url": "https://www.justwatch.com"}
 FRESH_FOR = timedelta(hours=24)
 LOGO_BASE_URL = "https://image.tmdb.org/t/p/w154"
-# ST-200 order and labels for offer groups. Only streaming offers count, so
-# TMDB's rent and buy offers are never stored or shown (ST-004).
-OFFER_GROUPS = (
-    ("flatrate", "Stream"),
-    ("free", "Free"),
-    ("ads", "Free with ads"),
+# Services a detail page shows even when they aren't one of the user's
+# (ST-200). One TMDB ID per service in any country: tiers and ad-supported
+# variants such as "Netflix Standard with Ads" would repeat the same logo.
+MAJOR_PROVIDER_IDS = frozenset(
+    {
+        8,  # Netflix
+        9,  # Amazon Prime Video (US, GB, DE)
+        119,  # Amazon Prime Video (most other countries)
+        337,  # Disney Plus
+        15,  # Hulu
+        1899,  # HBO Max
+        350,  # Apple TV, the subscription (2 is the Apple TV Store)
+        2303,  # Paramount Plus Premium (US)
+        531,  # Paramount Plus (outside the US)
+        386,  # Peacock Premium
+    },
 )
 REGION_HEADER = "X-Spine-Region"
 UNSET_REGION = "UNSET"

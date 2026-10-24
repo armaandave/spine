@@ -2,9 +2,9 @@
 
 Status: **agent-ready product contract**
 
-Last reviewed: **2026-10-23**
+Last reviewed: **2026-10-24**
 
-This contract covers "where to watch" for movies and TV in Spine: a user's streaming country and services, the Where to Watch section on detail pages, and the Service filter on collections and Discover.
+This contract covers "where to watch" for movies and TV in Spine: a user's streaming country and services, the streaming service pills on detail pages, and the Service filter on collections and Discover.
 Only the numbered laws contain accepted product decisions.
 The API section is the backend/iOS contract; change it here first if implementation needs a different shape.
 
@@ -18,6 +18,7 @@ The API section is the backend/iOS contract; change it here first if implementat
 | Streamable | An offer whose type is Stream, Free, or Free with ads. Rent and Buy are never streamable. |
 | Country / region | An ISO 3166-1 alpha-2 code from TMDB's watch-provider regions list. |
 | My services | The providers the user has selected in Streaming Services settings. |
+| Major service | A service detail pages show even when it isn't one of the user's: Netflix, Prime Video, Disney+, HBO Max, Hulu, Apple TV, Paramount+, or Peacock (`MAJOR_PROVIDER_IDS`, one TMDB ID per service in any country). |
 | Snapshot | Stored availability for one title in one country (`StreamingAvailability` plus its `StreamingOffer` rows). |
 
 ## Data source
@@ -35,11 +36,11 @@ Seasons and episodes use their show's availability for filtering.
 A season detail page shows the season-level availability TMDB returns for that season.
 Other media types never show streaming UI, and the Service filter excludes them.
 
-### ST-003: JustWatch is credited wherever availability appears
+### ST-003: JustWatch is credited for the data
 
-Every surface that shows availability shows **Powered by JustWatch**, linking to `https://www.justwatch.com`.
-That includes the Where to Watch section and the Streaming Services settings screen.
+The Streaming Services settings screen shows **Powered by JustWatch**, linking to `https://www.justwatch.com`.
 The About screen credits both TMDB ("This product uses the TMDB API but is not endorsed or certified by TMDB.") and JustWatch.
+Detail pages show only service logos; each opens TMDB's watch page, which credits JustWatch.
 
 ### ST-004: Only streaming counts
 
@@ -83,21 +84,20 @@ Filtering another user's public list by My services uses the viewer's services a
 
 ## Where to Watch on detail pages
 
-### ST-200: Movie, TV, and season detail show Where to Watch
+### ST-200: Movie, TV, and season detail show streaming service pills
 
-The section appears for TMDB movie, TV, and season detail, for the effective country.
-It lists offer groups in this order, omitting empty groups: Stream, Free, Free with ads.
-Inside each group, the user's services come first and are marked; the rest follow JustWatch display priority.
-When at least one of the user's services streams the title, the section says so up front (for example "Streaming on Netflix").
-Tapping a provider opens the title's TMDB watch page for that country in the browser.
+For TMDB movie, TV, and season detail, the services that stream the title in the effective country appear as logo-only pills styled like the rating pills, at the right end of the rating pills' rows.
+Only major services and the user's own services appear, each once: the user's services first, then JustWatch display priority.
+Tapping a pill opens the title's TMDB watch page for that country in the browser.
 
-### ST-201: Unavailable titles say so
+### ST-201: No pills when none of those services streams the title
 
-When the title has no streaming offers in the country, including when it can only be rented or bought, the section reads "Not available to stream in {Country}." and still shows the JustWatch credit.
+When no major service and none of the user's services streams the title in the country, including when it can only be rented or bought, the page shows no pills and says nothing about availability.
 
-### ST-202: Users without services are invited to add them
+### ST-202: Services are chosen only in Settings
 
-When the user has no services, the section offers a "Choose your streaming services" link to Streaming Services settings.
+Users pick their country and services in Settings → Streaming Services.
+Detail pages never link there or mention choosing services.
 
 ## Service filter
 
@@ -193,32 +193,17 @@ On success it replaces the selection, saves the region, queues the library check
   "region": "US",
   "region_name": "United States",
   "link": "https://www.themoviedb.org/movie/693134-dune-part-two/watch?locale=US",
-  "has_services": true,
-  "on_my_services": true,
-  "groups": [
-    {
-      "type": "flatrate",
-      "label": "Stream",
-      "providers": [
-        { "provider_id": 1899, "name": "HBO Max", "logo_url": "…", "display_priority": 151, "is_mine": true }
-      ]
-    },
-    {
-      "type": "ads",
-      "label": "Free with ads",
-      "providers": [
-        { "provider_id": 73, "name": "Tubi TV", "logo_url": "…", "display_priority": 20, "is_mine": false }
-      ]
-    }
+  "providers": [
+    { "provider_id": 73, "name": "Tubi TV", "logo_url": "…", "display_priority": 20, "is_mine": true },
+    { "provider_id": 1899, "name": "HBO Max", "logo_url": "…", "display_priority": 151, "is_mine": false }
   ],
   "attribution": { "name": "JustWatch", "url": "https://www.justwatch.com" }
 }
 ```
 
 - `null` for non-TMDB or non-movie/TV/season items, and when availability is disabled.
-- `groups` contains only non-empty groups, in ST-200 order. An empty `groups` array means not available in the country (ST-201).
+- `providers` holds the pills of ST-200: services with a streaming offer for the title in the country, each once, kept only when major or the user's (`is_mine`), the user's first, then display priority. An empty array shows nothing (ST-201).
 - `link` may be null when TMDB has no page for that country.
-- `on_my_services` is true when any streamable offer is one of the user's services.
 
 ### Service filter parameter
 

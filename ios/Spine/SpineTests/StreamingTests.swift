@@ -101,92 +101,33 @@ final class StreamingContractTests: XCTestCase {
     func testWhereToWatchDecodesTheContractExample() throws {
         let whereToWatch = try decode(WhereToWatch.self, Self.whereToWatchJSON)
         XCTAssertEqual(whereToWatch.region, "US")
-        XCTAssertEqual(whereToWatch.regionDisplayName, "United States")
+        XCTAssertEqual(whereToWatch.regionName, "United States")
         XCTAssertEqual(
             whereToWatch.linkURL?.absoluteString,
             "https://www.themoviedb.org/movie/693134-dune-part-two/watch?locale=US"
         )
-        XCTAssertTrue(whereToWatch.hasServices)
-        XCTAssertTrue(whereToWatch.onMyServices)
-        XCTAssertEqual(whereToWatch.groups.map(\.type), ["flatrate", "rent"])
-        XCTAssertEqual(whereToWatch.groups.first?.label, "Stream")
-        let max = try XCTUnwrap(whereToWatch.groups.first?.providers.first)
-        XCTAssertEqual(max.providerId, 1899)
-        XCTAssertEqual(max.name, "HBO Max")
-        XCTAssertEqual(max.displayPriority, 151)
-        XCTAssertTrue(max.isMine)
+        XCTAssertEqual(whereToWatch.providers.map(\.name), ["Tubi TV", "HBO Max"])
+        let tubi = try XCTUnwrap(whereToWatch.providers.first)
+        XCTAssertEqual(tubi.providerId, 73)
+        XCTAssertEqual(tubi.displayPriority, 20)
+        XCTAssertTrue(tubi.isMine)
+        XCTAssertFalse(try XCTUnwrap(whereToWatch.providers.last).isMine)
         XCTAssertEqual(whereToWatch.attribution?.name, "JustWatch")
     }
 
-    func testWhereToWatchSkipsEmptyGroupsAndLeadsWithTheUsersService() throws {
-        let whereToWatch = try decode(WhereToWatch.self, Self.whereToWatchJSON)
-        XCTAssertEqual(whereToWatch.visibleGroups.map(\.label), ["Stream"])
-        XCTAssertEqual(whereToWatch.myStreamingProviders.map(\.name), ["HBO Max"])
-        XCTAssertEqual(whereToWatch.myServicesHeadline, "Streaming on HBO Max")
-    }
-
-    func testWhereToWatchWithNoOffersAndNoLink() throws {
+    func testWhereToWatchWithNoServicesAndNoLink() throws {
         let whereToWatch = try decode(WhereToWatch.self, #"""
-        { "region": "GB", "region_name": "United Kingdom", "link": null, "has_services": false,
-          "on_my_services": false, "groups": [],
+        { "region": "GB", "region_name": "United Kingdom", "link": null, "providers": [],
           "attribution": { "name": "JustWatch", "url": "https://www.justwatch.com" } }
         """#)
         XCTAssertNil(whereToWatch.link)
         XCTAssertNil(whereToWatch.linkURL)
-        XCTAssertFalse(whereToWatch.hasServices)
-        XCTAssertTrue(whereToWatch.groups.isEmpty)
-        XCTAssertTrue(whereToWatch.visibleGroups.isEmpty)
-        XCTAssertNil(whereToWatch.myServicesHeadline)
-        XCTAssertEqual(whereToWatch.regionDisplayName, "United Kingdom")
+        XCTAssertTrue(whereToWatch.providers.isEmpty)
     }
 
-    func testWhereToWatchGroupsOrderAndHeadlineForSeveralServices() throws {
-        let whereToWatch = try decode(WhereToWatch.self, #"""
-        { "region": "US", "region_name": "United States", "link": "https://www.themoviedb.org/tv/1399/watch?locale=US",
-          "has_services": true, "on_my_services": true,
-          "groups": [
-            { "type": "flatrate", "label": "Stream", "providers": [
-                { "provider_id": 9, "name": "Prime Video", "logo_url": null, "display_priority": 2, "is_mine": false },
-                { "provider_id": 8, "name": "Netflix", "logo_url": null, "display_priority": 5, "is_mine": true }
-            ] },
-            { "type": "ads", "label": "Free with ads", "providers": [
-                { "provider_id": 8, "name": "Netflix", "logo_url": null, "display_priority": 5, "is_mine": true },
-                { "provider_id": 300, "name": "Pluto TV", "logo_url": null, "display_priority": 9, "is_mine": true }
-            ] },
-            { "type": "buy", "label": "Buy", "providers": [
-                { "provider_id": 2, "name": "Apple TV", "logo_url": null, "display_priority": 3, "is_mine": false }
-            ] }
-          ],
-          "attribution": { "name": "JustWatch", "url": "https://www.justwatch.com" } }
-        """#)
-        let stream = try XCTUnwrap(whereToWatch.visibleGroups.first)
-        XCTAssertEqual(stream.orderedProviders.map(\.name), ["Netflix", "Prime Video"])
-        XCTAssertTrue(stream.isStreamable)
-        XCTAssertFalse(try XCTUnwrap(whereToWatch.visibleGroups.last).isStreamable)
-        XCTAssertEqual(whereToWatch.myStreamingProviders.map(\.name), ["Netflix", "Pluto TV"])
-        XCTAssertEqual(whereToWatch.myServicesHeadline, "Streaming on your services")
-
-        let netflix = try XCTUnwrap(stream.providers.last)
-        XCTAssertEqual(netflix.accessibilityLabel(in: stream), "Netflix, Stream, on your services")
-        let buy = try XCTUnwrap(whereToWatch.visibleGroups.last)
-        XCTAssertEqual(try XCTUnwrap(buy.providers.first).accessibilityLabel(in: buy), "Apple TV, Buy")
-    }
-
-    func testHeadlineNeedsAStreamingOfferOnTheUsersServices() throws {
-        // The user's service only rents it: marked in Rent, but nothing streams on their services.
-        let whereToWatch = try decode(WhereToWatch.self, #"""
-        { "region": "US", "region_name": null, "link": "https://www.themoviedb.org/movie/1/watch?locale=US",
-          "has_services": true, "on_my_services": false,
-          "groups": [
-            { "type": "rent", "label": "Rent", "providers": [
-                { "provider_id": 10, "name": "Amazon Video", "logo_url": null, "display_priority": 1, "is_mine": true }
-            ] }
-          ],
-          "attribution": null }
-        """#)
-        XCTAssertNil(whereToWatch.myServicesHeadline)
-        XCTAssertTrue(whereToWatch.myStreamingProviders.isEmpty)
-        XCTAssertEqual(whereToWatch.regionDisplayName, Locale.current.localizedString(forRegionCode: "US") ?? "US")
+    func testStreamingPillsReadTheServiceName() throws {
+        let whereToWatch = try decode(WhereToWatch.self, Self.whereToWatchJSON)
+        XCTAssertEqual(whereToWatch.providers.map(\.accessibilityLabel), ["Tubi TV, one of your services", "HBO Max"])
     }
 
     func testCountryNamesSkipAServerNameThatIsOnlyTheCode() throws {
@@ -195,12 +136,6 @@ final class StreamingContractTests: XCTestCase {
         XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: "DE"), deviceName)
         XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: ""), deviceName)
         XCTAssertEqual(StreamingRegion.displayName(code: "DE", serverName: nil), deviceName)
-
-        let whereToWatch = try decode(WhereToWatch.self, #"""
-        { "region": "DE", "region_name": "DE", "link": null, "has_services": false,
-          "on_my_services": false, "groups": [], "attribution": null }
-        """#)
-        XCTAssertEqual(whereToWatch.regionDisplayName, deviceName)
 
         XCTAssertEqual(
             StreamingFilterOptions(available: true, region: "DE", regionName: "DE").attributionText,
@@ -221,8 +156,8 @@ final class StreamingContractTests: XCTestCase {
 
     func testOnlyWebLinksOpen() throws {
         let whereToWatch = try decode(WhereToWatch.self, #"""
-        { "region": "US", "region_name": "United States", "link": "javascript:alert(1)", "has_services": false,
-          "on_my_services": false, "groups": [], "attribution": null }
+        { "region": "US", "region_name": "United States", "link": "javascript:alert(1)", "providers": [],
+          "attribution": null }
         """#)
         XCTAssertNil(whereToWatch.linkURL)
         XCTAssertEqual(StreamingAttribution.justWatch.destination?.absoluteString, "https://www.justwatch.com")
@@ -246,7 +181,7 @@ final class StreamingContractTests: XCTestCase {
         let detail = try decode(MediaDetail.self, Self.mediaDetailJSON(whereToWatch: Self.whereToWatchJSON))
         let whereToWatch = try XCTUnwrap(detail.whereToWatch)
         XCTAssertEqual(whereToWatch.region, "US")
-        XCTAssertEqual(whereToWatch.visibleGroups.first?.providers.first?.name, "HBO Max")
+        XCTAssertEqual(whereToWatch.providers.first?.name, "Tubi TV")
         XCTAssertNotNil(detail.providers, "The legacy providers field is unchanged")
     }
 
@@ -261,7 +196,7 @@ final class StreamingContractTests: XCTestCase {
     }
 
     func testUnreadableWhereToWatchHidesOnlyThatSection() throws {
-        let detail = try decode(MediaDetail.self, Self.mediaDetailJSON(whereToWatch: #"{ "region": 5, "groups": "none" }"#))
+        let detail = try decode(MediaDetail.self, Self.mediaDetailJSON(whereToWatch: #"{ "region": 5, "providers": "none" }"#))
         XCTAssertNil(detail.whereToWatch)
         XCTAssertEqual(detail.title, "Dune: Part Two")
         XCTAssertEqual(detail.ref.mediaId, "693134")
@@ -384,17 +319,9 @@ final class StreamingContractTests: XCTestCase {
       "region": "US",
       "region_name": "United States",
       "link": "https://www.themoviedb.org/movie/693134-dune-part-two/watch?locale=US",
-      "has_services": true,
-      "on_my_services": true,
-      "groups": [
-        {
-          "type": "flatrate",
-          "label": "Stream",
-          "providers": [
-            { "provider_id": 1899, "name": "HBO Max", "logo_url": "https://image.tmdb.org/t/p/w154/max.png", "display_priority": 151, "is_mine": true }
-          ]
-        },
-        { "type": "rent", "label": "Rent", "providers": [] }
+      "providers": [
+        { "provider_id": 73, "name": "Tubi TV", "logo_url": "https://image.tmdb.org/t/p/w154/tubi.png", "display_priority": 20, "is_mine": true },
+        { "provider_id": 1899, "name": "HBO Max", "logo_url": "https://image.tmdb.org/t/p/w154/max.png", "display_priority": 151, "is_mine": false }
       ],
       "attribution": { "name": "JustWatch", "url": "https://www.justwatch.com" }
     }

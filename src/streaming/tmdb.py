@@ -13,13 +13,12 @@ from django.utils import timezone
 from app.models import Sources
 from app.providers import services as provider_services
 from app.providers import tmdb as tmdb_provider
-from streaming.models import StreamingProvider
-from streaming.services import OFFER_GROUPS, normalize_region
+from streaming.models import STREAMABLE_MONETIZATIONS, StreamingProvider
+from streaming.services import normalize_region
 
 CATALOG_CACHE_VERSION = "v1"
 CATALOG_TTL = 60 * 60 * 24
 TITLE_TYPES = ("movie", "tv")
-MONETIZATIONS = tuple(monetization for monetization, _label in OFFER_GROUPS)
 # Sorts providers without a priority after every ranked one.
 UNKNOWN_PRIORITY = 999
 MAX_LINK_LENGTH = 500
@@ -98,16 +97,17 @@ def parse_provider(entry, region=None):
 
 
 def parse_offers(region_data):
-    """Return the offers in one region's TMDB payload, in OFFER_GROUPS order.
+    """Return the streaming offers in one region's TMDB payload (ST-004).
 
-    Keys outside OFFER_GROUPS, such as rent and buy, are ignored, and a
-    repeated provider/type pair keeps its first entry.
+    Offers come in STREAMABLE_MONETIZATIONS order. Other keys, such as rent
+    and buy, are ignored, and a repeated provider/type pair keeps its first
+    entry.
     """
     if not isinstance(region_data, dict):
         return []
     offers = []
     seen = set()
-    for monetization in MONETIZATIONS:
+    for monetization in STREAMABLE_MONETIZATIONS:
         entries = region_data.get(monetization)
         if not isinstance(entries, list):
             continue

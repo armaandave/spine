@@ -6,11 +6,13 @@ from django.test import RequestFactory, TestCase
 from streaming.models import UserStreamingService
 from streaming.payloads import where_to_watch
 from streaming.tests.helpers import (
+    AMAZON,
     APPLE,
     HULU,
     MAX,
     NETFLIX,
     TITLE_RESULTS,
+    TUBI,
     US_LINK,
     make_provider,
     make_snapshot,
@@ -20,13 +22,12 @@ from streaming.tests.helpers import (
 METADATA = {"title": "Dune: Part Two", "providers": TITLE_RESULTS}
 
 
-def _provider_ids(payload, group_type):
-    group = next(group for group in payload["groups"] if group["type"] == group_type)
-    return [provider["provider_id"] for provider in group["providers"]]
+def _provider_ids(payload):
+    return [provider["provider_id"] for provider in payload["providers"]]
 
 
 class WhereToWatchTests(TestCase):
-    """ST-200/201/202 detail payload."""
+    """ST-200/201 detail payload."""
 
     def setUp(self):
         reset_streaming_state(self)
@@ -47,25 +48,16 @@ class WhereToWatchTests(TestCase):
             provider = make_provider(entry)
             UserStreamingService.objects.create(user=self.user, provider=provider)
 
-    def test_groups_follow_contract_order_and_shape(self):
+    def test_lists_major_services_in_contract_shape(self):
         payload = self._build()
 
+        self.assertEqual(set(payload), {"region", "region_name", "link", "providers", "attribution"})
         self.assertEqual(payload["region"], "US")
         self.assertEqual(payload["region_name"], "United States")
         self.assertEqual(payload["link"], US_LINK)
-        self.assertFalse(payload["has_services"])
-        self.assertFalse(payload["on_my_services"])
         self.assertEqual(payload["attribution"], {"name": "JustWatch", "url": "https://www.justwatch.com"})
         self.assertEqual(
-            [(group["type"], group["label"]) for group in payload["groups"]],
-            [
-                ("flatrate", "Stream"),
-                ("free", "Free"),
-                ("ads", "Free with ads"),
-            ],
-        )
-        self.assertEqual(
-            payload["groups"][0]["providers"][0],
+            payload["providers"][0],
             {
                 "provider_id": 8,
                 "name": "Netflix",
@@ -74,46 +66,50 @@ class WhereToWatchTests(TestCase):
                 "is_mine": False,
             },
         )
-        self.assertEqual(_provider_ids(payload, "flatrate"), [8, 1899])
+        # Kanopy and Tubi stream it too, but they are neither major nor the viewer's.
+        self.assertEqual(_provider_ids(payload), [8, 1899])
 
     def test_my_services_come_first_and_are_marked(self):
         self._subscribe(MAX)
 
         payload = self._build()
 
-        flatrate = payload["groups"][0]["providers"]
-        self.assertEqual([provider["provider_id"] for provider in flatrate], [1899, 8])
-        self.assertEqual([provider["is_mine"] for provider in flatrate], [True, False])
-        self.assertTrue(payload["has_services"])
-        self.assertTrue(payload["on_my_services"])
+        self.assertEqual(_provider_ids(payload), [1899, 8])
+        self.assertEqual([provider["is_mine"] for provider in payload["providers"]], [True, False])
 
-    def test_rent_and_buy_are_not_shown(self):
-        self._subscribe(APPLE, HULU)
+    def test_other_services_show_only_when_they_are_mine(self):
+        self._subscribe(TUBI)
 
         payload = self._build()
 
-        self.assertTrue(payload["has_services"])
-        self.assertFalse(payload["on_my_services"])
-        self.assertEqual([group["type"] for group in payload["groups"]], ["flatrate", "free", "ads"])
-        shown = {provider["provider_id"] for group in payload["groups"] for provider in group["providers"]}
-        self.assertEqual(shown, {8, 1899, 191, 73})
+        self.assertEqual(_provider_ids(payload), [73, 8, 1899])
+        self.assertTrue(payload["providers"][0]["is_mine"])
 
-    def test_title_only_to_rent_or_buy_is_not_available_to_stream(self):
+    def test_a_service_streaming_several_ways_shows_once(self):
+        metadata = {"providers": {"US": {"flatrate": [NETFLIX], "ads": [HULU, NETFLIX]}}}
+
+        self.assertEqual(_provider_ids(self._build(metadata=metadata)), [8, 15])
+
+    def test_rent_and_buy_are_not_shown(self):
+        self._subscribe(APPLE, AMAZON)
+
+        self.assertEqual(_provider_ids(self._build()), [8, 1899])
+
+    def test_title_only_to_rent_or_buy_shows_no_services(self):
         self.user.watch_provider_region = "FR"
         self.user.save(update_fields=["watch_provider_region"])
 
         payload = self._build()
 
-        self.assertEqual(payload["groups"], [])
+        self.assertEqual(payload["providers"], [])
         self.assertEqual(payload["link"], TITLE_RESULTS["FR"]["link"])
 
-    def test_unavailable_title_returns_empty_groups(self):
+    def test_unavailable_title_returns_no_services(self):
         payload = self._build(metadata={"providers": {"GB": TITLE_RESULTS["GB"]}})
 
-        self.assertEqual(payload["groups"], [])
+        self.assertEqual(payload["providers"], [])
         self.assertIsNone(payload["link"])
-        self.assertFalse(payload["on_my_services"])
-        self.assertEqual(self._build(metadata={})["groups"], [])
+        self.assertEqual(self._build(metadata={})["providers"], [])
 
     def test_null_when_disabled_or_unsupported(self):
         self.assertIsNone(self._build(source="mal", media_type="anime"))
@@ -129,14 +125,13 @@ class WhereToWatchTests(TestCase):
 
         payload = self._build()
 
-        self.assertEqual([group["type"] for group in payload["groups"]], ["flatrate"])
-        self.assertEqual(_provider_ids(payload, "flatrate"), [15])
+        self.assertEqual(_provider_ids(payload), [15])
         self.assertEqual(payload["link"], "https://example.com/us")
 
     def test_stale_snapshot_falls_back_to_metadata(self):
         make_snapshot("movie", "693134", "US", [(HULU, "flatrate")], age=timedelta(hours=25))
 
-        self.assertEqual(_provider_ids(self._build(), "flatrate"), [8, 1899])
+        self.assertEqual(_provider_ids(self._build()), [8, 1899])
 
     def test_season_uses_its_own_metadata(self):
         make_snapshot("tv", "693134", "US", [(HULU, "flatrate")])
@@ -144,7 +139,7 @@ class WhereToWatchTests(TestCase):
 
         payload = self._build(media_type="season", metadata=season_metadata)
 
-        self.assertEqual(_provider_ids(payload, "flatrate"), [8])
+        self.assertEqual(_provider_ids(payload), [8])
         self.assertIsNone(payload["link"])
 
     def test_anonymous_viewer_uses_header_region_without_services(self):
@@ -161,8 +156,8 @@ class WhereToWatchTests(TestCase):
 
         self.assertEqual(payload["region"], "GB")
         self.assertEqual(payload["region_name"], "United Kingdom")
-        self.assertFalse(payload["has_services"])
-        self.assertEqual(_provider_ids(payload, "flatrate"), [8])
+        self.assertEqual(_provider_ids(payload), [8])
+        self.assertFalse(payload["providers"][0]["is_mine"])
 
     def test_saved_region_and_unknown_region_name(self):
         self.user.watch_provider_region = "XX"
@@ -174,11 +169,11 @@ class WhereToWatchTests(TestCase):
         self.assertEqual(payload["region_name"], "XX")
 
     def test_snapshot_payload_query_count_is_constant(self):
-        self._subscribe(NETFLIX)
+        self._subscribe(NETFLIX, APPLE)
         make_snapshot("movie", "693134", "US", [(NETFLIX, "flatrate"), (HULU, "flatrate"), (APPLE, "rent")])
 
         with self.assertNumQueries(3):
             payload = self._build()
 
-        self.assertEqual(_provider_ids(payload, "flatrate"), [8, 15])
-        self.assertEqual([group["type"] for group in payload["groups"]], ["flatrate"])
+        # A stored rent offer stays hidden even on one of the viewer's services.
+        self.assertEqual(_provider_ids(payload), [8, 15])

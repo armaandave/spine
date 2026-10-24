@@ -99,11 +99,8 @@ struct WhereToWatch: Decodable, Equatable {
     let regionName: String?
     /// TMDB's watch page for the title and country; null when TMDB has none.
     let link: String?
-    let hasServices: Bool
-    /// True when one of the user's services streams the title (Stream, Free, or Free with ads).
-    let onMyServices: Bool
-    /// Offer groups in Stream, Free, Free with ads order. Empty means not available to stream in the country.
-    let groups: [WhereToWatchGroup]
+    /// The services to show as pills, each once: the user's first, then major ones. Empty shows nothing.
+    let providers: [WhereToWatchProvider]
     let attribution: StreamingAttribution?
 
     /// Only TMDB movies, shows, and seasons have availability (ST-002).
@@ -111,61 +108,11 @@ struct WhereToWatch: Decodable, Equatable {
         ref.source == "tmdb" && ["movie", "tv", "season"].contains(ref.mediaType)
     }
 
-    var regionDisplayName: String {
-        StreamingRegion.displayName(code: region, serverName: regionName)
-    }
-
     var linkURL: URL? {
         guard let link, let url = URL(string: link), ["http", "https"].contains(url.scheme?.lowercased()) else {
             return nil
         }
         return url
-    }
-
-    /// Groups that have at least one offer.
-    var visibleGroups: [WhereToWatchGroup] {
-        groups.filter { !$0.providers.isEmpty }
-    }
-
-    /// The user's services that stream the title, without duplicates, in group order.
-    var myStreamingProviders: [WhereToWatchProvider] {
-        var seen = Set<Int>()
-        return visibleGroups
-            .filter(\.isStreamable)
-            .flatMap(\.providers)
-            .filter { $0.isMine && seen.insert($0.providerId).inserted }
-    }
-
-    /// "Streaming on Netflix", or "Streaming on your services" when several of them do; nil unless one does.
-    var myServicesHeadline: String? {
-        guard onMyServices else { return nil }
-        let mine = myStreamingProviders
-        if mine.count == 1, let only = mine.first {
-            return "Streaming on \(only.name)"
-        }
-        return "Streaming on your services"
-    }
-}
-
-struct WhereToWatchGroup: Decodable, Equatable, Identifiable {
-    /// Offer types that count as streaming. Rent and Buy never do.
-    static let streamableTypes: Set<String> = ["flatrate", "free", "ads"]
-
-    /// `flatrate`, `free`, or `ads`. The API doesn't send Rent or Buy.
-    let type: String
-    /// "Stream", "Free", or "Free with ads".
-    let label: String
-    let providers: [WhereToWatchProvider]
-
-    var id: String { type }
-
-    var isStreamable: Bool {
-        Self.streamableTypes.contains(type)
-    }
-
-    /// The user's services first, then the rest, each keeping the API's display-priority order.
-    var orderedProviders: [WhereToWatchProvider] {
-        providers.filter(\.isMine) + providers.filter { !$0.isMine }
     }
 }
 
@@ -204,7 +151,7 @@ struct WhereToWatchProvider: Decodable, Equatable, Identifiable {
         isMine = try container.decodeIfPresent(Bool.self, forKey: .isMine) ?? false
     }
 
-    func accessibilityLabel(in group: WhereToWatchGroup) -> String {
-        isMine ? "\(name), \(group.label), on your services" : "\(name), \(group.label)"
+    var accessibilityLabel: String {
+        isMine ? "\(name), one of your services" : name
     }
 }

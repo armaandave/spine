@@ -323,11 +323,8 @@ class WhereToWatchDetailApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         where = response.data["where_to_watch"]
         self.assertEqual((where["region"], where["region_name"]), ("US", "United States"))
-        self.assertTrue(where["has_services"])
-        self.assertTrue(where["on_my_services"])
-        self.assertEqual([group["type"] for group in where["groups"]], ["flatrate", "free", "ads"])
-        self.assertEqual(where["groups"][0]["providers"][0]["provider_id"], 8)
-        self.assertTrue(where["groups"][0]["providers"][0]["is_mine"])
+        self.assertEqual([provider["provider_id"] for provider in where["providers"]], [8, 1899])
+        self.assertTrue(where["providers"][0]["is_mine"])
         self.assertEqual(where["attribution"]["name"], "JustWatch")
         self.assertEqual(
             response.data["providers"],
@@ -349,7 +346,7 @@ class WhereToWatchDetailApiTests(TestCase):
         response = self.client.get("/api/v1/media/tmdb/tv/1396/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["where_to_watch"]["groups"][0]["type"], "flatrate")
+        self.assertEqual(response.data["where_to_watch"]["providers"][0]["provider_id"], 8)
         self.assertTrue(StreamingAvailability.objects.filter(title_type="tv", tmdb_id="1396", region="US").exists())
         self._assert_no_provider_requests()
 
@@ -370,8 +367,8 @@ class WhereToWatchDetailApiTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         where = response.data["where_to_watch"]
-        self.assertEqual([provider["provider_id"] for provider in where["groups"][0]["providers"]], [1899])
-        self.assertFalse(where["on_my_services"])
+        self.assertEqual([provider["provider_id"] for provider in where["providers"]], [1899])
+        self.assertFalse(where["providers"][0]["is_mine"])
         self.assertEqual(where["link"], "https://example.com/s1")
         self.assertFalse(StreamingAvailability.objects.exists())
         self._assert_no_provider_requests()
@@ -404,8 +401,8 @@ class WhereToWatchDetailApiTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         where = response.data["where_to_watch"]
         self.assertEqual(where["region"], "GB")
-        self.assertFalse(where["has_services"])
-        self.assertEqual(where["groups"][0]["providers"][0]["name"], "Netflix")
+        self.assertEqual(where["providers"][0]["name"], "Netflix")
+        self.assertFalse(where["providers"][0]["is_mine"])
         self._assert_no_provider_requests()
 
     def test_where_to_watch_queries_are_bounded(self, *_mocks):
@@ -421,6 +418,9 @@ class WhereToWatchDetailApiTests(TestCase):
             )
             for index in range(12)
         ]
+        # The viewer's own services, so all twelve show.
+        for entry, _monetization in many:
+            UserStreamingService.objects.create(user=self.user, provider=make_provider(entry))
         make_snapshot("movie", "1", "US", [(NETFLIX, "flatrate"), (HULU, "rent")])
         make_snapshot("movie", "2", "US", many)
         active_regions()
@@ -439,4 +439,4 @@ class WhereToWatchDetailApiTests(TestCase):
             counts[media_id] = len(queries)
 
         self.assertEqual(counts["1"], counts["2"])
-        self.assertEqual(len(response.data["where_to_watch"]["groups"][0]["providers"]), 12)
+        self.assertEqual(len(response.data["where_to_watch"]["providers"]), 12)
