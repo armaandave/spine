@@ -1,6 +1,6 @@
 """Canonical state transitions for single-weight media."""
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.apps import apps
@@ -81,7 +81,10 @@ def calendar_datetime(value, *, today=None):
     """Normalize a user calendar date to a stable UTC date carrier."""
     if value is None:
         raise ValidationError("A consumption date is required.")
-    if isinstance(value, datetime):
+    if is_calendar_datetime(value):
+        # Already normalized; read in local time, west of UTC, it would be the day before.
+        day = value.date()
+    elif isinstance(value, datetime):
         day = timezone.localdate(value) if timezone.is_aware(value) else value.date()
     elif isinstance(value, date):
         day = value
@@ -93,6 +96,16 @@ def calendar_datetime(value, *, today=None):
     if day > (today or timezone.localdate()):
         raise ValidationError("Consumption dates cannot be in the future.")
     return datetime.combine(day, time.min, tzinfo=UTC)
+
+
+def is_calendar_datetime(value):
+    """Whether a value is already a normalized UTC-midnight date carrier."""
+    return (
+        isinstance(value, datetime)
+        and timezone.is_aware(value)
+        and value.utcoffset() == timedelta(0)
+        and value.time() == time.min
+    )
 
 
 def calendar_date(value):
