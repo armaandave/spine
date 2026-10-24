@@ -2,7 +2,7 @@
 
 Status: **agent-ready product contract**
 
-Last reviewed: **2026-10-19**
+Last reviewed: **2026-10-23**
 
 This contract covers "where to watch" for movies and TV in Spine: a user's streaming country and services, the Where to Watch section on detail pages, and the Service filter on collections and Discover.
 Only the numbered laws contain accepted product decisions.
@@ -14,7 +14,7 @@ The API section is the backend/iOS contract; change it here first if implementat
 | --- | --- |
 | Provider / service | A streaming service as identified by TMDB's watch-provider catalog (for example Netflix = 8). |
 | Offer | One way to watch a title in a country: a provider plus an offer type. |
-| Offer type | `flatrate` (shown as **Stream**), `free` (**Free**), `ads` (**Free with ads**), `rent` (**Rent**), `buy` (**Buy**). |
+| Offer type | `flatrate` (shown as **Stream**), `free` (**Free**), or `ads` (**Free with ads**). TMDB's `rent` and `buy` offers are ignored (ST-004). |
 | Streamable | An offer whose type is Stream, Free, or Free with ads. Rent and Buy are never streamable. |
 | Country / region | An ISO 3166-1 alpha-2 code from TMDB's watch-provider regions list. |
 | My services | The providers the user has selected in Streaming Services settings. |
@@ -40,6 +40,16 @@ Other media types never show streaming UI, and the Service filter excludes them.
 Every surface that shows availability shows **Powered by JustWatch**, linking to `https://www.justwatch.com`.
 That includes the Where to Watch section and the Streaming Services settings screen.
 The About screen credits both TMDB ("This product uses the TMDB API but is not endorsed or certified by TMDB.") and JustWatch.
+
+### ST-004: Only streaming counts
+
+Spine stores and shows only Stream, Free, and Free with ads offers.
+TMDB's Rent and Buy offers are ignored everywhere, so a title that can only be rented or bought is not available to stream (ST-201).
+
+### ST-005: The iPhone app is the only client
+
+Only the iPhone app shows streaming availability; the web app adds no streaming UI.
+The web's existing watch provider region setting still sets the country (ST-100).
 
 ## Preferences
 
@@ -76,14 +86,14 @@ Filtering another user's public list by My services uses the viewer's services a
 ### ST-200: Movie, TV, and season detail show Where to Watch
 
 The section appears for TMDB movie, TV, and season detail, for the effective country.
-It lists offer groups in this order, omitting empty groups: Stream, Free, Free with ads, Rent, Buy.
+It lists offer groups in this order, omitting empty groups: Stream, Free, Free with ads.
 Inside each group, the user's services come first and are marked; the rest follow JustWatch display priority.
 When at least one of the user's services streams the title, the section says so up front (for example "Streaming on Netflix").
 Tapping a provider opens the title's TMDB watch page for that country in the browser.
 
 ### ST-201: Unavailable titles say so
 
-When the title has no offers in the country, the section reads "Not available to stream in {Country}." and still shows the JustWatch credit.
+When the title has no streaming offers in the country, including when it can only be rented or bought, the section reads "Not available to stream in {Country}." and still shows the JustWatch credit.
 
 ### ST-202: Users without services are invited to add them
 
@@ -194,10 +204,10 @@ On success it replaces the selection, saves the region, queues the library check
       ]
     },
     {
-      "type": "rent",
-      "label": "Rent",
+      "type": "ads",
+      "label": "Free with ads",
       "providers": [
-        { "provider_id": 2, "name": "Apple TV Store", "logo_url": "…", "display_priority": 9, "is_mine": false }
+        { "provider_id": 73, "name": "Tubi TV", "logo_url": "…", "display_priority": 20, "is_mine": false }
       ]
     }
   ],
@@ -253,7 +263,7 @@ The backend sends `watch_region`, `with_watch_providers` (pipe-joined, meaning a
 
 - `StreamingProvider(id = TMDB provider_id, name, logo_path, display_priority)`.
 - `StreamingAvailability(title_type movie|tv, tmdb_id, region, link, fetched_at)`, unique per title and region.
-- `StreamingOffer(availability, provider, monetization, display_priority)`, unique per availability, provider, and type.
+- `StreamingOffer(availability, provider, monetization, display_priority)`, unique per availability, provider, and type. Only `flatrate`, `free`, and `ads` offers are written (ST-004).
 - `UserStreamingService(user, provider)`, unique per user and provider.
 - Snapshots are written only for active countries (ST-400).
 

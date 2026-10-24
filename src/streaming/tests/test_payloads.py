@@ -62,8 +62,6 @@ class WhereToWatchTests(TestCase):
                 ("flatrate", "Stream"),
                 ("free", "Free"),
                 ("ads", "Free with ads"),
-                ("rent", "Rent"),
-                ("buy", "Buy"),
             ],
         )
         self.assertEqual(
@@ -77,7 +75,6 @@ class WhereToWatchTests(TestCase):
             },
         )
         self.assertEqual(_provider_ids(payload, "flatrate"), [8, 1899])
-        self.assertEqual(_provider_ids(payload, "rent"), [10, 2])
 
     def test_my_services_come_first_and_are_marked(self):
         self._subscribe(MAX)
@@ -90,15 +87,25 @@ class WhereToWatchTests(TestCase):
         self.assertTrue(payload["has_services"])
         self.assertTrue(payload["on_my_services"])
 
-    def test_rent_and_buy_never_count_as_on_my_services(self):
+    def test_rent_and_buy_are_not_shown(self):
         self._subscribe(APPLE, HULU)
 
         payload = self._build()
 
         self.assertTrue(payload["has_services"])
         self.assertFalse(payload["on_my_services"])
-        self.assertEqual(_provider_ids(payload, "rent"), [2, 10])
-        self.assertTrue(payload["groups"][3]["providers"][0]["is_mine"])
+        self.assertEqual([group["type"] for group in payload["groups"]], ["flatrate", "free", "ads"])
+        shown = {provider["provider_id"] for group in payload["groups"] for provider in group["providers"]}
+        self.assertEqual(shown, {8, 1899, 191, 73})
+
+    def test_title_only_to_rent_or_buy_is_not_available_to_stream(self):
+        self.user.watch_provider_region = "FR"
+        self.user.save(update_fields=["watch_provider_region"])
+
+        payload = self._build()
+
+        self.assertEqual(payload["groups"], [])
+        self.assertEqual(payload["link"], TITLE_RESULTS["FR"]["link"])
 
     def test_unavailable_title_returns_empty_groups(self):
         payload = self._build(metadata={"providers": {"GB": TITLE_RESULTS["GB"]}})
@@ -174,3 +181,4 @@ class WhereToWatchTests(TestCase):
             payload = self._build()
 
         self.assertEqual(_provider_ids(payload, "flatrate"), [8, 15])
+        self.assertEqual([group["type"] for group in payload["groups"]], ["flatrate"])

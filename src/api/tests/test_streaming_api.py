@@ -325,7 +325,7 @@ class WhereToWatchDetailApiTests(TestCase):
         self.assertEqual((where["region"], where["region_name"]), ("US", "United States"))
         self.assertTrue(where["has_services"])
         self.assertTrue(where["on_my_services"])
-        self.assertEqual([group["type"] for group in where["groups"]], ["flatrate", "free", "ads", "rent", "buy"])
+        self.assertEqual([group["type"] for group in where["groups"]], ["flatrate", "free", "ads"])
         self.assertEqual(where["groups"][0]["providers"][0]["provider_id"], 8)
         self.assertTrue(where["groups"][0]["providers"][0]["is_mine"])
         self.assertEqual(where["attribution"]["name"], "JustWatch")

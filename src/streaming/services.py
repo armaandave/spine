@@ -17,13 +17,12 @@ from streaming.region_names import REGION_NAMES
 ATTRIBUTION = {"name": "JustWatch", "url": "https://www.justwatch.com"}
 FRESH_FOR = timedelta(hours=24)
 LOGO_BASE_URL = "https://image.tmdb.org/t/p/w154"
-# ST-200 order and labels for offer groups.
+# ST-200 order and labels for offer groups. Only streaming offers count, so
+# TMDB's rent and buy offers are never stored or shown (ST-004).
 OFFER_GROUPS = (
     ("flatrate", "Stream"),
     ("free", "Free"),
     ("ads", "Free with ads"),
-    ("rent", "Rent"),
-    ("buy", "Buy"),
 )
 REGION_HEADER = "X-Spine-Region"
 UNSET_REGION = "UNSET"

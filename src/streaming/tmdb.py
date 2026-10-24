@@ -100,8 +100,8 @@ def parse_provider(entry, region=None):
 def parse_offers(region_data):
     """Return the offers in one region's TMDB payload, in OFFER_GROUPS order.
 
-    Unknown keys are ignored and a repeated provider/type pair keeps its first
-    entry.
+    Keys outside OFFER_GROUPS, such as rent and buy, are ignored, and a
+    repeated provider/type pair keeps its first entry.
     """
     if not isinstance(region_data, dict):
         return []

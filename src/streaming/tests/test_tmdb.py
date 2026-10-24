@@ -60,7 +60,7 @@ class FetchTitleProvidersTests(TestCase):
 class ParsingTests(TestCase):
     """TMDB payload parsing."""
 
-    def test_parse_offers_covers_every_type_and_skips_unknown_keys(self):
+    def test_parse_offers_keeps_streaming_types_and_skips_rent_buy_and_unknown_keys(self):
         offers = tmdb.parse_offers(TITLE_RESULTS["US"])
 
         self.assertEqual(
@@ -70,9 +70,6 @@ class ParsingTests(TestCase):
                 ("flatrate", 8),
                 ("free", 191),
                 ("ads", 73),
-                ("rent", 10),
-                ("rent", 2),
-                ("buy", 2),
             ],
         )
         self.assertEqual(offers[0].name, "HBO Max")
@@ -82,7 +79,7 @@ class ParsingTests(TestCase):
         offers = tmdb.parse_offers(
             {
                 "flatrate": [{"provider_name": "No ID"}, {"provider_id": 0}, "junk", NETFLIX, NETFLIX],
-                "rent": "not-a-list",
+                "free": "not-a-list",
             },
         )
 

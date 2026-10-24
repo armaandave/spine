@@ -35,7 +35,7 @@ class StoreSnapshotTests(TestCase):
     def setUp(self):
         reset_streaming_state(self)
 
-    def test_writes_one_row_per_region_with_every_offer_type(self):
+    def test_writes_one_row_per_region_with_every_streaming_offer(self):
         written = sync.store_snapshots("movie", 693134, TITLE_RESULTS, {"US", "gb", "CA", "bad"})
 
         self.assertEqual(written, {"US", "GB", "CA"})
@@ -49,12 +49,9 @@ class StoreSnapshotTests(TestCase):
             _offers("movie", "693134", "US"),
             [
                 ("ads", 73, 20),
-                ("buy", 2, 9),
                 ("flatrate", 8, 1),
                 ("flatrate", 1899, 151),
                 ("free", 191, 30),
-                ("rent", 2, 9),
-                ("rent", 10, 8),
             ],
         )
         self.assertEqual(_offers("movie", "693134", "GB"), [("flatrate", 8, 1)])

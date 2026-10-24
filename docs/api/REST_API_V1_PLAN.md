@@ -930,7 +930,7 @@ Rules:
 - Anime and manga expose MAL/MangaUpdates related sections such as `related_anime`, `related_manga`, and recommendations.
 - TV seasons are top-level `seasons`, not `related_sections`.
 - Season detail exposes top-level `episodes` with `runtime` strings.
-- TMDB movie, TV, and season detail add `where_to_watch` for the viewer's effective country (see Streaming Availability): `region`, `region_name`, `link`, `has_services`, `on_my_services`, non-empty offer `groups` in Stream, Free, Free with ads, Rent, Buy order (the viewer's services first, marked `is_mine`), and `attribution`. It is `null` for other media and when availability is disabled. Seasons use season-level offers. The legacy `providers` field is unchanged.
+- TMDB movie, TV, and season detail add `where_to_watch` for the viewer's effective country (see Streaming Availability): `region`, `region_name`, `link`, `has_services`, `on_my_services`, non-empty offer `groups` in Stream, Free, Free with ads order (never Rent or Buy) (the viewer's services first, marked `is_mine`), and `attribution`. It is `null` for other media and when availability is disabled. Seasons use season-level offers. The legacy `providers` field is unchanged.
 - `rating_distribution` uses only actual Spine diary ratings visible outside private scope and returns `[]` when there are no ratings.
 
 ## New Models and Migrations

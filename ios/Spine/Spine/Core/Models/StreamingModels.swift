@@ -102,7 +102,7 @@ struct WhereToWatch: Decodable, Equatable {
     let hasServices: Bool
     /// True when one of the user's services streams the title (Stream, Free, or Free with ads).
     let onMyServices: Bool
-    /// Offer groups in Stream, Free, Free with ads, Rent, Buy order. Empty means not available in the country.
+    /// Offer groups in Stream, Free, Free with ads order. Empty means not available to stream in the country.
     let groups: [WhereToWatchGroup]
     let attribution: StreamingAttribution?
 
@@ -151,9 +151,9 @@ struct WhereToWatchGroup: Decodable, Equatable, Identifiable {
     /// Offer types that count as streaming. Rent and Buy never do.
     static let streamableTypes: Set<String> = ["flatrate", "free", "ads"]
 
-    /// `flatrate`, `free`, `ads`, `rent`, or `buy`.
+    /// `flatrate`, `free`, or `ads`. The API doesn't send Rent or Buy.
     let type: String
-    /// "Stream", "Free", "Free with ads", "Rent", or "Buy".
+    /// "Stream", "Free", or "Free with ads".
     let label: String
     let providers: [WhereToWatchProvider]
 
