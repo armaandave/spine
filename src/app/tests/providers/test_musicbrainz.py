@@ -140,8 +140,11 @@ class MusicBrainzTests(TestCase):
             params={
                 "fmt": "json",
                 "query": (
-                    r"(releasegroup:(Beyoncé \(Deluxe\)\: Hits\?) OR "
-                    r"artist:(Beyoncé \(Deluxe\)\: Hits\?))"
+                    r"((releasegroup:beyoncé OR artist:beyoncé) AND "
+                    r"(releasegroup:\(deluxe\)\: OR artist:\(deluxe\)\:) AND "
+                    r"(releasegroup:hits\? OR artist:hits\?))^10 OR "
+                    r"(releasegroup:(beyoncé \(deluxe\)\: hits\?) OR "
+                    r"artist:(beyoncé \(deluxe\)\: hits\?))"
                 ),
                 "limit": 12,
                 "offset": 24,
@@ -152,6 +155,29 @@ class MusicBrainzTests(TestCase):
             },
             request_session=services.musicbrainz_session,
         )
+
+    def test_search_query_ranks_albums_with_every_word_first(self):
+        # Any word alone ranked "Dark Age" by Dark Age above My Beautiful Dark
+        # Twisted Fantasy, past the 100 results search re-ranks.
+        self.assertEqual(
+            musicbrainz._release_group_query("my beautiful da"),
+            "((releasegroup:my OR artist:my) AND "
+            "(releasegroup:beautiful OR artist:beautiful) AND "
+            "(releasegroup:da OR artist:da OR releasegroup:da* OR artist:da*))^10 OR "
+            "(releasegroup:(my beautiful da) OR artist:(my beautiful da))",
+        )
+
+    def test_search_query_words(self):
+        query = musicbrainz._release_group_query("Simon & Garfunkel AND Bridge Över")
+        every_word, any_word = query.split(")^10 OR ")
+
+        self.assertNotIn(":&", every_word)  # nothing to match
+        # A typed AND is a word, not an operator.
+        self.assertIn("(releasegroup:and OR artist:and)", every_word)
+        self.assertIn("releasegroup:(simon & garfunkel and bridge över)", any_word)
+        self.assertIn("releasegroup:över OR artist:över OR releasegroup:over* OR artist:over*", every_word)
+        self.assertNotIn("*", musicbrainz._release_group_query("good kid m"))
+        self.assertNotIn("*", musicbrainz._release_group_query("Hits?"))
 
     @override_settings(VERSION="1.2.3", MUSICBRAINZ_CONTACT="contact@example.com")
     @patch("app.providers.musicbrainz.lookup_release_group_popularity")

@@ -818,3 +818,42 @@ class ServicesTests(TestCase):
                 genre="Rock",
                 platform="Spotify",
             )
+
+
+class MusicBrainzSessionTests(TestCase):
+    """A search waiting for MusicBrainz drops out once its person searches again."""
+
+    url = "https://musicbrainz.org/ws/2/release-group?query=dark"
+
+    def setUp(self):
+        self.session = services.MusicBrainzSession(per_second=1)
+        self.addCleanup(self.session.close)
+
+    def searching(self, superseded):
+        token = services.search_superseded.set(superseded)
+        self.addCleanup(services.search_superseded.reset, token)
+
+    @patch("requests.Session.send")
+    def test_waiting_search_gives_up_its_turn_once_replaced(self, send):
+        self.session.limiter.try_acquire("musicbrainz.org")  # this second's turn is taken
+        self.searching(MagicMock(side_effect=[False, True]))
+
+        with self.assertRaises(services.SearchSuperseded):
+            self.session.get(self.url)
+
+        send.assert_not_called()
+
+    @patch("requests.Session.send")
+    def test_current_search_takes_one_turn(self, send):
+        send.return_value = MagicMock(status_code=200)
+        self.searching(lambda: False)
+
+        with patch.object(
+            self.session.limiter,
+            "try_acquire",
+            wraps=self.session.limiter.try_acquire,
+        ) as acquire:
+            self.session.get(self.url)
+
+        acquire.assert_called_once()
+        send.assert_called_once()
