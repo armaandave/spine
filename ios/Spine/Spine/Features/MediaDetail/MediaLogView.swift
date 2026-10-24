@@ -455,26 +455,13 @@ struct MediaLogView: View {
                     if viewModel.mode == .progress {
                         progressSection
                     } else {
-                        finishedSections
+                        finishedSections(scrollProxy: proxy)
                     }
                 }
                 .listSectionSpacing(.compact)
                 .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
                 .disabled(viewModel.isSaving)
-                .onChange(of: focusedField) { oldField, newField in
-                    if oldField == .tag, newField != .tag {
-                        viewModel.tagDraft.commitQuery()
-                    }
-                    if newField == .tag {
-                        scrollToTags(proxy)
-                    }
-                }
-                .onChange(of: LogTagsSection<LogField>.scrollTarget(for: viewModel.tagDraft)) {
-                    if focusedField == .tag {
-                        scrollToTags(proxy)
-                    }
-                }
             }
             .background(alignment: .top) {
                 backdrop
@@ -526,7 +513,9 @@ struct MediaLogView: View {
     private var header: some View {
         LogHeader(
             title: viewModel.selectedTitle,
-            subtitle: viewModel.detail.subtitle ?? viewModel.detail.releaseDate.map { LogHeader.dateLabel($0) },
+            subtitle: viewModel.detail.subtitle
+                ?? DiaryDateFormatter.exactDate(from: viewModel.detail.releaseDate)
+                ?? viewModel.detail.releaseDate,
             posterURL: viewModel.detail.displayPosterURL,
             mediaType: viewModel.detail.ref.mediaType,
             orientation: viewModel.detail.posterOrientation,
@@ -542,7 +531,7 @@ struct MediaLogView: View {
     }
 
     @ViewBuilder
-    private var finishedSections: some View {
+    private func finishedSections(scrollProxy: ScrollViewProxy) -> some View {
         if viewModel.supportsSeasonLogging {
             Section {
                 Picker("Season", selection: $viewModel.selectedSeasonNumber) {
@@ -607,7 +596,7 @@ struct MediaLogView: View {
                 .focused($focusedField, equals: .review)
         }
 
-        LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag)
+        LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag, scrollProxy: scrollProxy)
 
         Section {
             if !viewModel.selectedRef.usesCalendarConsumptionDate {
@@ -674,13 +663,6 @@ struct MediaLogView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
                 .accessibilityIdentifier("media-log.save-error")
-        }
-    }
-
-    private func scrollToTags(_ proxy: ScrollViewProxy) {
-        let target = LogTagsSection<LogField>.scrollTarget(for: viewModel.tagDraft)
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(target, anchor: .bottom)
         }
     }
 

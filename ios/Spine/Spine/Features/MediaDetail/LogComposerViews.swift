@@ -33,13 +33,18 @@ final class LogTagDraft {
         hasLoaded = true
     }
 
+    /// Return or comma ends a tag.
+    nonisolated static func isSeparator(_ character: Character) -> Bool {
+        character == "\n" || character == ","
+    }
+
     nonisolated static func containsSeparator(_ text: String) -> Bool {
-        text.contains { $0 == "\n" || $0 == "," }
+        text.contains(where: isSeparator)
     }
 
     /// Text typed into the tag field. Everything before a return or comma becomes a tag.
     func updateQuery(_ text: String) {
-        let parts = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "," }
+        let parts = text.split(omittingEmptySubsequences: false, whereSeparator: Self.isSeparator)
         guard parts.count > 1 else {
             query = text
             return
@@ -77,16 +82,19 @@ final class LogTagDraft {
         excluding added: [String],
         limit: Int = 5
     ) -> [DiaryTagSuggestion] {
-        let available = library.filter { suggestion in
-            !added.contains { $0.caseInsensitiveCompare(suggestion.name) == .orderedSame }
-        }
+        let addedNames = Set(added.map { $0.lowercased() })
         let needle = query.trimmingCharacters(in: .whitespaces)
-        guard !needle.isEmpty else { return Array(available.prefix(limit)) }
-
         let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
-        let startsWith = available.filter { $0.name.range(of: needle, options: options.union(.anchored)) != nil }
-        let contains = available.filter { suggestion in
-            suggestion.name.range(of: needle, options: options) != nil && !startsWith.contains(suggestion)
+        var startsWith: [DiaryTagSuggestion] = []
+        var contains: [DiaryTagSuggestion] = []
+
+        for suggestion in library where !addedNames.contains(suggestion.name.lowercased()) {
+            if needle.isEmpty || suggestion.name.range(of: needle, options: options.union(.anchored)) != nil {
+                startsWith.append(suggestion)
+                if startsWith.count == limit { break }
+            } else if contains.count < limit, suggestion.name.range(of: needle, options: options) != nil {
+                contains.append(suggestion)
+            }
         }
         return Array((startsWith + contains).prefix(limit))
     }
@@ -186,13 +194,6 @@ struct LogHeader: View {
 
             Spacer(minLength: 0)
         }
-    }
-
-    /// "Feb 23, 2017" for an API date like "2017-02-23"; anything else (a bare year) as is.
-    static func dateLabel(_ raw: String) -> String {
-        let parts = raw.prefix(10).split(separator: "-")
-        guard parts.count == 3, let date = CalendarDateCodec.date(from: String(raw.prefix(10))) else { return raw }
-        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }
 
@@ -303,24 +304,33 @@ struct LogStars: View {
 }
 
 /// The tags section: added tags, the field, and the user's matching tags while typing.
+/// It keeps its own rows in view and reacts to typing itself, so a keystroke here doesn't
+/// redraw the rest of the form.
 struct LogTagsSection<Focus: Hashable>: View {
     @Bindable var draft: LogTagDraft
     let focus: FocusState<Focus?>.Binding
     let focusValue: Focus
+    let scrollProxy: ScrollViewProxy
 
-    static var fieldID: String { "log-tags-field" }
+    private static var fieldID: String { "log-tags-field" }
 
-    static func suggestionID(_ name: String) -> String {
+    private static func suggestionID(_ name: String) -> String {
         "log-tag-suggestion-\(name)"
     }
 
     /// The last row of the section, to keep in view above the keyboard while typing.
-    static func scrollTarget(for draft: LogTagDraft) -> String {
-        draft.suggestions.last.map { suggestionID($0.name) } ?? fieldID
+    private var scrollTarget: String {
+        draft.suggestions.last.map { Self.suggestionID($0.name) } ?? Self.fieldID
     }
 
     private var isEditing: Bool {
         focus.wrappedValue == focusValue
+    }
+
+    private func scrollToLastRow() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            scrollProxy.scrollTo(scrollTarget, anchor: .bottom)
+        }
     }
 
     var body: some View {
@@ -375,6 +385,23 @@ struct LogTagsSection<Focus: Hashable>: View {
             .id(Self.fieldID)
             .sensoryFeedback(trigger: draft.tags.count) { oldCount, newCount in
                 newCount > oldCount ? SensoryFeedback.impact(weight: .light) : .selection
+            }
+            .onChange(of: isEditing) { _, editing in
+                guard editing else {
+                    // Done, a swipe or another field: keep what was typed as a tag.
+                    draft.commitQuery()
+                    return
+                }
+                // The suggestion rows and the keyboard arrive after focus does.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    scrollToLastRow()
+                }
+            }
+            .onChange(of: scrollTarget) {
+                if isEditing {
+                    scrollToLastRow()
+                }
             }
 
             if isEditing {

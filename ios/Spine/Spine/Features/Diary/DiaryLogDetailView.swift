@@ -235,7 +235,12 @@ struct DiaryLogDetailView: View {
         }
         .sheet(isPresented: $isEditing) {
             if let entry = viewModel.entry {
-                DiaryLogEditSheet(entry: entry, diaryRepository: diaryRepository, errorMessage: { viewModel.errorMessage }) { request in
+                DiaryLogEditSheet(
+                    entry: entry,
+                    diaryRepository: diaryRepository,
+                    backdropURL: viewModel.mediaDetail?.displayBackdropURL,
+                    errorMessage: { viewModel.errorMessage }
+                ) { request in
                     await viewModel.save(request)
                 }
             }
@@ -703,6 +708,7 @@ private struct DiaryLogEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: DiaryLogEditViewModel
     @FocusState private var focusedField: EditField?
+    let backdropURL: String?
     let onSave: (DiaryEntryUpdateRequest) async -> Bool
     let errorMessage: () -> String?
 
@@ -715,8 +721,9 @@ private struct DiaryLogEditSheet: View {
         case gamePercentage
     }
 
-    init(entry: DiaryEntry, diaryRepository: DiaryRepository, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
+    init(entry: DiaryEntry, diaryRepository: DiaryRepository, backdropURL: String? = nil, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
         _viewModel = State(initialValue: DiaryLogEditViewModel(entry: entry, diaryRepository: diaryRepository))
+        self.backdropURL = backdropURL
         self.onSave = onSave
         self.errorMessage = errorMessage
     }
@@ -783,7 +790,7 @@ private struct DiaryLogEditSheet: View {
                             .focused($focusedField, equals: .review)
                     }
 
-                    LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag)
+                    LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag, scrollProxy: proxy)
 
                     Section {
                         if !viewModel.entry.media.ref.usesCalendarConsumptionDate {
@@ -800,21 +807,8 @@ private struct DiaryLogEditSheet: View {
                 .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
                 .disabled(viewModel.isSaving)
-                .onChange(of: focusedField) { oldField, newField in
-                    if oldField == .tag, newField != .tag {
-                        viewModel.tagDraft.commitQuery()
-                    }
-                    if newField == .tag {
-                        scrollToTags(proxy)
-                    }
-                }
-                .onChange(of: LogTagsSection<EditField>.scrollTarget(for: viewModel.tagDraft)) {
-                    if focusedField == .tag {
-                        scrollToTags(proxy)
-                    }
-                }
             }
-            .background { LogBackdrop(url: URL(string: viewModel.entry.media.displayPosterURL ?? "")) }
+            .background { LogBackdrop(url: URL(string: backdropURL ?? viewModel.entry.media.displayPosterURL ?? "")) }
             .navigationTitle("Edit Log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -871,19 +865,14 @@ private struct DiaryLogEditSheet: View {
         viewModel.entry.media.ref.mediaType == "game"
     }
 
-    private func scrollToTags(_ proxy: ScrollViewProxy) {
-        let target = LogTagsSection<EditField>.scrollTarget(for: viewModel.tagDraft)
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(target, anchor: .bottom)
-        }
-    }
-
     private func save() {
+        guard !viewModel.isSaving else { return }
         focusedField = nil
         viewModel.tagDraft.commitQuery()
+        // Set before the task starts, so a quick second tap can't send the update twice.
+        viewModel.isSaving = true
+        viewModel.errorMessage = nil
         Task {
-            viewModel.isSaving = true
-            viewModel.errorMessage = nil
             defer { viewModel.isSaving = false }
             do {
                 if await onSave(try viewModel.request()) {

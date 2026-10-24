@@ -7254,17 +7254,6 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(diary.createdRequests.first?.tags, ["late night"])
     }
 
-    @MainActor
-    func testLogHeaderShowsReleaseDatesInTheUsualFormat() {
-        let february23 = Calendar.current.date(from: DateComponents(year: 2017, month: 2, day: 23))!
-        XCTAssertEqual(
-            LogHeader.dateLabel("2017-02-23"),
-            february23.formatted(.dateTime.month(.abbreviated).day().year())
-        )
-        XCTAssertNotEqual(LogHeader.dateLabel("2017-02-23"), "2017-02-23")
-        XCTAssertEqual(LogHeader.dateLabel("2017"), "2017")
-    }
-
     func testLogTagSeparatorsAreReturnAndComma() {
         XCTAssertTrue(LogTagDraft.containsSeparator("latin\n"))
         XCTAssertTrue(LogTagDraft.containsSeparator("cozy,"))
