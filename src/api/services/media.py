@@ -6,7 +6,7 @@ import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import suppress
+from contextlib import contextmanager, nullcontext, suppress
 from copy import deepcopy
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
@@ -583,14 +583,36 @@ def refresh_all_media_candidate(*, media_type, query, page, source):
     return summary
 
 
+@contextmanager
+def _latest_music_search(user, query):
+    """Let a music search drop out of MusicBrainz's line once its person searches again.
+
+    Search runs as you type, and MusicBrainz takes one request a second for the whole
+    app, so searches someone has typed past would hold up the one they're waiting for.
+    A search for the same text doesn't replace it.
+    """
+    if not getattr(user, "pk", None):
+        yield
+        return
+    key = f"music-search-latest:{user.pk}"
+    query = query.strip().lower()
+    cache.set(key, query, timeout=60)
+    reset = provider_services.search_superseded.set(lambda: cache.get(key, query) != query)
+    try:
+        yield
+    finally:
+        provider_services.search_superseded.reset(reset)
+
+
 def search_media(*, media_type, query, page=1, source=None, request=None, user=None):
     """Search provider metadata with a versioned cache key."""
-    source, data = _search_data(
-        media_type=media_type,
-        query=query,
-        page=page,
-        source=source,
-    )
+    with _latest_music_search(user, query) if media_type == MediaTypes.MUSIC.value else nullcontext():
+        source, data = _search_data(
+            media_type=media_type,
+            query=query,
+            page=page,
+            source=source,
+        )
 
     raw_results = data.get("results") or data.get("items") or []
     return [

@@ -1,3 +1,4 @@
+import contextvars
 import hashlib
 import logging
 import time
@@ -72,7 +73,41 @@ session = LimiterSession(
     bucket_kwargs={"redis": redis_db, "bucket_key": bucket_key},
 )
 
-musicbrainz_session = LimiterSession(
+# Set while a person's search runs: returns True once they've searched for something
+# else, so a search still waiting for MusicBrainz gives up its turn.
+search_superseded = contextvars.ContextVar("search_superseded", default=None)
+
+
+class SearchSuperseded(Exception):
+    """A newer search from the same person replaced this one while it waited."""
+
+
+class MusicBrainzSession(LimiterSession):
+    """MusicBrainz's one-request-a-second session, where a waiting search can drop out.
+
+    Search runs as you type, so searches someone has typed past would otherwise hold
+    up the one they're waiting for. The limiter keeps one thread at a time waiting
+    inside it, so a search waits in short turns and checks in between.
+    """
+
+    def send(self, request, **kwargs):
+        superseded = search_superseded.get()
+        if superseded is None:
+            return super().send(request, **kwargs)
+        bucket_name = self._bucket_name(request)
+        while True:
+            if superseded():
+                raise SearchSuperseded
+            if self.limiter.try_acquire(bucket_name, weight=1, timeout=0.1):
+                break
+        # The turn is taken, so skip LimiterSession's own wait.
+        response = requests.Session.send(self, request, **kwargs)
+        if response.status_code in self.limit_statuses:
+            self._fill_bucket(request)
+        return response
+
+
+musicbrainz_session = MusicBrainzSession(
     per_second=1,
     bucket_class=RedisBucket,
     bucket_kwargs={"redis": redis_db, "bucket_key": musicbrainz_bucket_key},
