@@ -7,16 +7,23 @@ final class MediaDiscoverViewModel {
     var isLoading = false
     var isLoadingNextPage = false
     var errorMessage: String?
+    /// The server needs the user to choose their streaming services before On my services can work.
+    var needsStreamingServices = false
     var totalCount = 0
 
     private let mediaRepository: MediaRepository
     private let onUnauthorized: () -> Void
-    private var request: MediaDiscoverRequest
+    private(set) var request: MediaDiscoverRequest
+    /// The genre, year, or platform pill Discover opened with.
+    let pillFilter: MediaDiscoverRequest.Filter?
     private var nextPage: String?
     private var hasAttemptedInitialLoad = false
+    /// Bumped by every load, so a response for earlier criteria is dropped.
+    private var requestGeneration = 0
 
     init(request: MediaDiscoverRequest, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
         self.request = request
+        self.pillFilter = request.filter
         self.mediaRepository = mediaRepository
         self.onUnauthorized = onUnauthorized
     }
@@ -29,20 +36,57 @@ final class MediaDiscoverViewModel {
         !hasAttemptedInitialLoad || isLoading
     }
 
+    var isOnMyServices: Bool {
+        request.service.isActive
+    }
+
+    var includesPillFilter: Bool {
+        request.filter != nil
+    }
+
+    /// The pill filter can be dropped only while On my services keeps the results narrowed.
+    var canTogglePillFilter: Bool {
+        pillFilter != nil && isOnMyServices
+    }
+
+    func setOnMyServices(_ isOn: Bool) async {
+        guard request.supportsServiceFilter, isOnMyServices != isOn else { return }
+        request.service = isOn ? .mine : .any
+        if !isOn, request.filter == nil {
+            request.filter = pillFilter
+        }
+        await reloadForNewCriteria()
+    }
+
+    func setIncludesPillFilter(_ isOn: Bool) async {
+        guard let pillFilter, includesPillFilter != isOn, isOn || isOnMyServices else { return }
+        request.filter = isOn ? pillFilter : nil
+        await reloadForNewCriteria()
+    }
+
     func loadNextPageIfNeeded(currentItem: MediaSummary) async {
         guard shouldLoadNextPage(currentItem: currentItem) else { return }
         await loadNextPage()
     }
 
+    /// Starts over from the first page. A load already in flight is superseded, not waited on.
     func load() async {
-        guard !isLoading else { return }
+        requestGeneration += 1
+        let generation = requestGeneration
         request.page = nil
         isLoading = true
+        isLoadingNextPage = false
         errorMessage = nil
-        defer { isLoading = false }
+        needsStreamingServices = false
+        defer {
+            if generation == requestGeneration {
+                isLoading = false
+            }
+        }
 
         do {
             let response = try await mediaRepository.discover(request)
+            guard generation == requestGeneration else { return }
             results = response.results
             totalCount = response.count
             nextPage = Self.page(from: response.next)
@@ -50,7 +94,9 @@ final class MediaDiscoverViewModel {
         } catch is CancellationError {
             return
         } catch {
+            guard generation == requestGeneration else { return }
             hasAttemptedInitialLoad = true
+            needsStreamingServices = isOnMyServices && StreamingFilterRules.isChooseServicesError(error)
             errorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -58,14 +104,28 @@ final class MediaDiscoverViewModel {
         }
     }
 
+    /// New criteria start from an empty grid, so an error or empty result is never hidden behind old results.
+    private func reloadForNewCriteria() async {
+        results = []
+        totalCount = 0
+        nextPage = nil
+        await load()
+    }
+
     func loadNextPage() async {
         guard let nextPage, !isLoadingNextPage else { return }
+        let generation = requestGeneration
         request.page = nextPage
         isLoadingNextPage = true
-        defer { isLoadingNextPage = false }
+        defer {
+            if generation == requestGeneration {
+                isLoadingNextPage = false
+            }
+        }
 
         do {
             let response = try await mediaRepository.discover(request)
+            guard generation == requestGeneration else { return }
             let existing = Set(results.map(\.id))
             results += response.results.filter { !existing.contains($0.id) }
             totalCount = response.count
@@ -73,6 +133,7 @@ final class MediaDiscoverViewModel {
         } catch is CancellationError {
             return
         } catch {
+            guard generation == requestGeneration else { return }
             errorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -101,12 +162,13 @@ struct MediaDiscoverView: View {
     @State private var viewModel: MediaDiscoverViewModel
     @State private var selectedMedia: MediaBrowsingSelection?
     @State private var edgeDragOffset: CGFloat = 0
+    @State private var isChoosingStreamingServices = false
 
-    private let request: MediaDiscoverRequest
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
     private let listRepository: ListRepository
+    private let streamingRepository: StreamingRepository
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
@@ -118,16 +180,17 @@ struct MediaDiscoverView: View {
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
         listRepository: ListRepository = AppRepositories.current().lists,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
-        self.request = request
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.listRepository = listRepository
+        self.streamingRepository = streamingRepository
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
@@ -149,8 +212,27 @@ struct MediaDiscoverView: View {
                         ProgressView()
                             .tint(.white)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if viewModel.needsStreamingServices, viewModel.results.isEmpty {
+                        ContentUnavailableView {
+                            Label("Choose your streaming services", systemImage: "play.tv")
+                        } description: {
+                            Text("Pick the services you subscribe to and see what's streaming on them.")
+                        } actions: {
+                            Button("Choose Services") {
+                                isChoosingStreamingServices = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.white)
+                            .foregroundStyle(.black)
+                        }
                     } else if let error = viewModel.errorMessage, viewModel.results.isEmpty {
                         ContentUnavailableView("Could not load media", systemImage: "exclamationmark.triangle", description: Text(error))
+                    } else if viewModel.results.isEmpty, viewModel.isOnMyServices {
+                        ContentUnavailableView(
+                            "Nothing streaming on your services",
+                            systemImage: "play.tv",
+                            description: Text("Turn off On my services to see everything.")
+                        )
                     } else if viewModel.results.isEmpty {
                         ContentUnavailableView("No results", systemImage: "square.grid.2x2", description: Text("Try another media detail pill."))
                     } else {
@@ -187,8 +269,13 @@ struct MediaDiscoverView: View {
                     }
                 }
                 .spineContentTransition(value: contentPhase)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if viewModel.request.supportsServiceFilter {
+                        serviceFilterBar
+                    }
+                }
             }
-            .navigationTitle(request.title)
+            .navigationTitle(viewModel.request.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -203,6 +290,13 @@ struct MediaDiscoverView: View {
                 if viewModel.results.isEmpty {
                     await viewModel.load()
                 }
+            }
+            .sheet(isPresented: $isChoosingStreamingServices) {
+                StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                guard viewModel.isOnMyServices else { return }
+                Task { await viewModel.load() }
             }
         }
         .background(Color.black)
@@ -237,6 +331,38 @@ struct MediaDiscoverView: View {
         )
     }
 
+    /// The opening pill plus On my services; either can narrow the results alone (ST-302).
+    /// Changing either while results load starts the load over.
+    private var serviceFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    if let pillFilter = viewModel.pillFilter {
+                        MediaDiscoverFilterPill(
+                            title: pillFilter.value,
+                            systemImage: viewModel.includesPillFilter ? "checkmark" : "plus",
+                            isSelected: viewModel.includesPillFilter
+                        ) {
+                            Task { await viewModel.setIncludesPillFilter(!viewModel.includesPillFilter) }
+                        }
+                        .allowsHitTesting(viewModel.canTogglePillFilter)
+                    }
+
+                    MediaDiscoverFilterPill(
+                        title: "On my services",
+                        systemImage: "play.tv",
+                        isSelected: viewModel.isOnMyServices
+                    ) {
+                        Task { await viewModel.setOnMyServices(!viewModel.isOnMyServices) }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 6)
+        }
+        .background(Color.black)
+    }
+
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { value in
@@ -252,6 +378,31 @@ struct MediaDiscoverView: View {
                     }
                 }
             }
+    }
+}
+
+private struct MediaDiscoverFilterPill: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white.opacity(isSelected ? 0.96 : 0.52))
+                .padding(.horizontal, 15)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(
+            isSelected
+                ? .regular.tint(.white.opacity(0.14)).interactive()
+                : .clear.interactive(),
+            in: Capsule()
+        )
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

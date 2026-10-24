@@ -325,10 +325,12 @@ class MusicPhase9ContractTests(TransactionTestCase):
         )
         responses["activity"] = self.client.get(f"/api/v1/users/{self.user.username}/activity/")
         responses["statistics"] = self.client.get("/api/v1/stats/me/summary/")
-        responses["filter_options"] = self.client.get(
-            "/api/v1/filter-options/",
-            {"scope": "tracking", "media_type": "music"},
-        )
+        # Streaming region names come from TMDB; pin them so the contract is offline.
+        with patch("streaming.services.region_names", return_value={"US": "United States"}):
+            responses["filter_options"] = self.client.get(
+                "/api/v1/filter-options/",
+                {"scope": "tracking", "media_type": "music"},
+            )
 
         self.assertTrue(
             all(

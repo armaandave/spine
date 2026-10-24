@@ -851,18 +851,28 @@ def discover_media(
     sort="vote_count",
     request=None,
     user=None,
+    watch_region=None,
+    watch_providers=None,
 ):
-    """Discover provider metadata with a versioned cache key."""
+    """Discover provider metadata with a versioned cache key.
+
+    ``watch_providers`` limits TMDB results to titles streamable on any of those
+    providers in ``watch_region`` (ST-302).
+    """
     source = source or default_source_for(media_type)
-    filters = urlencode(
-        {
-            "genre": genre or "",
-            "year": year or "",
-            "platform": platform or "",
-            "sort": sort,
-            "page_size": page_size or "",
-        },
-    )
+    filter_values = {
+        "genre": genre or "",
+        "year": year or "",
+        "platform": platform or "",
+        "sort": sort,
+        "page_size": page_size or "",
+    }
+    watch = {}
+    if watch_providers:
+        watch = {"watch_region": watch_region, "watch_providers": sorted(watch_providers)}
+        filter_values["watch_region"] = watch_region
+        filter_values["watch_providers"] = "|".join(map(str, watch["watch_providers"]))
+    filters = urlencode(filter_values)
     filters_hash = hashlib.sha256(filters.encode()).hexdigest()[:24]
     cache_key = f"api:v1:discover:{media_type}:{source}:{filters_hash}:p{page}"
     data = cache.get(cache_key)
@@ -876,6 +886,7 @@ def discover_media(
             year=year,
             platform=platform,
             sort=sort,
+            **watch,
         )
         empty_mal_genre = (
             source == Sources.MAL.value
@@ -1088,6 +1099,11 @@ def media_detail(
         summary["overview"] = synopsis
     ref = summary["ref"]
     item = _external_rating_item(ref, primary_metadata)
+    from streaming import payloads as streaming_payloads
+    from streaming import sync as streaming_sync
+
+    # ST-400: fill in missing snapshots from the metadata already fetched.
+    streaming_sync.sync_from_metadata(source, media_type, media_id, primary_metadata)
     if summary.get("poster_accent_color") is None:
         summary["poster_accent_color"] = poster_accent_color(metadata, ref)
     viewer_poster = _viewer_poster(user, ref["item_id"])
@@ -1214,6 +1230,14 @@ def media_detail(
         "related": metadata.get("related", {}),
         "related_sections": related_sections,
         "providers": watch_providers_for_user(metadata, user),
+        "where_to_watch": streaming_payloads.where_to_watch(
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            metadata=primary_metadata,
+            user=user,
+            request=request,
+        ),
         "community": community_stats(
             source=source,
             media_type=media_type,

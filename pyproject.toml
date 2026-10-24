@@ -105,6 +105,19 @@ max-doc-length = 88
 "src/integrations/**/*.py" = ["ALL"]
 "src/lists/**/*.py" = ["ALL"]
 "src/social/models.py" = ["D106", "DJ008"]
+"src/streaming/**/*.py" = [
+  "ARG001",
+  "ARG002",
+  "D102",
+  "D106",
+  "DJ008",
+  "E501",
+  "EM101",
+  "PLC0415",
+  "PLR2004",
+  "TRY003",
+]
+"src/streaming/tests/**/*.py" = ["S106"]
 "src/users/**/*.py" = ["ALL"]
 
 [tool.ruff.lint.pydocstyle]

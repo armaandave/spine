@@ -415,6 +415,15 @@ protocol FilterOptionsRepository {
     func options(scope: MediaFilterScope, filter: MediaFilterState) async throws -> MediaFilterOptionsResponse
 }
 
+/// The user's streaming country and services (docs/streaming-availability-contract.md).
+protocol StreamingRepository {
+    func regions() async throws -> [StreamingRegion]
+    /// The country's service catalog, popular first. A nil region asks for the user's effective country.
+    func providers(region: String?) async throws -> [StreamingProvider]
+    func preferences() async throws -> StreamingPreferences
+    func savePreferences(_ request: StreamingPreferencesUpdateRequest) async throws -> StreamingPreferences
+}
+
 protocol ImportRepository {
     func queueLetterboxdImport(
         fileData: Data,
@@ -456,6 +465,7 @@ struct AppRepositories {
     let lists: ListRepository
     let filterOptions: FilterOptionsRepository
     let imports: ImportRepository
+    let streaming: StreamingRepository
 
     init(
         auth: AuthRepository,
@@ -469,7 +479,8 @@ struct AppRepositories {
         profile: ProfileRepository,
         lists: ListRepository,
         filterOptions: FilterOptionsRepository = APIFilterOptionsRepository(client: AppEnvironment.apiClient),
-        imports: ImportRepository
+        imports: ImportRepository,
+        streaming: StreamingRepository = APIStreamingRepository(client: AppEnvironment.apiClient)
     ) {
         self.auth = auth
         self.media = media
@@ -483,6 +494,7 @@ struct AppRepositories {
         self.lists = lists
         self.filterOptions = filterOptions
         self.imports = imports
+        self.streaming = streaming
     }
 
     static func current() -> AppRepositories {
@@ -502,7 +514,8 @@ struct AppRepositories {
             profile: APIProfileRepository(client: client),
             lists: APIListRepository(client: client),
             filterOptions: APIFilterOptionsRepository(client: client),
-            imports: APIImportRepository(client: client)
+            imports: APIImportRepository(client: client),
+            streaming: APIStreamingRepository(client: client)
         )
     }
 }
@@ -1432,6 +1445,33 @@ struct APIFilterOptionsRepository: FilterOptionsRepository {
         }
         query += filter.queryItems()
         return try await client.get("/filter-options/", query: query, authenticated: true)
+    }
+}
+
+struct APIStreamingRepository: StreamingRepository {
+    let client: APIClient
+
+    func regions() async throws -> [StreamingRegion] {
+        let response: StreamingRegionsResponse = try await client.get("/streaming/regions/", authenticated: true)
+        return response.results
+    }
+
+    func providers(region: String?) async throws -> [StreamingProvider] {
+        let query = region.map { [URLQueryItem(name: "region", value: $0)] } ?? []
+        let response: StreamingProvidersResponse = try await client.get(
+            "/streaming/providers/",
+            query: query,
+            authenticated: true
+        )
+        return response.results
+    }
+
+    func preferences() async throws -> StreamingPreferences {
+        try await client.get("/me/streaming/", authenticated: true)
+    }
+
+    func savePreferences(_ request: StreamingPreferencesUpdateRequest) async throws -> StreamingPreferences {
+        try await client.put("/me/streaming/", body: request, authenticated: true)
     }
 }
 

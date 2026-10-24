@@ -6,6 +6,8 @@ struct MediaFilterButton: View {
     var options: MediaFilterOptionsResponse = .empty
     var mediaTypes: [String] = APIConstants.fallbackMediaTypes
     var showsTagFilter = true
+    /// For the Streaming Services screen the sheet can open.
+    var onUnauthorized: () -> Void = {}
     var onApply: () -> Void
 
     @State private var isPresented = false
@@ -41,6 +43,7 @@ struct MediaFilterButton: View {
                 options: options,
                 mediaTypes: mediaTypes,
                 showsTagFilter: showsTagFilter,
+                onUnauthorized: onUnauthorized,
                 onApply: onApply
             )
         }

@@ -128,6 +128,7 @@ INSTALLED_APPS = [
     "integrations",
     "lists",
     "social",
+    "streaming",
     "users",
     "debug_toolbar",
     "django_celery_beat",
@@ -367,6 +368,8 @@ MUSICBRAINZ_CONTACT = config(
     default="github@fuzzygrim.com",
 )
 MUSIC_DEFAULT_MARKET = config("MUSIC_DEFAULT_MARKET", default="US")
+# Where-to-watch region for users who have not picked one.
+STREAMING_DEFAULT_REGION = config("STREAMING_DEFAULT_REGION", default="US")
 LISTENBRAINZ_TOKEN = config(
     "LISTENBRAINZ_TOKEN",
     default=secret("LISTENBRAINZ_TOKEN_FILE", ""),
@@ -691,6 +694,10 @@ CELERY_BEAT_SCHEDULE = {
     "queue_stale_external_ratings": {
         "task": "Queue stale external ratings",
         "schedule": 60 * 60 * 24,  # every 24 hours
+    },
+    "queue_stale_streaming_availability": {
+        "task": "Queue stale streaming availability",
+        "schedule": 60 * 60 * 6,  # every 6 hours
     },
     "sync_nyt_featured_lists": {
         "task": "Sync NYT featured lists",

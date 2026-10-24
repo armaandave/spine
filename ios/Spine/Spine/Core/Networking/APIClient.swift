@@ -143,6 +143,7 @@ struct APIClient: Sendable {
             request.timeoutInterval = 120
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
+            Self.setRegionHeader(on: &request)
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let accessToken {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -322,6 +323,7 @@ struct APIClient: Sendable {
         request.timeoutInterval = requestTimeout ?? 10
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
+        Self.setRegionHeader(on: &request)
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -330,6 +332,23 @@ struct APIClient: Sendable {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    nonisolated static let regionHeaderField = "X-Spine-Region"
+
+    /// The device region as an ISO 3166-1 alpha-2 code ("US"), which the server uses as the streaming country until
+    /// the user saves one. nil when the locale has no region or it isn't a country (a UN M.49 area such as "419").
+    nonisolated static func regionHeaderValue(for locale: Locale = .current) -> String? {
+        guard let identifier = locale.region?.identifier,
+              identifier.count == 2,
+              identifier.allSatisfy({ $0.isASCII && $0.isLetter }) else { return nil }
+        return identifier.uppercased()
+    }
+
+    private static func setRegionHeader(on request: inout URLRequest) {
+        if let region = regionHeaderValue() {
+            request.setValue(region, forHTTPHeaderField: regionHeaderField)
+        }
     }
 
     /// `mapsUnauthorized: false` hands a 401 back like any other response, for the one caller that has to read
