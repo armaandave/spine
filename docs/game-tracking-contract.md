@@ -32,7 +32,7 @@ The following rules are inherited without another approval step:
 | Direct Planning | BK-101 | Assign Planning without inventing dates, progress, a playthrough, or a log. |
 | Progress-screen actions | BK-301, BK-304, BK-309 | Reuse Pause, Drop, Finish, Restart from Beginning, and Delete Playthrough for applicable Playing or Paused attempts. Apply the game laws to their results. |
 | Eye rating picker | SW-011, BK-102 | An optional rating picker must not undo an undated completion when dismissed. A real playthrough still uses its completion composer under GM-206. |
-| Diary fields and opinions | SW-100 through SW-107, SW-202 through SW-203, SW-300 through SW-303 | Reuse rating values, per-log opinions, source links, visible draft values, cancellation, and the same editor across entry points. Game progress follows GM-100 through GM-106 and GM-200 onward. |
+| Diary fields and opinions | SW-100 through SW-108, SW-202 through SW-203, SW-300 through SW-303 | Reuse rating values, per-log opinions, source links, visible draft values, cancellation, and the same editor across entry points. Game progress follows GM-100 through GM-106 and GM-200 onward. |
 | Dates and repeated logs | SW-005 through SW-007, BK-403 | Use local calendar dates. Permit distinct same-day logs. Derive last completion from the greatest completion date. Update the linked playthrough's completion date atomically when editing its log. Game date limits override book progress-date restrictions. |
 | Completion counts | BK-405, BK-406 | Library sections count unique games. Each completion log counts once. The undated fact counts once for lifetime completion, never date-based totals. Dropped attempts do not count as completions. Replay badges do not change counts. |
 | Privacy and activity | SW-400, SW-401 | Reuse account-level privacy and existing action-specific activity rules. A completion log creates one diary activity, not an extra rating activity. |
@@ -574,7 +574,7 @@ This differs from cancelling a completion composer under GM-300, which saves not
 ### GM-303: Current and diary opinions follow the shared source rules
 
 Reuse the rating and heart source rules from the single-weight contract, as books do.
-Apply SW-100 through SW-107 and SW-202 through SW-203 to those values and their sources.
+Apply SW-100 through SW-108 and SW-202 through SW-203 to those values and their sources.
 Game completion and status transitions still follow this game contract.
 
 - Each diary entry keeps its own optional rating and its own heart state.
@@ -583,7 +583,7 @@ Game completion and status transitions still follow this game contract.
 - A new log sets the current heart on or off and becomes its source.
 - Editing a source log updates the corresponding current value.
 - Clearing the source log's rating also clears the current rating.
-- Editing a log that is not the source leaves the corresponding current value unchanged.
+- Editing a log that is not the source leaves the corresponding current value unchanged, except that a log given a new rating fills an empty current rating and becomes its source (SW-108).
 - Directly changing or clearing a current value removes its link to older logs without changing those logs.
 - Rating and heart have separate source links. Changing one does not remove the other's link.
 - A later rated new log links the current rating again. Every later new log links the current heart again.

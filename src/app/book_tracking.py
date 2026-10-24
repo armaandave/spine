@@ -946,12 +946,15 @@ def update_completion(entry, data, *, tags=UNSET):
         if book.current_session_id == session.id:
             book.end_date = entry.consumed_at
     if "rating" in data:
+        previous_rating = entry.rating
         entry.rating = single_weight.validate_storage_rating(data["rating"])
         fields.append("rating")
         if rating_is_source:
             book.score = entry.rating
             if entry.rating is None:
                 book.rating_source = None
+        else:
+            single_weight.fill_empty_current_rating(book, entry, previous_rating)
     for field in (
         "review",
         "review_title",

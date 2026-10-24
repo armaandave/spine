@@ -260,7 +260,8 @@ laws in the Single-Weight Consumption Contract:
 - a newly saved completion log becomes the current rating and heart source;
 - editing the source log updates current state;
 - directly changing current state decouples it from existing logs;
-- editing a non-source log never changes current state; and
+- editing a non-source log never changes current state, except that a log given
+  a new rating fills an empty current rating and becomes its source (SW-108); and
 - a later completion log recouples current state.
 
 Deleting a completion log applies both those provenance laws and the journey

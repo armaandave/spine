@@ -91,6 +91,15 @@ class GameTrackingReviewTests(TestCase):
         self.assertEqual(game.score, 10)
         self.assertTrue(MediaLike.objects.filter(user=self.user, item=self.item).exists())
 
+    def test_rating_an_unrated_log_fills_an_empty_current_rating(self):
+        game_tracking.start(self.user, self.item)
+        _, log = game_tracking.complete(self.user, self.item, completion_date=self.today)
+        self.assertIsNone(self.game().score)
+        game_tracking.update_completion(log, {"rating": 6})
+        game = self.game()
+        self.assertEqual(game.score, 6)
+        self.assertEqual(game.rating_source_id, log.pk)
+
     def test_backdate_preserves_later_zero_and_unknown_fields_independently(self):
         start = self.today - timedelta(days=4)
         game_tracking.start(self.user, self.item, start_date=start)

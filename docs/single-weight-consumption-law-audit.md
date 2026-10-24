@@ -36,6 +36,7 @@ below omit that common path unless another suite is named.
 | SW-105 | Direct `set_rating(..., direct=True)` establishes the direct marker and clears `rating_source`; diary values are not rewritten. | `test_rating_couples_decouples_edits_clears_and_deletes_without_rollback` |
 | SW-106 | `delete_log` preserves a deleted source's current value as independent while other/direct evidence remains and never selects an older row. | `test_rating_couples_decouples_edits_clears_and_deletes_without_rollback` |
 | SW-107 | `rating_from_wire` accepts only 0.5 increments from 0.5–5.0; `rating_to_wire` converts doubled storage; zero maps to absent. | `test_api_rejects_missing_future_and_invalid_half_star_dates`; iOS `testSingleWeightRequestsEncodeDateOnlyWireRatingAndExplicitClears` |
+| SW-108 | `fill_empty_current_rating` couples an empty current rating to a log whose rating an edit changes; `update_log`, book `update_completion`, and game `update_completion` call it. | `test_rating_an_unrated_log_fills_an_empty_current_rating`; `test_rating_an_imported_unrated_log_shows_on_the_media_page` |
 
 ## Like laws
 
