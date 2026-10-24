@@ -6,14 +6,10 @@ import SwiftUI
 enum LogComposerStyle {
     static let starGold = Color(red: 0.94, green: 0.64, blue: 0.24)
     static let gameProgressFootnote = "Blank means unknown; zero means zero. Time replaces this playthrough's total rather than adding a session."
-    /// A translucent, glossy card: the blurred backdrop shows through it, with a soft sheen
-    /// at the top. It's a plain translucent fill rather than a live material, so scrolling
-    /// costs nothing extra.
-    static let rowBackground = LinearGradient(
-        colors: [.white.opacity(0.12), .white.opacity(0.06)],
-        startPoint: .top,
-        endPoint: .bottom
-    )
+    /// A translucent glass card: the blurred backdrop and its sheen show through it. An even
+    /// fill, because a row background repeats per row and a gradient would stripe multi-row
+    /// cards; and a plain fill rather than a live material, so scrolling costs nothing extra.
+    static let rowBackground = Color.white.opacity(0.09)
 }
 
 extension View {
@@ -115,9 +111,10 @@ final class LogTagDraft {
     }
 }
 
-/// A faint, blurred wash of the media's artwork behind the top of a log form, with a soft
-/// sheen, fading into the page. The blur and color boost are baked into the cached image when
-/// it loads, so nothing is re-blurred while the form scrolls or the keyboard moves.
+/// A faint, blurred wash of the media's artwork behind the whole log form, with a soft sheen,
+/// strongest at the top and staying faintly tinted to the bottom. The blur and color boost are
+/// baked into the cached image when it loads, so nothing is re-blurred while the form scrolls
+/// or the keyboard moves.
 struct LogBackdrop: View {
     let url: URL?
     var accentColor: Color?
@@ -240,7 +237,8 @@ struct LogRatingCard: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 36, height: 36)
-                            .contentShape(Circle())
+                            // Drawn at 36 pt to fit the row; taps count across 44 pt.
+                            .contentShape(Circle().inset(by: -4))
                     }
                     .buttonStyle(.plain)
                     .glassEffect(liked ? .regular.tint(.pink).interactive() : .regular.interactive(), in: .circle)
@@ -267,7 +265,7 @@ struct LogRatingCard: View {
                         .lineLimit(1)
                         .padding(.horizontal, 10)
                         .frame(minWidth: 36, minHeight: 36)
-                        .contentShape(Capsule())
+                        .contentShape(Capsule().inset(by: -4))
                     }
                     .buttonStyle(.plain)
                     .glassEffect(isRepeat ? .regular.tint(.green).interactive() : .regular.interactive(), in: .capsule)
