@@ -43,12 +43,16 @@ class LetterboxdImporter:
         with transaction.atomic():
             if self.mode == "overwrite":
                 self._cleanup()
-            self._import_history(export.diary, export.reviews, resolved)
+            liked_ids = self._liked_item_ids(export.likes, resolved)
+            already_liked = set(
+                MediaLike.objects.filter(user=self.user, item_id__in=liked_ids).values_list("item_id", flat=True),
+            )
+            self._import_history(export.diary, export.reviews, liked_ids, resolved)
             self._import_watched(export.watched, resolved)
             self._import_ratings(export.ratings, resolved)
             self._import_watchlist(export.watchlist, resolved)
             self._import_lists(export.lists, resolved)
-            self._import_likes(export.likes, resolved)
+            self._import_likes(export.likes, resolved, already_liked)
 
         warnings = "\n".join(dict.fromkeys(self.warnings))
         return dict(self.counts), warnings if warnings else None
@@ -66,7 +70,15 @@ class LetterboxdImporter:
             import_source="letterboxd",
         ).delete()
 
-    def _import_history(self, diary_rows, review_rows, resolved):
+    def _liked_item_ids(self, rows, resolved):
+        liked_ids = set()
+        for row in rows:
+            item = self._item_for(row, resolved)
+            if item:
+                liked_ids.add(item.id)
+        return liked_ids
+
+    def _import_history(self, diary_rows, review_rows, liked_ids, resolved):
         rows_by_id = {}
         for row in diary_rows:
             rows_by_id[row["source_id"]] = {**row, "from_diary": True, "from_review": False}
@@ -94,6 +106,8 @@ class LetterboxdImporter:
                     "consumed_at": row["date"],
                     "rating": row.get("rating"),
                     "review": row.get("review", ""),
+                    # The export says which films are liked, not which viewings.
+                    "liked": item.id in liked_ids,
                     "is_rewatch": row.get("rewatch"),
                     "tags": row.get("tags", []),
                     "from_diary": row["from_diary"],
@@ -186,14 +200,14 @@ class LetterboxdImporter:
                     self.counts["list_items"] += 1
             self.counts["lists"] += int(created)
 
-    def _import_likes(self, rows, resolved):
+    def _import_likes(self, rows, resolved, already_liked):
         for row in rows:
             item = self._item_for(row, resolved)
             if not item:
                 continue
-            created = not MediaLike.objects.filter(user=self.user, item=item).exists()
             single_weight.import_title_state(self.user, item, liked=True)
-            if created:
+            if item.id not in already_liked:
+                already_liked.add(item.id)
                 self.counts["likes"] += 1
 
     def _film_key(self, row):
