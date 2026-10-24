@@ -12,6 +12,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.serializers.common import crew_from_metadata, media_summary_from_item
+from api.services import media as media_service
 from api.services.filters import update_item_filter_metadata
 from api.services.media import _merge_manga_creators, external_ratings
 from app.models import (
@@ -34,6 +35,7 @@ from app.models import (
     Sources,
     Status,
 )
+from app.providers import services as provider_services
 from app.providers.services import ProviderAPIError
 from app.services import set_media_like, update_diary_entry_tags
 from lists.models import CustomList, CustomListItem
@@ -425,6 +427,26 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(album["poster_aspect_ratio"], 1.0)
         self.assertNotIn("search_score", album)
         search_mock.assert_called_once_with("year zero", 1)
+
+    def test_music_search_is_replaced_by_the_persons_next_search(self):
+        user = get_user_model().objects.create_user(username="music-typist")
+
+        replaced = media_service._music_search_superseded(user, "my beau")
+        media_service._music_search_superseded(user, " My Beau")
+        self.assertFalse(replaced())  # same text: the app may send it twice
+        media_service._music_search_superseded(user, "my beautiful")
+        self.assertTrue(replaced())
+        self.assertIsNone(media_service._music_search_superseded(None, "my beau"))
+
+    @patch("app.providers.musicbrainz.search")
+    def test_replaced_music_search_answers_conflict(self, search_mock):
+        search_mock.side_effect = provider_services.SearchSuperseded
+        self.client.force_authenticate(get_user_model().objects.create_user(username="music-typist"))
+
+        response = self.client.get("/api/v1/media/search/?media_type=music&q=my+beau")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["error"]["code"], "search_replaced")
 
     @patch("app.providers.musicbrainz.music")
     def test_music_detail_uses_generic_contract_and_metadata(self, music_mock):

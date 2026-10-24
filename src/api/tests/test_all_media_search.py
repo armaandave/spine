@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 
 from api.services import media as media_service
 from app.models import MediaTypes, Sources
+from app.providers import services as provider_services
 from app.tasks import refresh_all_media_search_candidate
 
 
@@ -141,6 +142,38 @@ class AllMediaSearchTests(TestCase):
         for call in provider_search.call_args_list:
             self.assertTrue(call.kwargs["preserve_ranking_fields"])
             self.assertEqual(call.kwargs["timeout"], media_service.ALL_MEDIA_SEARCH_TIMEOUT)
+
+    @patch("api.services.media.provider_services.search")
+    def test_replaced_music_search_replaces_the_whole_search(self, provider_search):
+        checks = {}
+
+        def search(media_type, *_args, **_kwargs):
+            checks[media_type] = provider_services.search_superseded.get()
+            if media_type == MediaTypes.MUSIC.value:
+                raise provider_services.SearchSuperseded
+            return {"results": []}
+
+        provider_search.side_effect = search
+
+        with self.assertRaises(provider_services.SearchSuperseded):
+            media_service.search_all_media(
+                media_types=[MediaTypes.MOVIE.value, MediaTypes.MUSIC.value],
+                query="my beau",
+                user=self.user,
+            )
+
+        # Only the music worker, the one waiting on MusicBrainz, can drop out.
+        self.assertIsNotNone(checks[MediaTypes.MUSIC.value])
+        self.assertIsNone(checks[MediaTypes.MOVIE.value])
+
+    @patch("api.views.media.media_service.search_all_media")
+    def test_replaced_all_search_answers_conflict(self, search_all):
+        search_all.side_effect = provider_services.SearchSuperseded
+
+        response = self.client.get("/api/v1/media/search/?scope=all&q=my+beau")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["error"]["code"], "search_replaced")
 
     @patch("api.services.media.provider_services.search")
     def test_provider_failure_returns_other_completed_results(self, provider_search):
