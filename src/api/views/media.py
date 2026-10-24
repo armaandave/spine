@@ -89,12 +89,15 @@ class MediaSearchView(MediaExposureMixin, APIView):
                 {"media_types": ["Enable at least one media type in Settings."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        payload = media_service.search_all_media(
-            media_types=media_types,
-            query=query,
-            request=request,
-            user=request.user,
-        )
+        try:
+            payload = media_service.search_all_media(
+                media_types=media_types,
+                query=query,
+                request=request,
+                user=request.user,
+            )
+        except provider_services.SearchSuperseded:
+            raise SearchReplaced from None
         if not payload["completed_media_types"]:
             raise AllMediaSearchUnavailable
         return Response(

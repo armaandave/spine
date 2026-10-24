@@ -143,8 +143,8 @@ class MusicBrainzTests(TestCase):
                     r"((releasegroup:beyoncé OR artist:beyoncé) AND "
                     r"(releasegroup:\(deluxe\)\: OR artist:\(deluxe\)\:) AND "
                     r"(releasegroup:hits\? OR artist:hits\?))^10 OR "
-                    r"(releasegroup:(Beyoncé \(Deluxe\)\: Hits\?) OR "
-                    r"artist:(Beyoncé \(Deluxe\)\: Hits\?))"
+                    r"(releasegroup:(beyoncé \(deluxe\)\: hits\?) OR "
+                    r"artist:(beyoncé \(deluxe\)\: hits\?))"
                 ),
                 "limit": 12,
                 "offset": 24,
@@ -168,10 +168,13 @@ class MusicBrainzTests(TestCase):
         )
 
     def test_search_query_words(self):
-        every_word = musicbrainz._release_group_query("Simon & Garfunkel AND Bridge Över").split(")^10")[0]
+        query = musicbrainz._release_group_query("Simon & Garfunkel AND Bridge Över")
+        every_word, any_word = query.split(")^10 OR ")
 
         self.assertNotIn(":&", every_word)  # nothing to match
-        self.assertIn("(releasegroup:and OR artist:and)", every_word)  # a word, not an operator
+        # A typed AND is a word, not an operator.
+        self.assertIn("(releasegroup:and OR artist:and)", every_word)
+        self.assertIn("releasegroup:(simon & garfunkel and bridge över)", any_word)
         self.assertIn("releasegroup:över OR artist:över OR releasegroup:over* OR artist:over*", every_word)
         self.assertNotIn("*", musicbrainz._release_group_query("good kid m"))
         self.assertNotIn("*", musicbrainz._release_group_query("Hits?"))

@@ -2,6 +2,7 @@ import contextvars
 import hashlib
 import logging
 import time
+from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import requests
@@ -80,6 +81,19 @@ search_superseded = contextvars.ContextVar("search_superseded", default=None)
 
 class SearchSuperseded(Exception):
     """A newer search from the same person replaced this one while it waited."""
+
+
+@contextmanager
+def replaceable_search(superseded):
+    """Let MusicBrainz requests in the block give up their turn once ``superseded()``.
+
+    ``None`` leaves them waiting as usual. Worker threads don't inherit it.
+    """
+    token = search_superseded.set(superseded)
+    try:
+        yield
+    finally:
+        search_superseded.reset(token)
 
 
 class MusicBrainzSession(LimiterSession):

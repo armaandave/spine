@@ -827,6 +827,7 @@ class MusicBrainzSessionTests(TestCase):
 
     def setUp(self):
         self.session = services.MusicBrainzSession(per_second=1)
+        self.addCleanup(self.session.close)
 
     def searching(self, superseded):
         token = services.search_superseded.set(superseded)

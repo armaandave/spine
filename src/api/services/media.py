@@ -6,7 +6,7 @@ import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import contextmanager, nullcontext, suppress
+from contextlib import suppress
 from copy import deepcopy
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
@@ -462,18 +462,19 @@ def _candidate_data(*, media_type, query, page, source, timeout, search_metrics=
             lock.release()
 
 
-def _candidate_worker(*, media_type, query, source, search_metrics):
+def _candidate_worker(*, media_type, query, source, search_metrics, superseded=None):
     started_at = time.monotonic()
     data = None
     try:
-        data, cache_status, provider_elapsed_ms, refresh_scheduled = _candidate_data(
-            media_type=media_type,
-            query=query,
-            page=1,
-            source=source,
-            timeout=ALL_MEDIA_SEARCH_TIMEOUT,
-            search_metrics=search_metrics,
-        )
+        with provider_services.replaceable_search(superseded):
+            data, cache_status, provider_elapsed_ms, refresh_scheduled = _candidate_data(
+                media_type=media_type,
+                query=query,
+                page=1,
+                source=source,
+                timeout=ALL_MEDIA_SEARCH_TIMEOUT,
+                search_metrics=search_metrics,
+            )
         search_metrics.update(
             cache_status=cache_status,
             cache_hit=cache_status in {"fresh", "stale", "coalesced"},
@@ -482,6 +483,8 @@ def _candidate_worker(*, media_type, query, source, search_metrics):
             refresh_scheduled=refresh_scheduled,
             result_count=len(data.get("results") or data.get("items") or []),
         )
+    except provider_services.SearchSuperseded:
+        search_metrics["outcome"] = "superseded"
     except TimeoutError:
         search_metrics.update(
             outcome="single_flight_timeout",
@@ -583,30 +586,25 @@ def refresh_all_media_candidate(*, media_type, query, page, source):
     return summary
 
 
-@contextmanager
-def _latest_music_search(user, query):
-    """Let a music search drop out of MusicBrainz's line once its person searches again.
+def _music_search_superseded(user, query):
+    """Mark this as the person's latest music search; return a check for a newer one.
 
     Search runs as you type, and MusicBrainz takes one request a second for the whole
     app, so searches someone has typed past would hold up the one they're waiting for.
     A search for the same text doesn't replace it.
     """
     if not getattr(user, "pk", None):
-        yield
-        return
+        return None
     key = f"music-search-latest:{user.pk}"
     query = query.strip().lower()
     cache.set(key, query, timeout=60)
-    reset = provider_services.search_superseded.set(lambda: cache.get(key, query) != query)
-    try:
-        yield
-    finally:
-        provider_services.search_superseded.reset(reset)
+    return lambda: cache.get(key, query) != query
 
 
 def search_media(*, media_type, query, page=1, source=None, request=None, user=None):
     """Search provider metadata with a versioned cache key."""
-    with _latest_music_search(user, query) if media_type == MediaTypes.MUSIC.value else nullcontext():
+    superseded = _music_search_superseded(user, query) if media_type == MediaTypes.MUSIC.value else None
+    with provider_services.replaceable_search(superseded):
         source, data = _search_data(
             media_type=media_type,
             query=query,
@@ -648,6 +646,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
         }
         for media_type in media_types
     }
+    music = MediaTypes.MUSIC.value
+    superseded = _music_search_superseded(user, query) if music in media_types else None
     executor = ThreadPoolExecutor(max_workers=len(media_types))
     futures = {
         media_type: executor.submit(
@@ -656,6 +656,7 @@ def search_all_media(*, media_types, query, request=None, user=None):
             query=query,
             source=provider_metrics[media_type]["source"],
             search_metrics=provider_metrics[media_type],
+            superseded=superseded if media_type == music else None,
         )
         for media_type in media_types
     }
@@ -691,6 +692,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
             continue
         source, data = future.result()
         metrics = provider_metrics[media_type]
+        if metrics["outcome"] == "superseded":
+            continue
         if data is None:
             unavailable.append(media_type)
             logger.warning(
@@ -726,6 +729,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
     for future in pending:
         future.cancel()
     executor.shutdown(wait=False, cancel_futures=True)
+    if provider_metrics.get(music, {}).get("outcome") == "superseded":
+        raise provider_services.SearchSuperseded
 
     ranked = rank_mixed_results(query, candidates, limit=settings.PER_PAGE)
     results = [

@@ -1405,10 +1405,11 @@ def _release_group_query(query):
     for "my beautiful dark", past the 100 that search re-ranks; it stays as the
     fallback so a typo still finds something.
     """
+    # Lowercase, so a typed AND, OR or NOT stays a word.
+    query = query.lower()
     escaped = escape_lucene(query)
     any_word = f"(releasegroup:({escaped}) OR artist:({escaped}))"
-    # Lowercase, so a typed AND, OR or NOT stays a word.
-    words = [word.lower() for word in query.split() if any(char.isalnum() for char in word)]
+    words = [word for word in query.split() if any(char.isalnum() for char in word)]
     if not words:
         return any_word
     clauses = [f"releasegroup:{escape_lucene(word)} OR artist:{escape_lucene(word)}" for word in words]

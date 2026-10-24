@@ -431,15 +431,12 @@ class ApiV1FoundationTests(TestCase):
     def test_music_search_is_replaced_by_the_persons_next_search(self):
         user = get_user_model().objects.create_user(username="music-typist")
 
-        with media_service._latest_music_search(user, "my beau"):
-            replaced = provider_services.search_superseded.get()
-            with media_service._latest_music_search(user, " My Beau"):
-                pass
-            self.assertFalse(replaced())  # same text: the app may send it twice
-            with media_service._latest_music_search(user, "my beautiful"):
-                pass
-            self.assertTrue(replaced())
-        self.assertIsNone(provider_services.search_superseded.get())
+        replaced = media_service._music_search_superseded(user, "my beau")
+        media_service._music_search_superseded(user, " My Beau")
+        self.assertFalse(replaced())  # same text: the app may send it twice
+        media_service._music_search_superseded(user, "my beautiful")
+        self.assertTrue(replaced())
+        self.assertIsNone(media_service._music_search_superseded(None, "my beau"))
 
     @patch("app.providers.musicbrainz.search")
     def test_replaced_music_search_answers_conflict(self, search_mock):
