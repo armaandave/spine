@@ -235,7 +235,12 @@ struct DiaryLogDetailView: View {
         }
         .sheet(isPresented: $isEditing) {
             if let entry = viewModel.entry {
-                DiaryLogEditSheet(entry: entry, diaryRepository: diaryRepository, errorMessage: { viewModel.errorMessage }) { request in
+                DiaryLogEditSheet(
+                    entry: entry,
+                    diaryRepository: diaryRepository,
+                    backdropURL: viewModel.mediaDetail?.displayBackdropURL,
+                    errorMessage: { viewModel.errorMessage }
+                ) { request in
                     await viewModel.save(request)
                 }
             }
@@ -624,14 +629,11 @@ private final class DiaryLogEditViewModel {
     var ratingSteps: Int
     var reviewTitle: String
     var review: String
-    var tags: [String]
-    var tagQuery = ""
-    var tagSuggestions: [DiaryTagSuggestion] = []
+    let tagDraft: LogTagDraft
     var liked: Bool
     var isRewatch: Bool
     var containsSpoilers: Bool
     var visibility: String
-    var isLoadingTags = false
     var isSaving = false
     var errorMessage: String?
 
@@ -651,7 +653,7 @@ private final class DiaryLogEditViewModel {
         } ?? 0
         reviewTitle = entry.reviewTitle ?? ""
         review = entry.review ?? ""
-        tags = entry.tags
+        tagDraft = LogTagDraft(tags: entry.tags)
         liked = entry.liked
         isRewatch = entry.isTrueReread ?? entry.isRewatch
         containsSpoilers = entry.containsSpoilers
@@ -674,29 +676,9 @@ private final class DiaryLogEditViewModel {
         ratingSteps = max(1, min(10, Int(ceil((clamped / width) * 10))))
     }
 
+    /// Loads the user's own tags once, for suggestions while they type.
     func loadTags() async {
-        isLoadingTags = true
-        defer { isLoadingTags = false }
-        do {
-            tagSuggestions = try await diaryRepository.tags(query: tagQuery)
-        } catch {
-            tagSuggestions = []
-        }
-    }
-
-    func addTypedTag() {
-        addTag(tagQuery)
-        tagQuery = ""
-    }
-
-    func addTag(_ rawTag: String) {
-        let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
-        tags.append(tag)
-    }
-
-    func removeTag(_ tag: String) {
-        tags.removeAll { $0 == tag }
+        try? await tagDraft.load(from: diaryRepository)
     }
 
     func request() throws -> DiaryEntryUpdateRequest {
@@ -708,7 +690,7 @@ private final class DiaryLogEditViewModel {
                 : nil,
             review: review,
             reviewTitle: reviewTitle,
-            tags: tags,
+            tags: tagDraft.tags,
             liked: liked,
             isRewatch: isRewatch,
             containsSpoilers: containsSpoilers,
@@ -725,283 +707,185 @@ private final class DiaryLogEditViewModel {
 private struct DiaryLogEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: DiaryLogEditViewModel
+    @FocusState private var focusedField: EditField?
+    let backdropURL: String?
     let onSave: (DiaryEntryUpdateRequest) async -> Bool
     let errorMessage: () -> String?
 
-    init(entry: DiaryEntry, diaryRepository: DiaryRepository, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
+    private enum EditField: Hashable {
+        case reviewTitle
+        case review
+        case tag
+        case gameHours
+        case gameMinutes
+        case gamePercentage
+    }
+
+    init(entry: DiaryEntry, diaryRepository: DiaryRepository, backdropURL: String? = nil, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
         _viewModel = State(initialValue: DiaryLogEditViewModel(entry: entry, diaryRepository: diaryRepository))
+        self.backdropURL = backdropURL
         self.onSave = onSave
         self.errorMessage = errorMessage
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            SpinePageBackground()
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-                    fields.disabled(viewModel.isSaving)
-                    tagEditor.disabled(viewModel.isSaving)
-                    if let error = viewModel.errorMessage {
-                        Text(error)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.red.opacity(0.92))
+        NavigationStack {
+            ScrollViewReader { proxy in
+                Form {
+                    Section {
+                        LogHeader(
+                            title: viewModel.entry.media.displayTitle,
+                            posterURL: viewModel.entry.media.displayPosterURL,
+                            mediaType: viewModel.entry.media.ref.mediaType,
+                            orientation: viewModel.entry.media.posterOrientation
+                        )
                     }
-                    saveButton
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+
+                    Section {
+                        LogRatingCard(
+                            ratingSteps: $viewModel.ratingSteps,
+                            liked: $viewModel.liked,
+                            isRepeat: $viewModel.isRewatch,
+                            repeatLabel: viewModel.repeatLabel,
+                            ratingLabel: viewModel.ratingLabel(),
+                            ratingIdentifier: "diary-log.rating"
+                        ) { locationX, width in
+                            viewModel.setRating(locationX: locationX, width: width)
+                        }
+                    }
+
+                    Section {
+                        DatePicker(
+                            viewModel.entry.media.ref.consumedDateLabel,
+                            selection: $viewModel.consumedAt,
+                            in: Date.distantPast...(viewModel.entry.media.ref.usesCalendarConsumptionDate ? Date() : Date.distantFuture),
+                            displayedComponents: .date
+                        )
+
+                        if isGame {
+                            LogGameProgressRows(
+                                draft: $viewModel.gameProgress,
+                                focus: $focusedField,
+                                hoursFocus: .gameHours,
+                                minutesFocus: .gameMinutes,
+                                percentageFocus: .gamePercentage
+                            )
+                        }
+                    } footer: {
+                        if isGame {
+                            Text(LogComposerStyle.gameProgressFootnote)
+                        }
+                    }
+
+                    Section {
+                        TextField("Review title", text: $viewModel.reviewTitle)
+                            .focused($focusedField, equals: .reviewTitle)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .review }
+
+                        TextField("Add a review…", text: $viewModel.review, axis: .vertical)
+                            .lineLimit(4...12)
+                            .focused($focusedField, equals: .review)
+                    }
+
+                    LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag, scrollProxy: proxy)
+
+                    Section {
+                        if !viewModel.entry.media.ref.usesCalendarConsumptionDate {
+                            Picker("Visibility", selection: $viewModel.visibility) {
+                                ForEach(APIConstants.visibilityChoices, id: \.self) { value in
+                                    Text(value.capitalized).tag(value)
+                                }
+                            }
+                        }
+                        Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
+                    }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 34)
+                .listSectionSpacing(.compact)
+                .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .disabled(viewModel.isSaving)
+            }
+            .background { LogBackdrop(url: URL(string: backdropURL ?? viewModel.entry.media.displayPosterURL ?? "")) }
+            .navigationTitle("Edit Log")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                    .disabled(viewModel.isSaving)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if viewModel.isSaving {
+                        ProgressView()
+                    } else {
+                        Button(role: .confirm) {
+                            save()
+                        } label: {
+                            Label("Save Changes", systemImage: "checkmark")
+                        }
+                    }
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
             }
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(viewModel.isSaving)
-        .scrollDismissesKeyboard(.interactively)
         .task {
             await viewModel.loadTags()
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Button { if !viewModel.isSaving { dismiss() } } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(.white.opacity(0.12), in: Circle())
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-
-            HStack(alignment: .bottom, spacing: 14) {
-                MediaArtwork(
-                    url: viewModel.entry.media.displayPosterURL,
-                    title: viewModel.entry.media.title,
-                    slot: .logSheet,
-                    mediaType: viewModel.entry.media.ref.mediaType,
-                    orientation: viewModel.entry.media.posterOrientation
-                )
-                .shadow(color: .black.opacity(0.42), radius: 16, y: 8)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Edit Log")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .textCase(.uppercase)
-                    Text(viewModel.entry.media.displayTitle)
-                        .font(.system(size: 28, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.78)
-                }
-            }
-        }
+    private var isGame: Bool {
+        viewModel.entry.media.ref.mediaType == "game"
     }
 
-    private var fields: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            fieldGroup {
-                DatePicker(
-                    viewModel.entry.media.ref.consumedDateLabel,
-                    selection: $viewModel.consumedAt,
-                    in: Date.distantPast...(viewModel.entry.media.ref.usesCalendarConsumptionDate ? Date() : Date.distantFuture),
-                    displayedComponents: [.date]
-                )
-                    .datePickerStyle(.compact)
-                    .colorScheme(.dark)
-                ratingPicker
-                if viewModel.entry.media.ref.mediaType == "game" {
-                    GameProgressFields(draft: $viewModel.gameProgress)
+    private func save() {
+        guard !viewModel.isSaving else { return }
+        focusedField = nil
+        viewModel.tagDraft.commitQuery()
+        // Set before the task starts, so a quick second tap can't send the update twice.
+        viewModel.isSaving = true
+        viewModel.errorMessage = nil
+        Task {
+            defer { viewModel.isSaving = false }
+            do {
+                if await onSave(try viewModel.request()) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    dismiss()
+                } else {
+                    viewModel.errorMessage = errorMessage() ?? "Could not save. Try again."
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
                 }
+            } catch {
+                viewModel.errorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
-            fieldGroup {
-                TextField("Review title", text: $viewModel.reviewTitle)
-                Divider().background(.white.opacity(0.12))
-                TextField("Review", text: $viewModel.review, axis: .vertical)
-                    .lineLimit(5...9)
-            }
-            fieldGroup {
-                if !viewModel.entry.media.ref.usesCalendarConsumptionDate {
-                    Picker("Visibility", selection: $viewModel.visibility) {
-                        ForEach(APIConstants.visibilityChoices, id: \.self) { value in
-                            Text(value.capitalized).tag(value)
-                        }
-                    }
-                }
-                Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
-            }
-        }
-    }
-
-    private var ratingPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                GeometryReader { proxy in
-                    HStack(spacing: 6) {
-                        ForEach(1...5, id: \.self) { star in
-                            Image(systemName: starSystemName(star))
-                                .font(.system(size: 32, weight: .bold))
-                                .foregroundStyle(viewModel.ratingSteps >= star * 2 - 1 ? .yellow : .white.opacity(0.26))
-                                .frame(width: 33)
-                        }
-                    }
-                    .accessibilityHidden(true)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { value in
-                        viewModel.setRating(locationX: value.location.x, width: proxy.size.width)
-                    })
-                }
-                .frame(width: 189, height: 42)
-                .accessibilityRepresentation {
-                    Slider(value: Binding(get: { Double(viewModel.ratingSteps) }, set: { viewModel.ratingSteps = Int($0) }), in: 0...10, step: 1) {
-                        Text("Rating")
-                    }
-                    .accessibilityValue(viewModel.ratingLabel())
-                    .accessibilityIdentifier("diary-log.rating")
-                }
-
-                Spacer(minLength: 0)
-                compactIconButton(systemName: viewModel.liked ? "heart.fill" : "heart", title: "Like", isSelected: viewModel.liked) {
-                    viewModel.liked.toggle()
-                }
-                compactIconButton(systemName: "arrow.clockwise.circle", title: viewModel.repeatLabel, isSelected: viewModel.isRewatch) {
-                    viewModel.isRewatch.toggle()
-                }
-            }
-
-            Text(viewModel.ratingLabel())
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(.white.opacity(0.62))
-        }
-    }
-
-    private func starSystemName(_ star: Int) -> String {
-        if viewModel.ratingSteps >= star * 2 { return "star.fill" }
-        if viewModel.ratingSteps == star * 2 - 1 { return "star.leadinghalf.filled" }
-        return "star"
-    }
-
-    private var tagEditor: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !viewModel.tags.isEmpty {
-                FlowLayout(spacing: 8) {
-                    ForEach(viewModel.tags, id: \.self) { tag in
-                        Button { viewModel.removeTag(tag) } label: {
-                            Label(tag, systemImage: "xmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 10)
-                                .frame(height: 30)
-                                .background(.white.opacity(0.13), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            fieldGroup {
-                HStack {
-                    TextField("Tags", text: $viewModel.tagQuery)
-                        .textInputAutocapitalization(.never)
-                        .onSubmit { viewModel.addTypedTag() }
-                        .task(id: viewModel.tagQuery) {
-                            await viewModel.loadTags()
-                        }
-                    Button {
-                        viewModel.addTypedTag()
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 22, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.tagQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-
-            if !viewModel.tagSuggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(viewModel.tagSuggestions, id: \.self) { suggestion in
-                            Button {
-                                viewModel.addTag(suggestion.name)
-                                viewModel.tagQuery = ""
-                            } label: {
-                                Text(suggestion.name)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.84))
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 30)
-                                    .background(.white.opacity(0.09), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var saveButton: some View {
-        Button {
-            Task {
-                viewModel.isSaving = true
-                defer { viewModel.isSaving = false }
-                do {
-                    if await onSave(try viewModel.request()) { dismiss() }
-                    else { viewModel.errorMessage = errorMessage() ?? "Could not save. Try again." }
-                } catch { viewModel.errorMessage = error.localizedDescription }
-            }
-        } label: {
-            HStack {
-                Spacer()
-                Group {
-                    if viewModel.isSaving {
-                        ProgressView().tint(.black)
-                    } else {
-                        Text("Save Changes").font(.system(size: 16, weight: .heavy))
-                    }
-                }
-                .spineContentTransition(value: viewModel.isSaving)
-                Spacer()
-            }
-            .foregroundStyle(.black)
-            .frame(height: 54)
-            .background(.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isSaving)
-    }
-
-    private func compactIconButton(systemName: String, title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(isSelected ? (systemName == "heart.fill" ? .pink : .black) : .white)
-                .frame(width: 42, height: 42)
-                .background(isSelected ? .white.opacity(0.94) : .white.opacity(0.12), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func fieldGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            content()
-        }
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundStyle(.white)
-        .tint(.white)
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.06))
         }
     }
 }

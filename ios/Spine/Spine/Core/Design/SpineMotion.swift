@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import SwiftUI
 
@@ -108,28 +109,32 @@ extension View {
 
 /// Loads through `SpineImagePipeline` (memory + disk cache) but keeps the `AsyncImagePhase` content API.
 /// A scrolled-back cell whose image is in memory renders it on the first frame, with no placeholder or fade.
-/// Pass `thumbnailSize` when the display size is fixed so the image is decoded at that size.
+/// Pass `thumbnailSize` when the display size is fixed so the image is decoded at that size, and
+/// `processors` for effects baked into the cached image (a blur) instead of applied on every frame.
 struct SpineAsyncImage<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lastSuccessfulImage: Image?
 
     let url: URL?
     let thumbnailSize: CGSize?
+    let processors: [any ImageProcessing]
     private let content: (AsyncImagePhase) -> Content
 
     init(
         url: URL?,
         thumbnailSize: CGSize? = nil,
+        processors: [any ImageProcessing] = [],
         @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
     ) {
         self.url = url
         self.thumbnailSize = thumbnailSize
+        self.processors = processors
         self.content = content
     }
 
     var body: some View {
         LazyImage(
-            request: SpineImagePipeline.request(url: url, thumbnailSize: thumbnailSize),
+            request: SpineImagePipeline.request(url: url, thumbnailSize: thumbnailSize, processors: processors),
             transaction: Transaction(animation: SpineMotion.animation(reduceMotion: reduceMotion))
         ) { state in
             resolvedContent(for: SpineImagePhase.phase(url: url, image: state.image, error: state.error))

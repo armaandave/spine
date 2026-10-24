@@ -39,6 +39,27 @@ final class SpineImagePipelineTests: XCTestCase {
         XCTAssertNil(request.thumbnail)
     }
 
+    func testRequestWithoutProcessorsKeepsTheImageAsIs() throws {
+        let request = try XCTUnwrap(SpineImagePipeline.request(url: Self.posterURL, thumbnailSize: nil))
+
+        XCTAssertTrue(request.processors.isEmpty)
+    }
+
+    @MainActor
+    func testLogBackdropBakesItsBlurIntoTheCachedImage() throws {
+        let request = try XCTUnwrap(SpineImagePipeline.request(
+            url: Self.posterURL,
+            thumbnailSize: CGSize(width: 180, height: 110),
+            processors: LogBackdrop.processors
+        ))
+
+        XCTAssertEqual(
+            request.processors.map(\.identifier),
+            LogBackdrop.processors.map(\.identifier)
+        )
+        XCTAssertTrue(request.processors.contains { $0.identifier.contains("gaussian_blur") })
+    }
+
     func testRequestWithSizeDecodesThumbnailThatFillsTheSlot() throws {
         let size = CGSize(width: 80, height: 120)
         let request = try XCTUnwrap(SpineImagePipeline.request(url: Self.posterURL, thumbnailSize: size))
