@@ -46,6 +46,7 @@ from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
 from social.models import Activity, ContentLike, SocialAuditLog
+from streaming import filters as streaming_filters
 
 LIST_PREVIEW_ITEM_LIMIT = 12
 PERSON_COMPLETION_BATCH_LIMIT = 25
@@ -715,6 +716,12 @@ class ListItemsView(APIView):
             request.query_params,
             "user_rating",
         )
+        list_items, streaming = streaming_filters.apply_service_filter(
+            list_items,
+            request.query_params,
+            user=request.user,
+            request=request,
+        )
         if request.query_params.get("sort") or request.query_params.get("ordering"):
             list_items = filter_service.order_queryset(
                 list_items,
@@ -760,6 +767,8 @@ class ListItemsView(APIView):
                 media_type__in=exposure.media_types(),
             ),
         )
+        if streaming is not None:
+            response.data["streaming"] = streaming
         return response
 
     def post(self, request, list_id):

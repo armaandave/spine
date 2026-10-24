@@ -8,6 +8,8 @@ struct MediaFilterSheet: View {
     let mediaTypes: [String]
     let showsTagFilter: Bool
     let onApply: () -> Void
+    private let streamingRepository: StreamingRepository
+    private let onUnauthorized: () -> Void
 
     @State private var draft: MediaFilterState
     @State private var isGenreExpanded = false
@@ -19,6 +21,8 @@ struct MediaFilterSheet: View {
         options: MediaFilterOptionsResponse,
         mediaTypes: [String],
         showsTagFilter: Bool = true,
+        streamingRepository: StreamingRepository = AppRepositories.current().streaming,
+        onUnauthorized: @escaping () -> Void = {},
         onApply: @escaping () -> Void
     ) {
         _filter = filter
@@ -27,6 +31,8 @@ struct MediaFilterSheet: View {
         self.mediaTypes = mediaTypes
         self.showsTagFilter = showsTagFilter
         self.onApply = onApply
+        self.streamingRepository = streamingRepository
+        self.onUnauthorized = onUnauthorized
         _draft = State(initialValue: filter.wrappedValue)
     }
 
@@ -35,6 +41,7 @@ struct MediaFilterSheet: View {
             Form {
                 sortSection
                 contextSection
+                serviceSection
                 yearSection
                 releaseSection
                 choiceSection("Genre", choices: options.genres, include: \.genres, exclude: \.excludedGenres)
@@ -79,6 +86,11 @@ struct MediaFilterSheet: View {
                     }
                 }
             }
+        }
+        // A service removed under Edit your services can't stay chosen. Options that failed to load change nothing.
+        .onChange(of: options.streaming?.services) { _, services in
+            guard let services else { return }
+            draft.service = draft.service.pruned(toAvailable: services)
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.large])
@@ -126,6 +138,82 @@ struct MediaFilterSheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var serviceSection: some View {
+        if let streaming = options.streaming,
+           StreamingFilterRules.showsServiceSection(scope: scope, options: options, mediaType: draft.mediaType) {
+            Section {
+                serviceRow(isSelected: draft.service == .any) {
+                    Text("Any")
+                } action: {
+                    draft.service = .any
+                }
+
+                serviceRow(isSelected: draft.service == .mine) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("My services")
+                        if streaming.services.isEmpty {
+                            Text("Choose your streaming services first.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } action: {
+                    draft.service = .mine
+                }
+                .disabled(streaming.services.isEmpty)
+
+                ForEach(streaming.services) { service in
+                    serviceRow(isSelected: draft.service.includes(providerId: service.providerId)) {
+                        HStack(spacing: 12) {
+                            StreamingFilterServiceLogo(urlString: service.logoURL)
+                            Text(service.label)
+                        }
+                    } action: {
+                        draft.service = draft.service.togglingProvider(service.providerId)
+                    }
+                }
+
+                NavigationLink {
+                    StreamingServicesView(repository: streamingRepository, onUnauthorized: onUnauthorized)
+                } label: {
+                    Text(streaming.services.isEmpty ? "Choose your streaming services" : "Edit your services")
+                }
+            } header: {
+                Text("Service")
+            } footer: {
+                Text(attribution(for: streaming))
+            }
+        }
+    }
+
+    private func attribution(for streaming: StreamingFilterOptions) -> AttributedString {
+        var text = AttributedString(streaming.attributionText)
+        if let range = text.range(of: "JustWatch", options: .backwards) {
+            text[range].link = URL(string: "https://www.justwatch.com")
+        }
+        return text
+    }
+
+    private func serviceRow<RowLabel: View>(
+        isSelected: Bool,
+        @ViewBuilder label: () -> RowLabel,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                label()
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                }
+            }
+        }
+        .foregroundStyle(.primary)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var yearSection: some View {
@@ -386,7 +474,7 @@ struct MediaFilterSheet: View {
     }
 
     private var mediaTypeBinding: Binding<String?> {
-        Binding(get: { draft.mediaType }, set: { draft.mediaType = $0 })
+        Binding(get: { draft.mediaType }, set: { draft.selectMediaType($0) })
     }
 
     private var statusBinding: Binding<String?> {

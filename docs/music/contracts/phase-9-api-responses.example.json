@@ -325,7 +325,8 @@
       "is_tracked": false,
       "rating": null,
       "status": null
-    }
+    },
+    "where_to_watch": null
   },
   "diary_create": {
     "consumed_at": "2026-07-16",
@@ -519,6 +520,12 @@
         "value": "rating:musicbrainz"
       }
     ],
+    "streaming": {
+      "available": false,
+      "region": "US",
+      "region_name": "United States",
+      "services": []
+    },
     "years": [
       2007
     ]

@@ -99,6 +99,11 @@ from api.views.stats import (
     UserStatsMostLoggedView,
     UserStatsSummaryView,
 )
+from api.views.streaming import (
+    MeStreamingView,
+    StreamingProvidersView,
+    StreamingRegionsView,
+)
 from api.views.tracking import (
     BookCompleteView,
     BookJourneyView,
@@ -132,6 +137,9 @@ urlpatterns = [
     path("me/liked-media/", LikedMediaView.as_view(), name="api-me-liked-media"),
     path("me/password/", PasswordChangeView.as_view(), name="api-me-password"),
     path("me/preferences/", PreferencesView.as_view(), name="api-me-preferences"),
+    path("me/streaming/", MeStreamingView.as_view(), name="api-me-streaming"),
+    path("streaming/regions/", StreamingRegionsView.as_view(), name="api-streaming-regions"),
+    path("streaming/providers/", StreamingProvidersView.as_view(), name="api-streaming-providers"),
     path("me/hof/", MeHOFView.as_view(), name="api-me-hof"),
     path("me/hof/<str:media_type>/", HOFItemView.as_view(), name="api-me-hof-item"),
     path("media/search/", MediaSearchView.as_view(), name="api-media-search"),

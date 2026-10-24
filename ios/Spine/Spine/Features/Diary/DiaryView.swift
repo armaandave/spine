@@ -17,6 +17,11 @@ final class DiaryViewModel {
     var isLoadingAllPages = false
     var errorMessage: String?
     var nextPageErrorMessage: String?
+    var streamingPendingCount = 0
+
+    var streamingPendingNote: String? {
+        StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
+    }
 
     private let diaryRepository: DiaryRepository
     private let filterOptionsRepository: FilterOptionsRepository
@@ -72,6 +77,7 @@ final class DiaryViewModel {
         if !preservesLastGoodContent {
             entries = []
             nextPage = nil
+            streamingPendingCount = 0
         }
         presentedFilter = requestFilter
         isLoadingAllPages = false
@@ -93,6 +99,7 @@ final class DiaryViewModel {
             guard generation == requestGeneration, requestFilter == diaryRequestFilter else { return }
             entries = response.results
             nextPage = APIPageCursor.nextPage(from: response.next)
+            streamingPendingCount = response.streaming?.pendingCount ?? 0
             didLoad = true
         } catch is CancellationError {
             wasCancelled = true
@@ -183,6 +190,10 @@ final class DiaryViewModel {
             let options = try await filterOptionsRepository.options(scope: .diary, filter: requestFilter)
             guard requestFilter == diaryRequestFilter else { return }
             filterOptions = options
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            if service != filter.service {
+                filter.service = service
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -198,6 +209,7 @@ final class DiaryViewModel {
         presentedFilter = requestFilter
         entries = []
         nextPage = nil
+        streamingPendingCount = 0
         errorMessage = nil
         nextPageErrorMessage = nil
         isLoading = true
@@ -523,6 +535,15 @@ struct DiaryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await reloadDiary() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                Task {
+                    // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                    let hadServiceFilter = viewModel.filter.service.isActive
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled, hadServiceFilter else { return }
+                    await reloadDiary()
+                }
+            }
         }
     }
 
@@ -556,12 +577,25 @@ struct DiaryView: View {
                 message: error
             )
         } else if viewModel.entries.isEmpty {
-            DiaryStateCard(
-                title: "No diary entries",
-                systemImage: "calendar",
-                message: "Logs you create from media pages will appear here."
-            )
+            streamingPendingNote
+            if viewModel.filter.service.isActive {
+                DiaryStateCard(
+                    title: StreamingFilterCopy.emptyTitle(
+                        service: viewModel.filter.service,
+                        options: viewModel.filterOptions.streaming
+                    ),
+                    systemImage: "play.tv",
+                    message: StreamingFilterCopy.emptyMessage
+                )
+            } else {
+                DiaryStateCard(
+                    title: "No diary entries",
+                    systemImage: "calendar",
+                    message: "Logs you create from media pages will appear here."
+                )
+            }
         } else {
+            streamingPendingNote
             DiaryEntryList(
                 monthSections: viewModel.monthSections,
                 onMonthHeaderTap: monthIndexAction(proxy: monthProxy),
@@ -579,6 +613,14 @@ struct DiaryView: View {
                 )
             }
             paginationFooter
+        }
+    }
+
+    @ViewBuilder
+    private var streamingPendingNote: some View {
+        if let note = viewModel.streamingPendingNote {
+            StreamingFilterPendingNote(text: note)
+                .padding(.bottom, 12)
         }
     }
 
@@ -674,7 +716,8 @@ struct DiaryView: View {
             MediaFilterButton(
                 filter: $viewModel.filter,
                 scope: .diary,
-                options: viewModel.filterOptions
+                options: viewModel.filterOptions,
+                onUnauthorized: onUnauthorized
             ) {
                 Task { await reloadDiary(loadsFilterOptions: true) }
             }
@@ -691,7 +734,7 @@ struct DiaryView: View {
             allowsEmptySelection: true,
             isCompact: true
         ) { selectedType in
-            viewModel.filter.mediaType = selectedType.isEmpty ? nil : selectedType
+            viewModel.filter.selectMediaType(selectedType.isEmpty ? nil : selectedType)
             Task { await reloadDiary(loadsFilterOptions: true) }
         }
         .padding(.bottom, 14)
@@ -700,7 +743,7 @@ struct DiaryView: View {
     private var selectedMediaTypeBinding: Binding<String> {
         Binding(
             get: { viewModel.filter.mediaType ?? "" },
-            set: { viewModel.filter.mediaType = $0.isEmpty ? nil : $0 }
+            set: { viewModel.filter.selectMediaType($0.isEmpty ? nil : $0) }
         )
     }
 

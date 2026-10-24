@@ -361,20 +361,32 @@ struct MediaDiscoverRequest: Hashable, Identifiable {
 
     let mediaType: String
     let source: String?
-    let filter: Filter
+    /// The genre, year, or platform. Optional only when a Service filter narrows the results instead (ST-302).
+    var filter: Filter?
     var page: String?
     var pageSize: Int?
+    var service: StreamingFilterService = .any
 
     var id: String {
-        [mediaType, source ?? "_", filter.queryItem.name, filter.value].joined(separator: ":")
+        var parts = [mediaType, source ?? "_", filter?.queryItem.name ?? "_", filter?.value ?? "_"]
+        parts += service.queryItems.compactMap(\.value).map { "service=\($0)" }
+        return parts.joined(separator: ":")
+    }
+
+    /// Movie and TV Discover can be narrowed to the user's services (ST-002, ST-302).
+    var supportsServiceFilter: Bool {
+        ["movie", "tv"].contains(mediaType) && (source == nil || source == "tmdb")
     }
 
     var queryItems: [URLQueryItem] {
         var items = [
             URLQueryItem(name: "media_type", value: mediaType),
             URLQueryItem(name: "sort", value: "vote_count"),
-            filter.queryItem,
         ]
+        if let filter {
+            items.append(filter.queryItem)
+        }
+        items += service.queryItems
         if let source {
             items.append(URLQueryItem(name: "source", value: source))
         }
@@ -388,7 +400,11 @@ struct MediaDiscoverRequest: Hashable, Identifiable {
     }
 
     var title: String {
-        "\(filter.value) · \(MediaTypeTheme.theme(for: mediaType).displayName)"
+        let mediaTypeName = MediaTypeTheme.theme(for: mediaType).displayName
+        guard let filter else {
+            return service.isActive ? "On My Services · \(mediaTypeName)" : mediaTypeName
+        }
+        return "\(filter.value) · \(mediaTypeName)"
     }
 
     static func detailPillRequest(ref: MediaRef, filter: Filter) -> MediaDiscoverRequest? {
@@ -861,6 +877,7 @@ struct MediaDetail: Decodable, Identifiable {
     let related: [String: JSONValue]?
     let externalLinks: [String: String]
     let providers: JSONValue?
+    let whereToWatch: WhereToWatch?
     var community: CommunityStats?
     let externalRatings: [ExternalRating]?
     let externalRatingsPreparation: MediaExternalRatingsPreparation?
@@ -929,6 +946,7 @@ struct MediaDetail: Decodable, Identifiable {
         case related
         case externalLinks
         case providers
+        case whereToWatch
         case community
         case externalRatings
         case externalRatingsPreparation
@@ -972,6 +990,7 @@ struct MediaDetail: Decodable, Identifiable {
         related: [String: JSONValue]? = nil,
         externalLinks: [String: String] = [:],
         providers: JSONValue? = nil,
+        whereToWatch: WhereToWatch? = nil,
         community: CommunityStats? = nil,
         externalRatings: [ExternalRating]? = nil,
         externalRatingsPreparation: MediaExternalRatingsPreparation? = nil,
@@ -1013,6 +1032,7 @@ struct MediaDetail: Decodable, Identifiable {
         self.related = related
         self.externalLinks = externalLinks
         self.providers = providers
+        self.whereToWatch = whereToWatch
         self.community = community
         self.externalRatings = externalRatings
         self.externalRatingsPreparation = externalRatingsPreparation
@@ -1059,6 +1079,8 @@ struct MediaDetail: Decodable, Identifiable {
             related: try container.decodeIfPresent([String: JSONValue].self, forKey: .related),
             externalLinks: try container.decodeIfPresent([String: String].self, forKey: .externalLinks) ?? [:],
             providers: try container.decodeIfPresent(JSONValue.self, forKey: .providers),
+            // A where-to-watch shape the app can't read hides that section rather than the whole page.
+            whereToWatch: (try? container.decodeIfPresent(WhereToWatch.self, forKey: .whereToWatch)) ?? nil,
             community: try container.decodeIfPresent(CommunityStats.self, forKey: .community),
             externalRatings: try container.decodeIfPresent([ExternalRating].self, forKey: .externalRatings),
             externalRatingsPreparation: try container.decodeIfPresent(
@@ -1107,6 +1129,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: externalRatings,
             externalRatingsPreparation: externalRatingsPreparation,
@@ -1152,6 +1175,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: externalRatings,
             externalRatingsPreparation: externalRatingsPreparation,
@@ -1197,6 +1221,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: externalRatings,
             externalRatingsPreparation: externalRatingsPreparation,
@@ -1242,6 +1267,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: externalRatings,
             externalRatingsPreparation: externalRatingsPreparation,
@@ -1287,6 +1313,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: externalRatings,
             externalRatingsPreparation: externalRatingsPreparation,
@@ -1332,6 +1359,7 @@ struct MediaDetail: Decodable, Identifiable {
             related: related,
             externalLinks: externalLinks,
             providers: providers,
+            whereToWatch: whereToWatch,
             community: community,
             externalRatings: response.externalRatings + (externalRatings ?? []).filter { existing in
                 !response.externalRatings.contains { incoming in
