@@ -111,6 +111,8 @@ final class MusicContractTests: XCTestCase {
 
         XCTAssertEqual(MusicAlbumPresentation.artistCreditText(music.artistCredit), "Nine Inch Nails")
         XCTAssertEqual(MusicAlbumPresentation.releaseType(music), "Album")
+        XCTAssertEqual(MusicAlbumPresentation.songCount(release), "16 songs")
+        XCTAssertEqual(MusicAlbumPresentation.totalLength(release), "64 min")
         XCTAssertEqual(MusicAlbumPresentation.duration(track.lengthMs), "1:41")
         XCTAssertEqual(MusicAlbumPresentation.countryName(release.country), "Worldwide")
         XCTAssertEqual(MusicAlbumPresentation.format(release), "Digital Media")
@@ -123,6 +125,25 @@ final class MusicContractTests: XCTestCase {
             MusicAlbumPresentation.trackAccessibilityLabel(track: track, albumCredits: music.artistCredit),
             "Disc 1, track 1, HYPERPOWER!, by Nine Inch Nails, 1:41"
         )
+    }
+
+    func testAlbumLengthNeedsEveryTrackLength() throws {
+        var root = try Self.albumObject()
+        var music = try XCTUnwrap(root["music"] as? [String: Any])
+        var release = try XCTUnwrap(music["representative_release"] as? [String: Any])
+        var media = try XCTUnwrap(release["media"] as? [[String: Any]])
+        var tracks = try XCTUnwrap(media[0]["tracks"] as? [[String: Any]])
+        tracks[3]["length_ms"] = NSNull()
+        media[0]["tracks"] = tracks
+        release["media"] = media
+        music["representative_release"] = release
+        root["music"] = music
+
+        let detail = try JSONDecoder.api.decode(MediaDetail.self, from: Self.data(from: root))
+        let decoded = try XCTUnwrap(detail.music?.representativeRelease)
+
+        XCTAssertNil(MusicAlbumPresentation.totalLength(decoded))
+        XCTAssertEqual(MusicAlbumPresentation.songCount(decoded), "16 songs")
     }
 
     func testAlbumPresentationShowsDifferentTrackArtist() throws {

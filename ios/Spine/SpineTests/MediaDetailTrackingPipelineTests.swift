@@ -600,7 +600,8 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         ))
         let lines = TrackingSummarySection.lines(detail: Self.bookDetail(state: nil), state: reading, preferredMode: .pages)
         XCTAssertTrue(lines.contains { $0.contains("120") }, "\(lines)")
-        XCTAssertTrue(lines.contains { $0.hasPrefix("Rated ") }, "\(lines)")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("Rated ") }, "The rating has its own line under the status.")
+        XCTAssertEqual(TrackingSummarySection.stars(detail: Self.bookDetail(state: nil), state: reading), "4")
         XCTAssertTrue(lines.contains { $0.hasPrefix("Started ") && $0.contains("2026") }, "\(lines)")
 
         var paused = reading
@@ -611,8 +612,21 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         let movie = UserMediaState.untracked.applying(Self.movieState(rating: "3.5"))
         let movieLines = TrackingSummarySection.lines(detail: Self.movieDetail, state: movie, preferredMode: nil)
         XCTAssertEqual(movieLines.filter { $0.hasPrefix("Started ") }, [])
-        XCTAssertTrue(movieLines.contains { $0.hasPrefix("Rated ") })
+        XCTAssertEqual(TrackingSummarySection.stars(detail: Self.movieDetail, state: movie), "3.5")
         XCTAssertEqual(TrackingSummarySection.lines(detail: Self.movieDetail, state: .untracked, preferredMode: nil), [])
+        XCTAssertNil(TrackingSummarySection.stars(detail: Self.movieDetail, state: .untracked))
+    }
+
+    func testLoggedAlbumKeepsItsLogDateUnderTheRating() {
+        let album = Self.musicDetail(title: "The Life of Pablo")
+        let state = UserMediaState(
+            isTracked: true, status: "Completed", rating: "3.5",
+            diaryEntryId: 91, diaryCount: 1, diaryConsumedAt: "2023-03-24", hasLiked: true
+        )
+        let firstLine = TrackingSummarySection.lines(detail: album, state: state, preferredMode: nil).first
+
+        XCTAssertEqual(TrackingSummarySection.stars(detail: album, state: state), "3.5")
+        XCTAssertTrue(firstLine?.hasPrefix("Logged on ") == true && firstLine?.contains("24, 2023") == true, "\(String(describing: firstLine))")
     }
 
     func testComposerFoldsTheCompletionBeforeItClosesAndPostsOnceWithThePagesOrigin() async throws {
