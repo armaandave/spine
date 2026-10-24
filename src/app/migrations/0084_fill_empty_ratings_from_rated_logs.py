@@ -1,5 +1,5 @@
 from django.db import migrations
-from django.db.models import OuterRef, Subquery
+from django.db.models import Exists, OuterRef, Subquery
 
 
 def fill_empty_ratings_from_rated_logs(apps, _):
@@ -17,19 +17,15 @@ def fill_empty_ratings_from_rated_logs(apps, _):
             item_id=OuterRef("item_id"),
             rating__isnull=False,
         ).order_by("-consumed_at", "-id")
-        titles = (
+        (
             model.objects.filter(score__isnull=True, rating_source__isnull=True)
             .exclude(id__in=history.objects.filter(score__isnull=False).values("id"))
-            .annotate(
-                log_id=Subquery(newest_rated_log.values("id")[:1]),
-                log_rating=Subquery(newest_rated_log.values("rating")[:1]),
+            .filter(Exists(newest_rated_log))
+            .update(
+                score=Subquery(newest_rated_log.values("rating")[:1]),
+                rating_source=Subquery(newest_rated_log.values("id")[:1]),
             )
-            .filter(log_id__isnull=False)
         )
-        for title in titles:
-            title.score = title.log_rating
-            title.rating_source_id = title.log_id
-            title.save(update_fields=["score", "rating_source"])
 
 
 class Migration(migrations.Migration):

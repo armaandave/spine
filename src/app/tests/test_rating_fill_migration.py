@@ -3,15 +3,23 @@ from decimal import Decimal
 from importlib import import_module
 from uuid import uuid4
 
-from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase
 from django.utils import timezone
 
 from app import book_tracking, game_tracking, single_weight
 from app.models import Book, DiaryEntry, Game, Item, MediaTypes, Movie, Sources
 
-migration = import_module("app.migrations.0084_fill_empty_ratings_from_rated_logs")
+MIGRATION = "0084_fill_empty_ratings_from_rated_logs"
+migration = import_module(f"app.migrations.{MIGRATION}")
+
+
+def run_migration():
+    """Run the repair with the models as they stand at this migration, as a deploy does."""
+    state = MigrationExecutor(connection).loader.project_state(("app", MIGRATION))
+    migration.fill_empty_ratings_from_rated_logs(state.apps, None)
 
 
 class FillEmptyRatingsMigrationTests(TestCase):
@@ -58,7 +66,7 @@ class FillEmptyRatingsMigrationTests(TestCase):
         single_weight.set_rating(self.user, independent, Decimal(10))
         self.rate_without_title(independent_log, Decimal(2))
 
-        migration.fill_empty_ratings_from_rated_logs(django_apps, None)
+        run_migration()
 
         def current(item):
             tracking = Movie.objects.get(user=self.user, item=item)
@@ -82,7 +90,7 @@ class FillEmptyRatingsMigrationTests(TestCase):
         _, game_log = game_tracking.complete(self.user, game_item, completion_date=today)
         self.rate_without_title(game_log, Decimal(9))
 
-        migration.fill_empty_ratings_from_rated_logs(django_apps, None)
+        run_migration()
 
         book = Book.objects.get(user=self.user, item=book_item)
         game = Game.objects.get(user=self.user, item=game_item)
