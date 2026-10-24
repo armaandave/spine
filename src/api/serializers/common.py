@@ -131,6 +131,13 @@ def saved_poster_url(item, request=None):
     return artwork_from_payload({"image": item.image}, item.media_type, request=request)["poster_url"]
 
 
+def saved_still_url(item, request=None):
+    """Return the still saved on an episode Item as list cards show it, else None."""
+    if item is None or not item.image or item.image == settings.IMG_NONE:
+        return None
+    return artwork_from_payload({"image": item.image}, item.media_type, request=request)["backdrop_url"]
+
+
 def with_curated_artwork(artwork, item, request=None):
     """Make an admin's poster and backdrop picks the default artwork."""
     if item is None:
@@ -645,6 +652,22 @@ def picked_images_by_number(items, model, user, number_field):
     items = list(items)
     picks = picked_image_urls(items, model, user)
     return {getattr(item, number_field): picks[item.pk] for item in items if item.pk in picks}
+
+
+def episode_stills_by_number(items, user, request=None):
+    """Map episode numbers to a viewer pick, else an admin's, else the saved still."""
+    from app.providers import tmdb
+
+    items = list(items)
+    return {
+        # Rows are thumbnails, so saved TMDB stills load at w500 like live ones.
+        **{
+            item.episode_number: tmdb.sized_image_url(still, "w500")
+            for item in items
+            if (still := saved_still_url(item, request=request))
+        },
+        **picked_images_by_number(items, CustomBackdropPreference, user, "episode_number"),
+    }
 
 
 def _season_episode_count(season):
