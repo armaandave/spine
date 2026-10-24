@@ -434,11 +434,14 @@ struct MediaLogView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 Form {
+                    // A section header, not a row: rows clip to the card's rounded corners,
+                    // which cut into the poster's left side.
                     Section {
+                    } header: {
                         header
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
 
                     if viewModel.supportsProgress {
                         Section {
@@ -541,6 +544,7 @@ struct MediaLogView: View {
                     }
                 }
             }
+            .logRowBackground()
         }
 
         Section {
@@ -555,6 +559,7 @@ struct MediaLogView: View {
                 viewModel.setRating(locationX: locationX, width: width)
             }
         }
+        .logRowBackground()
 
         Section {
             DatePicker(
@@ -584,6 +589,7 @@ struct MediaLogView: View {
                 Text(LogComposerStyle.gameProgressFootnote)
             }
         }
+        .logRowBackground()
 
         Section {
             TextField("Review title", text: $viewModel.reviewTitle)
@@ -595,6 +601,7 @@ struct MediaLogView: View {
                 .lineLimit(4...12)
                 .focused($focusedField, equals: .review)
         }
+        .logRowBackground()
 
         LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag, scrollProxy: scrollProxy)
 
@@ -607,7 +614,9 @@ struct MediaLogView: View {
                 }
             }
             Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
+                .tint(.red)
         }
+        .logRowBackground()
 
         if viewModel.detail.ref.mediaType == "music" {
             Section {
@@ -619,6 +628,7 @@ struct MediaLogView: View {
             } footer: {
                 Text("Counts the album as listened without adding a diary entry.")
             }
+            .logRowBackground()
         }
     }
 
@@ -648,6 +658,7 @@ struct MediaLogView: View {
                 .lineLimit(3...8)
                 .focused($focusedField, equals: .review)
         }
+        .logRowBackground()
     }
 
     @ViewBuilder

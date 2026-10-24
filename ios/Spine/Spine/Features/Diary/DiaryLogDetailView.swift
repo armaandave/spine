@@ -732,16 +732,19 @@ private struct DiaryLogEditSheet: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 Form {
+                    // A section header, not a row: rows clip to the card's rounded corners,
+                    // which cut into the poster's left side.
                     Section {
+                    } header: {
                         LogHeader(
                             title: viewModel.entry.media.displayTitle,
                             posterURL: viewModel.entry.media.displayPosterURL,
                             mediaType: viewModel.entry.media.ref.mediaType,
                             orientation: viewModel.entry.media.posterOrientation
                         )
+                        .textCase(nil)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
 
                     Section {
                         LogRatingCard(
@@ -755,6 +758,7 @@ private struct DiaryLogEditSheet: View {
                             viewModel.setRating(locationX: locationX, width: width)
                         }
                     }
+                    .logRowBackground()
 
                     Section {
                         DatePicker(
@@ -778,6 +782,7 @@ private struct DiaryLogEditSheet: View {
                             Text(LogComposerStyle.gameProgressFootnote)
                         }
                     }
+                    .logRowBackground()
 
                     Section {
                         TextField("Review title", text: $viewModel.reviewTitle)
@@ -789,6 +794,7 @@ private struct DiaryLogEditSheet: View {
                             .lineLimit(4...12)
                             .focused($focusedField, equals: .review)
                     }
+                    .logRowBackground()
 
                     LogTagsSection(draft: viewModel.tagDraft, focus: $focusedField, focusValue: .tag, scrollProxy: proxy)
 
@@ -801,7 +807,9 @@ private struct DiaryLogEditSheet: View {
                             }
                         }
                         Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
+                            .tint(.red)
                     }
+                    .logRowBackground()
                 }
                 .listSectionSpacing(.compact)
                 .scrollContentBackground(.hidden)

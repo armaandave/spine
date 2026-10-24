@@ -6,6 +6,21 @@ import SwiftUI
 enum LogComposerStyle {
     static let starGold = Color(red: 0.94, green: 0.64, blue: 0.24)
     static let gameProgressFootnote = "Blank means unknown; zero means zero. Time replaces this playthrough's total rather than adding a session."
+    /// A translucent, glossy card: the blurred backdrop shows through it, with a soft sheen
+    /// at the top. It's a plain translucent fill rather than a live material, so scrolling
+    /// costs nothing extra.
+    static let rowBackground = LinearGradient(
+        colors: [.white.opacity(0.12), .white.opacity(0.06)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+}
+
+extension View {
+    /// The log forms' glassy card background, in place of the solid grouped-row gray.
+    func logRowBackground() -> some View {
+        listRowBackground(LogComposerStyle.rowBackground)
+    }
 }
 
 /// Tags on a log. The user's own tags load once and are matched locally as they
@@ -107,8 +122,6 @@ struct LogBackdrop: View {
     let url: URL?
     var accentColor: Color?
 
-    private static let height: CGFloat = 380
-
     static let processors: [any ImageProcessing] = [
         ImageProcessors.GaussianBlur(radius: 22),
         ImageProcessors.CoreImageFilter(
@@ -131,24 +144,23 @@ struct LogBackdrop: View {
                     (accentColor ?? .clear).opacity(0.3)
                 }
             }
-            .frame(height: Self.height)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .opacity(0.75)
 
             LinearGradient(colors: [.white.opacity(0.08), .clear], startPoint: .top, endPoint: .center)
-                .frame(height: Self.height)
 
+            // Strongest at the top, but a faint wash of color stays all the way down so the
+            // glassy cards always have something to show through.
             LinearGradient(
                 stops: [
                     .init(color: SpinePalette.pageBackground.opacity(0.2), location: 0),
-                    .init(color: SpinePalette.pageBackground.opacity(0.55), location: 0.45),
-                    .init(color: SpinePalette.pageBackground, location: 1),
+                    .init(color: SpinePalette.pageBackground.opacity(0.55), location: 0.35),
+                    .init(color: SpinePalette.pageBackground.opacity(0.8), location: 1),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: Self.height)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea()
@@ -178,15 +190,16 @@ struct LogHeader: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
+                // Explicit colors: the header sits in a section header, which dims .primary.
                 Text(title)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                     .lineLimit(3)
 
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.6))
                         .lineLimit(2)
                 }
             }
@@ -216,41 +229,45 @@ struct LogRatingCard: View {
                 onScrub: onScrub
             )
 
-            HStack(spacing: 24) {
-                toggle(liked ? "Liked" : "Like", systemImage: liked ? "heart.fill" : "heart", tint: .pink, isOn: liked) {
-                    liked.toggle()
-                }
-                .accessibilityLabel("Like")
-                .sensoryFeedback(trigger: liked) { _, isLiked in
-                    isLiked ? SensoryFeedback.impact(weight: .medium) : .selection
-                }
+            GlassEffectContainer(spacing: 10) {
+                HStack(spacing: 10) {
+                    Button {
+                        liked.toggle()
+                    } label: {
+                        Image(systemName: liked ? "heart.fill" : "heart")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(liked ? .regular.tint(.pink).interactive() : .regular.interactive(), in: .circle)
+                    .accessibilityLabel("Like")
+                    .accessibilityAddTraits(liked ? .isSelected : [])
+                    .sensoryFeedback(trigger: liked) { _, isLiked in
+                        isLiked ? SensoryFeedback.impact(weight: .medium) : .selection
+                    }
 
-                toggle(repeatLabel, systemImage: "arrow.clockwise", tint: .green, isOn: isRepeat) {
-                    isRepeat.toggle()
+                    Button {
+                        isRepeat.toggle()
+                    } label: {
+                        Label(repeatLabel, systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .frame(height: 44)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(isRepeat ? .regular.tint(.green).interactive() : .regular.interactive(), in: .capsule)
+                    .accessibilityAddTraits(isRepeat ? .isSelected : [])
+                    .sensoryFeedback(.selection, trigger: isRepeat)
                 }
-                .sensoryFeedback(.selection, trigger: isRepeat)
             }
+            .animation(.snappy(duration: 0.2), value: liked)
+            .animation(.snappy(duration: 0.2), value: isRepeat)
         }
         .padding(.vertical, 6)
-    }
-
-    private func toggle(
-        _ title: String,
-        systemImage: String,
-        tint: Color,
-        isOn: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                Text(title)
-            }
-            .font(.body.weight(.medium))
-            .foregroundStyle(isOn ? tint : .secondary)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -426,6 +443,7 @@ struct LogTagsSection<Focus: Hashable>: View {
                 }
             }
         }
+        .logRowBackground()
     }
 
     /// Bolds the part of the tag that matches what's typed.
