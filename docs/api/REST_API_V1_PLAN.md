@@ -135,6 +135,7 @@ current page of rows.
 | GET | `/api/v1/diary/tags/` | Yes |
 | POST/DELETE | `/api/v1/diary/{id}/like/` | Yes |
 | GET/POST | `/api/v1/lists/` | Yes |
+| GET | `/api/v1/lists/tagged/` | Yes |
 | GET/PATCH/DELETE | `/api/v1/lists/{id}/` | Yes |
 | GET/POST | `/api/v1/lists/{id}/items/` | Yes |
 | PATCH | `/api/v1/lists/{id}/items/reorder/` | Yes |
@@ -194,6 +195,17 @@ To create a people list:
 `list_type=people` for people lists or `list_type=all` for both types. The same
 filter is supported by the featured-lists endpoint. A list's type cannot be
 changed by `PATCH`; attempting to do so returns `400`.
+
+`GET /api/v1/lists/tagged/?tag=<tag>&owner=<username>` backs the list page's
+tag links: tags belong to the user who owns the list, so it returns that
+user's lists whose `tags` hold the tag, ignoring case and surrounding spaces,
+A to Z by name, in the standard paged shape with list summaries
+(`preview_items` and `preview_people` included). The owner gets all of their
+lists, and nobody gets any across a block (either way). Anyone else gets the
+lists they collaborate on, plus the public ones when they can see the owner's
+profile (a private account only to accepted followers); unlisted lists are
+left out. A missing or blank `tag` or `owner` returns `400`; an unknown owner
+returns `404`.
 
 All summary and detail payloads add `list_type` and `entries_count`.
 `entries_count` is the number of entries of the list's declared type and
