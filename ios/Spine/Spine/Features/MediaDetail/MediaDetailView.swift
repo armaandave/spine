@@ -1183,6 +1183,26 @@ enum MusicAlbumPresentation {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
+    /// Music videos on the tracklist aren't songs, so they're left out once the tracks have loaded.
+    static func songCount(_ release: MusicRepresentativeRelease) -> String? {
+        let songs = Self.songs(release)
+        let count = songs.isEmpty ? release.trackCount : songs.count
+        guard count > 0 else { return nil }
+        return count == 1 ? "1 song" : "\(count) songs"
+    }
+
+    /// The album's length, only when every song has one: a partial sum would understate it.
+    static func totalLength(_ release: MusicRepresentativeRelease) -> String? {
+        let lengths = songs(release).map { $0.lengthMs ?? $0.recording.lengthMs }
+        guard !lengths.isEmpty, !lengths.contains(nil) else { return nil }
+        let minutes = Int((Double(lengths.compactMap { $0 }.reduce(0, +)) / 60_000).rounded())
+        return "\(max(minutes, 1)) min"
+    }
+
+    private static func songs(_ release: MusicRepresentativeRelease) -> [MusicTrack] {
+        release.media.flatMap(\.tracks).filter { !$0.recording.isVideo }
+    }
+
     static func countryName(_ code: String?, locale: Locale = .current) -> String? {
         guard let code = code?.nilIfEmpty else { return nil }
         if code.caseInsensitiveCompare("XW") == .orderedSame {
@@ -2649,8 +2669,11 @@ private struct MediaDetailPageView: View {
                 discoverRequest: discoverRequest(detail, filter: .genre(genre))
             )
         }
+        let representativeRelease = detail.music?.representativeRelease
         let release = [
             detail.music.flatMap { MusicAlbumPresentation.releaseType($0) },
+            representativeRelease.flatMap { MusicAlbumPresentation.songCount($0) },
+            representativeRelease.flatMap { MusicAlbumPresentation.totalLength($0) },
             formattedDate(detail.music?.firstReleaseDate),
         ].compactMap { $0?.nilIfEmpty }.map { value in
             MediaDetailChip(label: value, discoverRequest: nil)
@@ -5637,6 +5660,9 @@ struct TrackingSummarySection: View {
                                 .padding(.top, 3)
                             }
                         }
+                        if showsRatingLine {
+                            ratingLine
+                        }
                         ForEach(lines, id: \.self) { line in
                             Text(line)
                                 .font(.system(size: 13, weight: .bold))
@@ -5657,7 +5683,35 @@ struct TrackingSummarySection: View {
     }
 
     private var status: String? { Self.status(detail: detail, state: state) }
-    private var hasState: Bool { status != nil || !lines.isEmpty }
+    private var hasState: Bool { status != nil || stars != nil || !lines.isEmpty }
+    private var stars: String? { Self.stars(detail: detail, state: state) }
+    private var isLiked: Bool { state?.hasLiked == true }
+    private var showsRatingLine: Bool { stars != nil || isLiked }
+
+    /// "3.5★ ♥" in the rail's star yellow and heart pink.
+    private var ratingLine: some View {
+        HStack(spacing: 6) {
+            if let stars {
+                HStack(spacing: 2) {
+                    Text(stars)
+                    Image(systemName: "star.fill")
+                }
+                .foregroundStyle(.yellow)
+            }
+            if isLiked {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink)
+            }
+        }
+        .font(.system(size: 13, weight: .bold))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [stars.map { "Rated \($0) out of 5 stars" }, isLiked ? "Liked" : nil]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+    }
+
     private var showsUpdateProgressButton: Bool {
         if detail.ref.mediaType == "game" { return state?.game?.canUpdateProgress == true }
         return (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused"))
@@ -5686,11 +5740,8 @@ struct TrackingSummarySection: View {
         if let logLine = Self.logLine(state) {
             values.append(logLine)
         }
-        if let rating = state?.rating {
-            values.append("Rated \(rating.starRatingLabel(mediaType: detail.ref.mediaType))")
-        }
         if !Self.hasMultipleLogs(state), let consumedAt = state?.diaryConsumedAt {
-            values.append("Logged \(consumedAt.shortDateLabel)")
+            values.append("Logged on \(consumedAt.longDateLabel)")
         }
         if detail.ref.mediaType != "movie" {
             if let startDate = state?.displayStartDate {
@@ -5702,6 +5753,10 @@ struct TrackingSummarySection: View {
 
     private static func status(detail: MediaDetail, state: UserMediaState?) -> String? {
         state?.status ?? (detail.ref.isEpisode && state?.isTracked == true ? "Watched" : nil)
+    }
+
+    static func stars(detail: MediaDetail, state: UserMediaState?) -> String? {
+        state?.rating?.starCount(mediaType: detail.ref.mediaType)
     }
 
     private static func hasMultipleLogs(_ state: UserMediaState?) -> Bool {
@@ -8230,6 +8285,13 @@ private extension String {
         guard let raw = Double(self) else { return self }
         let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
         return "\(Self.cleanRating(stars))/5"
+    }
+
+    /// Just the stars, "3.5" or "4", for places that draw the star themselves.
+    func starCount(mediaType: String) -> String? {
+        guard let raw = Double(self) else { return nil }
+        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+        return Self.cleanRating(stars)
     }
 
     func starRatingValue(mediaType: String) -> String {
