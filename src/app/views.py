@@ -481,6 +481,19 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
             season_metadata,
             episodes_in_db,
         )
+        # Show each episode's saved still, as its card does after a watch toggle.
+        saved_stills = {
+            episode.episode_number: tmdb.sized_image_url(episode.image, "w500")
+            for episode in Item.objects.filter(
+                source=source,
+                media_type=MediaTypes.EPISODE.value,
+                media_id=media_id,
+                season_number=season_number,
+            )
+            if episode.image and episode.image != settings.IMG_NONE
+        }
+        for episode in season_metadata["episodes"]:
+            episode["image"] = saved_stills.get(episode["episode_number"], episode.get("image"))
 
     # Enrich related items with user tracking data
     if season_metadata.get("related"):
