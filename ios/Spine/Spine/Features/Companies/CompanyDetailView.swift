@@ -294,6 +294,13 @@ struct CompanyDetailView: View {
                 .contentShape(Rectangle())
                 .gesture(edgeSwipeBackGesture)
         }
+        .overlay(alignment: .bottomLeading) {
+            if selectedTab == .search {
+                ExplorationSearchButton()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             ExplorationHomeButton()
                 .padding(.horizontal, 16)
@@ -515,12 +522,6 @@ struct CompanyDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityValue(expandedRoles.contains(role) ? "Expanded" : "Collapsed")
 
-                if let completion = viewModel.completion(for: role, in: detail),
-                   completion.isVisible {
-                    SWCompletionProgressButton(progress: completion)
-                        .accessibilityLabel("\(role.creditRole) completion")
-                }
-
                 Button {
                     toggleRole(role)
                 } label: {
@@ -608,6 +609,7 @@ struct CompanyDetailView: View {
                                 ? "View anime \(item.displayTitle)"
                                 : "View \(item.displayTitle)"
                         )
+                        .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

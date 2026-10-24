@@ -12,10 +12,20 @@ protocol AuthRepository {
     func refresh() async throws
     /// Ends the session on this device at once. Revoking it on the server carries on in the background.
     func logout() async
+    #if DEBUG
+    /// Signs in as a local backend's passwordless dev user (`scripts/ios/local-backend.sh`).
+    func devSignIn() async throws -> AuthUser
+    #endif
 }
 
 extension AuthRepository {
     var storedUserID: Int? { nil }
+
+    #if DEBUG
+    func devSignIn() async throws -> AuthUser {
+        throw APIError.httpStatus(404, nil)
+    }
+    #endif
 }
 
 protocol MediaRepository {
@@ -30,6 +40,7 @@ protocol MediaRepository {
     func setLiked(ref: MediaRef, liked: Bool) async throws -> MediaLikeResponse
     func reviews(ref: MediaRef) async throws -> [MediaReview]
     func reviewPage(ref: MediaRef, page: String?) async throws -> PagedResponse<MediaReview>
+    func community(ref: MediaRef) async throws -> CommunityStats
     func anilistReviews(ref: MediaRef, page: Int) async throws -> AniListReviewPage
     func posters(ref: MediaRef) async throws -> [PosterOption]
     func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse
@@ -122,6 +133,10 @@ extension MediaRepository {
     func anilistReviews(ref _: MediaRef, page: Int) async throws -> AniListReviewPage {
         AniListReviewPage(currentPage: page, nextPage: nil, results: [])
     }
+
+    func community(ref _: MediaRef) async throws -> CommunityStats {
+        throw APIError.httpStatus(501, nil)
+    }
 }
 
 protocol TrackingRepository {
@@ -141,21 +156,22 @@ protocol TrackingRepository {
     ) async throws -> TrackingState
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState
     func completeBook(source: String, mediaId: String, completedAt: Date?) async throws -> TrackingState
-    func performBookAction(source: String, mediaId: String, action: String, request: BookActionRequest) async throws -> TrackingState
-    func undoBookRead(source: String, mediaId: String) async throws
+    // The actions and deletes below return nil when the server answers 204 (the item is no longer tracked).
+    func performBookAction(source: String, mediaId: String, action: String, request: BookActionRequest) async throws -> TrackingState?
+    func undoBookRead(source: String, mediaId: String) async throws -> TrackingState?
     func updateBookJourney(source: String, mediaId: String, journeyId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
-    func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState
+    func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState?
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse
-    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState?
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState
-    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState?
     func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse
 }
 
 extension TrackingRepository {
-    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws { fatalError("Not implemented") }
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
-    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws { fatalError("Not implemented") }
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState? { fatalError("Not implemented") }
     func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse { fatalError("Not implemented") }
     func delete(ref _: MediaRef) async throws {
         fatalError("Not implemented")
@@ -188,11 +204,11 @@ extension TrackingRepository {
         fatalError("Not implemented")
     }
 
-    func performBookAction(source _: String, mediaId _: String, action _: String, request _: BookActionRequest) async throws -> TrackingState {
+    func performBookAction(source _: String, mediaId _: String, action _: String, request _: BookActionRequest) async throws -> TrackingState? {
         fatalError("Not implemented")
     }
 
-    func undoBookRead(source _: String, mediaId _: String) async throws {
+    func undoBookRead(source _: String, mediaId _: String) async throws -> TrackingState? {
         fatalError("Not implemented")
     }
 
@@ -200,7 +216,7 @@ extension TrackingRepository {
         fatalError("Not implemented")
     }
 
-    func deleteBookJourney(source _: String, mediaId _: String, journeyId _: Int) async throws -> TrackingState {
+    func deleteBookJourney(source _: String, mediaId _: String, journeyId _: Int) async throws -> TrackingState? {
         fatalError("Not implemented")
     }
 
@@ -353,6 +369,10 @@ protocol ListRepository {
     func list() async throws -> [CustomListSummary]
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary]
     func featured() async throws -> [CustomListSummary]
+    /// The Search landing's featured shelves.
+    func featuredShelves() async throws -> FeaturedShelvesResponse
+    /// One media type's featured lists, one shelf per kind (`"mixed"` for Across Media).
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse
     func detail(id: Int) async throws -> CustomListDetail
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary
     func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail
@@ -379,6 +399,15 @@ extension ListRepository {
 
     func featured() async throws -> [CustomListSummary] {
         []
+    }
+
+    /// Without a shelves endpoint, featured lists are grouped by their preview items' media types.
+    func featuredShelves() async throws -> FeaturedShelvesResponse {
+        FeaturedShelvesResponse.legacy(try await featured())
+    }
+
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse {
+        FeaturedShelvesResponse.legacy(try await featured(), mediaType: mediaType)
     }
 }
 
@@ -532,6 +561,12 @@ struct APIAuthRepository: AuthRepository {
     func logout() async {
         await service.logout()
     }
+
+    #if DEBUG
+    func devSignIn() async throws -> AuthUser {
+        try await service.devSignIn()
+    }
+    #endif
 }
 
 struct APIMediaRepository: MediaRepository {
@@ -661,6 +696,21 @@ struct APIMediaRepository: MediaRepository {
         } catch APIError.httpStatus(404, _), APIError.httpStatus(501, _) {
             return PagedResponse(count: 0, next: nil, previous: nil, results: [])
         }
+    }
+
+    func community(ref: MediaRef) async throws -> CommunityStats {
+        var query: [URLQueryItem] = []
+        if let seasonNumber = ref.seasonNumber {
+            query.append(URLQueryItem(name: "season_number", value: String(seasonNumber)))
+        }
+        if let episodeNumber = ref.episodeNumber {
+            query.append(URLQueryItem(name: "episode_number", value: String(episodeNumber)))
+        }
+        return try await client.get(
+            "/media/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/community/",
+            query: query,
+            authenticated: client.tokenProvider.accessToken != nil
+        )
     }
 
     func anilistReviews(ref: MediaRef, page: Int) async throws -> AniListReviewPage {
@@ -899,20 +949,16 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
-    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws {
-        let _: EmptyResponse = try await client.post("/tracking/\(ref.source)/game/\(ref.mediaId)/actions/\(action)/", body: request, authenticated: true)
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
+        try await client.post("/tracking/\(ref.source)/game/\(ref.mediaId)/actions/\(action)/", body: request, authenticated: true)
     }
 
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState {
         try await client.patch("/tracking/\(ref.source)/game/\(ref.mediaId)/playthroughs/\(playthroughId)/", body: request, authenticated: true)
     }
 
-    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws {
-        do {
-            let _: EmptyResponse = try await client.delete("/tracking/\(ref.source)/game/\(ref.mediaId)/playthroughs/\(playthroughId)/", authenticated: true)
-        } catch APIError.httpStatus(404, _) {
-            // A retry after a lost response can find the playthrough already deleted.
-        }
+    func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState? {
+        try await client.delete("/tracking/\(ref.source)/game/\(ref.mediaId)/playthroughs/\(playthroughId)/", authenticated: true)
     }
 
     func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse {
@@ -935,7 +981,7 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
-    func performBookAction(source: String, mediaId: String, action: String, request: BookActionRequest) async throws -> TrackingState {
+    func performBookAction(source: String, mediaId: String, action: String, request: BookActionRequest) async throws -> TrackingState? {
         try await client.post(
             "/tracking/\(source)/book/\(mediaId)/actions/\(action)/",
             body: request,
@@ -943,8 +989,8 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
-    func undoBookRead(source: String, mediaId: String) async throws {
-        let _: EmptyResponse = try await client.post(
+    func undoBookRead(source: String, mediaId: String) async throws -> TrackingState? {
+        try await client.post(
             "/tracking/\(source)/book/\(mediaId)/actions/undo_read/",
             body: BookActionRequest(),
             authenticated: true
@@ -959,7 +1005,7 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
-    func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState {
+    func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState? {
         try await client.delete(
             "/tracking/\(source)/book/\(mediaId)/journeys/\(journeyId)/",
             authenticated: true
@@ -1289,6 +1335,27 @@ struct APIListRepository: ListRepository {
             authenticated: true
         )
         return response.results
+    }
+
+    func featuredShelves() async throws -> FeaturedShelvesResponse {
+        do {
+            return try await client.get("/lists/featured/shelves/", authenticated: true)
+        } catch APIError.httpStatus(404, _) {
+            // An older backend without shelves.
+            return FeaturedShelvesResponse.legacy(try await featured())
+        }
+    }
+
+    func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse {
+        do {
+            return try await client.get(
+                "/lists/featured/shelves/",
+                query: [URLQueryItem(name: "media_type", value: mediaType)],
+                authenticated: true
+            )
+        } catch APIError.httpStatus(404, _) {
+            return FeaturedShelvesResponse.legacy(try await featured(), mediaType: mediaType)
+        }
     }
 
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary {

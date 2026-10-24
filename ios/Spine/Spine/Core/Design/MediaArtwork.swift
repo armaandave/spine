@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 struct MediaArtwork: View {
@@ -34,11 +35,28 @@ struct MediaArtwork: View {
         }
     }
 
-    private var imageURL: URL? {
+    /// The request an artwork with these values loads, so a grid can prefetch exactly what its cells will ask for.
+    static func imageRequest(
+        url: String?,
+        slot: PosterSlot,
+        mediaType: String? = nil,
+        orientation: PosterOrientation? = nil
+    ) -> ImageRequest? {
+        SpineImagePipeline.request(
+            url: imageURL(from: url),
+            thumbnailSize: slot.artworkSize(mediaType: mediaType, orientation: orientation)
+        )
+    }
+
+    private static func imageURL(from url: String?) -> URL? {
         guard let url, !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
         return URL(string: url)
+    }
+
+    private var imageURL: URL? {
+        Self.imageURL(from: url)
     }
 
     private var artworkSize: CGSize {

@@ -315,7 +315,11 @@ class MangaPosterTests(TestCase):
             [poster["provider_name"] for poster in posters],
             ["MyAnimeList", "AniList", "MangaUpdates"],
         )
-        self.assertTrue(posters[0]["is_selected"])
+        # With no pick, the picker marks the saved poster, which the page shows.
+        self.assertEqual(
+            [poster["url"] for poster in posters if poster["is_selected"]],
+            [self.item.image],
+        )
 
     @patch("api.services.media.anilist.manga")
     @patch("api.services.media.mal.manga")

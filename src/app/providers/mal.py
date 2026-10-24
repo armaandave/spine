@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 
@@ -570,6 +571,8 @@ def _discover_mal_genre(
             page=page,
             page_size=page_size,
         )
+    except SoftTimeLimitExceeded:
+        raise
     except Exception as error:  # noqa: BLE001 - final fallback is contained
         fallback_error = error
     else:

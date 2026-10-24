@@ -150,8 +150,18 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(movie.gradientColors.count, 2)
         XCTAssertEqual(boardGame.displayName, "Board Games")
         XCTAssertEqual(boardGame.symbolName, "dice.fill")
-        XCTAssertEqual(anime.symbolText, "オ")
+        XCTAssertEqual(anime.displayName, "Anime")
         XCTAssertEqual(movie.gradientColors, boardGame.gradientColors)
+    }
+
+    func testMediaTypeThemeSeasonAndEpisodeUseTVIcon() {
+        let season = MediaTypeTheme.theme(for: "season")
+        let episode = MediaTypeTheme.theme(for: "episode")
+
+        XCTAssertEqual(season.symbolName, "tv")
+        XCTAssertEqual(season.displayName, "Season")
+        XCTAssertEqual(episode.symbolName, "tv")
+        XCTAssertEqual(episode.displayName, "Episode")
     }
 
     func testMediaTypeThemeUnknownFallback() {
@@ -199,13 +209,17 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(CustomListReorderMath.rowOffset(for: 2, sourceIndex: 2, targetIndex: 0, activeTranslation: -20, rowHeight: 10), -20)
     }
 
-    func testCustomListBackdropSelectionUsesFirstMovieOrTVBackdrop() {
+    func testCustomListBackdropSelectionUsesFirstItemWithABackdrop() {
         let book = mediaSummary(id: "book", mediaType: "book", backdropURL: "https://example.com/book.jpg")
         let movie = mediaSummary(id: "movie", mediaType: "movie", backdropURL: "https://example.com/movie.jpg")
         let tv = mediaSummary(id: "tv", mediaType: "tv", backdropURL: "https://example.com/tv.jpg", customBackdropURL: "https://example.com/custom-tv.jpg")
 
         XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [book, movie, tv]), "https://example.com/movie.jpg")
         XCTAssertNil(CustomListBackdropSelection.artworkURL(from: [book]))
+        for mediaType in ["game", "anime", "manga"] {
+            let item = mediaSummary(id: mediaType, mediaType: mediaType, backdropURL: "https://example.com/\(mediaType).jpg")
+            XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [book, item]), "https://example.com/\(mediaType).jpg")
+        }
         XCTAssertEqual(CustomListBackdropSelection.artworkURL(from: [tv]), "https://example.com/custom-tv.jpg")
         XCTAssertEqual(
             CustomListBackdropSelection.artworkURL(from: [mediaSummary(id: "movie", mediaType: "movie", backdropURL: nil)]),
@@ -215,6 +229,53 @@ final class SpineTests: XCTestCase {
             CustomListBackdropSelection.artworkURL(
                 from: [mediaSummary(id: "blank", mediaType: "movie", backdropURL: "   ")]
             )
+        )
+    }
+
+    @MainActor
+    func testCustomListHeaderArtworkPrefersABackdropThenBlursTheFirstCover() {
+        let movie = mediaSummary(id: "movie", mediaType: "movie", backdropURL: "https://example.com/movie.jpg")
+        // Books never use a backdrop, even one the server sent.
+        let book = mediaSummary(id: "book", mediaType: "book", backdropURL: "https://example.com/book.jpg")
+        let album = mediaSummary(id: "album", mediaType: "music", backdropURL: nil)
+        let comic = mediaSummary(id: "comic", mediaType: "comic", backdropURL: nil)
+
+        XCTAssertEqual(CustomListBackdropSelection.artwork(from: [movie]), .backdrop("https://example.com/movie.jpg"))
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [book, mediaSummary(id: "book-2", mediaType: "book", backdropURL: nil)]),
+            .blurredCover("https://example.com/book-poster.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [album, comic]),
+            .blurredCover("https://example.com/album-poster.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [book, album, comic, movie]),
+            .backdrop("https://example.com/movie.jpg")
+        )
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [mediaSummary(id: "movie", mediaType: "movie", backdropURL: nil)]),
+            .blurredCover("https://example.com/movie-poster.jpg")
+        )
+    }
+
+    @MainActor
+    func testCustomListHeaderArtworkIsNilWithoutABackdropOrCover() {
+        let coverless = MediaSummary(
+            ref: MediaRef(itemId: nil, source: "openlibrary", mediaType: "book", mediaId: "coverless", seasonNumber: nil, episodeNumber: nil),
+            title: "Coverless"
+        )
+        let blankCover = MediaSummary(
+            ref: MediaRef(itemId: nil, source: "musicbrainz", mediaType: "music", mediaId: "blank", seasonNumber: nil, episodeNumber: nil),
+            title: "Blank",
+            posterUrl: "   "
+        )
+
+        XCTAssertNil(CustomListBackdropSelection.artwork(from: []))
+        XCTAssertNil(CustomListBackdropSelection.artwork(from: [coverless, blankCover]))
+        XCTAssertEqual(
+            CustomListBackdropSelection.artwork(from: [coverless, mediaSummary(id: "book", mediaType: "book", backdropURL: nil)]),
+            .blurredCover("https://example.com/book-poster.jpg")
         )
     }
 
@@ -1533,6 +1594,38 @@ final class SpineTests: XCTestCase {
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "tracked"),
             LibraryTrackingRequest(mediaType: "movie", page: "2", status: "tracked")
         ])
+    }
+
+    @MainActor
+    func testLibraryViewModelRequestsTheNextPageOnePrefetchScreenFromTheEnd() async {
+        let repository = ScriptedLibraryTrackingRepository(responses: [
+            "movie:": PagedResponse(
+                count: 21,
+                next: "https://spine.test/api/v1/tracking/?media_type=movie&page=2",
+                previous: nil,
+                results: (1 ... 20).map { libraryItem(id: "\($0)", title: "Movie \($0)") }
+            ),
+            "movie:2": PagedResponse(
+                count: 21,
+                next: nil,
+                previous: "https://spine.test/api/v1/tracking/?media_type=movie",
+                results: [libraryItem(id: "21", title: "Movie 21")]
+            )
+        ])
+        let viewModel = LibraryViewModel(
+            mediaRepository: FakeMediaRepository(),
+            trackingRepository: repository,
+            onUnauthorized: {}
+        )
+        await viewModel.reload()
+
+        // 17 items from the end is still beyond the artwork look-ahead.
+        await viewModel.loadNextPageIfNeeded(currentItem: viewModel.items[3])
+        XCTAssertEqual(repository.requests.count, 1)
+
+        await viewModel.loadNextPageIfNeeded(currentItem: viewModel.items[20 - ArtworkPrefetch.lookahead])
+        XCTAssertEqual(repository.requests.map(\.page), [nil, "2"])
+        XCTAssertEqual(viewModel.items.count, 21)
     }
 
     @MainActor
@@ -5314,6 +5407,66 @@ final class SpineTests: XCTestCase {
         XCTAssertFalse(viewModel.isLoading)
     }
 
+    @MainActor
+    func testOwnProfileRefreshesInProgressEachTimeItAppears() async {
+        let trackingRepository = ScriptedLibraryTrackingRepository(responses: [
+            "book:": PagedResponse(
+                count: 1,
+                next: nil,
+                previous: nil,
+                results: [libraryItem(id: "7", title: "Removed Book", mediaType: "book", status: "In progress")]
+            ),
+        ])
+        let viewModel = ProfileViewModel(
+            profileRepository: HallOfFameProfileRepository(
+                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
+                setResponse: [:],
+                clearResponse: [:]
+            ),
+            trackingRepository: trackingRepository,
+            activityRepository: ScriptedHomeActivityRepository(items: []),
+            onUnauthorized: {}
+        )
+
+        await viewModel.loadOnAppear()
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Removed Book"])
+
+        // The book leaves the library somewhere else, then the profile appears again.
+        trackingRepository.responses = [:]
+        await viewModel.loadOnAppear()
+
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), [])
+    }
+
+    @MainActor
+    func testProfileRefreshKeepsShownSectionsInsteadOfLoadingPlaceholders() async {
+        let trackingRepository = ScriptedLibraryTrackingRepository(responses: [:])
+        let activityRepository = ScriptedHomeActivityRepository(items: [])
+        let viewModel = ProfileViewModel(
+            profileRepository: HallOfFameProfileRepository(
+                profile: profileFixture(hof: [:], enabledMediaTypes: ["book"]),
+                setResponse: [:],
+                clearResponse: [:]
+            ),
+            trackingRepository: trackingRepository,
+            activityRepository: activityRepository,
+            onUnauthorized: {}
+        )
+        var inProgressLoadingStates: [Bool] = []
+        var activityLoadingStates: [Bool] = []
+        trackingRepository.onList = { inProgressLoadingStates.append(viewModel.isLoadingInProgress) }
+        activityRepository.onRequest = { activityLoadingStates.append(viewModel.isLoadingActivity) }
+
+        await viewModel.load()
+        await viewModel.reload()
+
+        // The first load shows placeholders; the refresh keeps "Nothing in progress yet" and "No activity yet" up.
+        XCTAssertEqual(inProgressLoadingStates, [true, false])
+        XCTAssertEqual(activityLoadingStates, [true, false])
+        XCTAssertFalse(viewModel.isLoadingInProgress)
+        XCTAssertFalse(viewModel.isLoadingActivity)
+    }
+
     func testHardcoverBookSeriesRelatedSectionDecoding() throws {
         let data = """
         {
@@ -6288,7 +6441,7 @@ final class SpineTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(tracking.detailRequests, [TestFixtures.movieDetail.ref])
-        XCTAssertEqual(viewModel.tracking?.progress?.value(in: .percentage), 7)
+        XCTAssertEqual(viewModel.viewer?.progress?.value(in: .percentage), 7)
     }
 
     @MainActor
@@ -6305,7 +6458,7 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt)
+        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.completedBooks.first?.source, "manual")
@@ -6328,7 +6481,7 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt)
+        let didSave = await viewModel.performQuickAction(.finished, for: detail, completedAt: completedAt).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
@@ -6364,7 +6517,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.detail?.userState?.isTracked, true)
         XCTAssertNil(viewModel.detail?.userState?.status)
         XCTAssertNil(viewModel.quickActionErrorMessage)
-        XCTAssertNil(viewModel.tracking)
+        XCTAssertNil(viewModel.viewer?.status)
     }
 
     @MainActor
@@ -6379,7 +6532,7 @@ final class SpineTests: XCTestCase {
             onUnauthorized: {}
         )
 
-        let didSave = await viewModel.performQuickAction(.currently, for: detail)
+        let didSave = await viewModel.performQuickAction(.currently, for: detail).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.updateRequests.first?.ref, detail.ref)
@@ -6398,7 +6551,7 @@ final class SpineTests: XCTestCase {
             onUnauthorized: {}
         )
 
-        let didSave = await viewModel.performQuickAction(.stopped, for: detail)
+        let didSave = await viewModel.performQuickAction(.stopped, for: detail).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.gameActions.first?.ref, detail.ref)
@@ -6540,11 +6693,12 @@ final class SpineTests: XCTestCase {
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
         )
+        viewModel.detail = detail
 
         let didSave = await viewModel.saveProgress(
             ProgressUpdateSaveRequest(mode: .percentage, value: 42),
             for: detail
-        )
+        ).value
 
         XCTAssertTrue(didSave)
         XCTAssertEqual(tracking.bookProgressRequests.first?.source, "manual")
@@ -6553,10 +6707,10 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.bookProgressRequests.first?.value, Decimal(42))
         XCTAssertEqual(tracking.bookProgressRequests.first?.notes, "")
         XCTAssertEqual(tracking.updateRequests.count, 0)
-        XCTAssertEqual(viewModel.tracking?.status, "In progress")
-        XCTAssertEqual(viewModel.tracking?.progress?.kind, "percentage")
-        XCTAssertEqual(viewModel.tracking?.progress?.value, Decimal(42))
-        XCTAssertEqual(viewModel.tracking?.progress?.compactDisplayText, "42%")
+        XCTAssertEqual(viewModel.viewer?.status, "In progress")
+        XCTAssertEqual(viewModel.viewer?.progress?.kind, "percentage")
+        XCTAssertEqual(viewModel.viewer?.progress?.value, Decimal(42))
+        XCTAssertEqual(viewModel.viewer?.progress?.compactDisplayText, "42%")
         XCTAssertEqual(ProgressDisplayPreferences.mode(for: detail.ref), .percentage)
     }
 
@@ -6571,11 +6725,12 @@ final class SpineTests: XCTestCase {
             diaryRepository: RecordingDiaryRepository(),
             onUnauthorized: {}
         )
+        viewModel.detail = detail
 
         let didSave = await viewModel.saveProgress(
             ProgressUpdateSaveRequest(mode: .percentage, value: 100),
             for: detail
-        )
+        ).value
 
         XCTAssertFalse(didSave)
         XCTAssertEqual(tracking.updateRequests.count, 0)
@@ -6583,7 +6738,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.consumedRefs.count, 0)
         XCTAssertEqual(tracking.completedBooks.count, 0)
         XCTAssertNotNil(viewModel.progressErrorMessage)
-        XCTAssertNil(viewModel.tracking)
+        XCTAssertEqual(viewModel.viewer, detail.userState ?? .untracked)
     }
 
     @MainActor
@@ -6642,22 +6797,6 @@ final class SpineTests: XCTestCase {
         XCTAssertTrue(retried)
         XCTAssertNil(model.deleteErrorMessage)
         XCTAssertEqual(diary.deletedIds, [1, 1])
-    }
-
-    @MainActor
-    func testGameActionKeepsMutationWhenCanonicalRefreshFails() async {
-        let detail = TestFixtures.logDetail(mediaType: "game")
-        let tracking = RecordingTrackingRepository()
-        let model = MediaDetailViewModel(ref: detail.ref,
-            mediaRepository: MediaDetailFixtureRepository(detailError: APIError.httpStatus(503, nil)),
-            trackingRepository: tracking, diaryRepository: RecordingDiaryRepository(), onUnauthorized: {})
-        let first = await model.performGameAction("restart", for: detail)
-        let second = await model.performGameAction("restart", for: detail)
-        XCTAssertFalse(first)
-        XCTAssertFalse(second)
-        XCTAssertNotNil(model.quickActionErrorMessage)
-        XCTAssertEqual(tracking.gameActions.count, 2)
-        XCTAssertEqual(tracking.gameActions[0].request.mutationId, tracking.gameActions[1].request.mutationId)
     }
 
     @MainActor
@@ -6924,7 +7063,7 @@ final class SpineTests: XCTestCase {
         viewModel.ratingSteps = 9
         viewModel.reviewTitle = "A second spin"
         viewModel.review = "New details emerged."
-        viewModel.tags = ["relisten", "headphones"]
+        viewModel.tagDraft.tags = ["relisten", "headphones"]
         viewModel.liked = true
         viewModel.isRepeat = true
         viewModel.containsSpoilers = true
@@ -6959,17 +7098,17 @@ final class SpineTests: XCTestCase {
         )
         let completedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let planned = await viewModel.performQuickAction(.planning, for: detail)
-        let started = await viewModel.performQuickAction(.currently, for: detail)
-        let paused = await viewModel.performQuickAction(.paused, for: detail)
-        let dropped = await viewModel.performQuickAction(.stopped, for: detail)
-        let resumed = await viewModel.performQuickAction(.currently, for: detail)
+        let planned = await viewModel.performQuickAction(.planning, for: detail).value
+        let started = await viewModel.performQuickAction(.currently, for: detail).value
+        let paused = await viewModel.performQuickAction(.paused, for: detail).value
+        let dropped = await viewModel.performQuickAction(.stopped, for: detail).value
+        let resumed = await viewModel.performQuickAction(.currently, for: detail).value
         let listened = await viewModel.performQuickAction(
             .finished,
             for: detail,
             completedAt: completedAt
-        )
-        let removed = await viewModel.removeTracking(for: detail)
+        ).value
+        let removed = await viewModel.removeTracking(for: detail).value
 
         XCTAssertTrue(planned)
         XCTAssertTrue(started)
@@ -7038,7 +7177,7 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
-    func testMediaLogTagsLoadOnlyForTypedQueries() async {
+    func testMediaLogLoadsTheUsersOwnTagsOnceAndMatchesThemLocally() async {
         let diary = RecordingDiaryRepository()
         let viewModel = MediaLogViewModel(
             detail: TestFixtures.movieDetail,
@@ -7049,15 +7188,86 @@ final class SpineTests: XCTestCase {
         )
 
         await viewModel.loadTags()
-
-        XCTAssertTrue(diary.tagQueries.isEmpty)
-        XCTAssertTrue(viewModel.tagSuggestions.isEmpty)
-
-        viewModel.tagQuery = "net"
         await viewModel.loadTags()
 
-        XCTAssertEqual(diary.tagQueries, ["net"])
-        XCTAssertEqual(viewModel.tagSuggestions.map(\.name), ["netflix"])
+        XCTAssertEqual(diary.allTagRequests, [true])
+        XCTAssertTrue(diary.tagQueries.isEmpty)
+
+        viewModel.tagDraft.updateQuery("NE")
+
+        XCTAssertEqual(viewModel.tagDraft.suggestions.map(\.name), ["netflix", "new wave"])
+    }
+
+    func testLogTagSuggestionsPutPrefixMatchesFirstAndSkipAddedTags() {
+        let library = [
+            DiaryTagSuggestion(name: "netflix", usageCount: 12),
+            DiaryTagSuggestion(name: "Rainy day", usageCount: 6),
+            DiaryTagSuggestion(name: "summer", usageCount: 5),
+            DiaryTagSuggestion(name: "rain", usageCount: 3),
+            DiaryTagSuggestion(name: "brain food", usageCount: 2),
+            DiaryTagSuggestion(name: "café nights", usageCount: 1),
+        ]
+
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "rai", in: library, excluding: []).map(\.name),
+            ["Rainy day", "rain", "brain food"]
+        )
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "RAI", in: library, excluding: ["Rain"]).map(\.name),
+            ["Rainy day", "brain food"]
+        )
+        XCTAssertEqual(
+            LogTagDraft.suggestions(for: "", in: library, excluding: ["netflix"], limit: 2).map(\.name),
+            ["Rainy day", "summer"]
+        )
+        XCTAssertEqual(LogTagDraft.suggestions(for: "cafe", in: library, excluding: []).map(\.name), ["café nights"])
+        XCTAssertTrue(LogTagDraft.suggestions(for: "zzz", in: library, excluding: []).isEmpty)
+    }
+
+    @MainActor
+    func testLogTagDraftAddsATagOnReturnOrCommaAndKeepsTheRestTyped() {
+        let draft = LogTagDraft(tags: ["summer"])
+
+        draft.updateQuery("road trip\n")
+        XCTAssertEqual(draft.tags, ["summer", "road trip"])
+        XCTAssertEqual(draft.query, "")
+
+        draft.updateQuery("cozy, Summer, rew")
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "cozy"])
+        XCTAssertEqual(draft.query, "rew")
+
+        draft.commitQuery()
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "cozy", "rew"])
+        XCTAssertEqual(draft.query, "")
+
+        draft.commitQuery()
+        draft.pick("late night")
+        draft.remove("cozy")
+        XCTAssertEqual(draft.tags, ["summer", "road trip", "rew", "late night"])
+    }
+
+    @MainActor
+    func testMediaLogSaveKeepsATagThatIsStillBeingTyped() async {
+        let diary = RecordingDiaryRepository()
+        let viewModel = MediaLogViewModel(
+            detail: TestFixtures.movieDetail,
+            trackingRepository: RecordingTrackingRepository(),
+            diaryRepository: diary,
+            onUnauthorized: {},
+            onSaved: {}
+        )
+        viewModel.tagDraft.updateQuery("late night")
+
+        let didSave = await viewModel.save()
+
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(diary.createdRequests.first?.tags, ["late night"])
+    }
+
+    func testLogTagSeparatorsAreReturnAndComma() {
+        XCTAssertTrue(LogTagDraft.containsSeparator("latin\n"))
+        XCTAssertTrue(LogTagDraft.containsSeparator("cozy,"))
+        XCTAssertFalse(LogTagDraft.containsSeparator("road trip"))
     }
 
     @MainActor
@@ -7074,7 +7284,7 @@ final class SpineTests: XCTestCase {
         )
         viewModel.ratingSteps = 9
         viewModel.review = "Still cuts."
-        viewModel.tags = ["noir"]
+        viewModel.tagDraft.tags = ["noir"]
         viewModel.liked = true
         viewModel.isRepeat = true
         viewModel.containsSpoilers = true
@@ -7694,8 +7904,9 @@ private enum CompanyCatalogTestError: Error {
 }
 
 private final class ScriptedLibraryTrackingRepository: TrackingRepository {
-    private let responses: [String: PagedResponse<Spine.LibraryItem>]
+    var responses: [String: PagedResponse<Spine.LibraryItem>]
     var requests: [LibraryTrackingRequest] = []
+    var onList: (@MainActor () -> Void)?
 
     init(responses: [String: PagedResponse<Spine.LibraryItem>]) {
         self.responses = responses
@@ -7703,6 +7914,7 @@ private final class ScriptedLibraryTrackingRepository: TrackingRepository {
 
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<Spine.LibraryItem> {
         requests.append(LibraryTrackingRequest(mediaType: mediaType, page: page, status: status, query: query))
+        await onList?()
         guard let response = responses["\(mediaType):\(page ?? ""):\(query ?? "")"] ?? responses["\(mediaType):\(page ?? "")"] else {
             return PagedResponse(count: 0, next: nil, previous: nil, results: [])
         }
@@ -7906,6 +8118,7 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
     let items: [ActivityItem]
     let error: Error?
     var requests: [ActivityRequest] = []
+    var onRequest: (@MainActor () -> Void)?
 
     init(items: [ActivityItem], error: Error? = nil) {
         self.items = items
@@ -7914,6 +8127,7 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
 
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem] {
         requests.append(ActivityRequest(username: username, limit: limit))
+        await onRequest?()
         if let error { throw error }
         return Array(items.prefix(limit))
     }
@@ -8764,6 +8978,18 @@ private final class RecordingDiaryRepository: DiaryRepository {
         tagQueries.append(query)
         return [DiaryTagSuggestion(name: "netflix", usageCount: 12)]
     }
+
+    var allTagRequests: [Bool] = []
+
+    func allTags(mine: Bool) async throws -> [DiaryTagSuggestion] {
+        allTagRequests.append(mine)
+        return [
+            DiaryTagSuggestion(name: "netflix", usageCount: 12),
+            DiaryTagSuggestion(name: "summer", usageCount: 5),
+            DiaryTagSuggestion(name: "new wave", usageCount: 2),
+            DiaryTagSuggestion(name: "comfort rewatch", usageCount: 1),
+        ]
+    }
 }
 
 private final class TaggedDiaryFixtureRepository: DiaryRepository {
@@ -8815,8 +9041,9 @@ private final class TaggedDiaryFixtureRepository: DiaryRepository {
 
 private final class RecordingTrackingRepository: TrackingRepository {
     var gameActions: [(ref: MediaRef, action: String, request: BookActionRequest)] = []
-    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws {
+    func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
         gameActions.append((ref, action, request))
+        return nil
     }
     var detailRequests: [MediaRef] = []
     var detailResponse = TestFixtures.trackingState

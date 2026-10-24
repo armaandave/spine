@@ -1,0 +1,36 @@
+{
+ "albums": [
+  {
+   "votes": 31495,
+   "averageRating": 4.43,
+   "name": "The Dark Side Of The Moon",
+   "artist": "Pink Floyd",
+   "releaseDate": "1973",
+   "spotifyId": "3a0UOgDWw2pTajw85QPMiz"
+  },
+  {
+   "votes": 31752,
+   "averageRating": 4.45,
+   "name": "Rumours",
+   "artist": "Fleetwood Mac",
+   "releaseDate": "1977",
+   "spotifyId": "63k57x0qOkUWEMR0dkMivh"
+  },
+  {
+   "votes": 5,
+   "averageRating": 1.89,
+   "name": "D.O.A. the Third and Final Report of Throbbing Gristle",
+   "artist": "Throbbing Gristle",
+   "releaseDate": "1978",
+   "spotifyId": "5yj769ALl6uKp6ZIJO0BQM"
+  },
+  {
+   "votes": 31428,
+   "averageRating": 4.45,
+   "name": "Abbey Road",
+   "artist": "Beatles",
+   "releaseDate": "1969",
+   "spotifyId": "0ETFjACtuP2ADo6LFhL6HN"
+  }
+ ]
+}

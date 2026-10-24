@@ -122,6 +122,23 @@ class ServicesTests(TestCase):
         self.assertEqual(mock_get.call_count, services.RATE_LIMIT_MAX_RETRIES + 1)
         self.assertEqual(mock_sleep.call_count, services.RATE_LIMIT_MAX_RETRIES)
 
+    @patch("app.providers.services.time.sleep")
+    @patch("app.providers.services.session.post")
+    def test_rate_limit_longer_than_max_wait_fails_at_once(self, mock_post, mock_sleep):
+        """A daily cap that asks for hours fails without sleeping or retrying."""
+        mock_post.side_effect = self._rate_limited_then_ok("68281")
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            services.api_request(
+                Sources.HARDCOVER.value,
+                "POST",
+                "https://api.hardcover.app/v1/graphql",
+                params={"query": "{}"},
+            )
+
+        mock_post.assert_called_once()
+        mock_sleep.assert_not_called()
+
     def _rate_limited_then_ok(self, retry_after):
         limited = MagicMock(status_code=429, headers={"Retry-After": retry_after})
         error = requests.exceptions.HTTPError("429 Too Many Requests")
@@ -210,6 +227,28 @@ class ServicesTests(TestCase):
             igdb.handle_error(error)
 
         self.assertEqual(cm.exception.provider, Sources.IGDB.value)
+
+    @patch("app.providers.igdb.cache")
+    @patch("app.providers.igdb.services.api_request")
+    def test_igdb_token_refused_with_unauthorized_raises_provider_error(
+        self,
+        mock_api_request,
+        mock_cache,
+    ):
+        """Test a 401 from the IGDB token endpoint raises a provider error."""
+        mock_cache.get.return_value = None
+        mock_response = MagicMock()
+        mock_response.status_code = 401  # Unauthorized
+
+        error = requests.exceptions.HTTPError("401 Unauthorized")
+        error.response = mock_response
+        mock_api_request.side_effect = error
+
+        with self.assertRaises(services.ProviderAPIError) as cm:
+            igdb.get_access_token()
+
+        self.assertEqual(cm.exception.provider, Sources.IGDB.value)
+        mock_cache.set.assert_not_called()
 
     def test_handle_error_tmdb_unauthorized(self):
         """Test the handle_error function with TMDB unauthorized error."""

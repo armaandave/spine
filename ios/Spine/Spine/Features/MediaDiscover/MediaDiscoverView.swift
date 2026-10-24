@@ -146,7 +146,8 @@ final class MediaDiscoverViewModel {
               !isLoading,
               !isLoadingNextPage,
               let index = results.firstIndex(where: { $0.id == currentItem.id }) else { return false }
-        return index >= results.count - 12
+        // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
+        return index >= results.count - ArtworkPrefetch.lookahead
     }
 
     static func page(from urlString: String?) -> String? {
@@ -255,6 +256,7 @@ struct MediaDiscoverView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("View \(media.title)")
+                                    .prefetchingArtwork(after: media, in: viewModel.results) { $0.artworkRequest(slot: .tagGrid) }
                                     .task {
                                         await viewModel.loadNextPageIfNeeded(currentItem: media)
                                     }

@@ -14,18 +14,33 @@ final class MediaDetailViewModel {
     var detail: MediaDetail?
     var reviews: [MediaReview] = []
     var reviewCount = 0
-    var tracking: TrackingState?
     var isLoading = true
     var isLoadingReviews = false
     var isSavingQuickAction = false
     var isSavingProgress = false
-    var isSavingLike = false
     var errorMessage: String?
     var reviewsErrorMessage: String?
     var quickActionErrorMessage: String?
     var progressErrorMessage: String?
     var likeErrorMessage: String?
+    var formErrorMessage: String?
     var musicEnrichmentState = MusicEnrichmentState.idle
+
+    /// Tags this page's MediaStateChange posts, so its own observer can skip them.
+    let changeOrigin = UUID()
+    let writeRefreshDelay: Duration
+    let externalRefreshDelay: Duration
+    private(set) var pending: [PendingWrite] = []
+    private(set) var pendingWriteCount = 0
+    private var eyeWritesInFlight = 0
+
+    @ObservationIgnored private var mutationTail: Task<Void, Never>?
+    @ObservationIgnored private var stateGeneration = 0
+    @ObservationIgnored private var failedWriteCount = 0
+    @ObservationIgnored private var retainedMutationIds: [String: UUID] = [:]
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshIsWaiting = false
+    @ObservationIgnored private var scheduledNeed = RefreshNeed.none
 
     private let ref: MediaRef
     private let mediaRepository: MediaRepository
@@ -42,7 +57,9 @@ final class MediaDetailViewModel {
         diaryRepository: DiaryRepository,
         onUnauthorized: @escaping () -> Void,
         externalRatingPollInterval: Duration? = nil,
-        externalRatingMaxPollAttempts: Int = 30
+        externalRatingMaxPollAttempts: Int = 30,
+        writeRefreshDelay: Duration = .milliseconds(500),
+        externalRefreshDelay: Duration = .milliseconds(300)
     ) {
         self.ref = ref
         self.mediaRepository = mediaRepository
@@ -51,9 +68,41 @@ final class MediaDetailViewModel {
         self.onUnauthorized = onUnauthorized
         self.externalRatingPollInterval = externalRatingPollInterval
         self.externalRatingMaxPollAttempts = externalRatingMaxPollAttempts
+        self.writeRefreshDelay = writeRefreshDelay
+        self.externalRefreshDelay = externalRefreshDelay
+    }
+
+    /// The page's one tracking state: the confirmed `detail.userState` with pending writes applied in tap order.
+    var viewer: UserMediaState? {
+        guard let detail else { return nil }
+        return pending.reduce(into: detail.userState ?? .untracked) { state, write in write.project(&state) }
+    }
+
+    var hasPendingWrites: Bool { pendingWriteCount > 0 }
+    var confirmingEyeWrite: Bool { eyeWritesInFlight > 0 }
+
+    /// Waits for every write queued so far and reports whether they all succeeded. Screens that capture ids read
+    /// confirmed state after this, and don't open at all when a write they waited for failed.
+    @discardableResult
+    func settled() async -> Bool {
+        let failures = failedWriteCount
+        await mutationTail?.value
+        return failedWriteCount == failures
+    }
+
+    func refreshFinished() async {
+        while let task = refreshTask {
+            await task.value
+            if task == refreshTask { return }
+        }
     }
 
     func load() async {
+        if detail != nil {
+            isLoading = false
+            await refreshFully()
+            return
+        }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -61,10 +110,9 @@ final class MediaDetailViewModel {
         do {
             let loaded = try await mediaRepository.detail(ref: ref)
             detail = loaded
-            reviews = loaded.reviews ?? []
-            reviewCount = reviews.count
+            isLoading = false
             async let enrichment: Void = loadMusicEnrichmentIfNeeded(for: loaded)
-            async let tracking: Void = loadTrackingIfNeeded(for: loaded)
+            async let tracking: Void = mergeTrackingIfNeeded(for: loaded)
             async let reviewLoad: Void = loadReviews()
             _ = await (enrichment, tracking, reviewLoad)
         } catch is CancellationError {
@@ -84,8 +132,10 @@ final class MediaDetailViewModel {
         }
         musicEnrichmentState = .loading
         do {
-            let enriched = try await mediaRepository.enrichedMusicDetail(ref: ref)
+            var enriched = try await mediaRepository.enrichedMusicDetail(ref: ref)
             guard detail?.id == loaded.id else { return }
+            // The enrichment carries the user state from before any write made while it loaded.
+            enriched.userState = detail?.userState
             detail = enriched
             musicEnrichmentState = .loaded
         } catch is CancellationError {
@@ -129,20 +179,28 @@ final class MediaDetailViewModel {
         }
     }
 
-    private func loadTrackingIfNeeded(for detail: MediaDetail) async {
-        guard detail.userState?.isTracked == true || detail.userState?.status != nil else {
-            tracking = nil
-            return
-        }
-        if detail.ref.mediaType == "game" { tracking = nil }
+    /// Games never fetch GET /tracking: their state comes complete in the detail payload.
+    private func mergeTrackingIfNeeded(for loaded: MediaDetail) async {
+        let generation = stateGeneration
+        guard let tracking = await trackingToMerge(for: loaded),
+              generation == stateGeneration, !hasPendingWrites,
+              let current = detail?.userState
+        else { return }
+        let merged = current.applying(tracking)
+        if merged != current { detail?.userState = merged }
+    }
+
+    private func trackingToMerge(for loaded: MediaDetail) async -> TrackingState? {
+        guard loaded.ref.mediaType != "game",
+              loaded.userState?.isTracked == true || loaded.userState?.status != nil
+        else { return nil }
         do {
-            tracking = try await trackingRepository.detail(ref: detail.ref)
-        } catch APIError.httpStatus(404, _) {
-            tracking = nil
+            return try await trackingRepository.detail(ref: loaded.ref)
         } catch {
             if case APIError.unauthorized = error {
                 onUnauthorized()
             }
+            return nil
         }
     }
 
@@ -177,77 +235,274 @@ final class MediaDetailViewModel {
         }
     }
 
-    func toggleMediaLike(for detail: MediaDetail) async -> Bool {
-        guard !isSavingLike else { return false }
-        isSavingLike = true
-        likeErrorMessage = nil
-        defer { isSavingLike = false }
+    // MARK: Refresh policy
 
-        let next = !(detail.userState?.hasLiked ?? false)
-        self.detail = detail.replacingHasLiked(next)
-        do {
-            let response = try await mediaRepository.setLiked(ref: detail.ref, liked: next)
-            self.detail = self.detail?.replacingHasLiked(response.liked)
-            MediaStateChange.post(ref: detail.ref)
-            await load()
-            return true
-        } catch {
-            self.detail = detail
-            likeErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
+    private var refreshesWholeDetail: Bool {
+        ["tv", "season", "episode"].contains(ref.mediaType)
+    }
+
+    /// Coalesces refreshes: one waits at a time, keeping the strongest need, and runs after the write queue settles.
+    func scheduleRefresh(_ need: RefreshNeed, after delay: Duration) {
+        guard need > .none else { return }
+        scheduledNeed = max(scheduledNeed, refreshesWholeDetail ? .full : need)
+        let previous = refreshTask
+        if refreshIsWaiting { previous?.cancel() }
+        refreshIsWaiting = true
+        refreshTask = Task {
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            guard !Task.isCancelled else { return }
+            await previous?.value
+            await settled()
+            guard !Task.isCancelled else { return }
+            refreshIsWaiting = false
+            let need = scheduledNeed
+            scheduledNeed = .none
+            await runRefresh(need)
         }
     }
 
-    func markConsumed(for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
+    /// A MediaStateChange post. The page has already applied its own writes, so it skips posts carrying its origin.
+    func handleMediaStateChange(_ userInfo: [AnyHashable: Any]?) {
+        guard userInfo?["origin"] as? UUID != changeOrigin,
+              let changedRef = userInfo?["ref"] as? MediaRef,
+              let detail,
+              completionMayHaveChanged(in: detail, for: changedRef)
+        else { return }
+        scheduleRefresh(.full, after: externalRefreshDelay)
+    }
 
-        do {
-            tracking = try await trackingRepository.consume(ref: detail.ref, consumedAt: nil)
-            self.detail = detail.replacingIsTracked(true)
-            MediaStateChange.post(ref: detail.ref)
-            await load()
+    private func completionMayHaveChanged(in detail: MediaDetail, for changedRef: MediaRef) -> Bool {
+        if changedRef.id == ref.id {
             return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
+        }
+        if ["tv", "season"].contains(detail.ref.mediaType),
+           detail.ref.source == changedRef.source,
+           detail.ref.mediaId == changedRef.mediaId {
+            return true
+        }
+        return false
+    }
+
+    private func runRefresh(_ need: RefreshNeed) async {
+        guard detail != nil else { return }
+        switch need {
+        case .none:
+            return
+        case .community:
+            await refreshCommunity()
+        case .communityAndReviews:
+            async let community: Void = refreshCommunity()
+            async let reviewLoad: Void = loadReviews()
+            _ = await (community, reviewLoad)
+        case .full:
+            await refreshFully()
         }
     }
 
-    func setCurrentRating(for detail: MediaDetail, halfSteps: Int) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-
+    private func refreshCommunity() async {
         do {
-            let rating = halfSteps > 0 ? Decimal(halfSteps) / 2 : nil
-            tracking = try await trackingRepository.update(
-                ref: detail.ref,
-                request: TrackingWriteRequest(rating: rating, includesRating: true)
-            )
-            MediaStateChange.post(ref: detail.ref)
-            await load()
-            return true
+            let community = try await mediaRepository.community(ref: ref)
+            if detail?.community != community { detail?.community = community }
         } catch {
-            quickActionErrorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
             }
-            return false
         }
     }
 
-    func performQuickAction(_ action: MediaDetailQuickAction, for detail: MediaDetail, completedAt: Date = Date()) async -> Bool {
-        if detail.ref.mediaType == "game", action != .planning {
+    /// Never clears anything first, and never overwrites a write that confirmed (or is pending) while it loaded.
+    private func refreshFully() async {
+        let generation = stateGeneration
+        do {
+            let loaded = try await mediaRepository.detail(ref: ref)
+            var userState = loaded.userState
+            if let tracking = await trackingToMerge(for: loaded) {
+                userState = (userState ?? .untracked).applying(tracking)
+            }
+            let lostRace = generation != stateGeneration || hasPendingWrites
+            if refreshesWholeDetail || detail == nil {
+                var next = loaded
+                next.userState = lostRace ? detail?.userState : userState
+                detail = next
+            } else {
+                // Patch only what can change, so music enrichment and other loaded extras stay.
+                if !lostRace, detail?.userState != userState { detail?.userState = userState }
+                if detail?.community != loaded.community { detail?.community = loaded.community }
+                if detail?.completion != loaded.completion { detail?.completion = loaded.completion }
+            }
+            errorMessage = nil
+            if lostRace { scheduleRefresh(.full, after: .zero) }
+            await loadReviews()
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+        }
+    }
+
+    // MARK: Write queue
+
+    /// Shows `project` at once, then sends on the serial queue. `send` builds its request when it runs, from
+    /// confirmed state only. Its outcome replaces the confirmed state in the same turn that drops the projection.
+    @discardableResult
+    private func enqueue(
+        _ project: TrackingProjection.Projection?,
+        ref: MediaRef,
+        refresh: RefreshNeed = .none,
+        errorsTo errorTarget: ReferenceWritableKeyPath<MediaDetailViewModel, String?>? = nil,
+        eyeSpinner: Bool = false,
+        send: @escaping () async throws -> WriteOutcome
+    ) -> Task<Bool, Never> {
+        let errorPath = errorTarget ?? \.quickActionErrorMessage
+        let write = project.map { PendingWrite(project: $0) }
+        if let write { pending.append(write) }
+        pendingWriteCount += 1
+        if eyeSpinner { eyeWritesInFlight += 1 }
+        self[keyPath: errorPath] = nil
+        let previous = mutationTail
+        let task = Task<Bool, Never> {
+            await previous?.value
+            defer {
+                pendingWriteCount -= 1
+                if eyeSpinner { eyeWritesInFlight -= 1 }
+            }
+            do {
+                let outcome = try await send()
+                pending.removeAll { $0.id == write?.id }
+                confirm(outcome)
+                retainedMutationIds.removeAll()
+                MediaStateChange.post(ref: ref, origin: changeOrigin)
+                switch outcome {
+                case .unknown:
+                    scheduleRefresh(.full, after: .zero)
+                case .untracked:
+                    // Removal also removes the rating and heart from the community stats.
+                    scheduleRefresh(max(refresh, .community), after: writeRefreshDelay)
+                default:
+                    scheduleRefresh(refresh, after: writeRefreshDelay)
+                }
+                return true
+            } catch {
+                pending.removeAll { $0.id == write?.id }
+                failedWriteCount += 1
+                self[keyPath: errorPath] = error.localizedDescription
+                if case APIError.unauthorized = error { onUnauthorized() }
+                // A lost response may still have landed.
+                if case APIError.network = error { scheduleRefresh(.full, after: .zero) }
+                return false
+            }
+        }
+        mutationTail = Task { _ = await task.value }
+        return task
+    }
+
+    private func confirm(_ outcome: WriteOutcome) {
+        let current = detail?.userState ?? .untracked
+        let next: UserMediaState
+        switch outcome {
+        case let .state(tracking):
+            next = current.applying(tracking)
+        case .untracked:
+            next = current.removed()
+        case let .completion(response):
+            next = current.applying(response.tracking).applying(diaryEntry: response.diaryEntry)
+        case let .liked(liked, serverState):
+            if var serverState {
+                serverState.progress = current.progress
+                serverState.startDate = current.startDate
+                next = serverState
+            } else {
+                var state = current
+                state.hasLiked = liked
+                next = state
+            }
+        case .unknown:
+            next = current
+        }
+        stateGeneration += 1
+        if detail != nil, detail?.userState != next { detail?.userState = next }
+    }
+
+    /// Reuses the id of a failed write so a retry stays idempotent. Any success clears them all.
+    private func mutationId(for key: String) -> UUID {
+        if let id = retainedMutationIds[key] { return id }
+        let id = UUID()
+        retainedMutationIds[key] = id
+        return id
+    }
+
+    private static func outcome(_ state: TrackingState?) -> WriteOutcome {
+        state.map { .state($0) } ?? .untracked
+    }
+
+    /// A rating or heart marks movies, music, books and games completed (SW-200, GM-300, BK-203).
+    private static func opinionImpliesCompletion(_ ref: MediaRef) -> Bool {
+        ref.isSingleWeight || ["book", "game"].contains(ref.mediaType)
+    }
+
+    private var confirmedState: UserMediaState? { detail?.userState }
+
+    private func confirmedPlaythroughId(for playthrough: GamePlaythroughState) throws -> Int {
+        guard playthrough.isPending else { return playthrough.id }
+        guard let current = confirmedState?.game?.currentPlaythrough, !current.isPending else { throw PendingWriteError() }
+        return current.id
+    }
+
+    private func confirmedJourneyId(for journey: BookJourneyState) throws -> Int {
+        guard journey.isPending else { return journey.id }
+        guard let current = confirmedState?.book?.currentJourney, !current.isPending else { throw PendingWriteError() }
+        return current.id
+    }
+
+    // MARK: Writes
+
+    @discardableResult
+    func toggleMediaLike(for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let liked = !((viewer ?? detail.userState)?.hasLiked ?? false)
+        let repository = mediaRepository
+        return enqueue(
+            TrackingProjection.like(liked, impliesCompletion: Self.opinionImpliesCompletion(ref)),
+            ref: ref,
+            refresh: .community,
+            errorsTo: \.likeErrorMessage
+        ) {
+            let response = try await repository.setLiked(ref: ref, liked: liked)
+            return .liked(response.liked, response.media?.userState)
+        }
+    }
+
+    @discardableResult
+    func markConsumed(for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let repository = trackingRepository
+        return enqueue(TrackingProjection.status("Completed"), ref: ref) {
+            .state(try await repository.consume(ref: ref, consumedAt: nil))
+        }
+    }
+
+    @discardableResult
+    func setCurrentRating(for detail: MediaDetail, halfSteps: Int) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let rating = halfSteps > 0 ? Decimal(halfSteps) / 2 : nil
+        let wire = halfSteps > 0 ? String(format: "%.1f", Double(halfSteps) / 2) : nil
+        let repository = trackingRepository
+        return enqueue(
+            TrackingProjection.rating(wire, impliesCompletion: Self.opinionImpliesCompletion(ref)),
+            ref: ref,
+            refresh: .community
+        ) {
+            .state(try await repository.update(ref: ref, request: TrackingWriteRequest(rating: rating, includesRating: true)))
+        }
+    }
+
+    @discardableResult
+    func performQuickAction(_ action: MediaDetailQuickAction, for detail: MediaDetail, completedAt: Date = Date()) -> Task<Bool, Never> {
+        let ref = detail.ref
+        if ref.mediaType == "game", action != .planning {
             let name: String
             switch action {
             case .currently: name = "start"
@@ -256,110 +511,96 @@ final class MediaDetailViewModel {
             case .finished: name = "mark_completed"
             case .planning: name = "planning"
             }
-            return await performGameAction(name, for: detail)
+            return performGameAction(name, for: detail)
         }
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-
-        do {
-            let state: TrackingState
+        let isBook = ref.mediaType == "book"
+        let day = CalendarDateCodec.string(from: completedAt)
+        let projection: TrackingProjection.Projection
+        switch action {
+        case .planning: projection = TrackingProjection.status("Planning")
+        case .currently: projection = isBook ? TrackingProjection.startBook(today: day) : TrackingProjection.status("In progress")
+        case .paused: projection = isBook ? TrackingProjection.pauseBook() : TrackingProjection.status("Paused")
+        case .stopped: projection = isBook ? TrackingProjection.dropBook(today: day) : TrackingProjection.status("Dropped")
+        case .finished: projection = TrackingProjection.status("Completed")
+        }
+        return enqueue(projection, ref: ref) { [self] in
+            // Book routing reads the state confirmed when this write is sent, not the state at the tap.
+            let confirmed = confirmedState
+            let state: TrackingState?
             switch action {
             case .planning:
-                state = try await trackingRepository.update(
-                    ref: detail.ref,
-                    request: TrackingWriteRequest(status: "Planning")
-                )
+                state = try await trackingRepository.update(ref: ref, request: TrackingWriteRequest(status: "Planning"))
             case .currently:
-                if detail.ref.mediaType == "book", tracking?.status == "Paused" {
+                if isBook, confirmed?.status == "Paused" {
                     state = try await trackingRepository.performBookAction(
-                        source: detail.ref.source,
-                        mediaId: detail.ref.mediaId,
+                        source: ref.source,
+                        mediaId: ref.mediaId,
                         action: "resume",
                         request: BookActionRequest()
                     )
                 } else {
                     state = try await trackingRepository.update(
-                        ref: detail.ref,
+                        ref: ref,
                         request: TrackingWriteRequest(
                             status: "In progress",
-                            startDate: detail.ref.mediaType == "book" ? CalendarDateCodec.string(from: completedAt) : nil,
-                            mutationId: detail.ref.mediaType == "book" ? UUID() : nil
+                            startDate: isBook ? day : nil,
+                            mutationId: isBook ? mutationId(for: "book.start") : nil
                         )
                     )
                 }
             case .paused:
-                if detail.ref.mediaType == "book", tracking?.book?.currentJourney != nil {
+                // The server keeps a closed journey as current; only an open one can take the pause action.
+                if isBook, confirmed?.book?.hasLiveJourney == true {
                     state = try await trackingRepository.performBookAction(
-                        source: detail.ref.source,
-                        mediaId: detail.ref.mediaId,
+                        source: ref.source,
+                        mediaId: ref.mediaId,
                         action: "pause",
                         request: BookActionRequest()
                     )
                 } else {
-                    state = try await trackingRepository.update(
-                        ref: detail.ref,
-                        request: TrackingWriteRequest(status: "Paused")
-                    )
+                    state = try await trackingRepository.update(ref: ref, request: TrackingWriteRequest(status: "Paused"))
                 }
             case .finished:
-                if detail.ref.mediaType == "book" {
+                if isBook {
                     state = try await trackingRepository.completeBook(
-                        source: detail.ref.source,
-                        mediaId: detail.ref.mediaId,
+                        source: ref.source,
+                        mediaId: ref.mediaId,
                         completedAt: completedAt
                     )
                 } else {
                     state = try await trackingRepository.consume(
-                        ref: detail.ref,
-                        consumedAt: detail.ref.isSingleWeight ? nil : completedAt
+                        ref: ref,
+                        consumedAt: ref.isSingleWeight ? nil : completedAt
                     )
                 }
             case .stopped:
-                if detail.ref.mediaType == "book", tracking?.book?.currentJourney != nil {
+                if isBook, confirmed?.book?.currentJourney != nil {
                     state = try await trackingRepository.performBookAction(
-                        source: detail.ref.source,
-                        mediaId: detail.ref.mediaId,
+                        source: ref.source,
+                        mediaId: ref.mediaId,
                         action: "drop",
-                        request: BookActionRequest(endDate: CalendarDateCodec.string(from: completedAt))
+                        request: BookActionRequest(endDate: day)
                     )
                 } else {
-                    state = try await trackingRepository.update(
-                        ref: detail.ref,
-                        request: TrackingWriteRequest(status: "Dropped")
-                    )
+                    state = try await trackingRepository.update(ref: ref, request: TrackingWriteRequest(status: "Dropped"))
                 }
             }
-            tracking = state
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
+            return Self.outcome(state)
         }
     }
 
-    func removeTracking(for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-
-        do {
-            try await trackingRepository.delete(ref: detail.ref)
-            tracking = nil
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
+    @discardableResult
+    func removeTracking(for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        if ref.isSingleWeight, (viewer?.diaryCount ?? 0) > 0 {
+            // SW-008: logs keep it watched and the server refuses, so don't show an unwatch that can't land.
+            quickActionErrorMessage = "Delete your logs before marking this as unwatched."
+            return Task { false }
+        }
+        let repository = trackingRepository
+        return enqueue(TrackingProjection.removed, ref: ref, refresh: .community) {
+            try await repository.delete(ref: ref)
+            return .untracked
         }
     }
 
@@ -381,19 +622,14 @@ final class MediaDetailViewModel {
                 episodeNumber: episodeNumber,
                 watchedAt: watchedAt
             )
-            self.detail = detail.replacingIsTracked(true)
-
-            do {
-                let refreshed = try await mediaRepository.detail(ref: detail.ref)
-                self.detail = refreshed.replacingIsTracked(true)
-            } catch is CancellationError {
-                // The watch mutation succeeded; cancellation only stops the best-effort refresh.
-            } catch {
-                if case APIError.unauthorized = error {
-                    onUnauthorized()
-                }
+            // Applied to the current detail, so a write that confirmed while the watch was sent stays.
+            if let current = self.detail {
+                self.detail?.userState = (current.userState ?? .untracked).replacingIsTracked(true)
             }
-            MediaStateChange.post(ref: detail.ref)
+            stateGeneration += 1
+            retainedMutationIds.removeAll()
+            MediaStateChange.post(ref: detail.ref, origin: changeOrigin)
+            scheduleRefresh(.full, after: .zero)
             return true
         } catch {
             quickActionErrorMessage = error.localizedDescription
@@ -404,194 +640,162 @@ final class MediaDetailViewModel {
         }
     }
 
-    func saveProgress(_ request: ProgressUpdateSaveRequest, for detail: MediaDetail) async -> Bool {
+    @discardableResult
+    func saveProgress(_ request: ProgressUpdateSaveRequest, for detail: MediaDetail) -> Task<Bool, Never> {
         guard detail.ref.mediaType != "game" else {
             progressErrorMessage = "Update hours and percentage through the game's playthrough."
-            return false
+            return Task { false }
         }
-        guard !isSavingProgress else { return false }
+        guard !isSavingProgress else { return Task { false } }
         isSavingProgress = true
-        progressErrorMessage = nil
-        defer { isSavingProgress = false }
-
-        do {
+        let ref = detail.ref
+        return enqueue(nil, ref: ref, errorsTo: \.progressErrorMessage) { [self] in
+            defer { isSavingProgress = false }
             var state: TrackingState
-            if detail.ref.mediaType == "book" {
+            if ref.mediaType == "book" {
                 state = try await trackingRepository.updateBookProgress(
-                    source: detail.ref.source,
-                    mediaId: detail.ref.mediaId,
+                    source: ref.source,
+                    mediaId: ref.mediaId,
                     progressType: request.mode.apiValue,
                     value: Decimal(request.value),
                     notes: ""
                 )
-                state = state.replacingProgress(progressState(for: request, detail: detail, fallback: state.progress))
             } else {
                 state = try await trackingRepository.update(
-                    ref: detail.ref,
+                    ref: ref,
                     request: TrackingWriteRequest(
                         status: "In progress",
                         progress: request.value
                     )
                 )
-                state = state.replacingProgress(progressState(for: request, detail: detail, fallback: state.progress))
             }
-            ProgressDisplayPreferences.setMode(request.mode, for: detail.ref)
-            tracking = state
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            progressErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
+            state = state.replacingProgress(progressState(for: request, detail: detail, fallback: state.progress))
+            ProgressDisplayPreferences.setMode(request.mode, for: ref)
+            return .state(state)
         }
     }
 
-    func performBookAction(_ action: String, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        do {
+    @discardableResult
+    func performBookAction(_ action: String, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let today = CalendarDateCodec.string(from: Date())
+        let projection: TrackingProjection.Projection?
+        switch action {
+        case "pause": projection = TrackingProjection.pauseBook()
+        case "resume": projection = TrackingProjection.startBook(today: today)
+        case "drop": projection = TrackingProjection.dropBook(today: today)
+        case "mark_read": projection = TrackingProjection.status("Completed")
+        default: projection = nil
+        }
+        let refresh: RefreshNeed = ["undo_read", "delete_undated_read"].contains(action) ? .community : .none
+        return enqueue(projection, ref: ref, refresh: refresh, eyeSpinner: action == "undo_read") { [self] in
             if action == "undo_read" {
-                try await trackingRepository.undoBookRead(
-                    source: detail.ref.source,
-                    mediaId: detail.ref.mediaId
-                )
-                tracking = nil
-                MediaStateChange.post(ref: detail.ref)
-                await load()
-                return true
+                return Self.outcome(try await trackingRepository.undoBookRead(source: ref.source, mediaId: ref.mediaId))
             }
-            tracking = try await trackingRepository.performBookAction(
-                source: detail.ref.source,
-                mediaId: detail.ref.mediaId,
+            return Self.outcome(try await trackingRepository.performBookAction(
+                source: ref.source,
+                mediaId: ref.mediaId,
                 action: action,
                 request: BookActionRequest(
-                    startDate: action == "restart" || action == "resume" ? CalendarDateCodec.string(from: Date()) : nil,
-                    endDate: action == "drop" || action == "restart" ? CalendarDateCodec.string(from: Date()) : nil
+                    mutationId: action == "restart" ? mutationId(for: "book.restart") : UUID(),
+                    startDate: action == "restart" || action == "resume" ? today : nil,
+                    endDate: action == "drop" || action == "restart" ? today : nil
                 )
-            )
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
-        }
-    }
-
-    func updateBookJourney(_ journey: BookJourneyState, startDate: Date?, endDate: Date?, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        do {
-            tracking = try await trackingRepository.updateBookJourney(
-                source: detail.ref.source,
-                mediaId: detail.ref.mediaId,
-                journeyId: journey.id,
-                request: BookJourneyWriteRequest(
-                    startDate: startDate.map { CalendarDateCodec.string(from: $0) },
-                    endDate: endDate.map { CalendarDateCodec.string(from: $0) }
-                )
-            )
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
-        }
-    }
-
-    func deleteBookJourney(_ journey: BookJourneyState, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        do {
-            tracking = try await trackingRepository.deleteBookJourney(
-                source: detail.ref.source,
-                mediaId: detail.ref.mediaId,
-                journeyId: journey.id
-            )
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
-        }
-    }
-
-    private var gameActionMutationIds: [String: UUID] = [:]
-
-    func performGameAction(_ action: String, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        let mutation = gameActionMutationIds[action] ?? UUID()
-        gameActionMutationIds[action] = mutation
-        do {
-            try await trackingRepository.performGameAction(ref: detail.ref, action: action, request: BookActionRequest(
-                mutationId: mutation,
-                startDate: ["start", "restart", "resume"].contains(action) ? CalendarDateCodec.string(from: Date()) : nil,
-                endDate: ["drop", "restart"].contains(action) ? CalendarDateCodec.string(from: Date()) : nil
             ))
-            await load()
-            MediaStateChange.post(ref: detail.ref)
-            guard errorMessage == nil else {
-                quickActionErrorMessage = "The change was saved, but refresh failed. Try again to reload it."
-                return false
-            }
-            gameActionMutationIds[action] = nil
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
         }
     }
 
-    func updateGamePlaythrough(_ playthrough: GamePlaythroughState, request: GamePlaythroughWriteRequest, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        do {
-            tracking = try await trackingRepository.updateGamePlaythrough(ref: detail.ref, playthroughId: playthrough.id, request: request)
-            await load()
-            MediaStateChange.post(ref: detail.ref)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
+    @discardableResult
+    func updateBookJourney(_ journey: BookJourneyState, startDate: Date?, endDate: Date?, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let request = BookJourneyWriteRequest(
+            startDate: startDate.map { CalendarDateCodec.string(from: $0) },
+            endDate: endDate.map { CalendarDateCodec.string(from: $0) }
+        )
+        return enqueue(nil, ref: ref, errorsTo: \.formErrorMessage) { [self] in
+            let journeyId = try confirmedJourneyId(for: journey)
+            return .state(try await trackingRepository.updateBookJourney(
+                source: ref.source,
+                mediaId: ref.mediaId,
+                journeyId: journeyId,
+                request: request
+            ))
         }
     }
 
-    func deleteGamePlaythrough(_ playthrough: GamePlaythroughState, for detail: MediaDetail) async -> Bool {
-        guard !isSavingQuickAction else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
-        do {
-            try await trackingRepository.deleteGamePlaythrough(ref: detail.ref, playthroughId: playthrough.id)
-            await load()
-            MediaStateChange.post(ref: detail.ref)
-            guard errorMessage == nil else {
-                quickActionErrorMessage = "The playthrough was deleted, but refresh failed. Try again to reload it."
-                return false
-            }
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error { onUnauthorized() }
-            return false
+    @discardableResult
+    func deleteBookJourney(_ journey: BookJourneyState, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        return enqueue(nil, ref: ref) { [self] in
+            let journeyId = try confirmedJourneyId(for: journey)
+            return Self.outcome(try await trackingRepository.deleteBookJourney(
+                source: ref.source,
+                mediaId: ref.mediaId,
+                journeyId: journeyId
+            ))
         }
+    }
+
+    @discardableResult
+    func performGameAction(_ action: String, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        let today = CalendarDateCodec.string(from: Date())
+        let projection: TrackingProjection.Projection?
+        switch action {
+        case "start", "resume": projection = TrackingProjection.startGame(today: today)
+        case "pause": projection = TrackingProjection.pauseGame()
+        case "drop": projection = TrackingProjection.dropGame(today: today)
+        case "mark_completed": projection = TrackingProjection.status("Completed")
+        default: projection = nil
+        }
+        let refresh: RefreshNeed = ["undo_completed", "delete_undated_completion"].contains(action) ? .community : .none
+        return enqueue(projection, ref: ref, refresh: refresh, eyeSpinner: action == "undo_completed") { [self] in
+            Self.outcome(try await trackingRepository.performGameAction(ref: ref, action: action, request: BookActionRequest(
+                mutationId: mutationId(for: "game.\(action)"),
+                startDate: ["start", "restart", "resume"].contains(action) ? today : nil,
+                endDate: ["drop", "restart"].contains(action) ? today : nil
+            )))
+        }
+    }
+
+    @discardableResult
+    func updateGamePlaythrough(_ playthrough: GamePlaythroughState, request: GamePlaythroughWriteRequest, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        return enqueue(nil, ref: ref, errorsTo: \.formErrorMessage) { [self] in
+            let playthroughId = try confirmedPlaythroughId(for: playthrough)
+            return .state(try await trackingRepository.updateGamePlaythrough(ref: ref, playthroughId: playthroughId, request: request))
+        }
+    }
+
+    @discardableResult
+    func deleteGamePlaythrough(_ playthrough: GamePlaythroughState, for detail: MediaDetail) -> Task<Bool, Never> {
+        let ref = detail.ref
+        return enqueue(nil, ref: ref) { [self] in
+            let playthroughId = try confirmedPlaythroughId(for: playthrough)
+            do {
+                return Self.outcome(try await trackingRepository.deleteGamePlaythrough(ref: ref, playthroughId: playthroughId))
+            } catch APIError.httpStatus(404, _) {
+                // A retry after a lost response can find the playthrough already deleted.
+                return .unknown
+            }
+        }
+    }
+
+    /// Folds a saved log's response in before the composer dismisses. MediaLogView has already posted the change
+    /// with this page's origin.
+    func applyLogSave(_ result: MediaLogSaveResult) {
+        // A saved log is a successful write: an id kept from an earlier failure must not make a later start a no-op.
+        retainedMutationIds.removeAll()
+        guard result.ref.id == ref.id, let tracking = result.tracking else {
+            scheduleRefresh(.full, after: .zero)
+            return
+        }
+        if let entry = result.diaryEntry {
+            confirm(.completion(BookCompletionResponse(tracking: tracking, diaryEntry: entry)))
+        } else {
+            confirm(.state(tracking))
+        }
+        scheduleRefresh(result.diaryEntry == nil ? .community : .communityAndReviews, after: writeRefreshDelay)
     }
 
     private func progressState(
@@ -617,7 +821,7 @@ final class MediaDetailViewModel {
     func applyPosterSave(_ response: PosterSaveResponse) {
         guard let ref = detail?.ref else { return }
         detail = detail?.replacingPoster(with: response)
-        MediaStateChange.post(ref: ref)
+        MediaStateChange.post(ref: ref, origin: changeOrigin)
     }
 
     func applyBackdropSave(_ response: BackdropSaveResponse) {
@@ -627,6 +831,11 @@ final class MediaDetailViewModel {
     func applyLogoSave(_ response: LogoSaveResponse) {
         detail = detail?.replacingLogo(with: response)
     }
+}
+
+/// A write that would need a playthrough or journey the server hasn't created yet.
+private struct PendingWriteError: LocalizedError {
+    var errorDescription: String? { "This is still saving. Try again in a moment." }
 }
 
 enum MediaDetailQuickAction {
@@ -670,6 +879,12 @@ struct MediaRatingPickerState: Equatable {
 
     mutating func rollbackWatch() {
         hasLocallyWatched = false
+    }
+
+    /// The local watch only bridges the wait for the server. Once the server says the item
+    /// isn't completed (a deleted playthrough, completion or log), the eye follows it.
+    mutating func syncCompleted(_ isCompleted: Bool) {
+        if !isCompleted { hasLocallyWatched = false }
     }
 
     mutating func resetAfterUnwatch() {
@@ -1284,14 +1499,23 @@ private struct MediaDetailPageView: View {
     @State private var editingBookJourney: BookJourneyState?
     @State private var editingGamePlaythrough: GamePlaythroughState?
     @State private var pendingGameProgress: GamePlaythroughState?
+    @State private var progressGamePlaythrough: GamePlaythroughState?
+    @State private var pendingGameEdit: GamePlaythroughState?
     @State private var pendingGameCompletion: GameCompletionPresentation?
     @State private var gameCompletionPresentation: GameCompletionPresentation?
+    @State private var pendingBookLog = false
+    /// True from a choice that closes a tracking sheet until that sheet's onDismiss, so an alert or the next
+    /// screen waits for the dismissal instead of colliding with it.
+    @State private var isClosingPresentation = false
+    @State private var alertAfterClose = false
+    @State private var likeAlertAfterClose = false
     @State private var isQuickActionAlertPresented = false
     @State private var isLikeAlertPresented = false
     @State private var showsTitleLogo = true
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var edgeDragOffset: CGFloat = 0
     @State private var ratingPicker = MediaRatingPickerState()
+    @State private var albumBackdropTint: Color?
 
     private let mediaRepository: MediaRepository
     private let musicRepository: MusicRepository
@@ -1375,6 +1599,12 @@ private struct MediaDetailPageView: View {
                     content: content
                 )
                     .spineContentTransition(value: contentPhase)
+                    .background {
+                        if let albumBackdropTint {
+                            AlbumBackdrop(tint: albumBackdropTint)
+                                .transition(.opacity)
+                        }
+                    }
             }
             .onScrollPhaseChange { _, phase in
                 if phase != .idle {
@@ -1395,6 +1625,13 @@ private struct MediaDetailPageView: View {
                 bottomActionRail(detail)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            }
+
+            if progressUpdateDetail == nil, selectedTab == .search {
+                ExplorationSearchButton(glass: .clear.interactive())
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
             if progressUpdateDetail == nil {
@@ -1423,7 +1660,7 @@ private struct MediaDetailPageView: View {
             }
         }
         .onPreferenceChange(TopSafeAreaInsetKey.self) { topSafeAreaInset = $0 }
-        .sheet(item: $presentedSheet, onDismiss: presentPendingGameSheet) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: presentPendingSheet) { sheet in
             switch sheet {
             case .posterMenu:
                 PosterMenuSheet(
@@ -1474,44 +1711,38 @@ private struct MediaDetailPageView: View {
             case .bookGameActions:
                 if let detail = viewModel.detail {
                     if detail.ref.mediaType == "game" {
-                        GameActionSheet(status: currentStatus(detail), game: gameState(detail), isSaving: viewModel.isSavingQuickAction, errorMessage: viewModel.quickActionErrorMessage,
-                            onAction: { await performQuickAction($0, for: detail, dismissSheet: true) },
+                        GameActionSheet(status: currentStatus(detail), game: gameState(detail),
+                            onAction: { closeSheetForChoice(); viewModel.performQuickAction($0, for: detail) },
                             onLog: { openBookCompletion(for: detail) },
                             onProgress: { openProgressUpdate(for: detail) },
-                            onRemove: { if await viewModel.removeTracking(for: detail) { presentedSheet = nil; await viewModel.load() } })
-                            .presentationDetents([.medium, .large])
+                            onRemove: { closeSheetForChoice(); viewModel.removeTracking(for: detail) })
                     } else {
                     BookGameActionSheet(
                         mediaType: detail.ref.mediaType,
                         status: currentStatus(detail),
                         bookState: bookState(detail),
-                        isSaving: viewModel.isSavingQuickAction,
-                        errorMessage: viewModel.quickActionErrorMessage,
                         onAction: { action in
-                            await performQuickAction(action, for: detail, dismissSheet: true)
+                            closeSheetForChoice()
+                            viewModel.performQuickAction(action, for: detail)
                         },
                         onRemove: {
-                            if await viewModel.removeTracking(for: detail) {
-                                presentedSheet = nil
-                                await viewModel.load()
-                            }
+                            closeSheetForChoice()
+                            viewModel.removeTracking(for: detail)
                         },
                         onUpdateProgress: {
                             openProgressUpdate(for: detail)
                         },
                         onLog: {
-                            presentedSheet = nil
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                if detail.ref.mediaType == "book" {
-                                    openBookCompletion(for: detail)
-                                } else {
+                            if detail.ref.mediaType == "book" {
+                                openBookCompletion(for: detail)
+                            } else {
+                                presentedSheet = nil
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                     isLogPresented = true
                                 }
                             }
                         }
                     )
-                    .presentationDetents(detail.ref.mediaType == "book" ? [.medium, .large] : [.height(detail.ref.mediaType == "music" ? 292 : 224)])
-                    .presentationDragIndicator(.visible)
                     }
                 }
             case .addToList:
@@ -1529,29 +1760,43 @@ private struct MediaDetailPageView: View {
                 StreamingServicesSheet(repository: streamingRepository, onUnauthorized: onUnauthorized)
             }
         }
-        .sheet(item: $editingGamePlaythrough, onDismiss: presentPendingGameSheet) { playthrough in
+        .sheet(item: $progressGamePlaythrough, onDismiss: presentPendingSheet) { playthrough in
             if let detail = viewModel.detail {
-                GamePlaythroughEditor(playthrough: playthrough,
-                    onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail) },
-                    onAction: { await viewModel.performGameAction($0, for: detail) },
-                    onDelete: { await viewModel.deleteGamePlaythrough(playthrough, for: detail) },
+                GameProgressSheet(detail: detail, playthrough: playthrough,
+                    onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail).value },
+                    onAction: { isClosingPresentation = true; viewModel.performGameAction($0, for: detail) },
+                    onDelete: { isClosingPresentation = true; viewModel.deleteGamePlaythrough(playthrough, for: detail) },
                     onFinish: { openBookCompletion(for: detail) },
-                    errorMessage: { viewModel.quickActionErrorMessage })
+                    onEditDates: {
+                        pendingGameEdit = playthrough
+                        progressGamePlaythrough = nil
+                    },
+                    errorMessage: { viewModel.formErrorMessage })
             }
         }
-        .sheet(item: $editingBookJourney) { journey in
+        .sheet(item: $editingGamePlaythrough, onDismiss: presentPendingSheet) { playthrough in
+            if let detail = viewModel.detail {
+                GamePlaythroughEditor(playthrough: playthrough,
+                    onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail).value },
+                    onAction: { isClosingPresentation = true; viewModel.performGameAction($0, for: detail) },
+                    onDelete: { isClosingPresentation = true; viewModel.deleteGamePlaythrough(playthrough, for: detail) },
+                    onFinish: { openBookCompletion(for: detail) },
+                    errorMessage: { viewModel.formErrorMessage })
+            }
+        }
+        .sheet(item: $editingBookJourney, onDismiss: presentPendingSheet) { journey in
             if let detail = viewModel.detail {
                 BookJourneyDateEditor(
                     journey: journey,
-                    isSaving: viewModel.isSavingQuickAction,
-                    errorMessage: viewModel.quickActionErrorMessage,
+                    isSaving: viewModel.hasPendingWrites,
+                    errorMessage: viewModel.formErrorMessage,
                     onSave: { startDate, endDate in
                         if await viewModel.updateBookJourney(
                             journey,
                             startDate: startDate,
                             endDate: endDate,
                             for: detail
-                        ) {
+                        ).value {
                             editingBookJourney = nil
                             return true
                         }
@@ -1606,31 +1851,28 @@ private struct MediaDetailPageView: View {
         .fullScreenCover(item: $gameCompletionPresentation, onDismiss: restoreCanonicalGameRating) { presentation in
             if let detail = viewModel.detail {
                 MediaLogView(detail: detail, trackingRepository: trackingRepository,
-                    diaryRepository: diaryRepository, tracking: viewModel.tracking,
+                    diaryRepository: diaryRepository,
                     completionJourneyId: presentation.playthroughId,
                     preselectedLiked: presentation.liked,
                     preselectedRatingSteps: presentation.ratingSteps,
-                    onUnauthorized: onUnauthorized) {
-                        Task { await viewModel.load() }
-                    }
+                    stateChangeOrigin: viewModel.changeOrigin,
+                    onResult: { viewModel.applyLogSave($0) },
+                    onUnauthorized: onUnauthorized) {}
             }
         }
-        .fullScreenCover(isPresented: $isLogPresented) {
+        .fullScreenCover(isPresented: $isLogPresented, onDismiss: presentDeferredAlerts) {
             if let detail = viewModel.detail {
                 MediaLogView(
                     detail: detail,
                     trackingRepository: trackingRepository,
                     diaryRepository: diaryRepository,
-                    tracking: viewModel.tracking,
                     completionJourneyId: completionJourneyId,
                     preselectedLiked: completionLiked,
                     preselectedRatingSteps: completionRatingSteps,
+                    stateChangeOrigin: viewModel.changeOrigin,
+                    onResult: { viewModel.applyLogSave($0) },
                     onUnauthorized: onUnauthorized
-                ) {
-                    Task {
-                        await viewModel.load()
-                    }
-                }
+                ) {}
             }
         }
         .fullScreenCover(isPresented: $isPosterPickerPresented, onDismiss: applyPendingPosterSave) {
@@ -1810,39 +2052,44 @@ private struct MediaDetailPageView: View {
         .task(id: viewModel.externalRatingsPollingID) {
             await viewModel.pollExternalRatingsIfNeeded()
         }
+        .task(id: albumArtworkURL) {
+            var tint: Color?
+            if let albumArtworkURL {
+                tint = await AlbumBackdropColor.load(url: albumArtworkURL)
+            }
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: reduceMotion ? SpineMotion.reducedDuration : 0.45)) {
+                albumBackdropTint = tint
+            }
+        }
         .onChange(of: viewModel.detail?.id) {
             showsTitleLogo = true
         }
-        .onChange(of: viewModel.detail?.userState?.rating) { _, rating in
+        .onChange(of: viewModel.viewer?.rating) { _, rating in
             ratingPicker.syncConfirmed(ratingHalfSteps(rating))
         }
+        .onChange(of: viewModel.quickActionErrorMessage) { _, message in
+            guard message != nil else { return }
+            if defersAlerts { alertAfterClose = true } else { isQuickActionAlertPresented = true }
+        }
+        .onChange(of: viewModel.likeErrorMessage) { _, message in
+            guard message != nil else { return }
+            if defersAlerts { likeAlertAfterClose = true } else { isLikeAlertPresented = true }
+        }
+        .onChange(of: viewModel.detail.map { isEyeCompleted($0) } ?? false) { _, isCompleted in
+            ratingPicker.syncCompleted(isCompleted)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
-            Swift.Task<Void, Never> { await viewModel.load() }
+            viewModel.scheduleRefresh(.full, after: viewModel.externalRefreshDelay)
         }
         .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-            guard let changedRef = notification.userInfo?["ref"] as? MediaRef,
-                  let detail = viewModel.detail,
-                  completionMayHaveChanged(in: detail, for: changedRef)
-            else { return }
-            Swift.Task<Void, Never> { await viewModel.load() }
+            viewModel.handleMediaStateChange(notification.userInfo)
         }
         .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
             // A new country or new services change Where to Watch.
             guard let detail = viewModel.detail, WhereToWatch.isAvailable(for: detail.ref) else { return }
             Swift.Task<Void, Never> { await viewModel.load() }
         }
-    }
-
-    private func completionMayHaveChanged(in detail: MediaDetail, for changedRef: MediaRef) -> Bool {
-        if changedRef.id == ref.id {
-            return true
-        }
-        if ["tv", "season"].contains(detail.ref.mediaType),
-           detail.ref.source == changedRef.source,
-           detail.ref.mediaId == changedRef.mediaId {
-            return true
-        }
-        return false
     }
 
     @ViewBuilder
@@ -1853,9 +2100,9 @@ private struct MediaDetailPageView: View {
                 progress: currentProgress(detail),
                 isSaving: viewModel.isSavingProgress,
                 errorMessage: viewModel.progressErrorMessage,
-                journeyStatus: viewModel.tracking?.book?.currentJourney?.status,
+                journeyStatus: viewModel.viewer?.book?.currentJourney?.status,
                 onSave: { request in
-                    await viewModel.saveProgress(request, for: detail)
+                    await viewModel.saveProgress(request, for: detail).value
                 },
                 onDismiss: {
                     progressUpdateDetail = nil
@@ -1865,17 +2112,20 @@ private struct MediaDetailPageView: View {
                     openBookCompletion(for: detail)
                 },
                 onPause: {
-                    await viewModel.performBookAction("pause", for: detail)
+                    viewModel.performBookAction("pause", for: detail)
+                },
+                onResume: {
+                    viewModel.performBookAction("resume", for: detail)
                 },
                 onDrop: {
-                    await viewModel.performBookAction("drop", for: detail)
+                    viewModel.performBookAction("drop", for: detail)
                 },
                 onRestart: {
-                    await viewModel.performBookAction("restart", for: detail)
+                    viewModel.performBookAction("restart", for: detail)
                 },
                 onDelete: {
-                    guard let journey = viewModel.tracking?.book?.currentJourney else { return false }
-                    return await viewModel.deleteBookJourney(journey, for: detail)
+                    guard let journey = viewModel.viewer?.book?.currentJourney else { return }
+                    viewModel.deleteBookJourney(journey, for: detail)
                 }
             )
         }
@@ -1887,6 +2137,13 @@ private struct MediaDetailPageView: View {
             hasContent: viewModel.detail != nil,
             hasError: viewModel.errorMessage != nil
         )
+    }
+
+    /// The image an album page takes its background color from, the one its hero draws; nil for every other
+    /// media type.
+    private var albumArtworkURL: URL? {
+        guard let detail = viewModel.detail, detail.ref.mediaType == "music" else { return nil }
+        return (detail.displayBackdropURL ?? detail.displayPosterURL).flatMap(URL.init(string:))
     }
 
     private func applyPendingPosterSave() {
@@ -2035,40 +2292,31 @@ private struct MediaDetailPageView: View {
         if usesBookGameActions(detail) {
             presentedSheet = .bookGameActions
         } else {
-            isLogPresented = true
+            // The composer prefills the heart, rating and rewatch from confirmed state, so a heart or rating
+            // still being sent must land first.
+            presentAfterSettling { isLogPresented = true }
         }
     }
 
     private func eyeAction(for detail: MediaDetail) {
         if detail.ref.isSingleWeight {
-            Task {
-                let succeeded: Bool
-                if isEyeCompleted(detail) {
-                    succeeded = await viewModel.removeTracking(for: detail)
-                    if succeeded {
-                        ratingPicker.resetAfterUnwatch()
-                        await viewModel.load()
-                    }
-                } else {
-                    succeeded = await viewModel.markConsumed(for: detail)
+            if isEyeCompleted(detail) {
+                let removal = viewModel.removeTracking(for: detail)
+                Task {
+                    if await removal.value { ratingPicker.resetAfterUnwatch() } else { ratingPicker.rollbackWatch() }
                 }
-                if !succeeded {
-                    ratingPicker.rollbackWatch()
-                    isQuickActionAlertPresented = true
-                }
+            } else {
+                rollBackWatchIfFails(viewModel.markConsumed(for: detail))
             }
             return
         }
         if detail.ref.mediaType == "game" {
             if gameState(detail)?.hasLivePlaythrough == true {
                 openBookCompletion(for: detail)
+            } else if isEyeCompleted(detail) {
+                resetAfterUnwatchIfSucceeds(viewModel.performGameAction("undo_completed", for: detail))
             } else {
-                let action = isEyeCompleted(detail) ? "undo_completed" : "mark_completed"
-                Task {
-                    if await viewModel.performGameAction(action, for: detail) {
-                        if action == "undo_completed" { ratingPicker.resetAfterUnwatch() }
-                    } else { isQuickActionAlertPresented = true }
-                }
+                rollBackWatchIfFails(viewModel.performGameAction("mark_completed", for: detail))
             }
             return
         }
@@ -2077,89 +2325,67 @@ private struct MediaDetailPageView: View {
                 openBookCompletion(for: detail)
             } else if isEyeCompleted(detail) {
                 if bookState(detail)?.supports("undo_read") == true {
-                    Task {
-                        if await viewModel.performBookAction("undo_read", for: detail) {
-                            ratingPicker.resetAfterUnwatch()
-                        } else {
-                            isQuickActionAlertPresented = true
-                        }
-                    }
+                    resetAfterUnwatchIfSucceeds(viewModel.performBookAction("undo_read", for: detail))
                 } else {
                     viewModel.quickActionErrorMessage = bookState(detail)?.actionReasons["undo_read"]
                         ?? "Delete the completion log to mark this book unread."
-                    isQuickActionAlertPresented = true
                 }
             } else {
-                Task {
-                    if !(await viewModel.performBookAction("mark_read", for: detail)) {
-                        isQuickActionAlertPresented = true
-                    }
-                }
+                rollBackWatchIfFails(viewModel.performBookAction("mark_read", for: detail))
             }
             return
         }
         guard !isEyeCompleted(detail) else { return }
         if detail.ref.mediaType == "episode" {
-            Task {
-                let succeeded = await viewModel.watchEpisode(detail)
-                if !succeeded {
-                    isQuickActionAlertPresented = true
-                }
-            }
+            Task { await viewModel.watchEpisode(detail) }
             return
         }
         guard usesBookGameActions(detail) else { return }
+        viewModel.performQuickAction(.finished, for: detail)
+    }
+
+    /// The write shows its result at once; the picker's local watch only needs undoing if it fails.
+    private func rollBackWatchIfFails(_ write: Task<Bool, Never>) {
         Task {
-            await performQuickAction(.finished, for: detail, dismissSheet: false)
+            if !(await write.value) { ratingPicker.rollbackWatch() }
+        }
+    }
+
+    private func resetAfterUnwatchIfSucceeds(_ write: Task<Bool, Never>) {
+        Task {
+            if await write.value { ratingPicker.resetAfterUnwatch() }
         }
     }
 
     private func isEyeCompleted(_ detail: MediaDetail) -> Bool {
         if detail.ref.mediaType == "episode" {
-            return detail.userState?.isTracked == true
+            return viewModel.viewer?.isTracked == true
         }
         return currentStatus(detail)?.caseInsensitiveCompare("Completed") == .orderedSame
     }
 
-    private func performQuickAction(_ action: MediaDetailQuickAction, for detail: MediaDetail, dismissSheet: Bool) async {
-        if await viewModel.performQuickAction(action, for: detail) {
-            if dismissSheet {
-                presentedSheet = nil
-            }
-            await viewModel.load()
-        } else if !dismissSheet {
-            isQuickActionAlertPresented = true
-        }
-    }
-
     private func likeAction(for detail: MediaDetail) {
         if ["book", "game"].contains(detail.ref.mediaType),
-           detail.userState?.hasLiked != true,
+           viewModel.viewer?.hasLiked != true,
            (bookState(detail)?.hasLiveJourney == true || gameState(detail)?.hasLivePlaythrough == true) {
             openBookCompletion(for: detail, liked: true)
             return
         }
-        Task {
-            let succeeded = await viewModel.toggleMediaLike(for: detail)
-            if !succeeded {
-                ratingPicker.rollbackWatch()
-                isLikeAlertPresented = true
-            }
-        }
+        rollBackWatchIfFails(viewModel.toggleMediaLike(for: detail))
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
         guard detail.ref.usesFiveStarRatingScale else { return }
         if halfSteps > 0, bookState(detail)?.hasLiveJourney == true || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
-            ratingPicker.syncConfirmed(ratingHalfSteps(detail.userState?.rating))
+            ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
             ratingPicker.rollbackWatch()
             openBookCompletion(for: detail, ratingSteps: halfSteps)
             return
         }
+        let write = viewModel.setCurrentRating(for: detail, halfSteps: halfSteps)
         Task {
-            if !(await viewModel.setCurrentRating(for: detail, halfSteps: halfSteps)) {
-                ratingPicker.syncConfirmed(ratingHalfSteps(detail.userState?.rating))
-                isQuickActionAlertPresented = true
+            if !(await write.value) {
+                ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
             }
         }
     }
@@ -2171,60 +2397,119 @@ private struct MediaDetailPageView: View {
     }
 
     private func gameState(_ detail: MediaDetail) -> GameTrackingState? {
-        viewModel.tracking?.game ?? detail.userState?.game
+        viewModel.viewer?.game
     }
 
     private func bookState(_ detail: MediaDetail) -> BookTrackingState? {
-        viewModel.tracking?.book ?? detail.userState?.book
+        viewModel.viewer?.book
     }
 
+    /// The composer captures playthrough and journey ids, so it opens only once the write queue has settled,
+    /// from confirmed state. A tracking sheet still open closes first; the composer follows its dismissal.
     private func openBookCompletion(for detail: MediaDetail, liked: Bool? = nil, ratingSteps: Int? = nil) {
-        if detail.ref.mediaType == "game" {
-            let presentation = GameCompletionPresentation(
-                playthroughId: gameState(detail)?.hasLivePlaythrough == true ? gameState(detail)?.currentPlaythrough?.id : nil,
-                liked: liked, ratingSteps: ratingSteps)
-            if presentedSheet != nil || editingGamePlaythrough != nil {
-                pendingGameCompletion = presentation
-                presentedSheet = nil
-                editingGamePlaythrough = nil
-            } else { gameCompletionPresentation = presentation }
-            return
+        if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil {
+            closeSheetForChoice()
         }
-        completionJourneyId = bookState(detail)?.currentJourney?.id
-        completionLiked = liked
-        completionRatingSteps = ratingSteps
-        presentedSheet = nil
         progressUpdateDetail = nil
-        isLogPresented = true
+        presentAfterSettling {
+            let confirmed = viewModel.detail?.userState
+            if detail.ref.mediaType == "game" {
+                let game = confirmed?.game
+                let presentation = GameCompletionPresentation(
+                    playthroughId: game?.hasLivePlaythrough == true ? game?.currentPlaythrough?.id : nil,
+                    liked: liked, ratingSteps: ratingSteps)
+                if isClosingPresentation { pendingGameCompletion = presentation } else { gameCompletionPresentation = presentation }
+                return
+            }
+            completionJourneyId = confirmed?.book?.currentJourney?.id
+            completionLiked = liked
+            completionRatingSteps = ratingSteps
+            if isClosingPresentation { pendingBookLog = true } else { isLogPresented = true }
+        }
     }
 
     private func openProgressUpdate(for detail: MediaDetail) {
         viewModel.progressErrorMessage = nil
-        if detail.ref.mediaType == "game" {
-            let playthrough = gameState(detail)?.currentPlaythrough
-            if presentedSheet != nil {
-                pendingGameProgress = playthrough
-                presentedSheet = nil
-            } else { editingGamePlaythrough = playthrough }
-        } else {
-            presentedSheet = nil
-            progressUpdateDetail = detail
+        viewModel.formErrorMessage = nil
+        if presentedSheet != nil { closeSheetForChoice() }
+        presentAfterSettling {
+            guard let confirmed = viewModel.detail else { return }
+            if detail.ref.mediaType == "game" {
+                let playthrough = confirmed.userState?.game?.currentPlaythrough
+                if isClosingPresentation { pendingGameProgress = playthrough } else { progressGamePlaythrough = playthrough }
+            } else {
+                progressUpdateDetail = confirmed
+            }
+        }
+    }
+
+    /// Presents once the write queue settles. Skipped when a write it waited for failed, since the tap was routed
+    /// from a state that never landed and that write's alert explains it, or when another screen or alert opened
+    /// during the wait, since SwiftUI shows only one at a time.
+    private func presentAfterSettling(_ present: @escaping () -> Void) {
+        Task {
+            guard await viewModel.settled(),
+                  !isPresentingTrackingScreen, !isQuickActionAlertPresented, !isLikeAlertPresented
+            else { return }
+            present()
         }
     }
 
     private func restoreCanonicalGameRating() {
         ratingPicker.dismiss()
-        ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.detail?.userState?.rating))
+        ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
         ratingPicker.rollbackWatch()
+        presentDeferredAlerts()
     }
 
-    private func presentPendingGameSheet() {
+    /// An alert can't present over a sheet or composer, or while a sheet is still sliding away.
+    private var defersAlerts: Bool {
+        isClosingPresentation || isPresentingTrackingScreen
+    }
+
+    private var isPresentingTrackingScreen: Bool {
+        presentedSheet != nil || progressGamePlaythrough != nil
+            || editingGamePlaythrough != nil || editingBookJourney != nil
+            || gameCompletionPresentation != nil || isLogPresented
+    }
+
+    /// Closes the tracking sheet in the tap's frame. Its onDismiss, `presentPendingSheet`, ends the closing.
+    private func closeSheetForChoice() {
+        isClosingPresentation = true
+        presentedSheet = nil
+        editingGamePlaythrough = nil
+        progressGamePlaythrough = nil
+    }
+
+    private func presentPendingSheet() {
+        isClosingPresentation = false
         if let playthrough = pendingGameProgress {
             pendingGameProgress = nil
+            progressGamePlaythrough = playthrough
+        } else if let playthrough = pendingGameEdit {
+            pendingGameEdit = nil
+            viewModel.formErrorMessage = nil
             editingGamePlaythrough = playthrough
         } else if let presentation = pendingGameCompletion {
             pendingGameCompletion = nil
             gameCompletionPresentation = presentation
+        } else if pendingBookLog {
+            pendingBookLog = false
+            isLogPresented = true
+        }
+        presentDeferredAlerts()
+    }
+
+    /// Shows an alert held back by `defersAlerts`, once nothing covers the page.
+    private func presentDeferredAlerts() {
+        guard !defersAlerts else { return }
+        if alertAfterClose {
+            alertAfterClose = false
+            isQuickActionAlertPresented = viewModel.quickActionErrorMessage != nil
+        }
+        if likeAlertAfterClose {
+            likeAlertAfterClose = false
+            isLikeAlertPresented = viewModel.likeErrorMessage != nil
         }
     }
 
@@ -2252,13 +2537,13 @@ private struct MediaDetailPageView: View {
 
     private func bottomActionRail(_ detail: MediaDetail) -> some View {
         let isEpisode = detail.ref.mediaType == "episode"
-        let isWatched = detail.userState?.isTracked == true
+        let isWatched = viewModel.viewer?.isTracked == true
         let usesQuickActions = usesBookGameActions(detail)
 
         return ActionRail(
             ratingPicker: $ratingPicker,
             isTracked: isEpisode ? isWatched : currentStatus(detail) != nil,
-            isLiked: detail.userState?.hasLiked ?? false,
+            isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
             showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || ["book", "game"].contains(detail.ref.mediaType),
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
@@ -2273,9 +2558,7 @@ private struct MediaDetailPageView: View {
                         : (isEyeCompleted(detail) ? "Watched" : "Mark as watched"))
                     : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
             isEyeSelected: isEyeCompleted(detail),
-            isEyeLoading: (isEpisode || usesQuickActions || detail.ref.isSingleWeight)
-                && viewModel.isSavingQuickAction,
-            isLikeLoading: viewModel.isSavingLike,
+            isEyeLoading: isEpisode ? viewModel.isSavingQuickAction : viewModel.confirmingEyeWrite,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -2300,9 +2583,9 @@ private struct MediaDetailPageView: View {
                         if let backdropURL = backdropURLString(for: detail) {
                             GeometryReader { proxy in
                                 BackdropArtwork(urlString: backdropURL)
-                                    .frame(height: min(
-                                        resolvedTopSafeAreaInset + MediaDetailLayout.backdropHeight,
-                                        proxy.size.width / MediaDetailLayout.backdropCropAspectRatio
+                                    .frame(height: BackdropLayout.stripHeight(
+                                        width: proxy.size.width,
+                                        topInset: resolvedTopSafeAreaInset
                                     ))
                                     .onLongPressGesture {
                                         openBackdropPicker(for: detail)
@@ -2354,7 +2637,7 @@ private struct MediaDetailPageView: View {
             .padding(.top, resolvedTopSafeAreaInset + MediaDetailLayout.heroPosterTopOffset)
             .padding(.bottom, 18)
             .background {
-                HeroArtwork(detail: detail)
+                HeroArtwork(detail: detail, fadesToTransparent: true)
                     .offset(y: BackdropLayout.safeAreaCompensation(for: resolvedTopSafeAreaInset))
             }
 
@@ -2862,21 +3145,16 @@ private struct MediaDetailPageView: View {
                         presentedSheet = .streamingServices
                     }
                 }
-                if detail.ref.mediaType == "game", let game = gameState(detail) {
-                    GamePlayHistorySection(game: game,
-                        onEdit: { editingGamePlaythrough = $0 },
-                        onDeleteUndated: { Task { if !(await viewModel.performGameAction("delete_undated_completion", for: detail)) { isQuickActionAlertPresented = true } } })
-                }
                 if detail.ref.mediaType == "book", let book = bookState(detail) {
                     BookReadingHistorySection(
                         book: book,
-                        isSaving: viewModel.isSavingQuickAction,
-                        onEdit: { editingBookJourney = $0 },
+                        isSaving: viewModel.hasPendingWrites,
+                        onEdit: { viewModel.formErrorMessage = nil; editingBookJourney = $0 },
                         onDelete: { journey in
-                            Task { _ = await viewModel.deleteBookJourney(journey, for: detail) }
+                            viewModel.deleteBookJourney(journey, for: detail)
                         },
                         onDeleteUndated: {
-                            Task { _ = await viewModel.performBookAction("delete_undated_read", for: detail) }
+                            viewModel.performBookAction("delete_undated_read", for: detail)
                         },
                         onOpenDiary: { entryId in
                             presentedDiaryEntry = PresentedDiaryEntry(id: entryId)
@@ -2959,6 +3237,11 @@ private struct MediaDetailPageView: View {
                 ) { item in
                     presentedRef = item.ref
                 }
+                if detail.ref.mediaType == "game", let game = gameState(detail) {
+                    GamePlayHistorySection(game: game,
+                        onEdit: { viewModel.formErrorMessage = nil; editingGamePlaythrough = $0 },
+                        onDeleteUndated: { viewModel.performGameAction("delete_undated_completion", for: detail) })
+                }
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
@@ -3039,8 +3322,7 @@ private struct MediaDetailPageView: View {
     private func trackingSummarySection(_ detail: MediaDetail) -> some View {
         TrackingSummarySection(
             detail: detail,
-            tracking: viewModel.tracking,
-            userState: detail.userState,
+            state: viewModel.viewer,
             onOpenDiaryEntry: {
                 Task {
                     await openTrackingDiary(for: detail)
@@ -3058,7 +3340,7 @@ private struct MediaDetailPageView: View {
             return
         }
 
-        if let entryId = detail.userState?.diaryEntryId {
+        if let entryId = viewModel.viewer?.diaryEntryId {
             presentedDiaryEntry = PresentedDiaryEntry(id: entryId)
             return
         }
@@ -3083,7 +3365,7 @@ private struct MediaDetailPageView: View {
     }
 
     private func isMultipleLogMedia(_ detail: MediaDetail) -> Bool {
-        (detail.userState?.diaryCount ?? 0) > 1
+        (viewModel.viewer?.diaryCount ?? 0) > 1
     }
 
     private func seasonsSection(_ detail: MediaDetail) -> some View {
@@ -3271,11 +3553,11 @@ private struct MediaDetailPageView: View {
     }
 
     private func currentStatus(_ detail: MediaDetail) -> String? {
-        viewModel.tracking?.status ?? detail.userState?.status
+        viewModel.viewer?.status
     }
 
     private func currentProgress(_ detail: MediaDetail) -> ProgressState? {
-        viewModel.tracking?.progress ?? detail.userState?.progress
+        viewModel.viewer?.progress
     }
 
     private func ratingChips(_ detail: MediaDetail) -> [RatingChip] {
@@ -3847,8 +4129,6 @@ private enum MediaDetailLayout {
     static let episodeAccessibilityArtworkHeight: CGFloat = 280
     static let heroPosterTopOffset: CGFloat = 108
     static let backdropTopSpacing: CGFloat = 137.5
-    static let backdropHeight: CGFloat = 352.34375
-    static let backdropCropAspectRatio: CGFloat = 1.5
     static let genrePillHeight: CGFloat = 31
     static let ratingBadgeSize: CGFloat = 24
     static let ratingPillVerticalPadding: CGFloat = 6
@@ -3994,19 +4274,27 @@ private struct PosterMenuSheet: View {
     }
 }
 
+/// Only books open this sheet: games use GameActionSheet, so the non-book branch is unreachable today.
 private struct BookGameActionSheet: View {
+    /// What the book list showed when a choice was made, kept while the sheet slides away (see GameActionSheet).
+    private struct Snapshot {
+        let status: String?
+        let bookState: BookTrackingState?
+    }
+
     @State private var isRemoveConfirmationPresented = false
     @State private var isDNFConfirmationPresented = false
+    @State private var committed: Snapshot?
 
     let mediaType: String
     let status: String?
     let bookState: BookTrackingState?
-    let isSaving: Bool
-    let errorMessage: String?
-    let onAction: (MediaDetailQuickAction) async -> Void
-    let onRemove: () async -> Void
+    let onAction: (MediaDetailQuickAction) -> Void
+    let onRemove: () -> Void
     let onUpdateProgress: () -> Void
     let onLog: () -> Void
+
+    private var shown: Snapshot { committed ?? Snapshot(status: status, bookState: bookState) }
 
     private var isInProgress: Bool {
         status == "In progress"
@@ -4041,11 +4329,11 @@ private struct BookGameActionSheet: View {
                 if mediaType == "music" {
                     HStack(spacing: 12) {
                         Button {
-                            Task { await onAction(.planning) }
+                            onAction(.planning)
                         } label: {
                             Label(status == "Planning" ? "Planning" : "Add to Planning", systemImage: "bookmark")
                         }
-                        .disabled(isSaving || status == "Planning")
+                        .disabled(status == "Planning")
 
                         if status != nil {
                             Button(role: .destructive) {
@@ -4053,7 +4341,6 @@ private struct BookGameActionSheet: View {
                             } label: {
                                 Label("Remove Tracking", systemImage: "trash")
                             }
-                            .disabled(isSaving)
                         }
                     }
                     .font(.system(size: 13, weight: .bold))
@@ -4061,14 +4348,12 @@ private struct BookGameActionSheet: View {
                     .tint(.white.opacity(0.82))
                     .padding(.horizontal, 16)
                 }
-
-                errorView
             }
             .presentationBackground(.regularMaterial)
+            .presentationDetents([.height(mediaType == "music" ? 292 : 224)])
+            .presentationDragIndicator(.visible)
             .confirmationDialog("Remove album tracking?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
-                Button("Remove Tracking", role: .destructive) {
-                    Task { await onRemove() }
-                }
+                Button("Remove Tracking", role: .destructive, action: onRemove)
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Diary logs are kept.")
@@ -4076,81 +4361,55 @@ private struct BookGameActionSheet: View {
         }
     }
 
+    /// The same list as the game sheet, sized to its rows.
     private var bookActions: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Track this book")
-                    .font(.title3.weight(.bold))
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    bookActionButton(
-                        status == "Planning" ? "To Read" : "Add to To Read",
-                        systemImage: "bookmark",
-                        disabled: status == "Planning" || bookState?.hasLiveJourney == true
-                    ) { await onAction(.planning) }
-                    bookActionButton(
-                        status == "Paused" ? "Resume Reading" : "Currently Reading",
-                        systemImage: "book.pages",
-                        disabled: status == "In progress"
-                    ) { await onAction(.currently) }
-
-                    if bookState?.hasLiveJourney == true {
-                        bookActionButton("Update Progress", systemImage: "slider.horizontal.3") {
-                            onUpdateProgress()
-                        }
-                        bookActionButton("Pause", systemImage: "pause.fill", disabled: status == "Paused") {
-                            await onAction(.paused)
-                        }
-                        bookActionButton("Mark as DNF", systemImage: "xmark") {
-                            isDNFConfirmationPresented = true
-                        }
-                    } else {
-                        bookActionButton("Paused", systemImage: "pause.fill", disabled: status == "Paused") {
-                            await onAction(.paused)
-                        }
-                        bookActionButton("Did Not Finish", systemImage: "xmark", disabled: status == "Dropped") {
-                            await onAction(.stopped)
-                        }
+        let status = shown.status
+        let bookState = shown.bookState
+        let isInProgress = status == "In progress"
+        return NavigationStack {
+            List {
+                Section {
+                    bookStatusButton("To Read", systemImage: "bookmark", action: .planning,
+                                     selected: status == "Planning",
+                                     disabled: status == "Planning" || bookState?.hasLiveJourney == true)
+                    bookStatusButton("Currently Reading", systemImage: "book.pages", action: .currently,
+                                     selected: isInProgress, disabled: isInProgress)
+                    bookStatusButton("Paused", systemImage: "pause.fill", action: .paused,
+                                     selected: status == "Paused", disabled: status == "Paused")
+                    Button {
+                        if bookState?.hasLiveJourney == true { isDNFConfirmationPresented = true }
+                        else { commit { onAction(.stopped) } }
+                    } label: {
+                        Label(status == "Dropped" ? "Did Not Finish ✓" : "Did Not Finish", systemImage: "xmark")
                     }
-
-                    bookActionButton("Log Read", systemImage: "square.and.pencil") {
-                        onLog()
-                    }
+                    .disabled(status == "Dropped")
+                    if status == "Paused" { Button("Resume Reading") { commit { onAction(.currently) } } }
+                    Button("Log Read", systemImage: "square.and.pencil") { commit(onLog) }
                 }
-
                 if bookState?.hasLiveJourney == true {
                     Text(bookState?.actionReasons["planning"] ?? "Pause or finish the active journey before moving this book to To Read.")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onUpdateProgress) }
                 }
-
                 if status != nil {
-                    Button(role: .destructive) {
-                        if bookState?.canRemoveTracking != false {
-                            isRemoveConfirmationPresented = true
+                    Section {
+                        Button("Remove Tracking", role: .destructive) {
+                            if bookState?.canRemoveTracking != false { isRemoveConfirmationPresented = true }
                         }
-                    } label: {
-                        Label("Remove Tracking", systemImage: "trash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isSaving || bookState?.canRemoveTracking == false)
-
-                    if bookState?.canRemoveTracking == false, let reason = bookState?.removeTrackingReason {
-                        Text(reason)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        .disabled(bookState?.canRemoveTracking == false)
+                        if bookState?.canRemoveTracking == false, let reason = bookState?.removeTrackingReason {
+                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
-
-                errorView
             }
-            .padding(18)
+            .fitsSheetToContent()
+            .navigationTitle("Track this book").navigationBarTitleDisplayMode(.inline)
         }
-        .presentationBackground(.regularMaterial)
+        .preferredColorScheme(.dark)
         .confirmationDialog("Mark this book as Did Not Finish?", isPresented: $isDNFConfirmationPresented, titleVisibility: .visible) {
             Button("Mark as DNF", role: .destructive) {
-                Task { await onAction(.stopped) }
+                commit { onAction(.stopped) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -4158,7 +4417,7 @@ private struct BookGameActionSheet: View {
         }
         .confirmationDialog("Remove book tracking?", isPresented: $isRemoveConfirmationPresented, titleVisibility: .visible) {
             Button("Remove Tracking", role: .destructive) {
-                Task { await onRemove() }
+                commit(onRemove)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -4166,44 +4425,27 @@ private struct BookGameActionSheet: View {
         }
     }
 
-    private func bookActionButton(
-        _ title: String,
-        systemImage: String,
-        disabled: Bool = false,
-        action: @escaping () async -> Void
-    ) -> some View {
-        Button {
-            Task { await action() }
-        } label: {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.bold))
-                .frame(maxWidth: .infinity, minHeight: 46)
-        }
-        .buttonStyle(.bordered)
-        .tint(.white.opacity(0.84))
-        .disabled(isSaving || disabled)
+    private func commit(_ choice: () -> Void) {
+        guard committed == nil else { return }
+        committed = Snapshot(status: status, bookState: bookState)
+        choice()
     }
 
-    @ViewBuilder
-    private var errorView: some View {
-        if let errorMessage {
-            Text(errorMessage)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.red.opacity(0.92))
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private func bookStatusButton(_ title: String, systemImage: String, action: MediaDetailQuickAction,
+                                  selected: Bool, disabled: Bool) -> some View {
+        Button { commit { onAction(action) } } label: {
+            Label(selected ? "\(title) ✓" : title, systemImage: systemImage)
         }
+        .disabled(disabled)
     }
 
     private func actionButton(title: String, systemName: String, action: MediaDetailQuickAction) -> some View {
         Button {
-            Task {
-                await onAction(action)
-            }
+            onAction(action)
         } label: {
             actionLabel(title: title, systemName: systemName)
         }
         .buttonStyle(.plain)
-        .disabled(isSaving)
     }
 
     private var progressButton: some View {
@@ -4211,7 +4453,6 @@ private struct BookGameActionSheet: View {
             actionLabel(title: "Update Progress", systemName: "slider.horizontal.3")
         }
         .buttonStyle(.plain)
-        .disabled(isSaving)
     }
 
     private var logButton: some View {
@@ -4219,7 +4460,6 @@ private struct BookGameActionSheet: View {
             actionLabel(title: mediaType == "music" ? "Log Album" : "Log", systemName: "square.and.pencil")
         }
         .buttonStyle(.plain)
-        .disabled(isSaving)
     }
 
     private func actionLabel(title: String, systemName: String) -> some View {
@@ -4231,17 +4471,9 @@ private struct BookGameActionSheet: View {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .stroke(.white.opacity(0.13), lineWidth: 1.25)
                     }
-                Group {
-                    if isSaving {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: systemName)
-                            .font(.system(size: 30, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.94))
-                    }
-                }
-                .spineContentTransition(value: isSaving)
+                Image(systemName: systemName)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.94))
             }
             .frame(height: 86)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 6)
@@ -4385,23 +4617,57 @@ private struct IMDbExternalLinkPill: View {
 }
 
 struct HeroArtwork: View {
+    /// How a poster or cover is blurred when there's no backdrop. List headers without one blur a cover the same way.
+    enum PosterFallback {
+        static let blurRadius: CGFloat = 30
+        static let scale: CGFloat = 1.28
+        static let saturation: Double = 1.18
+    }
+
     private let artworkURL: URL?
     private let usesPosterFallback: Bool
     private let accentColor: Color
+    /// Fades out to whatever is behind it instead of into the page's near-black, so an album page's color
+    /// can continue below the hero.
+    private let fadesToTransparent: Bool
 
-    init(detail: MediaDetail) {
+    init(detail: MediaDetail, fadesToTransparent: Bool = false) {
         artworkURL = URL(string: detail.displayBackdropURL ?? detail.displayPosterURL ?? "")
         usesPosterFallback = detail.displayBackdropURL == nil && detail.displayPosterURL != nil
         accentColor = Color(hex: detail.posterAccentColor) ?? SpinePalette.pageBackground
+        self.fadesToTransparent = fadesToTransparent
     }
 
     init(artworkURL: URL?, accentColor: Color = SpinePalette.pageBackground) {
         self.artworkURL = artworkURL
         usesPosterFallback = artworkURL != nil
         self.accentColor = accentColor
+        fadesToTransparent = false
     }
 
+    @ViewBuilder
     var body: some View {
+        if fadesToTransparent {
+            // The same curve as the near-black fade below, as opacity.
+            layers.mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0.48),
+                        .init(color: .white.opacity(0.88), location: 0.62),
+                        .init(color: .white.opacity(0.55), location: 0.78),
+                        .init(color: .white.opacity(0.18), location: 0.9),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            layers
+        }
+    }
+
+    private var layers: some View {
         ZStack {
             SpinePalette.pageBackground
 
@@ -4422,7 +4688,7 @@ struct HeroArtwork: View {
                 .blur(radius: blurRadius, opaque: true)
                 .scaleEffect(scale)
                 .brightness(0.02)
-                .saturation(usesPosterFallback ? 1.18 : 1.34)
+                .saturation(usesPosterFallback ? PosterFallback.saturation : 1.34)
                 .frame(width: proxy.size.width, height: proxy.size.height)
             }
 
@@ -4440,17 +4706,19 @@ struct HeroArtwork: View {
                 endPoint: .bottom
             )
 
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.48),
-                    .init(color: SpinePalette.pageBackground.opacity(0.12), location: 0.62),
-                    .init(color: SpinePalette.pageBackground.opacity(0.45), location: 0.78),
-                    .init(color: SpinePalette.pageBackground.opacity(0.82), location: 0.9),
-                    .init(color: SpinePalette.pageBackground, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            if !fadesToTransparent {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.48),
+                        .init(color: SpinePalette.pageBackground.opacity(0.12), location: 0.62),
+                        .init(color: SpinePalette.pageBackground.opacity(0.45), location: 0.78),
+                        .init(color: SpinePalette.pageBackground.opacity(0.82), location: 0.9),
+                        .init(color: SpinePalette.pageBackground, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
 
             RadialGradient(
                 colors: [.clear, .black.opacity(0.1)],
@@ -4464,11 +4732,11 @@ struct HeroArtwork: View {
     }
 
     private var blurRadius: CGFloat {
-        usesPosterFallback ? 30 : 22
+        usesPosterFallback ? PosterFallback.blurRadius : 22
     }
 
     private var scale: CGFloat {
-        usesPosterFallback ? 1.28 : 1.2
+        usesPosterFallback ? PosterFallback.scale : 1.2
     }
 
 }
@@ -5282,10 +5550,9 @@ private struct BookJourneyDateEditor: View {
     }
 }
 
-private struct TrackingSummarySection: View {
+struct TrackingSummarySection: View {
     let detail: MediaDetail
-    let tracking: TrackingState?
-    let userState: UserMediaState?
+    let state: UserMediaState?
     let onOpenDiaryEntry: () -> Void
     let onUpdateProgress: () -> Void
 
@@ -5351,54 +5618,62 @@ private struct TrackingSummarySection: View {
         }
     }
 
-    private var status: String? {
-        tracking?.status
-            ?? userState?.status
-            ?? (detail.ref.isEpisode && userState?.isTracked == true ? "Watched" : nil)
-    }
+    private var status: String? { Self.status(detail: detail, state: state) }
     private var hasState: Bool { status != nil || !lines.isEmpty }
     private var showsUpdateProgressButton: Bool {
-        if detail.ref.mediaType == "game" { return (tracking?.game ?? userState?.game)?.canUpdateProgress == true }
+        if detail.ref.mediaType == "game" { return state?.game?.canUpdateProgress == true }
         return (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused"))
             && ["book", "game"].contains(detail.ref.mediaType)
     }
-    private var hasLogs: Bool { (userState?.diaryCount ?? 0) > 0 || userState?.diaryEntryId != nil }
-    private var hasMultipleLogs: Bool {
-        (userState?.diaryCount ?? 0) > 1
-    }
-    private var logLine: String? {
-        guard hasMultipleLogs, let diaryCount = userState?.diaryCount else { return nil }
-        return "\(diaryCount) logs"
-    }
+    private var hasLogs: Bool { (state?.diaryCount ?? 0) > 0 || state?.diaryEntryId != nil }
+    private var hasMultipleLogs: Bool { Self.hasMultipleLogs(state) }
+    private var logLine: String? { Self.logLine(state) }
 
     private var lines: [String] {
+        Self.lines(detail: detail, state: state, preferredMode: ProgressDisplayPreferences.mode(for: detail.ref))
+    }
+
+    static func lines(detail: MediaDetail, state: UserMediaState?, preferredMode: ProgressUpdateMode?) -> [String] {
+        let status = Self.status(detail: detail, state: state)
         var values: [String] = []
-        if detail.ref.mediaType == "game", let game = tracking?.game ?? userState?.game,
+        if detail.ref.mediaType == "game", let game = state?.game,
            let text = game.currentPlaythrough?.progress.summary, !text.isEmpty {
             values.append(text)
         }
         if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused")),
            detail.ref.mediaType != "movie",
-            let progressText = (tracking?.progress ?? userState?.progress)?.detailDisplayText(preferredMode: ProgressDisplayPreferences.mode(for: detail.ref)) {
+            let progressText = state?.progress?.detailDisplayText(preferredMode: preferredMode) {
             values.append(progressText)
         }
-        if let logLine {
+        if let logLine = Self.logLine(state) {
             values.append(logLine)
         }
-        if let rating = tracking?.rating ?? userState?.rating {
+        if let rating = state?.rating {
             values.append("Rated \(rating.starRatingLabel(mediaType: detail.ref.mediaType))")
         }
-        if !hasMultipleLogs, let consumedAt = userState?.diaryConsumedAt {
+        if !Self.hasMultipleLogs(state), let consumedAt = state?.diaryConsumedAt {
             values.append("Logged \(consumedAt.shortDateLabel)")
         }
         if detail.ref.mediaType != "movie" {
-            if let startDate = tracking?.startDate {
+            if let startDate = state?.displayStartDate {
                 values.append("Started \(startDate.longDateLabel)")
             }
         }
         return values
     }
 
+    private static func status(detail: MediaDetail, state: UserMediaState?) -> String? {
+        state?.status ?? (detail.ref.isEpisode && state?.isTracked == true ? "Watched" : nil)
+    }
+
+    private static func hasMultipleLogs(_ state: UserMediaState?) -> Bool {
+        (state?.diaryCount ?? 0) > 1
+    }
+
+    private static func logLine(_ state: UserMediaState?) -> String? {
+        guard hasMultipleLogs(state), let diaryCount = state?.diaryCount else { return nil }
+        return "\(diaryCount) logs"
+    }
 }
 
 struct SynopsisText: View {
@@ -5435,7 +5710,7 @@ struct SynopsisText: View {
     }
 }
 
-private struct DetailFactRow: Identifiable {
+struct DetailFactRow: Identifiable {
     let label: String
     var value: String?
     var people: [MediaPersonCredit]
@@ -5444,6 +5719,29 @@ private struct DetailFactRow: Identifiable {
 
     var id: String { label }
     var isEmpty: Bool { label.isEmpty || (value?.isEmpty != false && people.isEmpty && companies.isEmpty) }
+    var symbolName: String {
+        Self.symbolNames[label] ?? (!people.isEmpty ? "person" : !companies.isEmpty ? "building.2" : "info.circle")
+    }
+
+    private static let symbolNames: [String: String] = [
+        "Status": "flag", "Format": "tag", "Physical Format": "book.closed", "Release Type": "opticaldisc",
+        "Release Date": "calendar", "First Aired": "calendar", "Aired": "calendar", "Publish Date": "calendar",
+        "Year": "calendar", "Last Aired": "calendar.badge.clock", "Broadcast": "antenna.radiowaves.left.and.right",
+        "Runtime": "clock", "Time to Beat": "hourglass",
+        "Certification": "checkmark.shield", "Age Rating": "checkmark.shield", "Maturity Rating": "checkmark.shield",
+        "Box Office": "dollarsign.circle", "Google Books Price": "creditcard",
+        "Seasons": "square.stack", "Season": "square.stack",
+        "Episodes": "play.rectangle.on.rectangle", "Episode": "play.rectangle", "Production Code": "number",
+        "Chapters": "book.pages", "Pages": "book.pages", "Latest Chapter": "bookmark", "Last Issue": "bookmark",
+        "Issues": "books.vertical", "Source": "book", "ISBN": "barcode", "Track Count": "music.note.list",
+        "Series": "rectangle.stack", "Collection": "rectangle.stack", "Franchise": "rectangle.stack",
+        "Genres": "theatermasks", "Themes": "sparkles",
+        "Director": "megaphone", "Directors": "megaphone", "Creator": "lightbulb", "Creators": "lightbulb",
+        "Author": "person", "Authors": "person.2", "Artist": "music.mic", "Artists": "music.mic",
+        "Studios": "building.2", "Companies": "building.2", "Developer": "hammer",
+        "Publisher": "building.columns", "Publishers": "building.columns",
+        "Country": "globe", "Languages": "character.bubble", "Platforms": "gamecontroller",
+    ]
 
     init(label: String, value: String?, destination: URL? = nil) {
         self.label = label
@@ -5477,103 +5775,228 @@ private struct MediaFactsSection: View {
 
     var body: some View {
         if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 13) {
+            VStack(alignment: .leading, spacing: 14) {
                 SectionLabel(title: "Details")
 
                 VStack(spacing: 0) {
-                    ForEach(rows) { row in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         DetailFactRowView(
                             row: row,
+                            showsDivider: index > 0,
                             onPersonSelected: onPersonSelected,
                             onCompanySelected: onCompanySelected
                         )
-
-                        if row.id != rows.last?.id {
-                            Divider().overlay(.white.opacity(0.045))
-                        }
                     }
                 }
-                .mediaDetailSurface(cornerRadius: 14)
+                .mediaDetailGroupSurface()
             }
         }
     }
 }
 
-private struct DetailFactRowView: View {
+struct DetailFactRowView: View {
+    private static let iconWidth: CGFloat = 20
+    private static let iconSpacing: CGFloat = 10
+
     let row: DetailFactRow
+    let showsDivider: Bool
     let onPersonSelected: (PersonRef) -> Void
     let onCompanySelected: (CompanyRef) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text(row.label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.44))
-                .lineLimit(1)
-                .frame(width: 98, alignment: .leading)
+        content
+            .overlay(alignment: .top) {
+                if showsDivider {
+                    MediaDetailRowDivider(
+                        leadingInset: MediaDetailGroup.horizontalPadding + Self.iconWidth + Self.iconSpacing
+                    )
+                }
+            }
+    }
 
-            if row.people.isEmpty && row.companies.isEmpty {
-                if let destination = row.destination {
-                    Link(destination: destination) {
-                        HStack(spacing: 5) {
-                            detailText(row.value ?? "")
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption2.weight(.bold))
+    /// A row naming one person or company opens it like a settings row; rows with several make each name tappable.
+    @ViewBuilder
+    private var content: some View {
+        if let destination = row.destination {
+            Link(destination: destination) {
+                layout(trailingSymbol: "arrow.up.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(row.value ?? "")")
+            .accessibilityHint("Opens in the system browser")
+        } else if row.people.count == 1, let person = row.people.first, let personRef = person.personRef {
+            Button {
+                onPersonSelected(personRef)
+            } label: {
+                layout(trailingSymbol: "chevron.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(person.name)")
+            .accessibilityHint("Opens person details")
+        } else if row.companies.count == 1, let company = row.companies.first {
+            Button {
+                onCompanySelected(company.ref)
+            } label: {
+                layout(trailingSymbol: "chevron.right")
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel("\(row.label), \(company.name)")
+            .accessibilityHint("Opens company details")
+        } else {
+            layout(trailingSymbol: nil)
+                .accessibilityElement(children: row.people.count > 1 || row.companies.count > 1 ? .contain : .combine)
+        }
+    }
+
+    /// Sits the value beside its label, wrapping a long one onto more lines against the trailing edge.
+    private func layout(trailingSymbol: String?) -> some View {
+        HStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                label
+                    .fixedSize()
+                values
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            if let trailingSymbol {
+                Image(systemName: trailingSymbol)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, minHeight: MediaDetailGroup.rowMinHeight, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var label: some View {
+        HStack(spacing: Self.iconSpacing) {
+            Image(systemName: row.symbolName)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.42))
+                .frame(width: Self.iconWidth)
+                .accessibilityHidden(true)
+
+            Text(row.label)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.55))
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var values: some View {
+        if !row.people.isEmpty {
+            VStack(alignment: .trailing, spacing: 6) {
+                ForEach(row.people, id: \.self) { person in
+                    if row.people.count > 1, let personRef = person.personRef {
+                        Button {
+                            onPersonSelected(personRef)
+                        } label: {
+                            linkedValue(person.name)
                         }
-                        .foregroundStyle(.white.opacity(0.84))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens in the system browser")
-                } else {
-                    detailText(row.value ?? "")
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.86)
-                }
-            } else if !row.people.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(row.people, id: \.self) { person in
-                        if let personRef = person.personRef {
-                            Button {
-                                onPersonSelected(personRef)
-                            } label: {
-                                personName(person.name)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("View \(person.name)")
-                        } else {
-                            personName(person.name)
-                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View \(person.name)")
+                    } else {
+                        valueText(person.name)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(row.companies) { company in
+            }
+        } else if !row.companies.isEmpty {
+            VStack(alignment: .trailing, spacing: 6) {
+                ForEach(row.companies) { company in
+                    if row.companies.count > 1 {
                         Button {
                             onCompanySelected(company.ref)
                         } label: {
-                            detailText(company.name)
+                            linkedValue(company.name)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(company.name)")
+                    } else {
+                        valueText(company.name)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+        } else {
+            valueText(row.value ?? "")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
     }
 
-    private func personName(_ name: String) -> some View {
-        detailText(name)
+    private func linkedValue(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            valueText(text)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.3))
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
     }
 
-    private func detailText(_ text: String) -> some View {
+    private func valueText(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.84))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.92))
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Inset-grouped Liquid Glass card for the credits and details lists, matching the profile menu.
+private enum MediaDetailGroup {
+    static let cornerRadius: CGFloat = 22
+    static let horizontalPadding: CGFloat = 16
+    static let rowMinHeight: CGFloat = 48
+}
+
+private extension View {
+    func mediaDetailGroupSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: MediaDetailGroup.cornerRadius, style: .continuous)
+
+        return self
+            .clipShape(shape)
+            .glassEffect(.regular, in: shape)
+            // The page is always dark; light-mode glass would wash out the white text.
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+private struct MediaDetailRowDivider: View {
+    let leadingInset: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.12))
+            .frame(height: 0.5)
+            .padding(.leading, leadingInset)
+    }
+}
+
+/// Fills the whole row while pressed; the group clips it to its rounded corners.
+private struct MediaDetailRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        MediaDetailRowPressHighlight(configuration: configuration)
+    }
+}
+
+private struct MediaDetailRowPressHighlight: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let configuration: ButtonStyleConfiguration
+
+    var body: some View {
+        configuration.label
+            .background {
+                Color.white
+                    .opacity(configuration.isPressed ? 0.12 : 0)
+            }
+            .animation(
+                configuration.isPressed ? nil : SpineMotion.animation(reduceMotion: reduceMotion),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -5590,21 +6013,20 @@ private struct MusicAlbumTracklistSection: View {
             if enrichmentState == .loading {
                 LazyVStack(spacing: 0) {
                     ForEach(1...4, id: \.self) { position in
-                        HStack(spacing: 12) {
-                            Text("\(position)")
-                                .frame(width: 28, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Loading track title")
-                                Text("Loading artist")
-                                    .font(.caption)
-                            }
-                            Spacer()
+                        MusicAlbumTrackRowLayout(number: "\(position)") {
+                            Text("Loading track title")
+                                .font(.body)
+                        } accessory: {
+                            EmptyView()
                         }
-                        .padding(.vertical, 10)
+                        if position < 4 {
+                            MusicAlbumTrackSeparator()
+                        }
                     }
                 }
                 .redacted(reason: .placeholder)
                 .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, -MusicTracklistMetrics.pageInset)
                 .accessibilityHidden(true)
                 .accessibilityIdentifier("music.tracklist.loading")
             } else if let release, hasTracks(release) {
@@ -5620,13 +6042,13 @@ private struct MusicAlbumTracklistSection: View {
                                 onSelect: { onSelectTrack(track) }
                             )
                             if track.id != medium.tracks.last?.id {
-                                Divider()
-                                    .overlay(.white.opacity(0.12))
-                                    .padding(.leading, 40)
+                                MusicAlbumTrackSeparator()
                             }
                         }
                     }
                 }
+                // Rows run edge to edge, so a pressed row highlights the full width, as in Apple Music.
+                .padding(.horizontal, -MusicTracklistMetrics.pageInset)
             } else {
                 ContentUnavailableView(
                     "Tracklist unavailable",
@@ -5658,52 +6080,99 @@ private struct MusicAlbumTracklistSection: View {
         }
         .foregroundStyle(.white.opacity(0.62))
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, MusicTracklistMetrics.margin)
         .padding(.top, 14)
         .padding(.bottom, 6)
     }
 }
 
-private struct MusicAlbumTrackRow: View {
-    @ScaledMetric(relativeTo: .caption) private var numberWidth = 28
+/// Apple Music's album tracklist, measured from its iOS 26 app: 20 pt margins, the track number centred
+/// 31 pt from the screen edge, titles 51 pt in, the trailing control 27 pt in, and 52 pt rows.
+private enum MusicTracklistMetrics {
+    /// The page's own horizontal padding, which the tracklist cancels to run edge to edge.
+    static let pageInset: CGFloat = 14
+    static let margin: CGFloat = 20
+    static let numberWidth: CGFloat = 22
+    static let numberSpacing: CGFloat = 9
+    static let rowHeight: CGFloat = 51
+}
 
+private struct MusicAlbumTrackRowLayout<Label: View, Accessory: View>: View {
+    @ScaledMetric(relativeTo: .body) private var numberWidth = MusicTracklistMetrics.numberWidth
+    @ScaledMetric(relativeTo: .body) private var minHeight = MusicTracklistMetrics.rowHeight
+
+    let number: String
+    @ViewBuilder let label: Label
+    @ViewBuilder let accessory: Accessory
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(number)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.5))
+                // Centred like Apple's; three-digit numbers spill evenly to both sides.
+                .fixedSize()
+                .frame(width: numberWidth)
+                .padding(.trailing, MusicTracklistMetrics.numberSpacing)
+
+            label
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            accessory
+                .padding(.leading, 16)
+                .padding(.trailing, 7)
+        }
+        .padding(.vertical, 11)
+        .frame(minHeight: minHeight)
+        .padding(.horizontal, MusicTracklistMetrics.margin)
+    }
+}
+
+/// Starts under the titles and stops at the right margin, like Apple Music's.
+private struct MusicAlbumTrackSeparator: View {
+    @ScaledMetric(relativeTo: .body) private var numberWidth = MusicTracklistMetrics.numberWidth
+
+    var body: some View {
+        Rectangle()
+            .fill(.white.opacity(0.13))
+            .frame(height: 1)
+            .padding(.leading, MusicTracklistMetrics.margin + numberWidth + MusicTracklistMetrics.numberSpacing)
+            .padding(.trailing, MusicTracklistMetrics.margin)
+    }
+}
+
+private struct MusicAlbumTrackRow: View {
     let track: MusicTrack
     let albumCredits: [MusicArtistCredit]
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(track.number)
-                    .font(.system(size: 16, weight: .regular).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: numberWidth, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 3) {
+            MusicAlbumTrackRowLayout(number: track.number) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(track.title)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.94))
+                        .font(.body)
+                        .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                     if let artist = MusicAlbumPresentation.differingArtistCredit(
                         track: track,
                         albumCredits: albumCredits
                     ) {
                         Text(artist)
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.52))
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.5))
                     }
                 }
-
-                Spacer(minLength: 10)
-
+            } accessory: {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    // Apple's "•••" is 15 pt wide; the chevron sits centred where it would.
+                    .frame(width: 15)
             }
-            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, 6)
+        .buttonStyle(MediaDetailRowButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MusicAlbumPresentation.trackAccessibilityLabel(track: track, albumCredits: albumCredits))
         .accessibilityHint("Opens song details")
@@ -6270,8 +6739,8 @@ private struct MediaReviewsView: View {
                     endPoint: .bottomTrailing
                 )
                 .overlay {
-                    Image(systemName: theme.symbolName)
-                        .foregroundStyle(.white.opacity(0.5))
+                    MediaTypeGlyph(theme: theme, size: 17)
+                        .opacity(0.5)
                 }
             }
         }
@@ -6860,11 +7329,16 @@ private struct CreditDisplay: Identifiable {
 }
 
 private struct CreditSection: View {
+    private static let collapsedLimit = 6
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let cast: [CreditDisplay]
     let crew: [CreditDisplay]
     let onSelect: (PersonRef) -> Void
     @State private var selectedTab: CreditTab
+    @State private var expandedTab: CreditTab?
 
     init(
         title: String,
@@ -6888,54 +7362,124 @@ private struct CreditSection: View {
         }
     }
 
+    private var tabs: [CreditTab] {
+        title == "Characters & Creators" ? [.crew, .cast] : [.cast, .crew]
+    }
+
+    private var isExpanded: Bool { expandedTab == selectedTab }
+
+    /// Short lists show everyone; longer ones open on the first few and expand in place.
+    private var collapsedCount: Int {
+        visiblePeople.count > Self.collapsedLimit + 2 ? Self.collapsedLimit : visiblePeople.count
+    }
+
+    private var shownPeople: [CreditDisplay] {
+        isExpanded ? visiblePeople : Array(visiblePeople.prefix(collapsedCount))
+    }
+
     var body: some View {
         if !visiblePeople.isEmpty {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
                     SectionLabel(title: title)
-                    Spacer()
+                    Spacer(minLength: 0)
                     if !cast.isEmpty && !crew.isEmpty {
                         creditTabs
                     }
                 }
 
-                LazyVStack(spacing: 7) {
-                    ForEach(visiblePeople) { person in
-                        creditRow(person)
-                    }
+                // Swapping identity per tab crossfades the two lists inside one card.
+                ZStack(alignment: .top) {
+                    creditList
+                        .id(selectedTab)
+                        .transition(.opacity)
                 }
+                .mediaDetailGroupSurface()
             }
         }
     }
 
     private var creditTabs: some View {
-        HStack(spacing: 4) {
-            if title == "Characters & Creators" {
-                creditTab(.crew)
-                creditTab(.cast)
-            } else {
-                creditTab(.cast)
-                creditTab(.crew)
+        Picker(title, selection: $selectedTab.animation(reduceMotion ? nil : .smooth(duration: 0.3))) {
+            ForEach(tabs, id: \.self) { tab in
+                Text(tabTitle(tab)).tag(tab)
             }
         }
-        .padding(3)
-        .background(.white.opacity(0.055), in: Capsule())
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
+        // The page is always dark; keep the system control from drawing its light-mode thumb.
+        .environment(\.colorScheme, .dark)
     }
 
-    private func creditTab(_ tab: CreditTab) -> some View {
-        Button {
-            selectedTab = tab
-        } label: {
-            Text(tabTitle(tab))
-                .font(.system(size: 11, weight: .heavy))
-                .foregroundStyle(selectedTab == tab ? .white.opacity(0.9) : .white.opacity(0.52))
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(selectedTab == tab ? .white.opacity(0.13) : .clear, in: Capsule())
+    private var creditList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(shownPeople.enumerated()), id: \.element.id) { index, person in
+                creditRow(person)
+                    .overlay(alignment: .top) {
+                        if index > 0 {
+                            MediaDetailRowDivider(leadingInset: CreditRow.textInset)
+                        }
+                    }
+            }
+
+            if collapsedCount < visiblePeople.count {
+                expandButton
+                    .overlay(alignment: .top) {
+                        MediaDetailRowDivider(leadingInset: MediaDetailGroup.horizontalPadding)
+                    }
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tabTitle(tab))
-        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func creditRow(_ person: CreditDisplay) -> some View {
+        if let personRef = person.personRef {
+            Button {
+                onSelect(personRef)
+            } label: {
+                CreditRow(person: person, showsChevron: true)
+            }
+            .buttonStyle(MediaDetailRowButtonStyle())
+            .accessibilityLabel(accessibilityLabel(for: person))
+            .accessibilityHint("Opens person details")
+        } else {
+            CreditRow(person: person, showsChevron: false)
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var expandButton: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+                expandedTab = isExpanded ? nil : selectedTab
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(isExpanded ? "Show Less" : "Show All")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+
+                if !isExpanded {
+                    Text(visiblePeople.count.formatted())
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+            .frame(maxWidth: .infinity, minHeight: MediaDetailGroup.rowMinHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MediaDetailRowButtonStyle())
     }
 
     private func tabTitle(_ tab: CreditTab) -> String {
@@ -6946,72 +7490,6 @@ private struct CreditSection: View {
             return tab == .cast ? "Characters" : "Creators"
         }
         return tab.title
-    }
-
-    private func creditRow(_ person: CreditDisplay) -> some View {
-        Group {
-            if let personRef = person.personRef {
-                Button {
-                    onSelect(personRef)
-                } label: {
-                    creditRowContent(person, showsChevron: true)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel(for: person))
-                .accessibilityHint("Opens person details")
-            } else {
-                creditRowContent(person, showsChevron: false)
-                    .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
-    private func creditRowContent(_ person: CreditDisplay, showsChevron: Bool) -> some View {
-        HStack(spacing: 10) {
-            SpineAsyncImage(url: URL(string: person.imageUrl ?? "")) { phase in
-                switch phase {
-                case let .success(image):
-                    image.resizable().scaledToFill()
-                default:
-                    Circle()
-                        .fill(.white.opacity(0.12))
-                        .overlay {
-                            Image(systemName: "person.fill")
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                }
-            }
-            .frame(width: 38, height: 38)
-            .clipShape(Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(person.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(1)
-
-                if let subtitle = person.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if showsChevron {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.38))
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(minHeight: 52)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.12), in: Capsule())
-        .contentShape(Capsule())
     }
 
     private func accessibilityLabel(for person: CreditDisplay) -> String {
@@ -7031,6 +7509,92 @@ private enum CreditTab {
         case .cast: "Cast"
         case .crew: "Crew"
         }
+    }
+}
+
+private struct CreditRow: View {
+    private static let avatarSize: CGFloat = 42
+    private static let avatarSpacing: CGFloat = 12
+    static let textInset = MediaDetailGroup.horizontalPadding + avatarSize + avatarSpacing
+
+    let person: CreditDisplay
+    let showsChevron: Bool
+
+    var body: some View {
+        HStack(spacing: Self.avatarSpacing) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+
+                if let role = person.subtitle?.nilIfEmpty {
+                    Text(role)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, MediaDetailGroup.horizontalPadding)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var avatar: some View {
+        SpineAsyncImage(
+            url: URL(string: person.imageUrl ?? ""),
+            thumbnailSize: CGSize(width: Self.avatarSize, height: Self.avatarSize)
+        ) { phase in
+            switch phase {
+            case let .success(image):
+                // Centered like the person page: a top-pinned crop cut off faces that fill the headshot.
+                image
+                    .resizable()
+                    .scaledToFill()
+            default:
+                monogram
+            }
+        }
+        .frame(width: Self.avatarSize, height: Self.avatarSize)
+        .clipShape(Circle())
+        .overlay {
+            Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+        }
+    }
+
+    private var monogram: some View {
+        Circle()
+            .fill(.white.opacity(0.08))
+            .overlay {
+                if let initials {
+                    Text(initials)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.6))
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+            }
+    }
+
+    private var initials: String? {
+        let words = person.name.split(whereSeparator: \.isWhitespace)
+        let letters = [words.first, words.count > 1 ? words.last : nil]
+            .compactMap { $0?.first(where: \.isLetter) }
+        return letters.isEmpty ? nil : String(letters).uppercased()
     }
 }
 
@@ -7421,7 +7985,7 @@ private extension JSONValue {
     }
 }
 
-private extension Color {
+extension Color {
     init?(hex: String?) {
         guard let hex else { return nil }
         let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

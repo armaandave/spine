@@ -1,0 +1,83 @@
+{
+ "movies": [],
+ "shows": [
+  {
+   "id": 213562,
+   "mediatype": "show",
+   "imdb_id": "tt23148340",
+   "tvdb_id": 426669,
+   "ids": {
+    "mdblist": "2yjel",
+    "imdb": "tt23148340",
+    "tmdb": 213562,
+    "tvdb": 426669
+   },
+   "title": "Crystal Lake",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 2026,
+   "adult": 0,
+   "release_date": "2026-10-15",
+   "status": "Returning Series",
+   "runtime": 398,
+   "added_at": "2026-10-16T09:26:29",
+   "rank": 1,
+   "rank_change": 23
+  },
+  {
+   "id": 288673,
+   "mediatype": "show",
+   "imdb_id": "tt11540908",
+   "tvdb_id": 455755,
+   "ids": {
+    "mdblist": "3xzbl",
+    "imdb": "tt11540908",
+    "tmdb": 288673,
+    "tvdb": 455755
+   },
+   "title": "Carrie",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "ca",
+   "release_year": 2026,
+   "adult": 0,
+   "release_date": "2026-10-07",
+   "status": "Ended",
+   "runtime": 421,
+   "added_at": "2026-10-07T09:26:28",
+   "rank": 2,
+   "rank_change": -1
+  },
+  {
+   "id": 213375,
+   "mediatype": "show",
+   "imdb_id": "tt23112594",
+   "tvdb_id": 426606,
+   "ids": {
+    "mdblist": "2ydxb",
+    "imdb": "tt23112594",
+    "tmdb": 213375,
+    "tvdb": 426606
+   },
+   "title": "VisionQuest",
+   "language": "en",
+   "spoken_language": "en",
+   "country": "us",
+   "release_year": 2026,
+   "adult": 0,
+   "release_date": "2026-10-13",
+   "status": "Returning Series",
+   "runtime": 416,
+   "added_at": "2026-10-14T09:26:28",
+   "rank": 3,
+   "rank_change": 59
+  }
+ ],
+ "pagination": {
+  "offset": 0,
+  "limit": 3,
+  "total": 147,
+  "has_more": false
+ }
+}

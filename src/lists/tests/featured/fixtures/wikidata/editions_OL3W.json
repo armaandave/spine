@@ -1,0 +1,44 @@
+{
+ "entries": [
+  {
+   "key": "/books/OL10M",
+   "title": "Prorocza pie\u015b\u0144",
+   "languages": [
+    {
+     "key": "/languages/pol"
+    }
+   ],
+   "covers": [
+    11
+   ],
+   "isbn_13": [
+    "9788300000000"
+   ]
+  },
+  {
+   "key": "/books/OL11M",
+   "title": "Prophet Song",
+   "languages": [
+    {
+     "key": "/languages/eng"
+    }
+   ],
+   "covers": null
+  },
+  {
+   "key": "/books/OL12M",
+   "title": "Prophet Song",
+   "languages": [
+    {
+     "key": "/languages/eng"
+    }
+   ],
+   "covers": [
+    12345
+   ],
+   "isbn_13": [
+    "9781804270000"
+   ]
+  }
+ ]
+}

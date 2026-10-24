@@ -101,7 +101,7 @@ struct MetaResponse: Decodable {
 }
 
 enum APIConstants {
-    static let allMedia = "all"
+    nonisolated static let allMedia = "all"
     // ponytail: boardgame removed from fallback list; add back if board games return
     static let fallbackMediaTypes = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
     static let statusChoices = ["Completed", "In progress", "Planning", "Paused", "Dropped"]

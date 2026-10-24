@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/ios/feature-status.sh)",
+      "Bash(scripts/check.sh)",
+      "Bash(git fetch origin)",
+      "Bash(git merge --no-ff *)",
+      "Bash(git push origin myapp-main)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run watch *)",
+      "Bash(docker exec spine printenv SPINE_COMMIT_SHA)",
+      "Bash(docker logs --since *)",
+      "Bash(ASC_APP_ID=6825566855 node ~/.appstoreconnect/asc.mjs status)",
+      "Bash(ASC_APP_ID=6825566855 node ~/.appstoreconnect/asc.mjs get *)",
+      "Bash(node ~/.appstoreconnect/asc.mjs post '/v1/betaGroups/4372d914-22d0-4f90-96dd-27ed38e160aa/relationships/builds' *)",
+      "Bash(git tag ios-*)",
+      "Bash(git push origin ios-*)",
+      "Bash(git worktree remove .claude/worktrees/*)",
+      "Bash(git branch -d *)",
+      "Bash(git push origin --delete worktree-*)",
+      "Bash(git push origin --delete claude/*)"
+    ]
+  }
+}

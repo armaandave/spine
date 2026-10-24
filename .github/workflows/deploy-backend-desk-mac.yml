@@ -1,6 +1,15 @@
 name: Deploy Backend on Desk Mac
 
+# CI (ci.yml) calls this for every push to myapp-main that passes its checks. Run it
+# by hand to deploy a branch's tip, or set ref to deploy an older commit of that
+# branch, for example to roll back.
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit to deploy: the myapp-main push CI just checked."
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       branch:
@@ -8,10 +17,11 @@ on:
         required: false
         default: ""
         type: string
-
-concurrency:
-  group: spine-production-mutation
-  cancel-in-progress: false
+      ref:
+        description: "Commit on that branch to deploy instead of its tip, for example to roll back."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -20,13 +30,58 @@ jobs:
   deploy:
     name: Deploy backend
     runs-on: [self-hosted, spine-backend]
+    # Shared with every workflow that changes production, so they never overlap.
+    concurrency:
+      group: spine-production-mutation
+      cancel-in-progress: false
     steps:
       - name: Checkout deploy workflow branch
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
+      # Manual runs always deploy. A push deploys only while it is still the tip of its
+      # branch (a late older run must not undo a newer deploy) and only when it changes
+      # something the backend image is built from.
+      - name: Decide whether to deploy
+        id: plan
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          branch="${REQUESTED_BRANCH:-$GITHUB_REF_NAME}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "ref=$REQUESTED_REF" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT" != "push" ]]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          deploy_repo="$HOME/projects/spine-deploy"
+          git -C "$deploy_repo" fetch --quiet origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+          tip="$(git -C "$deploy_repo" rev-parse "origin/$branch")"
+          if [[ "$tip" != "$REQUESTED_REF" ]]; then
+            echo "Not deploying: $branch has moved on to ${tip:0:8}, and that push deploys itself."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          deployed="$(docker exec spine printenv SPINE_COMMIT_SHA 2>/dev/null || true)"
+          if [[ -n "$deployed" ]] && git -C "$deploy_repo" cat-file -e "$deployed^{commit}" 2>/dev/null \
+            && git -C "$deploy_repo" diff --quiet "$deployed" "$REQUESTED_REF" -- \
+              src Dockerfile .dockerignore docker-compose.production.yml entrypoint.sh \
+              supervisord.conf nginx.conf pyproject.toml uv.lock \
+              scripts/codex-mobile-deploy-backend.sh scripts/verify-real-client-ip.sh \
+              .github/workflows/deploy-backend-desk-mac.yml; then
+            echo "Not deploying: nothing the backend is built from changed since the deployed ${deployed:0:8}."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
       - name: Back up production before deployment
+        if: steps.plan.outputs.deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -44,14 +99,16 @@ jobs:
           docker exec -i spine-db pg_restore --list < "$backup" > /dev/null
           echo "Verified database backup: $backup"
 
-      - name: Deploy requested branch
+      - name: Deploy
+        if: steps.plan.outputs.deploy == 'true'
+        shell: bash
         env:
-          REQUESTED_BRANCH: ${{ inputs.branch }}
-        run: |
-          branch="${REQUESTED_BRANCH:-$GITHUB_REF_NAME}"
-          ./scripts/codex-mobile-deploy-backend.sh "$branch"
+          BRANCH: ${{ steps.plan.outputs.branch }}
+          REF: ${{ steps.plan.outputs.ref }}
+        run: ./scripts/codex-mobile-deploy-backend.sh "$BRANCH" ${REF:+"$REF"}
 
       - name: Verify deployment and clear old cache
+        if: steps.plan.outputs.deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -60,5 +117,7 @@ jobs:
           deployed_sha="$(docker exec spine printenv SPINE_COMMIT_SHA)"
           [[ "$deployed_sha" == "$expected_sha" ]]
           docker exec spine python manage.py migrate --check
-          docker exec spine python manage.py shell -c 'from django.core.cache import cache; cache.clear()'
+          # Only the cache's own keys: clearing the cache flushes the whole Redis DB, which
+          # also holds Celery's queue and the provider quota counters.
+          docker exec spine python manage.py shell -c 'from django.core.cache import cache; cache.delete_pattern("*")'
           curl --fail --silent --show-error https://api.spine-api.com/api/v1/health/

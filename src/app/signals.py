@@ -16,6 +16,8 @@ from app.models import DiaryEntry, Item
 from app.tasks import enrich_external_ratings, update_daily_statistics
 
 logger = logging.getLogger(__name__)
+# Frequent bookkeeping tasks with ignore_result=True: no PENDING TaskResult rows.
+RESULTLESS_TASKS = frozenset({"Dispatch featured lists"})
 
 
 @receiver(post_save, sender=Item)
@@ -48,6 +50,8 @@ def create_task_result_on_publish(sender=None, headers=None, body=None, **kwargs
     https://github.com/celery/django-celery-results/issues/286#issuecomment-1279161047
     """
     if "task" not in headers:
+        return
+    if headers["task"] in RESULTLESS_TASKS:
         return
 
     TaskResult.objects.store_result(

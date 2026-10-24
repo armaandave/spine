@@ -1,0 +1,67 @@
+{
+ "data": [
+  {
+   "node": {
+    "id": 2,
+    "title": "Berserk",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/manga/1/157897.webp",
+     "large": "https://cdn.myanimelist.net/images/manga/1/157897l.webp"
+    },
+    "start_date": "1989-08-25",
+    "mean": 9.46,
+    "media_type": "manga",
+    "authors": [
+     {
+      "node": {
+       "id": 1868,
+       "first_name": "Kentarou",
+       "last_name": "Miura"
+      },
+      "role": "Story & Art"
+     },
+     {
+      "node": {
+       "id": 49592,
+       "first_name": "",
+       "last_name": "Studio Gaga"
+      },
+      "role": "Art"
+     }
+    ],
+    "num_list_users": 812623
+   },
+   "ranking": {
+    "rank": 1
+   }
+  },
+  {
+   "node": {
+    "id": 1706,
+    "title": "JoJo no Kimyou na Bouken Part 7: Steel Ball Run",
+    "main_picture": {
+     "medium": "https://cdn.myanimelist.net/images/manga/3/179882.jpg",
+     "large": "https://cdn.myanimelist.net/images/manga/3/179882l.jpg"
+    },
+    "start_date": "2004-01-19",
+    "mean": 9.34,
+    "media_type": "manga",
+    "authors": [
+     {
+      "node": {
+       "id": 2619,
+       "first_name": "Hirohiko",
+       "last_name": "Araki"
+      },
+      "role": "Story & Art"
+     }
+    ],
+    "num_list_users": 333539
+   },
+   "ranking": {
+    "rank": 2
+   }
+  }
+ ],
+ "paging": {}
+}

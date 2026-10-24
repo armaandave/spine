@@ -16,7 +16,9 @@ class FeedCursorPagination(CursorPagination):
     page_size = 25
     page_size_query_param = "page_size"
     max_page_size = 100
-    ordering = "-created_at"
+    # Activity written in the same instant ties on created_at, and Postgres returns tied
+    # rows in any order; id makes the order total, as Activity.Meta.ordering intends.
+    ordering = ("-created_at", "-id")
 
     def get_paginated_response(self, data):
         """Return the cursor format expected by the iOS contract."""

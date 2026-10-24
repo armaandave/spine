@@ -1,0 +1,15 @@
+{
+ "data": {
+  "book_mappings": [
+   {
+    "external_id": "/works/OL1W",
+    "book": {
+     "id": 1001,
+     "title": "Orbital",
+     "cached_image": "https://assets.hardcover.app/orbital.jpg",
+     "users_count": 900
+    }
+   }
+  ]
+ }
+}

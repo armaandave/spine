@@ -268,7 +268,8 @@ final class LibraryViewModel {
 
     func loadNextPageIfNeeded(currentItem: LibraryItem) async {
         let visibleItems = displayedItems
-        guard let thresholdIndex = visibleItems.index(visibleItems.endIndex, offsetBy: -8, limitedBy: visibleItems.startIndex) ?? visibleItems.indices.first,
+        // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
+        guard let thresholdIndex = visibleItems.index(visibleItems.endIndex, offsetBy: -ArtworkPrefetch.lookahead, limitedBy: visibleItems.startIndex) ?? visibleItems.indices.first,
               let currentIndex = visibleItems.firstIndex(where: { $0.id == currentItem.id }),
               currentIndex >= thresholdIndex else {
             return
@@ -799,6 +800,7 @@ struct LibraryView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(item.media.title)")
+                .prefetchingArtwork(after: item, in: items) { $0.media.artworkRequest(slot: .tagGrid) }
                 .task {
                     await viewModel.loadNextPageIfNeeded(currentItem: item)
                 }
@@ -830,6 +832,7 @@ struct LibraryView: View {
                     LibraryListRow(item: item)
                 }
                 .buttonStyle(.plain)
+                .prefetchingArtwork(after: item, in: items) { $0.media.artworkRequest(slot: .libraryRow) }
                 .task {
                     await viewModel.loadNextPageIfNeeded(currentItem: item)
                 }

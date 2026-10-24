@@ -999,6 +999,7 @@ struct StatsPosterGrid: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(item.media.displayTitle), \(item.accessibilityCaption)")
                 .accessibilityHint("Opens media details")
+                .prefetchingArtwork(after: item, in: items) { $0.media.artworkRequest(slot: .tagGrid) }
                 .onAppear {
                     onItemAppear?(item)
                 }

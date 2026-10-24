@@ -1,0 +1,43 @@
+{
+ "total_hits": 10000,
+ "page": 1,
+ "per_page": 2,
+ "results": [
+  {
+   "record": {
+    "series_id": 51239621230,
+    "title": "Berserk",
+    "url": "https://www.mangaupdates.com/series/njeqwry/berserk",
+    "image": {
+     "url": {
+      "original": "https://cdn.mangaupdates.com/image/i501230.png",
+      "thumb": "https://cdn.mangaupdates.com/image/thumb/i501230.png"
+     },
+     "height": 400,
+     "width": 284
+    },
+    "type": "Manga",
+    "year": "1989",
+    "bayesian_rating": 8.98
+   }
+  },
+  {
+   "record": {
+    "series_id": 55665151734,
+    "title": "Slam Dunk",
+    "url": "https://www.mangaupdates.com/series/pklldyu/slam-dunk",
+    "image": {
+     "url": {
+      "original": "https://cdn.mangaupdates.com/image/i426096.png",
+      "thumb": "https://cdn.mangaupdates.com/image/thumb/i426096.png"
+     },
+     "height": 231,
+     "width": 160
+    },
+    "type": "Manga",
+    "year": "1990",
+    "bayesian_rating": 8.96
+   }
+  }
+ ]
+}

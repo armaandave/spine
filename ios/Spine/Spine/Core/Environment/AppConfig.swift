@@ -8,11 +8,33 @@ enum AppConfig {
     /// Example after setup: https://api.yourdomain.com
     static let productionAPIBaseURL = "https://api.spine-api.com"
 
+    /// Where Debug builds go when nothing else is set: the always-on test backend on this Mac
+    /// (`scripts/ios/test-backend.sh`), which the Simulator reaches as 127.0.0.1. Never port 8000, which is
+    /// production on the server Mac.
+    static let localAPIBaseURL = "http://127.0.0.1:8010"
+
     /// Override in the Xcode scheme with SPINE_API_BASE_URL when local development needs localhost.
     static var apiBaseURL: URL {
-        if let override = ProcessInfo.processInfo.environment["SPINE_API_BASE_URL"],
-           !override.isEmpty,
-           let url = URL(string: override) {
+        resolvedAPIBaseURL(
+            environment: ProcessInfo.processInfo.environment,
+            infoDictionary: Bundle.main.infoDictionary
+        )
+    }
+
+    /// Release builds use the launch environment's SPINE_API_BASE_URL, else production.
+    /// Debug builds (the "Spine Dev" app) never talk to production: they use the launch environment's
+    /// SPINE_API_BASE_URL (Simulator launches), then the SpineAPIBaseURL Info.plist key, which a phone
+    /// build points at this Mac's backend (`scripts/ios/build-to-iphone.sh`), then `localAPIBaseURL`.
+    /// A value naming production (its host, or port 8000 on this Mac) is ignored.
+    static func resolvedAPIBaseURL(environment: [String: String], infoDictionary: [String: Any]?) -> URL {
+        #if DEBUG
+        let candidates = [environment["SPINE_API_BASE_URL"], infoDictionary?["SpineAPIBaseURL"] as? String]
+        for case let url? in candidates.map(usableURL) where !isProduction(url) {
+            return url
+        }
+        return URL(string: localAPIBaseURL)!
+        #else
+        if let url = usableURL(environment["SPINE_API_BASE_URL"]) {
             return url
         }
 
@@ -21,5 +43,18 @@ enum AppConfig {
             fatalError("Set AppConfig.productionAPIBaseURL to your permanent Cloudflare hostname.")
         }
         return url
+        #endif
+    }
+
+    /// Production's public host, or the production stack's port on the server Mac.
+    private static func isProduction(_ url: URL) -> Bool {
+        let host = url.host?.lowercased()
+        if host == URL(string: productionAPIBaseURL)?.host?.lowercased() { return true }
+        return url.port == 8000 && ["127.0.0.1", "localhost", "::1"].contains(host)
+    }
+
+    private static func usableURL(_ value: String?) -> URL? {
+        guard let value, !value.isEmpty else { return nil }
+        return URL(string: value)
     }
 }

@@ -123,8 +123,10 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
 
 ### 5.1 Planned base URL
 
-- Default and release: `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`). Any launch without `SPINE_API_BASE_URL` uses production.
-- Local dev: `http://127.0.0.1:8001` from `./start-dev.sh`, Simulator only, opted into per launch (see "Local backend (Simulator)" under Run). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
+- Two apps, one target:
+  - **Release** is **Spine** (`com.armaan.Spine`): what Xcode Cloud archives for TestFlight, and the user's real app. It always uses `https://api.spine-api.com` (`AppConfig.productionAPIBaseURL`).
+  - **Debug** is **Spine Dev** (`com.armaan.Spine.dev`, display name "Spine Dev", icon `AppIcon-Dev` with an orange DEV band). It installs next to Spine and **never talks to production**: it uses the launch environment's `SPINE_API_BASE_URL`, then the `SpineAPIBaseURL` Info.plist key (`ios/Spine/Configs/Info.plist`, from the `SPINE_API_BASE_URL` build setting, empty in Debug), then `AppConfig.localAPIBaseURL` (`http://127.0.0.1:8010`, the always-on test backend). A value naming production (its host, or port 8000 on this Mac) is ignored.
+- Test backend: `scripts/ios/test-backend.sh` keeps a backend running on this Mac at port 8010 (launchd, low priority, its own test database), serving `myapp-main`, or a branch for a few hours after `test-backend.sh use`. The Simulator reaches it as `http://127.0.0.1:8010` by default; on a phone, `scripts/ios/build-to-iphone.sh` bakes its `http://<Mac>.local:8010` address into the build (`scripts/ios/TEST_ON_IPHONE.md`). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
 - Config via `Info.plist` or xcconfig — **never hardcode secrets**.
 
 ### 5.2 v1 endpoints (target)
@@ -243,22 +245,24 @@ Rules:
 - Open `ios/Spine/Spine.xcodeproj` in Xcode.
 - Select iPhone simulator → Run (⌘R).
 - API base URL: `ios/Spine/Spine/Core/Environment/AppConfig.swift`
-- Scheme: **Debug**. Without an override it talks to production (`https://api.spine-api.com`).
+- Scheme: **Debug**, which builds Spine Dev. It talks to `http://127.0.0.1:8010` (the always-on test backend), never production. On a physical iPhone that address is the phone itself, so install to the phone with `scripts/ios/build-to-iphone.sh` (`scripts/ios/TEST_ON_IPHONE.md`), not Xcode's Run.
 
 ### Local backend (Simulator)
 
-Production is the default on purpose. Use the local backend only when you mean to, and say which backend you used when reporting results.
+Debug builds (Spine Dev) default to the always-on test backend, `http://127.0.0.1:8010`, which serves `myapp-main` (`scripts/ios/test-backend.sh status` says what it serves). That needs nothing started. To try a branch's backend changes, serve them on a backend of your own:
 
-1. Start the backend from the repo root: `./start-dev.sh` (Django on `http://127.0.0.1:8001`; set `SPINE_DEV_PORT` to change the port). Check `curl http://127.0.0.1:8001/api/v1/health/` returns 200.
-2. Launch with `SPINE_API_BASE_URL` set:
-   - simctl: `SIMCTL_CHILD_SPINE_API_BASE_URL=http://127.0.0.1:8001 xcrun simctl launch --terminate-running-process <UDID> com.armaan.Spine`
-   - XcodeBuildMCP: `build_run_sim` cannot pass launch environment, so it always launches against production. Build (or build and run), then `stop_app_sim`, then `launch_app_sim` with `env: {"SPINE_API_BASE_URL": "http://127.0.0.1:8001"}`.
+1. Start one from the feature worktree, under the cleanup wrapper with a 4-hour limit: `~/.local/bin/agent-cleanup run --owner <task> --label spine-local-backend --timeout 14400 -- scripts/ios/local-backend.sh`. It prints `LOCAL_API:` with its port (8001 or the next free one). `./start-dev.sh` (port 8001) also works for web work.
+2. Launch with `SPINE_API_BASE_URL` set to it in the launch environment:
+   - simctl: `SIMCTL_CHILD_SPINE_API_BASE_URL=http://127.0.0.1:8002 xcrun simctl launch --terminate-running-process <UDID> com.armaan.Spine.dev`
+   - XcodeBuildMCP: `build_run_sim` cannot pass launch environment. Build (or build and run), then `stop_app_sim`, then `launch_app_sim` with `env: {"SPINE_API_BASE_URL": "http://127.0.0.1:8002"}`.
    - Xcode: duplicate the scheme with **Shared** unchecked and set the variable in its Run action. Never add it to the shared `Spine.xcscheme`.
 3. Confirm the app's requests show up in the `runserver` output.
 
-Never point a "local" build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
+To open signed in as the passwordless dev user, launch with `--dev-sign-in` after the bundle ID; the test backend and `scripts/ios/local-backend.sh` answer it, `./start-dev.sh` doesn't (`simctl launch ... com.armaan.Spine.dev --dev-sign-in`). Only a local backend answers it; production answers 404.
 
-Release builds keep `AppConfig.productionAPIBaseURL`. Installed builds have no launch environment, so they always use production; don't change that default to a local URL.
+Never point a build at `127.0.0.1:8000` on the server Mac. That port is production, so the build would read and write production data.
+
+Release builds always use `AppConfig.productionAPIBaseURL`. Debug builds never do; don't give the Debug `SPINE_API_BASE_URL` build setting a production URL, and don't change the Debug bundle ID back to `com.armaan.Spine` (it would replace the user's TestFlight app).
 
 ### Codex Desktop simulator mirror
 
@@ -303,6 +307,19 @@ Implementation notes:
 - Use inline JSON fixtures in tests for decoder coverage — keep test data in `SpineTests/`, not in the app target
 
 No XCTest required for every change; required for non-trivial decoding/network logic.
+
+Run them under the cleanup wrapper, in the `ios` queue (heavy iOS work on this Mac takes turns, one at a time), on a scratch simulator it creates and deletes afterwards (the stock "iPhone 17" simulator on this Mac can wedge on boot, and never borrow another session's). Run it in the background: it may wait for its turn first.
+
+```sh
+~/.local/bin/agent-cleanup run --owner <task> --label spine-ios-tests --timeout 2400 --queue ios \
+  --sim-runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5 \
+  --sim-device-type com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
+  -- /bin/sh -c 'exec xcodebuild test -project ios/Spine/Spine.xcodeproj -scheme Spine -destination "id=$AGENT_CLEANUP_SIM_UDID" -only-testing:SpineTests -parallel-testing-enabled NO'
+```
+
+A first boot loads the Mac heavily for a few minutes, and the Mac also serves production; the queue keeps it to one simulator at a time. Builds for a simulator or a phone go through the queue too (`--queue ios`).
+
+The helper deletes its simulator when the run ends. Start these runs from inside the feature's checkout, so shipping can delete any it left behind (`scripts/ios/delete-scratch-sims.sh`, `scripts/ios/SHIP.md` step 10).
 
 ---
 

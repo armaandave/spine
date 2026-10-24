@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Keys Xcode can't generate; it merges these into the generated Info.plist.
+SpineAPIBaseURL comes from the SPINE_API_BASE_URL build setting (empty in Debug).
+A phone build (scripts/ios/build-to-iphone.sh) sets it to this Mac's local backend.
+Only Debug builds (the "Spine Dev" app) read it, and never use production (AppConfig);
+Release builds always use production.
+-->
+<plist version="1.0">
+<dict>
+	<key>SpineAPIBaseURL</key>
+	<string>$(SPINE_API_BASE_URL)</string>
+</dict>
+</plist>

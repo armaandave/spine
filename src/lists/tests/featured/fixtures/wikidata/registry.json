@@ -1,0 +1,133 @@
+{
+ "head": {
+  "vars": [
+   "w",
+   "title",
+   "wins",
+   "year",
+   "creators",
+   "types",
+   "tmdb_movie_"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q19089"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Citizen Kane"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "r|1989||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Orson Welles"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1941"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "15"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q192724"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Iron Man"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "r|2022||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Jon Favreau"
+    },
+    "year": {
+     "type": "literal",
+     "value": "2008"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "1726"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q36479"
+    },
+    "title": {
+     "type": "literal",
+     "value": "The Lion King"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "r|2023||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": "Roger Allers"
+    },
+    "year": {
+     "type": "literal",
+     "value": "1994"
+    },
+    "tmdb_movie_": {
+     "type": "literal",
+     "value": "8587"
+    }
+   },
+   {
+    "w": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q404"
+    },
+    "title": {
+     "type": "literal",
+     "value": "No Year Short"
+    },
+    "wins": {
+     "type": "literal",
+     "value": "r|||"
+    },
+    "types": {
+     "type": "literal",
+     "value": "http://www.wikidata.org/entity/Q11424"
+    },
+    "creators": {
+     "type": "literal",
+     "value": ""
+    },
+    "year": {
+     "type": "literal",
+     "value": "1900"
+    }
+   }
+  ]
+ }
+}

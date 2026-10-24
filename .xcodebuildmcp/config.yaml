@@ -13,7 +13,7 @@ sessionDefaults:
   simulatorName: "iPhone 17"
   useLatestOS: true
   platform: "iOS"
-  bundleId: "com.armaan.Spine"
+  bundleId: "com.armaan.Spine.dev"
   suppressWarnings: true
   derivedDataPath: "./ios/.derivedData"
   env:

@@ -25,6 +25,7 @@ from api.services import media as media_service
 from api.throttling import SearchRateThrottle
 from api.views.mixins import MediaExposureMixin
 from app import config, exposure, single_weight
+from app.curation import prime_curated_artwork
 from app.forms import ManualItemForm
 from app.models import BasicMedia, DiaryEntry, MediaTypes, Status
 from app.providers import anilist
@@ -767,6 +768,7 @@ class MediaReviewsView(MediaExposureMixin, APIView):
         page = paginator.paginate_queryset(entries, request, view=self)
         viewer = request.user if request.user.is_authenticated else None
         diary_service.prime_diary_likes(page, viewer)
+        prime_curated_artwork(entry.item for entry in page)
         return paginator.get_paginated_response(
             [diary_service.diary_payload(entry, request=request, viewer=viewer) for entry in page],
         )

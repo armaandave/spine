@@ -23,6 +23,7 @@ from app.providers import (
     manual,
     musicbrainz,
     openlibrary,
+    quota,
     tmdb,
 )
 
@@ -42,6 +43,8 @@ SUPPORTED_PERSON_SOURCES = (
     Sources.MANGAUPDATES.value,
     "anilist",
 )
+# Marks search results from a fallback provider while the usual one is rate limited.
+RATE_LIMIT_FALLBACK = "rate_limit_fallback"
 PERSON_SEARCH_CACHE_VERSION = "v1"
 PERSON_SEARCH_TTL = 60 * 60
 
@@ -80,6 +83,15 @@ person_search_session = LimiterSession(
     per_second=5,
     bucket_class=RedisBucket,
     bucket_kwargs={"redis": redis_db, "bucket_key": bucket_key},
+)
+
+# The weekly music genre refresh makes thousands of ListenBrainz and Wikipedia
+# requests, so it gets its own limit instead of spending the shared one.
+genre_refresh_session = LimiterSession(per_second=20)
+genre_refresh_session.mount(
+    # ListenBrainz allows 30 requests per 10 seconds.
+    "https://api.listenbrainz.org",
+    LimiterAdapter(per_second=2),
 )
 
 session.mount("http://", HTTPAdapter(max_retries=3))
@@ -222,7 +234,7 @@ def api_request(
         params: Query params for GET, JSON body for POST
         data: Raw data for POST
         headers: Request headers
-        response_format: "json" (default) or "xml" for XML parsing
+        response_format: "json" (default), "xml" for XML parsing, or "text" for the body
         request_session: Optional requests session; defaults to the shared provider session
         timeout: Optional request timeout; defaults to the global provider timeout
         retry_rate_limits: Whether HTTP 429 responses may wait and retry
@@ -248,11 +260,22 @@ def api_request(
 
     rate_limit_retries = RATE_LIMIT_MAX_RETRIES if retry_rate_limits else 0
     for retry_number in range(rate_limit_retries + 1):
+        # Featured-list syncs: spend the provider's daily budget, or raise Deferred.
+        quota.before_request(provider, url)
         try:
             response = request_func(**request_kwargs)
             response.raise_for_status()
         except requests.exceptions.HTTPError as error:
             error_resp = error.response
+            if error_resp.status_code == requests.codes.too_many_requests:
+                # A wait longer than we would sleep (a daily quota) blocks the provider
+                # for featured-list syncs, which then defer instead of sleeping.
+                quota.rate_limited(
+                    provider,
+                    url,
+                    error_resp,
+                    max_sleep=RATE_LIMIT_MAX_WAIT_SECONDS,
+                )
             if (
                 error_resp.status_code != requests.codes.too_many_requests
                 or retry_number == rate_limit_retries
@@ -263,6 +286,11 @@ def api_request(
                 seconds_to_wait = int(error_resp.headers.get("Retry-After", 5))
             except (TypeError, ValueError):
                 seconds_to_wait = 5
+            # A provider asking for more than every retry could wait (Hardcover's
+            # daily cap asks for hours) won't recover in time, so fail now instead
+            # of holding the request through every retry.
+            if seconds_to_wait > RATE_LIMIT_MAX_WAIT_SECONDS * RATE_LIMIT_MAX_RETRIES:
+                raise error from None
             seconds_to_wait = min(
                 max(seconds_to_wait, 0),
                 RATE_LIMIT_MAX_WAIT_SECONDS,
@@ -281,6 +309,8 @@ def api_request(
 
         if response_format == "xml":
             return ElementTree.fromstring(response.text)
+        if response_format == "text":
+            return response.text
         return response.json()
 
     raise RuntimeError("Unreachable rate-limit retry state")
@@ -418,11 +448,7 @@ def search(
                 **search_options,
             )
             if source == Sources.OPENLIBRARY.value
-            else hardcover.search(
-                query,
-                page,
-                **search_options,
-            )
+            else _search_hardcover_or_openlibrary(query, page, search_options)
         ),
         MediaTypes.COMIC.value: lambda: comicvine.search(
             query,
@@ -436,6 +462,18 @@ def search(
         ),
     }
     return search_handlers[media_type]()
+
+
+def _search_hardcover_or_openlibrary(query, page, search_options):
+    """Search Hardcover, or Open Library while Hardcover is rate limited."""
+    try:
+        return hardcover.search(query, page, **search_options)
+    except ProviderAPIError as error:
+        if error.status_code != requests.codes.too_many_requests:
+            raise
+        logger.warning("Hardcover is rate limited; searching Open Library instead")
+        # Flagged so callers don't cache it in place of Hardcover's results.
+        return {**openlibrary.search(query, page, **search_options), RATE_LIMIT_FALLBACK: True}
 
 
 def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count", watch_region=None, watch_providers=None):

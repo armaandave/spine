@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import html
 import io
 import zipfile
 from collections import Counter
@@ -9,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import PurePosixPath
 
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from integrations.imports.helpers import MediaImportError
 
@@ -114,17 +116,32 @@ def _read_list(archive, member, path):
     if header_index is None:
         raise MediaImportError(f"{path}: Unsupported Letterboxd list CSV format.")
 
-    metadata = {
-        row[0].strip().lower(): ",".join(row[1:]).strip()
-        for row in rows[:header_index]
-        if len(row) > 1 and row[0].strip()
-    }
+    metadata = _list_metadata(rows[:header_index])
     name = metadata.get("name") or _display_name_from_path(path)
-    description = metadata.get("description", "")
+    description = _plain_text(metadata.get("description", ""))
     tags = _tags(metadata.get("tags") or metadata.get("tag") or "")
     headers = rows[header_index]
     items = [_normalize_row(dict(zip(headers, row, strict=False))) for row in rows[header_index + 1 :] if row]
     return LetterboxdList(name=name, description=description, tags=tags, rows=items)
+
+
+def _list_metadata(rows):
+    """The list's name, tags and description from the lines above its films.
+
+    Letterboxd writes a header row (Date,Name,Tags,URL,Description) over one row of values.
+    One "Key,value" pair per row is also accepted.
+    """
+    rows = [row for row in rows if any(cell.strip() for cell in row)]
+    for index, row in enumerate(rows[:-1]):
+        keys = [cell.strip().lower() for cell in row]
+        if "name" in keys and "url" in keys:
+            return {key: value.strip() for key, value in zip(keys, rows[index + 1], strict=False) if key}
+    return {row[0].strip().lower(): ",".join(row[1:]).strip() for row in rows if len(row) > 1 and row[0].strip()}
+
+
+def _plain_text(value):
+    """Letterboxd descriptions are HTML; lists show plain text."""
+    return " ".join(html.unescape(strip_tags(value)).split())
 
 
 def _display_name_from_path(path):

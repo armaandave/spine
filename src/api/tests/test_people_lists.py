@@ -429,7 +429,8 @@ class PeopleListsAPITests(TestCase):
         self.assertEqual(audit.metadata["current"], "public")
         self.assertEqual(audit.metadata["list_type"], "people")
 
-    def test_media_list_payload_and_routes_still_use_media_contract(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_media_list_payload_and_routes_still_use_media_contract(self, _backdrop_mock):
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.MOVIE.value,

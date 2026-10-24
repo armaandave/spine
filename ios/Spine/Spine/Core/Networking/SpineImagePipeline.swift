@@ -25,9 +25,10 @@ enum SpineImagePipeline {
     /// With a `thumbnailSize` (in points), ImageIO decodes straight to that size: a 2000×3000 poster in an
     /// 80×120 grid cell costs ~0.35 MB of memory instead of ~24 MB. The disk cache still keeps the original
     /// bytes, so a full-size view of the same URL needs no new download.
-    static func request(url: URL?, thumbnailSize: CGSize?) -> ImageRequest? {
+    /// `processors` run once, off the main thread, and their output is cached like the image itself.
+    static func request(url: URL?, thumbnailSize: CGSize?, processors: [any ImageProcessing] = []) -> ImageRequest? {
         guard let url else { return nil }
-        var request = ImageRequest(url: url)
+        var request = ImageRequest(url: url, processors: processors)
         if let thumbnailSize {
             request.thumbnail = ImageRequest.ThumbnailOptions(size: thumbnailSize, unit: .points, contentMode: .aspectFill)
         }

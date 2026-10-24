@@ -1,0 +1,36 @@
+{
+ "feed": {
+  "title": "Top Albums",
+  "country": "us",
+  "updated": "Thu, 22 Oct 2026 03:14:53 +0000",
+  "results": [
+   {
+    "artistName": "Zach Bryan",
+    "id": "6822944288",
+    "name": "Young Manhood and Other Donatable Organs",
+    "releaseDate": "2026-10-16",
+    "kind": "albums",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/ea/98/f2/ea98f2b8-5131-29ae-2064-997234ef13bc/093624812647.jpg/100x100bb.jpg",
+    "url": "https://music.apple.com/us/album/young-manhood-and-other-donatable-organs/6822944288"
+   },
+   {
+    "artistName": "Drake",
+    "id": "1440642493",
+    "name": "Take Care (Deluxe Version)",
+    "releaseDate": "2011-11-15",
+    "kind": "albums",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/74/fb/d3/74fbd365-bd52-23b4-604b-7f164407b0a9/00602527899107.rgb.jpg/100x100bb.jpg",
+    "url": "https://music.apple.com/us/album/take-care-deluxe-version/1440642493"
+   },
+   {
+    "artistName": "SleepTherapy",
+    "id": "1417709876",
+    "name": "Brown Noise: Loops for Relaxation, Deep Sleep, Meditation, And Babies",
+    "releaseDate": "2018-07-17",
+    "kind": "albums",
+    "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/21/1e/77/211e77f4-beed-c073-526c-c182bbed597f/859727751685_cover.jpg/100x100bb.jpg",
+    "url": "https://music.apple.com/us/album/brown-noise-loops-for-relaxation-deep-sleep-meditation/1417709876"
+   }
+  ]
+ }
+}

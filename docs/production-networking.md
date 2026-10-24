@@ -68,8 +68,8 @@ process, or a container on another network. It does not identify `cloudflared`.
 
 ## Deploy-time checks
 
-Both deploy scripts do the following: `scripts/deploy-production.sh` (manual) and
-`scripts/codex-mobile-deploy-backend.sh` (the one the runner workflow calls).
+The deploy script, `scripts/codex-mobile-deploy-backend.sh` (which the deploy workflow
+calls), does the following:
 
 - `docker compose up -d --build --wait --wait-timeout 240`. `db` and `redis` have
   healthchecks (`pg_isready` over TCP, because a new data directory is first served by a
@@ -86,7 +86,7 @@ Both deploy scripts do the following: `scripts/deploy-production.sh` (manual) an
   wait for the first 45 s probe (not tested). The 240 s also bounds a slow start, for
   example a long migration: past that, compose reports failure even if the app comes up
   later.
-- After the existing health and meta checks, `scripts/verify-real-client-ip.sh` runs. It
+- Last, `scripts/verify-real-client-ip.sh` runs. It
   sends a loopback request with `CF-Connecting-IP: 203.0.113.250` to
   `http://127.0.0.1:8000/api/v1/health/` (not `/health/`, which has `access_log off`) and
   requires nginx's log line to start with that address. It also sends a request through

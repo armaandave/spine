@@ -99,6 +99,41 @@ final class BookTrackingContractTests: XCTestCase {
 
     func testRepositoryUndoReadAcceptsEmptyUntrackedResponse() async throws {
         let repository = Self.repository()
+        Self.respondWithNoContent()
+
+        let state = try await repository.undoBookRead(source: "openlibrary", mediaId: "OL1M")
+
+        XCTAssertNil(state)
+        XCTAssertEqual(BookTrackingURLProtocol.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(
+            BookTrackingURLProtocol.lastRequest?.url?.absoluteString,
+            "https://example.com/api/v1/tracking/openlibrary/book/OL1M/actions/undo_read/"
+        )
+    }
+
+    func testRepositoryJourneyDeleteAcceptsEmptyUntrackedResponse() async throws {
+        let repository = Self.repository()
+        Self.respondWithNoContent()
+
+        let deleted = try await repository.deleteBookJourney(source: "openlibrary", mediaId: "OL1M", journeyId: 41)
+        XCTAssertNil(deleted)
+        XCTAssertEqual(BookTrackingURLProtocol.lastRequest?.httpMethod, "DELETE")
+
+        let acted = try await repository.performBookAction(
+            source: "openlibrary",
+            mediaId: "OL1M",
+            action: "delete_undated_read",
+            request: BookActionRequest()
+        )
+        XCTAssertNil(acted)
+    }
+
+    func testRepositoryJourneyDeleteDecodesTheRemainingState() async throws {
+        let deleted = try await Self.repository().deleteBookJourney(source: "openlibrary", mediaId: "OL1M", journeyId: 40)
+        XCTAssertEqual(deleted?.book?.currentJourney?.id, 41)
+    }
+
+    private static func respondWithNoContent() {
         BookTrackingURLProtocol.handler = { request in
             let response = try XCTUnwrap(HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -108,14 +143,6 @@ final class BookTrackingContractTests: XCTestCase {
             ))
             return (response, Data())
         }
-
-        try await repository.undoBookRead(source: "openlibrary", mediaId: "OL1M")
-
-        XCTAssertEqual(BookTrackingURLProtocol.lastRequest?.httpMethod, "POST")
-        XCTAssertEqual(
-            BookTrackingURLProtocol.lastRequest?.url?.absoluteString,
-            "https://example.com/api/v1/tracking/openlibrary/book/OL1M/actions/undo_read/"
-        )
     }
 
     func testRepositoryCompletionIsAtomicAndDecodesDiaryLinkage() async throws {

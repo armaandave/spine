@@ -824,19 +824,160 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.data["items_count"], 1)
         self.assertNotIn("items", response.data)
 
-    @patch("app.providers.services.get_media_metadata")
-    def test_list_detail_items_do_not_resolve_provider_backdrops(self, metadata_mock):
-        user = get_user_model().objects.create_user(username="list-detail-no-provider", password="strong-password-123")
-        custom_list = CustomList.objects.create(owner=user, name="Watchlist")
-        item = self._create_movie_items(1, title_prefix="Backdrop", media_id_prefix="no-provider-backdrop")[0]
-        CustomListItem.objects.create(custom_list=custom_list, item=item)
+    def _create_header_backdrop_list(self, username):
+        """Create a three-film list where only the second has the viewer's backdrop."""
+        user = get_user_model().objects.create_user(username=username, password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Current Posters")
+        gravity, heat, third = self._create_movie_items(3, title_prefix="Film", media_id_prefix=f"{username}-")
+        for position, item in enumerate([gravity, heat, third], start=1):
+            CustomListItem.objects.create(custom_list=custom_list, item=item, position=position)
+        CustomBackdropPreference.objects.create(
+            user=user,
+            item=heat,
+            custom_image_url="https://example.com/heat-custom.jpg",
+        )
+        self.client.force_authenticate(user)
+        return custom_list, gravity
+
+    @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"backdrop_path": "/gravity.jpg"},
+    )
+    def test_list_detail_items_resolve_only_the_first_film_backdrop(self, metadata_mock, _images_mock):
+        custom_list, gravity = self._create_header_backdrop_list("list-detail-first-film")
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first, second, third = response.data["items"]
+        self.assertEqual(first["backdrop_url"], "https://image.tmdb.org/t/p/original/gravity.jpg")
+        self.assertIsNone(first["custom_backdrop_url"])
+        self.assertIsNone(second["backdrop_url"])
+        self.assertEqual(second["custom_backdrop_url"], "https://example.com/heat-custom.jpg")
+        self.assertIsNone(third["backdrop_url"])
+        metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
+
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"artworks": [{"image_id": "elden-ring-art"}]},
+    )
+    def test_list_detail_resolves_the_first_game_backdrop(self, metadata_mock):
+        user = get_user_model().objects.create_user(username="list-first-game", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Games")
+        book = Item.objects.create(source=Sources.HARDCOVER.value, media_type=MediaTypes.BOOK.value, media_id="b1", title="A Book")
+        game = Item.objects.create(source=Sources.IGDB.value, media_type=MediaTypes.GAME.value, media_id="119133", title="Elden Ring")
+        CustomListItem.objects.create(custom_list=custom_list, item=book, position=1)
+        CustomListItem.objects.create(custom_list=custom_list, item=game, position=2)
         self.client.force_authenticate(user)
 
         response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(response.data["items"][0]["backdrop_url"])
+        first, second = response.data["items"]
+        self.assertIsNone(first["backdrop_url"])
+        self.assertEqual(
+            second["backdrop_url"],
+            "https://images.igdb.com/igdb/image/upload/t_original/elden-ring-art.jpg",
+        )
+        metadata_mock.assert_called_once_with(MediaTypes.GAME.value, game.media_id, Sources.IGDB.value)
+
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {**metadata, "backdrop": "https://example.com/berserk-banner.jpg"},
+    )
+    @patch("app.providers.services.get_media_metadata", return_value={"media_id": "2"})
+    def test_list_detail_uses_the_manga_page_backdrop(self, metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-first-manga", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga")
+        manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id="2", title="Berserk")
+        CustomListItem.objects.create(custom_list=custom_list, item=manga, position=1)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["items"][0]["backdrop_url"], "https://example.com/berserk-banner.jpg")
+        enrich_mock.assert_called_once()
+
+    @patch(
+        "api.services.media._enrich_manga_metadata",
+        side_effect=lambda metadata, _source: {
+            **metadata,
+            "backdrop": "https://example.com/second-banner.jpg" if metadata["media_id"] == "second" else None,
+        },
+    )
+    @patch(
+        "app.providers.services.get_media_metadata",
+        side_effect=lambda _media_type, media_id, _source: {"media_id": media_id},
+    )
+    def test_list_header_falls_back_to_the_next_title_with_a_backdrop(self, _metadata_mock, enrich_mock):
+        user = get_user_model().objects.create_user(username="list-next-backdrop", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Manga Awards")
+        for position, media_id in enumerate(["first", "second", "third"], start=1):
+            manga = Item.objects.create(source=Sources.MAL.value, media_type=MediaTypes.MANGA.value, media_id=media_id, title=media_id)
+            CustomListItem.objects.create(custom_list=custom_list, item=manga, position=position)
+        self.client.force_authenticate(user)
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        backdrops = [row["backdrop_url"] for row in response.data["results"]]
+        self.assertEqual(backdrops, [None, "https://example.com/second-banner.jpg", None])
+        self.assertEqual(enrich_mock.call_count, 2)
+
+    @patch("app.providers.tmdb.get_backdrop_images", return_value=[])
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={"backdrop_path": "/gravity.jpg"},
+    )
+    def test_list_items_first_page_resolves_first_film_backdrop(self, metadata_mock, _images_mock):
+        custom_list, gravity = self._create_header_backdrop_list("list-items-first-film")
+
+        response = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"page_size": 2})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        first, second = response.data["results"]
+        self.assertEqual(first["backdrop_url"], "https://image.tmdb.org/t/p/original/gravity.jpg")
+        self.assertEqual(second["custom_backdrop_url"], "https://example.com/heat-custom.jpg")
+        metadata_mock.assert_called_once_with(MediaTypes.MOVIE.value, gravity.media_id, Sources.TMDB.value)
+
+        metadata_mock.reset_mock()
+        later_page = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"page_size": 2, "page": 2})
+        sorted_page = self.client.get(f"/api/v1/lists/{custom_list.id}/items/", {"sort": "title"})
+
+        self.assertEqual(later_page.status_code, status.HTTP_200_OK)
+        self.assertIsNone(later_page.data["results"][0]["backdrop_url"])
+        self.assertEqual(sorted_page.status_code, status.HTTP_200_OK)
+        self.assertIsNone(sorted_page.data["results"][0]["backdrop_url"])
         metadata_mock.assert_not_called()
+
+    @patch("app.providers.services.get_media_metadata")
+    def test_list_items_load_when_first_film_backdrop_provider_fails(self, metadata_mock):
+        custom_list, _gravity = self._create_header_backdrop_list("list-backdrop-provider-down")
+        errors = [
+            ProviderAPIError(
+                Sources.TMDB.value,
+                requests.exceptions.HTTPError(response=MagicMock(status_code=503, text="down")),
+            ),
+            requests.exceptions.ConnectionError(),
+        ]
+
+        for error in errors:
+            with self.subTest(error=type(error).__name__):
+                metadata_mock.side_effect = error
+
+                detail = self.client.get(f"/api/v1/lists/{custom_list.id}/")
+                items = self.client.get(f"/api/v1/lists/{custom_list.id}/items/")
+
+                self.assertEqual(detail.status_code, status.HTTP_200_OK)
+                self.assertEqual(items.status_code, status.HTTP_200_OK)
+                self.assertIsNone(detail.data["items"][0]["backdrop_url"])
+                self.assertIsNone(items.data["results"][0]["backdrop_url"])
+                self.assertEqual(
+                    items.data["results"][1]["custom_backdrop_url"],
+                    "https://example.com/heat-custom.jpg",
+                )
 
     @patch("app.providers.services.get_media_metadata")
     def test_list_items_include_same_user_backdrop_as_media_detail(self, metadata_mock):
@@ -860,7 +1001,8 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(media["custom_backdrop_url"], "https://example.com/custom-backdrop.jpg")
         metadata_mock.assert_not_called()
 
-    def test_ranked_list_reorder_updates_positions(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_ranked_list_reorder_updates_positions(self, _backdrop_mock):
         user = get_user_model().objects.create_user(username="list-reorder", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
         items = self._create_movie_items(3, title_prefix="Ranked", media_id_prefix="ranked")
@@ -937,6 +1079,22 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(CustomListItem.objects.get(custom_list=ranked, item=ranked_item).position, 5)
         self.assertIsNone(CustomListItem.objects.get(custom_list=normal, item=normal_item).position)
 
+    def test_adding_an_item_twice_keeps_one_row(self):
+        user = get_user_model().objects.create_user(username="list-add-twice", password="strong-password-123")
+        custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
+        (item,) = self._create_movie_items(1, title_prefix="Twice", media_id_prefix="twice")
+        self.client.force_authenticate(user)
+        ref = {"ref": {"source": item.source, "media_type": item.media_type, "media_id": item.media_id}}
+
+        for _ in range(2):
+            response = self.client.post(f"/api/v1/lists/{custom_list.id}/items/", ref, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.assertEqual(
+            list(CustomListItem.objects.filter(custom_list=custom_list).values_list("item_id", "position", "occurrence")),
+            [(item.id, 1, 0)],
+        )
+
     def test_ranked_delete_renumbers_remaining_items(self):
         user = get_user_model().objects.create_user(username="list-delete-ranked", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Ranked", is_ranked=True)
@@ -953,7 +1111,8 @@ class ApiV1FoundationTests(TestCase):
             [(items[0].id, 1), (items[2].id, 2)],
         )
 
-    def test_mode_switch_assigns_and_preserves_positions(self):
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
+    def test_mode_switch_assigns_and_preserves_positions(self, _backdrop_mock):
         user = get_user_model().objects.create_user(username="list-mode-switch", password="strong-password-123")
         custom_list = CustomList.objects.create(owner=user, name="Mode")
         items = self._create_movie_items(3, title_prefix="Mode", media_id_prefix="mode")
@@ -1135,6 +1294,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(response.data["previous"])
         self.assertEqual(summary_mock.call_count, 25)
 
+    @patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None))
     @patch("app.providers.steam.get_review_rating")
     @patch("app.providers.steam.get_metacritic_rating")
     @patch("app.providers.imdb.get_title_rating")
@@ -1145,6 +1305,7 @@ class ApiV1FoundationTests(TestCase):
         imdb_mock,
         metacritic_mock,
         steam_review_mock,
+        _backdrop_mock,
     ):
         user = get_user_model().objects.create_user(
             username="rating-free-reads",
@@ -2980,7 +3141,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(manga["display_title"], "Attack on Titan")
         self.assertEqual(
             manga["poster_url"],
-            "https://example.com/manga-default.jpg",
+            "https://example.com/default.jpg",
         )
         self.assertEqual(
             manga["custom_poster_url"],
@@ -3265,8 +3426,8 @@ class ApiV1FoundationTests(TestCase):
 
         self.assertEqual(movie_ratings[0]["url"], "https://letterboxd.com/tmdb/550")
         self.assertIsNone(movie_ratings[1]["url"])
+        self.assertEqual([rating["source"] for rating in tv_ratings], ["Rotten Tomatoes"])
         self.assertIsNone(tv_ratings[0]["url"])
-        self.assertIsNone(tv_ratings[1]["url"])
         self.assertFalse(Item.objects.filter(media_id__in=["550", "1399"]).exists())
 
     @patch("app.providers.mdblist.get_media_ratings")
@@ -3357,7 +3518,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertFalse(item.external_ratings.exists())
 
     @patch("app.providers.mdblist.get_media_ratings")
-    def test_tv_and_season_rating_urls_use_available_series_pages(self, ratings_mock):
+    def test_tv_and_season_rating_urls_use_available_series_pages_without_letterboxd(self, ratings_mock):
         ratings_mock.return_value = {
             "imdb": {"value": "9.2", "votes": 2500000},
             "letterboxd": {
@@ -3376,7 +3537,6 @@ class ApiV1FoundationTests(TestCase):
         }
         expected_urls = {
             "IMDb": "https://www.imdb.com/title/tt0944947/",
-            "Letterboxd": "https://letterboxd.com/film/a-supported-limited-series/",
             "Rotten Tomatoes": "https://www.rottentomatoes.com/tv/example_show",
         }
 
@@ -3396,6 +3556,43 @@ class ApiV1FoundationTests(TestCase):
                 {rating["source"]: rating["url"] for rating in ratings},
                 expected_urls,
             )
+
+    @patch("app.tasks.enrich_external_ratings.delay")
+    def test_tracked_tv_and_season_hide_stored_letterboxd_rating(self, _enqueue_mock):
+        now = timezone.now()
+        for media_type, season_number in [
+            (MediaTypes.TV.value, None),
+            (MediaTypes.SEASON.value, 1),
+        ]:
+            item = Item.objects.create(
+                source=Sources.TMDB.value,
+                media_type=media_type,
+                media_id="1399",
+                season_number=season_number,
+                title="Game of Thrones",
+                image="https://example.com/got.jpg",
+            )
+            for source, value, maximum in (("imdb", "9.2", 10), ("letterboxd", "4.6", 5)):
+                ExternalRating.objects.create(
+                    item=item,
+                    rating_source=source,
+                    value=value,
+                    max_value=maximum,
+                    status=ExternalRating.Status.AVAILABLE,
+                    last_attempted_at=now,
+                    last_success_at=now,
+                )
+
+            ratings = external_ratings(
+                metadata={},
+                source=item.source,
+                media_type=media_type,
+                media_id=item.media_id,
+                season_number=season_number,
+                item=item,
+            )
+
+            self.assertEqual([rating["source"] for rating in ratings], ["IMDb"])
 
     @patch("api.services.media.provider_services.get_media_metadata")
     def test_landscape_only_artwork_marks_poster_orientation(self, metadata_mock):
@@ -3871,7 +4068,7 @@ class ApiV1FoundationTests(TestCase):
             media_type=MediaTypes.ANIME.value,
             media_id="16498",
             title="Attack on Titan",
-            image="https://img.anilist.co/stale-aot-anime.jpg",
+            image="https://img.anilist.co/saved-aot-anime.jpg",
         )
         user = get_user_model().objects.create_user(
             username="anime-person-posters",
@@ -3902,7 +4099,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(anime_credit["ref"]["media_id"], "16498")
         self.assertEqual(
             anime_credit["poster_url"],
-            "https://cdn.myanimelist.net/aot-anime.jpg",
+            "https://img.anilist.co/saved-aot-anime.jpg",
         )
         self.assertEqual(
             anime_credit["custom_poster_url"],
@@ -5369,9 +5566,18 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["backdrop_url"], "https://example.com/game-backdrop.jpg")
 
-    def test_community_stats_include_truthful_rating_distribution(self):
-        user = get_user_model().objects.create_user(username="rater", password="strong-password-123")
-        other = get_user_model().objects.create_user(username="other", password="strong-password-123")
+    def test_community_stats_count_each_persons_current_rating_once(self):
+        def person(name, *, private=False):
+            user = get_user_model().objects.create_user(username=name, password="strong-password-123")
+            if private:
+                user.profile_private = True
+                user.save(update_fields=["profile_private"])
+            return user
+
+        relogger = person("relogger")
+        rail_rater = person("railrater")
+        hidden = person("hidden", private=True)
+        unrated = person("unrated")
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.MOVIE.value,
@@ -5380,19 +5586,25 @@ class ApiV1FoundationTests(TestCase):
             image="https://example.com/fight-club.jpg",
         )
         now = timezone.now()
-        DiaryEntry.objects.create(user=user, item=item, consumed_at=now, rating="8.0", visibility="public")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating="8.0", visibility="followers")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating="9.0", visibility="private")
-        DiaryEntry.objects.create(user=other, item=item, consumed_at=now, rating=None, visibility="public")
+        # Logged twice: only the current rating, 4.5 stars, counts.
+        DiaryEntry.objects.create(user=relogger, item=item, consumed_at=now, rating="6.0", visibility="public")
+        DiaryEntry.objects.create(user=relogger, item=item, consumed_at=now, rating="9.0", visibility="public")
+        Movie.objects.create(user=relogger, item=item, status=Status.COMPLETED.value, score="9.0")
+        # Rated from the rail without a log: counts.
+        Movie.objects.create(user=rail_rater, item=item, status=Status.COMPLETED.value, score="8.0")
+        # A private account's rating stays out.
+        Movie.objects.create(user=hidden, item=item, status=Status.COMPLETED.value, score="2.0")
+        # Watched without a rating: nothing to count.
+        Movie.objects.create(user=unrated, item=item, status=Status.COMPLETED.value)
 
         response = self.client.get("/api/v1/media/tmdb/movie/550/community/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["average_rating"], "4.17")
-        self.assertEqual(response.data["rating_count"], 3)
+        self.assertEqual(response.data["average_rating"], "4.25")
+        self.assertEqual(response.data["rating_count"], 2)
         self.assertEqual(
             response.data["rating_distribution"],
-            [{"rating": "4.0", "count": 2}, {"rating": "4.5", "count": 1}],
+            [{"rating": "4.0", "count": 1}, {"rating": "4.5", "count": 1}],
         )
 
     def test_media_reviews_endpoint_returns_public_review_cards(self):
@@ -6112,9 +6324,9 @@ class ApiV1FoundationTests(TestCase):
         self.assertTrue(response.data["posters"][2]["is_selected"])
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#123456", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#123456")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#123456")
     def test_media_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123")
+        user = get_user_model().objects.create_user(username="poster3", password="strong-password-123", is_staff=True)
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.TV.value,
@@ -6141,9 +6353,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#654321", "contrast": "#ffffff"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#654321")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#654321")
     def test_media_book_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="bookposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="bookposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.OPENLIBRARY.value,
             media_type=MediaTypes.BOOK.value,
@@ -6170,9 +6386,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#aabbcc", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#aabbcc")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#aabbcc")
     def test_media_game_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="gameposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="gameposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.IGDB.value,
             media_type=MediaTypes.GAME.value,
@@ -6195,11 +6415,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(item.poster_accent_color, "#aabbcc")
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#d9bc7a", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#d9bc7a")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#d9bc7a")
     def test_media_music_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
         user = get_user_model().objects.create_user(
             username="musicposter2",
             password="strong-password-123",
+            is_staff=True,
         )
         item = Item.objects.create(
             source=Sources.MUSICBRAINZ.value,
@@ -6231,9 +6452,13 @@ class ApiV1FoundationTests(TestCase):
         )
 
     @patch("api.services.media.build_accent_palette", return_value={"accent": "#abcdef", "contrast": "#000000"})
-    @patch("api.services.media.compute_and_store_poster_accent", return_value="#abcdef")
+    @patch("api.services.media.get_poster_accent_from_url", return_value="#abcdef")
     def test_media_season_poster_save_updates_preference_and_item(self, _accent_mock, _palette_mock):
-        user = get_user_model().objects.create_user(username="seasonposter2", password="strong-password-123")
+        user = get_user_model().objects.create_user(
+            username="seasonposter2",
+            password="strong-password-123",
+            is_staff=True,
+        )
         item = Item.objects.create(
             source=Sources.TMDB.value,
             media_type=MediaTypes.SEASON.value,
@@ -6854,7 +7079,6 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.data["backdrop_url"], "https://image.tmdb.org/t/p/original/default-backdrop.jpg")
         self.assertEqual(response.data["custom_backdrop_url"], "https://example.com/custom-backdrop.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     @patch("app.providers.tmdb.get_title_logo", return_value=None)
     @patch("app.providers.tmdb.get_backdrop_images")
     @patch("app.providers.mdblist.get_media_ratings", return_value={})
@@ -6866,7 +7090,11 @@ class ApiV1FoundationTests(TestCase):
         backdrops_mock,
         _logo_mock,
     ):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-curated", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,
@@ -6978,9 +7206,12 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["backdrop_url"], "https://example.com/only.jpg")
 
-    @override_settings(SPINE_CURATOR_USERNAME="curator")
     def test_curator_backdrop_save_does_not_overwrite_other_user_preferences(self):
-        curator = get_user_model().objects.create_user(username="curator", password="strong-password-123")
+        curator = get_user_model().objects.create_user(
+            username="curator",
+            password="strong-password-123",
+            is_staff=True,
+        )
         viewer = get_user_model().objects.create_user(username="viewer-custom", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.TMDB.value,

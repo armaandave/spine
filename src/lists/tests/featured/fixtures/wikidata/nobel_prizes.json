@@ -1,0 +1,72 @@
+{
+ "nobelPrizes": [
+  {
+   "awardYear": "1974",
+   "category": {
+    "en": "Literature"
+   },
+   "laureates": [
+    {
+     "id": "647",
+     "knownName": {
+      "en": "Eyvind Johnson"
+     },
+     "portion": "1/2",
+     "sortOrder": "1"
+    },
+    {
+     "id": "648",
+     "knownName": {
+      "en": "Harry Martinson"
+     },
+     "portion": "1/2",
+     "sortOrder": "2"
+    }
+   ]
+  },
+  {
+   "awardYear": "2025",
+   "category": {
+    "en": "Literature"
+   },
+   "laureates": [
+    {
+     "id": "1050",
+     "knownName": {
+      "en": "László Krasznahorkai"
+     },
+     "portion": "1",
+     "sortOrder": "1"
+    }
+   ]
+  },
+  {
+   "awardYear": "1914",
+   "category": {
+    "en": "Literature"
+   },
+   "topMotivation": {
+    "en": "No Nobel Prize was awarded this year."
+   }
+  },
+  {
+   "awardYear": "2026",
+   "category": {
+    "en": "Literature"
+   },
+   "laureates": [
+    {
+     "id": "1067",
+     "knownName": {
+      "en": "Anne Carson"
+     },
+     "portion": "1",
+     "sortOrder": "1"
+    }
+   ]
+  }
+ ],
+ "meta": {
+  "count": 4
+ }
+}

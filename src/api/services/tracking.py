@@ -43,7 +43,9 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
     )
     existing_media = media is not None
     previous_progress = _progress_snapshot(media) if existing_media and "progress" in data else None
-    if media is None:
+    if media is None and media_type == MediaTypes.GAME.value:
+        media = apps.get_model("app", media_type)(item=_game_item(user, source, media_id), user=user)
+    elif media is None:
         metadata = provider_services.get_media_metadata(
             media_type,
             media_id,

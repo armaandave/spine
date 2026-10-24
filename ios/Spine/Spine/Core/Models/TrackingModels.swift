@@ -126,15 +126,15 @@ struct TrackingState: Codable, Equatable {
     }
 }
 
-struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
-    let id: Int
-    let status: String
-    let origin: String?
-    let startDate: String?
-    let endDate: String?
-    let progress: ProgressState?
-    let completionDiaryEntryId: Int?
-    let isReread: Bool
+nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
+    var id: Int
+    var status: String
+    var origin: String?
+    var startDate: String?
+    var endDate: String?
+    var progress: ProgressState?
+    var completionDiaryEntryId: Int?
+    var isReread: Bool
 
     init(
         id: Int,
@@ -157,7 +157,7 @@ struct BookJourneyState: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
-struct BookUndatedReadState: Codable, Equatable, Hashable {
+nonisolated struct BookUndatedReadState: Codable, Equatable, Hashable {
     let id: String
     let status: String
     let date: String?
@@ -169,20 +169,20 @@ struct BookUndatedReadState: Codable, Equatable, Hashable {
     }
 }
 
-struct BookTrackingState: Codable, Equatable, Hashable {
-    let currentJourney: BookJourneyState?
-    let readingHistory: [BookJourneyState]
-    let undatedRead: BookUndatedReadState?
-    let statusSource: String?
-    let completionDates: [String]
-    let completedJourneyCount: Int
-    let lifetimeReadCount: Int
-    let isRereading: Bool
-    let completionRequired: Bool
-    let canRemoveTracking: Bool
-    let removeTrackingReason: String?
-    let availableActions: [String]
-    let actionReasons: [String: String]
+nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
+    var currentJourney: BookJourneyState?
+    var readingHistory: [BookJourneyState]
+    var undatedRead: BookUndatedReadState?
+    var statusSource: String?
+    var completionDates: [String]
+    var completedJourneyCount: Int
+    var lifetimeReadCount: Int
+    var isRereading: Bool
+    var completionRequired: Bool
+    var canRemoveTracking: Bool
+    var removeTrackingReason: String?
+    var availableActions: [String]
+    var actionReasons: [String: String]
 
     init(
         currentJourney: BookJourneyState? = nil,
@@ -295,7 +295,7 @@ extension ProgressChangeState {
     }
 }
 
-struct ProgressState: Codable, Hashable {
+nonisolated struct ProgressState: Codable, Hashable {
     let kind: String
     let value: Decimal?
     let max: Decimal?
@@ -532,8 +532,11 @@ extension Notification.Name {
 }
 
 enum MediaStateChange {
-    static func post(ref: MediaRef) {
-        NotificationCenter.default.post(name: .mediaStateDidChange, object: nil, userInfo: ["ref": ref])
+    /// `origin` lets the screen that made the change recognize, and skip, its own post.
+    static func post(ref: MediaRef, origin: UUID? = nil) {
+        var userInfo: [String: Any] = ["ref": ref]
+        if let origin { userInfo["origin"] = origin }
+        NotificationCenter.default.post(name: .mediaStateDidChange, object: nil, userInfo: userInfo)
     }
 }
 

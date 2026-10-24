@@ -2,18 +2,26 @@
 set -euo pipefail
 
 branch="${1:-}"
+# Optional: a commit on that branch to deploy instead of its tip (CI passes the
+# commit it checked; a rollback passes an older one).
+commit="${2:-}"
 source_repo_dir="${SPINE_SOURCE_REPO_DIR:-$HOME/projects/spine}"
 repo_dir="${SPINE_DEPLOY_DIR:-$HOME/projects/spine-deploy}"
 env_file="${SPINE_DEPLOY_ENV_FILE:-$source_repo_dir/.env.production}"
 repo_url="${SPINE_DEPLOY_REPO_URL:-}"
 
 if [[ -z "$branch" ]]; then
-  echo "Usage: $0 <branch>" >&2
+  echo "Usage: $0 <branch> [<commit on that branch>]" >&2
   exit 2
 fi
 
 if [[ "$branch" == -* ]] || ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
   echo "Invalid branch: $branch" >&2
+  exit 2
+fi
+
+if [[ -n "$commit" && ! "$commit" =~ ^[0-9a-f]{7,40}$ ]]; then
+  echo "Invalid commit: $commit" >&2
   exit 2
 fi
 
@@ -65,8 +73,16 @@ cd "$repo_dir"
 
 git remote set-url origin "$repo_url"
 git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
-git checkout -B "$branch" "origin/$branch"
-git reset --hard "origin/$branch"
+target="origin/$branch"
+if [[ -n "$commit" ]]; then
+  if [[ -z "$(git branch --remotes --contains "$commit" --list "origin/$branch" 2>/dev/null)" ]]; then
+    echo "Commit $commit is not on $branch" >&2
+    exit 1
+  fi
+  target="$commit"
+fi
+git checkout -B "$branch" "$target"
+git reset --hard "$target"
 echo "Deploying $branch at $(git rev-parse --short HEAD) from $repo_dir"
 export SPINE_COMMIT_SHA
 SPINE_COMMIT_SHA="$(git rev-parse HEAD)"

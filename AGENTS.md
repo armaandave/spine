@@ -74,21 +74,20 @@ Supporting docs/scripts:
 ## 5) Local Development Commands
 
 Python/package workflow standard:
-- Use `venv` + `pip` for Python dependencies.
+- Use `uv` with `uv.lock` for Python dependencies: the same set CI and the production image install. `uv run --locked <command>` keeps each checkout's or worktree's `.venv` in sync and runs the command.
 - Use `npm` for frontend/Tailwind.
 
 Recommended:
-- `./start-dev.sh` (starts Tailwind watcher + Django dev server)
+- `./start-dev.sh` (starts Tailwind watcher + Django dev server on `127.0.0.1:8001`)
 
 Manual:
-- `source venv/bin/activate`
 - `npm run build-css` (watch mode)
-- `cd src && python manage.py runserver`
+- `cd src && uv run --locked python manage.py runserver 127.0.0.1:8001` (8000 is production on the server Mac; see section 16)
 
 Background services (when needed):
 - Redis
-- `cd src && celery -A config worker -l info`
-- `cd src && celery -A config beat -l info`
+- `cd src && CELERY_REDIS_URL=redis://localhost:6379/5 REDIS_PREFIX=<checkout>: uv run --locked celery -A config worker -l info` (never a worker on Redis DB 0; see section 16)
+- `cd src && uv run --locked celery -A config beat -l info`
 
 ---
 
@@ -97,8 +96,8 @@ Background services (when needed):
 Primary checks before handing off non-trivial changes:
 
 1. Targeted tests for changed area:
-   - `cd src && python manage.py test <app_or_test_path>`
-2. If change touches shared/core behavior, run broader relevant suites when practical.
+   - `cd src && uv run --locked python manage.py test <app_or_test_path>`
+2. Before calling the work done: `scripts/check.sh` (ruff, models without a migration, the full suite), the same as CI's Fast checks.
 3. For template/HTMX changes, verify:
    - Full-page load
    - Partial fragment response
@@ -109,7 +108,7 @@ Canonical test command (from repo docs): Django test runner via `python manage.p
 `pytest` config exists and can be used as supplemental tooling.
 
 Lint/format policy (current):
-- Required lint check: `ruff check src` (matches CI workflow in `.github/workflows/app-tests.yml`).
+- Required lint check: `ruff check src` (part of `scripts/check.sh` and CI's Fast checks in `.github/workflows/ci.yml`).
 - Template formatting: `djlint` is available/configured but not currently a CI-required gate.
 - Do not introduce new formatter/linter requirements unless explicitly requested.
 
@@ -245,3 +244,57 @@ If uncertain about business behavior, stop and ask instead of assuming.
 These do not block current implementation but should be finalized later:
 
 1. Long-term deployment platform choice for publicly hosted Spine.
+
+---
+
+## 13) Feature Workflow
+
+Every feature follows this path. Armaan drives it with the prompts in quotes.
+
+1. **Start.** "New feature: <what>. New worktree and branch." Work only in that worktree, under `.claude/worktrees/<name>`: inside the repo, so the settings find the main checkout's `.env`. Keep API changes additive. Don't merge or push.
+2. **Build.** Implement the feature and verify it. Run `scripts/check.sh` before calling the work done.
+   - New logic gets a test. A bug fix gets a test that fails before the fix and passes after it.
+   - Tests must pass with no `.env` and no API keys, as in CI.
+3. **Try on the phone.** "Test this on my iPhone." Use the `spine-test-on-iphone` skill (`scripts/ios/TEST_ON_IPHONE.md`). It installs **Spine Dev**, the Debug app, which talks to the always-on test backend on the Mac (`scripts/ios/test-backend.sh`), signed in as its dev user. A branch with backend changes is served from the test backend first (`scripts/ios/test-backend.sh use`); never deploy to test. Armaan's real **Spine** app (TestFlight, production, the real account) is never used for testing. Repeat 2–3 until Armaan is happy.
+4. **Ship.** "Ship this." Use the `spine-ship` skill (`scripts/ios/SHIP.md`): verify, merge into `myapp-main` in the main checkout, and push. CI then deploys production, and Xcode Cloud makes a TestFlight build if the iOS app changed. Watch both, verify production, then remove the worktree and delete any scratch simulators it left behind.
+5. **Roll back.** "Roll back" if a ship broke production (`scripts/ios/SHIP.md`, Workflow B).
+
+## 14) Shipping: Pushing `myapp-main` Goes Live
+
+- Every push to `myapp-main` runs CI (section 15). When CI passes and the push changes what the backend is built from, the "Deploy production" job deploys that exact commit on this Mac: it backs up the database, rebuilds the stack from `~/projects/spine-deploy`, and verifies it. Migrations run as the new container starts.
+- If the push changes the iOS app (`ios/Spine/Spine/`, `ios/Spine/Spine.xcodeproj/` or `ios/Spine/Configs/`), Xcode Cloud archives `Spine` and uploads a TestFlight build. Never write a CI skip marker in a commit message: GitHub Actions honors it and would skip CI and the deploy.
+- Merge into `myapp-main` only work that is finished, tested, and safe to run in production. Push only when asked ("ship this" counts).
+- `myapp-main` can't be force-pushed or deleted (GitHub ruleset). Deploy another branch or an older commit only by hand, on request: `gh workflow run deploy-backend-desk-mac.yml -f branch=<branch> [-f ref=<sha>]`.
+- The backend must keep working for installed builds. Additions are safe; removals and renames need expand and contract (`scripts/ios/SHIP.md`).
+
+## 15) CI
+
+- `.github/workflows/ci.yml` runs on every push to any branch, on GitHub-hosted runners (free for this public repo):
+  - "Fast checks": `scripts/check.sh` (ruff, `makemigrations --check`, the full suite on SQLite with `uv.lock`).
+  - "Database checks": every migration, then the full suite, on Postgres 16 like production.
+  - "Deploy production": pushes to `myapp-main` only, after both pass (`deploy-backend-desk-mac.yml`).
+- Upstream's App Tests and Stale workflows are disabled in GitHub. Leave upstream's workflow files unedited so upstream merges stay clean.
+- When CI goes red, find the run with `gh run list`, read the failure with `gh run view <run-id> --log-failed`, reproduce it (`scripts/check.sh`, or the Database checks commands against a throwaway Postgres), fix the cause, and push. Keep `myapp-main` green.
+- Never make a check pass by weakening it: no skipping or deleting a failing test, and no `continue-on-error`. If a check itself is wrong, change it on purpose in its own commit.
+- `src/api/tests/test_deploy_workflow.py` pins the deploy workflow and script; change them together.
+- The production Mac is a self-hosted runner for this public repo. Workflow runs from fork pull requests wait for Armaan's approval (repo setting); never approve one without reading it. Never send a self-hosted job a `pull_request` or `pull_request_target` event.
+
+## 16) Databases and Production
+
+- Production runs in Docker on this Mac: `spine` (published on `127.0.0.1:8000`; the Cloudflare tunnel serves it as `api.spine-api.com`), `spine-db` (Postgres 16) and `spine-redis`, in Compose project `spine`, built from `~/projects/spine-deploy`. Postgres and Redis aren't published to the host.
+- Local development never connects to production's database. Every checkout uses its own SQLite file (`src/db/db.sqlite3`, empty in a new worktree) and the Homebrew Redis on 6379.
+- Never point a dev server, build, or script at port 8000: it is production. Only Release builds of the iOS app (Spine, from TestFlight) talk to production. Debug builds are a separate app, Spine Dev (`com.armaan.Spine.dev`), that never does (`ios/AGENTS.md`), so test accounts and test ratings stay out of production's data.
+- The always-on test backend (`scripts/ios/test-backend.sh`) is the server Spine Dev talks to: a launchd job (`com.armaan.spine-test-backend`) on port 8010, at low priority, serving `myapp-main` from `.claude/test-backend` with its own SQLite test database (test accounts only). Leave the job and that checkout alone except through the script; shipping runs its `update`.
+- Don't run `docker compose` in `~/projects/spine` or a worktree: production's Compose project is also named `spine`. The main checkout's `.env` sets `COMPOSE_PROJECT_NAME=spine-dev` as a guard. Never stop, recreate, or `down` the production containers by hand.
+- `.env.production` holds production's secrets. It lives in the main checkout and is symlinked into `~/projects/spine-deploy`, so editing it changes production at the next deploy. Never print or edit it.
+- These touch production on purpose; run them only on request: the deploy workflow, `scripts/backup-production.sh`, `scripts/external-ratings-production.sh`, `scripts/restore-check.sh` (it reads one user count), and the "External Ratings Production Backfill" and "Sync Featured Lists to Production" workflows.
+- Dev Redis DB 0 and DB 5 both hold old Celery backlogs in the unprefixed `celery` queue. Never run a worker against DB 0. A worker on DB 5 needs its own `REDIS_PREFIX`, which `scripts/ios/local-backend.sh` sets.
+- Never copy the main checkout's dev database (it holds personal data) or production's.
+
+## 17) App Store Connect
+
+- Spine's App Store Connect app is "Spine Diary", app ID `6825566855` (bundle ID `com.armaan.Spine`, `K8A623RZVV`). The internal TestFlight group "Me" is `4372d914-22d0-4f90-96dd-27ed38e160aa`, with Armaan as its tester. Check it with `ASC_APP_ID=6825566855 node ~/.appstoreconnect/asc.mjs status`.
+- Xcode Cloud's workflow "Default" (`402D425F-065C-42A4-87AB-E95241728CC8`) archives `Spine` when a push to `myapp-main` touches `ios/Spine/Spine/`, `ios/Spine/Spine.xcodeproj/` or `ios/Spine/Configs/`, and uploads it to TestFlight; "Me" gets every build. The app is iPhone-only: an iPad target that supports only some orientations fails Apple's upload check.
+- `node ~/.appstoreconnect/asc.mjs` reads Pylon's app by default; `ASC_APP_ID=<id>` points it at another app. `status` and `get` are reads. `post` and `patch` write: ask first, except where `scripts/ios/SHIP.md` says the ship request covers it.
+- The tool signs requests with the API key in `~/.appstoreconnect/private_keys/`. Never copy, print, or commit that key.
+- Xcode Cloud assigns build numbers when it uploads. Tag the commit behind each TestFlight build, for example `ios-1.0-build3`.

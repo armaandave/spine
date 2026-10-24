@@ -198,6 +198,7 @@ struct ProfileLikesView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View \(item.title)")
+                .prefetchingArtwork(after: item, in: media) { $0.artworkRequest(slot: .tagGrid) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1091,8 +1092,7 @@ final class ProfileListDetailViewModel {
                 filteredItems = response.results
                 streamingPendingCount = response.streaming?.pendingCount ?? 0
             } else {
-                let existingIDs = Set(filteredItems.map(\.id))
-                filteredItems += response.results.filter { !existingIDs.contains($0.id) }
+                filteredItems = MediaSummary.appendingNewEntries(response.results, to: filteredItems)
             }
             nextPage = APIPageCursor.nextPage(from: response.next)
             if !requestFilter.isActive || list?.items.isEmpty == true {
@@ -1107,10 +1107,12 @@ final class ProfileListDetailViewModel {
         }
     }
 
-    func loadNextFilteredPageIfNeeded(currentItem: MediaSummary) async {
+    /// Takes the cell's index, not its item: a featured list can hold the same title more than once.
+    func loadNextFilteredPageIfNeeded(currentIndex: Int) async {
         guard nextPage != nil, !isLoadingFilteredItems,
-              let thresholdIndex = filteredItems.index(filteredItems.endIndex, offsetBy: -8, limitedBy: filteredItems.startIndex) ?? filteredItems.indices.first,
-              let currentIndex = filteredItems.firstIndex(where: { $0.id == currentItem.id }),
+              // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
+              let thresholdIndex = filteredItems.index(filteredItems.endIndex, offsetBy: -ArtworkPrefetch.lookahead, limitedBy: filteredItems.startIndex) ?? filteredItems.indices.first,
+              filteredItems.indices.contains(currentIndex),
               currentIndex >= thresholdIndex else {
             return
         }
@@ -1222,6 +1224,7 @@ final class ProfileListDetailViewModel {
         defer { isSaving = false }
 
         do {
+            let previousList = list
             let updatedList = try await listRepository.update(id: listId, request)
             list = updatedList
             if updatedList.listType == .people {
@@ -1233,6 +1236,10 @@ final class ProfileListDetailViewModel {
                 nextPage = nil
             }
             CustomListChange.post(listId: listId, listType: updatedList.listType)
+            // The PATCH response has no `featured` block and no entry notes, so a featured list reloads them.
+            if previousList?.hasFeaturedDetails == true {
+                await load()
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -1312,7 +1319,26 @@ final class ProfileListDetailViewModel {
     }
 }
 
+extension MediaSummary {
+    /// `existing` plus the rows of `page` it doesn't hold yet. A row is its title and its position, so a featured
+    /// list's repeated title (an award won in three years is three rows) keeps every row, while a row that a
+    /// shifted page sends again is dropped.
+    static func appendingNewEntries(_ page: [MediaSummary], to existing: [MediaSummary]) -> [MediaSummary] {
+        var seen = Set(existing.map(\.listEntryKey))
+        return existing + page.filter { seen.insert($0.listEntryKey).inserted }
+    }
+
+    private var listEntryKey: String {
+        "\(id)#\(position.map(String.init) ?? "")"
+    }
+}
+
 private extension CustomListDetail {
+    /// A featured block or an entry note, which only the list's own endpoints send.
+    var hasFeaturedDetails: Bool {
+        featured != nil || items.contains { $0.note != nil } || people.contains { $0.note != nil }
+    }
+
     func withItems(_ items: [MediaSummary]) -> CustomListDetail {
         CustomListDetail(
             id: id,
@@ -1332,7 +1358,9 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators,
+            featured: featured
         )
     }
 
@@ -1355,7 +1383,9 @@ private extension CustomListDetail {
             likeCount: likeCount,
             items: items,
             people: people,
-            completion: completion
+            completion: completion,
+            collaborators: collaborators,
+            featured: featured
         )
     }
 }
@@ -1369,6 +1399,7 @@ struct ProfileListDetailView: View {
     @State private var selectedPerson: PersonRef?
     @State private var isDeleteAlertPresented = false
     @State private var topSafeAreaInset: CGFloat = 0
+    @State private var listHeaderWidth: CGFloat = 0
     @State private var edgeDragOffset: CGFloat = 0
 
     private let listRepository: ListRepository
@@ -1389,9 +1420,18 @@ struct ProfileListDetailView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    /// The featured card the list was opened from, for its metadata, live banner and source link.
+    private let featured: FeaturedListCard?
+
+    /// The list's own featured block, which is fresher than the tapped card (a card restored from the cache can
+    /// still say live), else the tapped card until the list loads.
+    private var featuredCard: FeaturedListCard? {
+        viewModel.list?.featured ?? featured
+    }
 
     init(
         listId: Int,
+        featured: FeaturedListCard? = nil,
         profileRepository: ProfileRepository,
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
@@ -1429,6 +1469,7 @@ struct ProfileListDetailView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
+        self.featured = featured
         _viewModel = State(initialValue: ProfileListDetailViewModel(
             listId: listId,
             listRepository: listRepository,
@@ -1437,9 +1478,9 @@ struct ProfileListDetailView: View {
     }
 
     var body: some View {
-        let backdropURL = viewModel.list.flatMap { list in
+        let headerArtwork = viewModel.list.flatMap { list in
             list.listType == .media
-                ? CustomListBackdropSelection.artworkURL(from: list.items)
+                ? CustomListBackdropSelection.artwork(from: list.items)
                 : nil
         }
 
@@ -1472,11 +1513,11 @@ struct ProfileListDetailView: View {
                                     ) + 12
                                 )
                         } else if let list = viewModel.list {
-                            listHeader(list, backdropURL: backdropURL)
+                            listHeader(list, artwork: headerArtwork)
                                 .padding(
                                     .top,
                                     CustomListHeaderLayout.topPadding(
-                                        hasBackdrop: backdropURL != nil,
+                                        hasBackdrop: headerArtwork != nil,
                                         topSafeAreaInset: topSafeAreaInset
                                     )
                                 )
@@ -1531,7 +1572,7 @@ struct ProfileListDetailView: View {
             .scrollContentBackground(.hidden)
             .ignoresSafeArea(
                 edges: CustomListHeaderLayout.ignoredSafeAreaEdges(
-                    hasBackdrop: backdropURL != nil
+                    hasBackdrop: headerArtwork != nil
                 )
             )
 
@@ -1694,7 +1735,9 @@ struct ProfileListDetailView: View {
                 }
                 }
 
+                if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
                 Menu {
+                    if list.canEdit(by: currentUserId) {
                     Button("Edit List", systemImage: "slider.horizontal.3") {
                         Task {
                             if await viewModel.loadAllItemsForEditing(),
@@ -1703,36 +1746,67 @@ struct ProfileListDetailView: View {
                             }
                         }
                     }
+                    }
+                    if list.canDelete(by: currentUserId) {
                     Button("Delete List", systemImage: "trash", role: .destructive) {
                         isDeleteAlertPresented = true
+                    }
                     }
                 } label: {
                     ProfileListCircleIconLabel(systemName: "ellipsis")
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isSaving)
+                }
             }
         }
     }
 
-    private func listHeader(_ list: CustomListDetail, backdropURL: String?) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let backdropURL {
-                ProfileListBackdropArtwork(urlString: backdropURL)
+    private func listHeader(_ list: CustomListDetail, artwork: CustomListBackdropSelection.Artwork?) -> some View {
+        let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The same 3:2 backdrop strip as the media page, with the owner and title over its lower edge.
+        let stripHeight = BackdropLayout.stripHeight(width: listHeaderWidth, topInset: topSafeAreaInset)
+        return VStack(alignment: .leading, spacing: 0) {
+        listHeaderText(list)
+            .padding(.horizontal, 18)
+            // A description is the header's next line, just below the title.
+            .padding(.bottom, description.isEmpty ? 20 : 7)
+            .padding(
+                .top,
+                artwork == nil ? 18 : max(topSafeAreaInset + 56, stripHeight - 96)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .top) {
+                if let artwork {
+                    ProfileListBackdropArtwork(artwork: artwork)
+                        .frame(height: stripHeight)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listHeaderWidth = $0 }
 
-            listHeaderText(list)
+        // The description sits below the backdrop, so the title stays where it is on every
+        // list however long the description is.
+        if !description.isEmpty {
+            Text(description)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+                .lineLimit(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
                 .padding(.bottom, 20)
-                .padding(.top, backdropURL == nil ? 18 : topSafeAreaInset + 112)
         }
-        .frame(maxWidth: .infinity, minHeight: backdropURL == nil ? nil : topSafeAreaInset + 408, alignment: .bottomLeading)
+        }
     }
 
     private func listHeaderText(_ list: CustomListDetail) -> some View {
         let isOwnerCurrentUser = list.owner.id == currentUserId
 
         return VStack(alignment: .leading, spacing: 7) {
+            if let featured = featuredCard {
+                FeaturedListLiveBanner(card: featured)
+            }
+
             NavigationLink {
                 ProfileView(
                     profileRepository: profileRepository,
@@ -1824,15 +1898,6 @@ struct ProfileListDetailView: View {
             if !list.tags.isEmpty {
                 tagRow(list.tags)
             }
-
-            let description = list.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !description.isEmpty {
-                Text(description)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(4)
-                    .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
-            }
         }
     }
 
@@ -1852,8 +1917,11 @@ struct ProfileListDetailView: View {
     }
 
     private func mediaGrid(_ items: [MediaSummary]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 10) {
-            ForEach(items) { item in
+        // Top-aligned, so a cell with a note doesn't push its poster below its neighbours'.
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: 4), spacing: 10) {
+            // By index, not id: a featured list can hold the same title more than once (an award won in three
+            // years is three rows).
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Button {
                     selectedMedia = MediaBrowsingSelection(ref: item.ref, within: items.map(\.ref))
                 } label: {
@@ -1873,11 +1941,16 @@ struct ProfileListDetailView: View {
                                 .foregroundStyle(.white.opacity(0.72))
                                 .frame(maxWidth: .infinity)
                         }
+                        if let note = FeaturedEntryNote.text(item.note) {
+                            entryNote(note)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
-                .task {
-                    await viewModel.loadNextFilteredPageIfNeeded(currentItem: item)
+                .prefetchingArtwork(at: index, in: items) { $0.artworkRequest(slot: .tagGrid) }
+                // Keyed by the item too, so a cell that a filter change gives another item checks again.
+                .task(id: item.id) {
+                    await viewModel.loadNextFilteredPageIfNeeded(currentIndex: index)
                 }
             }
         }
@@ -1887,7 +1960,7 @@ struct ProfileListDetailView: View {
         let isAccessibilitySize = dynamicTypeSize.isAccessibilitySize
         let columnCount = PeopleListGridLayout.columnCount(isAccessibilitySize: isAccessibilitySize)
         let columns = Array(
-            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8),
+            repeating: GridItem(.flexible(), spacing: isAccessibilitySize ? 12 : 8, alignment: .top),
             count: columnCount
         )
 
@@ -1931,6 +2004,10 @@ struct ProfileListDetailView: View {
                                     .foregroundStyle(.white.opacity(0.5))
                                     .lineLimit(1)
                             }
+
+                            if let note = FeaturedEntryNote.text(person.note) {
+                                entryNote(note)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                         .contentShape(Rectangle())
@@ -1947,6 +2024,16 @@ struct ProfileListDetailView: View {
         }
     }
 
+    /// A featured entry's note under its poster or name: small and secondary.
+    private func entryNote(_ note: String) -> some View {
+        Text(note)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.5))
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity)
+    }
+
     private func detailCountLabel(_ list: CustomListDetail) -> String {
         let count = list.listType == .people ? list.entriesCount : list.itemsCount
         let noun = list.listType == .people
@@ -1960,7 +2047,8 @@ struct ProfileListDetailView: View {
             ? person.position.map { "Rank \($0), " } ?? ""
             : ""
         let department = person.knownForDepartment.map { ", \($0)" } ?? ""
-        return "\(rank)\(person.name)\(department)"
+        let note = FeaturedEntryNote.text(person.note).map { ", \($0)" } ?? ""
+        return "\(rank)\(person.name)\(department)\(note)"
     }
 
     private var deleteConfirmationMessage: String {
@@ -2006,12 +2094,39 @@ struct ProfileListDetailView: View {
 }
 
 enum CustomListBackdropSelection {
+    /// What the list header shows, in the media page's order: a backdrop, else a blurred cover.
+    enum Artwork: Equatable {
+        case backdrop(String)
+        /// No item has a backdrop (book, music and comic lists), so the first cover is blurred instead.
+        case blurredCover(String)
+
+        var urlString: String {
+            switch self {
+            case let .backdrop(url), let .blurredCover(url): url
+            }
+        }
+    }
+
+    /// Every media type whose detail page has a backdrop (the server resolves the same ones).
+    static let mediaTypes: Set<String> = ["movie", "tv", "game", "anime", "manga"]
+
+    static func artwork(from items: [MediaSummary]) -> Artwork? {
+        if let url = artworkURL(from: items) {
+            return .backdrop(url)
+        }
+        return items.lazy.compactMap { nonBlank($0.displayPosterURL) }.first.map(Artwork.blurredCover)
+    }
+
     static func artworkURL(from items: [MediaSummary]) -> String? {
         items.lazy.compactMap { item -> String? in
-            guard item.ref.mediaType == "movie" || item.ref.mediaType == "tv" else { return nil }
-            let url = item.displayBackdropURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return url?.isEmpty == false ? url : nil
+            guard mediaTypes.contains(item.ref.mediaType) else { return nil }
+            return nonBlank(item.displayBackdropURL)
         }.first
+    }
+
+    private static func nonBlank(_ url: String?) -> String? {
+        let url = url?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return url?.isEmpty == false ? url : nil
     }
 }
 
@@ -2078,20 +2193,29 @@ private struct ProfileListCircleIconLabel: View {
 }
 
 private struct ProfileListBackdropArtwork: View {
-    let urlString: String
+    let artwork: CustomListBackdropSelection.Artwork
     private let pageBackground = Color(red: 0.07, green: 0.07, blue: 0.065)
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                SpineAsyncImage(url: URL(string: urlString)) { phase in
+                SpineAsyncImage(url: URL(string: artwork.urlString)) { phase in
                     switch phase {
                     case let .success(image):
-                        image
+                        let fitted = image
                             .resizable()
                             .scaledToFill()
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
+                        if case .blurredCover = artwork {
+                            // Blurred like the media page's poster fallback; the shading below is the same.
+                            fitted
+                                .blur(radius: HeroArtwork.PosterFallback.blurRadius, opaque: true)
+                                .scaleEffect(HeroArtwork.PosterFallback.scale)
+                                .saturation(HeroArtwork.PosterFallback.saturation)
+                        } else {
+                            fitted
+                        }
                     default:
                         Color.clear
                     }

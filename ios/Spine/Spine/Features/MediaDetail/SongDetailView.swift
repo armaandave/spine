@@ -139,6 +139,13 @@ struct SongDetailView: View {
                 .contentShape(Rectangle())
                 .gesture(edgeSwipeBackGesture)
         }
+        .overlay(alignment: .bottomLeading) {
+            if selectedTab == .search {
+                ExplorationSearchButton()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             ExplorationHomeButton()
                 .padding(.horizontal, 16)
