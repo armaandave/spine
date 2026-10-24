@@ -209,6 +209,25 @@ class StreamingSettingsApiTests(TestCase):
         moved_check.assert_called_once_with(self.user.pk)
         self.assertEqual(repeat.data["provider_ids"], [8, 15])
 
+    def test_saving_the_first_services_queues_a_library_check(self):
+        empty, empty_check, _callbacks = self._put({"region": "GB", "provider_ids": []})
+        first, first_check, _callbacks = self._put({"region": "GB", "provider_ids": [39]})
+
+        self.assertEqual([empty.status_code, first.status_code], [status.HTTP_200_OK] * 2)
+        empty_check.assert_not_called()
+        first_check.assert_called_once_with(self.user.pk)
+
+    def test_bundled_regions_need_no_tmdb_region_list(self):
+        with patch("api.views.streaming.services.region_names", return_value={}):
+            saved, _check_mock, _callbacks = self._put({"region": "GB", "provider_ids": []})
+            catalog = self.client.get("/api/v1/streaming/providers/", {"region": "GB"})
+            unknown = self.client.get("/api/v1/streaming/providers/", {"region": "XX"})
+
+        self.assertEqual(saved.status_code, status.HTTP_200_OK)
+        self.assertEqual(saved.data["region"], "GB")
+        self.assertEqual([provider["provider_id"] for provider in catalog.data["results"]], [39, 8])
+        self.assertEqual(unknown.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_library_check_is_queued_when_the_debounce_cache_fails(self):
         with (
             patch("api.views.streaming.cache.add", side_effect=RedisError("down")),

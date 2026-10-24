@@ -44,9 +44,13 @@ def _queue_library_check(user_id, region):
 
 
 def _known_region(value):
-    """Return the normalized code when TMDB lists it as a watch region."""
+    """Return the normalized code when TMDB lists it as a watch region.
+
+    Bundled names answer without contacting TMDB; only other codes are checked
+    against TMDB's live list.
+    """
     code = services.normalize_region(value)
-    if code is None or code not in services.region_names():
+    if code is None or (code not in REGION_NAMES and code not in services.region_names()):
         return None
     return code
 
@@ -187,7 +191,10 @@ class MeStreamingView(APIView):
                 ignore_conflicts=True,
             )
             # Commit callbacks run in order, so the check sees the new active
-            # regions. ST-102: the save never waits for the library check.
+            # regions. ST-102: the save never waits for the library check, and
+            # a save without services has nothing to check, so it doesn't use
+            # up the debounce that the save adding the first service needs.
             transaction.on_commit(services.invalidate_active_regions)
-            transaction.on_commit(lambda: _queue_library_check(user.pk, region))
+            if provider_ids:
+                transaction.on_commit(lambda: _queue_library_check(user.pk, region))
         return Response(payloads.streaming_settings(user, request))

@@ -3,6 +3,7 @@
 Contract: docs/streaming-availability-contract.md
 """
 
+import hashlib
 import logging
 
 from django.core.cache import cache
@@ -107,7 +108,8 @@ def apply_service_filter(queryset, params, *, user, request, item_path="item__")
     Returns ``(queryset, streaming)``. ``streaming`` is the response block, or
     None when the request has no ``service``. Titles never checked for the
     country are excluded; in active countries they are also counted as pending
-    and queued for a check.
+    and queued for a check. A selection with no services matches nothing, so
+    nothing is checked for it.
     """
     selection = parse_service_param(params)
     if selection is None:
@@ -115,12 +117,11 @@ def apply_service_filter(queryset, params, *, user, request, item_path="item__")
     region = effective_region(user, request)
     if region is None:
         return queryset.none(), {"region": None, "pending_count": 0}
-    pending_count = check_pending_titles(queryset, region, user=user, item_path=item_path)
     provider_ids = selected_provider_ids(selection, user)
-    if provider_ids:
-        queryset = queryset.filter(streamable_filter(region, provider_ids, item_path=item_path))
-    else:
-        queryset = queryset.none()
+    if not provider_ids:
+        return queryset.none(), {"region": region, "pending_count": 0}
+    pending_count = check_pending_titles(queryset, region, user=user, item_path=item_path)
+    queryset = queryset.filter(streamable_filter(region, provider_ids, item_path=item_path))
     return queryset, {"region": region, "pending_count": pending_count}
 
 
@@ -129,13 +130,13 @@ def check_pending_titles(queryset, region, *, user, item_path="item__"):
 
     Only countries that get snapshots (ST-400) have pending titles; elsewhere
     the count is 0 because nothing will ever be stored. Checks are queued at
-    most PENDING_CHECK_LIMIT per request, debounced per user and country, after
-    commit.
+    most PENDING_CHECK_LIMIT per request, debounced per user, country, and set
+    of titles, after commit.
     """
     if region not in active_regions():
         return 0
     titles = unchecked_titles(queryset, region, item_path=item_path)
-    if titles and _claim_pending_check(user, region):
+    if titles and _claim_pending_check(user, region, titles):
         queued = [list(title) for title in titles[:PENDING_CHECK_LIMIT]]
         # A plain callable, not functools.partial: Django's robust on_commit
         # error logging reads __qualname__, which partial objects lack.
@@ -172,13 +173,21 @@ def _unchecked_rows(queryset, region, item_path):
         .exclude(_title_has(snapshots, item_path))
         .order_by()
         .values_list(f"{item_path}media_type", f"{item_path}media_id")
+        .distinct()
     )
 
 
-def _claim_pending_check(user, region):
+def _claim_pending_check(user, region, titles):
+    """Claim queueing ``titles`` for PENDING_CHECK_DEBOUNCE seconds.
+
+    The claim covers this exact set of titles, so another collection still
+    queues its own. Fails closed: page loads repeat, so without the cache
+    nothing is queued and the periodic task (ST-400) covers these titles.
+    """
+    digest = hashlib.sha256(repr(titles).encode()).hexdigest()[:16]
     try:
         return cache.add(
-            f"streaming:pending-check:v1:{user.pk}:{region}",
+            f"streaming:pending-check:v2:{user.pk}:{region}:{digest}",
             1,
             timeout=PENDING_CHECK_DEBOUNCE,
         )

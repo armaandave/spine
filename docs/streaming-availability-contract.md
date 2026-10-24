@@ -74,7 +74,7 @@ Changing country keeps existing selections; selected services missing from the n
 
 ### ST-102: Saving preferences starts an availability check
 
-Saving the country or services queues a background check of the user's library (tracked, listed, and diary movie/TV titles) for that country.
+Saving a country with at least one service queues a background check of the user's library (tracked, listed, and diary movie/TV titles) for that country.
 The save itself never waits for TMDB.
 
 ### ST-103: A user's services are private
@@ -219,8 +219,8 @@ When `service` is present, the paginated response adds:
 "streaming": { "region": "US", "pending_count": 3 }
 ```
 
-`pending_count` counts movie/TV titles in the unfiltered-by-service result that have no snapshot for the country; the backend queues checks for them (debounced per user).
-It is 0 when the country is not active (ST-400), since no snapshots are stored there.
+`pending_count` counts movie/TV titles in the unfiltered-by-service result that have no snapshot for the country; the backend queues checks for them (debounced per user, country, and set of titles).
+It is 0 when the country is not active (ST-400), since no snapshots are stored there, and when the selection has no services, since nothing can match.
 
 ### Filter options: `streaming`
 
@@ -257,7 +257,7 @@ The backend sends `watch_region`, `with_watch_providers` (pipe-joined, meaning a
 - **Deploy:** the only migration is `streaming.0001_initial`, which is additive. The Celery worker and beat must be running, as they already are in production (`supervisord.conf`).
 - **Prime storage after the first deploy (optional):** `python manage.py backfill_streaming_availability --limit 2000` queues refresh batches for library, list, and diary titles in active countries. Add `--dry-run` to see the counts first. The worker then processes the batches through the shared TMDB rate limiter.
 - **Periodic refresh:** the beat entry `queue_stale_streaming_availability` (task "Queue stale streaming availability") runs every 6 hours. It queues missing titles first, then those older than 24 hours, up to 1000 titles per run. It also deletes snapshots older than 30 days in countries that are no longer active.
-- **On save:** `PUT /me/streaming/` queues "Check streaming library" for that user, covering up to 1000 titles, at most once a minute per user and country.
+- **On save:** `PUT /me/streaming/` with at least one service queues "Check streaming library" for that user, covering up to 1000 titles, at most once a minute per user and country.
 - **Settings:** `STREAMING_DEFAULT_REGION` (default `US`) is the country for users who have not picked one and whose client sends no `X-Spine-Region`.
 - **Data terms:**
   - TMDB requires crediting JustWatch wherever this data appears (ST-003).

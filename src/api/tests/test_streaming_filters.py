@@ -410,6 +410,38 @@ class PendingTitleTests(TestCase):
         other.assert_called_once_with([["movie", "1"]], force=False)
         self.assertEqual(response.data["streaming"]["pending_count"], 1)
 
+    def test_each_collection_queues_its_own_titles(self):
+        custom_list = CustomList.objects.create(owner=self.user, name="Later")
+        for item in (make_item("4", "Movie 4"), make_item("5", "Movie 5")):
+            CustomListItem.objects.create(custom_list=custom_list, item=item)
+
+        _, shelf = self._get()
+        _, listed = self._get(f"/api/v1/lists/{custom_list.id}/items/")
+
+        shelf.assert_called_once_with([["movie", "1"], ["movie", "2"], ["movie", "3"]], force=False)
+        listed.assert_called_once_with([["movie", "4"], ["movie", "5"]], force=False)
+
+    def test_my_services_without_services_queue_nothing(self):
+        viewer = make_user("pending-none")
+        Movie.objects.bulk_create([
+            Movie(user=viewer, item=item, status=Status.COMPLETED.value) for item in self.items
+        ])
+        self.client.force_authenticate(viewer)
+
+        response, delay = self._get()
+
+        self.assertEqual(response.data["streaming"], {"region": "US", "pending_count": 0})
+        delay.assert_not_called()
+
+    def test_unchecked_rows_are_distinct(self):
+        now = timezone.now()
+        for days in (1, 2):
+            DiaryEntry.objects.create(user=self.user, item=self.items[0], consumed_at=now - timedelta(days=days))
+
+        rows = list(streaming_filters._unchecked_rows(DiaryEntry.objects.filter(user=self.user), "US", "item__"))
+
+        self.assertEqual(rows, [(MediaTypes.MOVIE.value, "1")])
+
     def test_debounced_requests_still_report_pending_titles(self):
         self._get()
         response, delay = self._get()
