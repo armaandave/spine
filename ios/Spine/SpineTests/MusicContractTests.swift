@@ -127,23 +127,27 @@ final class MusicContractTests: XCTestCase {
         )
     }
 
-    func testAlbumLengthNeedsEveryTrackLength() throws {
-        var root = try Self.albumObject()
-        var music = try XCTUnwrap(root["music"] as? [String: Any])
-        var release = try XCTUnwrap(music["representative_release"] as? [String: Any])
-        var media = try XCTUnwrap(release["media"] as? [[String: Any]])
-        var tracks = try XCTUnwrap(media[0]["tracks"] as? [[String: Any]])
+    func testAlbumPillsSkipVideosAndNeedEverySongLength() throws {
+        let music = try XCTUnwrap(Self.albumObject()["music"] as? [String: Any])
+        let release = try XCTUnwrap(music["representative_release"] as? [String: Any])
+        let media = try XCTUnwrap(release["media"] as? [[String: Any]])
+        var tracks = try XCTUnwrap(media.first?["tracks"] as? [[String: Any]])
+        var video = try XCTUnwrap(tracks[0]["recording"] as? [String: Any])
+        video["is_video"] = true
+        tracks[0]["recording"] = video
         tracks[3]["length_ms"] = NSNull()
-        media[0]["tracks"] = tracks
-        release["media"] = media
-        music["representative_release"] = release
-        root["music"] = music
 
-        let detail = try JSONDecoder.api.decode(MediaDetail.self, from: Self.data(from: root))
-        let decoded = try XCTUnwrap(detail.music?.representativeRelease)
+        let withRecordingLength = try Self.release(tracks: tracks)
+        XCTAssertEqual(MusicAlbumPresentation.songCount(withRecordingLength), "15 songs")
+        XCTAssertEqual(MusicAlbumPresentation.totalLength(withRecordingLength), "62 min")
 
-        XCTAssertNil(MusicAlbumPresentation.totalLength(decoded))
-        XCTAssertEqual(MusicAlbumPresentation.songCount(decoded), "16 songs")
+        var recording = try XCTUnwrap(tracks[3]["recording"] as? [String: Any])
+        recording["length_ms"] = NSNull()
+        tracks[3]["recording"] = recording
+
+        let withoutLength = try Self.release(tracks: tracks)
+        XCTAssertNil(MusicAlbumPresentation.totalLength(withoutLength))
+        XCTAssertEqual(MusicAlbumPresentation.songCount(withoutLength), "15 songs")
     }
 
     func testAlbumPresentationShowsDifferentTrackArtist() throws {
@@ -923,6 +927,20 @@ final class MusicContractTests: XCTestCase {
         try XCTUnwrap(
             JSONSerialization.jsonObject(with: contractData("album-detail.example.json")) as? [String: Any]
         )
+    }
+
+    /// The album fixture's release with its first disc's tracks replaced.
+    private static func release(tracks: [[String: Any]]) throws -> MusicRepresentativeRelease {
+        var root = try albumObject()
+        var music = try XCTUnwrap(root["music"] as? [String: Any])
+        var release = try XCTUnwrap(music["representative_release"] as? [String: Any])
+        var media = try XCTUnwrap(release["media"] as? [[String: Any]])
+        media[0]["tracks"] = tracks
+        release["media"] = media
+        music["representative_release"] = release
+        root["music"] = music
+        let detail = try JSONDecoder.api.decode(MediaDetail.self, from: data(from: root))
+        return try XCTUnwrap(detail.music?.representativeRelease)
     }
 
     private static func recordingObject() throws -> [String: Any] {

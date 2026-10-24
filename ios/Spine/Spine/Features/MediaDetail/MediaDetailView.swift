@@ -1183,17 +1183,24 @@ enum MusicAlbumPresentation {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
+    /// Music videos on the tracklist aren't songs, so they're left out once the tracks have loaded.
     static func songCount(_ release: MusicRepresentativeRelease) -> String? {
-        guard release.trackCount > 0 else { return nil }
-        return release.trackCount == 1 ? "1 song" : "\(release.trackCount) songs"
+        let songs = Self.songs(release)
+        let count = songs.isEmpty ? release.trackCount : songs.count
+        guard count > 0 else { return nil }
+        return count == 1 ? "1 song" : "\(count) songs"
     }
 
-    /// The album's length, only when every track has one: a partial sum would understate it.
+    /// The album's length, only when every song has one: a partial sum would understate it.
     static func totalLength(_ release: MusicRepresentativeRelease) -> String? {
-        let lengths = release.media.flatMap(\.tracks).map(\.lengthMs)
+        let lengths = songs(release).map { $0.lengthMs ?? $0.recording.lengthMs }
         guard !lengths.isEmpty, !lengths.contains(nil) else { return nil }
         let minutes = Int((Double(lengths.compactMap { $0 }.reduce(0, +)) / 60_000).rounded())
         return "\(max(minutes, 1)) min"
+    }
+
+    private static func songs(_ release: MusicRepresentativeRelease) -> [MusicTrack] {
+        release.media.flatMap(\.tracks).filter { !$0.recording.isVideo }
     }
 
     static func countryName(_ code: String?, locale: Locale = .current) -> String? {
