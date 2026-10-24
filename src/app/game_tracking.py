@@ -576,6 +576,7 @@ def update_completion(entry, data, *, tags=UNSET):
         .first()
     )
     old_date = entry.consumed_at
+    old_rating = entry.rating
     if "consumed_at" in data:
         day = _day(data["consumed_at"])
         if session:
@@ -606,7 +607,7 @@ def update_completion(entry, data, *, tags=UNSET):
         session.save()
     if tags is not UNSET:
         single_weight._replace_tags(entry, tags or [])
-    single_weight.update_current_from_source_log(game, entry, data)
+    single_weight.update_current_from_source_log(game, entry, data, previous_rating=old_rating)
     _sync_state(game)
     single_weight._update_diary_activity(entry)
     single_weight._audit_diary(entry, "diary_updated")

@@ -3,7 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import requests
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Max, Q
+from django.db.models import Exists, Max, OuterRef, Q
+from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -15,7 +16,7 @@ from rest_framework.views import APIView
 
 from api.exceptions import ListTypeMismatch, PersonProviderUnavailable
 from api.pagination import StandardResultsSetPagination
-from api.permissions import users_blocked
+from api.permissions import can_view_user_profile, users_blocked
 from api.serializers.common import (
     absolute_url,
     find_item,
@@ -362,6 +363,37 @@ def _can_view_list(user, custom_list):
     )
 
 
+def _lists_visible_to(viewer, owner):
+    """Return ``owner``'s lists that ``viewer`` may browse.
+
+    All of them for the owner, and none across a block. Anyone else gets the lists they
+    help edit, plus the public ones when they may see the owner's profile
+    (``can_view_user_profile``: a private account only for accepted followers).
+    Unlisted lists open only from their link.
+    """
+    lists = CustomList.objects.filter(owner=owner)
+    if viewer == owner:
+        return lists
+    if users_blocked(viewer, owner):
+        return lists.none()
+    helps_edit = CustomList.collaborators.through.objects.filter(
+        customlist_id=OuterRef("pk"),
+        user_id=viewer.pk,
+    )
+    visible = Q(helps_edit=True)
+    if can_view_user_profile(viewer, owner):
+        visible |= Q(visibility=CustomList.Visibility.PUBLIC)
+    return lists.annotate(helps_edit=Exists(helps_edit)).filter(visible)
+
+
+def _has_tag(tags, tag):
+    """Return whether a list's tags hold ``tag``, ignoring case and outer spaces."""
+    wanted = tag.strip().casefold()
+    return isinstance(tags, list) and any(
+        isinstance(value, str) and value.strip().casefold() == wanted for value in tags
+    )
+
+
 def _item_from_ref(ref):
     exposure.require_media_type(ref["media_type"])
     item = find_item(ref)
@@ -512,6 +544,46 @@ class ListsView(APIView):
             },
         )
         return Response(list_payload(custom_list, request=request), status=status.HTTP_201_CREATED)
+
+
+class TaggedListsView(APIView):
+    """One user's lists with a tag, as far as the viewer may see them, A to Z."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    def get(self, request):
+        from api.views.featured import list_payloads
+
+        tag = request.query_params.get("tag", "").strip()
+        username = request.query_params.get("owner", "").strip()
+        missing = {
+            field: ["This field is required."]
+            for field, value in (("tag", tag), ("owner", username))
+            if not value
+        }
+        if missing:
+            raise ValidationError(missing)
+        owner = get_object_or_404(get_user_model(), username=username)
+        # Tags are a JSON list, so the match runs here: the same on SQLite and Postgres,
+        # and Unicode-aware. Only the ID and tags of the owner's tagged lists are read.
+        rows = (
+            _lists_visible_to(request.user, owner)
+            .exclude(tags=[])
+            .order_by(Lower("name"), "id")
+            .values_list("id", "tags")
+        )
+        list_ids = [list_id for list_id, tags in rows if _has_tag(tags, tag)]
+        paginator = StandardResultsSetPagination()
+        page_ids = paginator.paginate_queryset(list_ids, request, view=self)
+        lists = (
+            CustomList.objects.select_related("owner")
+            .prefetch_related("collaborators")
+            .in_bulk(page_ids)
+        )
+        return paginator.get_paginated_response(
+            list_payloads([lists[list_id] for list_id in page_ids], request),
+        )
 
 
 class ListDetailView(APIView):

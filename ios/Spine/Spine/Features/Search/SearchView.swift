@@ -232,21 +232,24 @@ private struct SearchViewContainer: View {
             focusSearchIfReturning()
         }) { selection in
             let repositories = AppRepositories.current()
-            ProfileListDetailView(
-                listId: selection.card.id,
-                featured: selection.card,
-                profileRepository: repositories.profile,
-                listRepository: listRepository,
-                peopleRepository: peopleRepository,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                activityRepository: repositories.activity,
-                currentUserId: currentUserId,
-                selectedTab: selectedTab,
-                onSelectTab: onSelectTab,
-                onUnauthorized: onUnauthorized
-            )
+            // A stack of its own, so the list's tag and owner links can push their pages.
+            NavigationStack {
+                ProfileListDetailView(
+                    listId: selection.card.id,
+                    featured: selection.card,
+                    profileRepository: repositories.profile,
+                    listRepository: listRepository,
+                    peopleRepository: peopleRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    activityRepository: repositories.activity,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
             .navigationTransition(.zoom(sourceID: selection.id, in: featuredZoom))
         }
     }

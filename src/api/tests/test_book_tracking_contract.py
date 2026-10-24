@@ -695,6 +695,24 @@ class BookTrackingContractTests(TestCase):
         )
         self.assert_status(invalid_rating, status.HTTP_400_BAD_REQUEST)
 
+    # BK-202, SW-108.
+    def test_rating_an_unrated_completion_fills_an_empty_current_rating(self):
+        item = self.make_item("unrated-completion")
+        completed = self.complete(item, mutation_id=uuid4())
+        self.assert_status(completed, status.HTTP_201_CREATED)
+        entry_id = completed.data["diary_entry"]["id"]
+        self.assertIsNone(Book.objects.get(user=self.user, item=item).score)
+
+        edited = self.client.patch(
+            f"/api/v1/diary/{entry_id}/",
+            {"rating": "3.5"},
+            format="json",
+        )
+        self.assert_status(edited, status.HTTP_200_OK)
+        book = Book.objects.get(user=self.user, item=item)
+        self.assertEqual(book.score, 7)
+        self.assertEqual(book.rating_source_id, entry_id)
+
     # BK-403, BK-404.
     def test_completion_edit_delete_reopens_live_and_older_delete_preserves_newer(self):
         live_item = self.make_item("delete-live-completion")

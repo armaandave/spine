@@ -1,10 +1,12 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -39,6 +41,27 @@ class SingleWeightDomainTests(TestCase):
             consumed_at=day,
             **kwargs,
         )[0]
+
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_migration_restores_logs_that_saving_moved_a_day_early(self):
+        migration = import_module("app.migrations.0083_restore_shifted_log_dates")
+        item = self.item(media_id="shifted")
+        shifted = self.log(item, date(2026, 10, 8))
+        for day in (7, 6):  # Two saves, each a day earlier.
+            shifted.consumed_at = datetime(2026, 10, day, tzinfo=UTC)
+            shifted.save()
+        Movie.objects.filter(user=self.user, item=item).update(end_date=shifted.consumed_at)
+        moved = self.log(self.item(media_id="moved"), date(2026, 10, 1))
+        moved.consumed_at = datetime(2026, 10, 4, tzinfo=UTC)
+        moved.save()
+
+        migration.restore_shifted_log_dates(django_apps, None)
+
+        shifted.refresh_from_db()
+        moved.refresh_from_db()
+        self.assertEqual(shifted.consumed_at, datetime(2026, 10, 8, tzinfo=UTC))
+        self.assertEqual(Movie.objects.get(user=self.user, item=item).end_date, datetime(2026, 10, 8, tzinfo=UTC))
+        self.assertEqual(moved.consumed_at, datetime(2026, 10, 4, tzinfo=UTC))
 
     def test_direct_consumption_rating_and_like_are_undated_and_unique(self):
         for media_type, model in ((MediaTypes.MOVIE.value, Movie), (MediaTypes.MUSIC.value, Music)):
@@ -142,6 +165,32 @@ class SingleWeightDomainTests(TestCase):
         self.assertIsNone(source.rating)
         self.assertIsNone(tracking.score)
         self.assertIsNone(tracking.rating_source_id)
+
+    def test_rating_an_unrated_log_fills_an_empty_current_rating(self):
+        item = self.item()
+        older = self.log(item, date(2026, 1, 1))
+        newer = self.log(item, date(2026, 1, 2))
+        tracking = Movie.objects.get(user=self.user, item=item)
+        self.assertIsNone(tracking.score)
+
+        single_weight.update_log(newer, {"rating": Decimal(6)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(6), newer.id))
+
+        # Once filled, other logs follow SW-104 and leave it alone.
+        single_weight.update_log(older, {"rating": Decimal(2)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(6), newer.id))
+
+        # A deliberately cleared rating stays cleared when a log is re-saved unchanged,
+        # but a log rating the user changes fills it again.
+        single_weight.set_rating(self.user, item, None)
+        single_weight.update_log(older, {"rating": Decimal(2), "review": "Still good"})
+        tracking.refresh_from_db()
+        self.assertIsNone(tracking.score)
+        single_weight.update_log(older, {"rating": Decimal(4)})
+        tracking.refresh_from_db()
+        self.assertEqual((tracking.score, tracking.rating_source_id), (Decimal(4), older.id))
 
     def test_heart_couples_including_off_and_direct_change_decouples(self):
         item = self.item()
@@ -452,6 +501,54 @@ class SingleWeightAPITests(TestCase):
             format="json",
         )
         self.assertEqual(forbidden.status_code, 404)
+
+    def test_rating_an_imported_unrated_log_shows_on_the_media_page(self):
+        item = Item.objects.create(
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.MOVIE.value,
+            media_id="imported-unrated",
+            title="Imported Unrated",
+            image="https://example.com/poster.jpg",
+        )
+        imported = single_weight.import_logs(
+            self.user,
+            item,
+            [{"source_id": "lb-1", "consumed_at": date(2026, 10, 16), "review": "brittle"}],
+            source="letterboxd",
+        )[0]
+
+        edited = self.client.patch(
+            f"/api/v1/diary/{imported.id}/",
+            {"consumed_at": "2026-10-16", "rating": "3.0", "review": "brittle", "liked": False},
+            format="json",
+        )
+        self.assertEqual(edited.status_code, 200)
+
+        tracking = self.client.get("/api/v1/tracking/manual/movie/imported-unrated/")
+        community = self.client.get("/api/v1/media/manual/movie/imported-unrated/community/")
+        self.assertEqual(tracking.data["rating"], "3.0")
+        self.assertEqual(community.data["rating_count"], 1)
+        self.assertEqual(community.data["average_rating"], "3.00")
+        self.assertEqual(community.data["review_count"], 1)
+
+    @override_settings(TIME_ZONE="America/New_York")
+    @patch("api.services.diary.provider_services.get_media_metadata")
+    def test_saving_a_log_west_of_utc_keeps_its_date(self, metadata):
+        # Production runs on New York time, where a stored date read back
+        # as local time is the day before.
+        metadata.return_value = self.metadata
+        ref = {"source": "tmdb", "media_type": "movie", "media_id": "keeps-date"}
+
+        logged = self.client.post("/api/v1/diary/", {"ref": ref, "consumed_at": "2026-10-08"}, format="json")
+        path = f"/api/v1/diary/{logged.data['id']}/"
+        for review in ("First pass.", "Second pass."):
+            saved = self.client.patch(path, {"consumed_at": "2026-10-08", "review": review}, format="json")
+            self.assertEqual(saved.status_code, 200)
+
+        self.assertEqual(logged.data["consumed_at"], "2026-10-08")
+        self.assertEqual(saved.data["consumed_at"], "2026-10-08")
+        tracking = Movie.objects.get(user=self.user, item__media_id="keeps-date")
+        self.assertEqual(single_weight.calendar_date(tracking.end_date), date(2026, 10, 8))
 
     @patch("api.services.diary.provider_services.get_media_metadata")
     def test_api_rejects_missing_future_and_invalid_half_star_dates(self, metadata):

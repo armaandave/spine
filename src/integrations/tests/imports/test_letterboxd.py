@@ -1,10 +1,12 @@
 import io
 import zipfile
 from datetime import timedelta
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -264,6 +266,68 @@ class ImportLetterboxdTests(TestCase):
         self.assertEqual(entries.count(), 2)
         self.assertEqual([entry.consumed_at.date().isoformat() for entry in entries], ["2024-01-02", "2025-02-06"])
         self.assertEqual(Movie.objects.get(item__media_id="101").end_date.date().isoformat(), "2025-02-06")
+
+    def test_liked_film_logs_keep_their_heart(self):
+        payload = export_zip(
+            {
+                "diary.csv": (
+                    "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\n"
+                    "2024-01-02,Film One,1999,https://boxd.it/film-one-watched,4,No,,2024-01-02\n"
+                    "2025-02-06,Film One,1999,https://boxd.it/film-one-watched,5,Yes,,2025-02-06\n"
+                    "2025-02-07,Film Two,2000,https://boxd.it/film-two,3,No,,2025-02-07\n"
+                ),
+                "likes/films.csv": (
+                    "Date,Name,Year,Letterboxd URI\n"
+                    "2025-02-06,Film One,1999,https://boxd.it/film-one-watched\n"
+                ),
+            },
+        )
+
+        counts, _ = self._import_bytes(payload)
+
+        film_one_logs = DiaryEntry.objects.filter(item__media_id="101")
+        self.assertEqual([entry.liked for entry in film_one_logs], [True, True])
+        self.assertFalse(DiaryEntry.objects.get(item__media_id="202").liked)
+        self.assertTrue(MediaLike.objects.filter(user=self.user, item__media_id="101").exists())
+        self.assertFalse(MediaLike.objects.filter(user=self.user, item__media_id="202").exists())
+        self.assertEqual(counts["likes"], 1)
+
+    def test_migration_hearts_existing_logs_of_liked_films(self):
+        migration = import_module("app.migrations.0082_heart_liked_letterboxd_logs")
+        film_one, film_two = (
+            Item.objects.create(
+                media_id=media_id,
+                source=Sources.TMDB.value,
+                media_type=MediaTypes.MOVIE.value,
+                title=media_id,
+                image="https://example.com/poster.jpg",
+            )
+            for media_id in ("101", "202")
+        )
+        MediaLike.objects.create(user=self.user, item=film_one)
+        with patch("app.signals.update_daily_statistics.delay"):
+            imported = DiaryEntry.objects.create(
+                user=self.user,
+                item=film_one,
+                consumed_at=timezone.now(),
+                import_source="letterboxd",
+            )
+            logged_here = DiaryEntry.objects.create(user=self.user, item=film_one, consumed_at=timezone.now())
+            not_liked = DiaryEntry.objects.create(
+                user=self.user,
+                item=film_two,
+                consumed_at=timezone.now(),
+                import_source="letterboxd",
+            )
+
+        migration.heart_liked_letterboxd_logs(django_apps, None)
+
+        imported.refresh_from_db()
+        logged_here.refresh_from_db()
+        not_liked.refresh_from_db()
+        self.assertTrue(imported.liked)
+        self.assertFalse(logged_here.liked)
+        self.assertFalse(not_liked.liked)
 
     def test_likes_upgrade_watchlist_to_direct_completed_tracking(self):
         payload = export_zip(
