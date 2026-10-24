@@ -29,6 +29,14 @@ class DeskMacDeployWorkflowTests(SimpleTestCase):
         self.assertIn("migrate --check", workflow)
         self.assertIn('[[ "$deployed_sha" == "$expected_sha" ]]', workflow)
 
+    def test_deploy_clears_only_cache_keys(self):
+        workflow = WORKFLOW.read_text()
+
+        # The cache shares its Redis DB with Celery's queue and the quota counters,
+        # so cache.clear() (FLUSHDB) would empty those too.
+        self.assertIn('cache.delete_pattern("*")', workflow)
+        self.assertNotIn("cache.clear()", workflow)
+
     def test_deploy_script_never_updates_github_branch(self):
         script = DEPLOY_SCRIPT.read_text()
 

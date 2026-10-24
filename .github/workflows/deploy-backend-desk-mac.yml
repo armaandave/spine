@@ -117,5 +117,7 @@ jobs:
           deployed_sha="$(docker exec spine printenv SPINE_COMMIT_SHA)"
           [[ "$deployed_sha" == "$expected_sha" ]]
           docker exec spine python manage.py migrate --check
-          docker exec spine python manage.py shell -c 'from django.core.cache import cache; cache.clear()'
+          # Only the cache's own keys: clearing the cache flushes the whole Redis DB, which
+          # also holds Celery's queue and the provider quota counters.
+          docker exec spine python manage.py shell -c 'from django.core.cache import cache; cache.delete_pattern("*")'
           curl --fail --silent --show-error https://api.spine-api.com/api/v1/health/
