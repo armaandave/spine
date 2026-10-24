@@ -42,6 +42,7 @@ from api.serializers.common import (
     picked_images_by_number,
     prime_collection_items,
     related_sections_from_payload,
+    saved_poster_url,
     seasons_from_metadata,
     synopsis_from_payload,
 )
@@ -3325,7 +3326,7 @@ def manga_poster_options(*, source, media_id, request=None, user=None):
     selected_url = (
         current.custom_image_url
         if current
-        else curated_image_url(CustomPosterPreference, item) or metadata.get("image") or item.image
+        else curated_image_url(CustomPosterPreference, item) or saved_poster_url(item) or metadata.get("image")
     )
     selected_absolute = absolute_poster_url(request, selected_url)
     candidates = list(metadata.get("posters") or [])
