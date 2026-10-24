@@ -52,6 +52,12 @@ struct MediaTypeTheme: Equatable {
                 displayName: "TV",
                 symbolName: "tv"
             )
+        case "season", "episode":
+            return MediaTypeTheme(
+                slug: normalized,
+                displayName: normalized.capitalized,
+                symbolName: "tv"
+            )
         case "anime":
             return MediaTypeTheme(
                 slug: normalized,
@@ -114,7 +120,7 @@ struct MediaTypeGlyph: View {
             ClapperboardShape()
                 .fill(.white, style: FillStyle(eoFill: true))
                 .frame(width: size * 1.36, height: size * 1.14)
-        case "tv":
+        case "tv", "season", "episode":
             AntennaTVGlyph(size: size)
         case "anime":
             SpikyHairGlyph(size: size)
