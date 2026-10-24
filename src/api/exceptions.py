@@ -30,6 +30,14 @@ class AllMediaSearchUnavailable(exceptions.APIException):
     default_code = "provider_unavailable"
 
 
+class SearchReplaced(exceptions.APIException):
+    """The same person searched again before this search reached its provider."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "A newer search replaced this one."
+    default_code = "search_replaced"
+
+
 class PeopleSearchUnavailable(exceptions.APIException):
     """Every provider in a people search failed."""
 

@@ -24,6 +24,7 @@ from api.services import filters as filter_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
 from app.models import BasicMedia, GameSession, MediaTypes, Status
+from streaming import filters as streaming_filters
 
 
 class TrackingListView(MediaExposureMixin, APIView):
@@ -56,6 +57,12 @@ class TrackingListView(MediaExposureMixin, APIView):
             queryset = queryset.filter(item__title__icontains=search)
         queryset = filter_service.apply_rating_range(queryset, request.query_params, "score")
         queryset = filter_service.apply_watched_range(queryset, request.query_params, "end_date")
+        queryset, streaming = streaming_filters.apply_service_filter(
+            queryset,
+            request.query_params,
+            user=request.user,
+            request=request,
+        )
         if manager_sort is None or request.query_params.get("direction"):
             queryset = filter_service.order_queryset(
                 queryset,
@@ -91,6 +98,8 @@ class TrackingListView(MediaExposureMixin, APIView):
             ],
         )
         response.data["completion"] = completion
+        if streaming is not None:
+            response.data["streaming"] = streaming
         return response
 
 

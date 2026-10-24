@@ -16,6 +16,7 @@ from app.curation import curated_prefetches
 from app.models import CustomBackdropPreference, CustomPosterPreference, DiaryEntry
 from app.services import delete_diary_entry
 from social.models import ContentLike
+from streaming import filters as streaming_filters
 
 
 class DiaryListView(APIView):
@@ -70,24 +71,36 @@ class DiaryListView(APIView):
             request.user,
             request.query_params.get("status"),
         )
+        entries, streaming = streaming_filters.apply_service_filter(
+            entries,
+            request.query_params,
+            user=request.user,
+            request=request,
+        )
         entries = filter_service.order_queryset(
             entries,
             request.query_params,
             your_rating_field="rating",
             default_sort="consumed_at",
             extra_sorts={"consumed_at": "consumed_at", "created_at": "created_at"},
+            # Same-day logs go latest-logged first. Imports keep their export's row
+            # order; logs made in Spine have none and count as logged after them.
+            tiebreaks={"consumed_at": ("import_source_order", "id")},
             rating_scope_queryset=rating_scope_queryset,
         )
 
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(entries, request, view=self))
         diary_service.prime_diary_likes(page, request.user)
-        return paginator.get_paginated_response(
+        response = paginator.get_paginated_response(
             [
                 diary_service.diary_payload(entry, request=request, viewer=request.user)
                 for entry in page
             ],
         )
+        if streaming is not None:
+            response.data["streaming"] = streaming
+        return response
 
     def post(self, request):
         serializer = DiaryEntryWriteSerializer(data=request.data)

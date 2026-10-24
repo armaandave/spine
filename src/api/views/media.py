@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.http import urlencode
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +15,7 @@ from api.exceptions import (
     AllMediaSearchUnavailable,
     ListTypeMismatch,
     PeopleSearchUnavailable,
+    SearchReplaced,
 )
 from api.pagination import StandardResultsSetPagination
 from api.serializers.common import PersonCompletionResponseSerializer
@@ -31,6 +33,10 @@ from app.providers import anilist
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem
 from social.models import ContentLike
+from streaming import filters as streaming_filters
+from streaming.services import effective_region
+
+STREAMING_DISCOVER_MEDIA_TYPES = (MediaTypes.MOVIE.value, MediaTypes.TV.value)
 
 
 class MediaSearchView(MediaExposureMixin, APIView):
@@ -53,14 +59,18 @@ class MediaSearchView(MediaExposureMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         page = int(request.query_params.get("page", 1))
-        results = media_service.search_media(
-            media_type=media_type,
-            query=query,
-            page=page,
-            source=request.query_params.get("source"),
-            request=request,
-            user=request.user,
-        )
+        try:
+            results = media_service.search_media(
+                media_type=media_type,
+                query=query,
+                page=page,
+                source=request.query_params.get("source"),
+                request=request,
+                user=request.user,
+            )
+        except provider_services.SearchSuperseded:
+            # The app has moved on to the newer search and ignores this answer.
+            raise SearchReplaced from None
         return Response({"count": len(results), "next": None, "previous": None, "results": results})
 
     @staticmethod
@@ -79,12 +89,15 @@ class MediaSearchView(MediaExposureMixin, APIView):
                 {"media_types": ["Enable at least one media type in Settings."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        payload = media_service.search_all_media(
-            media_types=media_types,
-            query=query,
-            request=request,
-            user=request.user,
-        )
+        try:
+            payload = media_service.search_all_media(
+                media_types=media_types,
+                query=query,
+                request=request,
+                user=request.user,
+            )
+        except provider_services.SearchSuperseded:
+            raise SearchReplaced from None
         if not payload["completed_media_types"]:
             raise AllMediaSearchUnavailable
         return Response(
@@ -165,7 +178,13 @@ class FilterOptionsView(APIView):
             if str(status_filter).lower() == "tracked":
                 queryset = queryset.exclude(status=Status.PLANNING.value)
             filter_service.ensure_filter_metadata(queryset, request.query_params)
-            return Response(filter_service.filter_options_for_items(queryset, request.query_params))
+            return Response(
+                _with_streaming_options(
+                    filter_service.filter_options_for_items(queryset, request.query_params),
+                    request,
+                    available=media_type in streaming_filters.STREAMABLE_MEDIA_TYPES,
+                ),
+            )
 
         if scope == "diary":
             queryset = DiaryEntry.objects.filter(
@@ -173,7 +192,13 @@ class FilterOptionsView(APIView):
                 item__media_type__in=exposure.media_types(),
             ).select_related("item")
             filter_service.ensure_filter_metadata(queryset, request.query_params)
-            return Response(filter_service.filter_options_for_items(queryset, request.query_params))
+            return Response(
+                _with_streaming_options(
+                    filter_service.filter_options_for_items(queryset, request.query_params),
+                    request,
+                    available=streaming_filters.scope_has_titles(queryset, request.query_params),
+                ),
+            )
 
         if scope == "list":
             list_id = request.query_params.get("list_id")
@@ -187,9 +212,20 @@ class FilterOptionsView(APIView):
                 item__media_type__in=exposure.media_types(),
             ).select_related("item")
             filter_service.ensure_filter_metadata(queryset, request.query_params)
-            return Response(filter_service.filter_options_for_items(queryset, request.query_params))
+            return Response(
+                _with_streaming_options(
+                    filter_service.filter_options_for_items(queryset, request.query_params),
+                    request,
+                    available=streaming_filters.scope_has_titles(queryset, request.query_params),
+                ),
+            )
 
         return Response({"scope": ["Use tracking, diary, or list."]}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _with_streaming_options(options, request, *, available):
+    options["streaming"] = streaming_filters.filter_options(request.user, request, available=available)
+    return options
 
 
 class MediaDiscoverView(MediaExposureMixin, APIView):
@@ -202,6 +238,21 @@ class MediaDiscoverView(MediaExposureMixin, APIView):
         errors = _discover_errors(request.query_params)
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        watch = {}
+        service = streaming_filters.parse_service_param(request.query_params)
+        if service is not None:
+            provider_ids = streaming_filters.selected_provider_ids(service, request.user)
+            if not provider_ids:
+                return Response(
+                    {"service": ["Choose your streaming services first."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            region = effective_region(request.user, request)
+            if region is None:
+                # Availability is turned off for this user, so nothing matches.
+                return Response({"count": 0, "next": None, "previous": None, "results": []})
+            watch = {"watch_region": region, "watch_providers": provider_ids}
 
         paginator = StandardResultsSetPagination()
         page_size = paginator.get_page_size(request)
@@ -218,6 +269,7 @@ class MediaDiscoverView(MediaExposureMixin, APIView):
                 sort=request.query_params.get("sort", "vote_count"),
                 request=request,
                 user=request.user,
+                **watch,
             )
         except NotImplementedError as error:
             return Response({"detail": str(error)}, status=status.HTTP_501_NOT_IMPLEMENTED)
@@ -244,7 +296,19 @@ def _discover_errors(params):
     elif media_type not in config.MEDIA_TYPE_CONFIG:
         errors["media_type"] = ["Unsupported media type."]
 
-    if not any(params.get(name) for name in ["genre", "year", "platform"]):
+    try:
+        service = streaming_filters.parse_service_param(params)
+    except ValidationError as error:
+        service = None
+        errors["service"] = [str(message) for message in error.detail["service"]]
+    if service is not None and media_type and media_type not in STREAMING_DISCOVER_MEDIA_TYPES:
+        errors["service"] = ["Streaming services can only filter movie or tv."]
+
+    if (
+        service is None
+        and "service" not in errors
+        and not any(params.get(name) for name in ["genre", "year", "platform"])
+    ):
         errors["non_field_errors"] = ["At least one of genre, year, or platform is required."]
 
     year = params.get("year")

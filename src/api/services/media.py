@@ -462,18 +462,19 @@ def _candidate_data(*, media_type, query, page, source, timeout, search_metrics=
             lock.release()
 
 
-def _candidate_worker(*, media_type, query, source, search_metrics):
+def _candidate_worker(*, media_type, query, source, search_metrics, superseded=None):
     started_at = time.monotonic()
     data = None
     try:
-        data, cache_status, provider_elapsed_ms, refresh_scheduled = _candidate_data(
-            media_type=media_type,
-            query=query,
-            page=1,
-            source=source,
-            timeout=ALL_MEDIA_SEARCH_TIMEOUT,
-            search_metrics=search_metrics,
-        )
+        with provider_services.replaceable_search(superseded):
+            data, cache_status, provider_elapsed_ms, refresh_scheduled = _candidate_data(
+                media_type=media_type,
+                query=query,
+                page=1,
+                source=source,
+                timeout=ALL_MEDIA_SEARCH_TIMEOUT,
+                search_metrics=search_metrics,
+            )
         search_metrics.update(
             cache_status=cache_status,
             cache_hit=cache_status in {"fresh", "stale", "coalesced"},
@@ -482,6 +483,8 @@ def _candidate_worker(*, media_type, query, source, search_metrics):
             refresh_scheduled=refresh_scheduled,
             result_count=len(data.get("results") or data.get("items") or []),
         )
+    except provider_services.SearchSuperseded:
+        search_metrics["outcome"] = "superseded"
     except TimeoutError:
         search_metrics.update(
             outcome="single_flight_timeout",
@@ -583,14 +586,31 @@ def refresh_all_media_candidate(*, media_type, query, page, source):
     return summary
 
 
+def _music_search_superseded(user, query):
+    """Mark this as the person's latest music search; return a check for a newer one.
+
+    Search runs as you type, and MusicBrainz takes one request a second for the whole
+    app, so searches someone has typed past would hold up the one they're waiting for.
+    A search for the same text doesn't replace it.
+    """
+    if not getattr(user, "pk", None):
+        return None
+    key = f"music-search-latest:{user.pk}"
+    query = query.strip().lower()
+    cache.set(key, query, timeout=60)
+    return lambda: cache.get(key, query) != query
+
+
 def search_media(*, media_type, query, page=1, source=None, request=None, user=None):
     """Search provider metadata with a versioned cache key."""
-    source, data = _search_data(
-        media_type=media_type,
-        query=query,
-        page=page,
-        source=source,
-    )
+    superseded = _music_search_superseded(user, query) if media_type == MediaTypes.MUSIC.value else None
+    with provider_services.replaceable_search(superseded):
+        source, data = _search_data(
+            media_type=media_type,
+            query=query,
+            page=page,
+            source=source,
+        )
 
     raw_results = data.get("results") or data.get("items") or []
     return [
@@ -626,6 +646,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
         }
         for media_type in media_types
     }
+    music = MediaTypes.MUSIC.value
+    superseded = _music_search_superseded(user, query) if music in media_types else None
     executor = ThreadPoolExecutor(max_workers=len(media_types))
     futures = {
         media_type: executor.submit(
@@ -634,6 +656,7 @@ def search_all_media(*, media_types, query, request=None, user=None):
             query=query,
             source=provider_metrics[media_type]["source"],
             search_metrics=provider_metrics[media_type],
+            superseded=superseded if media_type == music else None,
         )
         for media_type in media_types
     }
@@ -669,6 +692,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
             continue
         source, data = future.result()
         metrics = provider_metrics[media_type]
+        if metrics["outcome"] == "superseded":
+            continue
         if data is None:
             unavailable.append(media_type)
             logger.warning(
@@ -704,6 +729,8 @@ def search_all_media(*, media_types, query, request=None, user=None):
     for future in pending:
         future.cancel()
     executor.shutdown(wait=False, cancel_futures=True)
+    if provider_metrics.get(music, {}).get("outcome") == "superseded":
+        raise provider_services.SearchSuperseded
 
     ranked = rank_mixed_results(query, candidates, limit=settings.PER_PAGE)
     results = [
@@ -851,18 +878,28 @@ def discover_media(
     sort="vote_count",
     request=None,
     user=None,
+    watch_region=None,
+    watch_providers=None,
 ):
-    """Discover provider metadata with a versioned cache key."""
+    """Discover provider metadata with a versioned cache key.
+
+    ``watch_providers`` limits TMDB results to titles streamable on any of those
+    providers in ``watch_region`` (ST-302).
+    """
     source = source or default_source_for(media_type)
-    filters = urlencode(
-        {
-            "genre": genre or "",
-            "year": year or "",
-            "platform": platform or "",
-            "sort": sort,
-            "page_size": page_size or "",
-        },
-    )
+    filter_values = {
+        "genre": genre or "",
+        "year": year or "",
+        "platform": platform or "",
+        "sort": sort,
+        "page_size": page_size or "",
+    }
+    watch = {}
+    if watch_providers:
+        watch = {"watch_region": watch_region, "watch_providers": sorted(watch_providers)}
+        filter_values["watch_region"] = watch_region
+        filter_values["watch_providers"] = "|".join(map(str, watch["watch_providers"]))
+    filters = urlencode(filter_values)
     filters_hash = hashlib.sha256(filters.encode()).hexdigest()[:24]
     cache_key = f"api:v1:discover:{media_type}:{source}:{filters_hash}:p{page}"
     data = cache.get(cache_key)
@@ -876,6 +913,7 @@ def discover_media(
             year=year,
             platform=platform,
             sort=sort,
+            **watch,
         )
         empty_mal_genre = (
             source == Sources.MAL.value
@@ -1088,6 +1126,11 @@ def media_detail(
         summary["overview"] = synopsis
     ref = summary["ref"]
     item = _external_rating_item(ref, primary_metadata)
+    from streaming import payloads as streaming_payloads
+    from streaming import sync as streaming_sync
+
+    # ST-400: fill in missing snapshots from the metadata already fetched.
+    streaming_sync.sync_from_metadata(source, media_type, media_id, primary_metadata)
     if summary.get("poster_accent_color") is None:
         summary["poster_accent_color"] = poster_accent_color(metadata, ref)
     viewer_poster = _viewer_poster(user, ref["item_id"])
@@ -1214,6 +1257,14 @@ def media_detail(
         "related": metadata.get("related", {}),
         "related_sections": related_sections,
         "providers": watch_providers_for_user(metadata, user),
+        "where_to_watch": streaming_payloads.where_to_watch(
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            metadata=primary_metadata,
+            user=user,
+            request=request,
+        ),
         "community": community_stats(
             source=source,
             media_type=media_type,

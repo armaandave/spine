@@ -73,6 +73,7 @@ final class LibraryViewModel {
     var shelf: LibraryShelf = .tracked
     var items: [LibraryItem] = []
     var totalCount = 0
+    var streamingPendingCount = 0
     var isBootstrapping = true
     var isLoadingInitial = false
     var isLoadingNextPage = false
@@ -115,6 +116,19 @@ final class LibraryViewModel {
 
     var availableShelves: [LibraryShelf] {
         LibraryShelf.available(for: mediaType)
+    }
+
+    var streamingPendingNote: String? {
+        StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
+    }
+
+    /// The quick "On my services" toggle beside the shelf controls: for movie and TV once the user has services,
+    /// and always while a Service filter is on so it can be turned off.
+    var showsMyServicesToggle: Bool {
+        guard StreamingFilterRules.supportsService(mediaType: mediaType) else { return false }
+        guard !filter.service.isActive else { return true }
+        guard let streaming = filterOptions.streaming else { return false }
+        return streaming.available && !streaming.services.isEmpty
     }
 
     static func libraryMediaTypes(from mediaTypes: [String]) -> [String] {
@@ -187,7 +201,18 @@ final class LibraryViewModel {
         filter.year = nil
         filter.yearMin = nil
         filter.yearMax = nil
+        if !StreamingFilterRules.supportsService(mediaType: type) {
+            filter.service = .any
+        }
         await loadFilterOptions(clearingUnconfirmedExternalSortOnFailure: true)
+        guard !Task.isCancelled else { return }
+        await reload()
+    }
+
+    /// Any Service filter turns off; otherwise My services turns on.
+    func toggleMyServices() async {
+        filter.service = filter.service.isActive ? .any : .mine
+        await loadFilterOptions()
         guard !Task.isCancelled else { return }
         await reload()
     }
@@ -214,6 +239,7 @@ final class LibraryViewModel {
         if !preservesLastGoodContent {
             items = []
             totalCount = 0
+            streamingPendingCount = 0
             nextPage = nil
         }
         presentedScope = scope
@@ -279,6 +305,7 @@ final class LibraryViewModel {
 
     private func apply(_ response: PagedResponse<LibraryItem>, replacingItems: Bool) {
         totalCount = response.count
+        streamingPendingCount = response.streaming?.pendingCount ?? 0
         nextPage = APIPageCursor.nextPage(from: response.next)
 
         if replacingItems {
@@ -305,6 +332,10 @@ final class LibraryViewModel {
                !options.sorts.contains(where: { $0.value == sort.rawValue }) {
                 filter.sort = nil
                 filter.direction = nil
+            }
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            if service != filter.service {
+                filter.service = service
             }
         } catch is CancellationError {
             return
@@ -333,6 +364,7 @@ final class LibraryViewModel {
         presentedScope = scope
         items = []
         totalCount = 0
+        streamingPendingCount = 0
         nextPage = nil
         errorMessage = nil
         nextPageErrorMessage = nil
@@ -462,6 +494,15 @@ struct LibraryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
                 Task { await viewModel.reload() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+                Task {
+                    // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                    let hadServiceFilter = viewModel.filter.service.isActive
+                    await viewModel.loadFilterOptions()
+                    guard !Task.isCancelled, hadServiceFilter else { return }
+                    await viewModel.reload()
+                }
+            }
         }
         .fullScreenCover(item: $selectedGridMedia, onDismiss: { selectedGridMedia = nil }) { selection in
             MediaDetailView(
@@ -526,11 +567,18 @@ struct LibraryView: View {
 
                 LibraryViewModeToggle(selection: $viewModel.viewMode)
 
+                if viewModel.showsMyServicesToggle {
+                    LibraryMyServicesToggle(isOn: viewModel.filter.service.isActive) {
+                        Task { await viewModel.toggleMyServices() }
+                    }
+                }
+
                 MediaFilterButton(
                     filter: $viewModel.filter,
                     scope: .tracking(mediaType: viewModel.mediaType),
                     options: viewModel.filterOptions,
-                    mediaTypes: viewModel.mediaTypes
+                    mediaTypes: viewModel.mediaTypes,
+                    onUnauthorized: onUnauthorized
                 ) {
                     Task {
                         await viewModel.loadFilterOptions()
@@ -614,12 +662,14 @@ struct LibraryView: View {
                     await viewModel.loadNextPage()
                 }
         } else if displayedItems.isEmpty {
+            streamingPendingNote
             LibraryStateCard(
                 title: emptyTitle,
-                systemImage: viewModel.shelf == .planning ? "bookmark" : "books.vertical",
+                systemImage: emptySystemImage,
                 message: emptyMessage
             )
         } else {
+            streamingPendingNote
             switch viewModel.viewMode {
             case .grid:
                 libraryGrid(displayedItems)
@@ -654,7 +704,26 @@ struct LibraryView: View {
         )
     }
 
+    @ViewBuilder
+    private var streamingPendingNote: some View {
+        if let note = viewModel.streamingPendingNote {
+            StreamingFilterPendingNote(text: note)
+                .padding(.bottom, 12)
+        }
+    }
+
+    private var emptySystemImage: String {
+        if viewModel.filter.service.isActive { return "play.tv" }
+        return viewModel.shelf == .planning ? "bookmark" : "books.vertical"
+    }
+
     private var emptyTitle: String {
+        if viewModel.filter.service.isActive {
+            return StreamingFilterCopy.emptyTitle(
+                service: viewModel.filter.service,
+                options: viewModel.filterOptions.streaming
+            )
+        }
         if !viewModel.query.isEmpty {
             return "No \(MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()) found"
         }
@@ -676,6 +745,9 @@ struct LibraryView: View {
     }
 
     private var emptyMessage: String {
+        if viewModel.filter.service.isActive {
+            return StreamingFilterCopy.emptyMessage
+        }
         if !viewModel.query.isEmpty {
             return "No matches for \"\(viewModel.query)\" in \(viewModel.shelf.rawValue.lowercased())."
         }
@@ -864,6 +936,25 @@ private struct LibraryViewModeToggle: View {
         .buttonStyle(.plain)
         .accessibilityLabel(mode.rawValue)
         .accessibilityAddTraits(selection == mode ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct LibraryMyServicesToggle: View {
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.tv")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isOn ? Color.black : Color.white)
+                .frame(width: 34, height: 34)
+                .background(isOn ? Color.white : Color.white.opacity(0.10), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("On my services")
+        .accessibilityHint("Shows only titles streaming on your services")
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }
 }
 

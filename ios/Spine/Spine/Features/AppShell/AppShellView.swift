@@ -143,6 +143,7 @@ struct AppShellView: View {
                     activityRepository: session.repositories.activity,
                     listRepository: session.repositories.lists,
                     peopleRepository: session.repositories.people,
+                    streamingRepository: session.repositories.streaming,
                     importCoordinator: session.letterboxdImportCoordinator,
                     storygraphImportCoordinator: session.storygraphImportCoordinator,
                     goodreadsImportCoordinator: session.goodreadsImportCoordinator,

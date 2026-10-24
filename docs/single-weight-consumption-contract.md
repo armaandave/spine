@@ -254,8 +254,8 @@ While the current rating is coupled to a diary entry:
 - changing that diary rating changes the current rating to the same value; and
 - clearing that diary rating also clears the current rating.
 
-Editing or clearing any other diary rating does not affect the current rating.
-Coupling follows the identified source entry, not whichever entry has the
+Editing or clearing any other diary rating does not affect the current rating,
+except when the current rating is empty under SW-108. Coupling follows the identified source entry, not whichever entry has the
 newest consumption date, creation time, or edit time.
 
 ### SW-105: A direct current-rating change decouples older diary history
@@ -267,7 +267,8 @@ Directly setting or changing the current rating to a rating:
 - never changes a diary rating.
 
 After decoupling, editing any existing diary entry cannot overwrite the current
-rating. A later rated new log becomes the source again under SW-101.
+rating. A later rated new log becomes the source again under SW-101. An empty
+current rating can still be filled by a log edit under SW-108.
 
 Directly clearing the current rating clears its source and leaves diary ratings
 unchanged. Clearing does not itself establish direct consumption, but it does
@@ -296,6 +297,21 @@ rating instead.
 A rating is one of: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, or 5.0.
 Zero means unrated and is represented by the absence of a rating, not by a
 stored zero-star rating.
+
+### SW-108: Rating a log fills an empty current rating
+
+When the title has no current rating, editing a diary entry to a new rating:
+
+- sets the current rating to that value; and
+- couples the current rating to that diary entry.
+
+Saving a diary entry without changing its rating does not fill an empty
+current rating, so a directly cleared rating stays cleared when an unrelated
+field of an older log is edited.
+
+Example: Log A was imported without a rating, so the title has no current
+rating. The user edits Log A to 3 stars. The current rating becomes 3 and Log A
+is its source, so the media page and community ratings show it.
 
 ## Like laws
 

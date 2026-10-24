@@ -939,7 +939,7 @@ struct ProfileListRowContainer<PrimaryControl: View>: View {
     }
 }
 
-private extension CustomListSummary {
+extension CustomListSummary {
     var countLabel: String {
         let count = listType == .people ? entriesCount : itemsCount
         let noun = listType == .people
@@ -966,6 +966,11 @@ final class ProfileListDetailViewModel {
     var isSaving = false
     var errorMessage: String?
     var nextPageErrorMessage: String?
+    var streamingPendingCount = 0
+
+    var streamingPendingNote: String? {
+        StreamingFilterCopy.pendingNote(pendingCount: streamingPendingCount, service: filter.service)
+    }
 
     private let listId: Int
     private let listRepository: ListRepository
@@ -1017,8 +1022,13 @@ final class ProfileListDetailViewModel {
                 filteredItems = response.results
                 people = []
                 nextPage = APIPageCursor.nextPage(from: response.next)
+                streamingPendingCount = response.streaming?.pendingCount ?? 0
                 list = detail.withItems(response.results)
-                Task { await loadFilterOptions() }
+                Task {
+                    if await loadFilterOptions() {
+                        await loadFilteredItems(reset: true)
+                    }
+                }
             case .people:
                 let response = try await listRepository.people(listId: listId, page: nil)
                 guard generation == requestGeneration else { return }
@@ -1040,12 +1050,20 @@ final class ProfileListDetailViewModel {
         }
     }
 
-    func loadFilterOptions() async {
-        guard list?.listType != .people else { return }
+    /// Returns true when it dropped services the user no longer has from the filter, so the items need reloading.
+    @discardableResult
+    func loadFilterOptions() async -> Bool {
+        guard list?.listType != .people else { return false }
         do {
-            filterOptions = try await filterOptionsRepository.options(scope: .list(id: listId), filter: filter)
+            let options = try await filterOptionsRepository.options(scope: .list(id: listId), filter: filter)
+            filterOptions = options
+            let service = filter.service.pruned(toAvailable: options.streaming?.services ?? [])
+            guard service != filter.service else { return false }
+            filter.service = service
+            return true
         } catch {
             filterOptions = .empty
+            return false
         }
     }
 
@@ -1055,6 +1073,7 @@ final class ProfileListDetailViewModel {
             requestGeneration += 1
             filteredItems = []
             nextPage = nil
+            streamingPendingCount = 0
         }
         let generation = requestGeneration
         let requestFilter = filter
@@ -1071,6 +1090,7 @@ final class ProfileListDetailViewModel {
             guard generation == requestGeneration, requestFilter == filter else { return }
             if reset {
                 filteredItems = response.results
+                streamingPendingCount = response.streaming?.pendingCount ?? 0
             } else {
                 filteredItems = MediaSummary.appendingNewEntries(response.results, to: filteredItems)
             }
@@ -1514,13 +1534,27 @@ struct ProfileListDetailView: View {
                                 filteredPaginationFooter
                                     .padding(.horizontal, 14)
                             } else if viewModel.displayedItems.isEmpty {
-                                DiaryStateCard(
-                                    title: viewModel.filter.isActive ? "No matching items" : "No items yet",
-                                    systemImage: "square.grid.2x2",
-                                    message: viewModel.filter.isActive ? "Try changing or resetting the filters." : "Add items from any media detail page."
-                                )
-                                .padding(.horizontal, 14)
+                                streamingPendingNote
+                                if viewModel.filter.service.isActive {
+                                    DiaryStateCard(
+                                        title: StreamingFilterCopy.emptyTitle(
+                                            service: viewModel.filter.service,
+                                            options: viewModel.filterOptions.streaming
+                                        ),
+                                        systemImage: "play.tv",
+                                        message: StreamingFilterCopy.emptyMessage
+                                    )
+                                    .padding(.horizontal, 14)
+                                } else {
+                                    DiaryStateCard(
+                                        title: viewModel.filter.isActive ? "No matching items" : "No items yet",
+                                        systemImage: "square.grid.2x2",
+                                        message: viewModel.filter.isActive ? "Try changing or resetting the filters." : "Add items from any media detail page."
+                                    )
+                                    .padding(.horizontal, 14)
+                                }
                             } else {
+                                streamingPendingNote
                                 mediaGrid(viewModel.displayedItems)
                                     .padding(.horizontal, 14)
                                 filteredPaginationFooter
@@ -1633,6 +1667,16 @@ struct ProfileListDetailView: View {
             guard containsMedia || isViewingPerson else { return }
             Task { await viewModel.load() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+            guard viewModel.list?.listType == .media else { return }
+            Task {
+                // Read first: loading options can drop a removed service, but the shown results were filtered by it.
+                let hadServiceFilter = viewModel.filter.service.isActive
+                await viewModel.loadFilterOptions()
+                guard !Task.isCancelled, hadServiceFilter else { return }
+                await viewModel.loadFilteredItems(reset: true)
+            }
+        }
     }
 
     private var contentPhase: SpineContentPhase {
@@ -1641,6 +1685,14 @@ struct ProfileListDetailView: View {
             hasContent: viewModel.list != nil,
             hasError: viewModel.errorMessage != nil
         )
+    }
+
+    @ViewBuilder
+    private var streamingPendingNote: some View {
+        if let note = viewModel.streamingPendingNote {
+            StreamingFilterPendingNote(text: note)
+                .padding(.horizontal, 14)
+        }
     }
 
     private var edgeSwipeBackGesture: some Gesture {
@@ -1673,7 +1725,8 @@ struct ProfileListDetailView: View {
                 MediaFilterButton(
                     filter: $viewModel.filter,
                     scope: .list(id: list.id),
-                    options: viewModel.filterOptions
+                    options: viewModel.filterOptions,
+                    onUnauthorized: onUnauthorized
                 ) {
                     Task {
                         await viewModel.loadFilterOptions()
@@ -1843,21 +1896,45 @@ struct ProfileListDetailView: View {
             }
 
             if !list.tags.isEmpty {
-                tagRow(list.tags)
+                tagRow(list.tags, owner: list.owner)
             }
         }
     }
 
-    private func tagRow(_ tags: [String]) -> some View {
+    /// The list's tags, each opening the owner's lists with that tag, as a log's tags open its tag page.
+    private func tagRow(_ tags: [String], owner: UserSummary) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.76))
-                        .padding(.horizontal, 8)
-                        .frame(height: 22)
-                        .background(.white.opacity(0.13), in: Capsule())
+                    NavigationLink {
+                        TaggedListsView(
+                            tag: tag,
+                            owner: owner,
+                            profileRepository: profileRepository,
+                            listRepository: listRepository,
+                            peopleRepository: peopleRepository,
+                            mediaRepository: mediaRepository,
+                            trackingRepository: trackingRepository,
+                            diaryRepository: diaryRepository,
+                            activityRepository: activityRepository,
+                            importCoordinator: importCoordinator,
+                            storygraphImportCoordinator: storygraphImportCoordinator,
+                            goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+                            currentUserId: currentUserId,
+                            onLogout: onLogout,
+                            onOpenDiary: onOpenDiary,
+                            onOpenLibrary: onOpenLibrary,
+                            selectedTab: selectedTab,
+                            onSelectTab: onSelectTab,
+                            onUnauthorized: onUnauthorized
+                        )
+                    } label: {
+                        DiaryLogChip(text: tag, systemImage: "tag")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Tag: \(tag)")
+                    .accessibilityHint("Shows lists with this tag")
                 }
             }
         }

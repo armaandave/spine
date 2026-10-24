@@ -2074,6 +2074,11 @@ private struct MediaDetailPageView: View {
         .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
             viewModel.handleMediaStateChange(notification.userInfo)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
+            // A new country or new services change Where to Watch.
+            guard let detail = viewModel.detail, WhereToWatch.isAvailable(for: detail.ref) else { return }
+            Swift.Task<Void, Never> { await viewModel.load() }
+        }
     }
 
     @ViewBuilder
@@ -2920,7 +2925,7 @@ private struct MediaDetailPageView: View {
                     }
 
                     genreChips(detail, wrapsAfterThird: true)
-                    RatingChipRow(chips: ratingChips(detail), stacked: true)
+                    RatingChipRow(chips: ratingChips(detail), stacked: true, streaming: streamingPills(detail))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 10)
@@ -2960,7 +2965,7 @@ private struct MediaDetailPageView: View {
                     }
 
                     genreChips(detail, wrapsAfterThird: false)
-                    RatingChipRow(chips: ratingChips(detail), stacked: false)
+                    RatingChipRow(chips: ratingChips(detail), stacked: false, streaming: streamingPills(detail))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -3582,6 +3587,14 @@ private struct MediaDetailPageView: View {
             ))
         }
         return chips
+    }
+
+    /// The services to show as pills next to the ratings (ST-200); nil when there are none.
+    private func streamingPills(_ detail: MediaDetail) -> WhereToWatch? {
+        guard WhereToWatch.isAvailable(for: detail.ref),
+              let whereToWatch = detail.whereToWatch,
+              !whereToWatch.providers.isEmpty else { return nil }
+        return whereToWatch
     }
 
     private func sortedExternalRatings(_ ratings: [ExternalRating]) -> [ExternalRating] {
@@ -5057,7 +5070,7 @@ private struct StarRatingPill: View {
     }
 }
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let title: String
 
     var body: some View {
@@ -5123,9 +5136,15 @@ private struct RatingChipRow: View {
 
     let chips: [RatingChip]
     let stacked: Bool
+    /// Streaming services shown as logo pills at the right end of the rows (ST-200).
+    var streaming: WhereToWatch?
 
     private var chipIDs: [String] {
         chips.map(\.id)
+    }
+
+    private var streamingProviders: [WhereToWatchProvider] {
+        streaming?.providers ?? []
     }
 
     private var chipTransition: AnyTransition {
@@ -5133,27 +5152,67 @@ private struct RatingChipRow: View {
     }
 
     var body: some View {
-        if !chips.isEmpty {
+        if !chips.isEmpty || !streamingProviders.isEmpty {
             if stacked {
+                // Next to the poster there's room for one streaming pill per row, from the top.
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(chips, id: \.id) { chip in
-                        ratingChip(chip)
-                            .transition(chipTransition)
+                    ForEach(0..<max(chips.count, streamingProviders.count), id: \.self) { row in
+                        HStack(spacing: 8) {
+                            if row < chips.count {
+                                ratingChip(chips[row])
+                                    .id(chips[row].id)
+                                    .transition(chipTransition)
+                            }
+                            Spacer(minLength: 0)
+                            if row < streamingProviders.count {
+                                streamingPill(streamingProviders[row])
+                            }
+                        }
                     }
                 }
                 .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: chipIDs)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(chips, id: \.id) { chip in
-                            ratingChip(chip)
-                                .transition(chipTransition)
+                HStack(spacing: 8) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(chips, id: \.id) { chip in
+                                ratingChip(chip)
+                                    .transition(chipTransition)
+                            }
                         }
+                        .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: chipIDs)
                     }
-                    .animation(SpineMotion.animation(reduceMotion: reduceMotion), value: chipIDs)
+                    ForEach(streamingProviders) { provider in
+                        streamingPill(provider)
+                    }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func streamingPill(_ provider: WhereToWatchProvider) -> some View {
+        if let link = streaming?.linkURL {
+            Link(destination: link) {
+                streamingPillContent(provider)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(provider.accessibilityLabel)
+            .accessibilityHint("Opens where to watch in your browser")
+        } else {
+            streamingPillContent(provider)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(provider.accessibilityLabel)
+        }
+    }
+
+    /// Only the service's logo, in the rating pills' capsule.
+    private func streamingPillContent(_ provider: WhereToWatchProvider) -> some View {
+        StreamingProviderLogo(url: provider.logoUrl, name: provider.name, size: MediaDetailLayout.ratingBadgeSize)
+            .padding(.horizontal, 9)
+            .padding(.vertical, MediaDetailLayout.ratingPillVerticalPadding)
+            .background(.white.opacity(0.12), in: Capsule())
     }
 
     @ViewBuilder

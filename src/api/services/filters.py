@@ -308,8 +308,13 @@ def order_queryset(
     default_sort="title",
     extra_sorts=None,
     rating_scope_queryset=None,
+    tiebreaks=None,
 ):
-    """Apply shared sort options with stable null handling."""
+    """Apply shared sort options with stable null handling.
+
+    ``tiebreaks`` maps a sort field to fields that order its ties, in the same
+    direction, before the title fallback.
+    """
     sort = params.get("sort") or params.get("ordering") or default_sort
     rating_source = rating_source_for_sort(sort)
     if rating_source:
@@ -381,7 +386,7 @@ def order_queryset(
         title_order = Lower(field).desc() if descending else Lower(field).asc()
         return queryset.order_by(title_order, "-id" if descending else "id")
 
-    return _order_by_field(queryset, field, descending, item_path)
+    return _order_by_field(queryset, field, descending, item_path, (tiebreaks or {}).get(field, ()))
 
 
 def filter_options_for_items(queryset, params=None, *, item_path="item__"):
@@ -801,13 +806,18 @@ def _apply_facet_exclude(queryset, params, item_path, facet_type):
     ).distinct()
 
 
-def _order_by_field(queryset, field, descending, item_path):
+def _order_by_field(queryset, field, descending, item_path, tiebreak=()):
     order = (
         models.F(field).desc(nulls_last=True)
         if descending
         else models.F(field).asc(nulls_last=True)
     )
-    return queryset.order_by(order, Lower(f"{item_path}title"))
+    # An empty tie value counts as the largest.
+    ties = [
+        models.F(name).desc(nulls_first=True) if descending else models.F(name).asc(nulls_last=True)
+        for name in tiebreak
+    ]
+    return queryset.order_by(order, *ties, Lower(f"{item_path}title"))
 
 
 def _facet_values(facets, facet_type):

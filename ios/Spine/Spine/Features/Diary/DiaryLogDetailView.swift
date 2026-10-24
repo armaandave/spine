@@ -993,7 +993,8 @@ private struct DiaryLogTagsFullHeightKey: PreferenceKey {
     }
 }
 
-private struct DiaryLogChip: View {
+/// A log's tag; list pages show their tags with it too.
+struct DiaryLogChip: View {
     let text: String
     let systemImage: String?
 

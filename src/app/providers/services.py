@@ -1,6 +1,8 @@
+import contextvars
 import hashlib
 import logging
 import time
+from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import requests
@@ -72,7 +74,54 @@ session = LimiterSession(
     bucket_kwargs={"redis": redis_db, "bucket_key": bucket_key},
 )
 
-musicbrainz_session = LimiterSession(
+# Set while a person's search runs: returns True once they've searched for something
+# else, so a search still waiting for MusicBrainz gives up its turn.
+search_superseded = contextvars.ContextVar("search_superseded", default=None)
+
+
+class SearchSuperseded(Exception):
+    """A newer search from the same person replaced this one while it waited."""
+
+
+@contextmanager
+def replaceable_search(superseded):
+    """Let MusicBrainz requests in the block give up their turn once ``superseded()``.
+
+    ``None`` leaves them waiting as usual. Worker threads don't inherit it.
+    """
+    token = search_superseded.set(superseded)
+    try:
+        yield
+    finally:
+        search_superseded.reset(token)
+
+
+class MusicBrainzSession(LimiterSession):
+    """MusicBrainz's one-request-a-second session, where a waiting search can drop out.
+
+    Search runs as you type, so searches someone has typed past would otherwise hold
+    up the one they're waiting for. The limiter keeps one thread at a time waiting
+    inside it, so a search waits in short turns and checks in between.
+    """
+
+    def send(self, request, **kwargs):
+        superseded = search_superseded.get()
+        if superseded is None:
+            return super().send(request, **kwargs)
+        bucket_name = self._bucket_name(request)
+        while True:
+            if superseded():
+                raise SearchSuperseded
+            if self.limiter.try_acquire(bucket_name, weight=1, timeout=0.1):
+                break
+        # The turn is taken, so skip LimiterSession's own wait.
+        response = requests.Session.send(self, request, **kwargs)
+        if response.status_code in self.limit_statuses:
+            self._fill_bucket(request)
+        return response
+
+
+musicbrainz_session = MusicBrainzSession(
     per_second=1,
     bucket_class=RedisBucket,
     bucket_kwargs={"redis": redis_db, "bucket_key": musicbrainz_bucket_key},
@@ -476,8 +525,11 @@ def _search_hardcover_or_openlibrary(query, page, search_options):
         return {**openlibrary.search(query, page, **search_options), RATE_LIMIT_FALLBACK: True}
 
 
-def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count"):
-    """Browse provider metadata by supported media attributes."""
+def discover(media_type, *, source=None, page=1, page_size=None, genre=None, year=None, platform=None, sort="vote_count", watch_region=None, watch_providers=None):
+    """Browse provider metadata by supported media attributes.
+
+    ``watch_region``/``watch_providers`` filter TMDB movies and TV by streaming service.
+    """
     if source == Sources.MAL.value and media_type == MediaTypes.ANIME.value:
         if year:
             msg = "year discovery is not supported for anime."
@@ -508,7 +560,8 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
         if platform:
             msg = "platform discovery is only supported for games."
             raise ValueError(msg)
-        return tmdb.discover(media_type, page=page, genre=genre, year=year)
+        watch = {"watch_region": watch_region, "watch_providers": watch_providers} if watch_providers else {}
+        return tmdb.discover(media_type, page=page, genre=genre, year=year, **watch)
 
     if source == Sources.IGDB.value and media_type == MediaTypes.GAME.value:
         return igdb.discover(page=page, page_size=page_size, genre=genre, year=year, platform=platform)
