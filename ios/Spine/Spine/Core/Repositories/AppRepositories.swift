@@ -374,6 +374,8 @@ protocol ListRepository {
     /// One media type's featured lists, one shelf per kind (`"mixed"` for Across Media).
     func featuredShelves(mediaType: String) async throws -> FeaturedShelvesResponse
     func detail(id: Int) async throws -> CustomListDetail
+    /// The lists of the user `owner` (a username) that carry `tag`: the list page's tag links.
+    func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary>
     func create(_ request: CustomListWriteRequest) async throws -> CustomListSummary
     func update(id: Int, _ request: CustomListWriteRequest) async throws -> CustomListDetail
     func delete(id: Int) async throws
@@ -399,6 +401,10 @@ extension ListRepository {
 
     func featured() async throws -> [CustomListSummary] {
         []
+    }
+
+    func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
+        PagedResponse(count: 0, next: nil, previous: nil, results: [])
     }
 
     /// Without a shelves endpoint, featured lists are grouped by their preview items' media types.
@@ -1335,6 +1341,14 @@ struct APIListRepository: ListRepository {
             authenticated: true
         )
         return response.results
+    }
+
+    func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
+        var query = [URLQueryItem(name: "tag", value: tag), URLQueryItem(name: "owner", value: owner)]
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return try await client.get("/lists/tagged/", query: query, authenticated: true)
     }
 
     func featuredShelves() async throws -> FeaturedShelvesResponse {
