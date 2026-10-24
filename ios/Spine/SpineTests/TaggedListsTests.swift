@@ -149,6 +149,37 @@ final class TaggedListsTests: XCTestCase {
         XCTAssertEqual(viewModel.totalCount, 1)
     }
 
+    func testRefreshDuringANextPageLetsPagingContinue() async throws {
+        let next = "https://example.com/api/v1/lists/tagged/?page=2&tag=horror"
+        let repository = ScriptedTaggedListRepository(results: [
+            .success(try Self.page(ids: [1], count: 2, next: next)),
+            .success(try Self.page(ids: [2], count: 2, next: nil)),
+            .success(try Self.page(ids: [1], count: 2, next: next)),
+            .success(try Self.page(ids: [2], count: 2, next: nil)),
+        ])
+        let viewModel = TaggedListsViewModel(tag: "horror", owner: "maya", listRepository: repository, onUnauthorized: {})
+        await viewModel.load()
+
+        repository.suspendsNextPage = true
+        let stalePage = Task { await viewModel.loadNextPage() }
+        for _ in 0..<100 where !repository.isPageSuspended {
+            await Task.yield()
+        }
+        XCTAssertTrue(repository.isPageSuspended)
+
+        await viewModel.load()
+        repository.resumePage()
+        await stalePage.value
+
+        XCTAssertFalse(viewModel.isLoadingNextPage)
+        XCTAssertEqual(viewModel.lists.map(\.id), [1])
+
+        await viewModel.loadNextPage()
+
+        XCTAssertEqual(viewModel.lists.map(\.id), [1, 2])
+        XCTAssertEqual(repository.requests.map { $0.page }, [nil, "2", nil, "2"])
+    }
+
     private func makeRepository() -> APIListRepository {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TaggedListsURLProtocol.self]
@@ -187,9 +218,14 @@ final class TaggedListsTests: XCTestCase {
     }
 }
 
+@MainActor
 private final class ScriptedTaggedListRepository: ListRepository {
     private var results: [Result<PagedResponse<CustomListSummary>, Error>]
     private(set) var requests: [(tag: String, owner: String, page: String?)] = []
+    /// Holds the next later-page request until `resumePage()`.
+    var suspendsNextPage = false
+    private(set) var isPageSuspended = false
+    private var pageContinuation: CheckedContinuation<Void, Never>?
 
     init(results: [Result<PagedResponse<CustomListSummary>, Error>]) {
         self.results = results
@@ -197,7 +233,21 @@ private final class ScriptedTaggedListRepository: ListRepository {
 
     func tagged(_ tag: String, owner: String, page: String?) async throws -> PagedResponse<CustomListSummary> {
         requests.append((tag: tag, owner: owner, page: page))
-        return try results.removeFirst().get()
+        let result = results.removeFirst()
+        if page != nil, suspendsNextPage {
+            suspendsNextPage = false
+            isPageSuspended = true
+            await withCheckedContinuation { continuation in
+                pageContinuation = continuation
+            }
+            isPageSuspended = false
+        }
+        return try result.get()
+    }
+
+    func resumePage() {
+        pageContinuation?.resume()
+        pageContinuation = nil
     }
 
     func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary] { fatalError("Not used") }

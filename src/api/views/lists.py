@@ -366,23 +366,24 @@ def _can_view_list(user, custom_list):
 def _lists_visible_to(viewer, owner):
     """Return ``owner``'s lists that ``viewer`` may browse.
 
-    All of them for the owner. Anyone else must be able to see the owner's profile
-    (``can_view_user_profile``: no block either way, and a private account only for
-    accepted followers), then gets the public ones and any they help edit. Unlisted
-    lists open only from their link.
+    All of them for the owner, and none across a block. Anyone else gets the lists they
+    help edit, plus the public ones when they may see the owner's profile
+    (``can_view_user_profile``: a private account only for accepted followers).
+    Unlisted lists open only from their link.
     """
     lists = CustomList.objects.filter(owner=owner)
     if viewer == owner:
         return lists
-    if not can_view_user_profile(viewer, owner):
+    if users_blocked(viewer, owner):
         return lists.none()
     helps_edit = CustomList.collaborators.through.objects.filter(
         customlist_id=OuterRef("pk"),
         user_id=viewer.pk,
     )
-    return lists.annotate(helps_edit=Exists(helps_edit)).filter(
-        Q(visibility=CustomList.Visibility.PUBLIC) | Q(helps_edit=True),
-    )
+    visible = Q(helps_edit=True)
+    if can_view_user_profile(viewer, owner):
+        visible |= Q(visibility=CustomList.Visibility.PUBLIC)
+    return lists.annotate(helps_edit=Exists(helps_edit)).filter(visible)
 
 
 def _has_tag(tags, tag):

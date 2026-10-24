@@ -103,6 +103,14 @@ class TaggedListsApiTests(TestCase):
         self.assertEqual(self.names(followed), ["Followed"])
         self.assertEqual(self.names(pending), [])
 
+    def test_lists_you_help_edit_show_even_on_a_private_account(self):
+        owner = self.user("owner", private=True)
+        self.make_list(owner, "Public", ["horror"])
+        shared = self.make_list(owner, "Shared with me", ["horror"], PRIVATE)
+        shared.collaborators.add(self.viewer)
+
+        self.assertEqual(self.names(owner), ["Shared with me"])
+
     def test_blocks_hide_lists_both_ways(self):
         blocker = self.user("blocker")
         blocked = self.user("blocked")

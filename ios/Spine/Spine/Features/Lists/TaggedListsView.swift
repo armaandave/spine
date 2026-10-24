@@ -29,6 +29,8 @@ final class TaggedListsViewModel {
         requestGeneration += 1
         let generation = requestGeneration
         isLoading = true
+        // A next page still in flight belongs to the old generation, so it won't clear this itself.
+        isLoadingNextPage = false
         errorMessage = nil
         nextPageErrorMessage = nil
         defer {

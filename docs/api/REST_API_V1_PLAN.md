@@ -201,11 +201,11 @@ tag links: tags belong to the user who owns the list, so it returns that
 user's lists whose `tags` hold the tag, ignoring case and surrounding spaces,
 A to Z by name, in the standard paged shape with list summaries
 (`preview_items` and `preview_people` included). The owner gets all of their
-lists. Anyone else must be able to see the owner's profile (not blocked either
-way, and a private account only to accepted followers) and then gets the
-public lists and any they collaborate on; unlisted lists are left out. A
-missing or blank `tag` or `owner` returns `400`; an unknown owner returns
-`404`.
+lists, and nobody gets any across a block (either way). Anyone else gets the
+lists they collaborate on, plus the public ones when they can see the owner's
+profile (a private account only to accepted followers); unlisted lists are
+left out. A missing or blank `tag` or `owner` returns `400`; an unknown owner
+returns `404`.
 
 All summary and detail payloads add `list_type` and `entries_count`.
 `entries_count` is the number of entries of the list's declared type and
