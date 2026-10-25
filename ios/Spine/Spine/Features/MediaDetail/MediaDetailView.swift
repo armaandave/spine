@@ -8287,13 +8287,6 @@ private extension String {
         return "\(Self.cleanRating(stars))/5"
     }
 
-    /// Just the stars, "3.5" or "4", for places that draw the star themselves.
-    func starCount(mediaType: String) -> String? {
-        guard let raw = Double(self) else { return nil }
-        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
-        return Self.cleanRating(stars)
-    }
-
     func starRatingValue(mediaType: String) -> String {
         guard let raw = Double(self) else { return self }
         let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
@@ -8415,6 +8408,12 @@ extension ExternalRating {
 }
 
 extension String {
+    /// Just the stars, "3.5" or "4", for places that draw the star themselves.
+    func starCount(mediaType: String) -> String? {
+        guard let raw = Double(self) else { return nil }
+        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+        return Self.cleanRating(stars)
+    }
 
     var ratingCountLabel: String {
         switch lowercased() {

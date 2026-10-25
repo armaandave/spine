@@ -211,34 +211,10 @@ struct DiaryEntryRow: View {
             compactArtwork
 
             VStack(alignment: .leading, spacing: 5) {
-                if hasRatingOrLike {
-                    ratingLikeLine
-                }
-
                 titleLine
 
-                if let title = clean(entry.reviewTitle) {
-                    Text(title)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.82))
-                        .lineLimit(2)
-                }
-
-                if let review = clean(entry.review) {
-                    Text(review)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.58))
-                        .lineLimit(2)
-                }
-
-                if !metadataChips.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(metadataChips, id: \.self) { chip in
-                                DiaryChip(text: chip.text, systemImage: chip.systemImage)
-                            }
-                        }
-                    }
+                if !summary.isEmpty {
+                    summaryLine
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -265,23 +241,30 @@ struct DiaryEntryRow: View {
         .shadow(color: .black.opacity(0.24), radius: 9, y: 4)
     }
 
-    private var hasRatingOrLike: Bool {
-        clean(entry.rating) != nil || entry.liked
-    }
+    private var summary: DiaryEntrySummary { DiaryEntrySummary(entry: entry) }
 
-    private var ratingLikeLine: some View {
+    /// The media page's "3★ ♥" tracking line, plus a mark when there's a review.
+    private var summaryLine: some View {
         HStack(spacing: 6) {
-            if let rating = clean(entry.rating) {
-                DiaryStarRating(rating: rating, mediaType: entry.media.ref.mediaType)
+            if let stars = summary.stars {
+                HStack(spacing: 2) {
+                    Text(stars)
+                    Image(systemName: "star.fill")
+                }
+                .foregroundStyle(.yellow)
             }
-
-            if entry.liked {
+            if summary.liked {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.pink)
-                    .accessibilityLabel("Liked")
+            }
+            if summary.hasReview {
+                Image(systemName: "text.alignleft")
+                    .foregroundStyle(.white.opacity(0.58))
             }
         }
+        .font(.system(size: 13, weight: .bold))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(summary.accessibilityLabel)
     }
 
     private var titleLine: some View {
@@ -332,27 +315,28 @@ struct DiaryEntryRow: View {
 
         return (String(title.dropLast(7)), year)
     }
+}
 
-    private var metadataChips: [DiaryMetadataChip] {
-        var chips: [DiaryMetadataChip] = []
+/// What a diary row shows under its title: the star count, a heart, and whether there's a review.
+struct DiaryEntrySummary: Equatable {
+    let stars: String?
+    let liked: Bool
+    let hasReview: Bool
 
-        chips += entry.tags.prefix(3).map { DiaryMetadataChip(text: $0, systemImage: nil) }
-
-        if entry.tags.count > 3 {
-            chips.append(DiaryMetadataChip(text: "+\(entry.tags.count - 3)", systemImage: nil))
+    init(entry: DiaryEntry) {
+        stars = entry.rating?.starCount(mediaType: entry.media.ref.mediaType)
+        liked = entry.liked
+        hasReview = [entry.reviewTitle, entry.review].contains {
+            $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
-
-        if entry.containsSpoilers {
-            chips.append(DiaryMetadataChip(text: "Spoilers", systemImage: "eye.slash"))
-        }
-
-        return chips
     }
 
-    private func clean(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    var isEmpty: Bool { stars == nil && !liked && !hasReview }
+
+    var accessibilityLabel: String {
+        [stars.map { "Rated \($0) out of 5 stars" }, liked ? "Liked" : nil, hasReview ? "Has review" : nil]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 }
 
@@ -390,33 +374,6 @@ struct DiaryStarRating: View {
             return "star.leadinghalf.filled"
         }
         return "star"
-    }
-}
-
-private struct DiaryMetadataChip: Hashable {
-    let text: String
-    let systemImage: String?
-}
-
-struct DiaryChip: View {
-    let text: String
-    var systemImage: String?
-
-    var body: some View {
-        Label {
-            Text(text)
-                .lineLimit(1)
-        } icon: {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 9, weight: .black))
-            }
-        }
-        .font(.system(size: 10, weight: .bold))
-        .foregroundStyle(.white.opacity(0.78))
-        .padding(.horizontal, 7)
-        .frame(height: 21)
-        .background(.white.opacity(0.11), in: Capsule())
     }
 }
 
