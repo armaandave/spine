@@ -1,0 +1,13 @@
+{
+  "status": 404,
+  "body": {
+    "errors": [
+      {
+        "status": "404",
+        "code": "40400",
+        "title": "Resource Not Found",
+        "detail": "Resource with requested id was not found"
+      }
+    ]
+  }
+}

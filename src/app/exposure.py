@@ -56,6 +56,7 @@ def source_values():
     values = list(Sources.values)
     if not settings.MUSIC_ENABLED:
         values.remove(Sources.MUSICBRAINZ.value)
+        values.remove(Sources.APPLE_MUSIC.value)
     return values
 
 
