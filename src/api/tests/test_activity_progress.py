@@ -120,6 +120,58 @@ class DailyProgressTests(TestCase):
 
         self.assertEqual(activity["consumed_at"], "2026-10-24")
 
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_an_evening_log_keeps_its_local_day(self):
+        # 21:00 on the 25th in New York is 01:00 UTC on the 26th.
+        episode = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.EPISODE.value,
+            media_id="other-show",
+            season_number=1,
+            episode_number=1,
+            title="Other Show",
+        )
+        self.log(episode, datetime(2026, 10, 26, 1, tzinfo=UTC))
+        self.change(self.seasons[1], 0, 1, datetime(2026, 10, 26, 16, tzinfo=UTC))
+
+        self.assertEqual(
+            self.summaries(self.activity()),
+            [
+                ("2026-10-26", "Severance", "watched 1 episode"),
+                ("2026-10-25", "Other Show", "log"),
+            ],
+        )
+
+    def test_a_log_the_viewer_cant_see_doesnt_hide_that_days_progress(self):
+        anime = self.item(MediaTypes.ANIME.value)
+        self.change(anime, 1, 3, at(24))
+        self.log(anime, at(24, 20), visibility="followers")
+
+        self.assertEqual(
+            [activity["object"].get("summary", "log") for activity in self.activity(viewer=self.viewer)],
+            ["watched 2 episodes"],
+        )
+        self.assertEqual([activity["type"] for activity in self.activity()], ["diary_created"])
+
+    def test_removing_a_title_removes_its_progress(self):
+        anime_item = Item.objects.create(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            media_id="removed",
+            title="Removed",
+        )
+        # Planning, so creating them fetches nothing from providers.
+        Anime.objects.create(user=self.owner, item=anime_item, status=Status.PLANNING.value)
+        self.change(anime_item, 0, 2, at(24))
+        TV.objects.create(user=self.owner, item=self.show, status=Status.PLANNING.value)
+        ProgressChange.record_start(self.owner, self.show)
+        self.change(self.seasons[1], 0, 1, at(24))
+
+        tracking_service.delete_tracking(self.owner, source="mal", media_type="anime", media_id="removed")
+        tracking_service.delete_tracking(self.owner, source="tmdb", media_type="tv", media_id="1396")
+
+        self.assertEqual(self.activity(), [])
+
     def test_going_backwards_shows_nothing(self):
         self.change(self.seasons[1], 5, 4, at(24))
         self.change(self.seasons[2], 3, 5, at(25, 9))

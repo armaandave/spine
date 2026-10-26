@@ -1,14 +1,14 @@
 """Activity: logs and each day's progress, newest first (docs/activity-contract.md).
 
 Activity is computed from the diary and from recorded progress changes, so it can't
-drift from them. A page merges both, ordered by date: a log by its log date, a day's
-progress by that day. Within a date, the most recently written comes first.
+drift from them. A page merges both, ordered by local calendar day: a log by its log
+date, a day's progress by that day. Within a day, the most recently written comes first.
 """
 
 import base64
 import binascii
 import json
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime
 from functools import reduce
 from operator import or_
 
@@ -89,8 +89,13 @@ def page_response(request, logs, progress):
     """Return one cursor page of activity in the shape installed apps read."""
     size = _page_size(request)
     after = _decode_cursor(request)
-    logs = logs.select_related("user", "item").order_by("-consumed_at", "-created_at", "-id")
-    days = _progress_days(progress).order_by("-day", "-last_at", "-progress_id")
+    # Only logs this viewer can see replace that day's progress.
+    days = _progress_days(progress, logs).order_by("-day", "-last_at", "-progress_id")
+    logs = (
+        logs.select_related("user", "item")
+        .annotate(log_day=_log_day())
+        .order_by("-log_day", "-created_at", "-id")
+    )
     if after:
         logs = _logs_after(logs, after)
         days = _days_after(days, after)
@@ -133,16 +138,16 @@ def _visible_logs(queryset, *, follows):
     )
 
 
-def _progress_days(changes):
+def _progress_days(changes, logs):
     """Group progress changes into one row per person, title, and day.
 
     A show's and its seasons' changes count toward the show. Each unit's net change is
     summed, and a day that didn't move forward is left out, as is a title the person
-    logged that day.
+    logged that day in one of the given (visible) logs.
     """
     show_types = [MediaTypes.TV.value, MediaTypes.SEASON.value]
     logs_that_day = (
-        DiaryEntry.objects.filter(user=OuterRef("actor"))
+        logs.filter(user=OuterRef("actor"))
         .annotate(log_day=_log_day())
         .filter(log_day=OuterRef("day"))
     )
@@ -193,34 +198,30 @@ def _log_day():
     )
 
 
+# Every item sorts by (calendar day, last written, kind, id), newest first.
 def _log_key(entry):
-    return (entry.consumed_at, entry.created_at, LOG, entry.id)
+    return (entry.log_day, entry.created_at, LOG, entry.id)
 
 
 def _day_key(day):
-    # A day sorts as that date's midnight UTC, where half-star logs of the date sit.
-    return (datetime.combine(day["day"], time.min, tzinfo=UTC), day["last_at"], PROGRESS, day["progress_id"])
+    return (day["day"], day["last_at"], PROGRESS, day["progress_id"])
 
 
 def _logs_after(logs, key):
-    at, tie, kind, row_id = key
-    after = Q(consumed_at__lt=at) | Q(consumed_at=at, created_at__lt=tie)
+    day, tie, kind, row_id = key
+    after = Q(log_day__lt=day) | Q(log_day=day, created_at__lt=tie)
     if kind == LOG:
-        after |= Q(consumed_at=at, created_at=tie, id__lt=row_id)
+        after |= Q(log_day=day, created_at=tie, id__lt=row_id)
     return logs.filter(after)
 
 
 def _days_after(days, key):
-    at, tie, kind, row_id = key
-    at = at.astimezone(UTC)
-    if at.time() != time.min:
-        # Days sort at midnight, so none tie with a key later in the day.
-        return days.filter(day__lte=at.date())
-    after = Q(day__lt=at.date()) | Q(day=at.date(), last_at__lt=tie)
+    day, tie, kind, row_id = key
+    after = Q(day__lt=day) | Q(day=day, last_at__lt=tie)
     if kind == LOG:
-        after |= Q(day=at.date(), last_at=tie)
+        after |= Q(day=day, last_at=tie)
     else:
-        after |= Q(day=at.date(), last_at=tie, progress_id__lt=row_id)
+        after |= Q(day=day, last_at=tie, progress_id__lt=row_id)
     return days.filter(after)
 
 
@@ -257,7 +258,8 @@ def _log_payload(entry, request):
         "id": entry.id,
         "type": "diary_created",
         "created_at": entry.created_at,
-        "consumed_at": diary_service.consumed_at_payload(entry),
+        # The local calendar day, so an evening log isn't shown as the next UTC day.
+        "consumed_at": entry.log_day.isoformat(),
         "actor": user_summary(entry.user, request=request),
         "media": media_summary_from_item(entry.item, request=request),
         "person": None,
@@ -333,8 +335,8 @@ def _page_size(request):
 
 
 def _encode_cursor(key):
-    at, tie, kind, row_id = key
-    data = json.dumps({"at": at.isoformat(), "tie": tie.isoformat(), "kind": kind, "id": row_id})
+    day, tie, kind, row_id = key
+    data = json.dumps({"day": day.isoformat(), "tie": tie.isoformat(), "kind": kind, "id": row_id})
     return base64.urlsafe_b64encode(data.encode()).decode()
 
 
@@ -345,7 +347,7 @@ def _decode_cursor(request):
     try:
         data = json.loads(base64.urlsafe_b64decode(raw.encode()))
         return (
-            datetime.fromisoformat(data["at"]),
+            date.fromisoformat(data["day"]),
             datetime.fromisoformat(data["tie"]),
             int(data["kind"]),
             int(data["id"]),

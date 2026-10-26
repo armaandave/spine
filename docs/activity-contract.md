@@ -39,10 +39,11 @@ hearts, follows, or adding to a list.
 
 ## AC-3: Newest date first
 
-Activity is ordered by date, newest first: a log by its log date (the diary's
-order), a day's progress by that day. Within one date, the most recently written
-comes first. When a log was posted doesn't matter, so backfilling old logs doesn't
-push them to the top: a log for 2019 sits at 2019.
+Activity is ordered by calendar day, newest first: a log by its log date, a day's
+progress by that day. Days are local, so a log at 9pm stays on its own day. Within
+one day, the most recently written comes first. When a log was posted doesn't
+matter, so backfilling old logs doesn't push them to the top: a log for 2019 sits
+at 2019.
 
 Activity shows its date, not when it was posted.
 
@@ -68,8 +69,8 @@ or deletion shows everywhere at once.
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
-the shape installed apps read. `consumed_at` is the item's date and `created_at`
-when it was last written.
+the shape installed apps read. `consumed_at` is the item's calendar day
+(`YYYY-MM-DD`) and `created_at` when it was last written.
 
 - A log: `type` is `diary_created`, `id` is the log's id, and `object` is
   `{"type": "diary", "id", "rating", "liked"}`.

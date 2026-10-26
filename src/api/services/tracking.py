@@ -129,7 +129,21 @@ def delete_tracking(user, *, source, media_type, media_id, season_number=None):
                 raise DiaryHistoryConflict from error
         else:
             media.delete()
+            _delete_progress_history(user, media.item)
     return None
+
+
+def _delete_progress_history(user, item):
+    """Drop a removed title's recorded starts and progress, with a show's seasons."""
+    changes = ProgressChange.objects.filter(actor=user, item=item)
+    if item.media_type == MediaTypes.TV.value:
+        changes = ProgressChange.objects.filter(
+            actor=user,
+            item__source=item.source,
+            item__media_id=item.media_id,
+            item__media_type__in=[MediaTypes.TV.value, MediaTypes.SEASON.value],
+        )
+    changes.delete()
 
 
 def consume_media(user, *, source, media_type, media_id, consumed_at=None):
