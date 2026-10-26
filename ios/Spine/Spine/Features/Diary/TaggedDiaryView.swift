@@ -134,7 +134,8 @@ struct TaggedDiaryView: View {
                 MediaFilterButton(
                     filter: $viewModel.filter,
                     scope: .diary,
-                    showsTagFilter: false
+                    showsTagFilter: false,
+                    surface: .toolbar
                 ) {
                     Task { await viewModel.load() }
                 }
