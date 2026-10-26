@@ -1,0 +1,280 @@
+{
+  "data": [
+    {
+      "id": "1498988850",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn/1498988850",
+        "playParams": {
+          "id": "1498988850",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "explicit",
+        "trackCount": 20
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534816297",
+              "type": "albums"
+            },
+            {
+              "id": "1510840178",
+              "type": "albums"
+            },
+            {
+              "id": "1534811491",
+              "type": "albums"
+            },
+            {
+              "id": "1509850659",
+              "type": "albums"
+            },
+            {
+              "id": "1499567361",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1534816297",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn (Deluxe)",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn-deluxe/1534816297",
+        "playParams": {
+          "id": "1534816297",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "explicit",
+        "trackCount": 38
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1510840178",
+              "type": "albums"
+            },
+            {
+              "id": "1534811491",
+              "type": "albums"
+            },
+            {
+              "id": "1509850659",
+              "type": "albums"
+            },
+            {
+              "id": "1498988850",
+              "type": "albums"
+            },
+            {
+              "id": "1499567361",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1510840178",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn (Deluxe)",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn-deluxe/1510840178",
+        "playParams": {
+          "id": "1510840178",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "explicit",
+        "trackCount": 35
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534816297",
+              "type": "albums"
+            },
+            {
+              "id": "1534811491",
+              "type": "albums"
+            },
+            {
+              "id": "1509850659",
+              "type": "albums"
+            },
+            {
+              "id": "1498988850",
+              "type": "albums"
+            },
+            {
+              "id": "1499567361",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1534811491",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn (Deluxe)",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn-deluxe/1534811491",
+        "playParams": {
+          "id": "1534811491",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "clean",
+        "trackCount": 27
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534816297",
+              "type": "albums"
+            },
+            {
+              "id": "1510840178",
+              "type": "albums"
+            },
+            {
+              "id": "1509850659",
+              "type": "albums"
+            },
+            {
+              "id": "1498988850",
+              "type": "albums"
+            },
+            {
+              "id": "1499567361",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1509850659",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn (Deluxe)",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn-deluxe/1509850659",
+        "playParams": {
+          "id": "1509850659",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "clean",
+        "trackCount": 26
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534816297",
+              "type": "albums"
+            },
+            {
+              "id": "1510840178",
+              "type": "albums"
+            },
+            {
+              "id": "1534811491",
+              "type": "albums"
+            },
+            {
+              "id": "1498988850",
+              "type": "albums"
+            },
+            {
+              "id": "1499567361",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1499567361",
+      "type": "albums",
+      "attributes": {
+        "name": "My Turn",
+        "artistName": "Lil Baby",
+        "url": "https://music.apple.com/us/album/my-turn/1499567361",
+        "playParams": {
+          "id": "1499567361",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-02-28",
+        "contentRating": "clean",
+        "trackCount": 20
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534816297",
+              "type": "albums"
+            },
+            {
+              "id": "1510840178",
+              "type": "albums"
+            },
+            {
+              "id": "1534811491",
+              "type": "albums"
+            },
+            {
+              "id": "1509850659",
+              "type": "albums"
+            },
+            {
+              "id": "1498988850",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

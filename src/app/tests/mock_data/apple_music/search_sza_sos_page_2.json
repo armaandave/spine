@@ -1,0 +1,427 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "6780604582",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (feat. MeatCanyon & Sybyr) - Single",
+            "artistName": "Jasiah",
+            "url": "https://music.apple.com/us/album/sos-feat-meatcanyon-sybyr-single/6780604582",
+            "playParams": {
+              "id": "6780604582",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-06-26",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1886836633",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Forrest Frank & PARTY WAVE",
+            "url": "https://music.apple.com/us/album/sos-single/1886836633",
+            "playParams": {
+              "id": "1886836633",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-03-27",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1546390012",
+          "type": "albums",
+          "attributes": {
+            "name": "Good Days - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/good-days-single/1546390012",
+            "playParams": {
+              "id": "1546390012",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-12-25",
+            "contentRating": "clean",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1682342493",
+          "type": "albums",
+          "attributes": {
+            "name": "Kill Bill (feat. Doja Cat) - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/kill-bill-feat-doja-cat-single/1682342493",
+            "playParams": {
+              "id": "1682342493",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-04-14",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1239977075",
+          "type": "albums",
+          "attributes": {
+            "name": "Ctrl",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/ctrl/1239977075",
+            "playParams": {
+              "id": "1239977075",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-06-09",
+            "contentRating": "clean",
+            "trackCount": 14
+          }
+        },
+        {
+          "id": "1840029743",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "J Abdiel, De La Ghetto & NTG",
+            "url": "https://music.apple.com/us/album/sos-single/1840029743",
+            "playParams": {
+              "id": "1840029743",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-10-02",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1781270319",
+          "type": "albums",
+          "attributes": {
+            "name": "GNX",
+            "artistName": "Kendrick Lamar",
+            "url": "https://music.apple.com/us/album/gnx/1781270319",
+            "playParams": {
+              "id": "1781270319",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-11-22",
+            "contentRating": "explicit",
+            "trackCount": 12
+          }
+        },
+        {
+          "id": "1417709876",
+          "type": "albums",
+          "attributes": {
+            "name": "Brown Noise: Loops for Relaxation, Deep Sleep, Meditation, And Babies",
+            "artistName": "SleepTherapy",
+            "url": "https://music.apple.com/us/album/brown-noise-loops-for-relaxation-deep-sleep-meditation/1417709876",
+            "playParams": {
+              "id": "1417709876",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-07-17",
+            "trackCount": 8
+          }
+        },
+        {
+          "id": "1368156323",
+          "type": "albums",
+          "attributes": {
+            "name": "Invasion of Privacy",
+            "artistName": "Cardi B",
+            "url": "https://music.apple.com/us/album/invasion-of-privacy/1368156323",
+            "playParams": {
+              "id": "1368156323",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-04-06",
+            "contentRating": "explicit",
+            "trackCount": 13
+          }
+        },
+        {
+          "id": "1732348411",
+          "type": "albums",
+          "attributes": {
+            "name": "Saturn - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/saturn-single/1732348411",
+            "playParams": {
+              "id": "1732348411",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-02-22",
+            "trackCount": 5
+          }
+        },
+        {
+          "id": "1669006146",
+          "type": "albums",
+          "attributes": {
+            "name": "Special (feat. SZA) - Single",
+            "artistName": "Lizzo",
+            "url": "https://music.apple.com/us/album/special-feat-sza-single/1669006146",
+            "playParams": {
+              "id": "1669006146",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-02-09",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1667650945",
+          "type": "albums",
+          "attributes": {
+            "name": "Kill Bill (Acoustic) - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/kill-bill-acoustic-single/1667650945",
+            "playParams": {
+              "id": "1667650945",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-01-24",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "6776568824",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "TUKI.",
+            "url": "https://music.apple.com/us/album/sos-single/6776568824",
+            "playParams": {
+              "id": "6776568824",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-06-22",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "6815232330",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "Tye Henney",
+            "url": "https://music.apple.com/us/album/sos/6815232330",
+            "playParams": {
+              "id": "6815232330",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-02-14",
+            "contentRating": "explicit",
+            "trackCount": 8
+          }
+        },
+        {
+          "id": "1486262969",
+          "type": "albums",
+          "attributes": {
+            "name": "Hot Pink",
+            "artistName": "Doja Cat",
+            "url": "https://music.apple.com/us/album/hot-pink/1486262969",
+            "playParams": {
+              "id": "1486262969",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-11-07",
+            "contentRating": "explicit",
+            "trackCount": 12
+          }
+        },
+        {
+          "id": "1440818106",
+          "type": "albums",
+          "attributes": {
+            "name": "Finally Rich (Deluxe Version)",
+            "artistName": "Chief Keef",
+            "url": "https://music.apple.com/us/album/finally-rich-deluxe-version/1440818106",
+            "playParams": {
+              "id": "1440818106",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2012-12-18",
+            "contentRating": "explicit",
+            "trackCount": 16
+          }
+        },
+        {
+          "id": "1728151465",
+          "type": "albums",
+          "attributes": {
+            "name": "Apple Music Live: SZA",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/apple-music-live-sza/1728151465",
+            "playParams": {
+              "id": "1728151465",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-01-31",
+            "contentRating": "explicit",
+            "trackCount": 20
+          }
+        },
+        {
+          "id": "6820960843",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Clay \"Krucial\" Perry III & Hitkidd",
+            "url": "https://music.apple.com/us/album/sos-single/6820960843",
+            "playParams": {
+              "id": "6820960843",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-10-16",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1440903005",
+          "type": "albums",
+          "attributes": {
+            "name": "Black Panther: The Album",
+            "artistName": "Kendrick Lamar",
+            "url": "https://music.apple.com/us/album/black-panther-the-album/1440903005",
+            "playParams": {
+              "id": "1440903005",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-02-09",
+            "contentRating": "clean",
+            "trackCount": 14
+          }
+        },
+        {
+          "id": "1704183235",
+          "type": "albums",
+          "attributes": {
+            "name": "Snooze - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/snooze-single/1704183235",
+            "playParams": {
+              "id": "1704183235",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-08-25",
+            "contentRating": "explicit",
+            "trackCount": 4
+          }
+        },
+        {
+          "id": "1615478007",
+          "type": "albums",
+          "attributes": {
+            "name": "No Love (Extended Version) - Single",
+            "artistName": "Summer Walker, SZA & Cardi B",
+            "url": "https://music.apple.com/us/album/no-love-extended-version-single/1615478007",
+            "playParams": {
+              "id": "1615478007",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-03-25",
+            "contentRating": "clean",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1664548283",
+          "type": "albums",
+          "attributes": {
+            "name": "Kill Bill - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/kill-bill-single/1664548283",
+            "playParams": {
+              "id": "1664548283",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2023-01-13",
+            "trackCount": 5
+          }
+        },
+        {
+          "id": "1707436500",
+          "type": "albums",
+          "attributes": {
+            "name": "Snooze (Acoustic) [feat. Justin Bieber] - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/snooze-acoustic-feat-justin-bieber-single/1707436500",
+            "playParams": {
+              "id": "1707436500",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-09-14",
+            "contentRating": "clean",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1473303796",
+          "type": "albums",
+          "attributes": {
+            "name": "Best Of",
+            "artistName": "The S.O.S. Band",
+            "url": "https://music.apple.com/us/album/best-of/1473303796",
+            "playParams": {
+              "id": "1473303796",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2011-01-01",
+            "trackCount": 12
+          }
+        },
+        {
+          "id": "1444005836",
+          "type": "albums",
+          "attributes": {
+            "name": "Finally Rich",
+            "artistName": "Chief Keef",
+            "url": "https://music.apple.com/us/album/finally-rich/1444005836",
+            "playParams": {
+              "id": "1444005836",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2012-01-01",
+            "contentRating": "clean",
+            "trackCount": 12
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=50&term=sza+sos&types=albums"
+    }
+  }
+}

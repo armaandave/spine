@@ -763,11 +763,11 @@ struct ProfileView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
-                        .background(.black.opacity(0.34), in: Circle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(.circle)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Back")
                 .padding(.top, topSafeAreaInset + 6)
                 .padding(.leading, 16)
@@ -811,11 +811,11 @@ struct ProfileView: View {
         } label: {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Settings")
     }
 

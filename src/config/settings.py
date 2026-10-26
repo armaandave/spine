@@ -374,6 +374,10 @@ LISTENBRAINZ_TOKEN = config(
     "LISTENBRAINZ_TOKEN",
     default=secret("LISTENBRAINZ_TOKEN_FILE", ""),
 )
+# Apple Music API key, used to sign the server's developer tokens.
+APPLE_MUSIC_TEAM_ID = config("APPLE_MUSIC_TEAM_ID", default="")
+APPLE_MUSIC_KEY_ID = config("APPLE_MUSIC_KEY_ID", default="")
+APPLE_MUSIC_PRIVATE_KEY = config("APPLE_MUSIC_PRIVATE_KEY", default="")  # base64 of the .p8, one line
 
 ADMIN_ENABLED = config("ADMIN_ENABLED", default=False, cast=bool)
 
