@@ -1845,6 +1845,26 @@ enum ProfileRecentActivityRailModel {
         }
     }
 
+    static let minimumSpacing: CGFloat = 4
+
+    static func visibleCount(width: CGFloat, itemCount: Int) -> Int {
+        let itemWidth = PosterSlot.profileRail.size.width
+        return max(1, min(min(6, itemCount), Int((width + minimumSpacing) / (itemWidth + minimumSpacing))))
+    }
+
+    /// The tallest artwork among the shown items, so a rail of square album covers isn't padded to poster height.
+    static func artworkHeight(for items: [ProfileRecentActivityRailItem]) -> CGFloat {
+        let heights = items.map { item in
+            switch item.subject {
+            case let .media(media):
+                PosterSlot.profileRail.artworkSize(mediaType: media.ref.mediaType, orientation: media.posterOrientation).height
+            case .person:
+                PosterSlot.profileRail.size.height
+            }
+        }
+        return heights.max() ?? PosterSlot.profileRail.size.height
+    }
+
     static func progressDeltaText(for activity: ActivityItem, media: MediaSummary) -> String? {
         guard
             activity.type == "progress_updated",
@@ -1896,17 +1916,23 @@ enum ProfileRecentActivityRailModel {
 private struct RecentActivityRail: View {
     let items: [ActivityItem]
     let action: (ProfileRecentActivityRailItem) -> Void
+    @State private var width: CGFloat?
 
     private var visibleItems: [ProfileRecentActivityRailItem] {
         ProfileRecentActivityRailModel.items(from: items)
     }
 
+    /// The items that fit the rail's width; all of them until it's measured.
+    private var shownItems: [ProfileRecentActivityRailItem] {
+        guard let width else { return visibleItems }
+        return Array(visibleItems.prefix(ProfileRecentActivityRailModel.visibleCount(width: width, itemCount: visibleItems.count)))
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let itemWidth = PosterSlot.profileRail.size.width
-            let minimumSpacing: CGFloat = 4
-            let maximumVisibleCount = min(6, visibleItems.count)
-            let visibleCount = max(1, min(maximumVisibleCount, Int((proxy.size.width + minimumSpacing) / (itemWidth + minimumSpacing))))
+            let minimumSpacing = ProfileRecentActivityRailModel.minimumSpacing
+            let visibleCount = ProfileRecentActivityRailModel.visibleCount(width: proxy.size.width, itemCount: visibleItems.count)
             let spacing = visibleCount > 1
                 ? min(10, max(minimumSpacing, (proxy.size.width - itemWidth * CGFloat(visibleCount)) / CGFloat(visibleCount - 1)))
                 : 0
@@ -1920,7 +1946,8 @@ private struct RecentActivityRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: PosterSlot.profileRail.size.height + 7 + 12.5)
+        .frame(height: ProfileRecentActivityRailModel.artworkHeight(for: shownItems) + 7 + 12.5)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 

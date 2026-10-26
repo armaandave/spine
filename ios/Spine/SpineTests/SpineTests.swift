@@ -3942,6 +3942,33 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    func testProfileRecentActivityRailFitsSquareAlbumArt() {
+        let albums = (1...5).map { activityItem(id: $0, title: "Album \($0)", mediaType: "music") }
+        let movie = activityItem(id: 6, title: "Movie")
+        let albumHeight = PosterSlot.profileRail.size.width
+        let posterHeight = PosterSlot.profileRail.size.height
+
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(for: ProfileRecentActivityRailModel.items(from: albums)),
+            albumHeight
+        )
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(for: ProfileRecentActivityRailModel.items(from: albums + [movie])),
+            posterHeight
+        )
+
+        // A movie that doesn't fit the width leaves the shown albums at album height.
+        let fiveItemWidth = PosterSlot.profileRail.size.width * 5 + ProfileRecentActivityRailModel.minimumSpacing * 4
+        let shownCount = ProfileRecentActivityRailModel.visibleCount(width: fiveItemWidth, itemCount: 6)
+        XCTAssertEqual(shownCount, 5)
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(
+                for: Array(ProfileRecentActivityRailModel.items(from: albums + [movie]).prefix(shownCount))
+            ),
+            albumHeight
+        )
+    }
+
     func testHomeProgressFallsBackWhenProgressDeltaIsMissingOrUnchanged() {
         let unchanged = TrackingState(
             trackingId: 1,

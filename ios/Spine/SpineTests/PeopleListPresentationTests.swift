@@ -86,6 +86,10 @@ final class PeopleListPresentationTests: XCTestCase {
             return XCTFail("Expected the person subject")
         }
         XCTAssertEqual(selectedPerson.ref, person.ref)
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(for: [items[1]]),
+            PosterSlot.profileRail.size.height
+        )
     }
 
     func testLegacyActivityFallbackLabelsArePreserved() {
