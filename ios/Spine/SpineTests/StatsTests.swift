@@ -4,7 +4,15 @@ import XCTest
 
 @MainActor
 final class StatsTests: XCTestCase {
+    private var statsDefaults: UserDefaults?
+    private var statsDefaultsName: String?
+
     override func tearDown() {
+        if let statsDefaultsName {
+            statsDefaults?.removePersistentDomain(forName: statsDefaultsName)
+        }
+        statsDefaults = nil
+        statsDefaultsName = nil
         StatsRequestCaptureURLProtocol.handler = nil
         KeychainTokenStore.shared.clear()
         super.tearDown()
@@ -251,222 +259,6 @@ final class StatsTests: XCTestCase {
         XCTAssertFalse(completed.isEmpty)
     }
 
-    func testStatsRatingChartNormalizesSparseHalfSteps() {
-        let points = SWStatsRatingChart.normalizedPoints(from: [
-            SWStatsRatingPoint(rating: 3.5, count: 1),
-            SWStatsRatingPoint(rating: 8, count: 2),
-            SWStatsRatingPoint(rating: 8, count: 1),
-            SWStatsRatingPoint(rating: 4.2, count: 99),
-            SWStatsRatingPoint(rating: .nan, count: 99),
-            SWStatsRatingPoint(rating: .infinity, count: 99),
-            SWStatsRatingPoint(rating: 5, count: -1),
-        ])
-
-        XCTAssertEqual(points.count, 21)
-        XCTAssertEqual(points[7].rating, 3.5)
-        XCTAssertEqual(points[7].count, 1)
-        XCTAssertEqual(points[16].rating, 8)
-        XCTAssertEqual(points[16].count, 3)
-        XCTAssertEqual(points.reduce(0) { $0 + $1.count }, 4)
-    }
-
-    func testStatsRatingChartCombinesNativeRatingScalesOnTenPointAxis() {
-        let points = SWStatsRatingChart.normalizedPoints(from: [
-            StatsMediaTypeSummary(
-                mediaType: "book",
-                ratingDistribution: [StatsRatingBucket(rating: "3.5", count: 1)]
-            ),
-            StatsMediaTypeSummary(
-                mediaType: "tv",
-                ratingDistribution: [StatsRatingBucket(rating: "8.0", count: 1)]
-            ),
-        ])
-
-        XCTAssertEqual(points[14].count, 1)
-        XCTAssertEqual(points[16].count, 1)
-        XCTAssertEqual(SWStatsRatingChart.averageRating(from: points), 7.5)
-    }
-
-    func testStatsYearChartFillsGapsIntoContinuousTimeline() {
-        let points = SWStatsYearChart.filledPoints(from: [
-            SWStatsYearPoint(year: 2022, count: 3),
-            SWStatsYearPoint(year: 2019, count: 1),
-            SWStatsYearPoint(year: 2022, count: 2),
-            SWStatsYearPoint(year: 2020, count: -4),
-        ])
-
-        XCTAssertEqual(points.map(\.year), [2019, 2020, 2021, 2022])
-        XCTAssertEqual(points.map(\.count), [1, 0, 0, 5])
-    }
-
-    func testStatsYearChartKeepsSingleYearAsOnePoint() {
-        let points = SWStatsYearChart.filledPoints(from: [SWStatsYearPoint(year: 2024, count: 4)])
-
-        XCTAssertEqual(points, [SWStatsYearPoint(year: 2024, count: 4)])
-        XCTAssertTrue(SWStatsYearChart.filledPoints(from: []).isEmpty)
-    }
-
-    func testStatsYearChartFindsPeakDecade() {
-        let decade = SWStatsYearChart.peakDecade(from: [
-            SWStatsYearPoint(year: 1974, count: 1),
-            SWStatsYearPoint(year: 1999, count: 4),
-            SWStatsYearPoint(year: 2012, count: 3),
-            SWStatsYearPoint(year: 2018, count: 3),
-        ])
-
-        XCTAssertEqual(decade, StatsDecade(decade: 2010, count: 6))
-        XCTAssertEqual(decade?.title, "2010s")
-        XCTAssertNil(SWStatsYearChart.peakDecade(from: [SWStatsYearPoint(year: 2000, count: 0)]))
-    }
-
-    func testStatsReleaseSeriesGroupsLongHistoriesByDecade() {
-        let series = StatsReleaseSeries.make(points: [
-            SWStatsYearPoint(year: 1946, count: 1),
-            SWStatsYearPoint(year: 1988, count: 5),
-            SWStatsYearPoint(year: 2012, count: 3),
-            SWStatsYearPoint(year: 2018, count: 4),
-            SWStatsYearPoint(year: 2025, count: 6),
-        ])
-
-        XCTAssertEqual(series.granularity, .decade)
-        XCTAssertEqual(series.buckets.map(\.id), ["1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"])
-        XCTAssertEqual(series.buckets.map(\.count), [1, 0, 0, 0, 5, 0, 0, 7, 6])
-        XCTAssertEqual(series.buckets.first?.axisLabel, "’40s")
-        XCTAssertEqual(series.buckets.last?.axisLabel, "’20s")
-        XCTAssertEqual(series.peak?.id, "2010s")
-    }
-
-    func testStatsReleaseSeriesKeepsShortHistoriesYearByYear() {
-        let series = StatsReleaseSeries.make(points: [
-            SWStatsYearPoint(year: 2019, count: 2),
-            SWStatsYearPoint(year: 2025, count: 5),
-            SWStatsYearPoint(year: 2022, count: 5),
-        ])
-
-        XCTAssertEqual(series.granularity, .year)
-        XCTAssertEqual(series.buckets.map(\.id), ["2019", "2020", "2021", "2022", "2023", "2024", "2025"])
-        XCTAssertEqual(series.peak?.id, "2025")
-        XCTAssertNil(StatsReleaseSeries.make(points: []).peak)
-    }
-
-    func testStatsRatingStarBucketsFoldTenPointScaleOntoHalfStars() {
-        let points = SWStatsRatingChart.normalizedPoints(from: [
-            SWStatsRatingPoint(rating: 7.5, count: 2),
-            SWStatsRatingPoint(rating: 8, count: 1),
-            SWStatsRatingPoint(rating: 0.5, count: 1),
-            SWStatsRatingPoint(rating: 0, count: 1),
-            SWStatsRatingPoint(rating: 10, count: 3),
-        ])
-
-        let buckets = SWStatsRatingChart.starBuckets(from: points)
-
-        XCTAssertEqual(buckets.map(\.step), Array(1 ... 10))
-        XCTAssertEqual(buckets[0].count, 2)
-        XCTAssertEqual(buckets[7].count, 3)
-        XCTAssertEqual(buckets[7].stars, 4)
-        XCTAssertEqual(buckets[9].count, 3)
-        XCTAssertEqual(buckets.reduce(0) { $0 + $1.count }, 8)
-    }
-
-    func testStatsActivitySeriesChartsEveryMonthOfASelectedYear() {
-        let range = StatsRange(startDate: "2025-01-01", endDate: "2025-12-31", timezone: "UTC", isAllTime: false)
-        let series = StatsActivitySeries.make(
-            months: [
-                StatsActivityMonth(month: "2025-03", count: 4),
-                StatsActivityMonth(month: "2025-11", count: 9),
-                StatsActivityMonth(month: "2024-11", count: 50),
-            ],
-            range: range,
-            now: Self.date("2026-10-01"),
-            calendar: Self.utcCalendar
-        )
-
-        XCTAssertEqual(series.granularity, .month)
-        XCTAssertEqual(series.buckets.count, 12)
-        XCTAssertEqual(series.buckets.first?.id, "2025-01")
-        XCTAssertEqual(series.buckets.last?.id, "2025-12")
-        XCTAssertEqual(series.buckets[2].count, 4)
-        XCTAssertEqual(series.total, 13)
-        XCTAssertEqual(series.busiest?.id, "2025-11")
-        XCTAssertTrue(series.buckets.allSatisfy { $0.axisLabel != nil })
-    }
-
-    func testStatsActivitySeriesChartsAllTimeByYearThroughCurrentYear() {
-        let series = StatsActivitySeries.make(
-            months: [
-                StatsActivityMonth(month: "2019-02", count: 2),
-                StatsActivityMonth(month: "2019-07", count: 3),
-                StatsActivityMonth(month: "2023-01", count: 7),
-            ],
-            range: .empty,
-            now: Self.date("2026-10-01"),
-            calendar: Self.utcCalendar
-        )
-
-        XCTAssertEqual(series.granularity, .year)
-        XCTAssertEqual(series.buckets.map(\.id), ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"])
-        XCTAssertEqual(series.buckets.map(\.count), [5, 0, 0, 0, 7, 0, 0, 0])
-        XCTAssertEqual(series.buckets.first?.axisLabel, "2019")
-        XCTAssertEqual(series.buckets.last?.axisLabel, "2026")
-        XCTAssertEqual(series.busiest?.id, "2023")
-    }
-
-    func testStatsActivitySeriesUsesTrailingMonthsForShortAllTimeHistory() {
-        let series = StatsActivitySeries.make(
-            months: [
-                StatsActivityMonth(month: "2025-12", count: 2),
-                StatsActivityMonth(month: "2026-10", count: 6),
-            ],
-            range: .empty,
-            now: Self.date("2026-10-01"),
-            calendar: Self.utcCalendar
-        )
-
-        XCTAssertEqual(series.granularity, .month)
-        XCTAssertEqual(series.buckets.count, 12)
-        XCTAssertEqual(series.buckets.first?.id, "2025-11")
-        XCTAssertEqual(series.buckets.last?.id, "2026-10")
-        XCTAssertEqual(series.buckets[1].count, 2)
-        XCTAssertEqual(series.total, 8)
-        XCTAssertTrue(StatsActivitySeries.make(months: [], range: .empty).buckets.isEmpty)
-    }
-
-    func testStatsActivityAxisLabelsKeepEndsAndAvoidCrowding() {
-        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 4, maximumLabels: 5), [0, 1, 2, 3])
-        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 16, maximumLabels: 5), [0, 4, 8, 12, 15])
-        XCTAssertEqual(StatsActivitySeries.axisLabelIndices(count: 8, maximumLabels: 5), [0, 2, 4, 7])
-        XCTAssertTrue(StatsActivitySeries.axisLabelIndices(count: 0, maximumLabels: 5).isEmpty)
-    }
-
-    func testStatsWeekdayDistributionCountsActiveDaysMondayFirst() {
-        let counts = StatsWeekdayDistribution.activeDays(from: [
-            StatsActivityDay(date: "2026-09-28", count: 3),
-            StatsActivityDay(date: "2026-10-04", count: 1),
-            StatsActivityDay(date: "2026-10-05", count: 2),
-            StatsActivityDay(date: "2026-10-02", count: 0),
-            StatsActivityDay(date: "not-a-date", count: 4),
-        ])
-
-        XCTAssertEqual(counts, [2, 0, 0, 0, 0, 0, 1])
-    }
-
-    func testStatsMixBarKeepsTinySlicesVisibleWithinWidth() {
-        let widths = StatsMixBar.widths(for: [761, 2, 216], totalWidth: 306, spacing: 3, minimum: 5)
-
-        XCTAssertEqual(widths[1], 5)
-        XCTAssertEqual(widths.reduce(0, +), 300, accuracy: 0.001)
-        XCTAssertGreaterThan(widths[0], widths[2])
-        XCTAssertEqual(StatsMixBar.widths(for: [0, 0], totalWidth: 100, spacing: 3, minimum: 5), [0, 0])
-    }
-
-    func testStatsChartSelectionRoundsAndClampsPlotIndices() {
-        XCTAssertEqual(SWStatsChartSelection.index(for: -2, count: 10), 0)
-        XCTAssertEqual(SWStatsChartSelection.index(for: 4.6, count: 10), 5)
-        XCTAssertEqual(SWStatsChartSelection.index(for: 20, count: 10), 9)
-        XCTAssertNil(SWStatsChartSelection.index(for: .nan, count: 10))
-        XCTAssertNil(SWStatsChartSelection.index(for: 3, count: 0))
-    }
-
     func testYearWithOnlyCurrentLibrarySnapshotIsEmpty() throws {
         let data = Data(
             """
@@ -526,51 +318,6 @@ final class StatsTests: XCTestCase {
         }
 
         _ = try await repository.statsSummary(username: "mika", period: .year(2025))
-    }
-
-    func testStatsViewModelLoadsContentAndTracksRequest() async {
-        let expected = Self.summary(completedCount: 3)
-        let repository = StatsProfileRepositoryFake { _, _ in expected }
-        let viewModel = StatsViewModel(
-            profileRepository: repository,
-            username: "mika",
-            onUnauthorized: {}
-        )
-
-        await viewModel.load()
-
-        XCTAssertEqual(viewModel.state, .loaded(expected))
-        XCTAssertEqual(viewModel.summary, expected)
-        XCTAssertFalse(viewModel.isLoading)
-        XCTAssertEqual(repository.requests, [StatsFakeRequest(username: "mika", period: .allTime)])
-    }
-
-    func testStatsViewModelSurfacesEmptyState() async {
-        let repository = StatsProfileRepositoryFake { _, _ in StatsSummary() }
-        let viewModel = StatsViewModel(profileRepository: repository, onUnauthorized: {})
-
-        await viewModel.load()
-
-        XCTAssertEqual(viewModel.state, .empty)
-        XCTAssertNil(viewModel.summary)
-    }
-
-    func testStatsViewModelSurfacesErrorAndUnauthorizedCallback() async {
-        var didCallUnauthorized = false
-        let repository = StatsProfileRepositoryFake { _, _ in throw APIError.unauthorized }
-        let viewModel = StatsViewModel(
-            profileRepository: repository,
-            onUnauthorized: { didCallUnauthorized = true }
-        )
-
-        await viewModel.load()
-
-        guard case let .error(message) = viewModel.state else {
-            return XCTFail("Expected an error state")
-        }
-        XCTAssertFalse(message.isEmpty)
-        XCTAssertEqual(viewModel.errorMessage, message)
-        XCTAssertTrue(didCallUnauthorized)
     }
 
     func testStatsSummaryDecodesMostLoggedTotalsWithPreviewFallback() throws {
@@ -637,88 +384,423 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
     }
 
-    func testStatsMostLoggedViewModelPagesAndPrefetchesNearTheEnd() async throws {
-        let firstPage = try Self.mostLoggedPage(
-            ids: Array(1 ... 48),
-            count: 50,
-            next: "https://example.com/api/v1/stats/me/most-logged/?page=2&page_size=48"
-        )
-        let secondPage = try Self.mostLoggedPage(ids: [48, 49, 50], count: 50, next: nil)
-        let repository = StatsMostLoggedRepositoryFake { request in
-            request.page == nil ? firstPage : secondPage
+    // MARK: - v2 requests
+
+    func testAPIProfileRepositoryRequestsSchemaTwoWithMediaType() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        var paths: [String] = []
+        var queries: [[String: String]] = []
+        StatsRequestCaptureURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            paths.append(components.path)
+            queries.append(self.queryDictionary(components.queryItems ?? []))
+            return Self.response(for: request, data: Data(#"{"schema_version": 2, "media_type": "movie", "years": {"first": 2019, "current": 2026}}"#.utf8))
         }
-        let viewModel = StatsMostLoggedViewModel(
-            profileRepository: repository,
-            username: nil,
-            period: .year(2025),
-            mediaType: "movie",
-            expectedTotal: 12,
-            onUnauthorized: {}
-        )
 
-        XCTAssertEqual(viewModel.totalCount, 12)
-        await viewModel.load()
-        XCTAssertEqual(viewModel.items.count, 48)
-        XCTAssertEqual(viewModel.totalCount, 50)
-        XCTAssertTrue(viewModel.hasMorePages)
+        let own = try await repository.statsSummary(username: nil, period: .year(2025), mediaType: "movie")
+        _ = try await repository.statsSummary(username: "mika", period: .allTime, mediaType: nil)
 
-        await viewModel.loadNextPageIfNeeded(currentItemID: viewModel.items[10].id)
-        XCTAssertEqual(repository.requests.count, 1)
-
-        await viewModel.loadNextPageIfNeeded(currentItemID: viewModel.items[44].id)
-        XCTAssertEqual(repository.requests.map(\.page), [nil, "2"])
-        XCTAssertEqual(repository.requests.map(\.mediaType), ["movie", "movie"])
-        XCTAssertEqual(repository.requests.map(\.pageSize), [48, 48])
-        XCTAssertEqual(repository.requests.first?.period, .year(2025))
-        XCTAssertEqual(viewModel.items.count, 50)
-        XCTAssertFalse(viewModel.hasMorePages)
+        XCTAssertEqual(paths, ["/api/v1/stats/me/summary/", "/api/v1/users/mika/stats/summary/"])
+        XCTAssertEqual(queries, [
+            ["schema": "2", "start_date": "2025-01-01", "end_date": "2025-12-31", "media_type": "movie"],
+            ["schema": "2", "start_date": "all", "end_date": "all"],
+        ])
+        XCTAssertFalse(own.isLegacy)
+        XCTAssertEqual(own.mediaType, "movie")
+        XCTAssertEqual(own.years, StatsYears(first: 2019, current: 2026))
     }
 
-    func testStatsMostLoggedViewModelSurfacesErrorsAndUnauthorized() async {
-        var didCallUnauthorized = false
-        let repository = StatsMostLoggedRepositoryFake { _ in throw APIError.unauthorized }
-        let viewModel = StatsMostLoggedViewModel(
-            profileRepository: repository,
-            username: "mika",
-            period: .allTime,
-            mediaType: nil,
-            onUnauthorized: { didCallUnauthorized = true }
-        )
+    func testAPIProfileRepositoryScopesALegacyAnswerToTheAskedTab() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        StatsRequestCaptureURLProtocol.handler = { request in
+            Self.response(for: request, data: Self.fullSummaryData)
+        }
 
-        await viewModel.load()
+        let page = try await repository.statsSummary(username: nil, period: .allTime, mediaType: "movie")
 
-        XCTAssertNotNil(viewModel.errorMessage)
-        XCTAssertTrue(viewModel.items.isEmpty)
-        XCTAssertFalse(viewModel.isLoadingInitial)
-        XCTAssertTrue(didCallUnauthorized)
-        XCTAssertEqual(repository.requests.first?.username, "mika")
+        XCTAssertTrue(page.isLegacy)
+        XCTAssertEqual(page.mediaType, "movie")
+        XCTAssertNil(page.activity, "Legacy activity isn't split by type, so a type tab hides it")
+        XCTAssertNil(page.ratings)
     }
 
-    func testStatsViewModelIgnoresStaleRequestAfterPeriodChange() async {
-        let firstRequestStarted = expectation(description: "All-time request started")
-        let repository = StatsProfileRepositoryFake { _, period in
-            switch period {
-            case .allTime:
-                firstRequestStarted.fulfill()
-                try await Task<Never, Never>.sleep(nanoseconds: 80_000_000)
-                return Self.summary(completedCount: 1)
-            case .year:
-                return Self.summary(completedCount: 2)
+    func testAPIProfileRepositoryRequestsShowAllPages() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        var paths: [String] = []
+        var queries: [[String: String]] = []
+        StatsRequestCaptureURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            paths.append(components.path)
+            queries.append(self.queryDictionary(components.queryItems ?? []))
+            switch components.path {
+            case let path where path.hasSuffix("/highest-rated/"):
+                return Self.response(for: request, data: Data("""
+                {"count": 1, "next": null, "previous": null, "results": [
+                  {"media": \(Self.mediaJSON(id: 3)), "stars": "4.5", "day": null}
+                ]}
+                """.utf8))
+            case let path where path.hasSuffix("/collections/"):
+                return Self.response(for: request, data: Data("""
+                {"count": 1, "next": null, "previous": null, "results": [
+                  {"id": "119", "source": "tmdb", "media_type": "movie", "name": "The Lord of the Rings Collection",
+                   "item_count": 3, "poster_urls": [], "completion": {"completed_count": 3, "total_count": 3}}
+                ]}
+                """.utf8))
+            default:
+                return Self.response(for: request, data: Data("""
+                {"count": 1, "next": null, "previous": null, "results": [{"media": \(Self.mediaJSON(id: 4)), "times": 3}]}
+                """.utf8))
             }
         }
-        let viewModel = StatsViewModel(profileRepository: repository, onUnauthorized: {})
 
-        let firstLoad = Task { await viewModel.load() }
-        await fulfillment(of: [firstRequestStarted], timeout: 1)
-        await viewModel.selectPeriod(.year(2026))
-        await firstLoad.value
+        let rated = try await repository.statsHighestRated(
+            username: nil, period: .year(2025), mediaType: "movie", page: "2", pageSize: 48
+        )
+        let collections = try await repository.statsCollections(
+            username: "mika", mediaType: "movie", group: .almost, page: nil, pageSize: 25
+        )
+        let mostLogged = try await repository.statsMostLoggedTitles(
+            username: nil, period: .allTime, mediaType: nil, page: nil, pageSize: 48
+        )
 
-        XCTAssertEqual(viewModel.selectedPeriod, .year(2026))
-        XCTAssertEqual(viewModel.summary?.overview.completedCount, 2)
-        XCTAssertEqual(repository.requests, [
-            StatsFakeRequest(username: nil, period: .allTime),
-            StatsFakeRequest(username: nil, period: .year(2026)),
+        XCTAssertEqual(paths, [
+            "/api/v1/stats/me/highest-rated/",
+            "/api/v1/users/mika/stats/collections/",
+            "/api/v1/stats/me/most-logged/",
         ])
+        XCTAssertEqual(queries, [
+            ["start_date": "2025-01-01", "end_date": "2025-12-31", "page_size": "48", "media_type": "movie", "page": "2"],
+            ["media_type": "movie", "group": "almost", "page_size": "25"],
+            ["schema": "2", "start_date": "all", "end_date": "all", "page_size": "48"],
+        ])
+        XCTAssertEqual(rated.results.first?.stars?.value, 4.5)
+        XCTAssertNil(rated.results.first?.day)
+        XCTAssertEqual(collections.results.first?.completion?.completedCount, 3)
+        XCTAssertEqual(mostLogged.results.first?.times, 3)
+    }
+
+    func testLegacyOnlyRepositoryAnswersTheV2CallWithTheFallbackPage() async throws {
+        let legacy = StatsSummary(overview: StatsOverview(diaryEntryCount: 9, uniqueLoggedCount: 7))
+        let repository = StatsProfileRepositoryFake { _, _ in legacy }
+
+        let page = try await repository.statsSummary(username: "mika", period: .year(2025), mediaType: nil)
+
+        XCTAssertTrue(page.isLegacy)
+        XCTAssertEqual(page.header?.titles, 7)
+        XCTAssertEqual(page.header?.logs, 9)
+        XCTAssertEqual(repository.requests, [StatsFakeRequest(username: "mika", period: .year(2025))])
+    }
+
+    // MARK: - View model
+
+    func testViewModelLoadsTheFirstPageAtOnce() async {
+        let repository = StatsPageRepositoryFake { scope in Self.page(for: scope) }
+        let viewModel = makeViewModel(repository, debounce: .seconds(30))
+
+        XCTAssertTrue(viewModel.isFirstLoad)
+        viewModel.appeared()
+        XCTAssertTrue(viewModel.isLoading)
+        XCTAssertFalse(viewModel.isDimmed, "Nothing on screen to dim")
+        await settle(viewModel)
+
+        XCTAssertEqual(repository.scopes, [StatsScope(period: .allTime, mediaType: nil)])
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil))
+        XCTAssertEqual(viewModel.page?.header?.titles, Self.page(for: .init(period: .allTime)).header?.titles)
+        XCTAssertFalse(viewModel.isFirstLoad)
+
+        viewModel.appeared()
+        await settle(viewModel)
+        XCTAssertEqual(repository.scopes.count, 1, "Appearing again with a page on screen doesn't reload")
+    }
+
+    func testViewModelDebouncesFastSwitchesIntoOneRequest() async {
+        let repository = StatsPageRepositoryFake { scope in Self.page(for: scope) }
+        let viewModel = makeViewModel(repository, debounce: .milliseconds(80))
+        viewModel.appeared()
+        await settle(viewModel)
+
+        viewModel.selectPeriod(.year(2025))
+        viewModel.selectPeriod(.year(2024))
+        viewModel.selectMediaType("movie")
+
+        XCTAssertEqual(viewModel.selected, StatsScope(period: .year(2024), mediaType: "movie"), "The selection changes at once")
+        XCTAssertTrue(viewModel.isDimmed)
+        await settle(viewModel)
+
+        XCTAssertEqual(repository.scopes, [
+            StatsScope(period: .allTime, mediaType: nil),
+            StatsScope(period: .year(2024), mediaType: "movie"),
+        ])
+        XCTAssertEqual(viewModel.pageScope, viewModel.selected)
+        XCTAssertEqual(viewModel.userSwitchCount, 3)
+    }
+
+    func testViewModelKeepsTheOldPageDimmedUntilTheNewOneArrives() async {
+        let gate = RefreshGate()
+        let repository = StatsPageRepositoryFake { scope in
+            if scope.period == .year(2025) { await gate.wait() }
+            return Self.page(for: scope)
+        }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+        let allTime = viewModel.page
+
+        viewModel.selectPeriod(.year(2025))
+        await waitUntil { repository.scopes.count == 2 }
+
+        XCTAssertEqual(viewModel.page, allTime)
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil))
+        XCTAssertTrue(viewModel.isLoading)
+        XCTAssertTrue(viewModel.isDimmed)
+
+        await gate.open()
+        await settle(viewModel)
+
+        XCTAssertFalse(viewModel.isDimmed)
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .year(2025), mediaType: nil))
+    }
+
+    func testViewModelDropsAnAnswerForAScopeNoLongerSelected() async {
+        let gate = RefreshGate()
+        let repository = StatsPageRepositoryFake { scope in
+            // Ignores cancellation, like a response already on its way.
+            if scope.period == .year(2025) { await gate.wait() }
+            return Self.page(for: scope)
+        }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+
+        viewModel.selectPeriod(.year(2025))
+        await waitUntil { repository.scopes.count == 2 }
+        viewModel.selectPeriod(.year(2024))
+        await waitUntil { viewModel.pageScope?.period == .year(2024) }
+        await gate.open()
+        // Give the dropped answer time to arrive.
+        try? await Task.sleep(for: .milliseconds(60))
+        await settle(viewModel)
+
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .year(2024), mediaType: nil))
+        XCTAssertEqual(viewModel.page?.header?.titles, 2024)
+        XCTAssertFalse(viewModel.isLoading)
+    }
+
+    func testViewModelShowsACachedScopeWithoutARequest() async {
+        let repository = StatsPageRepositoryFake { scope in Self.page(for: scope) }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+        viewModel.selectPeriod(.year(2025))
+        await settle(viewModel)
+
+        viewModel.selectPeriod(.allTime)
+
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil))
+        await settle(viewModel)
+        XCTAssertEqual(repository.scopes.count, 2)
+    }
+
+    func testPageCacheDropsTheLeastRecentlyUsedScope() {
+        var cache = StatsPageCache(capacity: 2)
+        let a = StatsScope(period: .allTime, mediaType: nil)
+        let b = StatsScope(period: .year(2025), mediaType: nil)
+        let c = StatsScope(period: .year(2025), mediaType: "movie")
+
+        cache.insert(Self.page(for: a), for: a)
+        cache.insert(Self.page(for: b), for: b)
+        XCTAssertNotNil(cache.page(for: a)) // a is now the most recent
+        cache.insert(Self.page(for: c), for: c)
+
+        XCTAssertNil(cache.page(for: b))
+        XCTAssertNotNil(cache.page(for: a))
+        XCTAssertNotNil(cache.page(for: c))
+        XCTAssertEqual(StatsViewModel.cacheCapacity, 12)
+    }
+
+    func testViewModelErrorKeepsThePageAndShowsABanner() async {
+        let repository = StatsPageRepositoryFake { scope in
+            if scope.period == .year(2023) { throw APIError.invalidResponse }
+            return Self.page(for: scope)
+        }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+
+        viewModel.selectPeriod(.year(2023))
+        await settle(viewModel)
+
+        XCTAssertNotNil(viewModel.bannerMessage)
+        XCTAssertNil(viewModel.fullErrorMessage)
+        XCTAssertEqual(viewModel.errorScope, StatsScope(period: .year(2023), mediaType: nil))
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil), "The old page stays")
+        XCTAssertFalse(viewModel.isDimmed, "It's undimmed once the load has failed")
+        XCTAssertEqual(viewModel.selectedPeriod, .year(2023), "The pill stays where the user put it")
+
+        viewModel.selectPeriod(.year(2024))
+        XCTAssertNil(viewModel.bannerMessage, "A new load clears the banner")
+        await settle(viewModel)
+        XCTAssertNil(viewModel.bannerMessage)
+    }
+
+    func testViewModelErrorWithNothingOnScreenIsTheWholeStateAndRetries() async {
+        var didCallUnauthorized = false
+        var fails = true
+        let repository = StatsPageRepositoryFake { scope in
+            if fails { throw APIError.unauthorized }
+            return Self.page(for: scope)
+        }
+        let viewModel = StatsViewModel(
+            profileRepository: repository,
+            debounce: .zero,
+            defaults: defaults,
+            onUnauthorized: { didCallUnauthorized = true }
+        )
+        viewModel.appeared()
+        await settle(viewModel)
+
+        XCTAssertNotNil(viewModel.fullErrorMessage)
+        XCTAssertNil(viewModel.bannerMessage)
+        XCTAssertFalse(viewModel.isFirstLoad)
+        XCTAssertTrue(didCallUnauthorized)
+
+        fails = false
+        viewModel.retry()
+        await settle(viewModel)
+        XCTAssertNil(viewModel.fullErrorMessage)
+        XCTAssertNotNil(viewModel.page)
+    }
+
+    func testChangeNotificationsReloadOnceOnTheNextAppear() async {
+        let repository = StatsPageRepositoryFake { scope in Self.page(for: scope) }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+        viewModel.selectPeriod(.year(2025))
+        await settle(viewModel)
+
+        viewModel.markNeedsRefresh()
+        viewModel.markNeedsRefresh()
+        XCTAssertEqual(repository.scopes.count, 2, "Nothing reloads until the page appears")
+
+        viewModel.appeared()
+        XCTAssertFalse(viewModel.isDimmed, "A reload of the same scope stays undimmed")
+        await settle(viewModel)
+        viewModel.appeared()
+        await settle(viewModel)
+
+        XCTAssertEqual(repository.scopes.count, 3)
+        XCTAssertEqual(repository.scopes.last, StatsScope(period: .year(2025), mediaType: nil))
+
+        viewModel.selectPeriod(.allTime)
+        await settle(viewModel)
+        XCTAssertEqual(repository.scopes.count, 4, "The change also emptied the cache")
+    }
+
+    func testUserSwitchCountMovesOnlyOnTheUsersOwnSwitches() async {
+        let repository = StatsPageRepositoryFake { scope in Self.page(for: scope) }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+        await viewModel.refresh()
+        viewModel.retry()
+        await settle(viewModel)
+        viewModel.selectPeriod(.allTime)
+        viewModel.selectMediaType("")
+        XCTAssertEqual(viewModel.userSwitchCount, 0)
+
+        viewModel.selectMediaType("tv")
+        viewModel.selectMediaType(nil)
+        XCTAssertEqual(viewModel.userSwitchCount, 2)
+    }
+
+    func testViewModelCachesYearsAndTypesPerPerson() async {
+        let repository = StatsPageRepositoryFake { scope in
+            StatsPage(
+                years: StatsYears(first: 2014, current: 2026),
+                mediaTypes: [
+                    StatsMediaTypeCount(mediaType: "movie", titles: 3, logs: 4),
+                    StatsMediaTypeCount(mediaType: "book", titles: 1, logs: 1),
+                ],
+                header: StatsHeader(titles: 1, logs: 1, activeDays: 1, longestDailyStreak: 1, details: [])
+            )
+        }
+        let now = { Self.date("2026-05-01") }
+        let first = StatsViewModel(profileRepository: repository, username: "mika", debounce: .zero, defaults: defaults, now: now, onUnauthorized: {})
+        XCTAssertEqual(first.mediaTypes, APIConstants.fallbackMediaTypes)
+        first.appeared()
+        await settle(first)
+        XCTAssertEqual(first.periods.first, .allTime)
+        XCTAssertEqual(first.periods.last, .year(2014))
+        XCTAssertEqual(first.mediaTypes, ["movie", "book"])
+
+        // Before its first response, the next visit shows the cached pills and types.
+        let again = StatsViewModel(profileRepository: repository, username: "mika", defaults: defaults, now: now, onUnauthorized: {})
+        XCTAssertEqual(again.periods.count, 1 + 13)
+        XCTAssertEqual(again.periods.last, .year(2014))
+        XCTAssertEqual(again.mediaTypes, ["movie", "book"])
+
+        let someoneElse = StatsViewModel(profileRepository: repository, username: "zoe", defaults: defaults, now: now, onUnauthorized: {})
+        XCTAssertEqual(
+            someoneElse.periods,
+            [.allTime] + StatsPeriod.recentYears(from: now()),
+            "Nobody cached: the recent years"
+        )
+        XCTAssertEqual(someoneElse.mediaTypes, APIConstants.fallbackMediaTypes)
+    }
+
+    private var defaults: UserDefaults {
+        if let suite = statsDefaults { return suite }
+        let name = "StatsTests.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        statsDefaults = suite
+        statsDefaultsName = name
+        return suite
+    }
+
+    private func makeViewModel(_ repository: ProfileRepository, debounce: Duration = .zero) -> StatsViewModel {
+        StatsViewModel(profileRepository: repository, debounce: debounce, defaults: defaults, onUnauthorized: {})
+    }
+
+    /// Waits until the view model has no load running.
+    private func settle(_ viewModel: StatsViewModel, file: StaticString = #filePath, line: UInt = #line) async {
+        await waitUntil(file: file, line: line) { !viewModel.isLoading }
+    }
+
+    private func waitUntil(
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () -> Bool
+    ) async {
+        for _ in 0 ..< 400 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Timed out waiting", file: file, line: line)
+    }
+
+    /// A page whose header titles name its scope: the year, or 1 for All Time.
+    private static func page(for scope: StatsScope) -> StatsPage {
+        let marker: Int
+        switch scope.period {
+        case .allTime: marker = 1
+        case let .year(year): marker = year
+        }
+        return StatsPage(
+            mediaType: scope.mediaType,
+            header: StatsHeader(titles: marker, logs: marker, activeDays: 1, longestDailyStreak: 1, details: [])
+        )
+    }
+
+    private static func mediaJSON(id: Int) -> String {
+        """
+        {"ref": {"item_id": \(id), "source": "tmdb", "media_type": "movie", "media_id": "\(id)", \
+        "season_number": null, "episode_number": null}, "title": "Title \(id)", "poster_url": null}
+        """
     }
 
     private func makeAPIRepository() -> APIProfileRepository {
@@ -749,17 +831,6 @@ final class StatsTests: XCTestCase {
         let results = ids.map { mostLoggedJSON(id: $0, logCount: 2) }.joined(separator: ",")
         let nextValue = next.map { "\"\($0)\"" } ?? "null"
         return Data("{\"count\": \(count), \"next\": \(nextValue), \"previous\": null, \"results\": [\(results)]}".utf8)
-    }
-
-    private static func mostLoggedPage(ids: [Int], count: Int, next: String?) throws -> PagedResponse<StatsMostLoggedItem> {
-        try JSONDecoder.api.decode(
-            PagedResponse<StatsMostLoggedItem>.self,
-            from: mostLoggedPageData(ids: ids, count: count, next: next)
-        )
-    }
-
-    private static func summary(completedCount: Int) -> StatsSummary {
-        StatsSummary(overview: StatsOverview(completedCount: completedCount))
     }
 
     private static func utcDate(year: Int, month: Int, day: Int) -> Date? {
@@ -933,40 +1004,20 @@ private final class StatsProfileRepositoryFake: ProfileRepository {
     func clearHallOfFameItem(mediaType: String) async throws -> [String: MediaSummary?] { fatalError("Not used") }
 }
 
-private struct StatsMostLoggedFakeRequest: Equatable {
-    let username: String?
-    let period: StatsPeriod
-    let mediaType: String?
-    let page: String?
-    let pageSize: Int
-}
+private final class StatsPageRepositoryFake: ProfileRepository {
+    typealias Handler = (StatsScope) async throws -> StatsPage
 
-private final class StatsMostLoggedRepositoryFake: ProfileRepository {
-    typealias Handler = (StatsMostLoggedFakeRequest) async throws -> PagedResponse<StatsMostLoggedItem>
-
-    private(set) var requests: [StatsMostLoggedFakeRequest] = []
+    private(set) var scopes: [StatsScope] = []
     private let handler: Handler
 
     init(handler: @escaping Handler) {
         self.handler = handler
     }
 
-    func statsMostLogged(
-        username: String?,
-        period: StatsPeriod,
-        mediaType: String?,
-        page: String?,
-        pageSize: Int
-    ) async throws -> PagedResponse<StatsMostLoggedItem> {
-        let request = StatsMostLoggedFakeRequest(
-            username: username,
-            period: period,
-            mediaType: mediaType,
-            page: page,
-            pageSize: pageSize
-        )
-        requests.append(request)
-        return try await handler(request)
+    func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage {
+        let scope = StatsScope(period: period, mediaType: mediaType)
+        scopes.append(scope)
+        return try await handler(scope)
     }
 
     func me() async throws -> UserProfile { fatalError("Not used") }

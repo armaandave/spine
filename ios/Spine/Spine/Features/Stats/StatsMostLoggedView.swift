@@ -1,42 +1,49 @@
 import SwiftUI
 
+/// A row of a Stats show-all page: anything with a poster.
+protocol StatsPosterTitle: Identifiable {
+    var media: MediaSummary { get }
+}
+
+extension StatsMostLoggedTitle: StatsPosterTitle {}
+extension StatsRatedTitle: StatsPosterTitle {}
+
+/// The pages of a Stats show-all list (STAT-310), loaded a page at a time as the grid scrolls.
 @MainActor
 @Observable
-final class StatsMostLoggedViewModel {
-    static let pageSize = 48
-    // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
-    private static let prefetchDistance = ArtworkPrefetch.lookahead
+final class StatsTitlesPageModel<Item: Identifiable> {
+    struct Page {
+        let count: Int
+        let next: String?
+        let results: [Item]
+    }
 
-    private(set) var items: [StatsMostLoggedItem] = []
+    /// Loads one page: `page` is nil for the first, then the next page's number.
+    typealias Fetch = @MainActor (_ page: String?, _ pageSize: Int) async throws -> Page
+
+    let pageSize: Int
+    private(set) var items: [Item] = []
     private(set) var totalCount: Int
     private(set) var isLoadingInitial = false
     private(set) var isLoadingNextPage = false
     private(set) var errorMessage: String?
     private(set) var nextPageErrorMessage: String?
 
-    let period: StatsPeriod
-    let mediaType: String?
-
-    private let profileRepository: ProfileRepository
-    private let username: String?
-    private let onUnauthorized: () -> Void
+    @ObservationIgnored private let fetch: Fetch
+    @ObservationIgnored private let onUnauthorized: () -> Void
     private var nextPage: String?
     private var requestGeneration = 0
 
     init(
-        profileRepository: ProfileRepository,
-        username: String?,
-        period: StatsPeriod,
-        mediaType: String?,
+        pageSize: Int = 48,
         expectedTotal: Int = 0,
-        onUnauthorized: @escaping () -> Void
+        onUnauthorized: @escaping () -> Void,
+        fetch: @escaping Fetch
     ) {
-        self.profileRepository = profileRepository
-        self.username = username
-        self.period = period
-        self.mediaType = mediaType
+        self.pageSize = pageSize
         self.totalCount = expectedTotal
         self.onUnauthorized = onUnauthorized
+        self.fetch = fetch
     }
 
     var hasMorePages: Bool {
@@ -47,6 +54,9 @@ final class StatsMostLoggedViewModel {
         requestGeneration &+= 1
         let generation = requestGeneration
         isLoadingInitial = true
+        // A next page still on its way belongs to the old generation and won't clear its own
+        // flag, so clear it here or paging would stay blocked.
+        isLoadingNextPage = false
         errorMessage = nil
         nextPageErrorMessage = nil
         defer {
@@ -56,7 +66,7 @@ final class StatsMostLoggedViewModel {
         }
 
         do {
-            let response = try await fetch(page: nil)
+            let response = try await fetch(nil, pageSize)
             guard generation == requestGeneration else { return }
             apply(response, replacingItems: true)
         } catch is CancellationError {
@@ -68,9 +78,11 @@ final class StatsMostLoggedViewModel {
         }
     }
 
-    func loadNextPageIfNeeded(currentItemID: StatsMostLoggedItem.ID) async {
+    /// Loads the next page once `currentItemID` is within the artwork prefetch's reach of the
+    /// end, so the next page's posters can be prefetched before they're reached.
+    func loadNextPageIfNeeded(currentItemID: Item.ID) async {
         guard let currentIndex = items.firstIndex(where: { $0.id == currentItemID }),
-              currentIndex >= items.count - Self.prefetchDistance else { return }
+              currentIndex >= items.count - ArtworkPrefetch.lookahead else { return }
         await loadNextPage()
     }
 
@@ -87,7 +99,7 @@ final class StatsMostLoggedViewModel {
         }
 
         do {
-            let response = try await fetch(page: page)
+            let response = try await fetch(page, pageSize)
             guard generation == requestGeneration else { return }
             apply(response, replacingItems: false)
         } catch is CancellationError {
@@ -99,17 +111,7 @@ final class StatsMostLoggedViewModel {
         }
     }
 
-    private func fetch(page: String?) async throws -> PagedResponse<StatsMostLoggedItem> {
-        try await profileRepository.statsMostLogged(
-            username: username,
-            period: period,
-            mediaType: mediaType,
-            page: page,
-            pageSize: Self.pageSize
-        )
-    }
-
-    private func apply(_ response: PagedResponse<StatsMostLoggedItem>, replacingItems: Bool) {
+    private func apply(_ response: Page, replacingItems: Bool) {
         totalCount = response.count
         nextPage = APIPageCursor.nextPage(from: response.next)
 
@@ -128,25 +130,61 @@ final class StatsMostLoggedViewModel {
     }
 }
 
-/// Every title logged at least twice in the current Stats scope, loaded a
-/// page at a time as the grid scrolls.
+extension StatsTitlesPageModel.Page where Item: Decodable {
+    init(_ response: PagedResponse<Item>) {
+        self.init(count: response.count, next: response.next, results: response.results)
+    }
+}
+
+typealias StatsMostLoggedViewModel = StatsTitlesPageModel<StatsMostLoggedTitle>
+
+extension StatsTitlesPageModel where Item == StatsMostLoggedTitle {
+    /// Most logged's show-all pages, folded to the show (`schema=2`, STAT-215).
+    static func mostLogged(
+        profileRepository: ProfileRepository,
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        expectedTotal: Int = 0,
+        onUnauthorized: @escaping () -> Void
+    ) -> StatsMostLoggedViewModel {
+        StatsMostLoggedViewModel(expectedTotal: expectedTotal, onUnauthorized: onUnauthorized) { page, pageSize in
+            let response = try await profileRepository.statsMostLoggedTitles(
+                username: username,
+                period: period,
+                mediaType: mediaType,
+                page: page,
+                pageSize: pageSize
+            )
+            return Page(response)
+        }
+    }
+}
+
+/// Every title logged at least twice in the current Stats scope (STAT-215), with "5 times"
+/// under each poster.
 struct StatsMostLoggedView: View {
     @State private var viewModel: StatsMostLoggedViewModel
-    @State private var selectedRef: MediaRef?
+    let title: String
+    let scopeTitle: String
+    let drillDownContext: StatsDrillDownContext?
+    let mediaRepository: MediaRepository
+    let trackingRepository: TrackingRepository
+    let diaryRepository: DiaryRepository
+    let listRepository: ListRepository
+    let currentUserId: Int?
+    let selectedTab: AppTab
+    let onSelectTab: (AppTab) -> Void
+    let onUnauthorized: () -> Void
 
-    private let scopeTitle: String
-    private let mediaRepository: MediaRepository
-    private let trackingRepository: TrackingRepository
-    private let diaryRepository: DiaryRepository
-    private let listRepository: ListRepository
-    private let currentUserId: Int?
-    private let selectedTab: AppTab
-    private let onSelectTab: (AppTab) -> Void
-    private let onUnauthorized: () -> Void
-
+    /// `title` is the section's label ("Most watched"); `scopeTitle` names the tab and range
+    /// ("Movies · 2025"). `drillDownContext` makes a poster open the same thing it opens on the
+    /// page (STAT-401); nil opens the title page.
     init(
         viewModel: StatsMostLoggedViewModel,
+        title: String = "Most logged",
         scopeTitle: String,
+        drillDownContext: StatsDrillDownContext? = nil,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
@@ -157,7 +195,9 @@ struct StatsMostLoggedView: View {
         onUnauthorized: @escaping () -> Void
     ) {
         _viewModel = State(initialValue: viewModel)
+        self.title = title
         self.scopeTitle = scopeTitle
+        self.drillDownContext = drillDownContext
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -169,30 +209,109 @@ struct StatsMostLoggedView: View {
     }
 
     var body: some View {
-        ZStack {
-            SpinePageBackground()
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
-                    StatsHeadline(
-                        value: viewModel.totalCount.formatted(),
-                        unit: viewModel.totalCount == 1 ? "title" : "titles",
-                        caption: "Logged twice or more · \(scopeTitle)"
-                    )
-
-                    content
-                        .spineContentTransition(value: contentPhase)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 40)
-            }
-            .scrollEdgeEffectStyle(.soft, for: .top)
-            .refreshable {
-                await viewModel.load()
-            }
+        StatsTitlesGridScreen(
+            viewModel: viewModel,
+            title: title,
+            caption: "Logged twice or more · \(scopeTitle)",
+            emptyTitle: "Nothing logged twice yet",
+            emptyMessage: "Titles you log more than once will appear here.",
+            gridID: "mostLoggedAll",
+            drillDownContext: drillDownContext,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
+            listRepository: listRepository,
+            currentUserId: currentUserId,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            onUnauthorized: onUnauthorized
+        ) { item, open in
+            StatsMostLoggedPosterCell(title: item, action: open)
         }
-        .navigationTitle("Most Logged")
+    }
+}
+
+/// A Stats show-all page: the count, then the posters in rows of four (each row its own lazy
+/// item), loading the next page as the end comes near. Tapping a poster opens what it opens on
+/// the page: on your own stats the title's logs, otherwise the title page (STAT-401).
+struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
+    let viewModel: StatsTitlesPageModel<Item>
+    let title: String
+    let caption: String
+    let emptyTitle: String
+    let emptyMessage: String
+    let gridID: String
+    /// Whose stats and which scope; nil always opens the title page.
+    let drillDownContext: StatsDrillDownContext?
+    let mediaRepository: MediaRepository
+    let trackingRepository: TrackingRepository
+    let diaryRepository: DiaryRepository
+    let listRepository: ListRepository
+    let currentUserId: Int?
+    let selectedTab: AppTab
+    let onSelectTab: (AppTab) -> Void
+    let onUnauthorized: () -> Void
+    /// The cell for an item; call `open` to open it.
+    let cell: (_ item: Item, _ open: @escaping () -> Void) -> Cell
+
+    @State private var selectedRef: MediaRef?
+    @State private var diaryRoute: StatsRoute?
+
+    init(
+        viewModel: StatsTitlesPageModel<Item>,
+        title: String,
+        caption: String,
+        emptyTitle: String,
+        emptyMessage: String,
+        gridID: String,
+        drillDownContext: StatsDrillDownContext? = nil,
+        mediaRepository: MediaRepository,
+        trackingRepository: TrackingRepository,
+        diaryRepository: DiaryRepository,
+        listRepository: ListRepository,
+        currentUserId: Int?,
+        selectedTab: AppTab,
+        onSelectTab: @escaping (AppTab) -> Void,
+        onUnauthorized: @escaping () -> Void,
+        @ViewBuilder cell: @escaping (_ item: Item, _ open: @escaping () -> Void) -> Cell
+    ) {
+        self.viewModel = viewModel
+        self.title = title
+        self.caption = caption
+        self.emptyTitle = emptyTitle
+        self.emptyMessage = emptyMessage
+        self.gridID = gridID
+        self.drillDownContext = drillDownContext
+        self.mediaRepository = mediaRepository
+        self.trackingRepository = trackingRepository
+        self.diaryRepository = diaryRepository
+        self.listRepository = listRepository
+        self.currentUserId = currentUserId
+        self.selectedTab = selectedTab
+        self.onSelectTab = onSelectTab
+        self.onUnauthorized = onUnauthorized
+        self.cell = cell
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                headline
+                    .padding(.bottom, 20)
+
+                contentRows
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 40)
+        }
+        .refreshable {
+            await viewModel.load()
+        }
+        .background {
+            LogBackdrop(url: URL(string: viewModel.items.first?.media.displayPosterURL ?? ""))
+        }
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -218,53 +337,83 @@ struct StatsMostLoggedView: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationDestination(item: $diaryRoute) { route in
+            if case let .diary(drillDown, context) = route {
+                FilteredDiaryView(
+                    title: drillDown.diaryTitle(in: context),
+                    filter: drillDown.diaryFilter(in: context),
+                    diaryRepository: diaryRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
+        }
+    }
+
+    /// The page's drill-down for a title: its logs on your own stats, else the title page.
+    private func open(_ item: Item) {
+        if let drillDownContext,
+           case let .diary(drillDown, context)? = StatsDrillDown.title(item.media).route(in: drillDownContext) {
+            diaryRoute = .diary(drillDown, context)
+        } else {
+            selectedRef = item.media.ref
+        }
+    }
+
+    private var headline: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(viewModel.totalCount.formatted()) \(viewModel.totalCount == 1 ? "title" : "titles")")
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .contentTransition(.numericText())
+            Text(caption)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.55))
+        }
+        .padding(.leading, 4)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var contentRows: some View {
         if let error = viewModel.errorMessage, viewModel.items.isEmpty {
             VStack(spacing: 16) {
-                ContentUnavailableView(
-                    "Could not load titles",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(error)
-                )
-                .foregroundStyle(.white)
-
-                retryButton {
+                DiaryStateCard(title: "Couldn't load titles", systemImage: "exclamationmark.triangle", message: error)
+                Button("Try Again") {
                     Task { await viewModel.load() }
                 }
+                .buttonStyle(.bordered)
+                .tint(.white)
             }
-            .frame(maxWidth: .infinity, minHeight: 320)
         } else if viewModel.items.isEmpty, viewModel.isLoadingInitial || viewModel.totalCount > 0 {
-            StatsPosterGridSkeleton(count: min(max(viewModel.totalCount, 8), 16))
+            ProgressView()
+                .tint(.white)
+                .frame(maxWidth: .infinity, minHeight: 320)
         } else if viewModel.items.isEmpty {
-            ContentUnavailableView(
-                "Nothing logged twice yet",
-                systemImage: "arrow.clockwise",
-                description: Text("Titles you log more than once will appear here.")
-            )
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 320)
+            DiaryStateCard(title: emptyTitle, systemImage: "square.grid.2x2", message: emptyMessage)
         } else {
-            VStack(spacing: 0) {
-                StatsPosterGrid(
-                    items: viewModel.items.map {
-                        StatsPosterItem(
-                            media: $0.media,
-                            caption: "\($0.logCount.formatted())×",
-                            accessibilityCaption: "\($0.logCount.formatted()) \($0.logCount == 1 ? "log" : "logs")"
-                        )
-                    },
-                    onItemAppear: { item in
-                        Task { await viewModel.loadNextPageIfNeeded(currentItemID: item.id) }
-                    }
-                ) { media in
-                    selectedRef = media.ref
+            let items = viewModel.items
+            ForEach(StatsPosterGridLayout.rows(items, idPrefix: gridID)) { row in
+                StatsPosterGridRowView(row: row) { item in
+                    cell(item) { open(item) }
                 }
-
-                paginationFooter
+                .padding(.bottom, StatsPosterGridLayout.rowSpacing)
+                .onAppear {
+                    guard let last = row.items.last else { return }
+                    ArtworkPrefetch.prefetch(
+                        ArtworkPrefetch.upcoming(after: last, in: items)
+                            .compactMap { $0.media.artworkRequest(slot: StatsPosterGridLayout.slot) }
+                    )
+                    Task { await viewModel.loadNextPageIfNeeded(currentItemID: last.id) }
+                }
             }
+
+            paginationFooter
         }
     }
 
@@ -276,58 +425,19 @@ struct StatsMostLoggedView: View {
                     .tint(.white)
             } else if viewModel.nextPageErrorMessage != nil {
                 VStack(spacing: 8) {
-                    Text("Could not load more")
-                        .font(.system(size: 13, weight: .semibold))
+                    Text("Couldn't load more")
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.6))
-                    retryButton {
+                    Button("Try Again") {
                         Task { await viewModel.loadNextPage() }
                     }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
                 }
             } else {
                 Color.clear
             }
         }
         .frame(maxWidth: .infinity, minHeight: 64)
-    }
-
-    private func retryButton(action: @escaping () -> Void) -> some View {
-        Button("Try Again", action: action)
-            .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(.black)
-            .padding(.horizontal, 22)
-            .frame(minHeight: 44)
-            .background(.white.opacity(0.92), in: Capsule())
-            .buttonStyle(.plain)
-    }
-
-    private var contentPhase: SpineContentPhase {
-        .resolve(
-            isLoading: viewModel.isLoadingInitial,
-            hasContent: !viewModel.items.isEmpty,
-            hasError: viewModel.errorMessage != nil
-        )
-    }
-}
-
-private struct StatsPosterGridSkeleton: View {
-    let count: Int
-
-    @State private var isDimmed = false
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(0 ..< count, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: PosterSlot.tagGrid.cornerRadius, style: .continuous)
-                    .fill(.white.opacity(0.07))
-                    .frame(width: PosterSlot.tagGrid.size.width, height: PosterSlot.tagGrid.size.height)
-            }
-        }
-        .opacity(isDimmed ? 0.55 : 1)
-        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: isDimmed)
-        .onAppear { isDimmed = true }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading titles")
     }
 }
