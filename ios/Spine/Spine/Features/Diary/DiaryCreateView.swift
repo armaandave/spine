@@ -169,9 +169,10 @@ final class DiaryCreateViewModel {
                 if envelope.hasFollowUp {
                     let followUp = TVWriteFollowUp(
                         showRef: selectedMedia.ref,
-                        trackingRepository: trackingRepository ?? AppRepositories.current().tracking,
-                        mediaRepository: mediaRepository
+                        trackingRepository: trackingRepository ?? AppRepositories.current().tracking
                     )
+                    let context = TVWriteFollowUp.context(show: selectedMedia)
+                    followUp.context = { context }
                     followUp.handle(envelope)
                     tvFollowUp = followUp
                 }

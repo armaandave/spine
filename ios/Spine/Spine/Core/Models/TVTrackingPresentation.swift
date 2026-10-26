@@ -134,6 +134,14 @@ nonisolated enum TVTrackingPresentation {
         return upNext.isNew ? "\(code) · New" : "\(code) next"
     }
 
+    // MARK: Show page Up next (TV-105)
+
+    /// The label over the show page's Up next row, which names the season the row's episode is in: "Up next ·
+    /// Season 2", or "New episode · Season 3" when it aired after the user's latest viewing of the show.
+    static func upNextLabel(for upNext: TVEpisodePointer) -> String {
+        "\(upNext.isNew ? "New episode" : "Up next") · \(seasonTitle(upNext.seasonNumber))"
+    }
+
     // MARK: Seasons (TV-200, TV-204)
 
     /// A season card's label: "Watched", "Airing", "6 of 10", or "9 of 10 · E4 not watched". A started, unfinished
@@ -247,7 +255,8 @@ nonisolated enum TVTrackingPresentation {
     }
 
     /// The show's + menu: Watching (and Resume when Paused), Planning, Pause, Drop, Rewatch or Stop Rewatching,
-    /// Log and Remove from Library. Base options are always listed; unavailable ones carry the server's reason.
+    /// Log, and Remove from Library for a show in the library. Base options are always listed; unavailable ones
+    /// carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server sends.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
@@ -263,10 +272,9 @@ nonisolated enum TVTrackingPresentation {
             items.append(stop)
         }
         items.append(menu.item("log", "Log", "square.and.pencil", .log))
-        items.append(menu.item(
-            "remove", "Remove from Library", "trash", .confirmRemove,
-            fallbackReason: tv.inLibrary ? nil : "This show isn't in your library."
-        ))
+        if tv.inLibrary {
+            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
+        }
         return items
     }
 
@@ -293,16 +301,10 @@ nonisolated enum TVTrackingPresentation {
         let reasons: [String: String]
         let selected: String?
 
-        func item(
-            _ key: String,
-            _ title: String,
-            _ systemImage: String,
-            _ command: TVMenuItem.Command,
-            fallbackReason: String? = nil
-        ) -> TVMenuItem {
+        func item(_ key: String, _ title: String, _ systemImage: String, _ command: TVMenuItem.Command) -> TVMenuItem {
             let isSelected = selected == key
             let isAvailable = !isSelected && available.contains(key)
-            let reason = isSelected || isAvailable ? nil : (reasons[key] ?? fallbackReason ?? "Not available right now.")
+            let reason = isSelected || isAvailable ? nil : (reasons[key] ?? "Not available right now.")
             return TVMenuItem(
                 key: key,
                 title: title,

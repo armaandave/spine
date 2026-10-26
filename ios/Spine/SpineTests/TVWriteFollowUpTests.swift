@@ -6,14 +6,12 @@ import XCTest
 @MainActor
 final class TVWriteFollowUpTests: XCTestCase {
     private var tracking: TVDataTrackingRepository!
-    private var media: TVDataMediaRepository!
     private var followUp: TVWriteFollowUp!
 
     override func setUp() async throws {
         try await super.setUp()
         tracking = TVDataTrackingRepository()
-        media = TVDataMediaRepository()
-        followUp = TVWriteFollowUp(showRef: Self.showRef, trackingRepository: tracking, mediaRepository: media)
+        followUp = TVWriteFollowUp(showRef: Self.showRef, trackingRepository: tracking)
     }
 
     func testTV107AsksBeforeOpeningTheComposerAndYesSendsMarkEarlier() async throws {
@@ -22,7 +20,6 @@ final class TVWriteFollowUpTests: XCTestCase {
                                         earlierUnwatched: Self.question(offer: 3)))
         XCTAssertEqual(followUp.question?.question, "Also mark Seasons 1–2 watched?")
         XCTAssertNil(followUp.composer, "The question comes before the composer.")
-        XCTAssertTrue(media.detailRequests.isEmpty)
 
         tracking.actionResponses = [TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(
             changed: true,
@@ -46,8 +43,7 @@ final class TVWriteFollowUpTests: XCTestCase {
         XCTAssertEqual(folded.count, 1, "The page folds in the Yes response.")
 
         XCTAssertEqual(followUp.composer?.finished.seasonNumber, 3, "The first response's season opens, not one Yes finished.")
-        XCTAssertEqual(media.detailRequests.map(\.mediaType), ["season"])
-        XCTAssertEqual(media.detailRequests.map(\.seasonNumber), [3])
+        XCTAssertEqual(followUp.composer?.detail.ref.mediaType, "season")
         XCTAssertEqual(followUp.composer?.detail.ref.seasonNumber, 3)
     }
 
@@ -62,7 +58,7 @@ final class TVWriteFollowUpTests: XCTestCase {
         XCTAssertNil(followUp.composer)
         await followUp.answer(yes: true)
         XCTAssertTrue(tracking.actions.isEmpty, "The question is used up once answered.")
-        XCTAssertEqual(media.detailRequests.count, 1, "The composer opens once.")
+        XCTAssertNil(followUp.composer, "The composer opens once.")
     }
 
     func testTV403YesOpensTheWritesOwnSeasonWhenYesFinishesIt() async {
@@ -74,7 +70,7 @@ final class TVWriteFollowUpTests: XCTestCase {
         ))]
         await followUp.answer(yes: true)
         XCTAssertEqual(followUp.composer?.finished.seasonNumber, 1)
-        XCTAssertEqual(media.detailRequests.map(\.seasonNumber), [1])
+        XCTAssertEqual(followUp.composer?.detail.ref.seasonNumber, 1)
     }
 
     func testTV107ASeasonOnlyTheYesFinishedGetsNoComposer() async {
@@ -87,10 +83,9 @@ final class TVWriteFollowUpTests: XCTestCase {
         await followUp.answer(yes: true)
         XCTAssertEqual(tracking.actions.count, 1)
         XCTAssertNil(followUp.composer)
-        XCTAssertTrue(media.detailRequests.isEmpty)
 
         // A Yes response naming another season than the write's own is ignored too.
-        let other = TVWriteFollowUp(showRef: Self.showRef, trackingRepository: tracking, mediaRepository: media)
+        let other = TVWriteFollowUp(showRef: Self.showRef, trackingRepository: tracking)
         other.handle(TVWriteEnvelope(changed: true, earlierUnwatched: Self.question(offer: 3)))
         tracking.actionResponses = [TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(
             changed: true,
@@ -98,18 +93,62 @@ final class TVWriteFollowUpTests: XCTestCase {
         ))]
         await other.answer(yes: true)
         XCTAssertNil(other.composer)
-        XCTAssertTrue(media.detailRequests.isEmpty)
     }
 
-    func testTV403AFinishedSeasonWithoutAQuestionOpensItsComposer() async throws {
+    func testTV403AFinishedSeasonWithoutAQuestionOpensItsComposerInTheSameTurn() throws {
+        // Nothing is loaded or awaited between the response and the composer.
+        followUp.context = { Self.showDetail }
         followUp.handle(TVWriteEnvelope(changed: true, finished: Self.finished(season: 1)))
         XCTAssertNil(followUp.question)
-        await followUp.loading?.value
+        XCTAssertNil(followUp.loading, "Nothing is loaded first")
         let composer = try XCTUnwrap(followUp.composer)
         XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
         XCTAssertEqual(composer.finished.composer.initialTarget?.date, "2026-10-24", "Dated with the finishing tick's day.")
-        XCTAssertEqual(media.detailRequests, [MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399",
-                                                       seasonNumber: 1, episodeNumber: nil)])
+        XCTAssertEqual(composer.detail.ref, Self.seasonRef(1))
+        XCTAssertEqual(composer.detail.title, "Game of Thrones", "The header names the show")
+        XCTAssertEqual(composer.detail.displayPosterURL, "https://img/s1.jpg", "with the season's poster")
+        XCTAssertEqual(composer.detail.displayBackdropURL, "https://img/backdrop.jpg")
+        XCTAssertTrue(followUp.isActive)
+        followUp.composerDismissed()
+        XCTAssertFalse(followUp.isActive)
+    }
+
+    func testTV403TheComposerHeaderComesFromWhatTheScreenAlreadyHas() {
+        let finished = Self.finished(season: 2)
+        // A season page finishing its own season opens on its own detail.
+        let seasonPage = MediaDetail(ref: MediaRef(itemId: 9, source: "tmdb", mediaType: "season", mediaId: "1399",
+                                                   seasonNumber: 2, episodeNumber: nil),
+                                     title: "Game of Thrones", posterUrl: "https://img/s2-page.jpg")
+        let fromSeason = TVWriteFollowUp.composerDetail(for: finished, showRef: Self.showRef, context: seasonPage)
+        XCTAssertEqual(fromSeason.ref.itemId, 9)
+        XCTAssertEqual(fromSeason.displayPosterURL, "https://img/s2-page.jpg")
+
+        // A show with no poster for that season falls back to the show's own.
+        let fromShow = TVWriteFollowUp.composerDetail(for: finished, showRef: Self.showRef, context: Self.showDetail)
+        XCTAssertEqual(fromShow.ref, Self.seasonRef(2))
+        XCTAssertEqual(fromShow.title, "Game of Thrones")
+        XCTAssertEqual(fromShow.displayPosterURL, "https://img/show.jpg")
+
+        // Continue Watching has the show's summary.
+        let summary = MediaSummary(ref: Self.showRef, title: "Game of Thrones", posterUrl: "https://img/show.jpg",
+                                   posterOrientation: .portrait)
+        let fromHome = TVWriteFollowUp.composerDetail(for: finished, showRef: Self.showRef,
+                                                      context: TVWriteFollowUp.context(show: summary))
+        XCTAssertEqual(fromHome.ref, Self.seasonRef(2))
+        XCTAssertEqual(fromHome.title, "Game of Thrones")
+        XCTAssertEqual(fromHome.displayPosterURL, "https://img/show.jpg")
+
+        // An episode page names its show in its details; its title is the episode's.
+        let episodePage = MediaDetail(ref: MediaRef(itemId: nil, source: "tmdb", mediaType: "episode", mediaId: "1399",
+                                                    seasonNumber: 2, episodeNumber: 10),
+                                      title: "Valar Morghulis", details: ["series_title": .string("Game of Thrones")])
+        XCTAssertEqual(TVWriteFollowUp.composerDetail(for: finished, showRef: Self.showRef, context: episodePage).title,
+                       "Game of Thrones")
+
+        // With nothing known, the season's own name.
+        let unknown = TVWriteFollowUp.composerDetail(for: finished, showRef: Self.showRef, context: nil)
+        XCTAssertEqual(unknown.ref, Self.seasonRef(2))
+        XCTAssertEqual(unknown.title, "Season 2")
     }
 
     func testNothingToFollowUpDoesNothing() async {
@@ -118,7 +157,6 @@ final class TVWriteFollowUpTests: XCTestCase {
         await followUp.loading?.value
         XCTAssertNil(followUp.question)
         XCTAssertNil(followUp.composer)
-        XCTAssertTrue(media.detailRequests.isEmpty)
         XCTAssertTrue(tracking.actions.isEmpty)
     }
 
@@ -164,26 +202,9 @@ final class TVWriteFollowUpTests: XCTestCase {
         XCTAssertEqual(followUp.composer?.finished.seasonNumber, 3)
     }
 
-    func testTV403TheComposerOpensEvenWhenTheSeasonPageCantLoad() async throws {
-        // The server offers the season's log once; a failed page load must not use the offer up silently.
-        media.detailError = APIError.network(URLError(.timedOut))
-        followUp.showTitle = "Breaking Bad"
-        followUp.handle(TVWriteEnvelope(changed: true, finished: Self.finished(season: 1)))
-        XCTAssertTrue(followUp.isActive, "Loading counts as active")
-        await followUp.loading?.value
-
-        let composer = try XCTUnwrap(followUp.composer)
-        XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
-        XCTAssertEqual(composer.detail.ref, MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399",
-                                                     seasonNumber: 1, episodeNumber: nil))
-        XCTAssertEqual(composer.detail.title, "Breaking Bad")
-        followUp.composerDismissed()
-        XCTAssertFalse(followUp.isActive)
-    }
-
     func testASeasonOrEpisodeRefActsOnTheShow() {
         let season = MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399", seasonNumber: 2, episodeNumber: nil)
-        let followUp = TVWriteFollowUp(showRef: season, trackingRepository: tracking, mediaRepository: media)
+        let followUp = TVWriteFollowUp(showRef: season, trackingRepository: tracking)
         XCTAssertEqual(followUp.showRef, Self.showRef)
     }
 
@@ -191,6 +212,24 @@ final class TVWriteFollowUpTests: XCTestCase {
 
     private static let showRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1399",
                                           seasonNumber: nil, episodeNumber: nil)
+
+    private static func seasonRef(_ season: Int) -> MediaRef {
+        MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399", seasonNumber: season, episodeNumber: nil)
+    }
+
+    /// The show page: Season 1 has a poster of its own, Season 2 doesn't.
+    private static let showDetail = MediaDetail(
+        ref: MediaRef(itemId: 7, source: "tmdb", mediaType: "tv", mediaId: "1399", seasonNumber: nil, episodeNumber: nil),
+        title: "Game of Thrones",
+        posterUrl: "https://img/show.jpg",
+        backdropUrl: "https://img/backdrop.jpg",
+        seasons: [
+            SeasonSummary(seasonNumber: 1, title: "Season 1", episodeCount: 10, imageUrl: "https://img/s1.jpg",
+                          releaseDate: nil, completion: nil),
+            SeasonSummary(seasonNumber: 2, title: "Season 2", episodeCount: 10, imageUrl: nil,
+                          releaseDate: nil, completion: nil),
+        ]
+    )
 
     private static func finished(season: Int) -> TVFinished {
         TVFinished(seasonNumber: season, composer: TVComposer(defaultTarget: "season:\(season)", targets: [
@@ -209,25 +248,4 @@ final class TVWriteFollowUpTests: XCTestCase {
             offerSeasonNumber: offer
         )
     }
-}
-
-final class TVDataMediaRepository: MediaRepository {
-    var detailRequests: [MediaRef] = []
-    var detailError: Error?
-
-    func detail(ref: MediaRef) async throws -> MediaDetail {
-        detailRequests.append(ref)
-        if let detailError { throw detailError }
-        return MediaDetail(ref: ref, title: ref.seasonNumber.map { "Season \($0)" } ?? "A Show")
-    }
-
-    func meta() async throws -> MetaResponse { fatalError("Not used") }
-    func search(query: String, mediaType: String) async throws -> [MediaSummary] { fatalError("Not used") }
-    func reviews(ref: MediaRef) async throws -> [MediaReview] { fatalError("Not used") }
-    func posters(ref: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
-    func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse { fatalError("Not used") }
-    func backdrops(ref: MediaRef) async throws -> [PosterOption] { fatalError("Not used") }
-    func saveBackdrop(ref: MediaRef, backdropURL: String) async throws -> BackdropSaveResponse { fatalError("Not used") }
-    func logos(ref: MediaRef) async throws -> [LogoOption] { fatalError("Not used") }
-    func saveLogo(ref: MediaRef, logoURL: String) async throws -> LogoSaveResponse { fatalError("Not used") }
 }

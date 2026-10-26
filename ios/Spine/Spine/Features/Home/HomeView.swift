@@ -19,12 +19,10 @@ final class ContinueWatchingTicks {
     let changeOrigin = UUID()
 
     @ObservationIgnored private let trackingRepository: TrackingRepository
-    @ObservationIgnored private let mediaRepository: MediaRepository
     @ObservationIgnored private let onUnauthorized: () -> Void
 
-    init(trackingRepository: TrackingRepository, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
+    init(trackingRepository: TrackingRepository, onUnauthorized: @escaping () -> Void) {
         self.trackingRepository = trackingRepository
-        self.mediaRepository = mediaRepository
         self.onUnauthorized = onUnauthorized
     }
 
@@ -77,8 +75,9 @@ final class ContinueWatchingTicks {
             return existing
         }
         followUps.removeAll { !$0.isActive }
-        let next = TVWriteFollowUp(showRef: ref, trackingRepository: trackingRepository, mediaRepository: mediaRepository)
-        next.showTitle = item.media.title
+        let next = TVWriteFollowUp(showRef: ref, trackingRepository: trackingRepository)
+        let context = TVWriteFollowUp.context(show: item.media)
+        next.context = { context }
         followUps.append(next)
         return next
     }
@@ -143,18 +142,13 @@ final class HomeViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
-        mediaRepository: MediaRepository? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
-        continueWatching = ContinueWatchingTicks(
-            trackingRepository: trackingRepository,
-            mediaRepository: mediaRepository ?? AppRepositories.current().media,
-            onUnauthorized: onUnauthorized
-        )
+        continueWatching = ContinueWatchingTicks(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
     }
 
     func load() async {
@@ -294,7 +288,6 @@ struct HomeView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
-            mediaRepository: mediaRepository,
             onUnauthorized: onUnauthorized
         ))
     }

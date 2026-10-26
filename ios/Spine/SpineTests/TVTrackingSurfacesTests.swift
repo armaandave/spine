@@ -174,7 +174,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode", "movie"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
 
@@ -195,7 +194,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
         await viewModel.load()
@@ -226,23 +224,48 @@ final class TVTrackingSurfacesTests: XCTestCase {
         let followUp = try XCTUnwrap(viewModel.continueWatching.followUp)
         XCTAssertEqual(followUp.showRef.mediaType, "tv")
         XCTAssertEqual(followUp.showRef.mediaId, "1396")
-        await followUp.loading?.value
         let composer = try XCTUnwrap(followUp.composer)
         XCTAssertEqual(composer.finished.seasonNumber, 1)
         XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
-        XCTAssertEqual(media.detailRequests.map(\.mediaType), ["season"])
-        XCTAssertEqual(media.detailRequests.map(\.seasonNumber), [1])
+        XCTAssertEqual(composer.detail.ref.mediaType, "season")
+        XCTAssertEqual(composer.detail.ref.seasonNumber, 1)
+        XCTAssertEqual(composer.detail.title, "Breaking Bad", "The header comes from the row: nothing is loaded")
+    }
+
+    func testTV403HomeTickOpensTheComposerAsSoonAsTheTickAnswers() async throws {
+        // The composer is up before the rail starts reloading: nothing after the tick's response is awaited.
+        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
+        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [show])
+        let viewModel = HomeViewModel(
+            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
+            trackingRepository: tracking,
+            activityRepository: SurfacesActivityRepository(),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        tracking.actionResponses = [TVActionResponse(
+            tracking: nil,
+            envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))
+        )]
+        var composerWhenTheRailReloads: Int?
+        tracking.onContinueWatching = {
+            composerWhenTheRailReloads = viewModel.continueWatching.followUp?.composer?.finished.seasonNumber
+        }
+
+        await viewModel.tickUpNext(show)
+
+        XCTAssertEqual(composerWhenTheRailReloads, 1, "The composer is already up when the rail starts reloading")
+        XCTAssertNil(viewModel.continueWatching.followUp?.loading, "Nothing was loaded for it")
     }
 
     func testTV403TicksOnTwoShowsKeepEachShowsComposer() async throws {
-        // Show A's tick finishes its season; show B's tick answers while A's composer is still loading.
+        // Show A's tick finishes its season; show B's ticks answer while A's composer is still open.
         let showA = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
         let showB = Self.showItem("1399", "Game of Thrones", tv: Self.showState(status: "In progress", upNext: (2, 10)))
         let viewModel = HomeViewModel(
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
         viewModel.inProgressItems = [showA, showB]
@@ -257,16 +280,16 @@ final class TVTrackingSurfacesTests: XCTestCase {
         let followUpA = try XCTUnwrap(ticks.followUp)
         _ = await ticks.tick(showB)  // finishes nothing
         XCTAssertTrue(ticks.followUp === followUpA, "A tick with nothing to follow up replaces nothing")
-        _ = await ticks.tick(showB)  // finishes Season 2 while A's composer may still be loading
+        _ = await ticks.tick(showB)  // finishes Season 2 while A's composer is still open
         XCTAssertTrue(ticks.followUp === followUpA, "The first follow-up stays on screen")
 
-        for followUp in ticks.followUps { await followUp.loading?.value }
         XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1396")
         XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 1, "A's composer opens")
+        XCTAssertEqual(ticks.followUp?.composer?.detail.title, "Breaking Bad")
         followUpA.composerDismissed()
         XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1399", "Then B's opens")
         XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 2)
-        XCTAssertEqual(media.detailRequests.map(\.mediaId), ["1396", "1399"])
+        XCTAssertEqual(ticks.followUp?.composer?.detail.title, "Game of Thrones", "with B's own header")
     }
 
     func testTV107HomeTickAsksTheEarlierEpisodesQuestionFirst() async throws {
@@ -275,7 +298,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
         viewModel.inProgressItems = [show]
@@ -297,7 +319,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
         let followUp = try XCTUnwrap(viewModel.continueWatching.followUp)
         XCTAssertEqual(followUp.question?.question, "Also mark Seasons 1–2 watched?")
         XCTAssertNil(followUp.composer, "The question comes before the composer")
-        XCTAssertTrue(media.detailRequests.isEmpty)
     }
 
     func testTV705AFailedTickRestoresTheRow() async {
@@ -306,7 +327,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
         viewModel.inProgressItems = [show]
@@ -328,7 +348,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
         await viewModel.tickUpNext(Self.showItem("1", "Caught Up", tv: Self.showState(status: "In progress", caughtUp: true)))
@@ -343,7 +362,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
             onUnauthorized: {}
         )
 
@@ -774,6 +792,7 @@ final class SurfacesTrackingRepository: TrackingRepository {
     var listResponses: [String: PagedResponse<Spine.LibraryItem>] = [:]
     var continueWatchingResponse: PagedResponse<Spine.LibraryItem>?
     var continueWatchingPages: [String?] = []
+    var onContinueWatching: (() -> Void)?
     var actions: [(source: String, mediaId: String, action: TVAction, request: TVActionRequest)] = []
     var actionResponses: [TVActionResponse] = []
     var actionError: Error?
@@ -788,6 +807,7 @@ final class SurfacesTrackingRepository: TrackingRepository {
 
     func continueWatching(page: String?) async throws -> PagedResponse<Spine.LibraryItem> {
         continueWatchingPages.append(page)
+        onContinueWatching?()
         return continueWatchingResponse ?? PagedResponse(count: 0, next: nil, previous: nil, results: [])
     }
 

@@ -181,6 +181,31 @@ struct TVEpisodeRowModel: Identifiable {
             .map { TVEpisodeRowModel(episodeNumber: $0.episodeNumber, title: $0.title, summary: nil, tv: $0.tv) }
         return listed + gone
     }
+
+    /// The show page's Up next as a row of its season's episode list (TV-105): the same still, number, title, air
+    /// date and tick. Up next has aired and isn't watched, so the row always has a tick.
+    static func upNext(_ pointer: TVEpisodePointer) -> TVEpisodeRowModel {
+        let name = pointer.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = name.isEmpty ? "Episode \(pointer.episodeNumber)" : name
+        let tv = TVEpisodeState(
+            seasonNumber: pointer.seasonNumber,
+            episodeNumber: pointer.episodeNumber,
+            aired: true,
+            airDate: pointer.airDate,
+            isUpNext: true
+        )
+        let summary = EpisodeSummary(
+            episodeNumber: pointer.episodeNumber,
+            title: title,
+            overview: nil,
+            airDate: pointer.airDate,
+            runtime: nil,
+            imageUrl: pointer.imageUrl,
+            rating: nil,
+            tv: tv
+        )
+        return TVEpisodeRowModel(episodeNumber: pointer.episodeNumber, title: title, summary: summary, tv: tv)
+    }
 }
 
 /// What the trailing side of an episode row shows (TV-100): a tick, or for an unaired episode its air date, or
@@ -235,51 +260,6 @@ struct TVEpisodeTickButton: View {
         .accessibilityHint(isWatched ? "Unticks this episode" : "Ticks this episode watched today")
         .accessibilityAddTraits(isWatched ? .isSelected : [])
         .accessibilityIdentifier("tv.episode-tick")
-    }
-}
-
-// MARK: Up next (TV-105)
-
-struct TVUpNextRow: View {
-    let upNext: TVEpisodePointer
-    let isWatched: Bool
-    let onTick: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(upNext.isNew ? "New episode" : "Up next")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-                Text(title)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-
-            TVEpisodeTickButton(isWatched: isWatched, episodeTitle: code, action: onTick)
-        }
-        .padding(.leading, 14)
-        .padding(.trailing, 4)
-        .padding(.vertical, 6)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-            shape
-                .fill(.white.opacity(0.05))
-                .overlay { shape.stroke(.white.opacity(0.07), lineWidth: 0.75) }
-        }
-        .accessibilityIdentifier("tv.up-next")
-    }
-
-    private var code: String {
-        TVTrackingPresentation.episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)
-    }
-
-    private var title: String {
-        guard let name = upNext.title?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return code }
-        return "\(code) · \(name)"
     }
 }
 

@@ -211,11 +211,31 @@ final class TVTrackingPresentationTests: XCTestCase {
                                      availableActions: ["stop_rewatch", "pause", "drop", "log"])
         XCTAssertEqual(TVTrackingPresentation.showMenu(for: rewatching).first { $0.key == "stop_rewatch" }?.title, "Stop Rewatching")
         XCTAssertFalse(TVTrackingPresentation.showMenu(for: rewatching).map(\.key).contains("rewatch"))
+    }
 
+    func testTV003RemoveFromLibraryIsListedOnlyForAShowInTheLibrary() throws {
+        // A show that isn't in the library has nothing to remove: no row, whatever the server sends.
         let untracked = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log"])
-        let remove = TVTrackingPresentation.showMenu(for: untracked).first { $0.key == "remove" }
-        XCTAssertEqual(remove?.isAvailable, false)
-        XCTAssertEqual(remove?.reason, "This show isn't in your library.")
+        XCTAssertEqual(TVTrackingPresentation.showMenu(for: untracked).map(\.key),
+                       ["watching", "planning", "pause", "drop", "log"])
+        let offered = TVShowState(availableActions: ["watching", "planning", "pause", "drop", "log", "remove"],
+                                  actionReasons: ["remove": "Nothing to remove."])
+        XCTAssertFalse(TVTrackingPresentation.showMenu(for: offered).contains { $0.key == "remove" })
+
+        // In the library: listed, and a blocked removal keeps its disabled row with the server's reason.
+        let tracked = TVShowState(inLibrary: true, status: "Planning", selectedAction: "planning",
+                                  availableActions: ["watching", "drop", "log", "remove"])
+        let remove = try XCTUnwrap(TVTrackingPresentation.showMenu(for: tracked).last)
+        XCTAssertEqual(remove.key, "remove")
+        XCTAssertTrue(remove.isAvailable)
+        XCTAssertEqual(remove.command, .confirmRemove)
+
+        let blocked = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
+                                  availableActions: ["pause", "drop", "log"],
+                                  actionReasons: ["remove": "Delete the logs first."])
+        let blockedRemove = try XCTUnwrap(TVTrackingPresentation.showMenu(for: blocked).first { $0.key == "remove" })
+        XCTAssertFalse(blockedRemove.isAvailable)
+        XCTAssertEqual(blockedRemove.reason, "Delete the logs first.")
     }
 
     func testTV005SeasonAndEpisodeMenus() {

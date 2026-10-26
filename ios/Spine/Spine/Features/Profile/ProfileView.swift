@@ -31,7 +31,6 @@ final class ProfileViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
-        mediaRepository: MediaRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -40,11 +39,7 @@ final class ProfileViewModel {
         self.activityRepository = activityRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
-        continueWatching = ContinueWatchingTicks(
-            trackingRepository: trackingRepository,
-            mediaRepository: mediaRepository ?? AppRepositories.current().media,
-            onUnauthorized: onUnauthorized
-        )
+        continueWatching = ContinueWatchingTicks(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
     }
 
     /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
@@ -600,7 +595,6 @@ struct ProfileView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
-            mediaRepository: mediaRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))

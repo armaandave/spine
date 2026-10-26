@@ -189,6 +189,32 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(page.viewer?.tv?.watchedCount, 14)
     }
 
+    func testTV105TheUpNextRowIsTheSeasonListsEpisodeRow() throws {
+        // The show page's Up next uses the season page's episode row: still, number, title, air date and tick.
+        let upNext = try JSONDecoder.api.decode(TVEpisodePointer.self, from: Data(#"""
+        {"season_number":2,"episode_number":4,"title":"Fly","air_date":"2010-05-23","is_new":false,
+         "image_url":"https://img/s2e4.jpg"}
+        """#.utf8))
+        let row = TVEpisodeRowModel.upNext(upNext)
+
+        XCTAssertEqual(row.episodeNumber, 4)
+        XCTAssertEqual(row.title, "Fly")
+        XCTAssertTrue(row.listed, "It opens the episode like a listed row")
+        XCTAssertEqual(row.summary?.imageUrl, "https://img/s2e4.jpg")
+        XCTAssertEqual(row.summary?.airDate, "2010-05-23")
+        XCTAssertEqual(row.tv?.coordinate, upNext.coordinate)
+        XCTAssertEqual(TVEpisodeTrailing.resolve(row.tv, isWatched: false), .tick(watched: false), "Up next has aired")
+        XCTAssertEqual(TVEpisodeTrailing.resolve(row.tv, isWatched: true), .tick(watched: true), "A pending tick shows")
+        XCTAssertEqual(TVTrackingPresentation.upNextLabel(for: upNext), "Up next · Season 2")
+
+        // Without a title or still, the row reads as the season list does.
+        let bare = TVEpisodeRowModel.upNext(TVEpisodePointer(seasonNumber: 3, episodeNumber: 1, title: "  ", isNew: true))
+        XCTAssertEqual(bare.title, "Episode 1")
+        XCTAssertNil(bare.summary?.imageUrl)
+        XCTAssertEqual(TVTrackingPresentation.upNextLabel(for: TVEpisodePointer(seasonNumber: 3, episodeNumber: 1, isNew: true)),
+                       "New episode · Season 3")
+    }
+
     // MARK: Follow-up (TV-107, TV-403)
 
     func testTV107AndTV403ATicksEnvelopeGoesToTheFollowUp() async throws {
@@ -209,6 +235,46 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(page.tvFollowUp.composer?.finished.seasonNumber, 1)
         XCTAssertEqual(page.tvFollowUp.composer?.finished.composer.initialTarget?.date, "2026-10-24")
         XCTAssertEqual(tracking.sent.map(\.action), [.tick], "No sends nothing.")
+    }
+
+    func testTV403FinishingTheSeasonFromItsPageOpensTheComposerAtOnceOnThePage() async throws {
+        holdRefreshes()
+        let page = model(Fixtures.seasonDetail(episodes: [Fixtures.episode(10)]))
+        tracking.responses = [.success(Fixtures.envelopeResponse(
+            episode: Fixtures.episode(10, watched: true, viewing: 3),
+            finished: Fixtures.finished(season: 1)
+        ))]
+
+        let ticked = await page.tickTVEpisode(seasonNumber: 1, episodeNumber: 10).value
+
+        XCTAssertTrue(ticked)
+        let composer = try XCTUnwrap(page.tvFollowUp.composer, "Open as soon as the tick answers")
+        XCTAssertNil(page.tvFollowUp.loading, "Nothing is loaded first")
+        XCTAssertEqual(composer.detail.ref, Fixtures.seasonRef, "The season page's own detail")
+        XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
+    }
+
+    func testTV403FinishingASeasonFromTheShowPagesUpNextOpensTheComposerAtOnce() async throws {
+        holdRefreshes()
+        let upNext = TVEpisodePointer(seasonNumber: 2, episodeNumber: 10, title: "Valar Morghulis")
+        let season2 = SeasonSummary(seasonNumber: 2, title: "Season 2", episodeCount: 10, imageUrl: "https://img/s2.jpg",
+                                    releaseDate: nil, completion: nil)
+        let page = model(Fixtures.showDetail(tv: Fixtures.show(upNext: upNext), seasons: [season2]))
+        tracking.responses = [.success(Fixtures.envelopeResponse(finished: Fixtures.finished(season: 2)))]
+
+        page.toggleTVUpNext(upNext)
+        let settled = await page.settled()
+
+        XCTAssertTrue(settled)
+        let composer = try XCTUnwrap(page.tvFollowUp.composer)
+        XCTAssertEqual(composer.finished.seasonNumber, 2)
+        XCTAssertEqual(composer.detail.ref.mediaType, "season")
+        XCTAssertEqual(composer.detail.ref.seasonNumber, 2)
+        XCTAssertEqual(composer.detail.title, "The Show")
+        XCTAssertEqual(composer.detail.displayPosterURL, "https://img/s2.jpg", "Season 2's poster from the show page")
+        XCTAssertNil(page.tvFollowUp.loading, "Nothing is loaded first")
+        XCTAssertEqual(logModel(composer.detail, composer: composer.finished.composer).selectedTitle,
+                       "The Show · Season 2")
     }
 
     func testTV403ASavedLogsFollowUpWaitsForItsComposerToClose() async throws {
@@ -520,6 +586,36 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(composer.tvTargets.map(\.id), ["season:1", "season:2", "season:0", "show"],
                        "Seasons, Specials last, then Whole show.")
         XCTAssertEqual(composer.selectedTitle, "The Show · Season 1")
+    }
+
+    func testTV404TheShowPagesLogOpensOnTheWholeShowWhenTheServerSaysSo() {
+        // The show page's + > Log: the app opens on the server's default, the whole show, not a season.
+        let composer = logModel(Fixtures.showDetail(tv: Fixtures.show(composer: Fixtures.showComposerOpeningOnShow)))
+
+        XCTAssertEqual(composer.selectedTVTargetId, "show")
+        XCTAssertEqual(composer.selectedRef.mediaType, "tv")
+        XCTAssertNil(composer.selectedRef.seasonNumber)
+        XCTAssertEqual(composer.primaryActionTitle, "Log TV Show")
+        XCTAssertEqual(composer.selectedTitle, "The Show")
+        XCTAssertEqual(composer.tvTargets.map(\.id), ["season:1", "season:2", "season:0", "show"],
+                       "The seasons stay in the picker")
+
+        // A write from the show page keeps the show's composer, so Log still opens on the whole show.
+        let page = model(Fixtures.showDetail(tv: Fixtures.show(composer: Fixtures.showComposerOpeningOnShow)))
+        let folded = MediaDetailViewModel.foldTV(
+            TVActionResponse(tracking: Fixtures.showTracking, envelope: TVWriteEnvelope(
+                tv: Fixtures.show(composer: Fixtures.showComposerOpeningOnShow), changed: true
+            )),
+            into: page.viewer ?? .untracked,
+            page: Fixtures.showRef
+        )
+        XCTAssertEqual(folded.tv?.composer?.initialTarget?.id, "show")
+
+        // With no composer from the server, the fallback picker opens on Whole Show too.
+        let fallback = logModel(Fixtures.showDetail(tv: Fixtures.show(), seasons: [Fixtures.seasonSummary(1)]))
+        XCTAssertTrue(fallback.supportsSeasonLogging)
+        XCTAssertNil(fallback.selectedSeasonNumber)
+        XCTAssertEqual(fallback.selectedRef.mediaType, "tv")
     }
 
     func testTV404SeasonLogsNameTheSeasonFromTheSeasonPage() {
@@ -889,13 +985,18 @@ final class TVTrackingPagesTests: XCTestCase {
         return page
     }
 
-    private func logModel(_ detail: MediaDetail, diary: PagesDiaryRepository? = nil) -> MediaLogViewModel {
+    private func logModel(
+        _ detail: MediaDetail,
+        diary: PagesDiaryRepository? = nil,
+        composer: TVComposer? = nil
+    ) -> MediaLogViewModel {
         MediaLogViewModel(
             detail: detail,
             trackingRepository: tracking,
             diaryRepository: diary ?? PagesDiaryRepository(),
             onUnauthorized: {},
-            onSaved: {}
+            onSaved: {},
+            tvComposer: composer
         )
     }
 }
@@ -955,13 +1056,17 @@ private enum Fixtures {
         TVComposer(defaultTarget: defaultTarget ?? targets.first?.id ?? "", targets: targets)
     }
 
-    /// The show page's targets as the server sends them: seasons, Specials last, then Whole show.
+    /// The show page's targets in the server's order: seasons, Specials last, then Whole show. It opens on Season 1,
+    /// so tests can tell the server's default from the app's.
     static let showComposer = composer([
         target("season:1", level: .season, season: 1, title: "Season 1", date: "2026-10-20", rating: "8.0", liked: true),
         target("season:2", level: .season, season: 2, title: "Season 2"),
         target("season:0", level: .season, season: 0, title: "Specials"),
         target("show", level: .show, title: "Whole show", rating: "9.0", isRewatch: true),
     ], default: "season:1")
+
+    /// The show page's composer as the server sends it now: the same targets, opening on the whole show.
+    static let showComposerOpeningOnShow = TVComposer(defaultTarget: "show", targets: showComposer.targets)
 
     static func finished(season: Int) -> TVFinished {
         TVFinished(seasonNumber: season, composer: composer([

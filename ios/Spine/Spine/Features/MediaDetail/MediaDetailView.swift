@@ -80,11 +80,8 @@ final class MediaDetailViewModel {
         self.externalRatingMaxPollAttempts = externalRatingMaxPollAttempts
         self.writeRefreshDelay = writeRefreshDelay
         self.externalRefreshDelay = externalRefreshDelay
-        tvFollowUp = TVWriteFollowUp(
-            showRef: ref,
-            trackingRepository: trackingRepository,
-            mediaRepository: mediaRepository
-        )
+        tvFollowUp = TVWriteFollowUp(showRef: ref, trackingRepository: trackingRepository)
+        tvFollowUp.context = { [weak self] in self?.detail }
         tvFollowUp.onResponse = { [weak self] response in
             self?.applyTVFollowUpResponse(response)
         }
@@ -4016,7 +4013,17 @@ private struct MediaDetailPageView: View {
             onUpdateProgress: {
                 openProgressUpdate(for: detail)
             },
-            onTickUpNext: { viewModel.toggleTVUpNext($0) }
+            onTickUpNext: { viewModel.toggleTVUpNext($0) },
+            onOpenUpNext: { upNext in
+                presentedRef = MediaRef(
+                    itemId: nil,
+                    source: detail.ref.source,
+                    mediaType: "episode",
+                    mediaId: detail.ref.mediaId,
+                    seasonNumber: upNext.seasonNumber,
+                    episodeNumber: upNext.episodeNumber
+                )
+            }
         )
     }
 
@@ -6325,6 +6332,8 @@ struct TrackingSummarySection: View {
     let onUpdateProgress: () -> Void
     /// The show page's Up next tick (TV-100, TV-105).
     var onTickUpNext: ((TVEpisodePointer) -> Void)?
+    /// Opens the Up next episode's page.
+    var onOpenUpNext: ((TVEpisodePointer) -> Void)?
 
     var body: some View {
         if hasState {
@@ -6389,11 +6398,23 @@ struct TrackingSummarySection: View {
                 }
 
                 if let upNext = Self.tvUpNext(detail: detail, state: state), let onTickUpNext {
-                    TVUpNextRow(
-                        upNext: upNext,
-                        isWatched: state?.tvPending.episodes[upNext.coordinate] == true,
-                        onTick: { onTickUpNext(upNext) }
-                    )
+                    // The season page's episode row, so the two look and behave alike.
+                    let row = TVEpisodeRowModel.upNext(upNext)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: TVTrackingPresentation.upNextLabel(for: upNext))
+                        EpisodeCard(
+                            row: row,
+                            trailing: TVEpisodeTrailing.resolve(
+                                row.tv,
+                                isWatched: state?.tvPending.episodes[upNext.coordinate] == true
+                            ),
+                            onTick: { onTickUpNext(upNext) },
+                            onMarkUpTo: nil,
+                            onSelect: onOpenUpNext.map { open in { open(upNext) } }
+                        )
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("tv.up-next")
                 }
             }
         }
