@@ -4,6 +4,8 @@ enum PosterSlot {
     case searchRow
     case libraryRow
     case diaryRow
+    /// The small poster in a diary entry row.
+    case diaryEntry
     case profileRow
     case profileRail
     case listPreview
@@ -24,6 +26,8 @@ enum PosterSlot {
             CGSize(width: 54, height: 81)
         case .libraryRow, .diaryRow, .profileRow:
             CGSize(width: 56, height: 84)
+        case .diaryEntry:
+            CGSize(width: 42, height: 63)
         case .profileRail:
             CGSize(width: 70, height: 105)
         case .listPreview:
@@ -53,6 +57,8 @@ enum PosterSlot {
         switch self {
         case .episodeStill:
             4
+        case .diaryEntry:
+            6
         case .hero, .logSheet:
             10
         default:
