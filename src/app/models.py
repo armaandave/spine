@@ -1140,6 +1140,33 @@ class UserMessage(models.Model):
         return self.level
 
 
+# Values app.tv_tracking works out for a show and its seasons from the stored facts
+# (viewings, logs, marks, choices) and writes with QuerySet.update (TV-207). They are
+# caches, so they keep no history.
+TV_STATE_CACHE_FIELD_NAMES = (
+    "reconciled_at",
+    "state_version",
+    "watched_count",
+    "aired_count",
+    "episode_count",
+    "up_next_season",
+    "up_next_episode",
+    "up_next_air_date",
+    "up_next_is_new",
+    "next_air_season",
+    "next_air_episode",
+    "next_air_date",
+    "finished",
+    "caught_up",
+    "last_watched_on",
+    "last_activity_on",
+    "last_activity_at",
+    "is_started",
+    "first_gap_episode",
+    "finish_offers",
+)
+
+
 class Media(models.Model):
     """Abstract model for all media types."""
 
@@ -1152,6 +1179,8 @@ class Media(models.Model):
             "user",
             "related_tv",
             "created_at",
+            # TV and Season values worked out from the facts (TV-207); they write no history.
+            *TV_STATE_CACHE_FIELD_NAMES,
         ],
     )
 
@@ -1302,9 +1331,72 @@ class BasicMedia(Media):
 
 
 class TV(Media):
-    """Model for TV shows."""
+    """Model for TV shows.
+
+    The show is the library unit (docs/tv-tracking-contract.md, TV-001). Its viewings
+    are Episode rows; app.tv_tracking records the facts below and works out the rest.
+    Every new NOT NULL column has a db_default, so code from before these columns
+    keeps inserting rows (TV-901).
+    """
 
     tracker = FieldTracker()
+
+    # Facts: stars and heart provenance (TV-501), choices (TV-005 to TV-007, TV-203,
+    # TV-208), rewatch (TV-600), the earlier-episodes question (TV-107) and the
+    # season-finish offers (TV-403).
+    rating_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_is_independent = models.BooleanField(default=False, db_default=False)
+    # "", "Planning", "In progress" (Watching), "Paused" or "Dropped".
+    choice = models.CharField(max_length=20, blank=True, default="", db_default="")
+    choice_at = models.DateTimeField(null=True, blank=True)
+    ended_choice = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        db_default="",
+    )
+    ended_choice_at = models.DateTimeField(null=True, blank=True)
+    rewatch_started_at = models.DateTimeField(null=True, blank=True)
+    # Null while a rewatch is in progress means the whole show.
+    rewatch_season_number = models.PositiveIntegerField(null=True, blank=True)
+    earlier_question_at = models.DateTimeField(null=True, blank=True)
+    # {"<season number>": "<ISO datetime offered>"}; null reads as {}.
+    finish_offers = models.JSONField(null=True, blank=True)
+    # True for rows that existed before this contract, and rows inserted by code that
+    # doesn't know the column: never worked out under the contract yet (TV-801).
+    legacy_pending = models.BooleanField(default=False, db_default=True)
+
+    # Worked out from the facts (TV-207); see TV_STATE_CACHE_FIELD_NAMES.
+    reconciled_at = models.DateTimeField(null=True, blank=True)
+    # max(previous + 1, Unix milliseconds) on each change, so it never repeats (TV-705).
+    state_version = models.PositiveBigIntegerField(default=0, db_default=0)
+    watched_count = models.PositiveIntegerField(null=True, blank=True)
+    aired_count = models.PositiveIntegerField(null=True, blank=True)
+    up_next_season = models.PositiveIntegerField(null=True, blank=True)
+    up_next_episode = models.PositiveIntegerField(null=True, blank=True)
+    up_next_air_date = models.DateField(null=True, blank=True)
+    up_next_is_new = models.BooleanField(default=False, db_default=False)
+    next_air_season = models.PositiveIntegerField(null=True, blank=True)
+    next_air_episode = models.PositiveIntegerField(null=True, blank=True)
+    next_air_date = models.DateField(null=True, blank=True)
+    finished = models.BooleanField(default=False, db_default=False)
+    caught_up = models.BooleanField(default=False, db_default=False)
+    last_watched_on = models.DateField(null=True, blank=True)
+    last_activity_on = models.DateField(null=True, blank=True)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         """Meta options for the model."""
@@ -1316,25 +1408,25 @@ class TV(Media):
                 name="%(app_label)s_%(class)s_unique_item_user",
             ),
         ]
+        indexes = [
+            models.Index(fields=["next_air_date"], name="app_tv_next_air_date_idx"),
+            models.Index(
+                fields=["user", "status", "last_activity_on"],
+                name="app_tv_user_status_activ_idx",
+            ),
+        ]
 
     @tracker  # postpone field reset until after the save
     def save(self, *args, **kwargs):
-        """Save the media instance."""
+        """Save the show without cascading into its seasons.
+
+        app.tv_tracking works out every status from the facts (TV-205, TV-207); the old
+        cascade helpers below stay defined but uncalled until installed builds no
+        longer depend on them (TV-901).
+        """
         super(Media, self).save(*args, **kwargs)
 
         if self.tracker.has_changed("status"):
-            if self.status == Status.COMPLETED.value:
-                self._completed()
-
-            elif self.status == Status.DROPPED.value:
-                self._mark_in_progress_seasons_as_dropped()
-
-            elif (
-                self.status == Status.IN_PROGRESS.value
-                and not self.seasons.filter(status=Status.IN_PROGRESS.value).exists()
-            ):
-                self._start_next_available_season()
-
             self.item.fetch_releases(delay=True)
 
     @property
@@ -1701,6 +1793,34 @@ class Season(Media):
         related_name="seasons",
     )
 
+    # The season's own stars and heart provenance (TV-501).
+    rating_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_is_independent = models.BooleanField(default=False, db_default=False)
+
+    # Worked out from the facts (TV-200, TV-205, TV-207); see
+    # TV_STATE_CACHE_FIELD_NAMES. is_started is null until the show is worked out.
+    is_started = models.BooleanField(null=True, blank=True)
+    watched_count = models.PositiveIntegerField(null=True, blank=True)
+    aired_count = models.PositiveIntegerField(null=True, blank=True)
+    episode_count = models.PositiveIntegerField(null=True, blank=True)
+    first_gap_episode = models.PositiveIntegerField(null=True, blank=True)
+    up_next_episode = models.PositiveIntegerField(null=True, blank=True)
+    next_air_date = models.DateField(null=True, blank=True)
+    last_watched_on = models.DateField(null=True, blank=True)
+
     tracker = FieldTracker()
 
     class Meta:
@@ -1722,7 +1842,11 @@ class Season(Media):
 
     @tracker  # postpone field reset until after the save
     def save(self, *args, **kwargs):
-        """Save the media instance."""
+        """Save the season without filling episodes or changing the show.
+
+        app.tv_tracking works out every status from the facts (TV-205, TV-207); the old
+        cascade helpers stay defined but uncalled (TV-901).
+        """
         # if related_tv is not set
         if self.related_tv_id is None:
             self.related_tv = self.get_tv()
@@ -1730,84 +1854,6 @@ class Season(Media):
         super(Media, self).save(*args, **kwargs)
 
         if self.tracker.has_changed("status"):
-            if self.status == Status.COMPLETED.value:
-                season_metadata = providers.services.get_media_metadata(
-                    MediaTypes.SEASON.value,
-                    self.item.media_id,
-                    self.item.source,
-                    [self.item.season_number],
-                )
-                current_date = timezone.localdate()
-                target_status = self.get_completion_status(
-                    season_metadata,
-                    unreleased_only_status=Status.IN_PROGRESS.value,
-                    current_date=current_date,
-                )
-                episodes_to_create = self.get_remaining_eps(
-                    season_metadata,
-                    current_date=current_date,
-                )
-                if episodes_to_create:
-                    bulk_create_with_history(
-                        episodes_to_create,
-                        Episode,
-                    )
-                    created_episodes_count = len(episodes_to_create)
-                    episode_label = (
-                        "episode" if created_episodes_count == 1 else "episodes"
-                    )
-                    self.create_user_message(
-                        f"had {created_episodes_count} released {episode_label} "
-                        "marked as watched automatically.",
-                        level=UserMessageLevel.INFO,
-                    )
-
-                if target_status == Status.COMPLETED.value:
-                    self.related_tv._handle_completed_season(
-                        self.item.season_number,
-                    )
-                else:
-                    self.status = target_status
-                    bulk_update_with_history(
-                        [self],
-                        Season,
-                        fields=["status"],
-                    )
-                    self.create_user_message(
-                        "was left in progress because unreleased episodes remain.",
-                        level=UserMessageLevel.WARNING,
-                    )
-
-                    if self.related_tv.status != Status.IN_PROGRESS.value:
-                        self.related_tv.status = Status.IN_PROGRESS.value
-                        bulk_update_with_history(
-                            [self.related_tv],
-                            TV,
-                            fields=["status"],
-                        )
-
-            elif (
-                self.status == Status.DROPPED.value
-                and self.related_tv.status != Status.DROPPED.value
-            ):
-                self.related_tv.status = Status.DROPPED.value
-                bulk_update_with_history(
-                    [self.related_tv],
-                    TV,
-                    fields=["status"],
-                )
-
-            elif (
-                self.status == Status.IN_PROGRESS.value
-                and self.related_tv.status != Status.IN_PROGRESS.value
-            ):
-                self.related_tv.status = Status.IN_PROGRESS.value
-                bulk_update_with_history(
-                    [self.related_tv],
-                    TV,
-                    fields=["status"],
-                )
-
             self.item.fetch_releases(delay=True)
 
     def _get_latest_watched_episode_number(self):
@@ -2127,7 +2173,24 @@ class Season(Media):
 
 
 class Episode(models.Model):
-    """Model for episodes of a season."""
+    """One viewing of one episode (the contract's Viewing term).
+
+    Saving or deleting a row works nothing out by itself: app.tv_tracking records
+    viewings and works out the season and show (TV-205, TV-207). The old status
+    helper below stays defined but uncalled (TV-901).
+    """
+
+    class Kind(models.TextChoices):
+        """Where a viewing came from."""
+
+        # A tap, a webhook watch or an imported play; a claimed tick keeps this kind
+        # and gets diary_entry (TV-100, TV-402).
+        TICK = "tick", "Tick"
+        # An episode log's own added viewing (TV-402).
+        LOG = "log", "Log"
+        # An undated viewing a log (diary_entry set) or a mark (diary_entry null)
+        # added (TV-301).
+        FILL = "fill", "Fill"
 
     history = HistoricalRecords(
         cascade_delete_history=True,
@@ -2142,6 +2205,25 @@ class Episode(models.Model):
         related_name="episodes",
     )
     end_date = models.DateTimeField(null=True, blank=True)
+    # Existing rows, and rows code from before this column inserts, are ticks.
+    kind = models.CharField(
+        max_length=8,
+        choices=Kind,
+        default=Kind.TICK,
+        db_default="tick",
+    )
+    # The log this viewing belongs to: its own viewing or one of its fills. RESTRICT
+    # makes deleting a log anywhere but app.tv_tracking fail loudly instead of turning
+    # its fills into a mark's (TV-301, TV-406).
+    diary_entry = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.RESTRICT,
+        related_name="tv_viewings",
+    )
+    # The viewing's day on the user's calendar; null for fills (TV-100, TV-301).
+    watched_on = models.DateField(null=True, blank=True)
 
     class Meta:
         """Meta options for the model."""
@@ -2152,74 +2234,16 @@ class Episode(models.Model):
             "-end_date",
             "-created_at",
         ]
+        indexes = [
+            models.Index(
+                fields=["related_season", "item", "created_at"],
+                name="app_ep_season_item_created_idx",
+            ),
+        ]
 
     def __str__(self):
         """Return the season and episode number."""
         return self.item.__str__()
-
-    def save(self, *args, **kwargs):
-        """Save the episode instance."""
-        super().save(*args, **kwargs)
-
-        season_number = self.item.season_number
-        tv_with_seasons_metadata = providers.services.get_media_metadata(
-            "tv_with_seasons",
-            self.item.media_id,
-            self.item.source,
-            [season_number],
-        )
-        season_metadata = tv_with_seasons_metadata[f"season/{season_number}"]
-        max_progress = len(season_metadata["episodes"])
-
-        # clear prefetch cache to get the updated episodes
-        self.related_season.refresh_from_db()
-
-        is_finale = self.item.episode_number == max_progress
-        season_just_completed = False
-        if is_finale:
-            if self.related_season.status != Status.COMPLETED.value:
-                self.related_season.status = Status.COMPLETED.value
-                bulk_update_with_history(
-                    [self.related_season],
-                    Season,
-                    fields=["status"],
-                )
-                season_just_completed = True
-                self.related_season.create_user_message(
-                    "was marked as completed automatically.",
-                    level=UserMessageLevel.SUCCESS,
-                )
-
-        elif self.related_season.status != Status.IN_PROGRESS.value:
-            self.related_season.status = Status.IN_PROGRESS.value
-            bulk_update_with_history(
-                [self.related_season],
-                Season,
-                fields=["status"],
-            )
-
-        if season_just_completed:
-            self.related_season.related_tv._handle_completed_season(season_number)
-        elif (
-            not is_finale
-            and self.related_season.related_tv.status != Status.IN_PROGRESS.value
-        ):
-            self.related_season.related_tv.status = Status.IN_PROGRESS.value
-            bulk_update_with_history(
-                [self.related_season.related_tv],
-                TV,
-                fields=["status"],
-            )
-
-    def delete(self, *args, **kwargs):
-        """Delete the episode instance and update parent statuses if needed."""
-        season = self.related_season
-        tv = season.related_tv
-        deleted_episode_number = self.item.episode_number
-
-        super().delete(*args, **kwargs)
-
-        self._update_parent_statuses_after_delete(season, tv, deleted_episode_number)
 
     def _update_parent_statuses_after_delete(self, season, tv, deleted_episode_number):
         """Move completed parents back to in progress after unwatching progress."""
@@ -2249,6 +2273,79 @@ class Episode(models.Model):
                 fields=["status"],
                 default_user=season.user,
             )
+
+
+class TVListing(models.Model):
+    """Stored copy of a show's provider episode lists (TV-103).
+
+    app.tv_listing keeps it up to date and uses it when the provider can't be reached.
+    Never written for manual shows, which are read live from their Items.
+    """
+
+    # The show's tv Item.
+    item = models.OneToOneField(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="tv_listing",
+    )
+    # Seasons the provider lists now, Specials (0) included.
+    season_numbers = models.JSONField(default=list)
+    # {"1": {"air_date": "2024-01-05", "fetched_at": "<ISO>",
+    #        "episodes": [[1, "2024-01-05", "Pilot", "https://...jpg"], ...]}}.
+    # A season without "episodes" has only its provider summary, not its list.
+    seasons = models.JSONField(default=dict)
+    # {"season_number": 3, "episode_number": 1, "air_date": "2027-03-12"}.
+    next_episode_to_air = models.JSONField(null=True, blank=True)
+    # The provider reports the show as returning ("Returning Series").
+    returning = models.BooleanField(default=False)
+    # Stored copies come from a provider that gives air dates, so this stays True;
+    # only manual shows (never stored) count every listed episode as aired (TV-103).
+    any_air_dates = models.BooleanField(default=True)
+    # When the show-level part (season_numbers, next_episode_to_air, returning) was
+    # last fetched.
+    fetched_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        """Return the show's title."""
+        return f"Listing for {self.item}"
+
+
+class TVMutation(models.Model):
+    """At-most-once record of a TV write that carried a mutation ID (TV-705)."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    mutation_id = models.UUIDField()
+    action = models.CharField(max_length=32)
+    show_item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    diary_entry = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    # {changed, season_number, episode_number, finished, earlier_unwatched,
+    #  diary_entry_id}
+    result = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Meta options for the model."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "mutation_id"],
+                name="app_tvmutation_unique_user_mutation",
+            ),
+        ]
+
+    def __str__(self):
+        """Return the action and mutation ID."""
+        return f"{self.action} {self.mutation_id}"
 
 
 class Manga(Media):

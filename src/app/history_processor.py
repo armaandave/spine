@@ -5,6 +5,14 @@ from app import config, helpers
 from app.models import MediaTypes, Status
 from app.templatetags import app_tags
 
+# Episode facts kept in history for the TV contract (a viewing's kind, calendar day and
+# owning log); they aren't user edits, so the history modal doesn't list them.
+EPISODE_FACT_FIELDS = {"kind", "watched_on", "diary_entry"}
+
+
+def _is_hidden_field(field_name, media_type):
+    return media_type == MediaTypes.EPISODE.value and field_name in EPISODE_FACT_FIELDS
+
 
 def process_history_entries(history_records, media_type, media_entry_number, user):
     """Process all history records into timeline entries."""
@@ -76,6 +84,8 @@ def organize_changes(changes, media_type, user):
     for change in changes:
         if change.field == "progress" and media_type == MediaTypes.MOVIE.value:
             continue
+        if _is_hidden_field(change.field, media_type):
+            continue
 
         change_data = {
             "description": format_description(
@@ -119,6 +129,7 @@ def collect_creation_changes(new_record, history_model, media_type, user):
             or field.name == "id"
             or not hasattr(new_record, field.attname)
             or (field.name == "progress" and media_type == MediaTypes.MOVIE.value)
+            or _is_hidden_field(field.name, media_type)
         ):
             continue
 

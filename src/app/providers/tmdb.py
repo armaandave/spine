@@ -816,7 +816,31 @@ def process_tv(response):
         "providers": response.get("watch/providers", {}).get("results", {}),
         "last_episode_season": last_episode["season_number"] if last_episode else None,
         "next_episode_season": next_episode["season_number"] if next_episode else None,
+        # The episode TMDB names as next to air, which its season list may not
+        # include yet (TV-200, TV-202).
+        "next_episode_to_air": (
+            {
+                "season_number": next_episode["season_number"],
+                "episode_number": next_episode.get("episode_number"),
+                "air_date": get_start_date(next_episode.get("air_date")),
+            }
+            if next_episode
+            else None
+        ),
     }
+
+
+def forget_tv(media_id, season_numbers=()):
+    """Drop the cached show and season details so the next read fetches them again."""
+    cache.delete_many(
+        [
+            f"{Sources.TMDB.value}_{DETAIL_CACHE_VERSION}_{MediaTypes.TV.value}_{media_id}",
+            *(
+                f"{Sources.TMDB.value}_{MediaTypes.SEASON.value}_{media_id}_{number}"
+                for number in season_numbers
+            ),
+        ],
+    )
 
 
 def process_season(response, providers_response=None):

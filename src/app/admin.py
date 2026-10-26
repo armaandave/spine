@@ -262,6 +262,8 @@ SpecialModels = [
     "BookCreditOverride",
     "MusicGenreAlbum",
     "UserMessage",
+    "TVListing",
+    "TVMutation",
 ]
 for model in app_models:
     if (

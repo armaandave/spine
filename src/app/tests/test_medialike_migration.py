@@ -13,6 +13,13 @@ class MediaLikeMigrationTests(TransactionTestCase):
     migrate_from = [("app", "0065_historicalmovie_liked_movie_liked")]
     migrate_to = [("app", "0066_medialike")]
 
+    def tearDown(self):
+        # Restore every app's latest migration, so the next migration test starts
+        # from the leaf (a partial state can force a mixed forwards and backwards plan).
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
     def test_backfills_movie_and_diary_likes_deduped(self):
         executor = MigrationExecutor(connection)
         user = get_user_model().objects.create_user(username="migration-like", password="password")
