@@ -10,56 +10,9 @@
           "id": 901,
           "username": "phase9"
         },
+        "consumed_at": "2026-07-16",
         "created_at": "2026-07-16T12:00:00Z",
-        "id": 4,
-        "media": {
-          "backdrop_url": null,
-          "custom_backdrop_url": null,
-          "custom_poster_url": null,
-          "default_source": "musicbrainz",
-          "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "overview": null,
-          "poster_accent_color": null,
-          "poster_aspect_ratio": null,
-          "poster_height": null,
-          "poster_orientation": "unknown",
-          "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "poster_width": null,
-          "ref": {
-            "episode_number": null,
-            "item_id": 902,
-            "media_id": "3bd76d40-7f0e-36b7-9348-91a33afee20e",
-            "media_type": "music",
-            "season_number": null,
-            "source": "musicbrainz"
-          },
-          "release_date": null,
-          "subtitle": null,
-          "title": "Year Zero",
-          "user_state": null
-        },
-        "object": {
-          "id": 1,
-          "list_name": "Favorite Albums",
-          "name": "Favorite Albums",
-          "type": "list"
-        },
-        "person": null,
-        "type": "list_item_added",
-        "viewer": {
-          "can_view": true,
-          "has_liked": false
-        }
-      },
-      {
-        "actor": {
-          "avatar_url": null,
-          "display_name": "Phase Nine",
-          "id": 901,
-          "username": "phase9"
-        },
-        "created_at": "2026-07-16T12:00:00Z",
-        "id": 2,
+        "id": 1,
         "media": {
           "backdrop_url": null,
           "custom_backdrop_url": null,
@@ -94,53 +47,6 @@
         },
         "person": null,
         "type": "diary_created",
-        "viewer": {
-          "can_view": true,
-          "has_liked": false
-        }
-      },
-      {
-        "actor": {
-          "avatar_url": null,
-          "display_name": "Phase Nine",
-          "id": 901,
-          "username": "phase9"
-        },
-        "created_at": "2026-07-16T12:00:00Z",
-        "id": 1,
-        "media": {
-          "backdrop_url": null,
-          "custom_backdrop_url": null,
-          "custom_poster_url": null,
-          "default_source": "musicbrainz",
-          "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "overview": null,
-          "poster_accent_color": null,
-          "poster_aspect_ratio": null,
-          "poster_height": null,
-          "poster_orientation": "unknown",
-          "poster_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
-          "poster_width": null,
-          "ref": {
-            "episode_number": null,
-            "item_id": 902,
-            "media_id": "3bd76d40-7f0e-36b7-9348-91a33afee20e",
-            "media_type": "music",
-            "season_number": null,
-            "source": "musicbrainz"
-          },
-          "release_date": null,
-          "subtitle": null,
-          "title": "Year Zero",
-          "user_state": null
-        },
-        "object": {
-          "id": 903,
-          "rating": "4.5",
-          "type": "tracking"
-        },
-        "person": null,
-        "type": "rating_updated",
         "viewer": {
           "can_view": true,
           "has_liked": false
@@ -846,6 +752,7 @@
       "hardcover",
       "comicvine",
       "musicbrainz",
+      "apple_music",
       "manual"
     ],
     "sources": {

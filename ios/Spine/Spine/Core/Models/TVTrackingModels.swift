@@ -84,13 +84,23 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
     var title: String?
     var airDate: String?
     var isNew: Bool
+    /// The episode's still, for the show page's Up next row; nil when the server has none.
+    var imageUrl: String?
 
-    init(seasonNumber: Int, episodeNumber: Int, title: String? = nil, airDate: String? = nil, isNew: Bool = false) {
+    init(
+        seasonNumber: Int,
+        episodeNumber: Int,
+        title: String? = nil,
+        airDate: String? = nil,
+        isNew: Bool = false,
+        imageUrl: String? = nil
+    ) {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
         self.title = title
         self.airDate = airDate
         self.isNew = isNew
+        self.imageUrl = imageUrl
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +110,7 @@ nonisolated struct TVEpisodePointer: Codable, Hashable {
         title = try c.decodeIfPresent(String.self, forKey: .title)
         airDate = try c.decodeIfPresent(String.self, forKey: .airDate)
         isNew = try c.decodeIfPresent(Bool.self, forKey: .isNew) ?? false
+        imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
     }
 
     var coordinate: TVEpisodeCoordinate { TVEpisodeCoordinate(seasonNumber: seasonNumber, episodeNumber: episodeNumber) }

@@ -14,9 +14,15 @@ class MediaLikeMigrationTests(TransactionTestCase):
     migrate_to = [("app", "0066_medialike")]
 
     def tearDown(self):
+        executor = MigrationExecutor(connection)
+        # Delete the test's logs and movies first: 0072 writes movie rows from them and
+        # then alters app_movie in one transaction, which PostgreSQL refuses ("pending
+        # trigger events").
+        old_apps = executor.loader.project_state(self.migrate_from).apps
+        for name in ("DiaryEntry", "Movie"):
+            old_apps.get_model("app", name).objects.all().delete()
         # Restore every app's latest migration, so the next migration test starts
         # from the leaf (a partial state can force a mixed forwards and backwards plan).
-        executor = MigrationExecutor(connection)
         executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 

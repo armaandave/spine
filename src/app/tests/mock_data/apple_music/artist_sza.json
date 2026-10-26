@@ -1,0 +1,451 @@
+{
+  "data": [
+    {
+      "id": "605800394",
+      "type": "artists",
+      "attributes": {
+        "name": "SZA",
+        "url": "https://music.apple.com/us/artist/sza/605800394"
+      },
+      "views": {
+        "appears-on-albums": {
+          "attributes": {
+            "title": "Appears On"
+          },
+          "data": [
+            {
+              "id": "1707479914",
+              "type": "albums",
+              "attributes": {
+                "name": "Slime You Out (feat. SZA) - Single",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/slime-you-out-feat-sza-single/1707479914",
+                "playParams": {
+                  "id": "1707479914",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-15",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1674061484",
+              "type": "albums",
+              "attributes": {
+                "name": "Special (feat. SZA) [Sped Up Version] - Single",
+                "artistName": "Lizzo",
+                "url": "https://music.apple.com/us/album/special-feat-sza-sped-up-version-single/1674061484",
+                "playParams": {
+                  "id": "1674061484",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-02-24",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1669006146",
+              "type": "albums",
+              "attributes": {
+                "name": "Special (feat. SZA) - Single",
+                "artistName": "Lizzo",
+                "url": "https://music.apple.com/us/album/special-feat-sza-single/1669006146",
+                "playParams": {
+                  "id": "1669006146",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-02-09",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1570532323",
+              "type": "albums",
+              "attributes": {
+                "name": "Just For Me (Space Jam: A New Legacy) [feat. SZA] - Single",
+                "artistName": "SAINt JHN",
+                "url": "https://music.apple.com/us/album/just-for-me-space-jam-a-new-legacy-feat-sza-single/1570532323",
+                "playParams": {
+                  "id": "1570532323",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2021-06-11",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1440906927",
+              "type": "albums",
+              "attributes": {
+                "name": "Black Panther: The Album",
+                "artistName": "Kendrick Lamar",
+                "url": "https://music.apple.com/us/album/black-panther-the-album/1440906927",
+                "playParams": {
+                  "id": "1440906927",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-02-09",
+                "contentRating": "explicit",
+                "trackCount": 14
+              }
+            },
+            {
+              "id": "1440903005",
+              "type": "albums",
+              "attributes": {
+                "name": "Black Panther: The Album",
+                "artistName": "Kendrick Lamar",
+                "url": "https://music.apple.com/us/album/black-panther-the-album/1440903005",
+                "playParams": {
+                  "id": "1440903005",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-02-09",
+                "contentRating": "clean",
+                "trackCount": 14
+              }
+            },
+            {
+              "id": "1445029775",
+              "type": "albums",
+              "attributes": {
+                "name": "Consideration (feat. SZA) [Dance Remixes] - EP",
+                "artistName": "Rihanna",
+                "url": "https://music.apple.com/us/album/consideration-feat-sza-dance-remixes-ep/1445029775",
+                "playParams": {
+                  "id": "1445029775",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2017-12-08",
+                "contentRating": "explicit",
+                "trackCount": 6
+              }
+            },
+            {
+              "id": "1445037272",
+              "type": "albums",
+              "attributes": {
+                "name": "What Lovers Do (feat. SZA) [A-Trak Remix] - Single",
+                "artistName": "Maroon 5 & A-Trak",
+                "url": "https://music.apple.com/us/album/what-lovers-do-feat-sza-a-trak-remix-single/1445037272",
+                "playParams": {
+                  "id": "1445037272",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-11-02",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1444276097",
+              "type": "albums",
+              "attributes": {
+                "name": "Homemade Dynamite (Remix) [feat. Khalid, Post Malone & SZA] - Single",
+                "artistName": "Lorde",
+                "url": "https://music.apple.com/us/album/homemade-dynamite-remix-feat-khalid-post-malone-sza-single/1444276097",
+                "playParams": {
+                  "id": "1444276097",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-09-16",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1444281774",
+              "type": "albums",
+              "attributes": {
+                "name": "What Lovers Do (feat. SZA) [Slushii Remix] - Single",
+                "artistName": "Maroon 5",
+                "url": "https://music.apple.com/us/album/what-lovers-do-feat-sza-slushii-remix-single/1444281774",
+                "playParams": {
+                  "id": "1444281774",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-09-15",
+                "trackCount": 1
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/artists/605800394/view/appears-on-albums?offset=10"
+        },
+        "compilation-albums": {
+          "attributes": {
+            "title": "Compilations"
+          },
+          "data": []
+        },
+        "full-albums": {
+          "attributes": {
+            "title": "Albums"
+          },
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+                "playParams": {
+                  "id": "1794644675",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-12-20",
+                "contentRating": "explicit",
+                "trackCount": 42
+              }
+            },
+            {
+              "id": "1657869377",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos/1657869377",
+                "playParams": {
+                  "id": "1657869377",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-12-09",
+                "contentRating": "explicit",
+                "trackCount": 23
+              }
+            },
+            {
+              "id": "1628387909",
+              "type": "albums",
+              "attributes": {
+                "name": "Ctrl (Deluxe)",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/ctrl-deluxe/1628387909",
+                "playParams": {
+                  "id": "1628387909",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-06-09",
+                "contentRating": "explicit",
+                "trackCount": 21
+              }
+            }
+          ]
+        },
+        "live-albums": {
+          "attributes": {
+            "title": "Live Albums"
+          },
+          "data": [
+            {
+              "id": "1728151465",
+              "type": "albums",
+              "attributes": {
+                "name": "Apple Music Live: SZA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/apple-music-live-sza/1728151465",
+                "playParams": {
+                  "id": "1728151465",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-31",
+                "contentRating": "explicit",
+                "trackCount": 20
+              }
+            }
+          ]
+        },
+        "singles": {
+          "attributes": {
+            "title": "Singles & EPs"
+          },
+          "data": [
+            {
+              "id": "6819802963",
+              "type": "albums",
+              "attributes": {
+                "name": "Flower In A Hurricane [from GTAVI] - Single",
+                "artistName": "Justice, Tame Impala, SZA & King Gizzard & The Lizard Wizard",
+                "url": "https://music.apple.com/us/album/flower-in-a-hurricane-from-gtavi-single/6819802963",
+                "playParams": {
+                  "id": "6819802963",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2026-10-15",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1894091581",
+              "type": "albums",
+              "attributes": {
+                "name": "BOY IN RED - Single",
+                "artistName": "Isaiah Rashad & SZA",
+                "url": "https://music.apple.com/us/album/boy-in-red-single/1894091581",
+                "playParams": {
+                  "id": "1894091581",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2026-04-30",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1877213779",
+              "type": "albums",
+              "attributes": {
+                "name": "Save The Day (From \"Hoppers\") - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/save-the-day-from-hoppers-single/1877213779",
+                "playParams": {
+                  "id": "1877213779",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2026-02-20",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1865239526",
+              "type": "albums",
+              "attributes": {
+                "name": "girl, get up. - Single",
+                "artistName": "Doechii & SZA",
+                "url": "https://music.apple.com/us/album/girl-get-up-single/1865239526",
+                "playParams": {
+                  "id": "1865239526",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-12-30",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1840031100",
+              "type": "albums",
+              "attributes": {
+                "name": "PT Cruiser - Single",
+                "artistName": "MoRuf & SZA",
+                "url": "https://music.apple.com/us/album/pt-cruiser-single/1840031100",
+                "playParams": {
+                  "id": "1840031100",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-10-15",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1732348411",
+              "type": "albums",
+              "attributes": {
+                "name": "Saturn - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/saturn-single/1732348411",
+                "playParams": {
+                  "id": "1732348411",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-02-22",
+                "trackCount": 5
+              }
+            },
+            {
+              "id": "1704408522",
+              "type": "albums",
+              "attributes": {
+                "name": "NO SZNS - Single",
+                "artistName": "Jean Dawson & SZA",
+                "url": "https://music.apple.com/us/album/no-szns-single/1704408522",
+                "playParams": {
+                  "id": "1704408522",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-22",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1707428950",
+              "type": "albums",
+              "attributes": {
+                "name": "Snooze (feat. Justin Bieber) [Acoustic] - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/snooze-feat-justin-bieber-acoustic-single/1707428950",
+                "playParams": {
+                  "id": "1707428950",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-15",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            },
+            {
+              "id": "1704183235",
+              "type": "albums",
+              "attributes": {
+                "name": "Snooze - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/snooze-single/1704183235",
+                "playParams": {
+                  "id": "1704183235",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-08-25",
+                "contentRating": "explicit",
+                "trackCount": 4
+              }
+            },
+            {
+              "id": "1682342493",
+              "type": "albums",
+              "attributes": {
+                "name": "Kill Bill (feat. Doja Cat) - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/kill-bill-feat-doja-cat-single/1682342493",
+                "playParams": {
+                  "id": "1682342493",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-04-14",
+                "contentRating": "explicit",
+                "trackCount": 1
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/artists/605800394/view/singles?offset=10"
+        }
+      }
+    }
+  ]
+}

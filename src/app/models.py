@@ -48,6 +48,7 @@ class Sources(models.TextChoices):
     HARDCOVER = "hardcover", "Hardcover"
     COMICVINE = "comicvine", "Comic Vine"
     MUSICBRAINZ = "musicbrainz", "MusicBrainz"
+    APPLE_MUSIC = "apple_music", "Apple Music"
     MANUAL = "manual", "Manual"
 
 
@@ -485,6 +486,84 @@ class MusicGenreAlbum(models.Model):
     def __str__(self):
         """Return a readable genre entry."""
         return f"{self.genre}: {self.title}"
+
+
+class MusicAlbumLink(models.Model):
+    """One MusicBrainz release group Spine has matched, or tried to match, to Apple Music.
+
+    See docs/music/apple-music-catalog.md.
+    """
+
+    class Status(models.TextChoices):
+        MATCHED = "matched", "Matched"
+        REVIEW = "review", "Needs review"
+        UNMATCHED = "unmatched", "Unmatched"
+        APPLIED = "applied", "Applied"
+        REVERTED = "reverted", "Reverted"
+
+    class Method(models.TextChoices):
+        UPC_EXACT = "upc_exact", "Exact barcode"
+        UPC_FAMILY = "upc_family", "Barcode family"
+        ISRC = "isrc", "Shared songs"
+        SEARCH = "search", "Search"
+        WIKIDATA = "wikidata", "Wikidata"
+        BRIDGE = "bridge", "Bridge"
+        MANUAL = "manual", "Manual pick"
+
+    release_group_mbid = models.CharField(max_length=36, unique=True)
+    apple_album_id = models.CharField(max_length=36, blank=True, default="", db_index=True)
+    # Set once the row is applied: the Item that now holds the album's data.
+    item = models.ForeignKey(
+        Item,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="music_album_links",
+    )
+    status = models.CharField(max_length=20, choices=Status)
+    method = models.CharField(max_length=20, choices=Method, blank=True, default="")
+    # 1, 2 or 3; empty for manual and bridge rows.
+    tier = models.PositiveSmallIntegerField(null=True, blank=True)
+    # MusicBrainz genre names.
+    genres = models.JSONField(default=list, blank=True)
+    # The exact Spotify album link, when MusicBrainz has one.
+    spotify_url = models.URLField(max_length=2048, blank=True, default="")
+    apple_title = models.TextField(blank=True, default="")
+    apple_image = models.URLField(max_length=2048, blank=True, default="")
+    # The Item's fields before the move, so it can be undone.
+    previous = models.JSONField(default=dict, blank=True)
+    # Rows moved between Items (model, pk, from item, to item), so it can be undone.
+    moved_rows = models.JSONField(default=list, blank=True)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Return a readable link."""
+        return f"{self.release_group_mbid} -> {self.apple_album_id or '-'} ({self.status})"
+
+
+class AppleAlbum(models.Model):
+    """One Apple Music album ID Spine has seen: its listing identity and MusicBrainz bridge."""
+
+    apple_album_id = models.CharField(max_length=36, unique=True)
+    # The listing identity this ID belongs to; equal to apple_album_id for identities.
+    canonical_id = models.CharField(max_length=36, db_index=True)
+    upc = models.CharField(max_length=14, blank=True, default="")
+    release_group_mbid = models.CharField(max_length=36, blank=True, default="", db_index=True)
+    # Apple's normalized title equals the release group's title.
+    same_title = models.BooleanField(default=False)
+    # MusicBrainz's first release date; text, because it can be partial ("1994-12").
+    first_release_date = models.CharField(max_length=10, blank=True, default="")
+    spotify_url = models.URLField(max_length=2048, blank=True, default="")
+    spotify_exact = models.BooleanField(default=False)
+    # MusicBrainz genre names.
+    genres = models.JSONField(default=list, blank=True)
+    bridge_checked_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        """Return a readable album ID."""
+        return f"{self.apple_album_id} -> {self.canonical_id}"
 
 
 class BookCreditOverride(models.Model):

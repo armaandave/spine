@@ -2022,6 +2022,43 @@ final class SpineTests: XCTestCase {
         ), "3d")
     }
 
+    func testActivityShowsTheLogDateNotWhenItWasPosted() throws {
+        let calendar = Calendar.current
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 26, hour: 15)))
+
+        XCTAssertEqual(ActivityTimestampFormatter.logDateText(from: "2026-10-26", now: now, calendar: calendar), "Today")
+        XCTAssertEqual(ActivityTimestampFormatter.logDateText(from: "2026-10-25", now: now, calendar: calendar), "Yesterday")
+        XCTAssertEqual(ActivityTimestampFormatter.logDateText(from: "2026-10-04", now: now, calendar: calendar), "Oct 4")
+        XCTAssertEqual(ActivityTimestampFormatter.logDateText(from: "2019-05-04", now: now, calendar: calendar), "May 4, 2019")
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let backfilled = try decoder.decode(
+            ActivityItem.self,
+            from: Data(
+                """
+                {
+                  "id": 7,
+                  "type": "diary_created",
+                  "created_at": "2026-10-26T14:00:00Z",
+                  "consumed_at": "2019-05-04",
+                  "actor": {"id": 1, "username": "mobile", "display_name": "Mobile", "avatar_url": null},
+                  "media": null,
+                  "person": null,
+                  "object": {"type": "diary", "id": 7, "rating": "4.5", "liked": true}
+                }
+                """.utf8
+            )
+        )
+        XCTAssertEqual(backfilled.consumedAt, "2019-05-04")
+        XCTAssertEqual(ActivityTimestampFormatter.text(for: backfilled, now: now, calendar: calendar), "May 4, 2019")
+
+        // An older server sends no log date: fall back to the posting time.
+        let legacy = activityItem(id: 8, title: "Legacy", type: "diary_created")
+        let posted = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-20T12:00:00Z"))
+        XCTAssertEqual(ActivityTimestampFormatter.text(for: legacy, now: posted.addingTimeInterval(2 * 3_600)), "2h")
+    }
+
     func testRecentSearchesKeepMediaTypeAndReadLegacyText() throws {
         let searches = [
             RecentSearch(text: "Halo", mediaType: "game"),
@@ -3944,6 +3981,62 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    func testProfileRecentActivityRailShowsAShowOnceAcrossItsSeasonsAndEpisodes() {
+        func activity(_ id: Int, _ mediaType: String, mediaId: String = "1396", season: Int? = nil, episode: Int? = nil) -> ActivityItem {
+            ActivityItem(
+                id: id,
+                type: mediaType == "tv" ? "progress_updated" : "diary_created",
+                createdAt: "2026-10-26T12:00:00Z",
+                actor: UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil),
+                media: MediaSummary(
+                    ref: MediaRef(itemId: nil, source: "tmdb", mediaType: mediaType, mediaId: mediaId,
+                                  seasonNumber: season, episodeNumber: episode),
+                    title: "Breaking Bad",
+                    posterUrl: nil,
+                    posterOrientation: .portrait
+                ),
+                object: ActivityObject(type: "diary", id: id, previous: nil, current: nil, rating: nil, liked: nil, name: nil)
+            )
+        }
+        let items = [
+            activity(1, "episode", season: 2, episode: 5),
+            activity(-2, "tv"),
+            activity(3, "season", season: 2),
+            activity(4, "movie", mediaId: "1396"),
+            activity(5, "season", mediaId: "1399", season: 1),
+        ]
+
+        // The show's newest activity stands for it; a movie with the same id is another title.
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: items).map(\.activity.id), [1, 4, 5])
+    }
+
+    func testProfileRecentActivityRailFitsSquareAlbumArt() {
+        let albums = (1...5).map { activityItem(id: $0, title: "Album \($0)", mediaType: "music") }
+        let movie = activityItem(id: 6, title: "Movie")
+        let albumHeight = PosterSlot.profileRail.size.width
+        let posterHeight = PosterSlot.profileRail.size.height
+
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(for: ProfileRecentActivityRailModel.items(from: albums)),
+            albumHeight
+        )
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(for: ProfileRecentActivityRailModel.items(from: albums + [movie])),
+            posterHeight
+        )
+
+        // A movie that doesn't fit the width leaves the shown albums at album height.
+        let fiveItemWidth = PosterSlot.profileRail.size.width * 5 + ProfileRecentActivityRailModel.minimumSpacing * 4
+        let shownCount = ProfileRecentActivityRailModel.visibleCount(width: fiveItemWidth, itemCount: 6)
+        XCTAssertEqual(shownCount, 5)
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.artworkHeight(
+                for: Array(ProfileRecentActivityRailModel.items(from: albums + [movie]).prefix(shownCount))
+            ),
+            albumHeight
+        )
+    }
+
     func testHomeProgressFallsBackWhenProgressDeltaIsMissingOrUnchanged() {
         let unchanged = TrackingState(
             trackingId: 1,
@@ -5355,7 +5448,52 @@ final class SpineTests: XCTestCase {
         }
         XCTAssertEqual(recentMedia.ref.mediaType, "music")
         XCTAssertEqual(ActivityFeedPresentation.actionText(for: viewModel.recentActivityItems[1]), "listened to an album")
-        XCTAssertEqual(activityRepository.requests, [ActivityRequest(username: "mobile", limit: 6)])
+        XCTAssertEqual(activityRepository.requests, [ActivityRequest(username: "mobile", limit: ProfileRecentActivityRailModel.fetchLimit)])
+    }
+
+    func testDailyProgressReadsAsItsSummaryAndTheRailShowsEachTitleOnce() throws {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let actor = #"{"id": 1, "username": "mobile", "display_name": "Mobile", "avatar_url": null}"#
+        let show = #"{"ref": {"source": "tmdb", "media_type": "tv", "media_id": "1396"}, "title": "Severance"}"#
+        let album = #"{"ref": {"source": "musicbrainz", "media_type": "music", "media_id": "a"}, "title": "Year Zero"}"#
+        func progressDay(_ id: Int, _ day: String, _ summary: String, _ label: String) -> String {
+            """
+            {"id": -\(id), "type": "progress_updated", "created_at": "\(day)T20:00:00Z", "consumed_at": "\(day)",
+             "actor": \(actor), "media": \(show), "person": null,
+             "object": {"type": "progress_day", "id": \(id), "summary": "\(summary)", "label": "\(label)"}}
+            """
+        }
+        let log = """
+        {"id": 9, "type": "diary_created", "created_at": "2026-10-24T20:00:00Z", "consumed_at": "2026-10-24",
+         "actor": \(actor), "media": \(album), "person": null,
+         "object": {"type": "diary", "id": 9, "rating": "4.5", "liked": false}}
+        """
+        let page = try decoder.decode(
+            ActivityCursorResponse.self,
+            from: Data(
+                """
+                {"next_cursor": null, "previous_cursor": null, "results": [
+                  \(progressDay(3, "2026-10-26", "watched 4 episodes", "4 episodes")),
+                  \(progressDay(2, "2026-10-25", "watched 1 episode", "1 episode")),
+                  \(log)
+                ]}
+                """.utf8
+            )
+        )
+        let today = page.results[0]
+
+        XCTAssertEqual(ActivityFeedPresentation.actionText(for: today), "watched 4 episodes")
+        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: today), "4 episodes")
+        XCTAssertEqual(ActivityDestination.resolve(today), .media(try XCTUnwrap(today.media).ref))
+        XCTAssertEqual(
+            ActivityFeedPresentation.actionText(for: activityItem(id: 4, title: "Older server")),
+            "updated progress"
+        )
+        XCTAssertEqual(
+            ProfileRecentActivityRailModel.items(from: page.results).map(\.id),
+            [-3, 9]
+        )
     }
 
     @MainActor

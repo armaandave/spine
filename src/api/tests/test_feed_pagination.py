@@ -1,54 +1,50 @@
-"""The activity feed pages in a total order, even through activity sharing a timestamp.
+"""Activity pages in a total order, even through logs sharing a log date.
 
-Activity written in the same instant (a bulk import, or a frozen clock in tests) ties on
-created_at. Postgres returns tied rows in any order, so without a tiebreaker a cursor
-page can repeat or skip them.
+Logs of the same day (a backfill, or half-star media dated by calendar day) tie on
+their date and can tie on when they were written. Postgres returns tied rows in any
+order, so without a tiebreaker a cursor page can repeat or skip them.
 """
 
+from datetime import UTC, datetime
+
 from django.contrib.auth import get_user_model
-from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
-from django.utils import timezone
-from rest_framework.request import Request
-from rest_framework.test import APIRequestFactory
+from rest_framework import status
+from rest_framework.test import APIClient
 
-from api.pagination import FeedCursorPagination
-from social.models import Activity
+from app.models import DiaryEntry, Item, MediaTypes, Sources
 
 
-class FeedCursorPaginationTests(TestCase):
-    """Tied activity pages newest id first, with nothing repeated or skipped."""
+class ActivityCursorTests(TestCase):
+    """Tied logs page newest id first, with nothing repeated or skipped."""
 
-    def test_the_feed_query_breaks_timestamp_ties_by_id(self):
-        # Which order Postgres returns tied rows in depends on the plan and the row
-        # layout, so a test of tied rows alone can pass by luck: check the order itself.
-        user = get_user_model().objects.create_user(username="feeder", password="strong-password-123")
-        Activity.objects.create(actor=user, verb="followed", target_type="user", target_id=1)
-        request = Request(APIRequestFactory().get("/feed/"))
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="feeder", password="strong-password-123")
+        self.item = Item.objects.create(
+            source=Sources.MUSICBRAINZ.value,
+            media_type=MediaTypes.MUSIC.value,
+            media_id="feed-pagination",
+            title="Feed Pagination",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
 
-        with CaptureQueriesContext(connection) as queries:
-            list(FeedCursorPagination().paginate_queryset(Activity.objects.filter(actor=user), request))
+    def _log(self, consumed_at):
+        return DiaryEntry.objects.create(user=self.user, item=self.item, consumed_at=consumed_at).id
 
-        order_by = queries.captured_queries[-1]["sql"].rsplit("ORDER BY", 1)[1]
-        table = connection.ops.quote_name(Activity._meta.db_table)
-        self.assertIn(f"{table}.{connection.ops.quote_name('created_at')} DESC", order_by)
-        self.assertIn(f"{table}.{connection.ops.quote_name('id')} DESC", order_by)
-
-    def test_tied_timestamps_page_newest_id_first_without_gaps(self):
-        user = get_user_model().objects.create_user(username="feeder", password="strong-password-123")
-        ids = [
-            Activity.objects.create(actor=user, verb="followed", target_type="user", target_id=n).id
-            for n in range(5)
-        ]
-        Activity.objects.filter(id__in=ids).update(created_at=timezone.now())
+    def test_tied_log_dates_page_newest_id_first_without_gaps(self):
+        day = datetime(2019, 5, 4, tzinfo=UTC)
+        tied = [self._log(day) for _ in range(5)]
+        DiaryEntry.objects.filter(id__in=tied).update(created_at=datetime(2026, 1, 1, tzinfo=UTC))
+        newer = self._log(datetime(2026, 1, 1, tzinfo=UTC))
+        older = self._log(datetime(2010, 1, 1, tzinfo=UTC))
 
         seen = []
-        url = "/feed/?page_size=2"
+        url = "/api/v1/users/feeder/activity/?page_size=2"
         while url:
-            paginator = FeedCursorPagination()
-            request = Request(APIRequestFactory().get(url))
-            seen += [activity.id for activity in paginator.paginate_queryset(Activity.objects.filter(actor=user), request)]
-            url = paginator.get_next_link()
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            seen += [activity["id"] for activity in response.data["results"]]
+            url = response.data["next_cursor"]
 
-        self.assertEqual(seen, sorted(ids, reverse=True))
+        self.assertEqual(seen, [newer, *sorted(tied, reverse=True), older])

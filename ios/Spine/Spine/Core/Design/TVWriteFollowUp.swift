@@ -15,8 +15,9 @@ struct TVFollowUpComposer: Identifiable {
 ///   at most once (SW-700, TV-705). Not Now then goes on as No.
 /// - Whatever the answer, the composer opens for the season the first response named. A Yes can also name the
 ///   write's own season (`offer_season_number`); any other season only the Yes finished gets no composer.
-/// - The server offers each season's composer once, so it opens even when the season's page can't be loaded,
-///   from what the follow-up already has.
+/// - The composer opens in the same turn as the response that finished the season: its defaults come with the
+///   response, and its header from what the presenting screen already shows (`context`), so nothing is loaded
+///   first. The server offers each season's composer once.
 @MainActor
 @Observable
 final class TVWriteFollowUp {
@@ -28,29 +29,28 @@ final class TVWriteFollowUp {
     private(set) var isSending = false
     /// Why the last Yes failed; the question is asked again with it.
     private(set) var errorMessage: String?
-    /// Answers and composer loads in flight.
+    /// Answers in flight.
     private(set) var pendingWork = 0
-    /// The show's title, for a composer whose season page couldn't be loaded.
-    @ObservationIgnored var showTitle: String?
+    /// The show, or the season or episode page, as the presenting screen has it now. The composer's header takes
+    /// the show's title and artwork from it.
+    @ObservationIgnored var context: () -> MediaDetail? = { nil }
     /// Receives the Yes response, so the presenting screen can fold it in and refresh.
     @ObservationIgnored var onResponse: ((TVActionResponse) -> Void)?
     /// The last question shown, so the alert keeps its title while it animates away.
     @ObservationIgnored private(set) var lastQuestionText = ""
-    /// The detail load in flight, if any.
+    /// The answer in flight, if any.
     @ObservationIgnored private(set) var loading: Task<Void, Never>?
 
     @ObservationIgnored private let trackingRepository: TrackingRepository
-    @ObservationIgnored private let mediaRepository: MediaRepository
     @ObservationIgnored private var pendingFinished: TVFinished?
     @ObservationIgnored private var generation = 0
     /// The mutation ID of a Yes that failed, kept while its question is asked again.
     @ObservationIgnored private var retryMutationId: UUID?
 
     /// `showRef` may be the show or one of its seasons or episodes; actions go to the show.
-    init(showRef: MediaRef, trackingRepository: TrackingRepository, mediaRepository: MediaRepository) {
+    init(showRef: MediaRef, trackingRepository: TrackingRepository) {
         self.showRef = showRef.parentTVRef ?? showRef
         self.trackingRepository = trackingRepository
-        self.mediaRepository = mediaRepository
     }
 
     /// Whether it has something to show or is still working towards it.
@@ -74,8 +74,7 @@ final class TVWriteFollowUp {
         }
         guard let finished = envelope.finished else { return }
         generation += 1
-        let current = generation
-        run { [self] in await present(finished, generation: current) }
+        present(finished)
     }
 
     /// Answers the question and waits for everything it starts.
@@ -171,30 +170,63 @@ final class TVWriteFollowUp {
         }
         errorMessage = nil
         guard let offer, taken.generation == generation else { return }
-        await present(offer, generation: taken.generation)
+        present(offer)
     }
 
-    private func present(_ finished: TVFinished, generation current: Int) async {
+    private func present(_ finished: TVFinished) {
+        guard question == nil else { return }
+        composer = TVFollowUpComposer(
+            finished: finished,
+            detail: Self.composerDetail(for: finished, showRef: showRef, context: context())
+        )
+    }
+
+    /// The detail the composer opens on, for the season (or show) `finished` names. A season page finishing its
+    /// own season gives its own detail. Otherwise the show's title and artwork go under the season's ref, with the
+    /// season's poster when the screen has it: a show's or a season's detail carries the show's title, an
+    /// episode's names its show in `series_title`. The write's defaults are in `finished.composer`.
+    static func composerDetail(for finished: TVFinished, showRef: MediaRef, context: MediaDetail?) -> MediaDetail {
         let ref = finished.seasonNumber.map { seasonNumber in
             MediaRef(itemId: nil, source: showRef.source, mediaType: "season", mediaId: showRef.mediaId,
                      seasonNumber: seasonNumber, episodeNumber: nil)
         } ?? showRef
-        let detail: MediaDetail
-        do {
-            detail = try await mediaRepository.detail(ref: ref)
-        } catch is CancellationError {
-            return
-        } catch {
-            // The page didn't load, but the server has offered this season's log once already (TV-403): open the
-            // composer from what the follow-up has. The write's defaults are in `finished.composer`.
-            detail = MediaDetail(
+        if let context, context.ref.id == ref.id { return context }
+        let fallbackTitle = finished.composer.initialTarget?.title
+            ?? finished.seasonNumber.map(TVTrackingPresentation.seasonTitle) ?? "Log"
+        guard let context else { return MediaDetail(ref: ref, title: fallbackTitle) }
+        if context.ref.isEpisode {
+            // An episode's artwork is its still, not a poster.
+            let show = context.details?["series_title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return MediaDetail(
                 ref: ref,
-                title: showTitle ?? finished.composer.initialTarget?.title
-                    ?? finished.seasonNumber.map(TVTrackingPresentation.seasonTitle) ?? "Log"
+                title: show.flatMap { $0.isEmpty ? nil : $0 } ?? fallbackTitle,
+                backdropUrl: context.displayBackdropURL
             )
         }
-        guard current == generation, question == nil else { return }
-        composer = TVFollowUpComposer(finished: finished, detail: detail)
+        let season = finished.seasonNumber.flatMap { number in context.seasons?.first { $0.seasonNumber == number } }
+        return MediaDetail(
+            ref: ref,
+            title: context.title,
+            posterUrl: season?.imageUrl ?? context.displayPosterURL,
+            posterOrientation: context.posterOrientation,
+            posterAccentColor: context.posterAccentColor,
+            backdropUrl: context.displayBackdropURL
+        )
+    }
+
+    /// A context from a show's summary, as Continue Watching and the diary's picker have it: its title and artwork.
+    static func context(show: MediaSummary) -> MediaDetail {
+        MediaDetail(
+            ref: show.ref,
+            title: show.title,
+            imageUrl: show.imageUrl,
+            posterUrl: show.posterUrl,
+            posterOrientation: show.posterOrientation,
+            posterAccentColor: show.posterAccentColor,
+            backdropUrl: show.backdropUrl,
+            customPosterUrl: show.customPosterUrl,
+            customBackdropUrl: show.customBackdropUrl
+        )
     }
 }
 

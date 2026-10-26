@@ -127,11 +127,82 @@ nonisolated enum TVTrackingPresentation {
 
     // MARK: Continue Watching (TV-701)
 
-    /// "S1 E2 next", or "S3 E1 · New" when up next aired after the user's latest viewing of the show.
-    static func continueWatchingLine(for tv: TVShowState) -> String? {
-        guard let upNext = tv.upNext else { return nil }
+    /// The line under a show in Continue Watching: "S2 E5 next · 4 of 10", or "S3 E1 · New · 20 of 21" when up next
+    /// aired after the user's latest viewing of the show. Without `includesProgress` it is just "S2 E5 next", for a
+    /// card too narrow for the count. A card that a tick has just caught up or finished stays put until Home loads
+    /// again, and reads as the show's Library card does ("Caught up · E7 on Thu"), else its count.
+    static func continueWatchingLine(
+        for tv: TVShowState,
+        includesProgress: Bool = true,
+        today: Date = Date(),
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String? {
+        let progress = includesProgress ? progressText(watched: tv.watchedCount, aired: tv.airedCount) : nil
+        guard let upNext = tv.upNext else {
+            return cardLine(for: tv, today: today, calendar: calendar)
+                ?? progressText(watched: tv.watchedCount, aired: tv.airedCount)
+        }
         let code = episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)
-        return upNext.isNew ? "\(code) · New" : "\(code) next"
+        return [upNext.isNew ? "\(code) · New" : "\(code) next", progress].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// "S2 E5 · Marionettes", or "S2 E5" when the episode's title is unknown: the touch-and-hold preview's caption.
+    static func upNextTitle(for upNext: TVEpisodePointer) -> String {
+        let code = episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)
+        guard let title = nonEmpty(upNext.title) else { return code }
+        return "\(code) · \(title)"
+    }
+
+    /// VoiceOver's label for a Continue Watching card: the show and its line, "The Crown, S2 E5 next, 4 of 10".
+    static func continueWatchingAccessibilityLabel(show: String, tv: TVShowState) -> String {
+        guard let line = continueWatchingLine(for: tv) else { return show }
+        return "\(show), \(line.replacingOccurrences(of: " · ", with: ", "))"
+    }
+
+    /// A Continue Watching card's touch-and-hold menu: Mark S2 E5 Watched, Log S2 E5… and Go to Season 2 for up next,
+    /// then, right after a tick from this menu, Mark S2 E4 Unwatched for the episode it ticked (`undo`, TV-102).
+    static func continueWatchingMenu(for tv: TVShowState, undo: TVEpisodeCoordinate? = nil) -> [ContinueWatchingMenuItem] {
+        var items: [ContinueWatchingMenuItem] = []
+        if let upNext = tv.upNext {
+            let code = episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)
+            let season = seasonTitle(upNext.seasonNumber)
+            items.append(ContinueWatchingMenuItem(
+                title: "Mark \(code) Watched",
+                accessibilityName: "Mark \(code) watched",
+                systemImage: "checkmark.circle",
+                command: .markWatched(upNext.coordinate)
+            ))
+            items.append(ContinueWatchingMenuItem(
+                title: "Log \(code)…",
+                accessibilityName: "Log \(code)",
+                systemImage: "square.and.pencil",
+                command: .log(upNext.coordinate)
+            ))
+            items.append(ContinueWatchingMenuItem(
+                title: "Go to \(season)",
+                accessibilityName: "Go to \(season)",
+                systemImage: "list.number",
+                command: .openSeason(upNext.seasonNumber)
+            ))
+        }
+        if let undo {
+            let code = episodeCode(season: undo.seasonNumber, episode: undo.episodeNumber)
+            items.append(ContinueWatchingMenuItem(
+                title: "Mark \(code) Unwatched",
+                accessibilityName: "Mark \(code) unwatched",
+                systemImage: "arrow.uturn.backward",
+                command: .markUnwatched(undo)
+            ))
+        }
+        return items
+    }
+
+    // MARK: Show page Up next (TV-105)
+
+    /// The label over the show page's Up next row, which names the season the row's episode is in: "Up next ·
+    /// Season 2", or "New episode · Season 3" when it aired after the user's latest viewing of the show.
+    static func upNextLabel(for upNext: TVEpisodePointer) -> String {
+        "\(upNext.isNew ? "New episode" : "Up next") · \(seasonTitle(upNext.seasonNumber))"
     }
 
     // MARK: Seasons (TV-200, TV-204)
@@ -247,7 +318,8 @@ nonisolated enum TVTrackingPresentation {
     }
 
     /// The show's + menu: Watching (and Resume when Paused), Planning, Pause, Drop, Rewatch or Stop Rewatching,
-    /// Log and Remove from Library. Base options are always listed; unavailable ones carry the server's reason.
+    /// Log, and Remove from Library for a show in the library. Base options are always listed; unavailable ones
+    /// carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server sends.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
@@ -263,10 +335,9 @@ nonisolated enum TVTrackingPresentation {
             items.append(stop)
         }
         items.append(menu.item("log", "Log", "square.and.pencil", .log))
-        items.append(menu.item(
-            "remove", "Remove from Library", "trash", .confirmRemove,
-            fallbackReason: tv.inLibrary ? nil : "This show isn't in your library."
-        ))
+        if tv.inLibrary {
+            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
+        }
         return items
     }
 
@@ -293,16 +364,10 @@ nonisolated enum TVTrackingPresentation {
         let reasons: [String: String]
         let selected: String?
 
-        func item(
-            _ key: String,
-            _ title: String,
-            _ systemImage: String,
-            _ command: TVMenuItem.Command,
-            fallbackReason: String? = nil
-        ) -> TVMenuItem {
+        func item(_ key: String, _ title: String, _ systemImage: String, _ command: TVMenuItem.Command) -> TVMenuItem {
             let isSelected = selected == key
             let isAvailable = !isSelected && available.contains(key)
-            let reason = isSelected || isAvailable ? nil : (reasons[key] ?? fallbackReason ?? "Not available right now.")
+            let reason = isSelected || isAvailable ? nil : (reasons[key] ?? "Not available right now.")
             return TVMenuItem(
                 key: key,
                 title: title,
@@ -350,6 +415,29 @@ nonisolated struct TVMenuItem: Hashable, Identifiable {
     let command: Command
 
     var id: String { key }
+}
+
+/// One item of a Continue Watching card's touch-and-hold menu, also offered to VoiceOver as an action (TV-701).
+nonisolated struct ContinueWatchingMenuItem: Hashable, Identifiable {
+    enum Command: Hashable {
+        /// Ticks up next, as the show page's Up next row does (TV-100).
+        case markWatched(TVEpisodeCoordinate)
+        /// Opens the episode page's log composer for the episode (TV-404).
+        case log(TVEpisodeCoordinate)
+        /// Opens the season's page.
+        case openSeason(Int)
+        /// Unticks the episode the menu just ticked (TV-102).
+        case markUnwatched(TVEpisodeCoordinate)
+    }
+
+    /// "Mark S2 E5 Watched"
+    let title: String
+    /// "Mark S2 E5 watched", for VoiceOver.
+    let accessibilityName: String
+    let systemImage: String
+    let command: Command
+
+    var id: String { title }
 }
 
 // MARK: Composer target switching (TV-404)

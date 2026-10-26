@@ -151,7 +151,7 @@ class TVWebTestCase(TestCase):
 class TVWebEpisodeTests(TVWebTestCase):
     """Ticks and unticks from the season page's episode cards."""
 
-    def test_tv_100_a_web_tick_matches_the_app_and_posts_nothing(self):
+    def test_tv_100_a_web_tick_matches_the_app_and_writes_no_activity_row(self):
         response = self.post("watch_episode", *self.episode_args(1, 1), htmx=True)
         self.assert_fragment(response, EPISODE_CARD)
         self.app(tv_tracking.tick, 1, 1)

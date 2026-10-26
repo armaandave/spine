@@ -143,12 +143,11 @@ struct ListComposerView: View {
             Button(action: requestClose) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
-                    .background(.black.opacity(0.34), in: Circle())
-                    .overlay { Circle().stroke(.white.opacity(0.08)) }
             }
             .buttonStyle(.plain)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
             .disabled(viewModel.isSaving)
             .accessibilityLabel("Close list editor")
 

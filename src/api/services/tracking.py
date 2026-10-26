@@ -143,6 +143,7 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             data,
         )
 
+    previous_status = media.status if existing_media else None
     for api_field, model_field in {
         "status": "status",
         "rating": "score",
@@ -156,9 +157,19 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
         ):
             setattr(media, model_field, data[api_field])
     media.save()
+    _record_start(user, media, previous_status)
     if previous_progress is not None:
         _record_progress_change(user, media, previous_progress)
     return media
+
+
+def _record_start(user, media, previous_status):
+    """Record starting a title set to In progress; resuming isn't starting it."""
+    if media.status == Status.IN_PROGRESS.value and previous_status not in {
+        Status.IN_PROGRESS.value,
+        Status.PAUSED.value,
+    }:
+        ProgressChange.record_start(user, media.item)
 
 
 def delete_tracking(
@@ -208,7 +219,21 @@ def delete_tracking(
                 raise DiaryHistoryConflict from error
         else:
             media.delete()
+            _delete_progress_history(user, media.item)
     return None
+
+
+def _delete_progress_history(user, item):
+    """Drop a removed title's recorded starts and progress, with a show's seasons."""
+    changes = ProgressChange.objects.filter(actor=user, item=item)
+    if item.media_type == MediaTypes.TV.value:
+        changes = ProgressChange.objects.filter(
+            actor=user,
+            item__source=item.source,
+            item__media_id=item.media_id,
+            item__media_type__in=[MediaTypes.TV.value, MediaTypes.SEASON.value],
+        )
+    changes.delete()
 
 
 def consume_media(

@@ -347,6 +347,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, session)
+    _record_start(user, item, session)
     return book
 
 
@@ -435,6 +436,7 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, new)
+    _record_start(user, item, new)
     return book
 
 
@@ -1275,6 +1277,13 @@ def _record_progress_change(user, item, previous, current):
         item=item,
         snapshot={"previous": change.previous_progress, "current": current},
     )
+
+
+def _record_start(user, item, session):
+    """Record a new journey; deleting the journey drops it with its progress."""
+    from social.models import ProgressChange
+
+    ProgressChange.record_start(user, item, journey_id=session.pk)
 
 
 def is_true_reread(session):

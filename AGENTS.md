@@ -188,8 +188,8 @@ These defaults are now agent guidance:
 8. Rollout scope:
    - Social features should apply to all media types together (not phased by type).
 9. Feed scope/order:
-   - Include diary logs, ratings, and list activity.
-   - Reverse-chronological ordering (no algorithmic ranking yet).
+   - Activity is diary logs, each day's progress on a title, and starting a title, as defined in `docs/activity-contract.md` (not ratings without a log or list activity).
+   - Newest date first (no algorithmic ranking yet).
 10. Social notifications:
     - Disabled for now (no follow/like/comment notification work unless requested later).
 11. Performance expectation:

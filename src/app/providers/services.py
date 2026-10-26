@@ -67,6 +67,16 @@ musicbrainz_bucket_key = (
     if settings.REDIS_PREFIX
     else "musicbrainz_api"
 )
+apple_music_bucket_key = (
+    f"{settings.REDIS_PREFIX}_apple_music_api"
+    if settings.REDIS_PREFIX
+    else "apple_music_api"
+)
+apple_music_background_bucket_key = (
+    f"{settings.REDIS_PREFIX}_apple_music_background"
+    if settings.REDIS_PREFIX
+    else "apple_music_background"
+)
 
 session = LimiterSession(
     per_second=5,
@@ -126,6 +136,20 @@ musicbrainz_session = MusicBrainzSession(
     bucket_class=RedisBucket,
     bucket_kwargs={"redis": redis_db, "bucket_key": musicbrainz_bucket_key},
     limit_statuses=(requests.codes.service_unavailable,),
+)
+
+# Apple Music's limit is per developer token and unpublished, so its requests get
+# their own buckets instead of the shared one: one for requests someone is waiting
+# on, and a slower one for tasks and commands so they never crowd those out.
+apple_music_session = LimiterSession(
+    per_second=5,
+    bucket_class=RedisBucket,
+    bucket_kwargs={"redis": redis_db, "bucket_key": apple_music_bucket_key},
+)
+apple_music_background_session = LimiterSession(
+    per_second=2,
+    bucket_class=RedisBucket,
+    bucket_kwargs={"redis": redis_db, "bucket_key": apple_music_background_bucket_key},
 )
 
 person_search_session = LimiterSession(

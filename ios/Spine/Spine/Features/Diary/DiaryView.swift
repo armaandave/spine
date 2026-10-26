@@ -406,11 +406,11 @@ struct MediaDiaryView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
-                        .background(.white.opacity(0.1), in: Circle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(.circle)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Back")
 
                 Text(title)
@@ -742,7 +742,7 @@ struct DiaryView: View {
                 filter: $viewModel.filter,
                 scope: .diary,
                 options: viewModel.filterOptions,
-                usesGlass: true,
+                surface: .glass,
                 onUnauthorized: onUnauthorized
             ) {
                 Task { await reloadDiary(loadsFilterOptions: true) }

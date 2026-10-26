@@ -19,6 +19,7 @@ COMPANY_CACHE_TTL = 60 * 60 * 24
 COMPANY_CATALOG_CACHE_TTL = 60 * 60 * 24
 IGDB_BATCH_SIZE = 500
 COLLECTION_CACHE_VERSION = "v1"
+SEARCH_FIELDS = "fields name,cover.image_id,total_rating_count,total_rating,first_release_date,game_type;"
 
 
 class ExternalGameSource(IntEnum):
@@ -232,8 +233,7 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
 
         search_body = (
             f'search "{search_query}";'
-            "fields name,cover.image_id,total_rating_count,total_rating,"
-            "first_release_date,game_type;"
+            f"{SEARCH_FIELDS}"
             f"limit {settings.PER_PAGE};"
             f"offset {offset};"
             f"{base_conditions};"
@@ -293,6 +293,16 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
 
         total_results = count_response.get("count", 0)
 
+        if not total_results:
+            search_results, total_results = _search_names(
+                query,
+                base_conditions,
+                offset,
+                headers,
+                count=not preserve_ranking_fields,
+                timeout=timeout,
+            )
+
         results = [
             {
                 "media_id": media["id"],
@@ -326,6 +336,32 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
     return data
 
 
+def _search_names(query, base_conditions, offset, headers, *, count, timeout):
+    """Return games whose names contain every word of the query, most rated first.
+
+    IGDB's search only matches whole words, so it finds nothing for a word that's
+    still being typed, like "cyberpun".
+    """
+    words = [word.replace("\\", "\\\\").replace('"', '\\"') for word in str(query).split()]
+    if not words:
+        return [], 0
+    conditions = base_conditions + "".join(f' & name ~ *"{word}"*' for word in words)
+    results = _post_igdb(
+        f"{base_url}/games",
+        f"{SEARCH_FIELDS}"
+        "sort total_rating_count desc;"
+        f"limit {settings.PER_PAGE};"
+        f"offset {offset};"
+        f"{conditions};",
+        headers,
+        timeout=timeout,
+    )
+    if not count:
+        return results, len(results)
+    response = _post_igdb(f"{base_url}/games/count", f"{conditions};", headers, timeout=timeout)
+    return results, response.get("count", 0)
+
+
 def _normalize_name(value):
     return slugify(str(value or "")).casefold()
 
@@ -337,14 +373,21 @@ def _api_headers():
     }
 
 
-def _post_igdb(url, body, headers):
+def _post_igdb(url, body, headers, *, timeout=None):
     try:
-        return services.api_request(Sources.IGDB.value, "POST", url, data=body, headers=headers)
+        return services.api_request(Sources.IGDB.value, "POST", url, data=body, headers=headers, timeout=timeout)
     except requests.exceptions.HTTPError as error:
         error_resp = handle_error(error)
         if error_resp and error_resp.get("retry"):
-            headers["Authorization"] = f"Bearer {get_access_token()}"
-            return services.api_request(Sources.IGDB.value, "POST", url, data=body, headers=headers)
+            headers["Authorization"] = f"Bearer {get_access_token(timeout=timeout)}"
+            return services.api_request(
+                Sources.IGDB.value,
+                "POST",
+                url,
+                data=body,
+                headers=headers,
+                timeout=timeout,
+            )
         raise
 
 

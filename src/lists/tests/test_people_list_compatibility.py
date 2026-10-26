@@ -167,7 +167,7 @@ class PeopleListCrossSurfaceAPITests(TestCase):
             "list_type_mismatch",
         )
 
-    def test_person_list_activity_is_feed_visible_and_old_client_safe(self):
+    def test_person_list_adds_are_not_feed_activity(self):
         Activity.objects.create(
             actor=self.owner,
             verb="list_item_added",
@@ -191,16 +191,9 @@ class PeopleListCrossSurfaceAPITests(TestCase):
         self.client.force_authenticate(self.follower)
 
         response = self.client.get("/api/v1/feed/")
-        media_filtered = self.client.get("/api/v1/feed/", {"media_type": "movie"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
-        activity = response.data["results"][0]
-        self.assertIsNone(activity["media"])
-        self.assertEqual(activity["person"]["id"], "525")
-        self.assertEqual(activity["object"]["name"], self.people_list.name)
-        self.assertEqual(activity["object"]["person"]["id"], "525")
-        self.assertEqual(media_filtered.data["results"], [])
+        self.assertEqual(response.data["results"], [])
 
     def test_itemless_non_person_list_activity_stays_hidden(self):
         Activity.objects.create(

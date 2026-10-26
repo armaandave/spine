@@ -1715,50 +1715,55 @@ struct ProfileListDetailView: View {
     }
 
     private var topButtons: some View {
-        HStack {
-            ProfileListCircleIconButton(systemName: "chevron.left", label: "Back") {
-                dismiss()
-            }
-
-            Spacer()
-
-            if let list = viewModel.list {
-                if list.listType == .media {
-                MediaFilterButton(
-                    filter: $viewModel.filter,
-                    scope: .list(id: list.id),
-                    options: viewModel.filterOptions,
-                    onUnauthorized: onUnauthorized
-                ) {
-                    Task {
-                        await viewModel.loadFilterOptions()
-                        await viewModel.loadFilteredItems(reset: true)
-                    }
-                }
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                ProfileListCircleIconButton(systemName: "chevron.left", label: "Back") {
+                    dismiss()
                 }
 
-                if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
-                Menu {
-                    if list.canEdit(by: currentUserId) {
-                    Button("Edit List", systemImage: "slider.horizontal.3") {
+                Spacer()
+
+                if let list = viewModel.list {
+                    if list.listType == .media {
+                    MediaFilterButton(
+                        filter: $viewModel.filter,
+                        scope: .list(id: list.id),
+                        options: viewModel.filterOptions,
+                        surface: .glass,
+                        onUnauthorized: onUnauthorized
+                    ) {
                         Task {
-                            if await viewModel.loadAllItemsForEditing(),
-                               let list = viewModel.list {
-                                presentedForm = .edit(list)
-                            }
+                            await viewModel.loadFilterOptions()
+                            await viewModel.loadFilteredItems(reset: true)
                         }
                     }
                     }
-                    if list.canDelete(by: currentUserId) {
-                    Button("Delete List", systemImage: "trash", role: .destructive) {
-                        isDeleteAlertPresented = true
+
+                    if list.canEdit(by: currentUserId) || list.canDelete(by: currentUserId) {
+                    Menu {
+                        if list.canEdit(by: currentUserId) {
+                        Button("Edit List", systemImage: "slider.horizontal.3") {
+                            Task {
+                                if await viewModel.loadAllItemsForEditing(),
+                                   let list = viewModel.list {
+                                    presentedForm = .edit(list)
+                                }
+                            }
+                        }
+                        }
+                        if list.canDelete(by: currentUserId) {
+                        Button("Delete List", systemImage: "trash", role: .destructive) {
+                            isDeleteAlertPresented = true
+                        }
+                        }
+                    } label: {
+                        ProfileListCircleIconLabel(systemName: "ellipsis")
                     }
+                    .buttonStyle(.plain)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .disabled(viewModel.isSaving)
                     }
-                } label: {
-                    ProfileListCircleIconLabel(systemName: "ellipsis")
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSaving)
                 }
             }
         }
@@ -2199,6 +2204,8 @@ private struct ProfileListCircleIconButton: View {
             ProfileListCircleIconLabel(systemName: systemName)
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(label)
     }
 }
@@ -2209,12 +2216,10 @@ private struct ProfileListCircleIconLabel: View {
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 17, weight: .bold))
-            .foregroundStyle(.white)
             .frame(
                 width: CustomListHeaderLayout.topControlSize,
                 height: CustomListHeaderLayout.topControlSize
             )
-            .background(.black.opacity(0.34), in: Circle())
     }
 }
 

@@ -190,6 +190,9 @@ class TV403FinishOfferTests(TVTrackingTestCase):
         finished = self.tick(show, 1, 2).finished
         self.assertTrue(finished["show_finished"])
         self.assertEqual([target["id"] for target in finished["composer"]["targets"]], ["season:1", "show"])
+        # It opens on the season it finished, though the show page now defaults to the show.
+        self.assertEqual(finished["composer"]["default_target"], "season:1")
+        self.assertEqual(self.state(show)["composer"]["default_target"], "show")
 
     def test_tv_403_an_episode_log_that_finishes_a_season_offers_it_dated_by_the_log(self):
         show = self.make_show({1: 2, 2: 2})
@@ -427,7 +430,7 @@ class TV407LogDateTests(TVTrackingTestCase):
 class TV703FeedTests(TVTrackingTestCase):
     """TV-703: ticks don't post; each log posts one diary activity with its stars."""
 
-    def test_tv_703_ticks_marks_and_fills_post_nothing_and_logs_post_once(self):
+    def test_tv_703_ticks_marks_and_fills_write_no_activity_row_and_logs_write_one(self):
         from social.models import Activity
 
         show = self.make_show({1: 3, 2: 3})
