@@ -256,6 +256,7 @@ class PersonListItem(models.Model):
         HARDCOVER = "hardcover", "Hardcover"
         OPENLIBRARY = "openlibrary", "Open Library"
         MUSICBRAINZ = "musicbrainz", "MusicBrainz"
+        APPLE_MUSIC = "apple_music", "Apple Music"
         MAL = "mal", "MyAnimeList"
         MANGAUPDATES = "mangaupdates", "MangaUpdates"
         ANILIST = "anilist", "AniList"

@@ -1,0 +1,526 @@
+{
+  "data": [
+    {
+      "id": "1649434004",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights/1649434004",
+        "playParams": {
+          "id": "1649434004",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "explicit",
+        "trackCount": 14
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1689131527",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights (The Til Dawn Edition)",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights-the-til-dawn-edition/1689131527",
+        "playParams": {
+          "id": "1689131527",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "explicit",
+        "trackCount": 23
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1651516410",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights (3am Edition / Video Deluxe)",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights-3am-edition-video-deluxe/1651516410",
+        "playParams": {
+          "id": "1651516410",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "explicit",
+        "trackCount": 42
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1650841512",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights (3am Edition)",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights-3am-edition/1650841512",
+        "playParams": {
+          "id": "1650841512",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "explicit",
+        "trackCount": 20
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1689089710",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights (The Til Dawn Edition)",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights-the-til-dawn-edition/1689089710",
+        "playParams": {
+          "id": "1689089710",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "clean",
+        "trackCount": 23
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1650859878",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights (3am Edition)",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights-3am-edition/1650859878",
+        "playParams": {
+          "id": "1650859878",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "clean",
+        "trackCount": 20
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1645937456",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights/1645937456",
+        "playParams": {
+          "id": "1645937456",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "explicit",
+        "trackCount": 13
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1649434996",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights/1649434996",
+        "playParams": {
+          "id": "1649434996",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "clean",
+        "trackCount": 14
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1645937249",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1645937249",
+      "type": "albums",
+      "attributes": {
+        "name": "Midnights",
+        "artistName": "Taylor Swift",
+        "url": "https://music.apple.com/us/album/midnights/1645937249",
+        "playParams": {
+          "id": "1645937249",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-21",
+        "contentRating": "clean",
+        "trackCount": 13
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1689131527",
+              "type": "albums"
+            },
+            {
+              "id": "1651516410",
+              "type": "albums"
+            },
+            {
+              "id": "1650841512",
+              "type": "albums"
+            },
+            {
+              "id": "1689089710",
+              "type": "albums"
+            },
+            {
+              "id": "1650859878",
+              "type": "albums"
+            },
+            {
+              "id": "1649434004",
+              "type": "albums"
+            },
+            {
+              "id": "1645937456",
+              "type": "albums"
+            },
+            {
+              "id": "1649434996",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

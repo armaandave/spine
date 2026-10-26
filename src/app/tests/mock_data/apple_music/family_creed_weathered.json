@@ -1,0 +1,62 @@
+{
+  "data": [
+    {
+      "id": "1440738578",
+      "type": "albums",
+      "attributes": {
+        "name": "Weathered",
+        "artistName": "Creed",
+        "url": "https://music.apple.com/us/album/weathered/1440738578",
+        "playParams": {
+          "id": "1440738578",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2001-01-01",
+        "trackCount": 11
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "6803287133",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6803287133",
+      "type": "albums",
+      "attributes": {
+        "name": "Weathered (Deluxe Edition / Remastered 2026)",
+        "artistName": "Creed",
+        "url": "https://music.apple.com/us/album/weathered-deluxe-edition-remastered-2026/6803287133",
+        "playParams": {
+          "id": "6803287133",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2026-11-20",
+        "trackCount": 15
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440738578",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
