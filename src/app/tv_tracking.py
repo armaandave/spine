@@ -1047,7 +1047,9 @@ def _scope_keys(listing, today, scope):
                 add_season(number)
         elif kind == SEASON:
             add_season(values[0])
-        elif kind == EPISODE:
+        elif kind == EPISODE and listing.is_listed(values[0], values[1]):
+            # Only an episode the provider lists: a tick, log or heart of an unlisted one
+            # is rejected and must create no Items (TV-106).
             seasons.add(values[0])
             episodes.add((values[0], values[1]))
     return seasons, episodes
@@ -1122,6 +1124,8 @@ class _Ctx:
             self.status_before = None
             if self.tv.legacy_pending and self.entry_point in WORKING_OUT:
                 _work_out_legacy(self)
+            elif self.tv.legacy_pending and self.entry_point == WEBHOOK:
+                _record_legacy_facts(self)
         return self.tv
 
     def set_tv(self, **values):
@@ -1362,7 +1366,7 @@ def _perform(  # noqa: PLR0913
     if listing is None and require_listing:
         listing = _listing_for(show_item, entry_point)
     today = user_calendar.today(user)
-    if entry_point in WORKING_OUT and listing is not None and _needs_conversion(user, show_item):
+    if entry_point in (*WORKING_OUT, WEBHOOK) and listing is not None and _needs_conversion(user, show_item):
         scope = (*scope, ("all",))
     season_numbers, episode_keys = _scope_keys(listing, today, scope)
     items = _item_ids(show_item, listing, season_numbers, episode_keys)
@@ -1417,6 +1421,8 @@ def _run_locked(
     ctx = _Ctx(user, show_item, listing, entry_point, items, tv)
     if tv is not None and entry_point in WORKING_OUT:
         _work_out_legacy(ctx)
+    elif tv is not None and tv.legacy_pending and entry_point == WEBHOOK:
+        _record_legacy_facts(ctx)
     _take_progress_baseline(ctx)
     outcome = body(ctx) or {}
     result = WriteResult(
@@ -1837,7 +1843,9 @@ def _plan(ctx_like, *, include_rule, exact_datetime_first=True, rebuild=False): 
                 plan.mark_fills.extend(positions)
                 watched.update(positions)
                 plan.marks.append({"level": SHOW, "season_number": None, "count": len(positions)})
-        if not tv.choice:
+        # A stored status a webhook already recorded as the choice, and its watch then
+        # ended, stays ended (ended_choice is set only by a write that ended a choice).
+        if not tv.choice and not tv.ended_choice:
             recorded = bool(facts.viewings or facts.logs or plan.mark_fills)
             if tv.status in HOLDING_CHOICES:
                 plan.choice = tv.status
@@ -1951,6 +1959,27 @@ def _work_out_legacy(ctx):
             )
         return plan
     return None
+
+
+def _record_legacy_facts(ctx):
+    """Before a webhook writes to a show not yet worked out, record its legacy facts (TV-801).
+
+    The legacy plan (its logs converted with their fills and links, the legacy rule's
+    marks, the stored show-level choice) describes the show as it was stored before this
+    write, so it is recorded first and the event applies on top. Nothing is worked out:
+    the show stays legacy for the repair or the user's next write, which then reach the
+    same state whether the webhook came first or not (TV-207, TV-802).
+    """
+    plan = _plan(ctx, include_rule=True)
+    _apply_plan(ctx, plan)
+    if plan.shown_day_changes:
+        logger.info(
+            "Converted TV log dates for %s (user %s): %s",
+            ctx.show_item,
+            ctx.user.pk,
+            plan.shown_day_changes,
+        )
+    return plan
 
 
 @dataclass
@@ -3107,13 +3136,31 @@ def _level_aired(calc, season_number):
     return bool(season and season.aired)
 
 
+def _stars_unavailable(calc, season_number):
+    """Return why stars can't be set on the show or a season now, or None (TV-303, TV-005).
+
+    The + menu's "rate" and the stars write use this one rule. Stars are unavailable
+    while nothing under the level has aired. A show in the library whose only aired
+    episodes are specials takes stars as opinion; on a show not in the library they
+    would have nothing to mark (TV-004), so they stay unavailable there.
+    """
+    if season_number is None:
+        if calc.regular_aired or (calc.any_aired and calc.in_library):
+            return None
+        return MSG_NOTHING_AIRED
+    season = calc.seasons.get(season_number)
+    if season is not None and (season.aired or season.started):
+        return None
+    return MSG_NOTHING_AIRED
+
+
 def _do_set_rating(ctx, season_number, rating):
     calc = ctx.calc
     outcome = {"changed": False}
     if rating is not None:
-        season = calc.seasons.get(season_number) if season_number is not None else None
-        if not _level_aired(calc, season_number) and not (season is not None and season.started):
-            raise TVConflict(MSG_NOTHING_AIRED)
+        reason = _stars_unavailable(calc, season_number)
+        if reason is not None:
+            raise TVConflict(reason)
         if not calc.started:
             outcome = _mark_for_opinion(ctx, season_number)
     row = _opinion_row(ctx, season_number, create=rating is not None)
@@ -3682,35 +3729,68 @@ def update_log(entry, data, *, tags=None, entry_point=APP):
     )
 
 
+def _keeping_log(ctx, viewing, deleted_id, calc):
+    """Return another season or show log that covers a viewing's episode in its pass (TV-400).
+
+    The log a deletion hands the viewing to, as TV-302 case 2 does with mark fills; a
+    season log before a show log, the oldest first.
+    """
+    rewatch = calc.rewatch
+    in_pass = _in_pass(rewatch, viewing.season, viewing.created_at)
+    season_logs = []
+    show_logs = []
+    for log in ctx.facts.logs:
+        if log.id == deleted_id or _in_pass(rewatch, viewing.season, log.created_at) != in_pass:
+            continue
+        if viewing.episode not in log.covers.get(viewing.season, ()):
+            continue
+        if log.level == SEASON and log.season == viewing.season:
+            season_logs.append(log)
+        elif log.level == SHOW:
+            show_logs.append(log)
+    return (season_logs or show_logs or [None])[0]
+
+
 def _log_effect(ctx, log, calc=None):
-    """Return (own viewings and fills, episodes the deletion would unmark)."""
+    """Return what deleting a log does (TV-400, TV-406).
+
+    (own viewings and fills, episodes the deletion would unmark, {viewing id: log id}
+    for own viewings another season or show log covers, which that log keeps as fills).
+    """
     calc = calc or ctx.calc
     owned = [viewing for viewing in ctx.facts.viewings if viewing.entry_id == log.id]
     owned_ids = {viewing.id for viewing in owned}
     unmarked = set()
+    reassign = {}
     for viewing in owned:
         if viewing.kind == TICK:
             continue
-        if not _in_pass(calc.rewatch, viewing.season, viewing.created_at):
-            continue
+        in_pass = _in_pass(calc.rewatch, viewing.season, viewing.created_at)
         others = [
             other
             for other in ctx.facts.viewings
             if other.pos == viewing.pos
             and other.id not in owned_ids
-            and _in_pass(calc.rewatch, other.season, other.created_at)
+            and _in_pass(calc.rewatch, other.season, other.created_at) == in_pass
         ]
-        if not others:
+        if others:
+            continue
+        keeper = _keeping_log(ctx, viewing, log.id, calc)
+        if keeper is not None:
+            reassign[viewing.id] = keeper.id
+        elif in_pass:
             unmarked.add(viewing.pos)
-    return owned, unmarked
+    return owned, unmarked, reassign
 
 
 def delete_log(user, entry, *, expected_version=None, entry_point=APP, mutation_id=None):
     """Delete a TV log: only its own viewing and fills go (TV-406).
 
-    A claimed tick stays as an unlogged tick on its current day. Stars and heart
-    sources are detached (SW-106, SW-203). When the deletion would unmark episodes and
-    expected_version is stale, TVStateChanged. Then TV-205 and TV-208 apply.
+    A claimed tick stays as an unlogged tick on its current day. An episode another
+    season or show log still covers stays watched: the viewing becomes that log's fill
+    (TV-400). Stars and heart sources are detached (SW-106, SW-203). When the deletion
+    would unmark episodes and expected_version is stale, TVStateChanged. Then TV-205
+    and TV-208 apply.
     """
     if entry.user_id != user.pk:
         raise TVInvalid(MSG_NOT_YOURS)
@@ -3721,13 +3801,23 @@ def delete_log(user, entry, *, expected_version=None, entry_point=APP, mutation_
         log = next((log for log in ctx.facts.logs if log.id == entry.pk), None)
         if log is None:
             return {"changed": False}
-        owned, unmarked = _log_effect(ctx, log)
+        owned, unmarked, reassign = _log_effect(ctx, log)
         if unmarked and expected_version is not None and int(expected_version) != int(ctx.version_before):
             raise TVStateChanged(state_version=ctx.version_before, count=len(unmarked))
         claimed = [viewing for viewing in owned if viewing.kind == TICK]
         if claimed:
             Episode.objects.filter(pk__in=[viewing.id for viewing in claimed]).update(diary_entry=None)
-        ctx.delete_viewings([viewing for viewing in owned if viewing.kind != TICK])
+        if reassign:
+            # Another season or show log still covers these episodes (TV-400): they stay
+            # watched as its fills, as TV-302 case 2 hands mark fills to a covering log.
+            Episode.objects.bulk_update(
+                [
+                    Episode(pk=viewing_id, kind=FILL, diary_entry_id=entry_id, watched_on=None, end_date=None)
+                    for viewing_id, entry_id in reassign.items()
+                ],
+                ["kind", "diary_entry", "watched_on", "end_date"],
+            )
+        ctx.delete_viewings([viewing for viewing in owned if viewing.kind != TICK and viewing.id not in reassign])
         ctx.touched_seasons.update(viewing.season for viewing in owned)
         if log.season is not None:
             ctx.touched_seasons.add(log.season)
@@ -3759,27 +3849,26 @@ def delete_log(user, entry, *, expected_version=None, entry_point=APP, mutation_
     )
 
 
-def prime_log_info(entries):
-    """Set each owner's TV log info on its entry with one set of queries per show."""
-    views = {}
-    for entry in entries:
-        if not supports(entry.item):
-            continue
-        show_item = tv_listing.show_item_for(entry.item) if entry.item.media_type != MediaTypes.TV.value else entry.item
-        key = (entry.user_id, show_item.pk)
-        if key not in views:
-            views[key] = _View.load(entry.user, show_item, tv_listing.stored_listing(show_item))
-        entry._tv_log_info = views[key].log_info(entry.pk)
-
-
 def log_info(entry):
-    """Return the diary payload's tv_log for a TV log: what it covers and would unmark."""
-    cached = getattr(entry, "_tv_log_info", None)
-    if cached is not None:
-        return cached
+    """Return the diary payload's tv_log for a TV log: what it covers and would unmark.
+
+    Reads stored rows only, never the provider (TV-207): a log whose show Item doesn't
+    exist yet has no tracking to report, so it gets None.
+    """
     if not supports(entry.item):
         return None
-    show_item = tv_listing.show_item_for(entry.item)
+    if entry.item.media_type == MediaTypes.TV.value:
+        show_item = entry.item
+    else:
+        show_item = Item.objects.filter(
+            media_id=entry.item.media_id,
+            source=entry.item.source,
+            media_type=MediaTypes.TV.value,
+            season_number=None,
+            episode_number=None,
+        ).first()
+        if show_item is None:
+            return None
     view = _View.load(entry.user, show_item, tv_listing.stored_listing(show_item))
     return view.log_info(entry.pk)
 
@@ -3825,6 +3914,10 @@ def _import_facts(ctx, overwritten):
     """Turn an import's stored statuses into facts (TV-800)."""
     tv = ctx.tv
     if overwritten:
+        if any(not log.stamped for log in ctx.facts.logs):
+            # Logs from before the contract beside logs written under it: convert them
+            # first, so they get their coverage and fills too (TV-801, TV-800).
+            _apply_plan(ctx, _plan(ctx, include_rule=False))
         plan = _plan(ctx, include_rule=False, exact_datetime_first=False, rebuild=True)
         _apply_plan(ctx, plan)
     calc = ctx.calc
@@ -3869,11 +3962,18 @@ def reconcile_imported(user, show_items, *, overwritten_show_item_ids=()):
                     continue
                 fresh = show_item.pk in overwritten or (tv.reconciled_at is None and tv.state_version == 0)
                 if fresh and not tv.legacy_pending:
-                    snapshots = DiaryEntry.objects.filter(_family(show_item), user=user).values_list(
-                        "progress_snapshot",
-                        flat=True,
-                    )
-                    if show_item.pk not in overwritten and any(not _stamped(value) for value in snapshots):
+                    stamped = [
+                        _stamped(value)
+                        for value in DiaryEntry.objects.filter(_family(show_item), user=user).values_list(
+                            "progress_snapshot",
+                            flat=True,
+                        )
+                    ]
+                    if not all(stamped) and not (show_item.pk in overwritten and any(stamped)):
+                        # Logs from before the contract, and none written under it: the
+                        # show is legacy, overwritten or not, as events.tv_airing's retry
+                        # decides when the listing was unreachable (TV-801). The repair or
+                        # the user's next write converts the logs.
                         TV.objects.filter(pk=tv.pk).update(legacy_pending=True)
                         continue
                 if tv.legacy_pending:
@@ -4401,10 +4501,11 @@ class _View:
                 reasons["remove"] = MSG_DELETE_SHOW_LOGS
             else:
                 actions.append("remove")
-        if calc.any_aired:
+        stars_reason = _stars_unavailable(calc, None)
+        if stars_reason is None:
             actions.append("rate")
         else:
-            reasons["rate"] = MSG_NOTHING_AIRED
+            reasons["rate"] = stars_reason
         return actions, reasons
 
     def season_actions(self, season_number):
@@ -4422,10 +4523,11 @@ class _View:
                 reasons["rewatch_season"] = MSG_REWATCH_IN_PROGRESS
             else:
                 actions.append("rewatch_season")
-        if season is not None and (season.aired or season.started):
+        stars_reason = _stars_unavailable(calc, season_number)
+        if stars_reason is None:
             actions.append("rate")
         else:
-            reasons["rate"] = MSG_NOTHING_AIRED
+            reasons["rate"] = stars_reason
         return actions, reasons
 
     # States
@@ -4657,7 +4759,7 @@ class _View:
         log = next((log for log in self.facts.logs if log.id == entry_id), None)
         if log is None:
             return None
-        owned, unmarked = _log_effect(self, log, self.calc)
+        owned, unmarked, _ = _log_effect(self, log, self.calc)
         own = next((viewing for viewing in owned if viewing.kind in (TICK, LOG)), None)
         if log.level == EPISODE:
             covers_count = 1
@@ -4694,22 +4796,25 @@ def state_payload(user, item, *, detail=True, listing=None):
     return view.show_state(detail=detail, page=item if detail else None)
 
 
-def write_envelope(result, item=None):
+def write_envelope(result, item=None, *, page=None):
     """Return the write envelope (plan 2.3.5) for a WriteResult.
 
     item is the page the write came from (a season or episode Item adds its state);
-    otherwise season and episode follow the write's own season and episode.
+    otherwise season and episode follow the write's own season and episode. page, when
+    given, scopes only `tv` to the page the app showed (its season or episode state and
+    its composer, TV-404), and season and episode stay the write's own. A season page
+    also gets season_episodes, its listed episodes' states, so its rows show the write
+    at once, an eye's undo included (TV-302, TV-705).
     """
     view = _View.load(result.user, result.show_item, _payload_listing(result.show_item, result.listing))
-    page = item
     season_number = result.season_number
     episode_number = result.episode_number
-    if page is not None and page.media_type == MediaTypes.SEASON.value:
-        season_number, episode_number = page.season_number, None
-    elif page is not None and page.media_type == MediaTypes.EPISODE.value:
-        season_number, episode_number = page.season_number, page.episode_number
-    return {
-        "tv": view.show_state(detail=True, page=page),
+    if item is not None and item.media_type == MediaTypes.SEASON.value:
+        season_number, episode_number = item.season_number, None
+    elif item is not None and item.media_type == MediaTypes.EPISODE.value:
+        season_number, episode_number = item.season_number, item.episode_number
+    envelope = {
+        "tv": view.show_state(detail=True, page=page if page is not None else item),
         "season": view.season_state(season_number) if season_number is not None else None,
         "episode": (
             view.episode_state(season_number, episode_number, detail=True)
@@ -4720,6 +4825,13 @@ def write_envelope(result, item=None):
         "finished": result.finished,
         "earlier_unwatched": result.earlier_unwatched,
     }
+    if page is not None and page.media_type == MediaTypes.SEASON.value:
+        season = view.calc.seasons.get(page.season_number)
+        envelope["season_episodes"] = [
+            view.episode_state(page.season_number, listed.episode_number)
+            for listed in (season.episodes if season is not None else ())
+        ]
+    return envelope
 
 
 def list_payload(tv):
@@ -5033,7 +5145,6 @@ __all__ = [
     "on_tv_created",
     "plan_legacy",
     "prepare_items",
-    "prime_log_info",
     "prime_progress",
     "progress_payload",
     "rebuild_log_viewings",

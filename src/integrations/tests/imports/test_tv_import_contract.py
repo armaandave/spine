@@ -355,6 +355,101 @@ class TVImportContractTests(TestCase):
         self.assertEqual(self.viewings().filter(diary_entry=log, kind=Episode.Kind.FILL).count(), 3)
         self.assertEqual((tv.status, tv.choice), (Status.IN_PROGRESS.value, Status.IN_PROGRESS.value))
 
+    def season_item(self, show, number):
+        item, _ = Item.objects.get_or_create(
+            media_id=show.media_id,
+            source=show.source,
+            media_type=MediaTypes.SEASON.value,
+            season_number=number,
+            defaults={"title": show.title, "image": show.image},
+        )
+        return item
+
+    def pre_contract_log(self, show, number):
+        """A season log saved before the contract: no stamp, a date and time."""
+        return DiaryEntry.objects.create(
+            user=self.user,
+            item=self.season_item(show, number),
+            consumed_at=datetime(2026, 10, 1, 20, 0, tzinfo=user_calendar.calendar_tz(self.user)),
+        )
+
+    def test_tv_801_an_overwrite_over_a_pre_contract_log_leaves_the_show_legacy(self):
+        """The overwrite records its facts and leaves the show for the repair or the next write.
+
+        Whether TMDB answers during the import or only when the hourly job retries, the
+        show ends the same: legacy, its log not yet converted. The user's next write
+        converts the log, so Season 1 is watched (TV-800, TV-801).
+        """
+        reachable = self.show
+        unreachable = make_show(self.fake, seasons={1: 3, 2: 3}, title="Unreachable Show")
+        logs = {}
+        for show in (reachable, unreachable):
+            TV.objects.create(user=self.user, item=show, status=Status.IN_PROGRESS.value, legacy_pending=True)
+            logs[show.pk] = self.pre_contract_log(show, 1)
+        self.fake.fail(unreachable.media_id)
+        rows = [
+            self.row("tv", show=show, status=Status.IN_PROGRESS.value)
+            for show in (reachable, unreachable)
+        ]
+        rows += [
+            self.row("season", show=show, season=2, status=Status.IN_PROGRESS.value)
+            for show in (reachable, unreachable)
+        ]
+        rows += [
+            self.row("episode", show=show, season=2, episode=1, end_date="2026-10-20T18:00:00Z")
+            for show in (reachable, unreachable)
+        ]
+        self.import_csv(rows, mode="overwrite")
+        self.fake.recover()
+        self.clock.advance(hours=1)
+        tv_airing.refresh_aired_shows()
+
+        snapshots = {}
+        for show in (reachable, unreachable):
+            tv = self.tv(show)
+            logs[show.pk].refresh_from_db()
+            snapshots[show.pk] = (show_snapshot(self.user, show), tv.legacy_pending, tv.reconciled_at)
+            self.assertTrue(tv.legacy_pending)
+            self.assertIsNone(tv.reconciled_at)
+            self.assertIsNone(logs[show.pk].progress_snapshot)
+        self.assertEqual(snapshots[reachable.pk], snapshots[unreachable.pk])
+
+        self.clock.advance(minutes=1)
+        tv_tracking.tick(self.user, reachable, 2, 2)
+
+        tv = self.tv()
+        logs[reachable.pk].refresh_from_db()
+        self.assertFalse(tv.legacy_pending)
+        self.assertEqual(logs[reachable.pk].progress_snapshot["tv"]["covers"], {"1": [1, 2, 3]})
+        fills = self.viewings().filter(item__season_number=1)
+        self.assertEqual(sorted(viewing.item.episode_number for viewing in fills), [1, 2, 3])
+        self.assertTrue(all(viewing.diary_entry_id == logs[reachable.pk].pk for viewing in fills))
+        self.assertEqual((tv.status, tv.up_next_season, tv.up_next_episode), (Status.IN_PROGRESS.value, 2, 3))
+
+    def test_tv_800_an_overwrite_converts_a_pre_contract_log_beside_a_stamped_one(self):
+        """Both logs survive the overwrite with their fills (TV-800), the old one converted."""
+        season_2 = self.season_item(self.show, 2)
+        self.clock.advance(minutes=1)
+        stamped = tv_tracking.create_log(self.user, season_2, consumed_at=user_calendar.today(self.user)).entry
+        old = self.pre_contract_log(self.show, 1)
+
+        self.import_csv([self.row("tv", status=Status.IN_PROGRESS.value)], mode="overwrite")
+
+        tv = self.tv()
+        old.refresh_from_db()
+        self.assertFalse(tv.legacy_pending)
+        self.assertIsNotNone(tv.reconciled_at)
+        self.assertEqual(old.progress_snapshot["tv"]["covers"], {"1": [1, 2, 3]})
+        owners = {
+            (viewing.item.season_number, viewing.item.episode_number): viewing.diary_entry_id
+            for viewing in self.viewings()
+        }
+        self.assertEqual(owners, {
+            **{(1, episode): old.pk for episode in (1, 2, 3)},
+            **{(2, episode): stamped.pk for episode in (1, 2, 3)},
+        })
+        self.assertEqual(tv.status, Status.COMPLETED.value)
+
     def test_tv_800_the_daily_overwrite_import_run_twice_gives_the_same_snapshot(self):
         rows = [
             self.row("tv", status=Status.IN_PROGRESS.value, score="7.0"),

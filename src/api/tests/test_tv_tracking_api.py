@@ -296,7 +296,10 @@ class TVActionEndpointTests(TVAPITestCase):
 
         response = self.tick(show, 1, 1)
 
-        self.assert_error(response, 503, "tv_details_unavailable", "TV details are unavailable right now")
+        # provider_unavailable is the 503 code installed builds show the message of; any
+        # other code reads as "start the backend" there (TV-900). reason names the case.
+        self.assert_error(response, 503, "provider_unavailable", "TV details are unavailable right now")
+        self.assertEqual(response.data["error"]["reason"], "tv_details_unavailable")
         self.assertIsNone(self.tv(show))
 
     def test_tv_102_untick_blocked_by_a_season_log_is_409(self):
@@ -524,6 +527,94 @@ class TVActionEndpointTests(TVAPITestCase):
         self.assertEqual(response.data["earlier_unwatched"]["seasons"], [1])
         self.assertIsNone(response.data["tracking"]["rating"])
 
+    def test_tv_404_an_action_from_a_season_page_returns_that_pages_composer(self):
+        """A-56: after the Season 2 eye on its page, Log Season defaults to Rewatch.
+
+        The action names its page, so `tv` carries the page's season and composer; the
+        response's own `season` and `episode` stay the write's (TV-705).
+        """
+        show = self.make_show(seasons={1: 3, 2: 3, 3: 3})
+        self.log(show, 1)
+        before = self.detail(show, 2).data["user_state"]["tv"]
+        self.assertFalse(before["composer"]["targets"][0]["is_rewatch"])
+
+        marked = self.action(show, "mark_watched", season_number=2, page_season_number=2)
+        ticked = self.action(show, "tick", season_number=1, episode_number=1, page_season_number=2)
+        from_episode = self.action(show, "tick", season_number=3, episode_number=1, page_season_number=3, page_episode_number=1)
+
+        tv = marked.data["tv"]
+        self.assertEqual(tv["season"]["season_number"], 2)
+        self.assertEqual(tv["season"]["state"], "watched")
+        self.assertEqual(tv["composer"]["default_target"], "season:2")
+        self.assertTrue(tv["composer"]["targets"][0]["is_rewatch"])
+        self.assertEqual(marked.data["season"]["season_number"], 2)
+        # A write about another level keeps its own season and episode beside `tv`.
+        self.assertEqual(ticked.data["episode"]["episode_number"], 1)
+        self.assertEqual(ticked.data["tv"]["season"]["season_number"], 2)
+        self.assertEqual(from_episode.data["tv"]["episode"]["season_number"], 3)
+        self.assertTrue(from_episode.data["tv"]["episode"]["watched"])
+        self.assertEqual(from_episode.data["tv"]["composer"]["default_target"], "episode:3:1")
+        # Without a page `tv` describes the show (the show page, Home and Profile).
+        self.assertIsNone(self.action(show, "rate", rating=7).data["tv"]["season"])
+
+    def test_tv_302_an_eye_undo_from_a_season_page_returns_its_episode_rows(self):
+        """TV-302 case 2, TV-705: the rows show what the undo kept, before any reload.
+
+        Tick E1, mark the season with its eye, then undo it: E1 stays watched and the
+        mark's fills go. A season page's action responses carry its episode states.
+        """
+        show = self.make_show(seasons={1: 4})
+        self.tick(show, 1, 1, page_season_number=1)
+        self.action(show, "mark_watched", season_number=1, page_season_number=1)
+
+        undone = self.action(show, "unmark", season_number=1, page_season_number=1)
+
+        self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.data)
+        rows = {row["episode_number"]: row["watched"] for row in undone.data["season_episodes"]}
+        self.assertEqual(rows, {1: True, 2: False, 3: False, 4: False})
+        self.assertEqual(undone.data["tv"]["season"]["watched_count"], 1)
+        self.assertNotIn("season_episodes", self.tick(show, 1, 2).data)
+
+    def test_tv_005_rate_is_offered_exactly_when_the_stars_write_saves(self):
+        """TV-005, TV-303: the server's "rate" action and the stars write agree.
+
+        Includes a show whose only aired episode is a special, before and after it is
+        ticked, and a season with nothing aired.
+        """
+        specials_only = self.make_show(seasons={0: [date(2026, 10, 1)], 1: [date(2027, 1, 10)]})
+        unaired = self.make_show(seasons={1: [date(2027, 1, 10)]})
+        aired = self.make_show(seasons={1: 2, 2: [date(2027, 1, 10)]})
+        cases = []
+
+        def check(name, show, season=None):
+            state = self.detail(show, season).data["user_state"]["tv"]
+            actions = state["available_actions"] if season is None else state["season"]["available_actions"]
+            body = {"rating": 7} if season is None else {"rating": 7, "season_number": season}
+            response = self.action(show, "rate", **body)
+            cases.append((name, "rate" in actions, response.status_code == status.HTTP_200_OK))
+            if response.status_code != status.HTTP_200_OK:
+                self.assert_error(response, 409, "tv_action_unavailable", "Nothing has aired yet.")
+
+        check("specials only, not started", specials_only)
+        self.tick(specials_only, 0, 1)
+        check("specials only, started", specials_only)
+        check("nothing aired", unaired)
+        check("an aired show", aired)
+        check("an unaired season", aired, season=2)
+        check("an aired season", aired, season=1)
+
+        self.assertEqual(
+            cases,
+            [
+                ("specials only, not started", False, False),
+                ("specials only, started", True, True),
+                ("nothing aired", False, False),
+                ("an aired show", True, True),
+                ("an unaired season", False, False),
+                ("an aired season", True, True),
+            ],
+        )
+
     def test_tv_304_stars_on_a_started_show_are_opinion_only(self):
         """A-29: stars on a show at S1 E3 change nothing else."""
         show = self.make_show()
@@ -573,6 +664,31 @@ class TVInstalledBuildEndpointTests(TVAPITestCase):
         # TV-100: watched_at is ignored; the server dates the tick.
         self.assertEqual([viewing.watched_on for viewing in self.viewings(show)], [OCT_25])
         self.assertFalse(retry.data["changed"])
+
+    def test_tv_900_pre_contract_actions_keep_a_top_level_tracking_state(self):
+        """consume, pause, resume and drop returned a TrackingState before the contract.
+
+        They keep it at the top level, beside the new keys (TV-900: additions only).
+        """
+        show = self.make_show()
+        responses = {action: self.action(show, action) for action in ("consume", "pause", "resume", "drop")}
+
+        tv = self.tv(show)
+        for action, response in responses.items():
+            with self.subTest(action=action):
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                data = response.data
+                self.assertEqual(data["tracking_id"], tv.pk)
+                self.assertEqual(data["status"], data["tracking"]["status"])
+                self.assertEqual(data["progress"], data["tracking"]["progress"])
+                self.assertTrue({"tv", "season", "episode", "changed", "finished", "earlier_unwatched"} <= set(data))
+        self.assertEqual(
+            [responses[action].data["status"] for action in ("consume", "pause", "resume", "drop")],
+            ["Completed", "Paused", "Completed", "Dropped"],
+        )
+        # The new action names keep the nested shape only.
+        ticked = self.tick(self.make_show(), 1, 1)
+        self.assertNotIn("tracking_id", ticked.data)
 
     def test_tv_102_installed_build_episode_unwatch(self):
         show = self.make_show()
@@ -779,6 +895,90 @@ class TVListEndpointTests(TVAPITestCase):
         tv = self.tv(show)
         self.assertEqual(row["tracking"]["updated_at"], tv.last_activity_at)
 
+    def test_tv_207_tv_lists_load_no_viewings(self):
+        """The Library and Continue Watching read stored values and two dates per show.
+
+        They never load each show's viewings (TV-207); start_date and end_date are still
+        the first and last regular viewing, specials left out.
+        """
+        long = self.make_show(title="Long", seasons={0: 2, 1: 30, 2: 30})
+        short = self.make_show(title="Short", seasons={1: 5})
+        self.action(long, "mark_watched")
+        self.ticks(long, 2, [1])  # already watched: records nothing
+        self.tick(long, 0, 1)
+        self.ticks(short, 1, [1, 2])
+        long_tv, short_tv = self.tv(long), self.tv(short)
+        original = Episode.from_db.__func__
+        loaded = []
+
+        def counting(cls, *args, **kwargs):
+            loaded.append(1)
+            return original(cls, *args, **kwargs)
+
+        with mock.patch.object(Episode, "from_db", classmethod(counting)):
+            library = {row["media"]["title"]: row["tracking"] for row in self.tracked(media_type="tv")}
+            watching = self.tracked(media_type="tv", continue_watching="true")
+
+        self.assertEqual(loaded, [])
+        self.assertEqual(self.titles(watching), ["Short"])
+        for title, tv in (("Long", long_tv), ("Short", short_tv)):
+            self.assertEqual(library[title]["start_date"], tv.start_date)
+            self.assertEqual(library[title]["end_date"], tv.end_date)
+        self.assertIsNone(library["Long"]["start_date"])  # undated fills; the special doesn't count
+        self.assertIsNotNone(library["Short"]["end_date"])
+
+    def test_tv_801_a_show_stored_before_the_contract_waits_for_the_ship_repair(self):
+        """TV-701 with TV-801 and TV-103: lists read stored values only.
+
+        A Watching show stored before the contract has none until the repair works it
+        out, so Continue Watching leaves it out and its Library progress has no max.
+        The repair that ships with the contract (scripts/ios/SHIP.md) brings it back.
+        """
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        show = self.make_show(title="Stored Before")
+        tv = TV.objects.create(user=self.user, item=show, status="In progress")
+        TV.objects.filter(pk=tv.pk).update(legacy_pending=True)
+        season = Season.objects.create(
+            item=Item.objects.create(
+                media_id=show.media_id,
+                source=show.source,
+                media_type=MediaTypes.SEASON.value,
+                season_number=1,
+                title=show.title,
+            ),
+            user=self.user,
+            related_tv=tv,
+            status="In progress",
+        )
+        for number in (1, 2):
+            Episode.objects.create(
+                item=Item.objects.create(
+                    media_id=show.media_id,
+                    source=show.source,
+                    media_type=MediaTypes.EPISODE.value,
+                    season_number=1,
+                    episode_number=number,
+                    title=f"Episode {number}",
+                ),
+                related_season=season,
+                end_date=datetime(2026, 10, number, 20, 0, tzinfo=UTC),
+            )
+
+        self.assertEqual(self.tracked(media_type="tv", continue_watching="true"), [])
+        before = self.tracked(media_type="tv")[0]["tracking"]
+        self.assertEqual(before["progress"], {"kind": "episodes", "value": 2, "max": None, "unit": "episode"})
+
+        call_command("reconcile_tv", "--apply", stdout=StringIO(), stderr=StringIO())
+
+        rows = self.tracked(media_type="tv", continue_watching="true")
+        self.assertEqual(self.titles(rows), ["Stored Before"])
+        up_next = rows[0]["tracking"]["tv"]["up_next"]
+        self.assertEqual((up_next["season_number"], up_next["episode_number"]), (1, 3))
+        self.assertEqual(rows[0]["tracking"]["progress"], {"kind": "episodes", "value": 2, "max": 18, "unit": "episode"})
+
     def test_tv_701_continue_watching_lists_shows_by_last_activity(self):
         older = self.make_show(title="Older")
         newer = self.make_show(title="Newer")
@@ -916,6 +1116,24 @@ class TVMediaDetailTests(TVAPITestCase):
         self.assertEqual(response.data["completion"], {"completed_count": 1, "total_count": 2})
         self.assertEqual(response.data["user_state"]["tv"]["season"]["watched_count"], 1)
         self.assertEqual(response.data["tv_unlisted_episodes"], [])
+
+    def test_tv_301_a_marked_season_page_takes_the_same_queries_however_long(self):
+        """A season page's reads don't grow with its viewings (TV-301, A-47)."""
+        short = self.make_show(seasons={1: 10})
+        long = self.make_show(seasons={1: 40})
+        for show in (short, long):
+            self.action(show, "mark_watched", season_number=1)
+        for show in (short, long):
+            self.detail(show, 1)  # stores the listing and settles caches
+
+        reads = {}
+        for name, show in (("short", short), ("long", long)):
+            with CaptureQueriesContext(connection) as captured:
+                response = self.detail(show, 1)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            reads[name] = sum(1 for query in captured.captured_queries if query["sql"].startswith("SELECT"))
+
+        self.assertEqual(reads["long"], reads["short"])
 
     def test_episode_page_carries_its_episode_state(self):
         show = self.make_show()
@@ -1070,6 +1288,47 @@ class TVDiaryEndpointTests(TVAPITestCase):
         )
         self.assertEqual(retry.data["earlier_unwatched"], first.data["earlier_unwatched"])
 
+    def test_tv_705_a_log_from_its_page_returns_that_pages_state_and_composer(self):
+        """TV-400, TV-404, TV-705: the page shows what the log counted, and defaults.
+
+        An episode log from its episode page, and a season log from its season page,
+        name their page; `tv` then carries that page's state and composer, and
+        `season` and `episode` are the log target's own.
+        """
+        show = self.make_show()
+        self.ticks(show, 1, [1, 2, 3])
+
+        episode_log = self.log(show, 1, 5, page_season_number=1, page_episode_number=5)
+        season_log = self.log(show, 1, page_season_number=1, is_rewatch=False)
+        edited = self.client.patch(
+            f"/api/v1/diary/{season_log.data['id']}/",
+            {"rating": 8, "page_season_number": 1},
+            format="json",
+        )
+
+        self.assertEqual(episode_log.status_code, status.HTTP_201_CREATED, episode_log.data)
+        page = episode_log.data["tv"]["episode"]
+        self.assertEqual((page["season_number"], page["episode_number"], page["watched"]), (1, 5, True))
+        self.assertEqual(episode_log.data["episode"], page)
+        self.assertEqual(episode_log.data["season"]["watched_count"], 4)
+        target = episode_log.data["tv"]["composer"]["targets"][0]
+        # The episode now has a log, so logging it again defaults to Rewatch (TV-404).
+        self.assertEqual((target["id"], target["is_rewatch"]), ("episode:1:5", True))
+        self.assertIsNone(episode_log.data["tv"]["season"])
+
+        self.assertEqual(season_log.data["tv"]["season"]["state"], "watched")
+        self.assertEqual(season_log.data["season"]["watched_count"], 10)
+        self.assertIsNone(season_log.data["episode"])
+        target = season_log.data["tv"]["composer"]["targets"][0]
+        self.assertEqual((target["id"], target["is_rewatch"]), ("season:1", True))
+        self.assertEqual(edited.data["tv"]["season"]["rating"], "8.0")
+        self.assertEqual(edited.data["season"]["rating"], "8.0")
+
+        # Without a page (the show page, the Diary) `tv` describes the show, as before.
+        show_page = self.log(show, 2)
+        self.assertIsNone(show_page.data["tv"]["season"])
+        self.assertEqual(show_page.data["season"]["season_number"], 2)
+
     def test_tv_403_an_episode_log_that_finishes_a_season_offers_its_log(self):
         show = self.make_show()
         self.ticks(show, 1, range(1, 10))
@@ -1150,8 +1409,12 @@ class TVDiaryEndpointTests(TVAPITestCase):
         self.assertIsNone(by_type["season"]["media"]["episode_title"])
         self.assertEqual(by_type["episode"]["media"]["show_title"], "Doctor Who")
         self.assertEqual(by_type["episode"]["media"]["episode_title"], "Fly")
-        self.assertEqual(by_type["episode"]["tv_log"]["level"], "episode")
-        self.assertEqual(by_type["season"]["tv_log"]["covers_count"], 10)
+        # tv_log is worked out only for one log at a time: the log's own screen reads it
+        # from GET diary/{id}/ (TV-207: a list never works out each show's viewings).
+        self.assertEqual({row["tv_log"] for row in response.data["results"]}, {None})
+        detail = {kind: self.client.get(f"/api/v1/diary/{row['id']}/").data for kind, row in by_type.items()}
+        self.assertEqual(detail["episode"]["tv_log"]["level"], "episode")
+        self.assertEqual(detail["season"]["tv_log"]["covers_count"], 10)
 
     def test_tv_log_is_for_the_owner_only(self):
         show = self.make_show()
@@ -1165,22 +1428,46 @@ class TVDiaryEndpointTests(TVAPITestCase):
         self.assertEqual(theirs.status_code, status.HTTP_200_OK)
         self.assertIsNone(theirs.data["tv_log"])
 
-    def test_tv_702_diary_list_titles_take_bounded_queries(self):
-        shows = [self.make_show(title=f"Show {index}") for index in range(4)]
+    def test_tv_702_diary_list_takes_the_same_queries_however_many_shows(self):
+        """TV-207: a Diary page reads stored values only, whatever its TV logs."""
+        shows = [self.make_show(title=f"Show {index}") for index in range(12)]
         self.log(shows[0], 1, 1)
         self.log(shows[1], 1)
         with CaptureQueriesContext(connection) as few:
-            self.client.get("/api/v1/diary/")
+            self.client.get("/api/v1/diary/", {"page_size": 100})
         for show in shows[2:]:
             self.log(show, 1, 2)
             self.log(show, 2)
+        # A log from before the contract (unstamped, legacy show) costs nothing extra.
+        DiaryEntry.objects.filter(user=self.user, item__media_id=shows[11].media_id).update(progress_snapshot=None)
+        TV.objects.filter(user=self.user, item=shows[11]).update(legacy_pending=True)
+        self.fake.reset_calls()
 
         with CaptureQueriesContext(connection) as many:
-            response = self.client.get("/api/v1/diary/")
+            response = self.client.get("/api/v1/diary/", {"page_size": 100})
 
-        self.assertEqual(len(response.data["results"]), 6)
-        # Titles take two queries a page; tv_log is worked out once per show.
-        self.assertLessEqual(len(many) - len(few), 2 * 12)
+        self.assertEqual(len(response.data["results"]), 22)
+        self.assertEqual(len(many), len(few))
+        self.assertEqual(self.fake.count(), 0)
+
+    def test_tv_207_a_log_whose_show_item_is_missing_reads_without_the_provider(self):
+        """The Diary and the log's screen never call TMDB, so an outage can't fail."""
+        show = self.make_show()
+        entry_id = self.log(show, 1, 1).data["id"]
+        # A season or episode Item can exist without its show Item (imports, the web).
+        TV.objects.filter(user=self.user, item=show).delete()
+        Item.objects.filter(pk=show.pk).delete()
+        self.fake.reset_calls()
+        self.fake.fail()
+
+        listed = self.client.get("/api/v1/diary/")
+        detail = self.client.get(f"/api/v1/diary/{entry_id}/")
+
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(listed.data["results"]), 1)
+        self.assertIsNone(detail.data["tv_log"])
+        self.assertEqual(self.fake.count(), 0)
 
 
 class TVLikeEndpointTests(TVAPITestCase):

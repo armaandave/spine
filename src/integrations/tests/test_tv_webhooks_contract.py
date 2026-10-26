@@ -194,10 +194,17 @@ class TVWebhookContractTests(TestCase):
 
         self.event(PLEX_WATCHED, 1, 1)
 
+        # The stored Completed show is a legacy mark (TV-801): a fact from before the
+        # watch, recorded first, so the watch records nothing (TV-101) and the repair
+        # later ends where it would have without the webhook (TV-207). Nothing is
+        # worked out: the show stays legacy with its stored status.
         tv.refresh_from_db()
         self.assertTrue(tv.legacy_pending)
+        self.assertIsNone(tv.reconciled_at)
         self.assertEqual(tv.status, Status.COMPLETED.value)
-        self.assertEqual(self.viewings().count(), 1)
+        viewings = self.viewings()
+        self.assertGreater(viewings.count(), 1)
+        self.assertEqual(set(viewings.values_list("kind", "diary_entry", "watched_on")), {("fill", None, None)})
 
 
 @override_settings(TIME_ZONE="America/New_York")

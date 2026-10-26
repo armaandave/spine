@@ -273,14 +273,24 @@ class TV801GatingTests(LegacyTestCase):
         self.assertEqual(one["up_next"], (2, 3))
 
     def test_tv_801_a_webhook_or_import_write_leaves_a_log_only_show_legacy(self):
+        """Neither works the show out; a webhook first records the old log's facts.
+
+        The log's fills are facts about the show from before the webhook, so they come
+        first and the watch applies on top (TV-207: the repair, run before or after,
+        then reaches the same state). Nothing is worked out: no stored status or counts.
+        """
         show = self.make_show({1: 2, 2: 2})
-        self.old_log(self.season_item(show, 1), datetime(2026, 10, 1, 20, 0, tzinfo=UTC))
+        log = self.old_log(self.season_item(show, 1), datetime(2026, 10, 1, 20, 0, tzinfo=UTC))
         self.advance()
         tv_tracking.webhook_event(self.user, show, 2, 1, event="watched", at=self.clock.moment)
         tv = self.tv(show)
         self.assertTrue(tv.legacy_pending)
         self.assertIsNone(tv.reconciled_at)
-        self.assertEqual(len(self.viewings(show)), 1)
+        self.assertEqual(
+            sorted((row.item.season_number, row.item.episode_number, row.kind, row.diary_entry_id) for row in self.viewings(show)),
+            [(1, 1, Episode.Kind.FILL, log.pk), (1, 2, Episode.Kind.FILL, log.pk), (2, 1, Episode.Kind.TICK, None)],
+        )
+        self.assertEqual((tv.watched_count, tv.up_next_season), (None, None))
         tv_tracking.reconcile_imported(self.user, [show])
         tv.refresh_from_db()
         self.assertTrue(tv.legacy_pending)

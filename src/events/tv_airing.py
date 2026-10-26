@@ -134,8 +134,9 @@ def _retry_import(tv):
 
     A row that was never worked out while its show already has logs written under the
     contract was recreated by an overwrite import, so those logs get their viewings
-    and fills back (TV-800). Logs from before the contract instead make the show
-    legacy, for the repair or the user's next write (TV-801).
+    and fills back, and logs from before the contract beside them are converted
+    (TV-800). Logs from before the contract alone make the show legacy, for the repair
+    or the user's next write (TV-801), as reconcile_imported decides.
     """
     snapshots = list(
         DiaryEntry.objects.filter(
@@ -146,7 +147,7 @@ def _retry_import(tv):
         ).values_list("progress_snapshot", flat=True),
     )
     stamped = [_is_stamped(snapshot) for snapshot in snapshots]
-    overwritten = [tv.item_id] if stamped and all(stamped) else []
+    overwritten = [tv.item_id] if any(stamped) else []
     tv_tracking.reconcile_imported(tv.user, [tv.item], overwritten_show_item_ids=overwritten)
     return TV.objects.filter(pk=tv.pk, reconciled_at__isnull=False).exists()
 

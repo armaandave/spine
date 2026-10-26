@@ -696,6 +696,106 @@ class FlowBSeasonsOnlyTests(AcceptanceHelpers, TVAcceptanceTestCase):
         self.assert_surfaces_agree_for(show, drivers)
 
 
+class CoveringLogDeletionTests(AcceptanceHelpers, TVAcceptanceTestCase):
+    """TV-400 with TV-406: deleting a log never unwatches what another log covers."""
+
+    def test_tv_400_deleting_the_older_of_two_season_logs_keeps_the_season(self):
+        """Log Season 1 twice, delete the first log: Season 1 stays 10 of 10."""
+        show = self.make_show()
+        counts = {}
+
+        def steps(driver):
+            driver.log(show, 1, day=date(2026, 10, 20), is_rewatch=False)
+            driver.log(show, 1, day=OCT_25, is_rewatch=True)
+            older = DiaryEntry.objects.filter(user=driver.user).order_by("created_at", "id").first()
+            if driver.path == "api":
+                counts["unmarks"] = driver.entry(older.pk)["tv_log"]["unmarks_count"]
+            driver.delete_log(older.pk)
+
+        drivers = self.run_paths(show, steps, LOG_PATHS)
+
+        snap = self.assert_same_state(show, drivers)
+        remaining = ("season", 1, None, "2026-10-25", 1)
+        self.assertEqual(counts["unmarks"], 0)  # the dialog says nothing will be unmarked
+        self.assertEqual(snap["watched_pass"], positions(1, range(1, 11)))
+        self.assertEqual(snap["seasons"][1]["watched"], 10)
+        self.assertEqual(snap["status"], WATCHING)
+        self.assertEqual(snap["up_next"][:2], (2, 1))
+        self.assertEqual([log[0] for log in snap["logs"]], [remaining])
+        self.assertEqual({(viewing[2], viewing[3], viewing[4]) for viewing in snap["viewings"]}, {("fill", remaining, None)})
+        self.assert_surfaces_agree_for(show, drivers)
+
+    def test_tv_400_deleting_a_show_log_keeps_a_season_a_season_log_covers(self):
+        """A show log, then a Season 2 log: deleting the show log unmarks Season 1."""
+        show = self.make_show()
+        counts = {}
+
+        def steps(driver):
+            driver.log(show, day=date(2026, 10, 20), is_rewatch=False)
+            driver.log(show, 2, day=OCT_25, is_rewatch=False)
+            show_log = DiaryEntry.objects.get(user=driver.user, item__media_type="tv")
+            if driver.path == "api":
+                counts["unmarks"] = driver.entry(show_log.pk)["tv_log"]["unmarks_count"]
+            driver.delete_log(show_log.pk)
+
+        drivers = self.run_paths(show, steps, LOG_PATHS)
+
+        snap = self.assert_same_state(show, drivers)
+        self.assertEqual(counts["unmarks"], 10)
+        self.assertEqual(snap["watched_pass"], positions(2, range(1, 9)))
+        self.assertEqual(snap["seasons"][2]["watched"], 8)
+        self.assertEqual(snap["season_rows"], [2])
+        self.assertEqual(snap["status"], WATCHING)
+        self.assertEqual(snap["up_next"][:2], (1, 1))
+        self.assert_surfaces_agree_for(show, drivers)
+
+    def test_tv_400_deleting_an_episode_log_keeps_an_episode_a_season_log_covers(self):
+        """An S1 E4 log, then a Season 1 log: deleting the E4 log keeps E4 watched."""
+        show = self.make_show()
+        api_reader = {}
+
+        def steps(driver):
+            driver.log(show, 1, 4, day=date(2026, 10, 20), is_rewatch=False)
+            driver.log(show, 1, day=OCT_25, is_rewatch=False)
+            episode_log = DiaryEntry.objects.get(user=driver.user, item__media_type="episode")
+            driver.delete_log(episode_log.pk)
+            api_reader[driver.path] = self.api(driver.user)
+
+        drivers = self.run_paths(show, steps, ("api", "installed"))
+
+        snap = self.assert_same_state(show, drivers)
+        season_log = ("season", 1, None, "2026-10-25", 1)
+        self.assertEqual(snap["watched_pass"], positions(1, range(1, 11)))
+        self.assertIn((1, 4, "fill", season_log, None), snap["viewings"])
+        self.assertEqual(snap["up_next"][:2], (2, 1))
+        for reader in api_reader.values():
+            self.assertEqual(reader.episode_state(show, 1, 4)["untick_message"], "Delete your Season 1 log first.")
+            self.assertEqual(self.season_card(reader, show, 1)["state"], "watched")
+        self.assert_surfaces_agree_for(show, drivers)
+
+    def test_tv_400_fills_a_log_took_over_from_a_mark_go_to_the_next_covering_log(self):
+        """Mark the show, log Season 2 twice, undo the eye, delete the older log."""
+        show = self.make_show()
+
+        def steps(driver):
+            driver.mark(show)
+            driver.log(show, 2, day=date(2026, 10, 20), is_rewatch=True)
+            driver.log(show, 2, day=OCT_25, is_rewatch=True)
+            driver.unmark(show)  # TV-302 case 2: Season 2's fills become the older log's
+            older = DiaryEntry.objects.filter(user=driver.user).order_by("created_at", "id").first()
+            driver.delete_log(older.pk)
+
+        drivers = self.run_paths(show, steps, ("api", "web"))
+
+        snap = self.assert_same_state(show, drivers)
+        remaining = ("season", 2, None, "2026-10-25", 1)
+        self.assertEqual(snap["watched_pass"], positions(2, range(1, 9)))
+        self.assertEqual({(viewing[2], viewing[3]) for viewing in snap["viewings"]}, {("fill", remaining)})
+        self.assertEqual(snap["status"], WATCHING)
+        self.assertEqual(snap["up_next"][:2], (1, 1))
+        self.assert_surfaces_agree_for(show, drivers)
+
+
 # ---------------------------------------------------------------------------------
 # Flow C: the whole show
 # ---------------------------------------------------------------------------------
@@ -1459,13 +1559,19 @@ class FlowFNewEpisodesTests(AcceptanceHelpers, TVAcceptanceTestCase):
         self.assertTrue(all(viewing[2:] == ("fill", "mark", None) for viewing in snap["viewings"]))
         self.assert_surfaces_agree_for(show, drivers)
 
-        # A webhook records its fact on such a show without working it out (TV-801).
+        # A webhook records facts on such a show without working it out (TV-801). The
+        # legacy mark is a fact about the show from before the watch, so it is recorded
+        # first and the watch records nothing (TV-101); the repair then ends where the
+        # app's tick did, whichever came first (TV-207).
         hook = self.driver("webhook")
         legacy_row(hook.user)
         hook.tick(show, 1, 1)
         after = self.snap_of(hook, show)
         self.assertTrue(after["legacy_pending"])
-        self.assertEqual((after["status"], after["viewings"]), (COMPLETED, [(1, 1, "tick", None, "2026-10-25")]))
+        self.assertEqual((after["status"], after["viewings"]), (COMPLETED, snap["viewings"]))
+        call_command("reconcile_tv", "--apply", "--user", hook.user.username, stdout=StringIO(), stderr=StringIO())
+        keys = ("legacy_pending", "status", "finished", "counts", "up_next", "watched_pass", "viewings")
+        self.assertEqual(pick(self.snap_of(hook, show), keys), pick(snap, keys))
 
     def test_a_60_a_9pm_pacific_tick_is_the_pacific_day_and_the_job_leaves_it(self):
         """TV-100, TV-103, TV-207.

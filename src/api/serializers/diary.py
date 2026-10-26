@@ -47,3 +47,7 @@ class DiaryEntryWriteSerializer(serializers.Serializer):
         required=False,
         default=list,
     )
+    # A TV log saved from a season or episode page names that page, so the response's
+    # `tv` carries the page's state and composer (TV-404, TV-705).
+    page_season_number = GameIntegerField(required=False, min_value=0, allow_null=True)
+    page_episode_number = GameIntegerField(required=False, min_value=0, allow_null=True)

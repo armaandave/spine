@@ -1360,7 +1360,9 @@ class TVAcceptanceTestCase(TestCase):
         diary = reader.diary(show)
         self.assertEqual(len(diary), len(snap["logs"]))
         for entry in diary:
-            self.assertIsNotNone(entry["tv_log"])
+            # The list leaves tv_log out (TV-207); the log's own screen reads it.
+            self.assertIsNone(entry["tv_log"])
+            self.assertIsNotNone(reader.entry(entry["id"])["tv_log"])
         return snap
 
     def assert_surfaces_agree_for(self, show, drivers):

@@ -4567,7 +4567,7 @@ def enrich_episodes(metadata, source, user):
             source,
             metadata.get("season_number"),
         ).first()
-        episodes_in_db = current.episodes.all() if current else []
+        episodes_in_db = current.episodes.select_related("item") if current else []
 
     payload = dict(metadata)
     if source == "manual":

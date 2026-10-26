@@ -394,6 +394,24 @@ class TV106RejectionTests(TVTrackingTestCase):
         self.assertEqual(raised.exception.message, "This episode isn't listed for Season 1.")
         self.assertIsNone(self.tv(show))
 
+    def test_tv_106_a_rejected_unlisted_episode_creates_no_items(self):
+        """A rejected tick or webhook watch of an episode TMDB doesn't list changes nothing.
+
+        No Season or Episode Item is created for it, and no external ratings are queued.
+        """
+        show = self.make_show({1: 3})
+        before = set(Item.objects.values_list("media_type", "season_number", "episode_number"))
+        with mock.patch("app.tv_tracking._queue_external_ratings") as queued:
+            for season, episode in ((1, 99), (7, 1)):
+                with self.assertRaises(TVInvalid):
+                    self.tick(show, season, episode)
+            self.advance()
+            acknowledged = tv_tracking.webhook_event(self.user, show, 5, 5, event="watched", at=self.clock.moment)
+        self.assertIsNone(acknowledged)
+        self.assertEqual(set(Item.objects.values_list("media_type", "season_number", "episode_number")), before)
+        self.assertFalse(any(call.args[0] for call in queued.call_args_list))
+        self.assertIsNone(self.tv(show))
+
     def test_a_22_an_episode_airing_in_three_days_is_rejected(self):
         show = self.make_show({1: [date(2026, 10, 1), OCT_25 + timedelta(days=3)]})
         with self.assertRaises(TVInvalid) as raised:

@@ -11,7 +11,7 @@ from django.test import override_settings
 from app import tv_tracking, user_calendar
 from app.models import DiaryEntry, Episode, MediaLike, Season
 from app.tests.test_tv_tracking_viewings import OCT_25, OCT_26, TVTrackingTestCase
-from app.tv_tracking import TVInvalid, TVStateChanged
+from app.tv_tracking import TVInvalid, TVLogBlocks, TVStateChanged
 
 
 class TV400LogsTrackTests(TVTrackingTestCase):
@@ -296,6 +296,85 @@ class TV406DeleteLogTests(TVTrackingTestCase):
         season = Season.objects.get(item=season_item)
         self.assertEqual(str(season.score), "7.0")
         self.assertIsNone(season.rating_source_id)
+
+    def test_tv_400_deleting_one_of_two_season_logs_keeps_the_season_watched(self):
+        """The newer log still covers Season 1, so its fills move to it (TV-400, TV-406)."""
+        show = self.make_show({1: 5, 2: 3})
+        older = self.log(self.season_item(show, 1), consumed_at=date(2026, 10, 20)).entry
+        newer = self.log(self.season_item(show, 1)).entry
+        self.assertEqual(tv_tracking.log_info(older)["unmarks_count"], 0)
+
+        tv_tracking.delete_log(self.user, older, expected_version=self.tv(show).state_version)
+
+        self.assertEqual(self.watched(show), {(1, episode) for episode in range(1, 6)})
+        self.assertEqual(
+            {(row.kind, row.diary_entry_id, row.watched_on, row.end_date) for row in self.viewings(show)},
+            {(Episode.Kind.FILL, newer.pk, None, None)},
+        )
+        state = self.state(show)
+        self.assertEqual((state["watched_count"], state["status"]), (5, "In progress"))
+        self.assertEqual((state["up_next"]["season_number"], state["up_next"]["episode_number"]), (2, 1))
+        self.assertEqual(tv_tracking.log_info(newer)["unmarks_count"], 5)
+
+    def test_tv_400_deleting_an_episode_log_a_season_log_covers_keeps_it_watched(self):
+        """The episode log's own viewing becomes the season log's fill (TV-400)."""
+        show = self.make_show({1: 5})
+        episode_log = self.log(self.episode_item(show, 1, 3), consumed_at=date(2026, 10, 20)).entry
+        season_log = self.log(self.season_item(show, 1)).entry
+        self.assertEqual(tv_tracking.log_info(episode_log)["unmarks_count"], 0)
+
+        tv_tracking.delete_log(self.user, episode_log)
+
+        self.assertEqual(self.watched(show), {(1, episode) for episode in range(1, 6)})
+        row = self.viewings(show, 1, 3)[0]
+        self.assertEqual((row.kind, row.diary_entry_id, row.watched_on, row.end_date), (Episode.Kind.FILL, season_log.pk, None, None))
+        self.assertEqual(self.status(show), "Completed")
+        with self.assertRaises(TVLogBlocks) as raised:
+            self.untick(show, 1, 3)
+        self.assertEqual(raised.exception.message, "Delete your Season 1 log first.")
+
+    def test_tv_400_deleting_a_season_log_under_a_show_log_keeps_the_season_and_its_stars(self):
+        show = self.make_show({1: 3, 2: 3})
+        season_log = self.log(self.season_item(show, 1), rating=8).entry
+        show_log = self.log(show).entry
+        self.assertEqual(tv_tracking.log_info(season_log)["unmarks_count"], 0)
+
+        tv_tracking.delete_log(self.user, season_log)
+
+        self.assertEqual(self.watched(show), {(season, episode) for season in (1, 2) for episode in (1, 2, 3)})
+        self.assertEqual({row.diary_entry_id for row in self.viewings(show)}, {show_log.pk})
+        self.assertEqual(self.status(show), "Completed")
+        season = Season.objects.get(item=self.season_item(show, 1))
+        self.assertEqual((str(season.score), season.rating_source_id), ("8.0", None))
+
+    def test_tv_400_fills_a_log_took_over_from_a_mark_pass_to_the_next_covering_log(self):
+        """Mark the show, log Season 2 twice, undo the show eye, then delete the older log."""
+        show = self.make_show({1: 2, 2: 3})
+        tv_tracking.mark_watched(self.user, show)
+        older = self.log(self.season_item(show, 2), consumed_at=date(2026, 10, 20)).entry
+        newer = self.log(self.season_item(show, 2)).entry
+        self.advance()
+        tv_tracking.unmark(self.user, show)  # TV-302 case 2: Season 2's fills become the older log's
+        self.assertEqual({row.diary_entry_id for row in self.viewings(show)}, {older.pk})
+
+        tv_tracking.delete_log(self.user, older)
+
+        self.assertEqual(self.watched(show), {(2, 1), (2, 2), (2, 3)})
+        self.assertEqual({row.diary_entry_id for row in self.viewings(show)}, {newer.pk})
+
+    def test_tv_406_only_episodes_no_remaining_log_covers_are_unmarked(self):
+        """A show log, then a Season 2 log: deleting the show log unmarks Season 1 only."""
+        show = self.make_show({1: 2, 2: 3})
+        show_log = self.log(show, consumed_at=date(2026, 10, 20)).entry
+        self.log(self.season_item(show, 2))
+        self.assertEqual(tv_tracking.log_info(show_log)["unmarks_count"], 2)
+
+        tv_tracking.delete_log(self.user, show_log)
+
+        self.assertEqual(self.watched(show), {(2, 1), (2, 2), (2, 3)})
+        self.assertEqual(self.season_numbers(show), [2])
+        state = self.state(show)
+        self.assertEqual((state["up_next"]["season_number"], state["up_next"]["episode_number"]), (1, 1))
 
     def test_tv_406_and_tv_208_a_deletion_restores_the_ended_choice(self):
         show = self.make_show({1: 3})

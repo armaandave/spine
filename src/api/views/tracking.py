@@ -1,4 +1,4 @@
-from django.db.models import Exists, F, OuterRef, Q
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -66,6 +66,8 @@ class TrackingListView(MediaExposureMixin, APIView):
         if str(status_filter).lower() == "tracked":
             queryset = queryset.exclude(status=Status.PLANNING.value)
         queryset = _tv_list_filters(queryset, media_type, continue_watching=continue_watching)
+        if media_type == MediaTypes.TV.value:
+            queryset = _tv_viewing_dates(queryset)
         rating_scope_queryset = queryset
         filter_service.ensure_filter_metadata(queryset, request.query_params)
         queryset = filter_service.apply_item_filters(queryset, request.query_params)
@@ -269,7 +271,17 @@ class TrackingActionView(MediaExposureMixin, APIView):
             action=action,
             data=serializer.validated_data,
         )
-        return Response(tracking_service.tv_action_response(result))
+        page = tracking_service.tv_page_item(
+            result.show_item,
+            serializer.validated_data.get("page_season_number"),
+            serializer.validated_data.get("page_episode_number"),
+        )
+        body = tracking_service.tv_action_response(result, page=page)
+        if action in tracking_service.TV_PRE_CONTRACT_ACTIONS and body["tracking"] is not None:
+            # These routes returned a top-level TrackingState before the contract;
+            # keep it beside the new keys, as PATCH does (TV-900).
+            body = {**body["tracking"], **body}
+        return Response(body)
 
     def _tv_part_action(self, request, source, media_type, media_id, action):
         """Apply consume, pause, resume or drop to a season or episode (TV-207)."""
@@ -316,6 +328,23 @@ def _tv_list_filters(queryset, media_type, *, continue_watching):
             up_next_season__isnull=False,
         )
     return queryset
+
+
+def _tv_viewing_dates(queryset):
+    """Read each show's first and last viewing time in SQL (TV-207, TV-701).
+
+    The list's start_date and end_date need only these two values, so the page doesn't
+    load every viewing of every show; get_media_list's seasons and episodes prefetch is
+    dropped. Specials don't count, as in the TV model's start_date and end_date.
+    """
+    viewings = Episode.objects.filter(
+        related_season__related_tv=OuterRef("pk"),
+        end_date__isnull=False,
+    ).exclude(related_season__item__season_number=0)
+    return queryset.prefetch_related(None).annotate(
+        tv_first_viewing_end=Subquery(viewings.order_by("end_date").values("end_date")[:1]),
+        tv_last_viewing_end=Subquery(viewings.order_by("-end_date").values("end_date")[:1]),
+    )
 
 
 def _prime_progress(page, media_type):

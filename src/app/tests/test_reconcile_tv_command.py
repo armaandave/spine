@@ -555,6 +555,64 @@ class TV801OrderTests(RepairTestCase):
         )
         self.assertEqual(result["show"][5:7], (2, 3))
 
+    def test_tv_801_a_webhook_watch_then_the_repair_equals_the_repair_then_the_webhook(self):
+        result = self.assert_order_independent(
+            lambda user, show: tv_tracking.webhook_event(user, show, 2, 2, event="watched", at=self.clock.moment),
+        )
+        self.assertEqual(result["show"][5:7], (2, 3))
+
+    def assert_webhook_order_independent(self, setup, event, season, episode):
+        """A webhook event, then the repair, ends where the repair, then the event, does."""
+        first = make_user("webhook-first")
+        second = make_user("repair-first")
+        show = self.make_show({1: 3, 2: 2})
+        for user in (first, second):
+            setup(user, show)
+
+        self.advance()
+        tv_tracking.webhook_event(first, show, season, episode, event=event, at=self.clock.moment)
+        self.advance()
+        self.repair("--apply", "--user", "webhook-first")
+
+        self.advance()
+        self.repair("--apply", "--user", "repair-first")
+        self.advance()
+        tv_tracking.webhook_event(second, show, season, episode, event=event, at=self.clock.moment)
+
+        result = outcome(first, show)
+        self.assertEqual(result, outcome(second, show))
+        return result
+
+    def test_tv_801_a_webhook_watch_on_a_hollow_completed_show_finds_it_marked_in_either_order(self):
+        """A stored Completed show with no season tracking is a show mark (TV-801, TV-101)."""
+        result = self.assert_webhook_order_independent(
+            lambda user, show: self.old_tv(show, user=user, status=COMPLETED),
+            "watched",
+            1,
+            1,
+        )
+        self.assertEqual(result["show"][:5], (COMPLETED, "", False, 5, 5))
+        self.assertTrue(all(viewing[2] == Episode.Kind.FILL for viewing in result["viewings"]))
+
+    def test_tv_801_a_webhook_watch_ends_a_stored_paused_status_in_either_order(self):
+        """A stored Paused show is the user's choice, and a webhook watch ends it (TV-203, TV-802)."""
+
+        def setup(user, show):
+            season = self.old_season(self.old_tv(show, user=user, status=Status.PAUSED.value), 1)
+            self.old_viewing(season, 1, at(1))
+
+        result = self.assert_webhook_order_independent(setup, "watched", 1, 2)
+        self.assertEqual(result["show"][:2], (WATCHING, ""))
+        self.assertEqual(result["show"][5:7], (1, 3))
+
+    def test_tv_801_a_webhook_play_on_a_stored_paused_show_resumes_it_in_either_order(self):
+        def setup(user, show):
+            season = self.old_season(self.old_tv(show, user=user, status=Status.PAUSED.value), 1)
+            self.old_viewing(season, 1, at(1))
+
+        result = self.assert_webhook_order_independent(setup, "play", 1, 2)
+        self.assertEqual(result["show"][:2], (WATCHING, WATCHING))
+
     def test_tv_801_a_web_write_then_the_repair_equals_the_repair_then_the_web_write(self):
         result = self.assert_order_independent(
             lambda user, show: tv_tracking.tick(user, show, 2, 2, at=date(2026, 10, 20), entry_point=tv_tracking.WEB),

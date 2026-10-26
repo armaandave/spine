@@ -106,6 +106,10 @@ class TVActionSerializer(serializers.Serializer):
     to = TVEpisodeCoordinateSerializer(required=False, allow_null=True)
     offer_season_number = GameIntegerField(min_value=0, required=False, allow_null=True)
     rating = TVRatingField(required=False)
+    # The season or episode page the action came from, so `tv` carries that page's
+    # state and composer (TV-404). Absent from the show page, Home and Profile.
+    page_season_number = GameIntegerField(min_value=0, required=False, allow_null=True)
+    page_episode_number = GameIntegerField(min_value=0, required=False, allow_null=True)
 
     def get_fields(self):
         fields = super().get_fields()

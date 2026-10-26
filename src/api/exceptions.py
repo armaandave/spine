@@ -93,11 +93,17 @@ class TVConflictError(exceptions.APIException):
 
 
 class TVDetailsUnavailableError(exceptions.APIException):
-    """The provider can't be reached and nothing is stored (TV-103): retryable 503."""
+    """The provider can't be reached and nothing is stored (TV-103): retryable 503.
+
+    Its code is provider_unavailable, whose message installed builds show (TV-900);
+    any other 503 code makes them say the server can't be reached. error.reason names
+    the TV case for the new build.
+    """
 
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     default_detail = "TV details are unavailable right now"
-    default_code = "tv_details_unavailable"
+    default_code = "provider_unavailable"
+    reason = "tv_details_unavailable"
 
 
 def tv_api_error(error):
@@ -182,4 +188,6 @@ def api_exception_handler(exc, context):
     if getattr(exc, "tv", None):
         # tv_state_changed: the show's new version and count, so the app can ask again.
         response.data["error"]["tv"] = exc.tv
+    if getattr(exc, "reason", None):
+        response.data["error"]["reason"] = exc.reason
     return response

@@ -94,7 +94,6 @@ class DiaryListView(APIView):
         page = list(paginator.paginate_queryset(entries, request, view=self))
         diary_service.prime_diary_likes(page, request.user)
         diary_service.prime_show_titles(page)
-        diary_service.prime_tv_logs(page, request.user)
         response = paginator.get_paginated_response(
             [
                 diary_service.diary_payload(entry, request=request, viewer=request.user)
@@ -114,18 +113,11 @@ class DiaryListView(APIView):
         entry = diary_service.create_entry(request.user, serializer.validated_data)
         tv_write = getattr(entry, "tv_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
-        payload = diary_service.diary_payload(entry, request=request, viewer=request.user)
+        payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
         if tv_write is not None:
-            # A TV log's response adds the show's state and what the log finished or
-            # left unwatched (plan 2.3.7).
-            envelope = tracking_service.tv_envelope(tv_write)
-            payload.update(
-                {
-                    "tv": envelope["tv"],
-                    "finished": envelope["finished"],
-                    "earlier_unwatched": envelope["earlier_unwatched"],
-                },
-            )
+            # A TV log's response adds the show's state, the log target's season and
+            # episode, and what the log finished or left unwatched (plan 2.3.7).
+            payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=True))
         return Response(payload, status=status.HTTP_201_CREATED)
 
 
@@ -145,7 +137,7 @@ class DiaryDetailView(APIView):
             if not single_weight.uses_half_star_rating(entry.item) and entry.visibility == "private":
                 return Response(status=status.HTTP_404_NOT_FOUND)
         exposure.require_media_type(entry.item.media_type)
-        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user))
+        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True))
 
     def patch(self, request, entry_id):
         entry = get_object_or_404(DiaryEntry, id=entry_id, user=request.user)
@@ -158,9 +150,9 @@ class DiaryDetailView(APIView):
         entry = diary_service.update_entry(entry, serializer.validated_data)
         tv_write = getattr(entry, "tv_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
-        payload = diary_service.diary_payload(entry, request=request, viewer=request.user)
+        payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
         if tv_write is not None:
-            payload["tv"] = tracking_service.tv_envelope(tv_write)["tv"]
+            payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=False))
         return Response(payload)
 
     def delete(self, request, entry_id):

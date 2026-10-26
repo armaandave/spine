@@ -113,6 +113,33 @@ class TV304StartedShowTests(TVTrackingTestCase):
         tv_tracking.set_like(self.user, self.season_item(show, 1), True)
         self.assertEqual(self.status(show), "Paused")
 
+    def test_tv_303_stars_when_only_specials_have_aired_follow_the_rate_action(self):
+        """TV-005, TV-303: a started show takes stars as opinion once a special has aired.
+
+        Season 1 premieres in 2027 and S0 E1 aired. Before the special is ticked the show
+        isn't in the library, so its stars would have nothing to mark: "rate" is
+        unavailable and the write says why. After the tick both allow the stars.
+        """
+        show = self.make_show({0: [date(2026, 10, 1)], 1: [date(2027, 1, 10)]})
+        before = self.state(show)
+        self.assertNotIn("rate", before["available_actions"])
+        self.assertEqual(before["action_reasons"]["rate"], "Nothing has aired yet.")
+        with self.assertRaises(TVConflict) as raised:
+            tv_tracking.set_rating(self.user, show, 8)
+        self.assertEqual(raised.exception.message, "Nothing has aired yet.")
+        self.assertIsNone(self.tv(show))
+
+        self.tick(show, 0, 1)
+        started = self.state(show)
+        self.assertIn("rate", started["available_actions"])
+        self.assertNotIn("rate", started["action_reasons"])
+        tv_tracking.set_rating(self.user, show, 8)
+
+        after = self.state(show)
+        self.assertEqual(str(self.tv(show).score), "8.0")
+        self.assertEqual((after["status"], after["watched_count"]), (started["status"], started["watched_count"]))
+        self.assertEqual(len(self.viewings(show)), 1)
+
     def test_a_40_a_special_then_a_heart_is_opinion_only(self):
         """A-40: Watching, S1 E1 up next, progress unchanged, Planning unavailable."""
         show = self.make_show({0: 2, 1: 3})

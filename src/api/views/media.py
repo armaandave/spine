@@ -783,7 +783,6 @@ class MediaReviewsView(MediaExposureMixin, APIView):
         viewer = request.user if request.user.is_authenticated else None
         diary_service.prime_diary_likes(page, viewer)
         diary_service.prime_show_titles(page)
-        diary_service.prime_tv_logs(page, viewer)
         prime_curated_artwork(entry.item for entry in page)
         return paginator.get_paginated_response(
             [diary_service.diary_payload(entry, request=request, viewer=viewer) for entry in page],

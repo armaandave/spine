@@ -52,6 +52,9 @@ TV_ACTIONS = frozenset(
         "rate",
     },
 )
+# The actions that existed for every media type before the TV contract; their responses
+# keep the top-level TrackingState installed clients decode (TV-900).
+TV_PRE_CONTRACT_ACTIONS = frozenset({"consume", "pause", "resume", "drop"})
 TV_CHOICE_ACTIONS = {
     "watching": Status.IN_PROGRESS.value,
     "resume": Status.IN_PROGRESS.value,
@@ -904,9 +907,29 @@ def perform_tv_action(user, *, source, media_id, action, data):  # noqa: C901, P
     return _call_tv(tv_tracking.set_rating, user, item, data["rating"], **common)
 
 
-def tv_envelope(result, item=None):
-    """Return the write envelope (plan 2.3.5) of a TV write."""
-    return _call_tv(tv_tracking.write_envelope, result, item)
+def tv_envelope(result, item=None, *, page=None):
+    """Return the write envelope (plan 2.3.5) of a TV write; page scopes its `tv`."""
+    return _call_tv(tv_tracking.write_envelope, result, item, page=page)
+
+
+def tv_page_item(show_item, season_number=None, episode_number=None):
+    """Return the season or episode Item of the page a TV write came from, or None.
+
+    The app sends page_season_number (and page_episode_number) from a season or
+    episode page, so the response's `tv` carries that page's state and composer
+    (TV-404, TV-705).
+    None for the show page, or an Item that doesn't exist; nothing is created.
+    """
+    if show_item is None or season_number is None:
+        return None
+    media_type = MediaTypes.SEASON.value if episode_number is None else MediaTypes.EPISODE.value
+    return Item.objects.filter(
+        source=show_item.source,
+        media_id=show_item.media_id,
+        media_type=media_type,
+        season_number=season_number,
+        episode_number=episode_number,
+    ).first()
 
 
 def tv_season_row(result, season_number=None):
@@ -928,9 +951,12 @@ def tv_tracking_response(result, *, row, item=None):
     return {**state, **envelope}
 
 
-def tv_action_response(result):
-    """Return the actions endpoint's body: the show's TrackingState and the envelope."""
-    envelope = tv_envelope(result)
+def tv_action_response(result, page=None):
+    """Return the actions endpoint's body: the show's TrackingState and the envelope.
+
+    page is the season or episode page the action came from (tv_page_item).
+    """
+    envelope = tv_envelope(result, page=page)
     tracking = None
     if result.tv is not None:
         tv = TV.objects.select_related("item", "user").get(pk=result.tv.pk)

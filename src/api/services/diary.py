@@ -21,9 +21,37 @@ from app.providers import services as provider_services
 from app.services import create_diary_entry, update_diary_entry
 from social.models import Activity, ContentLike
 
+# Where a TV log was saved from; they shape the response, not the log (TV-404, TV-705).
+TV_PAGE_FIELDS = ("page_season_number", "page_episode_number")
 
-def diary_payload(entry, request=None, viewer=None):
-    """Serialize a diary entry for the API."""
+
+def tv_write_payload(tv_write, data, *, created):
+    """Return the TV keys a log's create or update response adds (plan 2.3.7).
+
+    `tv` is the show's state scoped to the page the log was saved from (its season or
+    episode state and composer); `season` and `episode` are the log target's own, so
+    the page shows what the log counted watched at once.
+    """
+    page = tracking_service.tv_page_item(
+        tv_write.show_item,
+        data.get("page_season_number"),
+        data.get("page_episode_number"),
+    )
+    envelope = tracking_service.tv_envelope(tv_write, page=page)
+    keys = ("tv", "season", "episode", "finished", "earlier_unwatched") if created else ("tv", "season", "episode")
+    payload = {key: envelope[key] for key in keys}
+    if "season_episodes" in envelope:
+        payload["season_episodes"] = envelope["season_episodes"]
+    return payload
+
+
+def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
+    """Serialize a diary entry for the API.
+
+    include_tv_log works out a TV log's tv_log (what it covers and would unmark) for
+    one entry: the diary detail, create and update responses. Lists leave it null, so
+    a page never works out each show's viewings (TV-207).
+    """
     like_count = getattr(entry, "viewer_like_count", None)
     if like_count is None:
         like_count = ContentLike.objects.filter(
@@ -79,7 +107,7 @@ def diary_payload(entry, request=None, viewer=None):
         "viewer_has_liked": bool(viewer_has_liked),
         "created_at": entry.created_at,
         "updated_at": entry.updated_at,
-        "tv_log": _tv_log(entry, viewer),
+        "tv_log": _tv_log(entry, viewer) if include_tv_log else None,
     }
     if entry.item.media_type == "game":
         session = getattr(entry, "game_playthrough", None)
@@ -153,15 +181,6 @@ def _listed_episode_title(seasons, season_number, episode_number):
         if row and int(row[0]) == episode_number:
             return (row[2] if len(row) > 2 else "") or None
     return None
-
-
-def prime_tv_logs(entries, viewer):
-    """Work out tv_log for the viewer's own TV logs on a page, once per show."""
-    if viewer is None or not viewer.is_authenticated:
-        return
-    tv_tracking.prime_log_info(
-        entry for entry in entries if entry.user_id == viewer.pk and tv_tracking.supports(entry.item)
-    )
 
 
 def prime_diary_likes(entries, viewer):
@@ -366,6 +385,8 @@ def update_entry(entry, data):
     """Update a diary entry from API payload."""
     data = dict(data)
     tags = data.pop("tags", None)
+    for page_key in TV_PAGE_FIELDS:
+        data.pop(page_key, None)
     if tv_tracking.supports(entry.item):
         return _update_tv_entry(entry, data, tags)
     if single_weight.uses_half_star_rating(entry.item):

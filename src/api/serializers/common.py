@@ -1101,10 +1101,14 @@ def _tv_viewing_dates(media):
     """Return a TV or Season row's (start_date, end_date) in one query (A-47).
 
     The same values as the models' properties, which read every season's episodes;
-    rows whose seasons or episodes are prefetched (lists) read the prefetch instead.
+    rows whose seasons or episodes are prefetched read the prefetch instead, and the TV
+    list's rows read its two annotations.
     """
     prefetched = getattr(media, "_prefetched_objects_cache", {})
     if isinstance(media, TV):
+        if hasattr(media, "tv_first_viewing_end"):
+            # The TV list annotates both (api.views.tracking._tv_viewing_dates).
+            return media.tv_first_viewing_end, media.tv_last_viewing_end
         if "seasons" in prefetched:
             return media.start_date, media.end_date
         viewings = Episode.objects.filter(related_season__related_tv=media).exclude(
