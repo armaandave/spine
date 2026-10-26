@@ -958,7 +958,7 @@ def _external_rating_item(ref, metadata):
     )
     if not eligible_rating_sources(candidate):
         return None
-    return get_or_create_item_from_metadata(ref, metadata)
+    return get_or_create_item_from_metadata(ref, metadata, persist_series=False)
 
 
 def _detail_cache_key(

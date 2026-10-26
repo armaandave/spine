@@ -16,8 +16,8 @@ from app.providers.search_rank import rank_results
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.themoviedb.org/3"
-DETAIL_CACHE_VERSION = "v3"
-MOVIE_DETAIL_CACHE_VERSION = "v4"
+DETAIL_CACHE_VERSION = "v4"
+MOVIE_DETAIL_CACHE_VERSION = "v5"
 COLLECTION_CACHE_VERSION = "v1"
 base_params = {
     "api_key": settings.TMDB_API,

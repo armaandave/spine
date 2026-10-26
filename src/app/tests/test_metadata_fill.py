@@ -375,10 +375,11 @@ class ApplyTests(FillTestCase):
 class ErrorTests(FillTestCase):
     def test_classes(self):
         self.assertEqual(metadata_fill.classify(provider_error(404)), metadata_fill.STAMP)
-        self.assertEqual(metadata_fill.classify(provider_error(400)), metadata_fill.STAMP)
+        self.assertEqual(metadata_fill.classify(provider_error(410)), metadata_fill.STAMP)
         self.assertEqual(metadata_fill.classify(KeyError("x")), metadata_fill.STAMP)
         self.assertEqual(metadata_fill.classify(NotImplementedError()), metadata_fill.STAMP)
-        for status in (401, 403, 429, 500, 503, None):
+        # A 400 or 422 is a query we got wrong, for every title: never a stamp.
+        for status in (400, 401, 403, 405, 422, 429, 500, 503, None):
             self.assertEqual(metadata_fill.classify(provider_error(status)), metadata_fill.BLOCK, status)
         until = datetime(2026, 10, 27, tzinfo=UTC)
         self.assertEqual(metadata_fill.classify(quota.Deferred("hardcover", until, "spent")), metadata_fill.BLOCK)
@@ -416,6 +417,121 @@ class ErrorTests(FillTestCase):
         self.assertIsNone(later.metadata_attempted_at)
         self.assertEqual(film.metadata_version, CURRENT)
 
+    def test_a_400_for_every_title_stops_the_provider_and_stamps_nothing(self):
+        anime = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(3)]
+        fetch = self.patch_metadata(provider_error(400))
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(totals["retry_later"], 1)
+        self.refresh(*anime)
+        self.assertEqual([item.metadata_version for item in anime], [0, 0, 0])
+        self.assertIsNotNone(anime[0].metadata_attempted_at)
+        self.assertIsNone(anime[1].metadata_attempted_at)
+
+    def test_an_error_while_storing_is_retried_not_stamped(self):
+        film = self.item()
+        later = self.item()
+        self.patch_metadata(lambda *args, **kwargs: movie_metadata())
+        real_store = metadata_fill.store_item_metadata
+
+        def store(item, metadata):
+            if item.pk == film.pk:
+                raise TypeError("our storage bug")
+            return real_store(item, metadata)
+
+        with mock.patch.object(metadata_fill, "store_item_metadata", side_effect=store):
+            totals = metadata_fill.fill_in_process()
+
+        self.assertEqual((totals["retry_later"], totals["filled"]), (1, 1))
+        self.refresh(film, later)
+        self.assertEqual(film.metadata_version, 0)
+        self.assertIsNotNone(film.metadata_attempted_at)
+        # The provider isn't stopped: the next film is filled.
+        self.assertEqual(later.metadata_version, CURRENT)
+
+    def test_the_tenth_stamp_in_a_row_stops_the_provider(self):
+        streak = metadata_fill.MAX_STAMP_STREAK
+        anime = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(streak + 2)]
+        fetch = self.patch_metadata(TypeError("a parse bug for every title"))
+
+        metadata_fill.fill_in_process()
+
+        self.assertEqual(fetch.call_count, streak)
+        self.refresh(*anime)
+        self.assertEqual([item.metadata_version for item in anime[: streak - 1]], [CURRENT] * (streak - 1))
+        self.assertEqual(anime[streak - 1].metadata_version, 0)
+        self.assertIsNotNone(anime[streak - 1].metadata_attempted_at)
+        self.assertEqual([item.metadata_version for item in anime[streak:]], [0, 0])
+        self.assertIsNone(anime[streak].metadata_attempted_at)
+
+    def test_a_stored_title_resets_the_stamp_streak(self):
+        streak = metadata_fill.MAX_STAMP_STREAK
+        missing = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(streak - 1)]
+        found = self.item(MediaTypes.ANIME.value, Sources.MAL.value)
+        more = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(2)]
+        gone = {item.media_id for item in [*missing, *more]}
+
+        def fetch_metadata(media_type, media_id, source, *args, **kwargs):
+            if media_id in gone:
+                raise provider_error(404)
+            return {"release_date": "2010-04-01", "genres": ["Action"]}
+
+        self.patch_metadata(fetch_metadata)
+
+        metadata_fill.fill_in_process()
+
+        self.refresh(*missing, found, *more)
+        self.assertTrue(all(item.metadata_version == CURRENT for item in [*missing, found, *more]))
+
+    def test_a_failed_hardcover_batch_is_never_stamped(self):
+        books = [self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id=str(400 + n)) for n in range(2)]
+        self.patch_hardcover(TypeError("the batch answer changed shape"))
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual(totals["retry_later"], 2)
+        self.refresh(*books)
+        for book in books:
+            self.assertEqual(book.metadata_version, 0)
+            self.assertIsNotNone(book.metadata_attempted_at)
+
+    def test_an_unexpected_error_for_one_item_never_stalls_the_chain(self):
+        show = self.item(MediaTypes.TV.value)
+        film = self.item()
+        self.patch_metadata(lambda *args, **kwargs: movie_metadata())
+
+        with mock.patch.object(metadata_fill, "_fill_show", side_effect=AttributeError("malformed")):
+            next_state, _, _ = metadata_fill.run_chunk(metadata_fill.initial_state())
+
+        self.assertIsNone(next_state)
+        self.refresh(show, film)
+        self.assertEqual(show.metadata_version, 0)
+        self.assertIsNotNone(show.metadata_attempted_at)
+        self.assertEqual(film.metadata_version, CURRENT)
+
+    def test_a_malformed_season_waits_and_the_rest_is_filled(self):
+        show = self.item(MediaTypes.TV.value, media_id="6000", track=False)
+        tv = self.track(show)
+        season = self.item(MediaTypes.SEASON.value, media_id="6000", season_number=1, track=False)
+        Season.objects.bulk_create([Season(item=season, user=self.user, related_tv=tv)])
+        film = self.item()
+
+        def fetch_metadata(media_type, *args, **kwargs):
+            if media_type == "tv_with_seasons":
+                return {"title": "Show", "release_date": "2020-01-01", "season/1": "not a season"}
+            return movie_metadata()
+
+        self.patch_metadata(fetch_metadata)
+
+        metadata_fill.fill_in_process()
+
+        self.refresh(season, film)
+        self.assertEqual(season.metadata_version, 0)
+        self.assertIsNotNone(season.metadata_attempted_at)
+        self.assertEqual(film.metadata_version, CURRENT)
+
     def test_deferred_stops_the_provider_without_requeueing(self):
         books = [self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id=str(200 + n)) for n in range(2)]
         film = self.item()
@@ -430,9 +546,11 @@ class ErrorTests(FillTestCase):
         schedule.assert_not_called()
         self.refresh(film, *books)
         self.assertEqual(film.metadata_version, CURRENT)
+        # No call was made, so the books aren't pushed back a week: the next run asks again.
         for book in books:
             self.assertEqual(book.metadata_version, 0)
-            self.assertIsNotNone(book.metadata_attempted_at)
+            self.assertIsNone(book.metadata_attempted_at)
+        self.assertEqual(set(metadata_fill.pending_items()), set(books))
 
     def test_the_fill_runs_inside_its_hardcover_and_open_library_budgets(self):
         self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id="301")
@@ -594,15 +712,86 @@ class ChainTests(FillTestCase):
             call_command("fill_item_metadata", "--apply", "--queue", "--limit", "5", stdout=StringIO())
 
         out = StringIO()
+        self.assertFalse(metadata_fill.is_enabled())
         call_command("fill_item_metadata", "--apply", "--queue", stdout=out)
         call_command("fill_item_metadata", "--apply", "--queue", stdout=out)
 
         apply_async.assert_called_once()
+        self.assertTrue(metadata_fill.is_enabled())
         self.assertIn("Started the fill chain", out.getvalue())
         self.assertIn("Not started: a fill chunk is queued", out.getvalue())
 
+    def test_only_a_full_apply_turns_the_sweep_on(self):
+        self.item()
+        self.patch_metadata(lambda *args, **kwargs: movie_metadata())
+
+        call_command("fill_item_metadata", "--apply", "--limit", "1", stdout=StringIO())
+        call_command("fill_item_metadata", "--apply", "--type", "movie", stdout=StringIO())
+        self.assertFalse(metadata_fill.is_enabled())
+
+        call_command("fill_item_metadata", "--apply", stdout=StringIO())
+        self.assertTrue(metadata_fill.is_enabled())
+
+    def test_apply_waits_for_a_running_chunk_to_let_go_of_the_lock(self):
+        film = self.item()
+        self.patch_metadata(lambda *args, **kwargs: movie_metadata())
+        held = metadata_fill._acquire_lock()
+
+        def sleep(seconds):
+            self.clock.sleep(seconds)
+            metadata_fill._release_lock(held)  # the worker's chunk ends
+
+        with mock.patch.object(metadata_fill, "_sleep", side_effect=sleep):
+            call_command("fill_item_metadata", "--apply", stdout=StringIO())
+
+        film.refresh_from_db()
+        self.assertEqual(film.metadata_version, CURRENT)
+
+    def test_apply_gives_up_when_the_lock_stays_held(self):
+        self.item()
+        self.patch_metadata(AssertionError("the lock is held"))
+        metadata_fill._acquire_lock()
+
+        with self.assertRaises(CommandError):
+            call_command("fill_item_metadata", "--apply", stdout=StringIO())
+
+        self.assertGreaterEqual(sum(self.clock.sleeps), metadata_fill.LOCK_WAIT_SECONDS)
+
+    def test_pending_is_counted_only_when_the_chain_ends(self):
+        for _ in range(17):
+            self.item(MediaTypes.ANIME.value, Sources.MAL.value)
+        self.patch_metadata(lambda *args, **kwargs: {"release_date": "2010-04-01", "genres": ["Action"]})
+        self.patch_schedule()
+
+        with (
+            mock.patch.object(metadata_fill, "pending_counts", wraps=metadata_fill.pending_counts) as counts,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            metadata_fill.chain_chunk()  # MAL's minute is spent: the chain goes on
+
+        counts.assert_not_called()
+
+    def test_the_fill_runs_on_the_featured_worker(self):
+        for name in ("Fill item metadata", "Sweep item metadata"):
+            self.assertEqual(settings.CELERY_TASK_ROUTES[name], {"queue": "featured"})
+
 
 class SweepTests(FillTestCase):
+    def setUp(self):
+        super().setUp()
+        metadata_fill.enable()
+
+    def test_nothing_happens_until_the_fill_is_enabled(self):
+        self.item()
+        metadata_fill.clear()
+        fetch = self.patch_metadata(AssertionError("the sweep is off"))
+        schedule = self.patch_schedule()
+
+        self.assertEqual(metadata_fill.sweep(), {"recent": 0, "chain_started": False, "enabled": False})
+
+        fetch.assert_not_called()
+        schedule.assert_not_called()
+
     def test_recent_items_are_filled_first_then_the_backlog_chain_starts(self):
         old = self.item()
         Movie.objects.filter(item=old).update(created_at=timezone.now() - timedelta(days=3))
@@ -613,7 +802,7 @@ class SweepTests(FillTestCase):
         result = metadata_fill.sweep()
 
         self.assertEqual([call.args[1] for call in fetch.call_args_list], [recent.media_id])
-        self.assertEqual(result, {"recent": 1, "chain_started": True})
+        self.assertEqual(result, {"recent": 1, "chain_started": True, "enabled": True})
         schedule.assert_called_once_with()
         self.refresh(old, recent)
         self.assertEqual((old.metadata_version, recent.metadata_version), (0, CURRENT))
@@ -631,7 +820,7 @@ class SweepTests(FillTestCase):
         fetch = self.patch_metadata(AssertionError("nothing is pending"))
         schedule = self.patch_schedule()
 
-        self.assertEqual(metadata_fill.sweep(), {"recent": 0, "chain_started": False})
+        self.assertEqual(metadata_fill.sweep(), {"recent": 0, "chain_started": False, "enabled": True})
 
         fetch.assert_not_called()
         schedule.assert_not_called()
@@ -642,7 +831,7 @@ class SweepTests(FillTestCase):
         schedule = self.patch_schedule()
         metadata_fill._acquire_lock()
 
-        self.assertEqual(metadata_fill.sweep(), {"recent": 0, "chain_started": False})
+        self.assertEqual(metadata_fill.sweep(), {"recent": 0, "chain_started": False, "enabled": True})
 
         fetch.assert_not_called()
         schedule.assert_not_called()

@@ -6,6 +6,9 @@ and minutes the fill would take at its caps (app.metadata_fill.CAPS). --apply fi
 this process, paced the same way (the test backend, which has no worker); --apply
 --queue starts the Celery chain instead (production). Safe to run again: a filled Item
 is never fetched again.
+
+The hourly sweep stays off until --apply --queue, or a full --apply (no --limit, --type
+or --user) that finishes, enables it (metadata_fill.enable()).
 """
 
 from django.contrib.auth import get_user_model
@@ -72,6 +75,8 @@ class Command(BaseCommand):
         self._dry_run(types=types, user=user)
 
     def _queue(self):
+        metadata_fill.enable()
+        self.stdout.write("The hourly sweep now fills recent titles and resumes the fill.")
         if metadata_fill.start_chain():
             self.stdout.write("Started the fill chain. Watch it with: grep 'metadata fill' in the worker's log.")
         else:
@@ -83,6 +88,9 @@ class Command(BaseCommand):
             totals = metadata_fill.fill_in_process(media_types=types, user=user, limit=limit)
         except RuntimeError as error:
             raise CommandError(str(error)) from error
+        if limit is None and not types and user is None:
+            metadata_fill.enable()
+            self.stdout.write("The hourly sweep now fills recent titles and resumes the fill.")
         self.stdout.write(
             "Done: {items} Items (filled {filled}, stamp-only {stamp_only}, not found {not_found}, "
             "unstamped {unstamped}, retry later {retry_later}), {new_series_members} new series "
@@ -102,7 +110,10 @@ class Command(BaseCommand):
         pending = metadata_fill.pending_counts(media_types=types, user=user)
         if pending:
             left = ", ".join(f"{media_type} {count}" for media_type, count in pending.items())
-            self.stdout.write(f"Still pending (blocked or paced providers; the hourly sweep retries): {left}")
+            if metadata_fill.is_enabled():
+                self.stdout.write(f"Still pending (blocked or paced providers; the hourly sweep retries): {left}")
+            else:
+                self.stdout.write(f"Still pending (the hourly sweep is off; --apply --queue fills them): {left}")
 
     def _dry_run(self, *, types, user):
         report = metadata_fill.estimate(media_types=types, user=user)
@@ -134,3 +145,7 @@ class Command(BaseCommand):
             "8 seasons a call; music runs last at one MusicBrainz call every 3 s).",
         )
         self.stdout.write(f"Chain: {STATUS_TEXT[report['status']]}.")
+        self.stdout.write(
+            "Hourly sweep: "
+            + ("on." if report["enabled"] else "off until --apply --queue (or a full --apply)."),
+        )

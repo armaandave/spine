@@ -270,6 +270,9 @@ fill_metadata() {
   cd "$checkout/src"
   export REDIS_URL=redis://localhost:6379/5 CELERY_REDIS_URL=redis://localhost:6379/5
   export REDIS_PREFIX="local-$(basename "$checkout"):"
+  # The served backend's Redis cache (local-backend.sh), so the IGDB token and provider
+  # responses are reused instead of fetched again.
+  export DEBUG=True DEV_CACHE=redis
   local vendor
   vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
   [ "$vendor" = sqlite ] || die "the settings use '$vendor', not the test backend's SQLite database"

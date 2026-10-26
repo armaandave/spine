@@ -350,7 +350,7 @@ def _discover_where(*, genre=None, year=None):
 
 def book(media_id):
     """Get metadata for a book from Hardcover."""
-    cache_key = f"{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_{media_id}_v7"
+    cache_key = f"{Sources.HARDCOVER.value}_{MediaTypes.BOOK.value}_{media_id}_v8"
     data = cache.get(cache_key)
 
     if data is None:

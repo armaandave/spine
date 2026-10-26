@@ -230,7 +230,9 @@ class YamtrackImporter:
 
             logger.info("Added title from %s: %s", source, row["title"])
             logger.info("Obtained media id: %s", row["media_id"])
-            return first_result, False
+            # A search result's languages are only the original language; storing them
+            # would replace the title's full list.
+            return {key: value for key, value in first_result.items() if key != "languages"}, False
 
         msg = f"Missing metadata for: {row}"
         raise MediaImportError(msg)

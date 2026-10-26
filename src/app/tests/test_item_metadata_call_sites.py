@@ -108,3 +108,23 @@ class DetailPageMetadataTests(CallSiteTestCase):
 
         self.assertEqual(media_service._external_rating_item(ref, MOVIE), item)
         self.assert_stored(item, 1995)
+
+    def test_the_detail_page_leaves_a_new_items_series_to_the_view(self):
+        ref = {
+            "source": Sources.TMDB.value,
+            "media_type": MediaTypes.MOVIE.value,
+            "media_id": "949",
+            "season_number": None,
+            "episode_number": None,
+        }
+        movie = {**MOVIE, "details": {**MOVIE["details"], "series_id": "10"}}
+
+        with (
+            mock.patch.object(media_service, "eligible_rating_sources", return_value=["imdb"]),
+            mock.patch("api.services.item_metadata._persist_series") as persist_series,
+        ):
+            item = media_service._external_rating_item(ref, movie)
+
+        # The detail view saves the series once, after the rating payload.
+        persist_series.assert_not_called()
+        self.assert_stored(item, 1995)

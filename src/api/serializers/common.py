@@ -247,8 +247,11 @@ def find_item(ref):
     ).first()
 
 
-def get_or_create_item_from_metadata(ref, metadata):
-    """Get or create an Item using provider metadata."""
+def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
+    """Get or create an Item using provider metadata.
+
+    persist_series=False leaves the metadata's series for the caller to store.
+    """
     from api.services.item_metadata import store_item_metadata
 
     defaults = {
@@ -270,7 +273,7 @@ def get_or_create_item_from_metadata(ref, metadata):
     if defaults.get("total_pages") and item.total_pages != defaults["total_pages"]:
         item.total_pages = defaults["total_pages"]
         item.save(update_fields=["total_pages"])
-    store_item_metadata(item, metadata)
+    store_item_metadata(item, metadata, persist_series=persist_series)
     return item
 
 

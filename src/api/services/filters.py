@@ -131,9 +131,14 @@ def update_item_filter_metadata(item, metadata):
         return False
 
     release_date = _release_date(metadata, item.media_type)
+    # A year without a date never replaces the year of a stored date, so the two agree.
+    if release_date is None and item.release_date is not None:
+        release_year = item.release_date.year
+    else:
+        release_year = _release_year(metadata, release_date, item.media_type)
     updates = {
         "release_date": release_date,
-        "release_year": _release_year(metadata, release_date, item.media_type),
+        "release_year": release_year,
         "runtime_minutes": _runtime_minutes(metadata),
     }
     changed = []
@@ -963,13 +968,10 @@ def _apply_facet_exclude(queryset, params, item_path, facet_type):
     facet_values = values(params, f"exclude_{facet_type}")
     if not facet_values:
         return queryset
-    path = f"{item_path}filter_facets__"
-    return queryset.exclude(
-        **{
-            f"{path}facet_type": facet_type,
-            f"{path}value__in": facet_values,
-        },
-    ).distinct()
+    # One subquery, so the type and the value must match on the same facet row (a game's
+    # "Horror" theme doesn't hide it from exclude_genre=Horror).
+    matching = ItemFilterFacet.objects.filter(facet_type=facet_type, value__in=facet_values)
+    return queryset.exclude(**{f"{item_path}id__in": matching.values("item_id")})
 
 
 def _order_by_field(queryset, field, descending, item_path, tiebreak=()):

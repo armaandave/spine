@@ -897,7 +897,10 @@ def _release_year_payloads(entries):
 def _facet_payloads(entries):
     logged_item_ids = entries.values("item_id")
     facets = (
-        ItemFilterFacet.objects.filter(item_id__in=Subquery(logged_item_ids))
+        ItemFilterFacet.objects.filter(
+            item_id__in=Subquery(logged_item_ids),
+            facet_type__in=[ItemFilterFacet.FacetType.GENRE, ItemFilterFacet.FacetType.LANGUAGE],
+        )
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("stats_media_type", "facet_type", "value")
         .annotate(count=Count("item_id", distinct=True))
@@ -922,8 +925,12 @@ def _facet_payloads(entries):
         if media_type in by_type_counts:
             by_type_counts[media_type][facet_type][row["value"]] += row["count"]
 
+    # The legacy payload counts genre and language rows only (no theme rows and so on).
     coverage_rows = (
-        ItemFilterFacet.objects.filter(item_id__in=Subquery(logged_item_ids))
+        ItemFilterFacet.objects.filter(
+            item_id__in=Subquery(logged_item_ids),
+            facet_type__in=[ItemFilterFacet.FacetType.GENRE, ItemFilterFacet.FacetType.LANGUAGE],
+        )
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("stats_media_type", "facet_type")
         .annotate(count=Count("item_id", distinct=True))

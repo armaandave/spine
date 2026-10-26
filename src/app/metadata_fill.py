@@ -14,10 +14,17 @@ The chain (app.tasks.fill_item_metadata) walks pending Items by id in chunks of 
 - MusicBrainz, Open Library, ComicVine and IGDB Items that already have what their
   provider gives (year, genres, a runtime where the type has one, themes for games) are
   only stamped, without a call.
-- A 404, NotImplementedError, TypeError, ValueError, KeyError or other 4xx stamps the
-  Item: asking again would give the same answer. A 401, 403, 429, 5xx, network error or
-  quota.Deferred sets metadata_attempted_at and stops that provider for the rest of the
-  run; the others carry on.
+- A 404 or 410, NotImplementedError, TypeError, ValueError or KeyError from the provider
+  stamps the Item: asking again would give the same answer. The 10th such failure in a
+  row (with nothing stored in between) stops the provider instead: that looks like our
+  bug, not missing titles. Titles TMDB no longer lists and bad ids are stamped too.
+- Any other HTTP error (400, 401, 403, 422, 429, 5xx ...), a network error, or a whole
+  Hardcover batch failing sets metadata_attempted_at and stops that provider for the
+  rest of the run; the others carry on. quota.Deferred (a spent budget, or a provider
+  that asked us to wait) only stops the provider: the Items aren't at fault, so nothing
+  is marked and the next run asks again.
+- An error while storing, or any other error, sets metadata_attempted_at: retried in
+  7 days.
 
 The fill keeps its own per-provider counters in services.redis_db (the per-host limiters
 are in memory and reset with every task), with the caps in CAPS. MusicBrainz shares its
@@ -26,6 +33,11 @@ IP with every environment on this Mac, so albums are spaced to one call every 3 
 At most one chunk runs (the lock, held only while a chunk runs) and at most one waits
 (the queued marker), both raw redis_db keys that survive deploys. The chain stops when a
 pass makes no progress or only blocked providers remain.
+
+The hourly sweep does nothing until the fill is enabled: `fill_item_metadata --apply
+--queue`, or a full `--apply` with no --limit, --type or --user, sets the enabled key (a
+raw redis_db key with no expiry). So a deploy never starts the backfill before the
+ship's dry run and spot check; if Redis loses the key, the sweep just stops.
 """
 
 import logging
@@ -145,7 +157,14 @@ MUSIC = "music"
 STAMP = "stamp"
 BLOCK = "block"
 RETRY = "retry"
-RETRY_STATUSES = {401, 403, 429}
+# HTTP statuses that mean the title is gone; every other status stops the provider.
+GONE_STATUSES = {404, 410}
+# Failures in a row (with nothing stored in between) whose last one stops the provider
+# instead of stamping.
+MAX_STAMP_STREAK = 10
+# How long the command's --apply waits for a running chunk or sweep to let go of the lock.
+LOCK_WAIT_SECONDS = SWEEP_SECONDS + 60
+LOCK_POLL_SECONDS = 5
 
 
 def _now():
@@ -169,6 +188,7 @@ def _key(*parts):
 
 LOCK_KEY = "lock"
 QUEUED_KEY = "queued"
+ENABLED_KEY = "enabled"
 MUSICBRAINZ_KEY = "musicbrainz_free_at"
 
 
@@ -310,18 +330,18 @@ def _musicbrainz_done(started):
 
 
 def classify(error):
-    """Return STAMP (asking again won't help), BLOCK (stop the provider) or RETRY."""
+    """Return STAMP (asking again won't help), BLOCK (stop the provider) or RETRY.
+
+    Only a 404 or 410 stamps: a 400 or 422 for every title (a query we got wrong) must
+    not stamp the whole backlog.
+    """
     if isinstance(error, quota.Deferred):
         return BLOCK
     if isinstance(error, (services.ProviderAPIError, requests.RequestException)):
         status = getattr(error, "status_code", None)
         if status is None:
             status = getattr(getattr(error, "response", None), "status_code", None)
-        if status is None or status in RETRY_STATUSES or status >= 500:  # noqa: PLR2004
-            return BLOCK
-        if 400 <= status < 500:  # noqa: PLR2004
-            return STAMP
-        return BLOCK
+        return STAMP if status in GONE_STATUSES else BLOCK
     if isinstance(error, (NotImplementedError, TypeError, ValueError, KeyError)):
         return STAMP
     return RETRY
@@ -362,6 +382,7 @@ class _Run:
         self.handled_shows = set()
         self.hardcover = []
         self.stopped_for_musicbrainz = False
+        self.stamp_streak = Counter()
 
     def pending(self):
         return pending_items(media_types=self.media_types, user=self.user)
@@ -390,12 +411,27 @@ class _Run:
         self.counts[outcome] += len(items)
         self.progress += len(items)
 
-    def failed(self, provider, items, error):
-        kind = classify(error)
+    def failed(self, provider, items, error, *, kind=None):
+        """Handle a failed fetch or store: stamp, stop the provider, or retry in a week."""
+        if isinstance(error, quota.Deferred):
+            # A spent budget or a provider's wait: the Items aren't at fault, so nothing
+            # is marked and the next run asks again.
+            logger.warning("metadata fill: stopping %s for this run: %s", provider, error)
+            self.blocked[provider] = str(error)[:200]
+            self.counts["skipped_blocked"] += len(items)
+            return
+        kind = kind or classify(error)
+        if kind == STAMP and self.stamp_streak[provider] + 1 >= MAX_STAMP_STREAK:
+            # That many missing titles in a row looks like our bug: stop instead.
+            logger.warning(
+                "metadata fill: %s failed %s times in a row; stopping it instead of stamping",
+                provider,
+                MAX_STAMP_STREAK,
+            )
+            kind = BLOCK
         if kind == STAMP:
-            logger.info("metadata fill: %s for %s; stamped", error, ", ".join(str(item.pk) for item in items))
-            _stamp(items)
-            self.done(items, "not_found")
+            self.stamp_streak[provider] += 1
+            self.unfillable(items, error)
             return
         _mark_attempted(items)
         self.done(items, "retry_later")
@@ -410,13 +446,20 @@ class _Run:
                 exc_info=error,
             )
 
+    def unfillable(self, items, reason):
+        """Stamp Items the provider can't fill (a missing title, a bad id)."""
+        logger.info("metadata fill: %s for %s; stamped", reason, ", ".join(str(item.pk) for item in items))
+        _stamp(items)
+        self.done(items, "not_found")
+
     def store(self, item, metadata):
         try:
             with transaction.atomic():
                 stamped = store_item_metadata(item, metadata)
-        except Exception as error:  # noqa: BLE001 - classified; one Item never stops the run
-            self.failed(item.source, [item], error)
+        except Exception as error:  # noqa: BLE001 - our bug, not the provider's: retry in a week
+            self.failed(item.source, [item], error, kind=RETRY)
             return
+        self.stamp_streak[item.source] = 0
         if stamped:
             self.done([item], "filled")
         else:
@@ -483,7 +526,7 @@ def _flush_hardcover(run):
         return
     bad = [item for item in items if not str(item.media_id).isdigit()]
     if bad:
-        run.failed(provider, bad, ValueError("not a Hardcover book id"))
+        run.unfillable(bad, "not a Hardcover book id")
         items = [item for item in items if item not in bad]
     if not items or not run.turn(provider, FETCH_CALLS[provider]):
         return
@@ -492,7 +535,9 @@ def _flush_hardcover(run):
     try:
         results = hardcover.book_metadata_batch([item.media_id for item in items])
     except Exception as error:  # noqa: BLE001 - classified
-        run.failed(provider, items, error)
+        # One book can't fail a whole batch, so nothing here is stamped.
+        kind = classify(error)
+        run.failed(provider, items, error, kind=BLOCK if kind == STAMP else kind)
         return
     for item in items:
         metadata = results.get(str(item.media_id))
@@ -539,19 +584,29 @@ def _fill_show(run, item):
         episode_number__isnull=True,
     ).first()
     if show is not None:
-        tv_listing.update_from_metadata(show, metadata)
+        try:
+            with transaction.atomic():
+                tv_listing.update_from_metadata(show, metadata)
+        except Exception as error:  # noqa: BLE001 - a malformed listing never stops the chain
+            run.failed(provider, group, error, kind=RETRY)
+            return
     show_metadata = {name: value for name, value in metadata.items() if not name.startswith("season/")}
     for member in group:
         if member.media_type == MediaTypes.TV.value:
             run.store(member, show_metadata)
             continue
-        season = metadata.get(f"season/{member.season_number}")
-        if member.media_type == MediaTypes.SEASON.value:
-            values = _season_metadata(season, show_metadata) if season else None
-        else:
-            values = _episode_metadata(season, member.episode_number) if season else None
+        try:
+            season = metadata.get(f"season/{member.season_number}")
+            if member.media_type == MediaTypes.SEASON.value:
+                values = _season_metadata(season, show_metadata) if season else None
+            else:
+                values = _episode_metadata(season, member.episode_number) if season else None
+        except Exception as error:  # noqa: BLE001 - a malformed season never stops the chain
+            run.failed(provider, [member], error, kind=RETRY)
+            continue
         if values is None:
-            run.failed(provider, [member], KeyError(f"TMDB doesn't list {member}"))
+            # Not a provider error: TMDB dropped the season or episode.
+            run.unfillable([member], f"TMDB doesn't list {member}")
         else:
             run.store(member, values)
 
@@ -581,7 +636,12 @@ def _walk(run, queryset):
         for item in page:
             if run.out_of_time() or run.limit_reached():
                 return False
-            if not _process(run, item):
+            try:
+                carry_on = _process(run, item)
+            except Exception as error:  # noqa: BLE001 - one Item never stalls the chain
+                run.failed(item.source, [item], error, kind=RETRY)
+                carry_on = True
+            if not carry_on:
                 return False
             run.after = item.id
 
@@ -763,14 +823,25 @@ def pending_counts(*, media_types=None, user=None):
 
 
 def log_chunk(state, next_state, run, countdown, *, label=None, outcome=None):
-    """Write the one progress line a chunk logs."""
+    """Write the one progress line a chunk logs.
+
+    What is still pending is counted only when the chain ends: the count scans every
+    outdated Item, too much for every ~30 s chunk.
+    """
     counts = run.counts
-    pending = pending_counts(media_types=run.media_types, user=run.user)
-    if outcome is None:
+    pending_text = "counted when the chain ends"
+    if next_state is None and outcome is None:
+        pending = pending_counts(media_types=run.media_types, user=run.user)
         outcome = _outcome(next_state, run, countdown, pending)
+        pending_text = "{} ({})".format(
+            sum(pending.values()),
+            ", ".join(f"{media_type} {count}" for media_type, count in pending.items()) or "none",
+        )
+    elif outcome is None:
+        outcome = _outcome(next_state, run, countdown, {})
     logger.info(
         "metadata fill: %s %s items (filled %s, stamp-only %s, not found %s, unstamped %s, "
-        "retry later %s, skipped %s), %s new series members; pending %s (%s); blocked: %s; %s",
+        "retry later %s, skipped %s), %s new series members; pending %s; blocked: %s; %s",
         label or f"pass {state.get('pass', 1)},",
         run.progress,
         counts["filled"],
@@ -780,8 +851,7 @@ def log_chunk(state, next_state, run, countdown, *, label=None, outcome=None):
         counts["retry_later"],
         counts["skipped_blocked"] + counts["skipped_waiting"],
         counts["new_series_members"],
-        sum(pending.values()),
-        ", ".join(f"{media_type} {count}" for media_type, count in pending.items()) or "none",
+        pending_text,
         ", ".join(sorted(run.blocked)) or "none",
         outcome,
     )
@@ -802,10 +872,7 @@ def fill_in_process(*, media_types=None, user=None, limit=None, write=None):
     state = initial_state()
     totals = Counter()
     while state is not None:
-        lock = _acquire_lock()
-        if lock is None:
-            msg = "A fill chunk is running in a worker; wait for it to finish."
-            raise RuntimeError(msg)
+        lock = _wait_for_lock()
         try:
             remaining = None if limit is None else limit - totals["items"]
             next_state, countdown, run = run_chunk(state, media_types=media_types, user=user, limit=remaining)
@@ -823,8 +890,36 @@ def fill_in_process(*, media_types=None, user=None, limit=None, write=None):
     return totals
 
 
+def _wait_for_lock():
+    """Take the lock, waiting for a worker's chunk or sweep to let go of it."""
+    deadline = _now() + LOCK_WAIT_SECONDS
+    while True:
+        lock = _acquire_lock()
+        if lock is not None:
+            return lock
+        if _now() >= deadline:
+            msg = f"A fill chunk or sweep has held the lock for over {LOCK_WAIT_SECONDS} s; try again later."
+            raise RuntimeError(msg)
+        _sleep(LOCK_POLL_SECONDS)
+
+
+def enable():
+    """Let the hourly sweep fill recent Items and resume the backlog from now on."""
+    _redis().set(_key(ENABLED_KEY), "1")
+
+
+def is_enabled():
+    return bool(_redis().exists(_key(ENABLED_KEY)))
+
+
 def sweep(now=None):
-    """The hourly sweep: fill what was tracked or logged in the last 48 h, then resume the backlog."""
+    """The hourly sweep: fill what was tracked or logged in the last 48 h, then resume the backlog.
+
+    It does nothing until the fill is enabled (enable()).
+    """
+    if not is_enabled():
+        logger.info("metadata fill: sweep skipped; start the fill with fill_item_metadata --apply --queue")
+        return {"recent": 0, "chain_started": False, "enabled": False}
     now = now or timezone.now()
     recent = 0
     lock = _acquire_lock()
@@ -846,7 +941,7 @@ def sweep(now=None):
     started = False
     if chain_status() is None and pending_items().exists():
         started = schedule_next_chunk()
-    return {"recent": recent, "chain_started": started}
+    return {"recent": recent, "chain_started": started, "enabled": True}
 
 
 # The dry run
@@ -856,7 +951,7 @@ def estimate(*, media_types=None, user=None):
     """Count what the fill would do, without any provider call.
 
     Returns {"rows": [...], "waiting_for_retry": n, "new_series_members": n,
-    "minutes": n, "status": chain_status()}; each row has media_type, provider,
+    "minutes": n, "status": chain_status(), "enabled": is_enabled()}; each row has media_type, provider,
     pending, stamp_only, failed_before, calls and minutes.
     """
     rows = {}
@@ -925,6 +1020,7 @@ def estimate(*, media_types=None, user=None):
         "new_series_members": round(fetched_without_series * NEW_SERIES_MEMBERS_PER_ITEM),
         "minutes": round(minutes, 1),
         "status": chain_status(),
+        "enabled": is_enabled(),
     }
 
 

@@ -229,6 +229,46 @@ class UpdateItemFilterMetadataTests(MetadataTestCase):
         self.assertEqual(self.facets(item, ORIGINAL_LANGUAGE), {"Japanese"})
         self.assertEqual(self.facets(item, LANGUAGE), {"Japanese", "English"})
 
+    def test_a_year_without_a_date_keeps_the_stored_dates_year(self):
+        dated = self.item(release_date=date(2010, 5, 1), release_year=2010)
+        undated_year = self.item(release_date=date(2010, 5, 1))
+
+        for item in (dated, undated_year):
+            update_item_filter_metadata(item, {"first_publish_year": 1950})
+
+        self.refresh_items(dated, undated_year)
+        # The year and the date agree; a stored date's year fills a missing year.
+        self.assertEqual((dated.release_date, dated.release_year), (date(2010, 5, 1), 2010))
+        self.assertEqual((undated_year.release_date, undated_year.release_year), (date(2010, 5, 1), 2010))
+
+    def test_a_year_alone_fills_an_item_without_a_date(self):
+        item = self.item(release_year=2010)
+
+        update_item_filter_metadata(item, {"first_publish_year": 1950})
+
+        item.refresh_from_db()
+        self.assertEqual((item.release_date, item.release_year), (None, 1950))
+
+    def test_exclude_matches_type_and_value_on_the_same_row(self):
+        themed = self.item(MediaTypes.GAME.value, Sources.IGDB.value)
+        update_item_filter_metadata(themed, {"genres": ["Shooter"], "themes": ["Horror"]})
+        horror = self.item(MediaTypes.GAME.value, Sources.IGDB.value)
+        update_item_filter_metadata(horror, {"genres": ["Horror"]})
+        spoken = self.item()
+        update_item_filter_metadata(spoken, {"languages": ["English"], "original_language": "Japanese"})
+
+        def kept(params):
+            return set(filters.apply_item_filters(Item.objects.all(), params, item_path=""))
+
+        # A game's "Horror" theme doesn't hide it from exclude_genre=Horror.
+        self.assertEqual(kept({"exclude_genre": "Horror"}), {themed, spoken})
+        self.assertEqual(kept({"exclude_language": "Japanese"}), {themed, horror, spoken})
+        self.assertEqual(kept({"exclude_language": "English"}), {themed, horror})
+
+    def refresh_items(self, *items):
+        for item in items:
+            item.refresh_from_db()
+
     def test_themes_and_original_language_stay_out_of_filter_options(self):
         item = self.item()
         update_item_filter_metadata(

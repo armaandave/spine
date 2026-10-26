@@ -429,7 +429,7 @@ def discover(*, page=1, page_size=None, genre=None, year=None, platform=None):
 
 def game(media_id):
     """Return the metadata for the selected game from IGDB."""
-    cache_key = f"{Sources.IGDB.value}_{MediaTypes.GAME.value}_{media_id}_v4"
+    cache_key = f"{Sources.IGDB.value}_{MediaTypes.GAME.value}_{media_id}_v5"
     data = cache.get(cache_key)
     if data is None:
         access_token = get_access_token()

@@ -476,6 +476,57 @@ class PartialMetadataImportTests(ImportMetadataTestCase):
         self.assertEqual(item.release_date, date(2015, 5, 19))
         self.assert_stamped(item, stamped=False)
 
+    def test_yamtrack_search_result_keeps_the_stored_languages(self):
+        item = Item.objects.create(
+            media_id="949",
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            title="Heat",
+            image="heat.jpg",
+        )
+        for language in ("English", "Spanish"):
+            ItemFilterFacet.objects.create(item=item, facet_type=ItemFilterFacet.FacetType.LANGUAGE, value=language)
+        row = {
+            "media_id": "",
+            "source": Sources.TMDB.value,
+            "media_type": MediaTypes.MOVIE.value,
+            "title": "Heat",
+            "image": "",
+            "season_number": "",
+            "episode_number": "",
+            "score": "",
+            "progress": "",
+            "status": "Completed",
+            "start_date": "",
+            "end_date": "",
+            "notes": "",
+        }
+        # A TMDB search result: its languages are only the original language.
+        result = {
+            "media_id": "949",
+            "source": Sources.TMDB.value,
+            "media_type": MediaTypes.MOVIE.value,
+            "title": "Heat",
+            "image": "heat.jpg",
+            "release_date": "1995-12-15",
+            "genres": ["Crime"],
+            "languages": ["English"],
+        }
+
+        with patch("integrations.imports.yamtrack.services.search", return_value={"results": [result]}):
+            callbacks = self.run_partial(lambda: YamtrackImporter(None, self.user, "new")._process_row(row))
+
+        self.assertEqual(callbacks, [])
+        languages = set(
+            ItemFilterFacet.objects.filter(
+                item=item,
+                facet_type=ItemFilterFacet.FacetType.LANGUAGE,
+            ).values_list("value", flat=True),
+        )
+        self.assertEqual(languages, {"English", "Spanish"})
+        self.assertEqual(self.genres(item), {"Crime"})
+        self.assert_stamped(item, stamped=False)
+
     def test_free_fields_never_touch_an_item_holding_its_full_record(self):
         item = Item.objects.create(
             media_id="312",

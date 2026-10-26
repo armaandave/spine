@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import DiaryEntry, Item, MediaTypes, Sources
+from app.models import DiaryEntry, Item, ItemFilterFacet, MediaTypes, Sources
 
 LEGACY_KEYS = {
     "start_date",
@@ -81,6 +81,29 @@ class LegacyStatsContractTests(TestCase):
         # (9 + 5) / 2 out of 10 is 3.5 stars.
         self.assertEqual(overview["average_rating"], "3.5")
         self.assertEqual(overview["rated_count"], 2)
+
+    def test_metadata_coverage_counts_only_genre_and_language_rows(self):
+        other = self._item(MediaTypes.MOVIE.value, "551")
+        DiaryEntry.objects.create(user=self.user, item=other, consumed_at=datetime(2026, 1, 12, tzinfo=UTC))
+        facet = ItemFilterFacet.FacetType
+        ItemFilterFacet.objects.bulk_create([
+            ItemFilterFacet(item=self.movie, facet_type=facet.GENRE, value="Drama"),
+            ItemFilterFacet(item=self.movie, facet_type=facet.LANGUAGE, value="English"),
+            ItemFilterFacet(item=other, facet_type=facet.LANGUAGE, value="French"),
+            ItemFilterFacet(item=self.season, facet_type=facet.LANGUAGE, value="English"),
+            # New rows the legacy payload never counted: one film each.
+            ItemFilterFacet(item=self.movie, facet_type=facet.ORIGINAL_LANGUAGE, value="Japanese"),
+            ItemFilterFacet(item=self.movie, facet_type=facet.THEME, value="Survival"),
+        ])
+
+        payload = self._payload()
+        coverage = payload["metadata_coverage"]
+
+        self.assertEqual((coverage["genre_items"], coverage["language_items"]), (1, 3))
+        movies = next(row for row in payload["media_types"] if row["media_type"] == MediaTypes.MOVIE.value)
+        self.assertEqual(movies["metadata_coverage"]["language_items"], 2)
+        self.assertEqual([row["name"] for row in payload["top_genres"]], ["Drama"])
+        self.assertEqual({row["name"] for row in payload["top_languages"]}, {"English", "French"})
 
     def _payload(self):
         response = self.client.get(
