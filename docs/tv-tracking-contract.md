@@ -133,7 +133,7 @@ A show is in the library while it has at least one of these:
 
 Ticking, logging, marking, choosing a status, and stars or hearts that mark all put the show in the library.
 
-Remove from Library is on the show's + menu.
+Remove from Library is on the show's + menu while the show is in the library.
 It asks first and says what it removes, for example "Remove this show? Your 13 watched episodes will be unmarked."
 It is unavailable while any log of the show, a season or an episode exists, with the reason "Delete this show's logs first."
 Confirming removes every viewing, mark and choice under the show.
@@ -162,12 +162,13 @@ The show's + menu offers:
 - Drop;
 - Rewatch when the show is finished, or Stop rewatching during a rewatch;
 - Log, for a season or the whole show; and
-- Remove from Library.
+- Remove from Library, while the show is in the library.
 
 A season's + menu offers Log Season, and Rewatch Season once that season is finished.
 An episode's + menu offers Log Episode.
 
 Base options stay visible whatever the status.
+Remove from Library isn't one: a show that isn't in the library has nothing to remove, so the menu leaves it out, and the server sends neither the action nor a reason for it.
 The current status shows as selected rather than as a second action.
 An unavailable option says why; the server sends the available actions and their reasons with the state.
 
@@ -282,6 +283,10 @@ Up next is the first aired regular episode in show order that comes after the us
 - With no aired regular episode, there is no up next, and the show isn't on Continue Watching.
 
 Moving up next into a new season creates nothing for that season (TV-205).
+
+The show page shows up next as a row of its season's episode list, with the same still, number, title, air date and tick.
+Above it, "Up next · Season 2" names the season, or "New episode · Season 3" when up next aired after the user's latest viewing of the show.
+Tapping the row opens the episode's page.
 
 For example, ticking S1 E3 moves up next to S1 E4.
 Skipping S1 E4 and ticking E5 to E10 moves up next to S2 E1, and the Season 1 card reads "9 of 10 · E4 not watched".
@@ -627,6 +632,7 @@ It doesn't open when a mark, a season or show log, a webhook or an import finish
 If the user skipped an episode, the season isn't finished and nothing opens.
 
 The write's response names the season or show it just finished, so the app knows to open the composer.
+The app opens it as soon as that response arrives, wherever the write was made, and loads nothing first.
 Installed builds ignore that key and open nothing.
 
 ### TV-404: The server supplies the composer's defaults
@@ -637,7 +643,7 @@ The user can change all of them before saving.
 **Target**
 
 - From an episode page, the target is that episode; from a season page, that season.
-- From the show page, the target is the latest season in show order that is finished in the current pass and has no season log in the current pass. If there is none, it is the season that up next is in; if there is no up next, it is the last aired season. The user can pick another season or Whole show. Specials are listed last.
+- From the show page, the target is Whole show. The user can pick a season instead; Specials are listed last. While only specials have aired, Whole show is unavailable, so the target is Specials.
 - From the season-finish composer, the target is that season (TV-403).
 
 **Date**
@@ -1093,6 +1099,13 @@ The user approved the design on 2026-10-25 and chose the recommended answer to e
 - a show caught up between seasons waits in Completed and returns to Watching when the next regular episode airs, and one caught up mid-season stays in Watching (TV-202, TV-206);
 - starting partway asks once about earlier episodes (TV-107); and
 - stars or a heart mark an unstarted show watched, and are opinion only on a started one (TV-303, TV-304).
+
+After trying the app on 2026-10-26, the user asked for four changes, now in the laws:
+
+- Remove from Library shows only for a show in the library (TV-003, TV-005);
+- the show page's Up next uses the season list's episode row (TV-105);
+- the season-finish composer opens without a wait (TV-403); and
+- Log on the show page starts on Whole show (TV-404).
 
 Whether ticks post to friends' feeds was settled by the maintainer defaults in AGENTS.md section 9: the feed includes logs, ratings and list activity, so ticks don't post (TV-703).
 

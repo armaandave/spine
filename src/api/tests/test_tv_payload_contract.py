@@ -42,7 +42,7 @@ SHOW_DETAIL_KEYS = SHOW_LIST_KEYS | {
     "season",
     "episode",
 }
-UP_NEXT_KEYS = {"season_number", "episode_number", "title", "air_date", "is_new"}
+UP_NEXT_KEYS = {"season_number", "episode_number", "title", "air_date", "is_new", "image_url"}
 NEXT_AIRING_KEYS = {"season_number", "episode_number", "air_date"}
 PREMIERE_KEYS = {"season_number", "air_date"}
 REWATCH_KEYS = {"scope", "season_number", "started_at"}
@@ -130,14 +130,15 @@ SHOW_DETAIL_EXAMPLE = json.loads(
 {"version": 1793051512345, "in_library": true, "status": "In progress", "choice": null,
  "selected_action": "watching", "started": true, "finished": false, "caught_up": false,
  "watched_count": 13, "aired_count": 20,
- "up_next": {"season_number": 2, "episode_number": 4, "title": "Fly", "air_date": "2010-05-23", "is_new": false},
+ "up_next": {"season_number": 2, "episode_number": 4, "title": "Fly", "air_date": "2010-05-23", "is_new": false,
+             "image_url": null},
  "next_airing": null, "premiere": null, "rewatch": null, "last_watched_on": "2026-10-25", "remove_count": 13,
  "rating_source_diary_entry_id": null, "like_source_diary_entry_id": null, "like_is_independent": true,
  "eye": {"filled": false, "tap": "mark_confirm", "count": 20, "prompt": "Mark all 20 aired episodes watched?",
          "message": null},
  "available_actions": ["pause", "drop", "log", "remove", "rate"],
  "action_reasons": {"planning": "You've started this show. Pause or drop it instead."},
- "composer": {"default_target": "season:1", "targets": [
+ "composer": {"default_target": "show", "targets": [
    {"id": "season:1", "level": "season", "season_number": 1, "episode_number": null, "title": "Season 1",
     "date": "2026-10-26", "rating": "8.0", "liked": true, "is_rewatch": false, "claims_viewing_id": null,
     "available": true, "reason": null},
@@ -371,7 +372,7 @@ class TVPayloadExampleTests(TVAPITestCase):
         self.assertEqual(state["last_watched_on"], OCT_25.isoformat())
         self.assertCountEqual(state["available_actions"], SHOW_DETAIL_EXAMPLE["available_actions"])
         composer = state["composer"]
-        self.assertEqual(composer["default_target"], "season:1")
+        self.assertEqual(composer["default_target"], SHOW_DETAIL_EXAMPLE["composer"]["default_target"])
         for target, expected in zip(composer["targets"], SHOW_DETAIL_EXAMPLE["composer"]["targets"], strict=True):
             for key in ("id", "level", "season_number", "title", "rating", "liked", "is_rewatch", "available"):
                 self.assertEqual(target[key], expected[key], (target["id"], key))

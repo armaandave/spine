@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 from functools import cached_property
 
 import requests
+from django.conf import settings
 from django.db import DatabaseError, IntegrityError, transaction
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -233,6 +234,14 @@ class ShowListing:
         """Return a listed episode's title, or None when it isn't listed or has none."""
         listed = self.episode(season_number, episode_number)
         return (listed.title or None) if listed is not None else None
+
+    def episode_still(self, season_number, episode_number) -> str | None:
+        """Return a listed episode's still at the size of a season's episode rows, or None."""
+        listed = self.episode(season_number, episode_number)
+        image = listed.image if listed is not None else None
+        if not image or image == settings.IMG_NONE or not image.startswith(("http://", "https://")):
+            return None
+        return tmdb.sized_image_url(image, "w500")
 
     @cached_property
     def _by_number(self):

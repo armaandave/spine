@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from app import tv_listing, tv_tracking
 from app.models import TV, Episode, Season, Status
 from app.tests.test_tv_tracking_viewings import OCT_25, TVTrackingTestCase
+from app.tests.tv_fixtures import FakeEpisode
 
 SHOW_DETAIL_KEYS = [
     "version",
@@ -122,7 +123,10 @@ class PayloadShapeTests(TVTrackingTestCase):
         state = self.state(show)
         self.assertEqual(list(state), SHOW_DETAIL_KEYS)
         self.assertEqual(set(state["eye"]), EYE_KEYS)
-        self.assertEqual(set(state["up_next"]), {"season_number", "episode_number", "title", "air_date", "is_new"})
+        self.assertEqual(
+            set(state["up_next"]),
+            {"season_number", "episode_number", "title", "air_date", "is_new", "image_url"},
+        )
         self.assertEqual(state["up_next"]["title"], "Episode 2")
         for target in state["composer"]["targets"]:
             self.assertEqual(set(target), TARGET_KEYS)
@@ -165,7 +169,9 @@ class PayloadShapeTests(TVTrackingTestCase):
         )
         self.assertEqual((state["watched_count"], state["aired_count"]), (0, 3))
         self.assertEqual(state["eye"]["tap"], "mark_confirm")
+        # Remove from Library isn't offered at all, not even with a reason (TV-005).
         self.assertNotIn("remove", state["available_actions"])
+        self.assertNotIn("remove", state["action_reasons"])
         self.assertIn("planning", state["available_actions"])
 
 
@@ -238,6 +244,25 @@ class TV105UpNextTests(TVTrackingTestCase):
         up_next = self.state(show)["up_next"]
         self.assertEqual((up_next["season_number"], up_next["episode_number"]), (1, 2))
 
+    def test_tv_105_up_next_carries_its_episode_still(self):
+        # The show page shows up next as a row of its season's episode list, still included.
+        show = self.make_show(
+            {
+                1: [
+                    FakeEpisode(1, date(2026, 1, 5), "One", still_path="/one.jpg"),
+                    FakeEpisode(2, date(2026, 1, 12), "Two", still_path="/two.jpg"),
+                    FakeEpisode(3, date(2026, 1, 19), "Three"),
+                ],
+            },
+        )
+        self.tick(show, 1, 1)
+        up_next = self.state(show)["up_next"]
+        self.assertEqual((up_next["episode_number"], up_next["image_url"]), (2, "https://image.tmdb.org/t/p/w500/two.jpg"))
+        self.tick(show, 1, 2)
+        self.assertIsNone(self.state(show)["up_next"]["image_url"], "E3 has no still")
+        # The list variant reads stored values only, so it never has one.
+        self.assertIsNone(tv_tracking.list_payload(self.tv(show))["up_next"]["image_url"])
+
     def test_tv_105_with_no_aired_regular_episode_there_is_no_up_next(self):
         show = self.make_show({0: 2, 1: [OCT_25 + timedelta(days=3)]})
         self.tick(show, 0, 1)
@@ -266,11 +291,24 @@ class TV404ComposerTests(TVTrackingTestCase):
         self.tick(show, 2, 1)
         composer = self.state(show)["composer"]
         self.assertEqual([target["id"] for target in composer["targets"]], ["season:1", "season:2", "season:0", "show"])
-        self.assertEqual(composer["default_target"], "season:1")
+        self.assertEqual(composer["default_target"], "show")
         self.assertEqual(composer["targets"][2]["title"], "Specials")
         self.assertEqual(composer["targets"][3]["title"], "Whole show")
+        # A finished, unlogged season doesn't move the show page's default off the show.
         self.log(self.season_item(show, 1))
-        self.assertEqual(self.state(show)["composer"]["default_target"], "season:2")
+        self.assertEqual(self.state(show)["composer"]["default_target"], "show")
+        # A season page and an episode page default to their own level.
+        season_page = self.state(self.season_item(show, 2))["composer"]
+        self.assertEqual((season_page["default_target"], [t["id"] for t in season_page["targets"]]), ("season:2", ["season:2"]))
+        episode_page = self.state(self.episode_item(show, 2, 2))["composer"]
+        self.assertEqual(episode_page["default_target"], "episode:2:2")
+
+    def test_tv_404_show_page_defaults_to_specials_while_only_specials_have_aired(self):
+        show = self.make_show({0: 1, 1: [OCT_25 + timedelta(days=10)]})
+        composer = self.state(show)["composer"]
+        self.assertEqual([target["id"] for target in composer["targets"]], ["season:0", "show"])
+        self.assertFalse(composer["targets"][1]["available"])
+        self.assertEqual(composer["default_target"], "season:0")
 
     def test_tv_404_stars_and_heart_prefill_from_the_targets_own_values(self):
         show = self.make_show({1: 2})

@@ -4442,23 +4442,10 @@ class _View:
         if 0 in calc.seasons and calc.seasons[0].listed and calc.seasons[0].aired:
             numbers.append(0)
         targets = [self.composer_target(SEASON, number) for number in numbers]
-        targets.append(self.composer_target(SHOW, None))
-        default = None
-        finished = [
-            number
-            for number in calc.regular
-            if calc.seasons[number].finished and not _season_log_in_pass(self, number, calc)
-        ]
-        if finished:
-            default = f"season:{finished[-1]}"
-        elif calc.up_next is not None:
-            default = f"season:{calc.up_next[0]}"
-        else:
-            aired = [number for number in calc.regular if calc.seasons[number].aired]
-            if aired:
-                default = f"season:{aired[-1]}"
-        if default is None or default not in {target["id"] for target in targets}:
-            default = targets[0]["id"]
+        show = self.composer_target(SHOW, None)
+        targets.append(show)
+        # The show page logs the whole show; while only specials have aired, Specials.
+        default = show["id"] if show["available"] else targets[0]["id"]
         return {"default_target": default, "targets": targets}
 
     # Actions (plan 2.3.6)
@@ -4668,6 +4655,8 @@ class _View:
                 "title": self.listing.episode_title(*calc.up_next) if self.listing else None,
                 "air_date": _iso(calc.up_next_air_date),
                 "is_new": calc.up_next_is_new,
+                # The show page shows up next as a row of its season's episode list.
+                "image_url": self.listing.episode_still(*calc.up_next) if self.listing else None,
             }
         next_airing = None
         if calc.next_airing is not None:
@@ -4867,6 +4856,7 @@ def list_payload(tv):
             "title": None,
             "air_date": _iso(tv.up_next_air_date),
             "is_new": tv.up_next_is_new,
+            "image_url": None,
         }
     next_airing = None
     if not legacy and tv.next_air_season is not None:
