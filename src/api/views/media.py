@@ -717,12 +717,18 @@ class MediaReviewsView(MediaExposureMixin, APIView):
     def get(self, request, source, media_type, media_id):
         from app.models import DiaryEntry, Item
 
+        season_number = request.query_params.get("season_number")
+        episode_number = request.query_params.get("episode_number")
+        # Installed iOS builds ask for a season's reviews as tv + season_number.
+        # A TV Item never has a season number, so read that as the season.
+        if media_type == MediaTypes.TV.value and season_number is not None and episode_number is None:
+            media_type = MediaTypes.SEASON.value
         item = Item.objects.filter(
             source=source,
             media_type=media_type,
             media_id=media_id,
-            season_number=request.query_params.get("season_number"),
-            episode_number=request.query_params.get("episode_number"),
+            season_number=season_number,
+            episode_number=episode_number,
         ).first()
         if item is None:
             return Response({"count": 0, "next": None, "previous": None, "results": []})

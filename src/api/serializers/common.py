@@ -1017,8 +1017,10 @@ def latest_progress_change_for(media):
     """Return the newest recorded progress delta for this user and item."""
     if hasattr(media, "viewer_latest_progress_change"):
         return media.viewer_latest_progress_change
+    # Episodes have no user of their own; they belong to the season's user.
+    user = media.related_season.user if media.item.media_type == MediaTypes.EPISODE.value else media.user
     return (
-        ProgressChange.objects.filter(actor=media.user, item=media.item)
+        ProgressChange.objects.filter(actor=user, item=media.item)
         .order_by("-created_at", "-id")
         .first()
     )
