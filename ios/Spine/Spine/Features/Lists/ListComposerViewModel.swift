@@ -104,10 +104,18 @@ final class ListComposerViewModel {
     var failedItemTitles: [String] = []
     var removedItem: RemovedListComposerItem?
     var removedPerson: RemovedListComposerPerson?
+    /// The list's tags, edited with the log sheet's tag pieces.
+    let tagDraft: LogTagDraft
+    /// Only the list's owner writes its tags (STAT-402); collaborators never see them here.
+    let canEditTags: Bool
 
     let mode: ListComposerMode
 
     private let initialDraft: ListComposerDraft
+    private let initialTags: [String]
+    private let currentUserId: Int?
+    private let now: () -> Date
+    private var listTagLibrary: [DiaryTagSuggestion] = []
     private let listRepository: ListRepository
     private let onUnauthorized: () -> Void
     private var serverListID: Int?
@@ -120,11 +128,23 @@ final class ListComposerViewModel {
         mode: ListComposerMode,
         initialItems: [MediaSummary] = [],
         listRepository: ListRepository,
+        currentUserId: Int? = nil,
+        now: @escaping () -> Date = Date.init,
         onUnauthorized: @escaping () -> Void
     ) {
         self.mode = mode
         self.listRepository = listRepository
+        self.currentUserId = currentUserId
+        self.now = now
         self.onUnauthorized = onUnauthorized
+        canEditTags = ListTagRules.canEditTags(mode: mode, currentUserId: currentUserId)
+        switch mode {
+        case .create:
+            initialTags = []
+        case let .edit(list):
+            initialTags = ListTagRules.normalized(list.tags)
+        }
+        tagDraft = LogTagDraft(tags: initialTags)
 
         switch mode {
         case let .create(type):
@@ -160,7 +180,39 @@ final class ListComposerViewModel {
     }
 
     var isDirty: Bool {
-        draft != initialDraft
+        draft != initialDraft || (canEditTags && ListTagRules.normalized(tagDraft.tags) != initialTags)
+    }
+
+    /// A ranked media list can be Stats' Top, so its tags suggest the Top tags. A list with positions
+    /// counts as ranked, as Stats counts it (STAT-206).
+    var suggestsTopTags: Bool {
+        draft.listType == .media && (draft.isRanked || draft.items.contains { $0.position != nil })
+    }
+
+    var topTags: [String] {
+        ListTagRules.topTags(year: Calendar.current.component(.year, from: now()))
+    }
+
+    /// Loads the user's own list tags for suggestions. Without them, only the Top tags are suggested.
+    func loadTagLibrary() async {
+        guard canEditTags else { return }
+        refreshTagSuggestions()
+        do {
+            let lists = try await listRepository.list()
+            listTagLibrary = ListTagRules.counted(lists, ownerId: currentUserId)
+        } catch {
+            handleUnauthorized(error)
+        }
+        refreshTagSuggestions()
+    }
+
+    /// Call when Ranked changes, so the Top tags come and go with it.
+    func refreshTagSuggestions() {
+        guard canEditTags else { return }
+        tagDraft.useLibrary(ListTagRules.library(
+            listTags: listTagLibrary,
+            topTags: suggestsTopTags ? topTags : []
+        ))
     }
 
     var requiresDiscardConfirmation: Bool {
@@ -304,6 +356,9 @@ final class ListComposerViewModel {
 
     func save() async -> Int? {
         guard canSave else { return nil }
+        if canEditTags {
+            tagDraft.commitQuery()
+        }
         errorMessage = nil
         failedItemTitles = []
         removedItem = nil
@@ -351,7 +406,8 @@ final class ListComposerViewModel {
             description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines),
             visibility: draft.visibility,
             isRanked: draft.isRanked,
-            listType: serverListID == nil && draft.listType == .people ? .people : nil
+            listType: serverListID == nil && draft.listType == .people ? .people : nil,
+            tags: canEditTags ? ListTagRules.normalized(tagDraft.tags) : nil
         )
 
         if let serverListID {
@@ -584,5 +640,64 @@ final class ListComposerViewModel {
         if case APIError.unauthorized = error {
             onUnauthorized()
         }
+    }
+}
+
+/// List tags (STAT-402): who writes them, how they're cleaned up, and what's suggested.
+enum ListTagRules {
+    /// The owner writes a list's tags. A new list is always the creator's. When the signed-in user isn't
+    /// known, a list without collaborators can only be edited by its owner.
+    static func canEditTags(mode: ListComposerMode, currentUserId: Int?) -> Bool {
+        switch mode {
+        case .create:
+            true
+        case let .edit(list):
+            if let currentUserId {
+                list.owner.id == currentUserId
+            } else {
+                list.collaborators.isEmpty
+            }
+        }
+    }
+
+    /// Trimmed, inner spaces collapsed to one, empties dropped, and tags that differ only in case
+    /// kept once with their first spelling: the server's own rule, so what's shown is what's saved.
+    static func normalized(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for tag in tags {
+            let cleaned = tag.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            guard !cleaned.isEmpty, seen.insert(cleaned.lowercased()).inserted else { continue }
+            result.append(cleaned)
+        }
+        return result
+    }
+
+    /// The tags Stats reads for Top: this year, last year and all time.
+    static func topTags(year: Int) -> [String] {
+        ["top\(year)", "top\(year - 1)", "topalltime"]
+    }
+
+    /// How often each tag is used across the user's lists, most used first. With an owner, only
+    /// that owner's lists count.
+    static func counted(_ lists: [CustomListSummary], ownerId: Int?) -> [DiaryTagSuggestion] {
+        var counts: [String: (name: String, count: Int)] = [:]
+        for list in lists where ownerId == nil || list.owner.id == ownerId {
+            for tag in normalized(list.tags) {
+                let key = tag.lowercased()
+                counts[key] = (counts[key]?.name ?? tag, (counts[key]?.count ?? 0) + 1)
+            }
+        }
+        return counts.values
+            .sorted { ($1.count, $0.name.lowercased()) < ($0.count, $1.name.lowercased()) }
+            .map { DiaryTagSuggestion(name: $0.name, usageCount: $0.count) }
+    }
+
+    /// The Top tags first, in order, then the user's other list tags.
+    static func library(listTags: [DiaryTagSuggestion], topTags: [String]) -> [DiaryTagSuggestion] {
+        let usage = Dictionary(listTags.map { ($0.name.lowercased(), $0.usageCount) }, uniquingKeysWith: { first, _ in first })
+        let top = topTags.map { DiaryTagSuggestion(name: $0, usageCount: usage[$0.lowercased()] ?? 0) }
+        let topKeys = Set(topTags.map { $0.lowercased() })
+        return top + listTags.filter { !topKeys.contains($0.name.lowercased()) }
     }
 }

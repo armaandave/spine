@@ -231,7 +231,7 @@ struct DiaryRowButtonStyle: ButtonStyle {
     }
 }
 
-private struct DiarySeparator: View {
+struct DiarySeparator: View {
     var body: some View {
         Rectangle()
             .fill(.white.opacity(0.09))

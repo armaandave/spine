@@ -44,6 +44,12 @@ final class LogTagDraft {
         hasLoaded = true
     }
 
+    /// Suggests these tags instead of the diary's, such as the list composer's list tags.
+    func useLibrary(_ suggestions: [DiaryTagSuggestion]) {
+        library = suggestions
+        hasLoaded = true
+    }
+
     /// Return or comma ends a tag.
     nonisolated static func isSeparator(_ character: Character) -> Bool {
         character == "\n" || character == ","

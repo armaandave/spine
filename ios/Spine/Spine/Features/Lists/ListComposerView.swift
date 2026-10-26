@@ -15,7 +15,10 @@ struct ListComposerView: View {
     private enum Field: Hashable {
         case name
         case description
+        case tags
     }
+
+    private static let tagsRowID = "list-composer-tags"
 
     init(
         mode: ListComposerMode,
@@ -23,6 +26,7 @@ struct ListComposerView: View {
         listRepository: ListRepository,
         mediaRepository: MediaRepository,
         peopleRepository: PeopleRepository,
+        currentUserId: Int? = nil,
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping (Int, ListComposerDraft) -> Void
     ) {
@@ -30,6 +34,7 @@ struct ListComposerView: View {
             mode: mode,
             initialItems: initialItems,
             listRepository: listRepository,
+            currentUserId: currentUserId,
             onUnauthorized: onUnauthorized
         ))
         self.mediaRepository = mediaRepository
@@ -45,31 +50,46 @@ struct ListComposerView: View {
             VStack(spacing: 0) {
                 topBar
 
-                List {
-                    detailsSection
-                        .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 9, trailing: 16))
-                        .listRowSeparator(.hidden)
+                ScrollViewReader { proxy in
+                    List {
+                        detailsSection
+                            .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 9, trailing: 16))
+                            .listRowSeparator(.hidden)
 
-                    settingsSection
-                        .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
-                        .listRowSeparator(.hidden)
+                        settingsSection
+                            .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                            .listRowSeparator(.hidden)
 
-                    itemsSection
+                        if viewModel.canEditTags {
+                            tagsSection(proxy: proxy)
+                                .id(Self.tagsRowID)
+                                .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                                .listRowSeparator(.hidden)
+                        }
 
-                    errorSection
-                        .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
-                        .listRowSeparator(.hidden)
+                        itemsSection
+
+                        errorSection
+                            .listRowInsets(EdgeInsets(top: 9, leading: 16, bottom: 9, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    }
+                    .listStyle(.plain)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .scrollContentBackground(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .contentMargins(.bottom, 19, for: .scrollContent)
+                    .environment(\.defaultMinListRowHeight, 1)
+                    .environment(\.editMode, .constant(.active))
+                    .disabled(viewModel.isSaving)
                 }
-                .listStyle(.plain)
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .contentMargins(.bottom, 19, for: .scrollContent)
-                .environment(\.defaultMinListRowHeight, 1)
-                .environment(\.editMode, .constant(.active))
-                .disabled(viewModel.isSaving)
             }
+        }
+        .task {
+            await viewModel.loadTagLibrary()
+        }
+        .onChange(of: viewModel.suggestsTopTags) {
+            viewModel.refreshTagSuggestions()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if focusedField == nil {
@@ -188,6 +208,111 @@ struct ListComposerView: View {
             Toggle("Ranked", isOn: $viewModel.draft.isRanked)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .tint(.white)
+        }
+    }
+
+    /// Tags, with the log sheet's chips: tap a chip to remove it; return or a comma adds what's typed.
+    /// Suggestions show while typing, inside the card, so their taps work in the always-editing list.
+    private func tagsSection(proxy: ScrollViewProxy) -> some View {
+        let tagDraft = viewModel.tagDraft
+        return composerSurface {
+            Text("Tags")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+            if !tagDraft.tags.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(tagDraft.tags, id: \.self) { tag in
+                        Button {
+                            tagDraft.remove(tag)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(tag)
+                                Image(systemName: "xmark")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove tag \(tag)")
+                    }
+                }
+            }
+
+            TextField("Add tags", text: Bindable(tagDraft).query, axis: .vertical)
+                .lineLimit(1...3)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focusedField, equals: .tags)
+                .font(.system(size: 16, weight: .regular, design: .rounded))
+                .foregroundStyle(.white)
+                .onChange(of: tagDraft.query) { _, text in
+                    if LogTagDraft.containsSeparator(text) {
+                        tagDraft.updateQuery(text)
+                    }
+                }
+                .onSubmit {
+                    tagDraft.commitQuery()
+                    focusedField = .tags
+                }
+
+            if focusedField == .tags, !tagDraft.suggestions.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(tagDraft.suggestions, id: \.name) { suggestion in
+                        Divider().overlay(.white.opacity(0.1))
+                        Button {
+                            tagDraft.pick(suggestion.name)
+                            focusedField = .tags
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "number")
+                                    .foregroundStyle(.secondary)
+                                Text(suggestion.name)
+                                    .foregroundStyle(.primary)
+                                Spacer(minLength: 8)
+                                if suggestion.usageCount > 0 {
+                                    Text("\(suggestion.usageCount)")
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Add tag \(suggestion.name)")
+                    }
+                }
+            }
+
+            if viewModel.suggestsTopTags {
+                Text("Tag it \(viewModel.topTags[0]) or topalltime to show it as your Top in Stats.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .sensoryFeedback(trigger: tagDraft.tags.count) { oldCount, newCount in
+            newCount > oldCount ? SensoryFeedback.impact(weight: .light) : .selection
+        }
+        .onChange(of: focusedField) { oldField, newField in
+            if oldField == .tags, newField != .tags {
+                // Done, a swipe or another field: keep what was typed as a tag.
+                tagDraft.commitQuery()
+            }
+            guard newField == .tags else { return }
+            // The suggestions and the keyboard arrive after focus does.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(Self.tagsRowID, anchor: .bottom)
+                }
+            }
         }
     }
 

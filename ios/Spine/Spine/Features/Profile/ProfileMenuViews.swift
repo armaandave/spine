@@ -747,6 +747,7 @@ struct ProfileListsView: View {
                 listRepository: listRepository,
                 mediaRepository: mediaRepository,
                 peopleRepository: peopleRepository,
+                currentUserId: currentUserId,
                 onUnauthorized: onUnauthorized
             ) { listID, _ in
                 pendingCreatedListID = listID
@@ -1633,6 +1634,7 @@ struct ProfileListDetailView: View {
                 listRepository: listRepository,
                 mediaRepository: mediaRepository,
                 peopleRepository: peopleRepository,
+                currentUserId: currentUserId,
                 onUnauthorized: onUnauthorized
             ) { _, _ in
                 Task { await viewModel.load() }
