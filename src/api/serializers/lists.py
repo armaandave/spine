@@ -7,6 +7,9 @@ from api.serializers.common import (
 from app.providers import services as provider_services
 from lists.models import CustomList
 
+MAX_LIST_TAGS = 20
+MAX_LIST_TAG_LENGTH = 100
+
 
 class CustomListWriteSerializer(serializers.Serializer):
     """Validate custom list writes."""
@@ -27,6 +30,38 @@ class CustomListWriteSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=150),
         required=False,
     )
+    # Owner only (the views check). STAT-402: at most 20 strings of at most 100
+    # characters once trimmed, checked as sent; then normalized.
+    tags = serializers.ListField(
+        child=serializers.JSONField(allow_null=True),
+        required=False,
+        max_length=MAX_LIST_TAGS,
+    )
+
+    def validate_tags(self, value):
+        """Check each tag as sent, then return the normalized tags (STAT-402)."""
+        for tag in value:
+            if not isinstance(tag, str):
+                raise serializers.ValidationError("Each tag must be a string.")
+            if len(tag.strip()) > MAX_LIST_TAG_LENGTH:
+                msg = f"Each tag must be at most {MAX_LIST_TAG_LENGTH} characters."
+                raise serializers.ValidationError(msg)
+        return normalize_list_tags(value)
+
+
+def normalize_list_tags(tags):
+    """Trim tags, collapse inner whitespace, drop empties and case-insensitive repeats.
+
+    The first spelling of tags that differ only in case is kept (STAT-402).
+    """
+    normalized, seen = [], set()
+    for tag in tags:
+        value = " ".join(tag.split())
+        key = value.casefold()
+        if value and key not in seen:
+            seen.add(key)
+            normalized.append(value)
+    return normalized
 
 
 class ListItemWriteSerializer(serializers.Serializer):

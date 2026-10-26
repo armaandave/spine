@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
+from api.services import stats_cache
 from app.models import (
     DiaryEntry,
     DiaryEntryTag,
@@ -703,6 +704,7 @@ def _set_like_row(user, item, liked):
         tracking_model = _tracking_model(item)
         if any(field.name == "liked" for field in tracking_model._meta.fields):
             tracking_model.objects.filter(user=user, item=item).update(liked=liked)
+            stats_cache.bump_user(user)
     if liked:
         _, created = MediaLike.objects.get_or_create(user=user, item=item)
         return created

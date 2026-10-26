@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 
 import events
+from api.services import stats_cache
 from app.mixins import collect_external_rating_item_ids, disable_fetch_releases
 from app.models import MediaTypes
 from app.tasks import enqueue_external_rating_batches
@@ -82,22 +83,27 @@ def import_media(
     """Handle the import process for different media services."""
     user = get_user_model().objects.get(id=user_id)
 
-    with disable_fetch_releases(), collect_external_rating_item_ids() as item_ids:
-        if oauth_username is None:
-            imported_counts, warnings = importer_func(
-                identifier,
-                user,
-                mode,
-                **kwargs,
-            )
-        else:
-            imported_counts, warnings = importer_func(
-                identifier,
-                user,
-                mode,
-                username=oauth_username,
-                **kwargs,
-            )
+    try:
+        with disable_fetch_releases(), collect_external_rating_item_ids() as item_ids:
+            if oauth_username is None:
+                imported_counts, warnings = importer_func(
+                    identifier,
+                    user,
+                    mode,
+                    **kwargs,
+                )
+            else:
+                imported_counts, warnings = importer_func(
+                    identifier,
+                    user,
+                    mode,
+                    username=oauth_username,
+                    **kwargs,
+                )
+    finally:
+        # Importers write with bulk calls that send no signals; even a failed import
+        # may have saved some rows (STAT-006).
+        stats_cache.bump_user(user)
 
     transaction.on_commit(
         partial(enqueue_external_rating_batches, sorted(item_ids)),

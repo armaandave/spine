@@ -94,8 +94,12 @@ from api.views.social import (
     UserActivityView,
 )
 from api.views.stats import (
+    MyStatsCollectionsView,
+    MyStatsHighestRatedView,
     MyStatsMostLoggedView,
     MyStatsSummaryView,
+    UserStatsCollectionsView,
+    UserStatsHighestRatedView,
     UserStatsMostLoggedView,
     UserStatsSummaryView,
 )
@@ -228,6 +232,8 @@ urlpatterns = [
     path("diary/<int:entry_id>/like/", DiaryLikeView.as_view(), name="api-diary-like"),
     path("stats/me/summary/", MyStatsSummaryView.as_view(), name="api-my-stats"),
     path("stats/me/most-logged/", MyStatsMostLoggedView.as_view(), name="api-my-stats-most-logged"),
+    path("stats/me/highest-rated/", MyStatsHighestRatedView.as_view(), name="api-my-stats-highest-rated"),
+    path("stats/me/collections/", MyStatsCollectionsView.as_view(), name="api-my-stats-collections"),
     path("lists/", ListsView.as_view(), name="api-lists"),
     path("lists/featured/", FeaturedListsView.as_view(), name="api-featured-lists"),
     path("lists/featured/shelves/", FeaturedShelvesView.as_view(), name="api-featured-shelves"),
@@ -268,6 +274,16 @@ urlpatterns = [
         "users/<str:username>/stats/most-logged/",
         UserStatsMostLoggedView.as_view(),
         name="api-user-stats-most-logged",
+    ),
+    path(
+        "users/<str:username>/stats/highest-rated/",
+        UserStatsHighestRatedView.as_view(),
+        name="api-user-stats-highest-rated",
+    ),
+    path(
+        "users/<str:username>/stats/collections/",
+        UserStatsCollectionsView.as_view(),
+        name="api-user-stats-collections",
     ),
     path("users/<str:username>/activity/", UserActivityView.as_view(), name="api-user-activity"),
     path("users/<str:username>/follow/", FollowView.as_view(), name="api-user-follow"),

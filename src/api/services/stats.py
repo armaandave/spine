@@ -108,10 +108,23 @@ class StatsRange:
         }
 
 
-def parse_stats_range(params):
-    """Parse API date parameters without ambiguous or server-erroring fallbacks."""
+def parse_stats_range(params, owner=None):
+    """Parse API date parameters without ambiguous or server-erroring fallbacks.
+
+    With an owner, the defaults and the reported timezone are the owner's calendar
+    (STAT-005), whoever asks; without one (the legacy payload) they are the
+    request's current timezone, as before.
+    """
     start_value = params.get("start_date")
     end_value = params.get("end_date")
+    if owner is not None:
+        current_timezone = user_calendar.calendar_tz(owner)
+        timezone_name = current_timezone.key
+        today = user_calendar.today(owner)
+    else:
+        current_timezone = timezone.get_current_timezone()
+        timezone_name = timezone.get_current_timezone_name()
+        today = timezone.localdate()
 
     if start_value == "all" or end_value == "all":
         if start_value != "all" or end_value != "all":
@@ -123,10 +136,9 @@ def parse_stats_range(params):
             end_date=None,
             start_datetime=None,
             end_datetime=None,
-            timezone_name=timezone.get_current_timezone_name(),
+            timezone_name=timezone_name,
         )
 
-    today = timezone.localdate()
     start_date = _parse_date_param("start_date", start_value) if start_value else today - relativedelta(years=1)
     end_date = _parse_date_param("end_date", end_value) if end_value else today
     if start_date > end_date:
@@ -134,18 +146,21 @@ def parse_stats_range(params):
             "date_range": ["start_date must be on or before end_date."],
         })
 
-    current_timezone = timezone.get_current_timezone()
     return StatsRange(
         start_date=start_date,
         end_date=end_date,
         start_datetime=timezone.make_aware(datetime.combine(start_date, time.min), current_timezone),
         end_datetime=timezone.make_aware(datetime.combine(end_date, time.max), current_timezone),
-        timezone_name=timezone.get_current_timezone_name(),
+        timezone_name=timezone_name,
     )
 
 
 def _parse_date_param(field, value):
-    parsed = parse_date(value)
+    try:
+        parsed = parse_date(value)
+    except ValueError:
+        # Well formed but not a real day, such as 2025-13-01.
+        parsed = None
     if parsed is None:
         raise ValidationError({field: ["Use an ISO 8601 date in YYYY-MM-DD format."]})
     return parsed

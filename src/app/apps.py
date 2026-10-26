@@ -11,3 +11,6 @@ class AppConfig(AppConfig):
         """Import signals when the app is ready."""
         import app.signals  # noqa: F401, PLC0415
         import app.tv_signals  # noqa: F401, PLC0415
+        from app import stats_signals  # noqa: PLC0415
+
+        stats_signals.connect()

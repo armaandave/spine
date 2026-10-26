@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from api.services import stats_cache
 from app import single_weight
 from app.models import (
     Book,
@@ -1052,6 +1053,7 @@ def _splice_session(book, session):
         previous_tracked=session.previous_tracked,
         previous_read_override=session.previous_read_override,
     )
+    stats_cache.bump_user(book.user_id)
     if book.undated_read_previous_session_id == session.id:
         book.undated_read_previous_session = session.previous_session
         book.undated_read_previous_status = session.previous_status

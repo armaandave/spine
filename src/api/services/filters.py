@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import reduce
+from operator import or_
 
 from django.apps import apps
 from django.conf import settings
@@ -327,6 +329,128 @@ def apply_diary_date_range(queryset, params, *, owner, field="consumed_at"):
     if watched_from is None and watched_to is None:
         return queryset
     return queryset.filter(log_day_range_q(owner, watched_from, watched_to, field))
+
+
+# Item filters that tv_rollup matches through the log's title (STAT-400).
+TITLE_MATCHED_PARAMS = ("year", "year_min", "year_max", "genre")
+SHOW_PART_TYPES = (MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
+
+
+def diary_item_q(item_id, *, tv_rollup=False):
+    """Match logs of one Item; with tv_rollup a show brings its seasons and episodes.
+
+    Any other Item, a season included, stays exact (STAT-400).
+    """
+    exact = Q(item_id=item_id)
+    if not tv_rollup or not str(item_id).isdigit():
+        return exact
+    show = Item.objects.filter(
+        id=item_id,
+        media_type=MediaTypes.TV.value,
+        season_number__isnull=True,
+        episode_number__isnull=True,
+    )
+    return exact | Q(
+        item__media_type__in=SHOW_PART_TYPES,
+        item__source=Subquery(show.values("source")[:1]),
+        item__media_id=Subquery(show.values("media_id")[:1]),
+    )
+
+
+def item_filter_params(params):
+    """Return the params apply_item_filters should read for a diary request.
+
+    With tv_rollup, the title-matched filters move to apply_diary_drilldown_filters.
+    """
+    if not bool_param(params, "tv_rollup"):
+        return params
+    remaining = params.copy()
+    for key in TITLE_MATCHED_PARAMS:
+        remaining.pop(key, None)
+    return remaining
+
+
+def apply_diary_drilldown_filters(queryset, params, *, owner):
+    """Apply the stats drill-down filters to the owner's diary logs (STAT-400).
+
+    - ``genre_group`` (repeatable): a genre or theme value in a shared group, from
+      the owner's own stored spellings, each matched on its own media type. Music
+      never matches; an unknown key matches nothing.
+    - ``original_language`` (repeatable): the title's original language, exactly.
+    - ``tv_rollup=true``: these and ``year``, ``year_min``, ``year_max`` and
+      ``genre`` match a season or episode log through its show's Item (STAT-102),
+      or its own Item when the show Item doesn't exist.
+
+    Stored values only: nothing here calls a provider.
+    """
+    from api.services import genre_groups
+    from api.services.stats_scope import StatsScope
+
+    target = "item_id"
+    if bool_param(params, "tv_rollup"):
+        queryset = queryset.annotate(drilldown_title_id=StatsScope.title_id())
+        target = "drilldown_title_id"
+        queryset = _apply_title_item_filters(queryset, params, target)
+
+    group_keys = values(params, "genre_group")
+    if group_keys:
+        pairs = set()
+        for key in dict.fromkeys(group_keys):
+            pairs.update(genre_groups.raw_values_for(owner, key))
+        if not pairs:
+            return queryset.none()
+        by_type = defaultdict(set)
+        for value, media_type in pairs:
+            by_type[media_type].add(value)
+        matching = ItemFilterFacet.objects.filter(
+            facet_type__in=genre_groups.GENRE_FACET_TYPES,
+        ).filter(
+            reduce(
+                or_,
+                (
+                    Q(item__media_type=media_type, value__in=sorted(type_values))
+                    for media_type, type_values in sorted(by_type.items())
+                ),
+            ),
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+
+    languages = values(params, "original_language")
+    if languages:
+        matching = ItemFilterFacet.objects.filter(
+            facet_type=ItemFilterFacet.FacetType.ORIGINAL_LANGUAGE,
+            value__in=languages,
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+    return queryset
+
+
+def _apply_title_item_filters(queryset, params, target):
+    """Apply year, year_min, year_max and genre to each log's title Item."""
+    title_items = Item.objects.all()
+    filtered = False
+    year_values = [year for year in (_year_value(value) for value in values(params, "year")) if year]
+    if values(params, "year"):
+        title_items = title_items.filter(release_year__in=year_values)
+        filtered = True
+    year_min = int_param(params, "year_min")
+    if year_min is not None:
+        title_items = title_items.filter(release_year__gte=year_min)
+        filtered = True
+    year_max = int_param(params, "year_max")
+    if year_max is not None:
+        title_items = title_items.filter(release_year__lte=year_max)
+        filtered = True
+    if filtered:
+        queryset = queryset.filter(**{f"{target}__in": title_items.values("id")})
+    genres = values(params, "genre")
+    if genres:
+        matching = ItemFilterFacet.objects.filter(
+            facet_type=ItemFilterFacet.FacetType.GENRE,
+            value__in=genres,
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+    return queryset
 
 
 def apply_watched_range(queryset, params, field):

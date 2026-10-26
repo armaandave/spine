@@ -55,6 +55,7 @@ from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 
+from api.services import stats_cache
 from api.services.item_metadata import CURRENT_METADATA_VERSION, store_item_metadata
 from app import tv_listing
 from app.mixins import collect_external_rating_item_ids
@@ -195,9 +196,10 @@ MUSICBRAINZ_KEY = "musicbrainz_free_at"
 def bump_stats_epoch():
     """Hook for the stats cache: called once when a fill chain ends having filled Items.
 
-    Milestone 2 bumps the stats epoch here, so every stats page is worked out again
-    from the filled metadata. Until the cache exists there is nothing to bump.
+    Bumps the stats epoch, so every stats page is worked out again from the filled
+    metadata (STAT-006).
     """
+    stats_cache.bump_epoch()
 
 
 # Selection

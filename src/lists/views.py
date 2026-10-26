@@ -330,6 +330,8 @@ def list_item_toggle(request):
         custom_list.items.add(item)
         logger.info("%s added to %s.", item, custom_list)
         has_item = True
+    # Editing a list's items counts as updating it (STAT-403).
+    custom_list.save(update_fields=["updated_at"])
 
     return render(
         request,
