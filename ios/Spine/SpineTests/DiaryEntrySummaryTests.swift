@@ -11,6 +11,7 @@ final class DiaryEntrySummaryTests: XCTestCase {
         ))
 
         XCTAssertEqual(summary.stars, "3")
+        XCTAssertEqual(summary.starSymbols, ["star.fill", "star.fill", "star.fill"])
         XCTAssertTrue(summary.liked)
         XCTAssertTrue(summary.hasReview)
         XCTAssertEqual(summary.accessibilityLabel, "Rated 3 out of 5 stars, Liked, Has review")
@@ -20,6 +21,7 @@ final class DiaryEntrySummaryTests: XCTestCase {
         let summary = DiaryEntrySummary(entry: try diaryEntry(mediaType: "tv", rating: "7"))
 
         XCTAssertEqual(summary.stars, "3.5")
+        XCTAssertEqual(summary.starSymbols, ["star.fill", "star.fill", "star.fill", "star.leadinghalf.filled"])
     }
 
     func testReviewTitleAloneCountsAsReview() throws {
@@ -32,6 +34,7 @@ final class DiaryEntrySummaryTests: XCTestCase {
         let summary = DiaryEntrySummary(entry: try diaryEntry(reviewTitle: "  ", review: "\n"))
 
         XCTAssertNil(summary.stars)
+        XCTAssertEqual(summary.starSymbols, [])
         XCTAssertFalse(summary.hasReview)
         XCTAssertTrue(summary.isEmpty)
     }
