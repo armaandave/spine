@@ -16,7 +16,6 @@ final class MediaDetailViewModel {
     var reviewCount = 0
     var isLoading = true
     var isLoadingReviews = false
-    var isSavingQuickAction = false
     var isSavingProgress = false
     var errorMessage: String?
     var reviewsErrorMessage: String?
@@ -25,6 +24,15 @@ final class MediaDetailViewModel {
     var likeErrorMessage: String?
     var formErrorMessage: String?
     var musicEnrichmentState = MusicEnrichmentState.idle
+    /// What the page says instead of writing: a blocked eye or untick, or nothing aired yet (TV-102, TV-300, TV-302).
+    var tvNotice: String?
+    /// The native confirmation a TV write waits for, including the re-ask after a stale count (TV-705).
+    var tvConfirmation: TVPageConfirmation?
+    /// Confirmed TV writes the loaded episode and season lists don't show yet; a refresh that replaces the detail
+    /// clears them.
+    private(set) var tvConfirmed = TVConfirmedWrites()
+    /// After a TV write, log or heart: the earlier-episodes question, then the season-finish composer (TV-107, TV-403).
+    let tvFollowUp: TVWriteFollowUp
 
     /// Tags this page's MediaStateChange posts, so its own observer can skip them.
     let changeOrigin = UUID()
@@ -41,6 +49,8 @@ final class MediaDetailViewModel {
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var refreshIsWaiting = false
     @ObservationIgnored private var scheduledNeed = RefreshNeed.none
+    /// A saved log's envelope, handed to `tvFollowUp` once its composer has closed.
+    @ObservationIgnored private var deferredTVEnvelope: TVWriteEnvelope?
 
     private let ref: MediaRef
     private let mediaRepository: MediaRepository
@@ -70,12 +80,22 @@ final class MediaDetailViewModel {
         self.externalRatingMaxPollAttempts = externalRatingMaxPollAttempts
         self.writeRefreshDelay = writeRefreshDelay
         self.externalRefreshDelay = externalRefreshDelay
+        tvFollowUp = TVWriteFollowUp(
+            showRef: ref,
+            trackingRepository: trackingRepository,
+            mediaRepository: mediaRepository
+        )
+        tvFollowUp.onResponse = { [weak self] response in
+            self?.applyTVFollowUpResponse(response)
+        }
     }
 
     /// The page's one tracking state: the confirmed `detail.userState` with pending writes applied in tap order.
     var viewer: UserMediaState? {
         guard let detail else { return nil }
-        return pending.reduce(into: detail.userState ?? .untracked) { state, write in write.project(&state) }
+        var confirmed = detail.userState ?? .untracked
+        if tvConfirmed.watches != TVPendingWatches() { confirmed.tvPending = tvConfirmed.watches }
+        return pending.reduce(into: confirmed) { state, write in write.project(&state) }
     }
 
     var hasPendingWrites: Bool { pendingWriteCount > 0 }
@@ -324,6 +344,8 @@ final class MediaDetailViewModel {
                 var next = loaded
                 next.userState = lostRace ? detail?.userState : userState
                 detail = next
+                // The fresh lists show every confirmed write, unless one confirmed while they loaded.
+                if !lostRace { tvConfirmed = TVConfirmedWrites() }
             } else {
                 // Patch only what can change, so music enrichment and other loaded extras stay.
                 if !lostRace, detail?.userState != userState { detail?.userState = userState }
@@ -347,6 +369,9 @@ final class MediaDetailViewModel {
 
     /// Shows `project` at once, then sends on the serial queue. `send` builds its request when it runs, from
     /// confirmed state only. Its outcome replaces the confirmed state in the same turn that drops the projection.
+    ///
+    /// `onSuccess` runs in the same turn as the confirmation. `onConflict` may claim an error (returning true): the
+    /// write then fails without an error message, and the page refreshes.
     @discardableResult
     private func enqueue(
         _ project: TrackingProjection.Projection?,
@@ -354,6 +379,8 @@ final class MediaDetailViewModel {
         refresh: RefreshNeed = .none,
         errorsTo errorTarget: ReferenceWritableKeyPath<MediaDetailViewModel, String?>? = nil,
         eyeSpinner: Bool = false,
+        onSuccess: ((WriteOutcome) -> Void)? = nil,
+        onConflict: ((Error) -> Bool)? = nil,
         send: @escaping () async throws -> WriteOutcome
     ) -> Task<Bool, Never> {
         let errorPath = errorTarget ?? \.quickActionErrorMessage
@@ -373,6 +400,7 @@ final class MediaDetailViewModel {
                 let outcome = try await send()
                 pending.removeAll { $0.id == write?.id }
                 confirm(outcome)
+                onSuccess?(outcome)
                 retainedMutationIds.removeAll()
                 MediaStateChange.post(ref: ref, origin: changeOrigin)
                 switch outcome {
@@ -388,7 +416,13 @@ final class MediaDetailViewModel {
             } catch {
                 pending.removeAll { $0.id == write?.id }
                 failedWriteCount += 1
-                self[keyPath: errorPath] = error.localizedDescription
+                if onConflict?(error) == true {
+                    scheduleRefresh(.full, after: .zero)
+                    return false
+                }
+                // TV errors carry user copy, including the retryable 503 (TV-103).
+                let message = ref.isTVFamily ? (error as? APIError)?.apiErrorMessage : nil
+                self[keyPath: errorPath] = message ?? error.localizedDescription
                 if case APIError.unauthorized = error { onUnauthorized() }
                 // A lost response may still have landed.
                 if case APIError.network = error { scheduleRefresh(.full, after: .zero) }
@@ -419,11 +453,37 @@ final class MediaDetailViewModel {
                 state.hasLiked = liked
                 next = state
             }
+        case let .tv(response):
+            next = Self.foldTV(response, into: current, page: ref)
         case .unknown:
             next = current
         }
         stateGeneration += 1
         if detail != nil, detail?.userState != next { detail?.userState = next }
+    }
+
+    /// Folds a TV action's response into the page (TV-705). A season or episode page whose payload had no TV state
+    /// of its own takes it from the response when the response names that level, and never takes the show's
+    /// tracking as its own.
+    static func foldTV(_ response: TVActionResponse, into current: UserMediaState, page: MediaRef) -> UserMediaState {
+        guard page.mediaType != "tv", current.tv?.season == nil, current.tv?.episode == nil else {
+            return current.applying(tvEnvelope: response.envelope, tracking: response.tracking)
+        }
+        let envelope = response.envelope
+        var tv = current.tv ?? envelope.tv ?? TVShowState()
+        if page.mediaType == "season", let season = envelope.season, season.seasonNumber == page.seasonNumber {
+            tv.season = season
+        } else if page.isEpisode, let episode = envelope.episode,
+                  episode.seasonNumber == page.seasonNumber, episode.episodeNumber == page.episodeNumber {
+            tv.episode = episode
+        }
+        var state = current
+        guard tv.season != nil || tv.episode != nil else {
+            state.tv = envelope.tv ?? current.tv
+            return state
+        }
+        state.tv = tv
+        return state.applying(tvEnvelope: envelope, tracking: response.tracking)
     }
 
     /// Reuses the id of a failed write so a retry stays idempotent. Any success clears them all.
@@ -464,6 +524,9 @@ final class MediaDetailViewModel {
         let ref = detail.ref
         let liked = !((viewer ?? detail.userState)?.hasLiked ?? false)
         let repository = mediaRepository
+        if ref.isTVFamily {
+            return toggleTVLike(ref: ref, liked: liked)
+        }
         return enqueue(
             TrackingProjection.like(liked, impliesCompletion: Self.opinionImpliesCompletion(ref)),
             ref: ref,
@@ -487,6 +550,10 @@ final class MediaDetailViewModel {
     @discardableResult
     func setCurrentRating(for detail: MediaDetail, halfSteps: Int) -> Task<Bool, Never> {
         let ref = detail.ref
+        if ref.isTVFamily {
+            // TV keeps its 0-10 wire scale: the picker's half steps are the whole values 1-10 (TV-504).
+            return rateTV(steps: halfSteps)
+        }
         let rating = halfSteps > 0 ? Decimal(halfSteps) / 2 : nil
         let wire = halfSteps > 0 ? String(format: "%.1f", Double(halfSteps) / 2) : nil
         let repository = trackingRepository
@@ -604,40 +671,389 @@ final class MediaDetailViewModel {
         }
     }
 
-    func watchEpisode(_ detail: MediaDetail, watchedAt: Date = Date()) async -> Bool {
-        guard
-            !isSavingQuickAction,
-            let seasonNumber = detail.ref.seasonNumber,
-            let episodeNumber = detail.ref.episodeNumber
-        else { return false }
-        isSavingQuickAction = true
-        quickActionErrorMessage = nil
-        defer { isSavingQuickAction = false }
+    // MARK: TV writes
 
-        do {
-            _ = try await trackingRepository.watchEpisode(
-                source: detail.ref.source,
-                mediaId: detail.ref.mediaId,
+    /// TV actions go to the show, whichever page sends them.
+    private var tvShowRef: MediaRef { ref.parentTVRef ?? ref }
+
+    /// The season a season page is about; nil on show and episode pages.
+    private var pageSeasonNumber: Int? { ref.mediaType == "season" ? ref.seasonNumber : nil }
+
+    /// The confirmed state of one episode: the episode page's own, a write's newer answer, or the season's list.
+    func confirmedTVEpisode(seasonNumber: Int, episodeNumber: Int) -> TVEpisodeState? {
+        let coordinate = TVEpisodeCoordinate(seasonNumber: seasonNumber, episodeNumber: episodeNumber)
+        if let page = detail?.userState?.tv?.episode, page.coordinate == coordinate { return page }
+        if let confirmed = tvConfirmed.episodes[coordinate] { return confirmed }
+        if let listed = detail?.episodes?.first(where: { $0.tv?.coordinate == coordinate })?.tv { return listed }
+        return detail?.tvUnlistedEpisodes?.first(where: { $0.tv.coordinate == coordinate })?.tv
+    }
+
+    /// An episode row's state: a confirmed write's answer when the loaded list predates it.
+    func tvEpisodeState(_ listed: TVEpisodeState?) -> TVEpisodeState? {
+        guard let listed else { return nil }
+        return tvConfirmed.episodes[listed.coordinate] ?? listed
+    }
+
+    /// A season card's state: a confirmed write's answer when the loaded cards predate it.
+    func tvSeasonState(_ listed: TVSeasonState?) -> TVSeasonState? {
+        guard let listed else { return nil }
+        return tvConfirmed.seasons[listed.seasonNumber] ?? listed
+    }
+
+    /// Sends a TV action through the write queue. `request` runs when the write is sent, from confirmed state;
+    /// nil means there is nothing left to send. The response folds in, then goes to `tvFollowUp`.
+    @discardableResult
+    private func sendTV(
+        _ action: TVAction,
+        projection: TrackingProjection.Projection? = nil,
+        eyeSpinner: Bool = false,
+        onStateChanged: ((TVStateChange) -> Void)? = nil,
+        afterSuccess: (() -> Void)? = nil,
+        request: @escaping () throws -> TVActionRequest?
+    ) -> Task<Bool, Never> {
+        let show = tvShowRef
+        let repository = trackingRepository
+        return enqueue(
+            projection,
+            ref: ref,
+            refresh: .community,
+            eyeSpinner: eyeSpinner,
+            onSuccess: { [self] outcome in
+                guard case let .tv(response) = outcome else { return }
+                var projected = UserMediaState.untracked
+                projection?(&projected)
+                tvConfirmed.record(projected: projected.tvPending, envelope: response.envelope)
+                afterSuccess?()
+                tvFollowUp.handle(response.envelope)
+            },
+            onConflict: onStateChanged.map { handler in
+                { error in
+                    guard let change = (error as? APIError)?.tvStateChange else { return false }
+                    handler(change)
+                    return true
+                }
+            }
+        ) {
+            guard let body = try request() else { return .unknown }
+            return .tv(try await repository.performTVAction(
+                source: show.source,
+                mediaId: show.mediaId,
+                action: action,
+                request: body
+            ))
+        }
+    }
+
+    /// Ticks an aired episode, dated now by the server (TV-100). It shows at once and a failure restores the
+    /// confirmed state (TV-705).
+    @discardableResult
+    func tickTVEpisode(seasonNumber: Int, episodeNumber: Int) -> Task<Bool, Never> {
+        sendTV(.tick, projection: TrackingProjection.tvTick(season: seasonNumber, episode: episodeNumber)) { [self] in
+            TVActionRequest(
                 seasonNumber: seasonNumber,
                 episodeNumber: episodeNumber,
-                watchedAt: watchedAt
+                mutationId: mutationId(for: "tv.tick.\(seasonNumber).\(episodeNumber)")
             )
-            // Applied to the current detail, so a write that confirmed while the watch was sent stays.
-            if let current = self.detail {
-                self.detail?.userState = (current.userState ?? .untracked).replacingIsTracked(true)
-            }
-            stateGeneration += 1
-            retainedMutationIds.removeAll()
-            MediaStateChange.post(ref: detail.ref, origin: changeOrigin)
-            scheduleRefresh(.full, after: .zero)
-            return true
-        } catch {
-            quickActionErrorMessage = error.localizedDescription
-            if case APIError.unauthorized = error {
-                onUnauthorized()
-            }
-            return false
         }
+    }
+
+    /// Unticks the viewing the episode's confirmed state names (TV-102). An episode no longer watched sends nothing.
+    @discardableResult
+    func untickTVEpisode(seasonNumber: Int, episodeNumber: Int) -> Task<Bool, Never> {
+        sendTV(.untick, projection: TrackingProjection.tvUntick(season: seasonNumber, episode: episodeNumber)) { [self] in
+            guard let episode = confirmedTVEpisode(seasonNumber: seasonNumber, episodeNumber: episodeNumber),
+                  episode.watched
+            else { return nil }
+            guard let viewingId = episode.untickViewingId else {
+                throw TVPageError(message: episode.untickMessage ?? "Delete your log of this episode first.")
+            }
+            return TVActionRequest(
+                seasonNumber: seasonNumber,
+                episodeNumber: episodeNumber,
+                viewingId: viewingId,
+                mutationId: mutationId(for: "tv.untick.\(viewingId)")
+            )
+        }
+    }
+
+    /// An episode tick, from a season's list, the Up next row or the episode page's eye: ticks it, unticks it, or
+    /// says why it can't (TV-100, TV-102).
+    func toggleTVEpisode(_ episode: TVEpisodeState) {
+        let isWatched = viewer?.tvIsWatched(episode) ?? episode.watched
+        if isWatched {
+            let confirmed = confirmedTVEpisode(seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+            if let confirmed, confirmed.watched, confirmed.untickViewingId == nil {
+                tvNotice = confirmed.untickMessage ?? "Delete your log of this episode first."
+                return
+            }
+            untickTVEpisode(seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+        } else if episode.aired, episode.listed {
+            tickTVEpisode(seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+        } else if !episode.aired {
+            tvNotice = "This episode hasn't aired yet."
+        }
+    }
+
+    /// The Up next row's tick: up next is aired and unwatched, so a tap ticks it, and a second tap before the page
+    /// moves on unticks it.
+    func toggleTVUpNext(_ upNext: TVEpisodePointer) {
+        if viewer?.tvPending.episodes[upNext.coordinate] == true {
+            untickTVEpisode(seasonNumber: upNext.seasonNumber, episodeNumber: upNext.episodeNumber)
+        } else {
+            tickTVEpisode(seasonNumber: upNext.seasonNumber, episodeNumber: upNext.episodeNumber)
+        }
+    }
+
+    /// The rail's eye on a TV page. The episode eye ticks and unticks; the show and season eyes follow `eye.tap`
+    /// (TV-300, TV-302): mark at once, confirm first, unmark at once, confirm first, or say why not.
+    func tapTVEye() {
+        guard let viewer, !confirmingEyeWrite else { return }
+        switch ref.mediaType {
+        case "episode":
+            if let episode = viewer.tv?.episode {
+                toggleTVEpisode(episode)
+            } else if !viewer.isTracked, let seasonNumber = ref.seasonNumber, let episodeNumber = ref.episodeNumber {
+                tickTVEpisode(seasonNumber: seasonNumber, episodeNumber: episodeNumber)
+            }
+        case "season":
+            guard let season = viewer.tv?.season, let eye = season.eye else { return }
+            handleTVEye(eye, seasonNumber: season.seasonNumber, version: viewer.tv?.version)
+        default:
+            guard let tv = viewer.tv, let eye = tv.eye else { return }
+            handleTVEye(eye, seasonNumber: nil, version: tv.version)
+        }
+    }
+
+    private func handleTVEye(_ eye: TVEyeState, seasonNumber: Int?, version: Int?) {
+        switch eye.tap {
+        case .mark:
+            markTVWatched(seasonNumber: seasonNumber)
+        case .markConfirm:
+            tvConfirmation = TVPageConfirmation(
+                kind: .mark(seasonNumber: seasonNumber),
+                prompt: TVTrackingPresentation.eyePrompt(for: eye) ?? "Mark all aired episodes watched?",
+                expectedVersion: nil
+            )
+        case .unmarkMarks:
+            unmarkTV(seasonNumber: seasonNumber, confirmed: false, expectedVersion: nil)
+        case .unmarkConfirm:
+            tvConfirmation = TVPageConfirmation(
+                kind: .unmark(seasonNumber: seasonNumber),
+                prompt: TVTrackingPresentation.eyePrompt(for: eye) ?? "Mark all episodes unwatched?",
+                expectedVersion: version
+            )
+        case .blocked, .nothingAired:
+            tvNotice = TVTrackingPresentation.eyeMessage(for: eye)
+        case .unknown:
+            break
+        }
+    }
+
+    /// The user confirmed a TV dialog.
+    func confirmTV(_ confirmation: TVPageConfirmation) {
+        if tvConfirmation == confirmation { tvConfirmation = nil }
+        switch confirmation.kind {
+        case let .mark(seasonNumber):
+            markTVWatched(seasonNumber: seasonNumber)
+        case let .unmark(seasonNumber):
+            unmarkTV(seasonNumber: seasonNumber, confirmed: true, expectedVersion: confirmation.expectedVersion)
+        case let .markUpTo(coordinate):
+            markTVUpTo(coordinate)
+        case .remove:
+            removeTVShow(expectedVersion: confirmation.expectedVersion)
+        }
+    }
+
+    /// The show eye (`seasonNumber` nil) or a season or Specials eye marks every aired episode under it, undated
+    /// (TV-300, TV-004).
+    @discardableResult
+    func markTVWatched(seasonNumber: Int?) -> Task<Bool, Never> {
+        sendTV(.markWatched, projection: TrackingProjection.tvMarked(season: seasonNumber), eyeSpinner: true) { [self] in
+            TVActionRequest(seasonNumber: seasonNumber, mutationId: mutationId(for: "tv.mark.\(seasonNumber ?? -1)"))
+        }
+    }
+
+    /// A filled eye's undo (TV-302). Case 3 is `confirmed`: it carries the version its dialog showed, and a show
+    /// that changed since asks again with the new count (TV-705).
+    @discardableResult
+    func unmarkTV(seasonNumber: Int?, confirmed: Bool, expectedVersion: Int?) -> Task<Bool, Never> {
+        sendTV(
+            .unmark,
+            eyeSpinner: true,
+            onStateChanged: { [self] change in
+                guard change.count > 0 else { return }
+                tvConfirmation = TVPageConfirmation(
+                    kind: .unmark(seasonNumber: seasonNumber),
+                    prompt: TVTrackingPresentation.eyePrompt(
+                        for: TVEyeState(filled: true, tap: .unmarkConfirm, count: change.count)
+                    ) ?? "Mark all \(change.count) episodes unwatched?",
+                    expectedVersion: change.stateVersion
+                )
+            },
+            afterSuccess: { [self] in tvConfirmed.clearWatches(seasonNumber: seasonNumber) }
+        ) { [self] in
+            TVActionRequest(
+                seasonNumber: seasonNumber,
+                mutationId: mutationId(for: "tv.unmark.\(seasonNumber ?? -1).\(expectedVersion ?? -1)"),
+                expectedVersion: confirmed ? expectedVersion : nil,
+                confirm: confirmed ? true : nil
+            )
+        }
+    }
+
+    /// Long-press "Mark watched up to here" on an episode row asks first, naming the range (TV-108).
+    func askMarkTVUpTo(_ episode: TVEpisodeState) {
+        guard episode.canMarkUpTo, episode.markUpToPrompt != nil else { return }
+        tvConfirmation = TVPageConfirmation(
+            kind: .markUpTo(episode.coordinate),
+            prompt: TVTrackingPresentation.markUpToPrompt(for: episode),
+            expectedVersion: nil
+        )
+    }
+
+    @discardableResult
+    func markTVUpTo(_ coordinate: TVEpisodeCoordinate) -> Task<Bool, Never> {
+        // This season's aired regular episodes up to here show as watched until the server answers.
+        let shown = (detail?.episodes ?? []).compactMap(\.tv).filter {
+            $0.seasonNumber == coordinate.seasonNumber && $0.episodeNumber <= coordinate.episodeNumber
+                && $0.aired && $0.listed && !$0.isSpecial
+        }.map(\.coordinate)
+        let projection: TrackingProjection.Projection = { state in
+            for episode in shown { state.tvPending.episodes[episode] = true }
+        }
+        return sendTV(.markUpTo, projection: projection) { [self] in
+            TVActionRequest(
+                seasonNumber: coordinate.seasonNumber,
+                episodeNumber: coordinate.episodeNumber,
+                mutationId: mutationId(for: "tv.markUpTo.\(coordinate.seasonNumber).\(coordinate.episodeNumber)")
+            )
+        }
+    }
+
+    /// Watching, Resume, Planning, Pause, Drop (already confirmed), Rewatch and Stop Rewatching from a + menu
+    /// (TV-005 to TV-007, TV-600, TV-602). `seasonNumber` makes Rewatch a season rewatch.
+    @discardableResult
+    func performTVAction(_ action: TVAction, seasonNumber: Int? = nil) -> Task<Bool, Never> {
+        let projection: TrackingProjection.Projection?
+        switch action {
+        case .watching, .resume: projection = TrackingProjection.tvChoice(status: "In progress")
+        case .planning: projection = TrackingProjection.tvChoice(status: "Planning")
+        case .pause: projection = TrackingProjection.tvChoice(status: "Paused")
+        case .drop: projection = TrackingProjection.tvChoice(status: "Dropped")
+        default: projection = nil
+        }
+        return sendTV(action, projection: projection) { [self] in
+            TVActionRequest(
+                seasonNumber: seasonNumber,
+                mutationId: mutationId(for: "tv.\(action.rawValue).\(seasonNumber ?? -1)")
+            )
+        }
+    }
+
+    /// Remove from Library, after the count dialog (TV-003). A show that changed since the dialog changes nothing,
+    /// and the page asks again with the new count (TV-705).
+    @discardableResult
+    func removeTVShow(expectedVersion: Int?) -> Task<Bool, Never> {
+        sendTV(
+            .remove,
+            projection: TrackingProjection.removed,
+            onStateChanged: { [self] change in
+                tvConfirmation = TVPageConfirmation(
+                    kind: .remove,
+                    prompt: TVTrackingPresentation.removePrompt(count: change.count),
+                    expectedVersion: change.stateVersion
+                )
+            },
+            afterSuccess: { [self] in tvConfirmed = TVConfirmedWrites() }
+        ) { [self] in
+            TVActionRequest(
+                mutationId: mutationId(for: "tv.remove.\(expectedVersion ?? -1)"),
+                expectedVersion: expectedVersion
+            )
+        }
+    }
+
+    /// Show and season stars: whole values 1-10 on TV's wire, or nil to clear, with the season number on a season
+    /// page (TV-504). On a show the user hasn't started they mark it watched; on a started one they are opinion
+    /// only (TV-303, TV-304).
+    @discardableResult
+    func rateTV(steps: Int) -> Task<Bool, Never> {
+        let steps = min(max(steps, 0), 10)
+        let wire = steps > 0 ? "\(steps).0" : nil
+        let seasonNumber = pageSeasonNumber
+        return sendTV(.rate, projection: TrackingProjection.rating(wire, impliesCompletion: false)) { [self] in
+            TVActionRequest(
+                seasonNumber: seasonNumber,
+                mutationId: mutationId(for: "tv.rate.\(seasonNumber ?? -1).\(steps)"),
+                rating: steps > 0 ? steps : nil,
+                includesRating: true
+            )
+        }
+    }
+
+    /// A TV heart (TV-303, TV-305): the like response's TV keys fold in, and the earlier-episodes question it may
+    /// carry goes to `tvFollowUp`. Like requests carry no mutation ID.
+    private func toggleTVLike(ref: MediaRef, liked: Bool) -> Task<Bool, Never> {
+        let repository = mediaRepository
+        let received = TVLikeEnvelopeBox()
+        return enqueue(
+            TrackingProjection.like(liked, impliesCompletion: false),
+            ref: ref,
+            refresh: .community,
+            errorsTo: \.likeErrorMessage,
+            onSuccess: { [self] _ in
+                guard let envelope = received.envelope else { return }
+                tvConfirmed.record(projected: TVPendingWatches(), envelope: envelope)
+                tvFollowUp.handle(envelope)
+            }
+        ) { [self] in
+            let response = try await repository.setLiked(ref: ref, liked: liked)
+            received.envelope = response.tvEnvelope
+            return .liked(response.liked, tvLikeState(response))
+        }
+    }
+
+    /// The page's state after a TV heart, from the confirmed state the response lands on.
+    private func tvLikeState(_ response: MediaLikeResponse) -> UserMediaState {
+        let current = detail?.userState ?? .untracked
+        var state = response.media?.userState ?? current
+        state.hasLiked = response.liked
+        let envelope = response.tvEnvelope
+        if let tv = envelope.tv {
+            state.tv = tv.keepingPageScope(of: current.tv, season: envelope.season, episode: envelope.episode)
+        } else {
+            state.tv = current.tv
+        }
+        if let pageSeason = current.tv?.season, let season = envelope.season,
+           season.seasonNumber == pageSeason.seasonNumber {
+            state.isTracked = season.started
+            state.status = season.status
+            state.rating = season.rating
+            state.hasLiked = season.liked
+        }
+        if let pageEpisode = current.tv?.episode, let episode = envelope.episode,
+           episode.coordinate == pageEpisode.coordinate {
+            state.isTracked = episode.viewingCount > 0
+            state.hasLiked = episode.liked
+        }
+        return state
+    }
+
+    /// The earlier-episodes Yes, which `tvFollowUp` sends itself (TV-107).
+    private func applyTVFollowUpResponse(_ response: TVActionResponse) {
+        confirm(.tv(response))
+        tvConfirmed.record(projected: TVPendingWatches(), envelope: response.envelope)
+        retainedMutationIds.removeAll()
+        MediaStateChange.post(ref: ref, origin: changeOrigin)
+        scheduleRefresh(.community, after: writeRefreshDelay)
+    }
+
+    /// Hands a saved log's envelope to `tvFollowUp` once its composer has closed, so the question or the next
+    /// composer doesn't collide with the closing one.
+    func releaseDeferredTVFollowUp() {
+        guard let envelope = deferredTVEnvelope else { return }
+        deferredTVEnvelope = nil
+        tvFollowUp.handle(envelope)
     }
 
     @discardableResult
@@ -783,9 +1199,30 @@ final class MediaDetailViewModel {
 
     /// Folds a saved log's response in before the composer dismisses. MediaLogView has already posted the change
     /// with this page's origin.
-    func applyLogSave(_ result: MediaLogSaveResult) {
+    ///
+    /// A TV log's envelope folds the show's state in, and is kept for `tvFollowUp` until the composer has closed
+    /// (`releaseDeferredTVFollowUp`): an episode log can finish a season, and a first log can ask about earlier
+    /// episodes (TV-107, TV-403). `followsUp` is false for the season-finish composer's own log.
+    func applyLogSave(_ result: MediaLogSaveResult, followsUp: Bool = true) {
         // A saved log is a successful write: an id kept from an earlier failure must not make a later start a no-op.
         retainedMutationIds.removeAll()
+        if let envelope = result.tvEnvelope {
+            if let tv = envelope.tv, detail != nil {
+                var state = detail?.userState ?? .untracked
+                state.tv = tv.keepingPageScope(of: state.tv, season: envelope.season, episode: envelope.episode)
+                if ref.mediaType == "tv" {
+                    // Every log puts the show in the library (TV-400).
+                    state.isTracked = tv.inLibrary
+                    state.status = tv.status
+                }
+                stateGeneration += 1
+                if detail?.userState != state { detail?.userState = state }
+            }
+            tvConfirmed.record(projected: TVPendingWatches(), envelope: envelope)
+            if followsUp, envelope.hasFollowUp { deferredTVEnvelope = envelope }
+            scheduleRefresh(.communityAndReviews, after: writeRefreshDelay)
+            return
+        }
         guard result.ref.id == ref.id, let tracking = result.tracking else {
             scheduleRefresh(.full, after: .zero)
             return
@@ -836,6 +1273,17 @@ final class MediaDetailViewModel {
 /// A write that would need a playthrough or journey the server hasn't created yet.
 private struct PendingWriteError: LocalizedError {
     var errorDescription: String? { "This is still saving. Try again in a moment." }
+}
+
+/// A TV write the page refuses before sending, with the server's reason (an untick of a logged viewing, TV-102).
+private struct TVPageError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
+/// Carries a TV heart's envelope from the request to the moment it confirms.
+private final class TVLikeEnvelopeBox {
+    var envelope: TVWriteEnvelope?
 }
 
 enum MediaDetailQuickAction {
@@ -902,12 +1350,14 @@ private struct GameCompletionPresentation: Identifiable {
 private enum MediaDetailSheet: Identifiable {
     case posterMenu
     case bookGameActions
+    case tvActions
     case addToList
 
     var id: String {
         switch self {
         case .posterMenu: "posterMenu"
         case .bookGameActions: "bookGameActions"
+        case .tvActions: "tvActions"
         case .addToList: "addToList"
         }
     }
@@ -1756,6 +2206,10 @@ private struct MediaDetailPageView: View {
                     )
                     }
                 }
+            case .tvActions:
+                if let detail = viewModel.detail {
+                    tvActionSheet(detail)
+                }
             case .addToList:
                 if let detail = viewModel.detail {
                     AddToListSheet(
@@ -1830,6 +2284,41 @@ private struct MediaDetailPageView: View {
         } message: {
             Text(viewModel.likeErrorMessage ?? "")
         }
+        .alert(
+            viewModel.tvNotice ?? "",
+            isPresented: Binding(
+                get: { viewModel.tvNotice != nil && !defersAlerts },
+                set: { if !$0 { viewModel.tvNotice = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewModel.tvNotice = nil }
+        }
+        .confirmationDialog(
+            viewModel.tvConfirmation?.prompt ?? "",
+            isPresented: Binding(
+                get: { viewModel.tvConfirmation != nil && !defersAlerts },
+                set: { if !$0 { viewModel.tvConfirmation = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: viewModel.tvConfirmation
+        ) { confirmation in
+            Button(confirmation.confirmTitle, role: confirmation.isDestructive ? .destructive : nil) {
+                viewModel.confirmTV(confirmation)
+            }
+            Button("Cancel", role: .cancel) { viewModel.tvConfirmation = nil }
+        }
+        .tvWriteFollowUp(viewModel.tvFollowUp) { item in
+            MediaLogView(
+                detail: item.detail,
+                trackingRepository: trackingRepository,
+                diaryRepository: diaryRepository,
+                stateChangeOrigin: viewModel.changeOrigin,
+                onResult: { viewModel.applyLogSave($0, followsUp: false) },
+                onUnauthorized: onUnauthorized,
+                onSaved: {},
+                tvComposer: item.finished.composer
+            )
+        }
         .fullScreenCover(isPresented: $isBackdropPickerPresented, onDismiss: applyPendingBackdropSave) {
             if let detail = viewModel.detail {
                 BackdropPickerView(
@@ -1869,7 +2358,7 @@ private struct MediaDetailPageView: View {
                     onUnauthorized: onUnauthorized) {}
             }
         }
-        .fullScreenCover(isPresented: $isLogPresented, onDismiss: presentDeferredAlerts) {
+        .fullScreenCover(isPresented: $isLogPresented, onDismiss: logComposerDismissed) {
             if let detail = viewModel.detail {
                 MediaLogView(
                     detail: detail,
@@ -2297,8 +2786,129 @@ private struct MediaDetailPageView: View {
         ["book", "game"].contains(detail.ref.mediaType)
     }
 
+    // MARK: TV (TV-005, TV-100, TV-300, TV-302, TV-502)
+
+    /// The show's or the season's + menu. The episode page's + opens Log Episode directly, its one action.
+    @ViewBuilder
+    private func tvActionSheet(_ detail: MediaDetail) -> some View {
+        if let tv = viewModel.viewer?.tv {
+            let season = detail.ref.mediaType == "season" ? tv.season : nil
+            TVActionSheet(
+                title: season.map { TVTrackingPresentation.seasonTitle($0.seasonNumber) } ?? "Track this show",
+                items: season.map { TVTrackingPresentation.seasonMenu(for: $0) } ?? TVTrackingPresentation.showMenu(for: tv),
+                removePrompt: TVTrackingPresentation.removePrompt(count: tv.removeCount),
+                onCommand: { command in performTVCommand(command, version: tv.version) }
+            )
+        }
+    }
+
+    private func performTVCommand(_ command: TVMenuItem.Command, version: Int) {
+        switch command {
+        case .log:
+            openTVComposer()
+        case let .action(action):
+            closeSheetForChoice()
+            viewModel.performTVAction(action)
+        case let .rewatchSeason(seasonNumber):
+            closeSheetForChoice()
+            viewModel.performTVAction(.rewatch, seasonNumber: seasonNumber)
+        case .confirmRemove:
+            closeSheetForChoice()
+            viewModel.removeTVShow(expectedVersion: version)
+        case .confirmDrop:
+            // The sheet asks first and sends `.action(.drop)`.
+            break
+        }
+    }
+
+    /// Opens Log Show, Log Season or Log Episode with the server's defaults (TV-404), once the write queue has
+    /// settled so the defaults are current. `ratingSteps` are an episode's stars (TV-502).
+    private func openTVComposer(ratingSteps: Int? = nil) {
+        if presentedSheet != nil { closeSheetForChoice() }
+        presentAfterSettling {
+            completionJourneyId = nil
+            completionLiked = nil
+            completionRatingSteps = ratingSteps
+            if isClosingPresentation { pendingBookLog = true } else { isLogPresented = true }
+        }
+    }
+
+    /// The log composer closed: a TV log's question or season composer can follow now (TV-107, TV-403).
+    private func logComposerDismissed() {
+        completionRatingSteps = nil
+        presentDeferredAlerts()
+        viewModel.releaseDeferredTVFollowUp()
+    }
+
+    private func tvTrackAction(for detail: MediaDetail) {
+        guard let tv = viewModel.viewer?.tv else {
+            presentAfterSettling { isLogPresented = true }
+            return
+        }
+        if detail.ref.mediaType == "episode" {
+            let episode = tv.episode
+            if let episode, !episode.availableActions.contains("log_episode"),
+               let reason = episode.actionReasons["log_episode"] {
+                viewModel.tvNotice = reason
+                return
+            }
+            openTVComposer()
+            return
+        }
+        presentedSheet = .tvActions
+    }
+
+    /// The episode page's stars show the newest rated log's stars and open Log Episode with them (TV-502).
+    private func tvEpisodeRatingSteps() -> Int? {
+        guard let rating = viewModel.viewer?.tv?.episode?.userRating, let value = Double(rating) else { return nil }
+        return min(max(Int(value.rounded()), 0), 10)
+    }
+
+    /// Show and season stars can't be set before anything has aired (TV-303).
+    private func tvRatingUnavailableReason() -> String? {
+        guard let tv = viewModel.viewer?.tv else { return nil }
+        let actions = tv.season?.availableActions ?? tv.availableActions
+        let reasons = tv.season?.actionReasons ?? tv.actionReasons
+        guard !actions.contains("rate"), let reason = reasons["rate"], viewModel.viewer?.rating == nil else { return nil }
+        return reason
+    }
+
+    private func isTVEyeFilled(_ detail: MediaDetail) -> Bool {
+        guard let viewer = viewModel.viewer else { return false }
+        switch detail.ref.mediaType {
+        case "episode":
+            guard let episode = viewer.tv?.episode else { return viewer.isTracked }
+            return viewer.tvIsWatched(episode)
+        case "season":
+            guard let season = viewer.tv?.season else { return false }
+            return viewer.tvIsMarked(season)
+        default:
+            guard let tv = viewer.tv else { return false }
+            return viewer.tvPending.markedShow || tv.eye?.filled == true
+        }
+    }
+
+    private func tvEyeLabel(_ detail: MediaDetail) -> String {
+        let filled = isTVEyeFilled(detail)
+        switch detail.ref.mediaType {
+        case "episode": return filled ? "Episode watched" : "Mark episode watched"
+        case "season": return filled ? "Season watched" : "Mark season watched"
+        default: return filled ? "Show watched" : "Mark show watched"
+        }
+    }
+
+    private func tvEyeHint(_ detail: MediaDetail) -> String {
+        let filled = isTVEyeFilled(detail)
+        if detail.ref.mediaType == "episode" {
+            return filled ? "Unticks this episode" : "Ticks this episode watched today"
+        }
+        return filled ? "Undoes marking these episodes watched" : "Marks every aired episode watched, without a date"
+    }
+
     private func trackAction(for detail: MediaDetail) {
-        if usesBookGameActions(detail) {
+        if detail.ref.isTVFamily {
+            tvTrackAction(for: detail)
+        } else if usesBookGameActions(detail) {
             presentedSheet = .bookGameActions
         } else {
             // The composer prefills the heart, rating and rewatch from confirmed state, so a heart or rating
@@ -2308,6 +2918,10 @@ private struct MediaDetailPageView: View {
     }
 
     private func eyeAction(for detail: MediaDetail) {
+        if detail.ref.isTVFamily {
+            viewModel.tapTVEye()
+            return
+        }
         if detail.ref.isSingleWeight {
             if isEyeCompleted(detail) {
                 let removal = viewModel.removeTracking(for: detail)
@@ -2345,10 +2959,6 @@ private struct MediaDetailPageView: View {
             return
         }
         guard !isEyeCompleted(detail) else { return }
-        if detail.ref.mediaType == "episode" {
-            Task { await viewModel.watchEpisode(detail) }
-            return
-        }
         guard usesBookGameActions(detail) else { return }
         viewModel.performQuickAction(.finished, for: detail)
     }
@@ -2367,8 +2977,8 @@ private struct MediaDetailPageView: View {
     }
 
     private func isEyeCompleted(_ detail: MediaDetail) -> Bool {
-        if detail.ref.mediaType == "episode" {
-            return viewModel.viewer?.isTracked == true
+        if detail.ref.isTVFamily {
+            return isTVEyeFilled(detail)
         }
         return currentStatus(detail)?.caseInsensitiveCompare("Completed") == .orderedSame
     }
@@ -2384,6 +2994,16 @@ private struct MediaDetailPageView: View {
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
+        if detail.ref.isTVFamily, detail.ref.mediaType != "episode" {
+            // Show and season stars: whole steps on TV's 0-10 wire, with the season number on a season page (TV-504).
+            let write = viewModel.rateTV(steps: halfSteps)
+            Task {
+                if !(await write.value) {
+                    ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
+                }
+            }
+            return
+        }
         guard detail.ref.usesFiveStarRatingScale else { return }
         if halfSteps > 0, bookState(detail)?.hasLiveJourney == true || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
             ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
@@ -2544,30 +3164,62 @@ private struct MediaDetailPageView: View {
         showsTitleLogo && supportsTitleLogo(detail)
     }
 
+    @ViewBuilder
     private func bottomActionRail(_ detail: MediaDetail) -> some View {
+        if detail.ref.isTVFamily {
+            tvActionRail(detail)
+        } else {
+            standardActionRail(detail)
+        }
+    }
+
+    /// The TV rail: + (the + menu, or Log Episode), the eye (TV-100, TV-300, TV-302), stars and the heart. Show and
+    /// season stars rate directly; the episode's show its newest rated log and open Log Episode (TV-502).
+    private func tvActionRail(_ detail: MediaDetail) -> some View {
         let isEpisode = detail.ref.mediaType == "episode"
-        let isWatched = viewModel.viewer?.isTracked == true
+        let episodeSteps = isEpisode ? tvEpisodeRatingSteps() : nil
+        let unavailableReason = isEpisode ? nil : tvRatingUnavailableReason()
+        return ActionRail(
+            ratingPicker: $ratingPicker,
+            isLiked: viewModel.viewer?.hasLiked ?? false,
+            showsEye: true,
+            showsRating: true,
+            offersRatingAfterBaseAction: false,
+            trackLabel: isEpisode ? "Log episode" : (detail.ref.mediaType == "season" ? "Season actions" : "Track show"),
+            eyeLabel: tvEyeLabel(detail),
+            eyeHint: tvEyeHint(detail),
+            isEyeSelected: isEyeCompleted(detail),
+            isEyeLoading: viewModel.confirmingEyeWrite,
+            isRatingFilled: isEpisode ? (episodeSteps ?? 0) > 0 : nil,
+            onRatingTap: isEpisode
+                ? { openTVComposer(ratingSteps: episodeSteps) }
+                : unavailableReason.map { reason in { viewModel.tvNotice = reason } },
+            onTrack: { trackAction(for: detail) },
+            onLike: { likeAction(for: detail) },
+            onEye: { eyeAction(for: detail) },
+            onRating: { ratingAction(for: detail, halfSteps: $0) }
+        )
+    }
+
+    private func standardActionRail(_ detail: MediaDetail) -> some View {
         let usesQuickActions = usesBookGameActions(detail)
 
         return ActionRail(
             ratingPicker: $ratingPicker,
-            isTracked: isEpisode ? isWatched : currentStatus(detail) != nil,
             isLiked: viewModel.viewer?.hasLiked ?? false,
             showsEye: true,
             showsRating: (detail.ref.isSingleWeight && isEyeCompleted(detail)) || ["book", "game"].contains(detail.ref.mediaType),
             offersRatingAfterBaseAction: detail.ref.isSingleWeight
                 || (detail.ref.mediaType == "book" && bookState(detail)?.hasLiveJourney != true)
                 || (detail.ref.mediaType == "game" && gameState(detail)?.hasLivePlaythrough != true),
-            trackLabel: isEpisode ? "Log episode" : (usesQuickActions ? "Track" : nil),
-            eyeLabel: isEpisode
-                ? (isWatched ? "Episode watched" : "Mark episode watched")
-                : detail.ref.isSingleWeight
-                    ? (detail.ref.mediaType == "music"
-                        ? (isEyeCompleted(detail) ? "Listened" : "Mark as listened")
-                        : (isEyeCompleted(detail) ? "Watched" : "Mark as watched"))
-                    : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
+            trackLabel: usesQuickActions ? "Track" : nil,
+            eyeLabel: detail.ref.isSingleWeight
+                ? (detail.ref.mediaType == "music"
+                    ? (isEyeCompleted(detail) ? "Listened" : "Mark as listened")
+                    : (isEyeCompleted(detail) ? "Watched" : "Mark as watched"))
+                : (usesQuickActions ? bookGameCopy(for: detail.ref.mediaType).finished : nil),
             isEyeSelected: isEyeCompleted(detail),
-            isEyeLoading: isEpisode ? viewModel.isSavingQuickAction : viewModel.confirmingEyeWrite,
+            isEyeLoading: viewModel.confirmingEyeWrite,
             onTrack: { trackAction(for: detail) },
             onLike: { likeAction(for: detail) },
             onEye: { eyeAction(for: detail) },
@@ -3226,8 +3878,12 @@ private struct MediaDetailPageView: View {
                 )
                 if detail.ref.mediaType == "season" {
                     EpisodesSection(
-                        episodes: detail.episodes ?? [],
-                        completion: detail.completion
+                        rows: TVEpisodeRowModel.rows(episodes: detail.episodes ?? [], unlisted: detail.tvUnlistedEpisodes),
+                        completion: detail.completion,
+                        state: { viewModel.tvEpisodeState($0.tv) },
+                        isWatched: { episode in viewModel.viewer?.tvIsWatched(episode) ?? episode.watched },
+                        onTick: { viewModel.toggleTVEpisode($0) },
+                        onMarkUpTo: { viewModel.askMarkTVUpTo($0) }
                     ) { episode in
                         presentEpisode(episode, from: detail)
                     }
@@ -3337,7 +3993,8 @@ private struct MediaDetailPageView: View {
             },
             onUpdateProgress: {
                 openProgressUpdate(for: detail)
-            }
+            },
+            onTickUpNext: { viewModel.toggleTVUpNext($0) }
         )
     }
 
@@ -3377,7 +4034,17 @@ private struct MediaDetailPageView: View {
 
     private func seasonsSection(_ detail: MediaDetail) -> some View {
         SeasonsSection(
-            seasons: detail.seasons ?? []
+            cards: TVSeasonCardModel.cards(seasons: detail.seasons ?? [], unlisted: detail.tvUnlistedSeasons),
+            label: { card in
+                TVSeasonCardModel(
+                    seasonNumber: card.seasonNumber,
+                    title: card.title,
+                    imageUrl: card.imageUrl,
+                    episodeCount: card.episodeCount,
+                    tv: viewModel.tvSeasonState(card.tv),
+                    listed: card.listed
+                ).label(pending: viewModel.viewer?.tvPending ?? TVPendingWatches())
+            }
         ) { season in
             presentedRef = MediaRef(
                 itemId: nil,
@@ -4811,16 +5478,21 @@ private struct ActionRail: View {
     @State private var actionHaptics = UISelectionFeedbackGenerator()
 
     @Binding var ratingPicker: MediaRatingPickerState
-    let isTracked: Bool
     let isLiked: Bool
     var showsEye = true
     var showsRating = false
     var offersRatingAfterBaseAction = false
     var trackLabel: String?
     var eyeLabel: String?
+    /// What the eye does, for VoiceOver. Without one, an eye that opens the rating picker says so.
+    var eyeHint: String?
     var isEyeSelected = false
     var isEyeLoading = false
     var isLikeLoading = false
+    /// Overrides the star's fill, for stars that aren't a current rating (an episode's newest rated log, TV-502).
+    var isRatingFilled: Bool?
+    /// When set, the star runs this instead of opening the rating picker.
+    var onRatingTap: (() -> Void)?
     let onTrack: () -> Void
     let onLike: () -> Void
     var onEye: () -> Void = {}
@@ -4860,7 +5532,8 @@ private struct ActionRail: View {
         HStack(spacing: 0) {
             railButton(
                 systemName: "plus",
-                label: trackLabel ?? (isTracked ? "Edit tracking" : "Log"),
+                // The + opens a new log for these types, whether or not they're tracked.
+                label: trackLabel ?? "Log",
                 usesLargePlus: true,
                 action: handleTrack
             )
@@ -4872,13 +5545,14 @@ private struct ActionRail: View {
                     isLoading: isEyeLoading && !ratingPicker.isPresented,
                     action: handleEye
                 )
-                .accessibilityValue(ratingPicker.isPresented ? "Expanded" : "Collapsed")
-                .accessibilityHint(ratingPicker.isPresented ? "Closes the rating picker" : "Opens the rating picker")
+                .accessibilityValue(offersRatingAfterBaseAction ? (ratingPicker.isPresented ? "Expanded" : "Collapsed") : "")
+                .accessibilityHint(eyeAccessibilityHint)
             }
             if showsRating {
+                let isFilled = isRatingFilled ?? (ratingPicker.confirmedHalfSteps > 0)
                 railButton(
-                    systemName: ratingPicker.confirmedHalfSteps > 0 ? "star.fill" : "star",
-                    label: ratingPicker.confirmedHalfSteps > 0 ? "Edit rating" : "Rate",
+                    systemName: isFilled ? "star.fill" : "star",
+                    label: isFilled ? "Edit rating" : "Rate",
                     usesLargePlus: false,
                     action: handleRating
                 )
@@ -4968,7 +5642,18 @@ private struct ActionRail: View {
         onLike()
     }
 
+    private var eyeAccessibilityHint: String {
+        if let eyeHint { return eyeHint }
+        guard offersRatingAfterBaseAction, !isEyeSelected else { return "" }
+        return ratingPicker.isPresented ? "Closes the rating picker" : "Opens the rating picker"
+    }
+
     private func handleRating() {
+        if let onRatingTap {
+            dismissRatingPickerIfNeeded()
+            onRatingTap()
+            return
+        }
         if ratingPicker.isPresented {
             animate { ratingPicker.dismiss() }
         } else {
@@ -5616,6 +6301,8 @@ struct TrackingSummarySection: View {
     let state: UserMediaState?
     let onOpenDiaryEntry: () -> Void
     let onUpdateProgress: () -> Void
+    /// The show page's Up next tick (TV-100, TV-105).
+    var onTickUpNext: ((TVEpisodePointer) -> Void)?
 
     var body: some View {
         if hasState {
@@ -5678,12 +6365,28 @@ struct TrackingSummarySection: View {
 
                     Spacer()
                 }
+
+                if let upNext = Self.tvUpNext(detail: detail, state: state), let onTickUpNext {
+                    TVUpNextRow(
+                        upNext: upNext,
+                        isWatched: state?.tvPending.episodes[upNext.coordinate] == true,
+                        onTick: { onTickUpNext(upNext) }
+                    )
+                }
             }
         }
     }
 
     private var status: String? { Self.status(detail: detail, state: state) }
-    private var hasState: Bool { status != nil || stars != nil || !lines.isEmpty }
+    private var hasState: Bool {
+        status != nil || stars != nil || !lines.isEmpty || Self.tvUpNext(detail: detail, state: state) != nil
+    }
+
+    /// The show page's next episode to watch, once the show is in the library (TV-105).
+    static func tvUpNext(detail: MediaDetail, state: UserMediaState?) -> TVEpisodePointer? {
+        guard detail.ref.mediaType == "tv", let tv = state?.tv, tv.inLibrary else { return nil }
+        return tv.upNext
+    }
     private var stars: String? { Self.stars(detail: detail, state: state) }
     private var isLiked: Bool { state?.hasLiked == true }
     private var showsRatingLine: Bool { stars != nil || isLiked }
@@ -5732,7 +6435,9 @@ struct TrackingSummarySection: View {
            let text = game.currentPlaythrough?.progress.summary, !text.isEmpty {
             values.append(text)
         }
-        if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused")),
+        if detail.ref.isTVFamily, let tv = state?.tv {
+            values += tvLines(detail: detail, tv: tv)
+        } else if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.mediaType == "book" && status == "Paused")),
            detail.ref.mediaType != "movie",
             let progressText = state?.progress?.detailDisplayText(preferredMode: preferredMode) {
             values.append(progressText)
@@ -5752,7 +6457,48 @@ struct TrackingSummarySection: View {
     }
 
     private static func status(detail: MediaDetail, state: UserMediaState?) -> String? {
-        state?.status ?? (detail.ref.isEpisode && state?.isTracked == true ? "Watched" : nil)
+        if detail.ref.isTVFamily, let tv = state?.tv {
+            return tvStatus(detail: detail, tv: tv, state: state)
+        }
+        return state?.status ?? (detail.ref.isEpisode && state?.isTracked == true ? "Watched" : nil)
+    }
+
+    /// The bold line of a TV page: the show's status, with Watching for In progress (TV-000); a season's "Watched",
+    /// "Airing" or "6 of 10" (TV-200); "Watched" for an episode watched in the current pass.
+    static func tvStatus(detail: MediaDetail, tv: TVShowState, state: UserMediaState?) -> String? {
+        switch detail.ref.mediaType {
+        case "season":
+            guard let season = tv.season else { return nil }
+            if state?.tvIsMarked(season) == true, season.state != .watched, season.state != .airing {
+                return season.nextAirDate == nil ? "Watched" : "Airing"
+            }
+            return TVTrackingPresentation.seasonLabel(for: season)
+        case "episode":
+            guard let episode = tv.episode else { return state?.isTracked == true ? "Watched" : nil }
+            return state?.tvIsWatched(episode) ?? episode.watched ? "Watched" : nil
+        default:
+            guard tv.inLibrary, let status = tv.status else { return nil }
+            return status == "In progress" ? "Watching" : status
+        }
+    }
+
+    /// The show page's lines: the rewatch, caught-up or premiere line (TV-600, TV-202, TV-700) and progress as a
+    /// count of aired regular episodes (TV-104).
+    static func tvLines(detail: MediaDetail, tv: TVShowState) -> [String] {
+        guard detail.ref.mediaType == "tv", tv.inLibrary else { return [] }
+        var lines: [String] = []
+        if let rewatch = TVTrackingPresentation.rewatchLine(for: tv) {
+            lines.append(rewatch)
+        } else if tv.caughtUp {
+            lines.append(TVTrackingPresentation.caughtUpLine(for: tv))
+        } else if !tv.started, tv.status == "Planning", let card = TVTrackingPresentation.cardLine(for: tv) {
+            lines.append(card)
+        }
+        if tv.started, !tv.finished || tv.rewatch != nil,
+           let progress = TVTrackingPresentation.progressText(watched: tv.watchedCount, aired: tv.airedCount) {
+            lines.append("\(progress) watched")
+        }
+        return lines
     }
 
     static func stars(detail: MediaDetail, state: UserMediaState?) -> String? {
@@ -7692,41 +8438,29 @@ private struct CreditRow: View {
 }
 
 private struct SeasonsSection: View {
-    let seasons: [SeasonSummary]
-    let onSelect: (SeasonSummary) -> Void
+    let cards: [TVSeasonCardModel]
+    /// The card's line from the viewer's state, counting pending marks (TV-200).
+    let label: (TVSeasonCardModel) -> String?
+    let onSelect: (TVSeasonCardModel) -> Void
 
     var body: some View {
-        if !seasons.isEmpty {
+        if !cards.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
                 SectionLabel(title: "Seasons")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
-                        ForEach(seasons) { season in
+                        ForEach(cards) { card in
                             Button {
-                                onSelect(season)
+                                onSelect(card)
                             } label: {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    MediaArtwork(
-                                        url: season.imageUrl,
-                                        title: season.title,
-                                        slot: .seasonCard,
-                                        mediaType: "season"
-                                    )
-                                    Text(season.title)
-                                        .font(.system(size: 12, weight: .heavy))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(2)
-                                    if let count = season.episodeCount {
-                                        Text("\(count) episodes")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(.white.opacity(0.55))
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .frame(width: MediaDetailLayout.seasonPosterSize.width, alignment: .topLeading)
+                                TVSeasonCard(
+                                    card: card,
+                                    label: label(card),
+                                    width: MediaDetailLayout.seasonPosterSize.width
+                                )
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Open \(season.title)")
+                            .accessibilityHint("Opens \(card.title)")
                             .frame(width: MediaDetailLayout.seasonPosterSize.width, alignment: .topLeading)
                         }
                     }
@@ -7737,8 +8471,14 @@ private struct SeasonsSection: View {
 }
 
 private struct EpisodesSection: View {
-    let episodes: [EpisodeSummary]
+    let rows: [TVEpisodeRowModel]
     let completion: CompletionProgress?
+    /// An episode's current TV state: a confirmed write's answer when the list predates it.
+    let state: (TVEpisodeRowModel) -> TVEpisodeState?
+    /// Whether an episode shows as watched, counting a pending tick (TV-705).
+    let isWatched: (TVEpisodeState) -> Bool
+    let onTick: (TVEpisodeState) -> Void
+    let onMarkUpTo: (TVEpisodeState) -> Void
     let onSelect: (EpisodeSummary) -> Void
 
     var body: some View {
@@ -7750,7 +8490,7 @@ private struct EpisodesSection: View {
                     SWCompletionProgressButton(progress: completion)
                 }
             }
-            if episodes.isEmpty {
+            if rows.isEmpty {
                 ContentUnavailableView(
                     "No episodes available",
                     systemImage: "play.rectangle",
@@ -7761,10 +8501,17 @@ private struct EpisodesSection: View {
                 .mediaDetailSurface(cornerRadius: 18)
             } else {
                 LazyVStack(spacing: 16) {
-                    ForEach(episodes) { episode in
-                        EpisodeCard(episode: episode) {
-                            onSelect(episode)
-                        }
+                    ForEach(rows) { row in
+                        let tv = state(row)
+                        EpisodeCard(
+                            row: row,
+                            trailing: TVEpisodeTrailing.resolve(tv, isWatched: tv.map(isWatched) ?? false),
+                            onTick: { if let tv { onTick(tv) } },
+                            onMarkUpTo: tv.flatMap { tv in
+                                tv.canMarkUpTo && tv.markUpToPrompt != nil ? { onMarkUpTo(tv) } : nil
+                            },
+                            onSelect: row.summary.map { summary in { onSelect(summary) } }
+                        )
                     }
                 }
             }
@@ -7772,58 +8519,110 @@ private struct EpisodesSection: View {
     }
 }
 
+/// An episode row: the still, number, title, air date and overview, and a tick (TV-100), the air date or "TBA" for
+/// an unaired episode. Long-press offers Mark watched up to here (TV-108).
 private struct EpisodeCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    let episode: EpisodeSummary
-    let onSelect: () -> Void
+    let row: TVEpisodeRowModel
+    let trailing: TVEpisodeTrailing
+    let onTick: () -> Void
+    let onMarkUpTo: (() -> Void)?
+    /// Nil for an episode the provider no longer lists: it has no page.
+    let onSelect: (() -> Void)?
 
     var body: some View {
-        Button(action: onSelect) {
+        Group {
             if dynamicTypeSize.isAccessibilitySize {
                 accessibilityLayout
             } else {
                 compactLayout
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint("Opens episode details")
-        .accessibilityAddTraits(.isButton)
+        .background(cardBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contextMenu {
+            if let onMarkUpTo {
+                Button("Mark Watched Up to Here", systemImage: "checkmark.circle", action: onMarkUpTo)
+            }
+        }
     }
 
     private var compactLayout: some View {
-        HStack(spacing: 12) {
-            EpisodeCardStill(episode: episode, fillsWidth: false)
+        HStack(spacing: 4) {
+            Button {
+                onSelect?()
+            } label: {
+                HStack(spacing: 12) {
+                    EpisodeCardStill(episodeNumber: row.episodeNumber, imageUrl: row.summary?.imageUrl, fillsWidth: false)
+                    episodeCopy
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelect == nil)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityHint(onSelect == nil ? "" : "Opens episode details")
+            .accessibilityAddTraits(onSelect == nil ? [] : .isButton)
 
-            episodeCopy
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white.opacity(0.32))
-                .accessibilityHidden(true)
+            trailingView
+                .padding(.trailing, trailingPadding)
         }
-        .padding(.trailing, 12)
         .frame(maxWidth: .infinity, minHeight: 84, maxHeight: 84, alignment: .leading)
-        .background(cardBackground)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var accessibilityLayout: some View {
         VStack(alignment: .leading, spacing: 12) {
-            EpisodeCardStill(episode: episode, fillsWidth: true)
-            episodeCopy
+            Button {
+                onSelect?()
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    EpisodeCardStill(episodeNumber: row.episodeNumber, imageUrl: row.summary?.imageUrl, fillsWidth: true)
+                    episodeCopy
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelect == nil)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityAddTraits(onSelect == nil ? [] : .isButton)
+            trailingView
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var trailingView: some View {
+        switch trailing {
+        case let .tick(watched):
+            TVEpisodeTickButton(isWatched: watched, episodeTitle: "Episode \(row.episodeNumber)", action: onTick)
+        case let .airDate(text):
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.5))
+                .accessibilityLabel(text == "TBA" ? "Air date to be announced" : "Airs \(text)")
+        case .none:
+            if onSelect != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var trailingPadding: CGFloat {
+        if case .tick = trailing { return 2 }
+        return 12
     }
 
     private var episodeCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(episode.title)
+            Text(row.title)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.white)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
@@ -7836,7 +8635,7 @@ private struct EpisodeCard: View {
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
 
-            if let overview = episode.overview?.nilIfEmpty {
+            if let overview = row.summary?.overview?.nilIfEmpty {
                 Text(overview)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.white.opacity(0.62))
@@ -7846,20 +8645,20 @@ private struct EpisodeCard: View {
     }
 
     private var metadata: String {
-        [episode.airDate?.longDateLabel, episode.runtime]
+        [row.summary?.airDate?.longDateLabel, row.summary?.runtime]
             .compactMap { $0?.nilIfEmpty }
             .joined(separator: " · ")
     }
 
     private var accessibilityDescription: String {
-        var components = ["Episode \(episode.episodeNumber), \(episode.title)"]
-        if let airDate = episode.airDate?.longDateLabel.nilIfEmpty {
+        var components = ["Episode \(row.episodeNumber), \(row.title)"]
+        if let airDate = row.summary?.airDate?.longDateLabel.nilIfEmpty {
             components.append("Aired \(airDate)")
         }
-        if let runtime = episode.runtime?.nilIfEmpty {
+        if let runtime = row.summary?.runtime?.nilIfEmpty {
             components.append(runtime)
         }
-        if let overview = episode.overview?.nilIfEmpty {
+        if let overview = row.summary?.overview?.nilIfEmpty {
             components.append(overview)
         }
         return components.joined(separator: ". ")
@@ -7874,7 +8673,8 @@ private struct EpisodeCard: View {
 }
 
 private struct EpisodeCardStill: View {
-    let episode: EpisodeSummary
+    let episodeNumber: Int
+    let imageUrl: String?
     let fillsWidth: Bool
 
     var body: some View {
@@ -7884,7 +8684,7 @@ private struct EpisodeCardStill: View {
             .frame(width: fillsWidth ? nil : 148, height: fillsWidth ? nil : 84)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(alignment: .bottomLeading) {
-                Text("E\(episode.episodeNumber)")
+                Text("E\(episodeNumber)")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)
@@ -7901,7 +8701,7 @@ private struct EpisodeCardStill: View {
 
     @ViewBuilder
     private var artwork: some View {
-        SpineAsyncImage(url: episode.imageUrl.flatMap(URL.init(string:))) { phase in
+        SpineAsyncImage(url: imageUrl.flatMap(URL.init(string:))) { phase in
             switch phase {
             case let .success(image):
                 image

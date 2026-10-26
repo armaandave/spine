@@ -1778,10 +1778,12 @@ final class SpineTests: XCTestCase {
         ])
     }
 
+    /// TV-701: Continue Watching lists shows, so `tv` now maps to `tv` (loaded through Continue Watching) where it
+    /// used to map to In progress seasons; seasons and episodes are never rows.
     func testInProgressLoaderMapsMediaTypesAndSortsWithLimit() {
         let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv", "episode", "book", "music"])
 
-        XCTAssertEqual(InProgressLibraryLoader.mediaTypes(from: profile), ["movie", "season", "book", "music"])
+        XCTAssertEqual(InProgressLibraryLoader.mediaTypes(from: profile), ["movie", "tv", "book", "music"])
 
         let sorted = InProgressLibraryLoader.limitedSortedItems([
             libraryItem(id: "1", title: "Older", updatedAt: "2026-06-20T10:00:00Z"),
@@ -5233,6 +5235,8 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(repository.clearMediaType, "music")
     }
 
+    /// TV-701: Continue Watching lists shows, so the TV row is a show loaded through Continue Watching; it used to
+    /// be an In progress season.
     @MainActor
     func testProfileViewModelLoadsInProgressAcrossEnabledMediaTypes() async {
         let trackingRepository = ScriptedLibraryTrackingRepository(responses: [
@@ -5250,18 +5254,17 @@ final class SpineTests: XCTestCase {
                     )
                 ]
             ),
-            "season:": PagedResponse(
+            "tv:": PagedResponse(
                 count: 1,
                 next: nil,
                 previous: nil,
                 results: [
                     libraryItem(
                         id: "2",
-                        title: "Newest Season",
-                        mediaType: "season",
+                        title: "Newest Show",
+                        mediaType: "tv",
                         status: "In progress",
-                        updatedAt: "2026-06-22T12:00:00Z",
-                        seasonNumber: 2
+                        updatedAt: "2026-06-22T12:00:00Z"
                     )
                 ]
             ),
@@ -5307,11 +5310,12 @@ final class SpineTests: XCTestCase {
 
         await viewModel.load()
 
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Newest Album", "Newest Season", "Middle Book", "Older Movie"])
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Newest Album", "Newest Show", "Middle Book", "Older Movie"])
         XCTAssertEqual(viewModel.inProgressItems.first?.media.ref.mediaType, "music")
         XCTAssertEqual(trackingRepository.requests, [
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "In progress"),
-            LibraryTrackingRequest(mediaType: "season", page: nil, status: "In progress"),
+            // Continue Watching (here through the repository default, which lists In progress shows).
+            LibraryTrackingRequest(mediaType: "tv", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "book", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "music", page: nil, status: "In progress")
         ])
@@ -6492,6 +6496,9 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.completedBooks.count, 0)
     }
 
+    /// TV-705: the episode tick goes through the write queue and the TV actions endpoint, dated by the server
+    /// (TV-100). It used to bypass the queue through the legacy watch endpoint with the phone's time. A refresh
+    /// that fails afterwards keeps the confirmed tick.
     @MainActor
     func testMediaDetailEpisodeWatchKeepsMutationSuccessWhenRefreshFails() async {
         let detail = TestFixtures.episodeDetail
@@ -6501,19 +6508,22 @@ final class SpineTests: XCTestCase {
             mediaRepository: MediaDetailFixtureRepository(detailError: APIError.httpStatus(503, nil)),
             trackingRepository: tracking,
             diaryRepository: RecordingDiaryRepository(),
-            onUnauthorized: {}
+            onUnauthorized: {},
+            writeRefreshDelay: .zero
         )
         viewModel.detail = detail
-        let watchedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.watchEpisode(detail, watchedAt: watchedAt)
+        let didSave = await viewModel.tickTVEpisode(seasonNumber: 3, episodeNumber: 2).value
+        await viewModel.refreshFinished()
 
         XCTAssertTrue(didSave)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.source, "tmdb")
-        XCTAssertEqual(tracking.watchedEpisodes.first?.mediaId, "1399")
-        XCTAssertEqual(tracking.watchedEpisodes.first?.seasonNumber, 3)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.episodeNumber, 2)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.watchedAt, watchedAt)
+        XCTAssertEqual(tracking.tvActions.first?.source, "tmdb")
+        XCTAssertEqual(tracking.tvActions.first?.mediaId, "1399")
+        XCTAssertEqual(tracking.tvActions.first?.action, .tick)
+        XCTAssertEqual(tracking.tvActions.first?.request.seasonNumber, 3)
+        XCTAssertEqual(tracking.tvActions.first?.request.episodeNumber, 2)
+        XCTAssertNotNil(tracking.tvActions.first?.request.mutationId)
+        XCTAssertTrue(tracking.watchedEpisodes.isEmpty, "Ticks no longer use the legacy watch endpoint.")
         XCTAssertEqual(viewModel.detail?.userState?.isTracked, true)
         XCTAssertNil(viewModel.detail?.userState?.status)
         XCTAssertNil(viewModel.quickActionErrorMessage)
@@ -9040,6 +9050,17 @@ private final class TaggedDiaryFixtureRepository: DiaryRepository {
 }
 
 private final class RecordingTrackingRepository: TrackingRepository {
+    var tvActions: [(source: String, mediaId: String, action: TVAction, request: TVActionRequest)] = []
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        tvActions.append((source, mediaId, action, request))
+        let episode = request.episodeNumber.flatMap { number in
+            request.seasonNumber.map {
+                TVEpisodeState(seasonNumber: $0, episodeNumber: number, watched: action == .tick,
+                               viewingCount: action == .tick ? 1 : 0, untickViewingId: action == .tick ? 1 : nil)
+            }
+        }
+        return TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(episode: episode, changed: true))
+    }
     var gameActions: [(ref: MediaRef, action: String, request: BookActionRequest)] = []
     func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
         gameActions.append((ref, action, request))

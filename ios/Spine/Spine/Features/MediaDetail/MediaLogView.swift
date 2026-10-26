@@ -13,6 +13,9 @@ struct MediaLogSaveResult {
     let ref: MediaRef
     let tracking: TrackingState?
     let diaryEntry: DiaryEntry?
+    /// A TV log's write envelope (`tv`, `finished`, `earlier_unwatched`), which the presenting page hands to its
+    /// `TVWriteFollowUp` (TV-107, TV-403). Nil for other logs.
+    var tvEnvelope: TVWriteEnvelope? = nil
 }
 
 @MainActor
@@ -20,16 +23,20 @@ struct MediaLogSaveResult {
 final class MediaLogViewModel {
     let detail: MediaDetail
     var mode: MediaLogMode = .finished
+    /// The season a TV show log targets when the server sent no composer (nil for the whole show).
     var selectedSeasonNumber: Int?
-    var consumedAt = Date()
-    var ratingSteps = 0
     var reviewTitle = ""
     var review = ""
     let tagDraft = LogTagDraft()
     var containsSpoilers = false
     var visibility = "public"
-    var liked = false
-    var isRepeat = false
+    /// A TV log's target and defaults from the server (TV-404). The date, stars, heart and Rewatch below read and
+    /// write it, so switching the target replaces only the values the user hasn't changed.
+    private(set) var tvDraft: TVComposerDraft?
+    private var storedConsumedAt = Date()
+    private var storedRatingSteps = 0
+    private var storedLiked = false
+    private var storedIsRepeat = false
     var gameProgress = GameProgressDraft()
     var gameStartDate = Date()
     var gameHasStartDate = false
@@ -39,6 +46,10 @@ final class MediaLogViewModel {
     var isSaving = false
     var errorMessage: String?
     let completionJourneyId: Int?
+    /// The season-finish composer's server defaults (TV-403, TV-404); nil for every other log, which takes the
+    /// page's own composer from `userState.tv`.
+    let tvComposer: TVComposer?
+    /// One per composer session: a retried save never logs twice (TV-705).
     private let completionMutationId = UUID()
 
     private let trackingRepository: TrackingRepository
@@ -59,16 +70,28 @@ final class MediaLogViewModel {
         stateChangeOrigin: UUID? = nil,
         onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
-        onSaved: @escaping () -> Void
+        onSaved: @escaping () -> Void,
+        tvComposer: TVComposer? = nil
     ) {
         self.detail = detail
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.completionJourneyId = completionJourneyId
+        self.tvComposer = tvComposer
         self.stateChangeOrigin = stateChangeOrigin
         self.onUnauthorized = onUnauthorized
         self.onResult = onResult
         self.onSaved = onSaved
+        if detail.ref.isTVFamily {
+            // The server works out every default when the composer opens (TV-404); the user's own picks win.
+            tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap { TVComposerDraft(composer: $0) }
+            if tvDraft == nil {
+                liked = detail.userState?.hasLiked ?? false
+            }
+            if let preselectedRatingSteps { ratingSteps = preselectedRatingSteps }
+            if let preselectedLiked { liked = preselectedLiked }
+            return
+        }
         if detail.ref.isSingleWeight {
             let state = detail.userState
             isRepeat = state?.directConsumption == true
@@ -98,15 +121,81 @@ final class MediaLogViewModel {
         }
     }
 
+    // MARK: Draft values
+
+    /// The log's calendar date (TV-407 for TV: capped at today, sent as a date).
+    var consumedAt: Date {
+        get { tvDraft?.dateValue() ?? storedConsumedAt }
+        set {
+            if tvDraft != nil { tvDraft?.setDate(newValue) } else { storedConsumedAt = newValue }
+        }
+    }
+
+    /// Half steps 0-10; for TV these are the wire's whole values 1-10 (TV-504).
+    var ratingSteps: Int {
+        get { tvDraft?.ratingSteps ?? storedRatingSteps }
+        set {
+            if tvDraft != nil { tvDraft?.ratingSteps = newValue } else { storedRatingSteps = newValue }
+        }
+    }
+
+    var liked: Bool {
+        get { tvDraft?.liked ?? storedLiked }
+        set {
+            if tvDraft != nil { tvDraft?.liked = newValue } else { storedLiked = newValue }
+        }
+    }
+
+    var isRepeat: Bool {
+        get { tvDraft?.isRewatch ?? storedIsRepeat }
+        set {
+            if tvDraft != nil { tvDraft?.isRewatch = newValue } else { storedIsRepeat = newValue }
+        }
+    }
+
+    // MARK: Targets
+
     var supportsProgress: Bool {
         ["manga", "comic", "boardgame"].contains(detail.ref.mediaType)
     }
 
+    /// The server-less fallback for a show log: Whole Show or one of its seasons.
     var supportsSeasonLogging: Bool {
-        detail.ref.mediaType == "tv" && !(detail.seasons ?? []).isEmpty
+        tvDraft == nil && detail.ref.mediaType == "tv" && !(detail.seasons ?? []).isEmpty
+    }
+
+    /// The fallback picker's seasons: regular seasons, then Specials last (TV-004).
+    var seasonPickerSeasons: [SeasonSummary] {
+        let seasons = detail.seasons ?? []
+        return seasons.filter { $0.seasonNumber != 0 } + seasons.filter { $0.seasonNumber == 0 }
+    }
+
+    /// The TV composer's targets: the seasons, Specials last, then Whole show (TV-404). Targets that can't be
+    /// logged yet are left out unless selected.
+    var tvTargets: [TVComposerTarget] {
+        guard let tvDraft else { return [] }
+        let targets = tvDraft.composer.targets.filter { $0.available || $0.id == tvDraft.target.id }
+        let seasons = targets.filter { $0.level == .season && $0.seasonNumber != 0 }
+        let specials = targets.filter { $0.level == .season && $0.seasonNumber == 0 }
+        let episodes = targets.filter { $0.level == .episode }
+        let others = targets.filter { ![.season, .episode, .show].contains($0.level) }
+        let show = targets.filter { $0.level == .show }
+        return episodes + seasons + specials + others + show
+    }
+
+    var supportsTVTargetPicker: Bool { tvTargets.count > 1 }
+
+    /// Switching the target replaces only the defaults the user hasn't changed (TV-404).
+    var selectedTVTargetId: String {
+        get { tvDraft?.target.id ?? "" }
+        set { tvDraft?.selectTarget(id: newValue) }
     }
 
     var selectedRef: MediaRef {
+        if let tvDraft {
+            let target = tvDraft.target.ref(show: detail.ref.parentTVRef ?? detail.ref)
+            return Self.isSameTarget(target, detail.ref) ? detail.ref : target
+        }
         guard let selectedSeasonNumber else { return detail.ref }
         return MediaRef(
             itemId: nil,
@@ -119,8 +208,22 @@ final class MediaLogViewModel {
     }
 
     var selectedTitle: String {
-        guard let selectedSeasonNumber else { return detail.title }
-        return "\(detail.title) Season \(selectedSeasonNumber)"
+        if let tvDraft, detail.ref.mediaType == "tv", tvDraft.target.level == .season {
+            return "\(detail.title) · \(tvDraft.target.title)"
+        }
+        guard tvDraft == nil, let selectedSeasonNumber else { return detail.title }
+        return "\(detail.title) \(TVTrackingPresentation.seasonTitle(selectedSeasonNumber))"
+    }
+
+    /// An episode page's composer is the episode's; show and season pages carry theirs on `tv`.
+    private static func pageComposer(of detail: MediaDetail) -> TVComposer? {
+        guard let tv = detail.userState?.tv else { return nil }
+        return tv.episode?.composer ?? tv.composer
+    }
+
+    private static func isSameTarget(_ lhs: MediaRef, _ rhs: MediaRef) -> Bool {
+        lhs.source == rhs.source && lhs.mediaType == rhs.mediaType && lhs.mediaId == rhs.mediaId
+            && lhs.seasonNumber == rhs.seasonNumber && lhs.episodeNumber == rhs.episodeNumber
     }
 
     var repeatLabel: String {
@@ -268,8 +371,11 @@ final class MediaLogViewModel {
 
     private func saveFinishedLog() async -> Bool {
         await performSave {
-            guard !selectedRef.usesCalendarConsumptionDate || !CalendarDateCodec.isFuture(consumedAt) else {
-                throw MediaLogError.futureDate
+            guard !selectedRef.usesCalendarLogDate || !CalendarDateCodec.isFuture(consumedAt) else {
+                throw selectedRef.isTVFamily ? MediaLogError.futureLogDate : MediaLogError.futureDate
+            }
+            if selectedRef.isTVFamily {
+                return try await saveTVLog()
             }
             if selectedRef.mediaType == "game" {
                 let progress = try gameProgress.values()
@@ -319,6 +425,30 @@ final class MediaLogViewModel {
         }
     }
 
+    /// A TV log: a calendar date, the target's stars on TV's 1-10 scale, Rewatch always sent, and one mutation ID
+    /// per composer session (TV-404, TV-407, TV-504, TV-705). The response's envelope goes back to the caller.
+    private func saveTVLog() async throws -> MediaLogSaveResult {
+        if let target = tvDraft?.target, !target.available {
+            throw MediaLogError.unavailable(target.reason ?? "Nothing has aired yet.")
+        }
+        let ref = selectedRef
+        let (entry, envelope) = try await diaryRepository.createTV(DiaryEntryWriteRequest(
+            ref: ref,
+            consumedAt: consumedAt,
+            rating: Self.ratingDecimal(for: ratingSteps, mediaType: ref.mediaType),
+            review: review,
+            reviewTitle: reviewTitle,
+            liked: liked,
+            isRewatch: isRepeat,
+            autoMarkConsumed: true,
+            containsSpoilers: containsSpoilers,
+            visibility: visibility,
+            tags: tagDraft.tags,
+            mutationId: completionMutationId
+        ))
+        return MediaLogSaveResult(ref: ref, tracking: nil, diaryEntry: entry, tvEnvelope: envelope)
+    }
+
     private func saveProgressOnly() async -> Bool {
         await performSave {
             guard let value = Decimal(string: progressText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
@@ -364,7 +494,9 @@ final class MediaLogViewModel {
             onSaved()
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            // TV errors carry user copy, including the retryable "TV details are unavailable right now".
+            let tvMessage = selectedRef.isTVFamily ? (error as? APIError)?.apiErrorMessage : nil
+            errorMessage = tvMessage ?? error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
             }
@@ -376,6 +508,8 @@ final class MediaLogViewModel {
 private enum MediaLogError: LocalizedError {
     case invalidProgress
     case futureDate
+    case futureLogDate
+    case unavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -383,6 +517,10 @@ private enum MediaLogError: LocalizedError {
             "Enter a valid progress value."
         case .futureDate:
             "Consumption dates cannot be in the future."
+        case .futureLogDate:
+            "Log dates can't be in the future."
+        case let .unavailable(reason):
+            reason
         }
     }
 }
@@ -413,7 +551,8 @@ struct MediaLogView: View {
         stateChangeOrigin: UUID? = nil,
         onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
-        onSaved: @escaping () -> Void
+        onSaved: @escaping () -> Void,
+        tvComposer: TVComposer? = nil
     ) {
         _viewModel = State(initialValue: MediaLogViewModel(
             detail: detail,
@@ -426,7 +565,8 @@ struct MediaLogView: View {
             stateChangeOrigin: stateChangeOrigin,
             onResult: onResult,
             onUnauthorized: onUnauthorized,
-            onSaved: onSaved
+            onSaved: onSaved,
+            tvComposer: tvComposer
         ))
     }
 
@@ -535,13 +675,23 @@ struct MediaLogView: View {
 
     @ViewBuilder
     private func finishedSections(scrollProxy: ScrollViewProxy) -> some View {
-        if viewModel.supportsSeasonLogging {
+        if viewModel.supportsTVTargetPicker {
+            Section {
+                Picker("Log", selection: $viewModel.selectedTVTargetId) {
+                    ForEach(viewModel.tvTargets) { target in
+                        Text(target.title).tag(target.id)
+                    }
+                }
+                .accessibilityIdentifier("media-log.tv-target")
+            }
+            .logRowBackground()
+        } else if viewModel.supportsSeasonLogging {
             Section {
                 Picker("Season", selection: $viewModel.selectedSeasonNumber) {
-                    Text("Whole Show").tag(Int?.none)
-                    ForEach(viewModel.detail.seasons ?? []) { season in
-                        Text(season.title).tag(Int?.some(season.seasonNumber))
+                    ForEach(viewModel.seasonPickerSeasons) { season in
+                        Text(season.seasonNumber == 0 ? "Specials" : season.title).tag(Int?.some(season.seasonNumber))
                     }
+                    Text("Whole Show").tag(Int?.none)
                 }
             }
             .logRowBackground()
@@ -565,7 +715,7 @@ struct MediaLogView: View {
             DatePicker(
                 viewModel.selectedRef.consumedDateLabel,
                 selection: $viewModel.consumedAt,
-                in: Date.distantPast...(viewModel.selectedRef.usesCalendarConsumptionDate ? Date() : Date.distantFuture),
+                in: Date.distantPast...(viewModel.selectedRef.usesCalendarLogDate ? Date() : Date.distantFuture),
                 displayedComponents: .date
             )
 
