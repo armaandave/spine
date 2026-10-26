@@ -4,12 +4,9 @@ from zoneinfo import ZoneInfo
 
 import requests
 from django.core.cache import cache
-from django.db import transaction
-from django.db.models import Prefetch
-from django.utils import timezone
-from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
-from app.models import TV, Item, MediaTypes, Season, Status
+from app import tv_tracking
+from app.models import Item, MediaTypes
 from app.providers import services, tmdb
 from events.models import Event
 
@@ -22,6 +19,7 @@ def process_tv(tv_item, events_bulk):
     """Process TV item and create events for all seasons and episodes."""
     logger.info("Processing TV show: %s", tv_item)
 
+    refresh_tracking(tv_item)
     try:
         seasons_to_process = get_seasons_to_process(tv_item)
 
@@ -29,14 +27,9 @@ def process_tv(tv_item, events_bulk):
             logger.info("%s - No seasons need processing", tv_item)
             return
 
-        processed_season_items = process_tv_seasons(
+        process_tv_seasons(
             tv_item,
             seasons_to_process,
-            events_bulk,
-        )
-        reopen_completed_tv_with_new_seasons(
-            tv_item,
-            processed_season_items,
             events_bulk,
         )
 
@@ -47,6 +40,20 @@ def process_tv(tv_item, events_bulk):
         )
     except Exception:
         logger.exception("Error processing %s", tv_item)
+
+
+def refresh_tracking(tv_item):
+    """Refresh the show's stored episode lists and work out every user's row (TV-206).
+
+    It runs for every show the calendar selects, before the season events, because
+    those only reprocess seasons without events or from the next airing season on and
+    would miss an aired episode added to a finished season. Never raises: the events
+    still update when the provider or a row fails.
+    """
+    try:
+        tv_tracking.refresh_after_calendar(tv_item)
+    except Exception:
+        logger.exception("%s - Could not refresh TV tracking", tv_item)
 
 
 def get_seasons_to_process(tv_item):
@@ -129,129 +136,6 @@ def process_tv_seasons(tv_item, seasons_to_process, events_bulk):
         process_season_episodes(season_item, season_metadata, events_bulk)
 
     return processed_season_items
-
-
-def reopen_completed_tv_with_new_seasons(tv_item, season_items, events_bulk):
-    """Reopen completed TV entries and create planning seasons when needed."""
-    eligible_season_items = [
-        season_item
-        for season_item in season_items
-        if season_item.season_number and season_item.season_number > 0
-    ]
-    season_item_map = {
-        season_item.season_number: season_item for season_item in eligible_season_items
-    }
-    if not season_item_map:
-        logger.info(
-            "%s - No processed seasons eligible for completed-TV reopening",
-            tv_item,
-        )
-        return
-
-    # Only future season events should reopen a completed show; processed
-    # past-only seasons can exist when local season tracking was incomplete.
-    future_season_numbers = {
-        event.item.season_number
-        for event in events_bulk
-        if event.item in eligible_season_items and event.datetime >= timezone.now()
-    }
-    if not future_season_numbers:
-        logger.info(
-            "%s - Processed seasons have no future events; "
-            "skipping completed-TV reopening",
-            tv_item,
-        )
-        return
-
-    sorted_season_numbers = sorted(future_season_numbers)
-    completed_tvs = list(
-        TV.objects.filter(
-            item=tv_item,
-            status=Status.COMPLETED.value,
-        )
-        .select_related("user")
-        .prefetch_related(
-            Prefetch(
-                "seasons",
-                queryset=Season.objects.select_related("item"),
-            ),
-        ),
-    )
-    if not completed_tvs:
-        logger.info("%s - No completed TV entries to reopen", tv_item)
-        return
-
-    logger.info(
-        "%s - Checking %d completed TV entries against discovered seasons %s",
-        tv_item,
-        len(completed_tvs),
-        sorted_season_numbers,
-    )
-
-    seasons_by_tv_id = {}
-    tvs_to_update = []
-
-    for tv in completed_tvs:
-        existing_season_numbers = {
-            season.item.season_number
-            for season in tv.seasons.all()
-            if season.item.season_number and season.item.season_number > 0
-        }
-        missing_season_numbers = [
-            season_number
-            for season_number in sorted_season_numbers
-            if season_number not in existing_season_numbers
-        ]
-
-        if not missing_season_numbers:
-            logger.info(
-                "%s - User %s already tracks all discovered seasons",
-                tv_item,
-                tv.user,
-            )
-            continue
-
-        logger.info(
-            "%s - Reopening completed TV for user %s; new seasons: %s",
-            tv_item,
-            tv.user,
-            missing_season_numbers,
-        )
-        seasons_by_tv_id[tv.id] = [
-            Season(
-                item=season_item_map[season_number],
-                related_tv=tv,
-                user=tv.user,
-                status=Status.PLANNING.value,
-            )
-            for season_number in missing_season_numbers
-        ]
-        tv.status = Status.IN_PROGRESS.value
-        tvs_to_update.append(tv)
-
-    if not seasons_by_tv_id:
-        logger.info("%s - No completed TV entries required reopening", tv_item)
-        return
-
-    with transaction.atomic():
-        for tv in tvs_to_update:
-            bulk_create_with_history(
-                seasons_by_tv_id[tv.id],
-                Season,
-                default_user=tv.user,
-            )
-            bulk_update_with_history(
-                [tv],
-                TV,
-                ["status"],
-                default_user=tv.user,
-            )
-            logger.info(
-                "%s - Reopened TV for user %s and created %d planning seasons",
-                tv_item,
-                tv.user,
-                len(seasons_by_tv_id[tv.id]),
-            )
 
 
 def process_season_episodes(item, metadata, events_bulk):

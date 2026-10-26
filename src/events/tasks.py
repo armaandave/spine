@@ -2,7 +2,7 @@ import logging
 
 from celery import shared_task
 
-from events import notifications
+from events import notifications, tv_airing
 from events.calendar.main import fetch_releases
 
 logger = logging.getLogger(__name__)
@@ -36,3 +36,11 @@ def send_daily_digest_notifications():
     logger.info("Starting daily digest task")
 
     return notifications.send_daily_digest()
+
+
+@shared_task(name="Refresh aired TV")
+def refresh_aired_tv():
+    """Reopen shows whose next episode aired, and work out shows left unworked (TV-206)."""
+    logger.info("Starting aired TV refresh")
+
+    return tv_airing.refresh_aired_shows()

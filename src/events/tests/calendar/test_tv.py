@@ -6,7 +6,9 @@ import requests
 from django.core.cache import cache
 from django.test import TestCase
 
-from app.models import TV, Item, Season, Status
+from app import tv_tracking
+from app.models import TV, Season, Status
+from app.tests.tv_fixtures import FakeTVProvider, patch_now
 from events.calendar.helpers import date_parser
 from events.calendar.tv import (
     get_episode_datetime,
@@ -90,119 +92,91 @@ class CalendarTVTests(CalendarFixturesMixin, TestCase):
         expected_date = datetime.datetime.fromisoformat("2008-01-20T22:00:00+00:00")
         self.assertEqual(events_bulk[0].datetime, expected_date)
 
-    @patch("events.calendar.tv.get_tvmaze_episode_map")
-    @patch("events.calendar.tv.tmdb.tv_with_seasons")
-    @patch("events.calendar.tv.tmdb.tv")
+    def _finished_show(self, fake):
+        """Replace the fixture's rows with a show the user finished by marking it."""
+        TV.objects.filter(item=self.tv_item, user=self.user).delete()
+        fake.add_show(
+            self.tv_item.media_id,
+            title="Breaking Bad",
+            seasons={1: [datetime.date(2008, 1, 20)]},
+            status="Returning Series",
+        )
+        tv_tracking.mark_watched(self.user, self.tv_item)
+        Event.objects.create(
+            item=self.season_item,
+            content_number=1,
+            datetime=date_parser("2008-01-20"),
+        )
+        tv = TV.objects.get(item=self.tv_item, user=self.user)
+        self.assertEqual(tv.status, Status.COMPLETED.value)
+        return tv
+
+    @patch("events.calendar.tv.get_tvmaze_episode_map", return_value={})
+    @patch("app.models.Item.fetch_releases")
     def test_process_tv_reopens_completed_show_with_new_season_as_planning(
         self,
-        mock_tv,
-        mock_tv_with_seasons,
-        mock_get_tvmaze_episode_map,
+        _fetch_releases,
+        _tvmaze,
     ):
-        """Completed TV should reopen and create the discovered season as planning."""
-        TV.objects.filter(item=self.tv_item, user=self.user).update(
-            status=Status.COMPLETED.value,
-        )
-        Season.objects.filter(item=self.season_item, user=self.user).update(
-            status=Status.COMPLETED.value,
-        )
-        Event.objects.create(
-            item=self.season_item,
-            content_number=1,
-            datetime=date_parser("2008-01-20"),
-        )
+        """A new season that hasn't aired leaves a finished show Completed, caught up.
 
-        mock_tv.return_value = {
-            "related": {
-                "seasons": [
-                    {"season_number": 1, "episodes": [1]},
-                    {"season_number": 2, "episodes": [1]},
-                ],
-            },
-            "next_episode_season": 2,
-        }
-        mock_tv_with_seasons.return_value = {
-            "season/2": {
-                "image": "http://example.com/season2.jpg",
+        Rewritten for TV-202 and TV-205: the old rule reopened the show and created the
+        new season as Planning. Now the show waits in Completed with the next season's
+        date and Spine creates no empty season; it reopens when the season airs.
+        """
+        with FakeTVProvider() as fake, patch_now(datetime.datetime(2026, 10, 25, 12, 0)):
+            self._finished_show(fake)
+            fake.show(self.tv_item.media_id).set_season(2, [datetime.date(2027, 1, 20)])
+            fake.show(self.tv_item.media_id).next_episode_to_air = {
                 "season_number": 2,
-                "episodes": [
-                    {"episode_number": 1, "air_date": "2027-01-20"},
-                ],
-                "tvdb_id": "81189",
-            },
-        }
-        mock_get_tvmaze_episode_map.return_value = {}
+                "episode_number": 1,
+                "air_date": datetime.date(2027, 1, 20),
+            }
 
-        events_bulk = []
-        process_tv(self.tv_item, events_bulk)
-
-        season_two_item = Item.objects.get(
-            media_id=self.tv_item.media_id,
-            source=self.tv_item.source,
-            media_type=self.season_item.media_type,
-            season_number=2,
-        )
-        season_two = Season.objects.get(item=season_two_item, user=self.user)
-        tv = TV.objects.get(item=self.tv_item, user=self.user)
-
-        self.assertEqual(tv.status, Status.IN_PROGRESS.value)
-        self.assertEqual(season_two.status, Status.PLANNING.value)
-        self.assertEqual(len(events_bulk), 1)
-
-    @patch("events.calendar.tv.get_tvmaze_episode_map")
-    @patch("events.calendar.tv.tmdb.tv_with_seasons")
-    @patch("events.calendar.tv.tmdb.tv")
-    def test_process_tv_does_not_reopen_completed_show_for_past_only_season(
-        self,
-        mock_tv,
-        mock_tv_with_seasons,
-        mock_get_tvmaze_episode_map,
-    ):
-        """Past-only seasons should not reopen a completed TV entry."""
-        TV.objects.filter(item=self.tv_item, user=self.user).update(
-            status=Status.COMPLETED.value,
-        )
-        Season.objects.filter(item=self.season_item, user=self.user).update(
-            status=Status.COMPLETED.value,
-        )
-        Event.objects.create(
-            item=self.season_item,
-            content_number=1,
-            datetime=date_parser("2008-01-20"),
-        )
-
-        mock_tv.return_value = {
-            "related": {
-                "seasons": [
-                    {"season_number": 1, "episodes": [1]},
-                    {"season_number": 2, "episodes": [1]},
-                ],
-            },
-            "next_episode_season": 2,
-        }
-        mock_tv_with_seasons.return_value = {
-            "season/2": {
-                "image": "http://example.com/season2.jpg",
-                "season_number": 2,
-                "episodes": [
-                    {"episode_number": 1, "air_date": "2010-01-20"},
-                ],
-                "tvdb_id": "81189",
-            },
-        }
-        mock_get_tvmaze_episode_map.return_value = {}
-
-        events_bulk = []
-        process_tv(self.tv_item, events_bulk)
+            events_bulk = []
+            process_tv(self.tv_item, events_bulk)
 
         tv = TV.objects.get(item=self.tv_item, user=self.user)
         self.assertEqual(tv.status, Status.COMPLETED.value)
+        self.assertTrue(tv.caught_up)
+        self.assertEqual((tv.next_air_season, tv.next_air_date), (2, datetime.date(2027, 1, 20)))
         self.assertFalse(
             Season.objects.filter(
-                item__media_id=self.tv_item.media_id,
-                item__source=self.tv_item.source,
+                related_tv=tv,
                 item__season_number=2,
-                user=self.user,
+            ).exists(),
+        )
+        self.assertEqual(len(events_bulk), 1)
+
+    @patch("events.calendar.tv.get_tvmaze_episode_map", return_value={})
+    @patch("app.models.Item.fetch_releases")
+    def test_process_tv_does_not_reopen_completed_show_for_past_only_season(
+        self,
+        _fetch_releases,
+        _tvmaze,
+    ):
+        """An aired season the provider adds reopens a finished show (TV-206, A-12).
+
+        Rewritten for TV-201 and TV-206: the old rule ignored seasons whose episodes had
+        all aired. Every regular season with an aired episode must be watched to finish
+        a show, so it moves to Watching with the new season's first episode up next,
+        and still no season tracking is created for it (TV-205).
+        """
+        with FakeTVProvider() as fake, patch_now(datetime.datetime(2026, 10, 25, 12, 0)):
+            self._finished_show(fake)
+            fake.show(self.tv_item.media_id).set_season(2, [datetime.date(2010, 1, 20)])
+            fake.show(self.tv_item.media_id).status = "Ended"
+
+            events_bulk = []
+            process_tv(self.tv_item, events_bulk)
+
+        tv = TV.objects.get(item=self.tv_item, user=self.user)
+        self.assertEqual(tv.status, Status.IN_PROGRESS.value)
+        self.assertEqual((tv.up_next_season, tv.up_next_episode), (2, 1))
+        self.assertFalse(
+            Season.objects.filter(
+                related_tv=tv,
+                item__season_number=2,
             ).exists(),
         )
         self.assertEqual(len(events_bulk), 1)

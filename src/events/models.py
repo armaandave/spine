@@ -4,10 +4,7 @@ from django.db import models
 from django.db.models import (
     Case,
     IntegerField,
-    Min,
-    OuterRef,
     Q,
-    Subquery,
     UniqueConstraint,
     Value,
     When,
@@ -15,7 +12,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from app import config
-from app.models import TV, Item, MediaTypes, Season, Status
+from app.models import TV, Item, MediaTypes, Status
 
 # Statuses that represent inactive tracking
 # will be ignored when creating events
@@ -78,15 +75,18 @@ class EventManager(models.Manager):
         return self.sort_with_sentinel_last(queryset)
 
     def _build_tv_query(self, user, enabled_types):
-        """Build query for TV shows based on TV status and season statuses."""
+        """Build query for TV seasons: the show's status alone decides (TV-704).
+
+        Seasons have no Pause or Drop of their own, so every season of a show in
+        Planning, Watching or Completed gets events, and none of a Paused or Dropped one.
+        """
         if not (
             MediaTypes.TV.value in enabled_types
             or MediaTypes.SEASON.value in enabled_types
         ):
             return Q()
 
-        # Get active TV shows
-        active_tv_shows = (
+        active_tv_shows = list(
             TV.objects.filter(
                 user=user,
                 item__media_type=MediaTypes.TV.value,
@@ -94,52 +94,15 @@ class EventManager(models.Manager):
             .exclude(
                 status__in=INACTIVE_TRACKING_STATUSES,
             )
-            .values_list("item__media_id", flat=True)
+            .values_list("item__media_id", flat=True),
         )
 
         if not active_tv_shows:
             return Q()
 
-        # Subquery to find the first season with inactive status for each TV show
-        first_dropped_seasons = (
-            Season.objects.filter(
-                user=user,
-                item__media_id=OuterRef("media_id"),
-                status__in=INACTIVE_TRACKING_STATUSES,
-            )
-            .values("item__media_id")
-            .annotate(min_season=Min("item__season_number"))
-            .values("min_season")
-        )
-
-        # Get all media_ids and their first dropped season numbers
-        dropped_seasons = (
-            Item.objects.filter(
-                media_id__in=active_tv_shows,
-                media_type=MediaTypes.SEASON.value,
-            )
-            .annotate(
-                first_dropped_season=Subquery(first_dropped_seasons),
-            )
-            .filter(first_dropped_season__isnull=False)
-            .values_list("media_id", "first_dropped_season")
-        )
-
-        # Build exclusion query
-        exclude_query = Q()
-        for media_id, first_dropped_season in dropped_seasons:
-            exclude_query |= Q(
-                item__media_type=MediaTypes.SEASON.value,
-                item__media_id=media_id,
-                item__season_number__gte=first_dropped_season,
-            )
-
-        return (
-            Q(
-                item__media_type=MediaTypes.SEASON.value,
-                item__media_id__in=active_tv_shows,
-            )
-            & ~exclude_query
+        return Q(
+            item__media_type=MediaTypes.SEASON.value,
+            item__media_id__in=active_tv_shows,
         )
 
     def sort_with_sentinel_last(self, queryset):

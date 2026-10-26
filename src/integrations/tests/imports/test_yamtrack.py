@@ -18,6 +18,7 @@ from app.models import (
     Season,
     Sources,
 )
+from app.tests.tv_fixtures import FakeTVProvider
 from integrations.imports import (
     yamtrack,
 )
@@ -35,6 +36,10 @@ class ImportYamtrack(TestCase):
         """Create user for the tests."""
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_user(**self.credentials)
+        # Imported shows are worked out from their episode lists (TV-800).
+        fake = FakeTVProvider().__enter__()
+        self.addCleanup(fake.__exit__, None, None, None)
+        fake.add_show("1668", title="Friends", seasons={1: 24, 2: 24})
         with Path(mock_path / "import_yamtrack.csv").open("rb") as file:
             self.import_results = yamtrack.importer(file, self.user, "new")
 
@@ -66,12 +71,16 @@ class ImportYamtrack(TestCase):
             datetime(2024, 2, 9, 15, 30, 0, tzinfo=UTC),
         )
 
+        # The imported row keeps the source's date. Working the show out afterwards
+        # records the imported In progress as the Watching choice, a fact with its own
+        # history row (rewritten for TV-800, which makes imported statuses choices).
         tv = TV.objects.filter(user=self.user).first()
-        self.assertEqual(tv.history.count(), 1)
         self.assertEqual(
-            tv.history.first().history_date,
+            tv.history.earliest("history_date").history_date,
             datetime(2024, 2, 9, 12, 0, 0, tzinfo=UTC),
         )
+        self.assertEqual(tv.choice, "In progress")
+        self.assertEqual(tv.history.first().choice, "In progress")
 
     def test_musicbrainz_music_row_uses_generic_import(self):
         csv_data = (

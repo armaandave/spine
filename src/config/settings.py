@@ -683,6 +683,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Send release notifications",
         "schedule": 60 * 10,  # every 10 minutes
     },
+    "refresh_aired_tv": {
+        "task": "Refresh aired TV",
+        "schedule": 60 * 60,  # every hour; reopens shows whose next episode aired
+    },
     "send_daily_digest": {
         "task": "Send daily digest",
         "schedule": crontab(hour=DAILY_DIGEST_HOUR, minute=0),
