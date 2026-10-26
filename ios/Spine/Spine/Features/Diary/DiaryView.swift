@@ -319,6 +319,7 @@ struct MediaDiaryView: View {
                     .padding(.top, 18)
                     .padding(.bottom, 28)
                 }
+                .diaryPinnedHeaders()
                 .refreshable {
                     await viewModel.load()
                 }
@@ -449,6 +450,8 @@ struct DiaryView: View {
     @State private var viewModel: DiaryViewModel
     @State private var monthDisplayMode: DiaryMonthDisplayMode = .expanded
     @State private var pendingMonthAnchor: String?
+    /// Counts the user's switches between the diary and the month index, for the haptic.
+    @State private var monthSwitchCount = 0
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -480,8 +483,6 @@ struct DiaryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                SpinePageBackground()
-
                 ScrollViewReader { diaryProxy in
                     ScrollViewReader { monthProxy in
                         ZStack {
@@ -512,11 +513,18 @@ struct DiaryView: View {
                     }
                 }
             }
+            .background {
+                // A faint wash of the newest log's artwork, like the log sheet's.
+                LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
+            }
             .overlay(alignment: .top) {
-                DiaryTopSafeAreaScrim()
+                DiaryTopSoftScrim()
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
+            // Only the user's own switches: a reload also returns to the diary, silently.
+            .sensoryFeedback(.selection, trigger: monthSwitchCount)
+            .sensoryFeedback(.selection, trigger: viewModel.filter.mediaType)
             .task {
                 await viewModel.loadIfNeeded(loadsFilterOptions: true)
             }
@@ -555,10 +563,11 @@ struct DiaryView: View {
                 diaryContent(monthProxy: monthProxy)
                     .spineContentTransition(value: contentPhase)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
+        .diaryPinnedHeaders()
         .refreshable {
             await reloadDiary()
         }
@@ -633,7 +642,7 @@ struct DiaryView: View {
                     showDiary(sectionID, proxy: diaryProxy)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
@@ -664,6 +673,7 @@ struct DiaryView: View {
         withAnimation(monthTransitionAnimation) {
             monthDisplayMode = .collapsed
         }
+        monthSwitchCount += 1
     }
 
     private func showDiary(_ sectionID: String, proxy: ScrollViewProxy) {
@@ -671,6 +681,7 @@ struct DiaryView: View {
         withAnimation(monthTransitionAnimation) {
             monthDisplayMode = .expanded
         }
+        monthSwitchCount += 1
     }
 
     private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to sectionID: String) {
@@ -717,10 +728,12 @@ struct DiaryView: View {
                 filter: $viewModel.filter,
                 scope: .diary,
                 options: viewModel.filterOptions,
+                usesGlass: true,
                 onUnauthorized: onUnauthorized
             ) {
                 Task { await reloadDiary(loadsFilterOptions: true) }
             }
+            .environment(\.colorScheme, .dark)
         }
         .padding(.bottom, 14)
     }
@@ -764,6 +777,38 @@ struct DiaryView: View {
             guard let last = viewModel.entries.last else { return }
             await viewModel.loadNextPageIfNeeded(currentEntry: last)
         }
+    }
+}
+
+/// Blurs whatever scrolls under the status bar, fading out by the bottom of it, so the page's
+/// backdrop shows through instead of a solid band. It ends where month headers pin, so it
+/// never hazes a pinned header's title.
+private struct DiaryTopSoftScrim: View {
+    private static let fade: CGFloat = 14
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.safeAreaInsets.top
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: max(0, height - Self.fade) / max(height, 1)),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .frame(height: height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
+        }
+        .environment(\.colorScheme, .dark)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
