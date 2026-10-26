@@ -129,15 +129,18 @@ struct DiaryYearGroup: Identifiable {
     let id: String
     var sections: [DiaryMonthSection]
 
-    /// In the phone's calendar, like the month titles: "2026", or "2569 BE" on a Buddhist calendar.
-    var year: String? {
-        sections.first.flatMap { DiaryDateFormatter.year(fromID: $0.id) }
-    }
+    /// "2026", or "2569 BE" on a Buddhist calendar: the year in each month's title.
+    var year: String? { id.isEmpty ? nil : id }
 
-    static func groups(from sections: [DiaryMonthSection]) -> [DiaryYearGroup] {
+    /// Groups by the year each month's title shows, in the phone's calendar, so a heading never
+    /// disagrees with the titles under it, even where that calendar's year doesn't start in January.
+    static func groups(
+        from sections: [DiaryMonthSection],
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [DiaryYearGroup] {
         var groupIndexes: [String: Int] = [:]
         return sections.reduce(into: []) { groups, section in
-            let id = section.id == "undated" ? "" : String(section.id.prefix(4))
+            let id = DiaryDateFormatter.year(from: section.titleDate, calendar: calendar) ?? ""
             if let index = groupIndexes[id] {
                 groups[index].sections.append(section)
             } else {
@@ -154,7 +157,7 @@ private struct DiaryMonthIndexRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(DiaryDateFormatter.monthName(fromID: section.id) ?? section.title)
+            Text(DiaryDateFormatter.monthName(from: section.titleDate) ?? section.title)
                 .font(.body)
                 .foregroundStyle(.white)
 
@@ -262,6 +265,11 @@ struct DiaryMonthSection: Identifiable {
     let id: String
     let title: String
     var entries: [DiaryEntry]
+
+    /// The date the title is formatted from: its newest log's, or the first of its month.
+    var titleDate: String? {
+        entries.first.flatMap { $0.consumedAt ?? $0.createdAt } ?? (id == "undated" ? nil : "\(id)-01")
+    }
 }
 
 /// A month's title in a Liquid Glass capsule. It stays pinned while that month scrolls
@@ -299,10 +307,12 @@ struct DiaryMonthHeader: View {
                 .fill(.ultraThinMaterial)
                 .mask {
                     LinearGradient(
-                        // Solid from the top, where the status-bar blur ends, fading out below.
+                        // Soft at both ends: the top fades in across the overhang, under the
+                        // status-bar blur's fade, so neither edge shows as a line.
                         stops: [
-                            .init(color: .black, location: 0),
-                            .init(color: .black, location: 0.7),
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.3),
+                            .init(color: .black, location: 0.75),
                             .init(color: .clear, location: 1),
                         ],
                         startPoint: .top,
@@ -315,7 +325,8 @@ struct DiaryMonthHeader: View {
                 .padding(.top, -Self.bandOverhang)
                 .visualEffect { [pinnedTop] content, proxy in
                     guard let pinnedTop else { return content.opacity(0) }
-                    let distance = proxy.frame(in: .scrollView).minY + Self.bandOverhang - pinnedTop
+                    // The padding only lets the band draw outside the header; this is the header's own top.
+                    let distance = proxy.frame(in: .scrollView).minY - pinnedTop
                     return content.opacity(min(1, max(0, 1 - distance / 24)))
                 }
                 .allowsHitTesting(false)
@@ -630,14 +641,14 @@ enum DiaryDateFormatter {
         return dateOnlyFormatter.date(from: "\(value)-01") == nil ? nil : value
     }
 
-    /// "October" for the month ID "2026-10".
-    static func monthName(fromID id: String) -> String? {
-        dateOnlyFormatter.date(from: "\(id)-01")?.formatted(.dateTime.month(.wide))
+    /// "October", like `monthHeader` without the year.
+    static func monthName(from rawValue: String?) -> String? {
+        date(from: rawValue)?.formatted(.dateTime.month(.wide))
     }
 
-    /// "2026" for the month ID "2026-10", in the given calendar (the phone's by default).
-    static func year(fromID id: String, calendar: Calendar = .autoupdatingCurrent) -> String? {
-        guard let date = dateOnlyFormatter.date(from: "\(id)-01") else { return nil }
+    /// "2026", in the given calendar (the phone's by default), like `monthHeader`'s year.
+    static func year(from rawValue: String?, calendar: Calendar = .autoupdatingCurrent) -> String? {
+        guard let date = date(from: rawValue) else { return nil }
         var style = Date.FormatStyle.dateTime.year()
         style.calendar = calendar
         return date.formatted(style)
