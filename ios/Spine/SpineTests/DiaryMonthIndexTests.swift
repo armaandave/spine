@@ -24,6 +24,14 @@ final class DiaryMonthIndexTests: XCTestCase {
         XCTAssertEqual(groups.last?.sections.map(\.id), ["undated"])
     }
 
+    func testYearHeadingFollowsThePhonesCalendar() {
+        XCTAssertEqual(DiaryDateFormatter.year(fromID: "2026-10", calendar: Calendar(identifier: .gregorian)), "2026")
+        // The month titles say "October 2569 BE" on a Buddhist calendar, so the year heading must too.
+        let buddhist = DiaryDateFormatter.year(fromID: "2026-10", calendar: Calendar(identifier: .buddhist))
+        XCTAssertEqual(buddhist?.hasPrefix("2569"), true, buddhist ?? "nil")
+        XCTAssertNil(DiaryDateFormatter.year(fromID: "undated"))
+    }
+
     func testMonthNameComesFromTheMonthID() {
         XCTAssertEqual(DiaryDateFormatter.monthName(fromID: "2026-10"), "October")
         XCTAssertEqual(DiaryDateFormatter.monthName(fromID: "2025-02"), "February")

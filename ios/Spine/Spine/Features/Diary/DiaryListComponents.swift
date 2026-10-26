@@ -129,7 +129,10 @@ struct DiaryYearGroup: Identifiable {
     let id: String
     var sections: [DiaryMonthSection]
 
-    var year: String? { id.isEmpty ? nil : id }
+    /// In the phone's calendar, like the month titles: "2026", or "2569 BE" on a Buddhist calendar.
+    var year: String? {
+        sections.first.flatMap { DiaryDateFormatter.year(fromID: $0.id) }
+    }
 
     static func groups(from sections: [DiaryMonthSection]) -> [DiaryYearGroup] {
         var groupIndexes: [String: Int] = [:]
@@ -270,26 +273,24 @@ struct DiaryMonthHeader: View {
 
     @Environment(\.diaryPinnedHeaderTop) private var pinnedTop
 
+    /// How far the pinned blur reaches above the header.
+    private static let bandOverhang: CGFloat = 16
+
     var body: some View {
         Group {
             if let action {
                 Button(action: action) {
-                    label
+                    strip
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
-                // A darker tint keeps the title readable over rows scrolling under it.
-                .glassEffect(.regular.tint(.black.opacity(0.3)).interactive(), in: .capsule)
                 .accessibilityLabel(title)
                 .accessibilityValue(isLoading ? "Loading" : "Expanded")
                 .accessibilityHint("Hides diary entries for all months")
             } else {
-                label
-                    .glassEffect(.regular.tint(.black.opacity(0.3)), in: .capsule)
+                strip
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 8)
         .background {
             // While pinned, rows scrolling under the header blur away across the full width
             // instead of running into the capsule. It fades in over the last stretch before
@@ -298,9 +299,9 @@ struct DiaryMonthHeader: View {
                 .fill(.ultraThinMaterial)
                 .mask {
                     LinearGradient(
+                        // Solid from the top, where the status-bar blur ends, fading out below.
                         stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.25),
+                            .init(color: .black, location: 0),
                             .init(color: .black, location: 0.7),
                             .init(color: .clear, location: 1),
                         ],
@@ -308,11 +309,13 @@ struct DiaryMonthHeader: View {
                         endPoint: .bottom
                     )
                 }
-                // Out past the page margins to the screen edges.
+                // Out past the page margins to the screen edges, and up under the status-bar
+                // blur's fade so the two blurs meet without a seam.
                 .padding(.horizontal, -24)
+                .padding(.top, -Self.bandOverhang)
                 .visualEffect { [pinnedTop] content, proxy in
                     guard let pinnedTop else { return content.opacity(0) }
-                    let distance = proxy.frame(in: .scrollView).minY - pinnedTop
+                    let distance = proxy.frame(in: .scrollView).minY + Self.bandOverhang - pinnedTop
                     return content.opacity(min(1, max(0, 1 - distance / 24)))
                 }
                 .allowsHitTesting(false)
@@ -321,9 +324,24 @@ struct DiaryMonthHeader: View {
         .environment(\.colorScheme, .dark)
     }
 
+    /// The capsule on a full-width strip. The whole strip takes taps, so a tap beside the
+    /// capsule of a pinned header doesn't open the row blurred behind it.
+    private var strip: some View {
+        // A darker tint keeps the title readable over rows scrolling under it.
+        let glass = Glass.regular.tint(.black.opacity(0.3))
+        return label
+            .glassEffect(action == nil ? glass : glass.interactive(), in: .capsule)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 8)
+            .contentShape(Rectangle())
+    }
+
     private var label: some View {
         HStack(spacing: 6) {
             Text(title)
+                // One line at every text size, so the capsule never wraps.
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
 
             if action != nil {
                 if isLoading {
@@ -342,7 +360,6 @@ struct DiaryMonthHeader: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
         .frame(minHeight: 34)
-        .contentShape(Capsule())
     }
 }
 
@@ -616,6 +633,14 @@ enum DiaryDateFormatter {
     /// "October" for the month ID "2026-10".
     static func monthName(fromID id: String) -> String? {
         dateOnlyFormatter.date(from: "\(id)-01")?.formatted(.dateTime.month(.wide))
+    }
+
+    /// "2026" for the month ID "2026-10", in the given calendar (the phone's by default).
+    static func year(fromID id: String, calendar: Calendar = .autoupdatingCurrent) -> String? {
+        guard let date = dateOnlyFormatter.date(from: "\(id)-01") else { return nil }
+        var style = Date.FormatStyle.dateTime.year()
+        style.calendar = calendar
+        return date.formatted(style)
     }
 
     static func exactDate(from rawValue: String?) -> String? {

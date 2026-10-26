@@ -450,6 +450,8 @@ struct DiaryView: View {
     @State private var viewModel: DiaryViewModel
     @State private var monthDisplayMode: DiaryMonthDisplayMode = .expanded
     @State private var pendingMonthAnchor: String?
+    /// Counts the user's switches between the diary and the month index, for the haptic.
+    @State private var monthSwitchCount = 0
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -520,7 +522,8 @@ struct DiaryView: View {
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .sensoryFeedback(.selection, trigger: monthDisplayMode)
+            // Only the user's own switches: a reload also returns to the diary, silently.
+            .sensoryFeedback(.selection, trigger: monthSwitchCount)
             .sensoryFeedback(.selection, trigger: viewModel.filter.mediaType)
             .task {
                 await viewModel.loadIfNeeded(loadsFilterOptions: true)
@@ -670,6 +673,7 @@ struct DiaryView: View {
         withAnimation(monthTransitionAnimation) {
             monthDisplayMode = .collapsed
         }
+        monthSwitchCount += 1
     }
 
     private func showDiary(_ sectionID: String, proxy: ScrollViewProxy) {
@@ -677,6 +681,7 @@ struct DiaryView: View {
         withAnimation(monthTransitionAnimation) {
             monthDisplayMode = .expanded
         }
+        monthSwitchCount += 1
     }
 
     private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to sectionID: String) {
@@ -775,21 +780,22 @@ struct DiaryView: View {
     }
 }
 
-/// Blurs whatever scrolls under the status bar, fading out just below it, so the page's
-/// backdrop shows through instead of a solid band.
+/// Blurs whatever scrolls under the status bar, fading out by the bottom of it, so the page's
+/// backdrop shows through instead of a solid band. It ends where month headers pin, so it
+/// never hazes a pinned header's title.
 private struct DiaryTopSoftScrim: View {
-    private static let fade: CGFloat = 18
+    private static let fade: CGFloat = 14
 
     var body: some View {
         GeometryReader { proxy in
-            let height = proxy.safeAreaInsets.top + Self.fade
+            let height = proxy.safeAreaInsets.top
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .mask {
                     LinearGradient(
                         stops: [
                             .init(color: .black, location: 0),
-                            .init(color: .black, location: proxy.safeAreaInsets.top / height),
+                            .init(color: .black, location: max(0, height - Self.fade) / max(height, 1)),
                             .init(color: .clear, location: 1),
                         ],
                         startPoint: .top,
