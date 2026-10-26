@@ -476,7 +476,12 @@ struct DiaryEntryRow: View {
     }
 
     private var titleParts: (title: String, year: String?) {
-        let title = entry.media.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.titleParts(for: entry.media)
+    }
+
+    /// The title and its trailing "(2008)" year. TV logs read "Show · Season 1" or "Show · S1 E4 · Title" (TV-702).
+    static func titleParts(for media: DiaryMedia) -> (title: String, year: String?) {
+        let title = TVTrackingPresentation.diaryTitle(for: media).trimmingCharacters(in: .whitespacesAndNewlines)
         guard title.hasSuffix(")") else {
             return (title, nil)
         }

@@ -17,6 +17,9 @@ final class ProfileViewModel {
     var hofErrorMessage: String?
     var savingHallOfFameSlots: Set<String> = []
 
+    /// Continue Watching's inline tick on the user's own profile (TV-100, TV-701).
+    let continueWatching: ContinueWatchingTicks
+
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
@@ -28,6 +31,7 @@ final class ProfileViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
+        mediaRepository: MediaRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -36,6 +40,11 @@ final class ProfileViewModel {
         self.activityRepository = activityRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
+        continueWatching = ContinueWatchingTicks(
+            trackingRepository: trackingRepository,
+            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
@@ -159,6 +168,16 @@ final class ProfileViewModel {
         }
     }
 
+    /// Ticks a show's up-next episode from Continue Watching, then reloads the rail: the show may move or leave
+    /// (TV-701).
+    func tickUpNext(_ item: LibraryItem) async {
+        guard let response = await continueWatching.tick(item) else { return }
+        if let tracking = response.tracking, let index = inProgressItems.firstIndex(where: { $0.id == item.id }) {
+            inProgressItems[index] = LibraryItem(media: inProgressItems[index].media, tracking: tracking)
+        }
+        await loadInProgressItems(generation: requestGeneration)
+    }
+
     private func handleUnauthorized(_ error: Error) {
         if case APIError.unauthorized = error {
             onUnauthorized()
@@ -198,6 +217,26 @@ final class ProfileViewModel {
             hofErrorMessage = error.localizedDescription
             handleUnauthorized(error)
             return false
+        }
+    }
+}
+
+/// The rows of Settings › Logging. Quick log date is gone (TV-901): it only ever dated TV fills, which stay undated
+/// (TV-301). Its stored value is kept and saved back unchanged.
+enum LoggingSettingsRow: String, CaseIterable, Identifiable {
+    case weekStarts
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .weekStarts: "Week starts"
+        }
+    }
+
+    var systemName: String {
+        switch self {
+        case .weekStarts: "calendar"
         }
     }
 }
@@ -561,6 +600,7 @@ struct ProfileView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
+            mediaRepository: mediaRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))
@@ -617,8 +657,34 @@ struct ProfileView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
+                // A Continue Watching tick refreshes its own rail.
+                if notification.userInfo?["origin"] as? UUID == viewModel.continueWatching.changeOrigin { return }
                 Swift.Task<Void, Never> { await viewModel.reload() }
+            }
+            .background {
+                // The earlier-episodes question, then the season-finish composer, after a Continue Watching tick.
+                if let followUp = viewModel.continueWatching.followUp {
+                    Color.clear
+                        .tvWriteFollowUp(followUp) { item in
+                            MediaLogView(
+                                detail: item.detail,
+                                trackingRepository: trackingRepository,
+                                diaryRepository: diaryRepository,
+                                onUnauthorized: onUnauthorized,
+                                onSaved: {},
+                                tvComposer: item.finished.composer
+                            )
+                        }
+                }
+            }
+            .alert("Could not mark watched", isPresented: Binding(
+                get: { viewModel.continueWatching.errorMessage != nil },
+                set: { if !$0 { viewModel.continueWatching.errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.continueWatching.errorMessage ?? "")
             }
             .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
                 MediaDetailView(
@@ -1238,7 +1304,11 @@ struct ProfileView: View {
                 } else if viewModel.inProgressItems.isEmpty {
                     EmptyProfileCard(title: "Nothing in progress yet", systemName: "play.circle")
                 } else {
-                    InProgressRail(items: viewModel.inProgressItems) { item in
+                    InProgressRail(
+                        items: viewModel.inProgressItems,
+                        isTickPending: { viewModel.continueWatching.isPending($0) },
+                        onTick: { item in Swift.Task<Void, Never> { await viewModel.tickUpNext(item) } }
+                    ) { item in
                         selectedRef = item.media.ref
                     }
                 }
@@ -1925,7 +1995,12 @@ private struct RecentActivityRail: View {
 }
 
 private struct InProgressRail: View {
+    /// The height of the up-next line and tick under a show (TV-701).
+    private static let tickLineHeight: CGFloat = 28
+
     let items: [LibraryItem]
+    var isTickPending: (LibraryItem) -> Bool = { _ in false }
+    var onTick: (LibraryItem) -> Void = { _ in }
     let action: (LibraryItem) -> Void
 
     var body: some View {
@@ -1935,7 +2010,7 @@ private struct InProgressRail: View {
             let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
             HStack(alignment: .top, spacing: spacing) {
                 ForEach(Array(items.prefix(visibleCount))) { item in
-                    InProgressPoster(item: item) {
+                    InProgressPoster(item: item, isTickPending: isTickPending(item), onTick: { onTick(item) }) {
                         action(item)
                     }
                     .frame(width: itemWidth)
@@ -1943,26 +2018,44 @@ private struct InProgressRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: PosterSlot.profileRail.size.height)
+        .frame(height: PosterSlot.profileRail.size.height + (showsTickLines ? Self.tickLineHeight : 0))
+    }
+
+    private var showsTickLines: Bool {
+        items.contains { InProgressPoster.continueWatching(for: $0) != nil }
     }
 }
 
 private struct InProgressPoster: View {
     let item: LibraryItem
+    var isTickPending = false
+    var onTick: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            MediaArtwork(
-                url: item.media.displayPosterURL,
-                title: item.media.title,
-                slot: .profileRail,
-                mediaType: item.media.ref.mediaType,
-                orientation: item.media.posterOrientation
-            )
+        VStack(alignment: .leading, spacing: 4) {
+            Button(action: action) {
+                MediaArtwork(
+                    url: item.media.displayPosterURL,
+                    title: item.media.title,
+                    slot: .profileRail,
+                    mediaType: item.media.ref.mediaType,
+                    orientation: item.media.posterOrientation
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View \(item.media.title)")
+
+            // A show in Continue Watching: its up next with a tick (TV-701).
+            if let tv = Self.continueWatching(for: item) {
+                ContinueWatchingTickLine(tv: tv, isPending: isTickPending, compact: true, onTick: onTick)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("View \(item.media.title)")
+    }
+
+    static func continueWatching(for item: LibraryItem) -> TVShowState? {
+        guard item.media.ref.mediaType == "tv", let tv = item.tracking.tv, tv.upNext != nil else { return nil }
+        return tv
     }
 }
 
@@ -3071,19 +3164,17 @@ private struct SettingsPreferencesView: View {
     private var loggingSection: some View {
         SettingsGroup(title: "Logging") {
             SettingsCard {
-                SettingsChoicePicker(
-                    title: "Week starts",
-                    systemName: "calendar",
-                    selection: $viewModel.weekStartDay,
-                    choices: viewModel.settingsOptions.weekStartDays
-                )
-                SettingsDivider()
-                SettingsChoicePicker(
-                    title: "Quick log date",
-                    systemName: "bolt",
-                    selection: $viewModel.quickWatchDate,
-                    choices: viewModel.settingsOptions.quickWatchDates
-                )
+                ForEach(LoggingSettingsRow.allCases) { row in
+                    switch row {
+                    case .weekStarts:
+                        SettingsChoicePicker(
+                            title: row.title,
+                            systemName: row.systemName,
+                            selection: $viewModel.weekStartDay,
+                            choices: viewModel.settingsOptions.weekStartDays
+                        )
+                    }
+                }
             }
         }
     }

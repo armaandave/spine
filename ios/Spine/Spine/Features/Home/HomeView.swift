@@ -1,5 +1,115 @@
 import SwiftUI
 
+/// Continue Watching's inline tick on Home and Profile (TV-100, TV-701). It ticks a show's up-next episode with a
+/// mutation ID, shows the tick at once, and restores the row when the tick fails (TV-705). The response goes to a
+/// `TVWriteFollowUp`, which asks the earlier-episodes question and opens the season-finish composer (TV-107,
+/// TV-403).
+@MainActor
+@Observable
+final class ContinueWatchingTicks {
+    /// Rows with a tick in flight: their tick shows as done until the server answers.
+    private(set) var pendingIDs: Set<String> = []
+    var errorMessage: String?
+    /// The follow-up of the latest tick, for the screen to present.
+    private(set) var followUp: TVWriteFollowUp?
+    /// Recognizes this screen's own state-change posts.
+    let changeOrigin = UUID()
+
+    @ObservationIgnored private let trackingRepository: TrackingRepository
+    @ObservationIgnored private let mediaRepository: MediaRepository
+    @ObservationIgnored private let onUnauthorized: () -> Void
+
+    init(trackingRepository: TrackingRepository, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
+        self.trackingRepository = trackingRepository
+        self.mediaRepository = mediaRepository
+        self.onUnauthorized = onUnauthorized
+    }
+
+    func isPending(_ item: LibraryItem) -> Bool {
+        pendingIDs.contains(item.id)
+    }
+
+    /// Ticks the show's up-next episode. Returns the server's answer, or nil when there was nothing to tick or the
+    /// tick failed (the row then shows its last confirmed state).
+    func tick(_ item: LibraryItem) async -> TVActionResponse? {
+        let ref = item.media.ref
+        guard ref.mediaType == "tv", let upNext = item.tracking.tv?.upNext, !pendingIDs.contains(item.id) else {
+            return nil
+        }
+        pendingIDs.insert(item.id)
+        errorMessage = nil
+        defer { pendingIDs.remove(item.id) }
+
+        do {
+            let response = try await trackingRepository.performTVAction(
+                source: ref.source,
+                mediaId: ref.mediaId,
+                action: .tick,
+                request: TVActionRequest(
+                    seasonNumber: upNext.seasonNumber,
+                    episodeNumber: upNext.episodeNumber,
+                    mutationId: UUID()
+                )
+            )
+            followUp(for: ref).handle(response.envelope)
+            MediaStateChange.post(ref: ref, origin: changeOrigin)
+            return response
+        } catch is CancellationError {
+            return nil
+        } catch {
+            errorMessage = (error as? APIError)?.apiErrorMessage ?? error.localizedDescription
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+            return nil
+        }
+    }
+
+    /// One follow-up per show; a new show replaces an idle one.
+    private func followUp(for ref: MediaRef) -> TVWriteFollowUp {
+        if let followUp, followUp.showRef == (ref.parentTVRef ?? ref) {
+            return followUp
+        }
+        let next = TVWriteFollowUp(showRef: ref, trackingRepository: trackingRepository, mediaRepository: mediaRepository)
+        followUp = next
+        return next
+    }
+}
+
+/// The row text and tick under a show in Continue Watching: "S1 E2 next" or "S3 E1 · New" (TV-701).
+struct ContinueWatchingTickLine: View {
+    let tv: TVShowState
+    let isPending: Bool
+    /// The narrow Profile rail: a smaller tick, and text that shrinks to fit.
+    var compact = false
+    let onTick: () -> Void
+
+    var body: some View {
+        if let upNext = tv.upNext, let line = TVTrackingPresentation.continueWatchingLine(for: tv) {
+            HStack(spacing: compact ? 2 : 5) {
+                Button(action: onTick) {
+                    Image(systemName: isPending ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: compact ? 13 : 15, weight: .semibold))
+                        .foregroundStyle(isPending ? Color.green : Color.white.opacity(0.72))
+                        .contentTransition(.symbolEffect(.replace))
+                        .frame(width: compact ? 20 : 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isPending)
+                .sensoryFeedback(.success, trigger: isPending) { _, pending in pending }
+                .accessibilityLabel("Mark \(TVTrackingPresentation.episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)) watched")
+
+                Text(line)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(upNext.isNew ? Color.white : Color.white.opacity(0.54))
+                    .lineLimit(1)
+                    .minimumScaleFactor(compact ? 0.7 : 1)
+            }
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class HomeViewModel {
@@ -13,6 +123,9 @@ final class HomeViewModel {
     var inProgressErrorMessage: String?
     var activityErrorMessage: String?
 
+    /// Continue Watching's inline tick (TV-100, TV-701).
+    let continueWatching: ContinueWatchingTicks
+
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
@@ -22,12 +135,18 @@ final class HomeViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
+        mediaRepository: MediaRepository? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
+        continueWatching = ContinueWatchingTicks(
+            trackingRepository: trackingRepository,
+            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     func load() async {
@@ -80,6 +199,16 @@ final class HomeViewModel {
             inProgressErrorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
+    }
+
+    /// Ticks a show's up-next episode from Continue Watching. The row takes the server's state at once; then the
+    /// rail reloads, since the show may move or leave (caught up or finished, TV-701).
+    func tickUpNext(_ item: LibraryItem) async {
+        guard let response = await continueWatching.tick(item) else { return }
+        if let tracking = response.tracking, let index = inProgressItems.firstIndex(where: { $0.id == item.id }) {
+            inProgressItems[index] = LibraryItem(media: inProgressItems[index].media, tracking: tracking)
+        }
+        await loadInProgress()
     }
 
     func loadActivity() async {
@@ -157,6 +286,7 @@ struct HomeView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
+            mediaRepository: mediaRepository,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -204,7 +334,9 @@ struct HomeView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
+                // A Continue Watching tick refreshes its own rail.
+                if notification.userInfo?["origin"] as? UUID == viewModel.continueWatching.changeOrigin { return }
                 Task { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
@@ -247,6 +379,30 @@ struct HomeView: View {
                     onSelectTab: onSelectTab,
                     onUnauthorized: onUnauthorized
                 )
+            }
+            .background {
+                // The earlier-episodes question, then the season-finish composer, after a Continue Watching tick.
+                if let followUp = viewModel.continueWatching.followUp {
+                    Color.clear
+                        .tvWriteFollowUp(followUp) { item in
+                            MediaLogView(
+                                detail: item.detail,
+                                trackingRepository: trackingRepository,
+                                diaryRepository: diaryRepository,
+                                onUnauthorized: onUnauthorized,
+                                onSaved: {},
+                                tvComposer: item.finished.composer
+                            )
+                        }
+                }
+            }
+            .alert("Could not mark watched", isPresented: Binding(
+                get: { viewModel.continueWatching.errorMessage != nil },
+                set: { if !$0 { viewModel.continueWatching.errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.continueWatching.errorMessage ?? "")
             }
             .fullScreenCover(item: $selectedActivityEntry, onDismiss: { selectedActivityEntry = nil }) { selection in
                 DiaryLogDetailNavigationCover(
@@ -333,7 +489,11 @@ struct HomeView: View {
                     }
                 } else {
                     SpineRail(items: viewModel.inProgressItems) { item in
-                        HomeInProgressPoster(item: item) {
+                        HomeInProgressPoster(
+                            item: item,
+                            isTickPending: viewModel.continueWatching.isPending(item),
+                            onTick: { Task { await viewModel.tickUpNext(item) } }
+                        ) {
                             selectedRef = item.media.ref
                         }
                     }
@@ -551,40 +711,56 @@ private struct HomeAvatar: View {
 
 private struct HomeInProgressPoster: View {
     let item: LibraryItem
+    var isTickPending = false
+    var onTick: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                MediaArtwork(
-                    url: item.media.displayPosterURL,
-                    title: item.media.title,
-                    slot: .carousel,
-                    mediaType: item.media.ref.mediaType,
-                    orientation: item.media.posterOrientation
-                )
-                .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
+        VStack(alignment: .leading, spacing: 3) {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 8) {
+                    MediaArtwork(
+                        url: item.media.displayPosterURL,
+                        title: item.media.title,
+                        slot: .carousel,
+                        mediaType: item.media.ref.mediaType,
+                        orientation: item.media.posterOrientation
+                    )
+                    .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.media.displayTitle)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.media.displayTitle)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
 
-                    if let progressDelta {
-                        ProgressDeltaInlineView(delta: progressDelta)
-                    } else {
-                        Text(metadataText)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white.opacity(0.54))
-                            .lineLimit(1)
+                        if continueWatching == nil {
+                            if let progressDelta {
+                                ProgressDeltaInlineView(delta: progressDelta)
+                            } else {
+                                Text(metadataText)
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white.opacity(0.54))
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
             }
-            .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
+            .buttonStyle(.plain)
+            .accessibilityLabel("View \(item.media.displayTitle), \(metadataText)")
+
+            // A show in Continue Watching: its up next with a tick (TV-701), outside the poster's button.
+            if let continueWatching {
+                ContinueWatchingTickLine(tv: continueWatching, isPending: isTickPending, onTick: onTick)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("View \(item.media.displayTitle), \(metadataText)")
+        .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
+    }
+
+    private var continueWatching: TVShowState? {
+        guard item.media.ref.mediaType == "tv", let tv = item.tracking.tv, tv.upNext != nil else { return nil }
+        return tv
     }
 
     private var progressDelta: ProgressChangeDisplay? {
@@ -595,7 +771,10 @@ private struct HomeInProgressPoster: View {
     }
 
     private var metadataText: String {
-        item.tracking.homeProgressText(preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref))
+        if let continueWatching, let line = TVTrackingPresentation.continueWatchingLine(for: continueWatching) {
+            return line
+        }
+        return item.tracking.homeProgressText(preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref))
     }
 }
 

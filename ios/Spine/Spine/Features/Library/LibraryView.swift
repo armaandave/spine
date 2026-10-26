@@ -18,6 +18,15 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     func title(mediaType: String) -> String {
+        if mediaType == "tv" {
+            // TV-002: Watching is the display name of the shared In progress status.
+            switch self {
+            case .currentlyReading: return "Watching"
+            case .didNotFinish: return "Dropped"
+            case .read: return "Completed"
+            default: return rawValue
+            }
+        }
         if mediaType == "game" {
             switch self {
             case .currentlyReading: return "Playing"
@@ -31,9 +40,53 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
     }
 
     static func available(for mediaType: String) -> [LibraryShelf] {
-        ["book", "game"].contains(mediaType)
-            ? [.planning, .currentlyReading, .paused, .didNotFinish, .read]
-            : [.tracked, .planning]
+        switch mediaType {
+        case "book", "game":
+            [.planning, .currentlyReading, .paused, .didNotFinish, .read]
+        case "tv":
+            // TV-002: Watching, Planning, Paused, Dropped and Completed, one card per show (TV-001).
+            [.currentlyReading, .planning, .paused, .didNotFinish, .read]
+        default:
+            [.tracked, .planning]
+        }
+    }
+
+    /// Whether the type's library is split by status, one section per status, with a section picker.
+    static func usesStatusShelves(_ mediaType: String) -> Bool {
+        ["book", "game", "tv"].contains(mediaType)
+    }
+
+    /// The section a media type opens on when the current one isn't one of its sections.
+    static func defaultShelf(for mediaType: String) -> LibraryShelf {
+        usesStatusShelves(mediaType) ? .currentlyReading : .tracked
+    }
+
+    /// A section another screen asked for, for the current type. TV has no Tracked section, so the Library link
+    /// opens Watching.
+    static func resolved(_ requested: LibraryShelf, for mediaType: String) -> LibraryShelf {
+        guard mediaType == "tv", !available(for: mediaType).contains(requested) else { return requested }
+        return defaultShelf(for: mediaType)
+    }
+
+    /// TV-700: each empty TV section says what appears there.
+    static func tvEmptyTitle(_ shelf: LibraryShelf) -> String {
+        switch shelf {
+        case .currentlyReading, .tracked: "No shows in Watching"
+        case .planning: "No shows in Planning"
+        case .paused: "No paused shows"
+        case .didNotFinish: "No dropped shows"
+        case .read: "No completed shows"
+        }
+    }
+
+    static func tvEmptyMessage(_ shelf: LibraryShelf) -> String {
+        switch shelf {
+        case .currentlyReading, .tracked: "Shows you're watching will appear here."
+        case .planning: "Shows you plan to watch will appear here."
+        case .paused: "Shows you pause will appear here."
+        case .didNotFinish: "Shows you drop will appear here."
+        case .read: "Shows you finish, or are caught up on between seasons, will appear here."
+        }
     }
 
     var apiStatus: String {
@@ -182,7 +235,7 @@ final class LibraryViewModel {
             mediaType = mediaTypes.first ?? "movie"
         }
         if !availableShelves.contains(shelf) {
-            shelf = ["book", "game"].contains(mediaType) ? .currentlyReading : .tracked
+            shelf = LibraryShelf.defaultShelf(for: mediaType)
         }
     }
 
@@ -191,7 +244,7 @@ final class LibraryViewModel {
         guard mediaType != type || query != selectedQuery else { return }
         mediaType = type
         if !availableShelves.contains(shelf) {
-            shelf = ["book", "game"].contains(type) ? .currentlyReading : .tracked
+            shelf = LibraryShelf.defaultShelf(for: type)
         }
         query = selectedQuery
         filter.genres = []
@@ -522,7 +575,7 @@ struct LibraryView: View {
 
     private func consumeRequestedShelf() {
         guard let requestedShelf else { return }
-        viewModel.shelf = requestedShelf
+        viewModel.shelf = LibraryShelf.resolved(requestedShelf, for: viewModel.mediaType)
         self.requestedShelf = nil
     }
 
@@ -535,6 +588,9 @@ struct LibraryView: View {
 
     private func validateSelectedMediaType() {
         viewModel.mediaType = mediaLensStore.validateSelection(in: viewModel.mediaTypes)
+        if !viewModel.availableShelves.contains(viewModel.shelf) {
+            viewModel.shelf = LibraryShelf.defaultShelf(for: viewModel.mediaType)
+        }
     }
 
     private var header: some View {
@@ -593,7 +649,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var shelfPicker: some View {
-        if ["book", "game"].contains(viewModel.mediaType) {
+        if LibraryShelf.usesStatusShelves(viewModel.mediaType) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 7) {
                     ForEach(viewModel.availableShelves) { shelf in
@@ -727,6 +783,9 @@ struct LibraryView: View {
         if !viewModel.query.isEmpty {
             return "No \(MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()) found"
         }
+        if viewModel.mediaType == "tv" {
+            return LibraryShelf.tvEmptyTitle(viewModel.shelf)
+        }
         let mediaName = MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()
         switch viewModel.shelf {
         case .tracked:
@@ -749,9 +808,10 @@ struct LibraryView: View {
             return StreamingFilterCopy.emptyMessage
         }
         if !viewModel.query.isEmpty {
-            return "No matches for \"\(viewModel.query)\" in \(viewModel.shelf.rawValue.lowercased())."
+            return "No matches for \"\(viewModel.query)\" in \(viewModel.shelf.title(mediaType: viewModel.mediaType).lowercased())."
         }
         if viewModel.mediaType == "game" { return "Games with this status will appear here." }
+        if viewModel.mediaType == "tv" { return LibraryShelf.tvEmptyMessage(viewModel.shelf) }
         switch viewModel.shelf {
         case .tracked:
             return "Consumed, logged, watched, read, or played media will appear here."
@@ -799,7 +859,7 @@ struct LibraryView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("View \(item.media.title)")
+                .accessibilityLabel(gridAccessibilityLabel(item))
                 .prefetchingArtwork(after: item, in: items) { $0.media.artworkRequest(slot: .tagGrid) }
                 .task {
                     await viewModel.loadNextPageIfNeeded(currentItem: item)
@@ -810,6 +870,7 @@ struct LibraryView: View {
     }
 
     private func bookProgressBadge(_ item: LibraryItem) -> String? {
+        if item.media.ref.mediaType == "tv" { return TVLibraryCard.gridBadge(for: item) }
         if item.media.ref.mediaType == "game" {
             let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""
             return text.isEmpty ? nil : text
@@ -821,6 +882,11 @@ struct LibraryView: View {
             return text
         }
         return LibraryViewModel.hasStatus(item, "Completed") ? "Complete" : nil
+    }
+
+    private func gridAccessibilityLabel(_ item: LibraryItem) -> String {
+        guard item.media.ref.mediaType == "tv" else { return "View \(item.media.title)" }
+        return "View \(item.media.title), \(TVLibraryCard.line(for: item))"
     }
 
     private func libraryList(_ items: [LibraryItem]) -> some View {
@@ -905,6 +971,36 @@ struct LibraryView: View {
     }
 }
 
+/// What a show's Library card says (TV-700), from the list variant of its TV state.
+enum TVLibraryCard {
+    /// The section's card line, such as "S2 E4 next · 13 of 20" or "Paused at S2 E3", else the section's name.
+    static func line(
+        for item: LibraryItem,
+        today: Date = Date(),
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        if let tv = item.tracking.tv,
+           let line = TVTrackingPresentation.cardLine(for: tv, today: today, calendar: calendar) {
+            return line
+        }
+        return statusTitle(item.tracking.tv?.status ?? item.tracking.status)
+    }
+
+    /// The short badge on a grid poster: the episode up next while the show is Watching, Paused or Dropped.
+    static func gridBadge(for item: LibraryItem) -> String? {
+        guard let tv = item.tracking.tv, !tv.caughtUp,
+              ["In progress", "Paused", "Dropped"].contains(tv.status ?? "")
+        else { return nil }
+        return tv.upNextCode
+    }
+
+    /// A TV status by its section's name: "In progress" reads "Watching" (TV-002).
+    static func statusTitle(_ status: String?) -> String {
+        let shelf = LibraryShelf.available(for: "tv").first { $0.matches(status: status) }
+        return shelf?.title(mediaType: "tv") ?? status ?? "Tracked"
+    }
+}
+
 private struct LibraryViewModeToggle: View {
     @Binding var selection: LibraryViewMode
 
@@ -978,7 +1074,7 @@ private struct LibraryListRow: View {
                     .foregroundStyle(.white)
                     .lineLimit(2)
 
-                Text(item.tracking.status.map(item.media.ref.trackingStatusLabel) ?? "Tracked")
+                Text(statusLine)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white.opacity(0.62))
                     .lineLimit(1)
@@ -1008,8 +1104,19 @@ private struct LibraryListRow: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// TV cards say where you are (TV-700); other types show their status.
+    private var statusLine: String {
+        if item.media.ref.mediaType == "tv" { return TVLibraryCard.line(for: item) }
+        return item.tracking.status.map(item.media.ref.trackingStatusLabel) ?? "Tracked"
+    }
+
     private var metadataText: String {
         var parts: [String] = []
+        if item.media.ref.mediaType == "tv" {
+            // The show's own stars, drawn from TV's 0-10 scale (TV-500, TV-504); counts are on the card line.
+            if let stars = item.tracking.rating?.starCount(mediaType: "tv") { parts.append("\(stars) stars") }
+            return parts.joined(separator: " - ")
+        }
         if let rating = item.tracking.rating {
             parts.append("\(rating) stars")
         }
