@@ -70,6 +70,28 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(viewModel.shelf, .tracked, "Movies have no Watching section")
     }
 
+    func testSwitchingTheLibraryToTVLoadsItsSectionOnce() async {
+        let options = CountingFilterOptionsRepository()
+        let viewModel = LibraryViewModel(
+            mediaRepository: media,
+            trackingRepository: tracking,
+            filterOptionsRepository: options,
+            onUnauthorized: {}
+        )
+
+        // Movies' Tracked becomes TV's Watching; the Library's section change handler then runs too.
+        await viewModel.selectMediaType("tv")
+        await viewModel.shelfDidChange()
+        XCTAssertEqual(tracking.listRequests, [.init(mediaType: "tv", status: "In progress")])
+        XCTAssertEqual(options.requestCount, 1)
+
+        // A section the user picks still loads, once.
+        viewModel.shelf = .paused
+        await viewModel.shelfDidChange()
+        XCTAssertEqual(tracking.listRequests.map(\.status), ["In progress", "Paused"])
+        XCTAssertEqual(options.requestCount, 2)
+    }
+
     func testTV700CardLinesSayWhereYouAre() {
         let today = Self.day("2026-10-26") // a Monday
 
@@ -896,4 +918,13 @@ struct SurfacesActivityRepository: ActivityRepository {
 
 struct SurfacesFilterOptionsRepository: FilterOptionsRepository {
     func options(scope: MediaFilterScope, filter: MediaFilterState) async throws -> MediaFilterOptionsResponse { .empty }
+}
+
+final class CountingFilterOptionsRepository: FilterOptionsRepository {
+    private(set) var requestCount = 0
+
+    func options(scope: MediaFilterScope, filter: MediaFilterState) async throws -> MediaFilterOptionsResponse {
+        requestCount += 1
+        return .empty
+    }
 }

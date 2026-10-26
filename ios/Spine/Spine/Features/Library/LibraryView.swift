@@ -262,6 +262,15 @@ final class LibraryViewModel {
         await reload()
     }
 
+    /// The section changed, from its picker or another screen's link. A switch of media type already loads the
+    /// section it moves to, so a change the shown request already covers loads nothing twice.
+    func shelfDidChange() async {
+        guard presentedScope != currentRequestScope else { return }
+        await loadFilterOptions(clearingUnconfirmedExternalSortOnFailure: true)
+        guard !Task.isCancelled else { return }
+        await reload()
+    }
+
     /// Any Service filter turns off; otherwise My services turns on.
     func toggleMyServices() async {
         filter.service = filter.service.isActive ? .any : .mine
@@ -526,11 +535,7 @@ struct LibraryView: View {
                 consumeRequestedShelf()
             }
             .onChange(of: viewModel.shelf) {
-                Task {
-                    await viewModel.loadFilterOptions(clearingUnconfirmedExternalSortOnFailure: true)
-                    guard !Task.isCancelled else { return }
-                    await viewModel.reload()
-                }
+                Task { await viewModel.shelfDidChange() }
             }
             .onChange(of: mediaLensStore.selectedMediaType) {
                 Task { await viewModel.selectMediaType(mediaLensStore.selectedMediaType, searchText: searchDraftText) }

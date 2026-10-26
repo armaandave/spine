@@ -1,9 +1,10 @@
 # TV Tracking Simulator Verification Record
 
-Overall status: **VERIFIED WITH ONE OPEN APP DEFECT**
+Overall status: **VERIFIED; DEFECTS V-01 TO V-06 FIXED AND RE-RUN**
 
 Every flow below matched the laws in [the TV tracking contract](tv-tracking-contract.md) in the real Spine Dev app.
-One high-severity defect remains open: the Home screen can freeze on its first render (V-01).
+The run found six defects. Each was fixed at its cause and its flow re-run (see [Fixes and re-run](#fixes-and-re-run)).
+V-01, the Home freeze, didn't recur on the fixed build, but it also didn't recur on the pre-fix build in the re-run, so the re-run doesn't prove that fix.
 The record omits credentials, tokens and provider keys.
 
 ## Run metadata
@@ -153,7 +154,7 @@ Notes that aren't defects:
 - Not run here: webhooks, imports, export, other time zones, PostgreSQL, the hourly airing job.
 - Episodes airing while a show is caught up (TV-206) weren't observed live; neither show's next episode aired during the run.
 - B's Watching state after the first season log was checked through the API and the Continue Watching payload, not with a Library screenshot. Its Completed state was checked in the Library.
-- V-01's cause is unconfirmed; the next step is reproducing it on a `myapp-main` build, or with Instruments' SwiftUI template, in the same data state.
+- V-01's cause is inferred from the hang samples, not proven: the re-run couldn't make the pre-fix build freeze (see [Fixes and re-run](#fixes-and-re-run)).
 
 ## Runs and cleanup
 
@@ -164,4 +165,54 @@ Notes that aren't defects:
 | `8483cf0d` | Scratch simulator (`--queue ios --lane sim`); installed, launched and slept; never compiled | Stopped; `cleanup_complete` true, no leftovers; simulator deleted |
 | `05fd9441`, `bce25258` | `reconcile_tv` dry runs | `command_exit` 0, `cleanup_complete` true, no leftovers |
 
-No code was changed, and nothing was pushed, deployed or installed on a phone.
+No code was changed in this run, and nothing was pushed, deployed or installed on a phone.
+
+## Fixes and re-run
+
+The fixes, with the tests that pin them:
+
+| ID | Cause | Fix | Test |
+| --- | --- | --- | --- |
+| V-01 | The hang samples loop in SwiftUI's lazy placement: a `LazyVStack` of activity rows, nested in Home's page-level `LazyVStack`, measuring `ActivityFeedRow` again and again. Lazy stacks place rows from estimated heights, and nested ones can keep re-placing them. | Home's page stack and its activity list are plain `VStack`s (`ios/Spine/Spine/Features/Home/HomeView.swift:311-314`, `:538`). Home holds three sections and at most six rows, so nothing needs laziness. The full Activity page keeps its single lazy stack for paging. | None: a layout loop that depends on screen position can't be pinned in a unit test. Re-run below. |
+| V-02 | SQLite's deferred transactions: an atomic write that reads first can't wait for another writer; SQLite fails it at once with "database is locked". | The SQLite settings begin every transaction `IMMEDIATE` and wait up to 20 seconds for a busy file (`src/config/database_settings.py`, used by `src/config/settings.py:244-246`). PostgreSQL settings are unchanged. | `src/config/tests/test_database_settings.py`: an atomic read-then-write while another connection holds a write. It fails with "database is locked" without the options and passes with them. |
+| V-03 | `ActivityFeedPresentation.actionText` had no case for `rating_updated`. | It reads "rated a TV show", "rated a season", "rated a movie" and so on (`ios/Spine/Spine/Features/Home/ActivityFeedView.swift:432-433`). | `ActivityPeopleTests.testDirectStarsReadAsARating` |
+| V-04 | `selectedTitle` added the season only when the composer's detail was the show; the season page and the season-finish composer pass the season's detail, whose title is the show's. | Season targets read "Show · Season N" from the show, the season page and the season-finish composer (`ios/Spine/Spine/Features/MediaDetail/MediaLogView.swift:215-222`). | `TVTrackingPagesTests.testTV404SeasonLogsNameTheSeasonFromTheSeasonPage` |
+| V-05 | `MediaRef.displayTitle` and the season chip printed the raw number; the episode row's VoiceOver label left out the trailing air-date text. | Season 0 reads "Show Specials" and its chip "Specials" (`ios/Spine/Spine/Core/Models/MediaModels.swift:21-25`, `ios/Spine/Spine/Features/MediaDetail/MediaDetailView.swift:4246-4249`). The row's label now says "Air date to be announced" or "Airs Mar 12", and the duplicate trailing text is hidden from VoiceOver (`ios/Spine/Spine/Features/MediaDetail/TVTrackingViews.swift:205-210`, used at `MediaDetailView.swift:8678`). | `TVTrackingPagesTests.testTV004SpecialsReadAsSpecials`, and new assertions in `testTV103UnlistedEpisodesComeLastAndUnairedOnesShowTheirDate` |
+| V-06 | Switching type moved the section from Tracked to Watching, and the section's `onChange` loaded again what the switch was already loading. | `LibraryViewModel.shelfDidChange()` loads only when the section changes the request (`ios/Spine/Spine/Features/Library/LibraryView.swift:265-272`, `:537-539`). | `TVTrackingSurfacesTests.testSwitchingTheLibraryToTVLoadsItsSectionOnce` |
+
+The 8 undated Specials keeping the season "Airing" (in V-05's row) follow TV-200 and were left as they are.
+
+### Re-run
+
+| Field | Recorded value |
+| --- | --- |
+| Run | 2026-10-26, 10:35 to 11:01 EDT (14:35 to 15:01 UTC) |
+| Builds | Pre-fix: the original run's Spine Dev build of `c70a7f99`, copied aside. Fixed: the worktree with the fixes above, built the same way. |
+| Simulator | New scratch iPhone 17, iOS 26.5, UDID `8B9A9E47-1C03-45BD-AC92-CB0196CB3170`, created and deleted by the cleanup helper |
+| Backend | `scripts/ios/local-backend.sh` from this worktree on `127.0.0.1:8001`, with the V-02 fix, on the same SQLite database as the original run; dev user `claude` |
+| Evidence | `/Users/armaandave/Library/Caches/tv-tracking/rerun/screens/` (paths below are relative to it) |
+
+Test-setup writes through the API, as the dev user, before and during the re-run:
+
+- to rebuild V-01's state: deleted diary entries 7 (The IT Crowd Season 3) and 6 (Sherlock S1 E1, whose tick stays, TV-406); cleared Sherlock's show stars; unticked Sherlock S2 E1; paused The IT Crowd and Black Books; logged Fleabag Season 1 again with Rewatch on;
+- for V-02: 33 episode-page reads and 4 rate/clear writes on Black Books, all at once, then cleared Black Books' stars;
+- for V-03: set Sherlock's show stars to 4 (the request the app's Rate sends), because taps on the laggy simulator kept missing the Rate button.
+
+| ID | Re-run | Result | Evidence |
+| --- | --- | --- | --- |
+| V-01 | The original freeze states: Continue Watching with only Sherlock ("S2 E1 next") and four activity rows, first as entries 1, 2, 3 and 6, then as the 13:57 state (Fleabag S1, Fleabag S2, Fleabag S1, Sherlock S1). Pre-fix build: 14 cold launches (5 with empty image caches, on the new simulator or a fresh install; 7 across every text size from extra small to extra extra extra large) and 2 Go to Home returns. Fixed build: 11 cold launches (1 on a fresh install, 7 across the text sizes, 1 later with six activity rows) and 1 Go to Home return. | PASS on the fixed build: Home rendered every time, and the app was idle (0% CPU) 6 seconds after each launch. **The pre-fix build didn't freeze either**, so this re-run shows no regression but doesn't prove the fix; the fix rests on the hang samples. | `R-V01-fixed-fresh-install-home.jpg` |
+| V-02 | In the app: ticked Sherlock S2 E1 to E3 on the season page and saved the Log Season composer with 4 stars. Through the API: the concurrent reads and writes above, while the Celery worker enriched ratings. | PASS: the save answered 201 at once; all 37 concurrent requests answered 200; the server and worker logs show no "database is locked", no `OperationalError` and no 500 for the whole re-run. | server log; `src/config/tests/test_database_settings.py` |
+| V-03 | Direct stars on Sherlock, then Home. | PASS: the row reads "claude · rated a TV show", Sherlock, ★★★★. | `R-V03-home-rated-a-tv-show.jpg` |
+| V-04 | Finished Sherlock Season 2 from its season page (one request per tick); the finale opened Log Season. | PASS: the heading reads "Sherlock · Season 2". | `R-V04-season-page-finish-composer-names-season.jpg` |
+| V-05 | Opened Black Books' Specials. | PASS: the header reads "Black Books Specials" with a "Specials" chip; the undated rows read, for example, "Episode 6, Deleted Scenes - Series 2 Episode 1. Air date to be announced", and the trailing "TBA" is drawn. | `R-V05-specials-header-and-chip.jpg`, `R-V05-specials-tba-rows.jpg` |
+| V-06 | Library on Movies, then TV, then Paused. | PASS: switching to TV sent one `filter-options` and one `tracking/?media_type=tv&status=In progress`; Paused sent one of each. On the pre-fix build the same switch sent each twice. | `R-V06-library-tv-paused-one-request-each.jpg`, server log |
+
+Re-run runs and cleanup:
+
+| Run | Purpose | Receipt |
+| --- | --- | --- |
+| `d8ea5e3c` | Local backend (`--timeout 14400`) | Stopped; `cleanup_complete` true, no leftovers; port 8001 free afterwards |
+| `6b819f0d` | Scratch simulator (`--queue ios --lane sim`); installed, launched and held; never compiled | Stopped; `cleanup_complete` true, no leftovers; simulator deleted |
+| `7251ca6a` | Fixed simulator build (`--queue ios`) | `command_exit` 0, exit 125: one detached Xcode helper (`ibtoold`), gone when checked afterwards |
+| `5fae8e6a` | `scripts/check.sh` | `command_exit` 0, no leftovers: ruff clean, no missing migrations, 2,967 tests OK (34 skipped) |
+| `19faa943` | Full `SpineTests` on a scratch simulator (`--queue ios`) | `command_exit` 0, no leftovers, simulator deleted: 1,057 tests, 0 failures |

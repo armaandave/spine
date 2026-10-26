@@ -522,6 +522,23 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(composer.selectedTitle, "The Show · Season 1")
     }
 
+    func testTV404SeasonLogsNameTheSeasonFromTheSeasonPage() {
+        // Log Season from the season's + menu.
+        let fromMenu = logModel(Fixtures.seasonDetail(episodes: [Fixtures.episode(1)]))
+        XCTAssertEqual(fromMenu.selectedTitle, "The Show · Season 1")
+
+        // The season-finish composer opens on the season's own detail (TV-403).
+        let afterFinishing = MediaLogViewModel(
+            detail: Fixtures.seasonDetail(episodes: [Fixtures.episode(1, watched: true)]),
+            trackingRepository: tracking,
+            diaryRepository: PagesDiaryRepository(),
+            onUnauthorized: {},
+            onSaved: {},
+            tvComposer: Fixtures.finished(season: 1).composer
+        )
+        XCTAssertEqual(afterFinishing.selectedTitle, "The Show · Season 1")
+    }
+
     func testTV404RewatchIsTheServersDefaultNotTheLogCount() {
         var tv = Fixtures.show(composer: Fixtures.showComposer)
         tv.started = true
@@ -798,6 +815,21 @@ final class TVTrackingPagesTests: XCTestCase {
                        "An unlisted episode has no tick, only an untick for its viewings.")
         XCTAssertEqual(TVEpisodeTrailing.resolve(Fixtures.episode(12, watched: true, viewing: 8, listed: false), isWatched: true),
                        .tick(watched: true))
+
+        // The row's VoiceOver label says when an unaired episode airs, including "TBA".
+        XCTAssertEqual(TVEpisodeTrailing.airDate("TBA").accessibilityAirDate, "Air date to be announced")
+        XCTAssertEqual(TVEpisodeTrailing.airDate("Mar 12").accessibilityAirDate, "Airs Mar 12")
+        XCTAssertNil(TVEpisodeTrailing.tick(watched: false).accessibilityAirDate)
+        XCTAssertNil(TVEpisodeTrailing.none.accessibilityAirDate)
+    }
+
+    func testTV004SpecialsReadAsSpecials() {
+        func season(_ number: Int) -> MediaRef {
+            MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "903", seasonNumber: number, episodeNumber: nil)
+        }
+        XCTAssertEqual(season(0).displayTitle("Black Books"), "Black Books Specials")
+        XCTAssertEqual(season(2).displayTitle("Black Books"), "Black Books S2")
+        XCTAssertEqual(TVTrackingPresentation.seasonTitle(0), "Specials")
     }
 
     func testTV000WatchingAndTheCaughtUpRewatchAndProgressLines() {

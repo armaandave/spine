@@ -201,6 +201,13 @@ enum TVEpisodeTrailing: Equatable {
         }
         return tv.listed ? .tick(watched: false) : .none
     }
+
+    /// When an unaired episode airs, as its row reads to VoiceOver: "Airs Mar 12", or "Air date to be announced"
+    /// for "TBA". Nil when the row has a tick or nothing.
+    var accessibilityAirDate: String? {
+        guard case let .airDate(text) = self else { return nil }
+        return text == "TBA" ? "Air date to be announced" : "Airs \(text)"
+    }
 }
 
 /// The episode tick: an SF Symbol button with a haptic (TV-100, TV-102).

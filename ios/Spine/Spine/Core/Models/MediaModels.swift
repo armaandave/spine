@@ -18,9 +18,10 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         ].joined(separator: ":")
     }
 
+    /// "Show S2" for a season; Season 0 reads "Show Specials" (TV-004).
     func displayTitle(_ title: String) -> String {
         guard mediaType == "season", let seasonNumber else { return title }
-        return "\(title) S\(seasonNumber)"
+        return seasonNumber == 0 ? "\(title) Specials" : "\(title) S\(seasonNumber)"
     }
 
     var isEpisode: Bool {

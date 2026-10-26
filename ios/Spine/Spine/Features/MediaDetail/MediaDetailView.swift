@@ -4245,7 +4245,7 @@ private struct MediaDetailPageView: View {
 
     private func seasonChipLabel(_ detail: MediaDetail) -> String? {
         guard let seasonNumber = detail.ref.seasonNumber, detail.ref.mediaType == "season" else { return nil }
-        return "Season \(seasonNumber)"
+        return TVTrackingPresentation.seasonTitle(seasonNumber)
     }
 
     private func currentStatus(_ detail: MediaDetail) -> String? {
@@ -8623,10 +8623,11 @@ private struct EpisodeCard: View {
         case let .tick(watched):
             TVEpisodeTickButton(isWatched: watched, episodeTitle: "Episode \(row.episodeNumber)", action: onTick)
         case let .airDate(text):
+            // The row's own label says when it airs.
             Text(text)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.5))
-                .accessibilityLabel(text == "TBA" ? "Air date to be announced" : "Airs \(text)")
+                .accessibilityHidden(true)
         case .none:
             if onSelect != nil {
                 Image(systemName: "chevron.right")
@@ -8674,7 +8675,9 @@ private struct EpisodeCard: View {
 
     private var accessibilityDescription: String {
         var components = ["Episode \(row.episodeNumber), \(row.title)"]
-        if let airDate = row.summary?.airDate?.longDateLabel.nilIfEmpty {
+        if let airs = trailing.accessibilityAirDate {
+            components.append(airs)
+        } else if let airDate = row.summary?.airDate?.longDateLabel.nilIfEmpty {
             components.append("Aired \(airDate)")
         }
         if let runtime = row.summary?.runtime?.nilIfEmpty {

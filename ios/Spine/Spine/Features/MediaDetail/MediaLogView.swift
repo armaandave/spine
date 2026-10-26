@@ -212,8 +212,10 @@ final class MediaLogViewModel {
         )
     }
 
+    /// A season log reads "Show · Season 1" (TV-404), whether it opened from the show page, the season page or the
+    /// season-finish composer; a season's detail carries the show's title.
     var selectedTitle: String {
-        if let tvDraft, detail.ref.mediaType == "tv", tvDraft.target.level == .season {
+        if let tvDraft, ["tv", "season"].contains(detail.ref.mediaType), tvDraft.target.level == .season {
             return "\(detail.title) · \(tvDraft.target.title)"
         }
         guard tvDraft == nil, let selectedSeasonNumber else { return detail.title }

@@ -308,7 +308,10 @@ struct HomeView: View {
                     .opacity(HomeBackdropMotion.opacity(for: scrollOffset))
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 22) {
+                    // Plain stacks, here and in Activity: the page has three sections and at most six activity
+                    // rows. A frozen Home was sampled looping in the nested lazy stacks' placement of the activity
+                    // rows, which lazy stacks size from estimated heights (TV-705).
+                    VStack(alignment: .leading, spacing: 22) {
                         header
                         content
                             .spineContentTransition(value: contentPhase)
@@ -532,7 +535,7 @@ struct HomeView: View {
                         message: "Diary logs and progress updates will appear here."
                     )
                 } else {
-                    LazyVStack(spacing: 0) {
+                    VStack(spacing: 0) {
                         ForEach(viewModel.activityItems) { activity in
                             Button {
                                 handleActivityTap(activity)
