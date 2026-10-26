@@ -1412,6 +1412,59 @@ class Search(TestCase):
     @patch("app.providers.igdb.cache")
     @patch("app.providers.igdb.get_access_token", return_value="token")
     @patch("app.providers.igdb.services.api_request")
+    def test_igdb_search_matches_partly_typed_words(
+        self,
+        mock_api_request,
+        _mock_get_access_token,
+        mock_cache,
+    ):
+        """Test a word still being typed finds games when IGDB's search finds none."""
+        mock_cache.get.return_value = None
+        mock_api_request.side_effect = [
+            [],
+            {"count": 0},
+            [{"id": 1, "name": "The Witcher 3: Wild Hunt", "total_rating_count": 5000, "game_type": 0}],
+            {"count": 1},
+        ]
+
+        response = igdb.search("witcher 3 wil", 1)
+
+        self.assertEqual(response["total_results"], 1)
+        self.assertEqual(response["results"][0]["title"], "The Witcher 3: Wild Hunt")
+        name_search, name_count = mock_api_request.call_args_list[2:]
+        self.assertTrue(name_search.args[2].endswith("/games"))
+        self.assertTrue(name_count.args[2].endswith("/games/count"))
+        for request in (name_search, name_count):
+            body = request.kwargs["data"]
+            self.assertIn('name ~ *"witcher"* & name ~ *"3"* & name ~ *"wil"*', body)
+            self.assertIn("game_type", body)
+        self.assertIn("sort total_rating_count desc;", name_search.kwargs["data"])
+
+    @patch("app.providers.igdb.cache")
+    @patch("app.providers.igdb.get_access_token", return_value="token")
+    @patch("app.providers.igdb.services.api_request")
+    def test_igdb_preserved_partly_typed_search_skips_count_request(
+        self,
+        mock_api_request,
+        _mock_get_access_token,
+        mock_cache,
+    ):
+        mock_cache.get.return_value = None
+        mock_api_request.side_effect = [
+            [],
+            [{"id": 1, "name": "Cyberpunk 2077", "total_rating_count": 5000, "game_type": 0}],
+        ]
+
+        response = igdb.search("cyberpun", 1, preserve_ranking_fields=True)
+
+        self.assertEqual(mock_api_request.call_count, 2)
+        self.assertIn('name ~ *"cyberpun"*', mock_api_request.call_args.kwargs["data"])
+        self.assertEqual(response["total_results"], 1)
+        self.assertEqual(response["results"][0]["title"], "Cyberpunk 2077")
+
+    @patch("app.providers.igdb.cache")
+    @patch("app.providers.igdb.get_access_token", return_value="token")
+    @patch("app.providers.igdb.services.api_request")
     def test_igdb_preserved_search_skips_count_request(
         self,
         mock_api_request,
