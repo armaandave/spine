@@ -913,7 +913,7 @@ A season holding nothing under TV-205 stays stored but counts as not started.
 A one-time repair brings existing data under this contract:
 
 - It runs as a dry run by default, reports every status it would change, and is safe to run again.
-- It runs on the test backend first, and on production only when the user asks.
+- It runs on the test backend first, then on production right after the deploy that ships this contract.
 - It gives every existing season and show log its fills under TV-401, for the episodes that had aired when the log was saved, whether or not its target had tracking.
 - It links each existing episode log to one viewing of that episode: the one dated exactly at the log's date and time, else an unlinked one on the log's calendar day, else a new one on the log's date. Other viewings stay as ticks, and viewings that bulk completions dated with the completion time keep those dates.
 - It converts each existing TV log's date and time to a calendar date on the user's calendar, stored as single-weight dates are, and lists every log whose shown day changes.

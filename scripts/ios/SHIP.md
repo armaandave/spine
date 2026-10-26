@@ -135,18 +135,18 @@ TV shows stored before the TV tracking contract stay unworked until this repair 
 (`docs/tv-tracking-contract.md`, TV-801). Until then the new build's Continue Watching on
 Home and Profile leaves them out, shows and seasons that only have logs stay out of the
 Library, and Library rows count their episodes without the number aired. It runs on the
-test backend first, and on production only when the user asks (TV-801):
+test backend first, then on production right after the deploy. The user's "ship this"
+covers both (decided 2026-10-26):
 
 1. With the ship, after `scripts/ios/test-backend.sh update` (step 6), run
    `scripts/ios/test-backend.sh repair-tv`, a dry run that lists every status it would
    change. If its summary shows errors, stop and report. Otherwise run
    `scripts/ios/test-backend.sh repair-tv --apply`.
-2. Production waits for the user's request; "ship this" doesn't cover it. In the ship
-   report, say the repair is waiting and what it fixes. When the user asks, run the dry
-   run: `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
+2. On production, after the deploy is verified (step 8), run the dry run:
+   `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
    can't be repaired, stop and report. Otherwise run
    `docker exec spine python manage.py reconcile_tv --apply`. It is safe to run again: a
-   show already worked out reports nothing.
+   show already worked out reports nothing. The pre-deploy backup is the way back.
 3. Report each run's counts (shows checked and changed, newly in the Library, status
    changes).
 
