@@ -269,3 +269,41 @@ class MixedSearchRankTests(SimpleTestCase):
 
         self.assertEqual([item["media_id"] for item in single], ["high", "low"])
         self.assertEqual([item["media_id"] for item in mixed], ["high", "low"])
+
+    def test_words_found_in_the_artist_leave_the_rest_to_match_the_title(self):
+        def album(media_id, title, artist, users, listens):
+            return {
+                "media_id": media_id,
+                "title": title,
+                "artist_name": artist,
+                "image": f"https://example.com/{media_id}.jpg",
+                "first_release_date": "2022",
+                "total_user_count": users,
+                "total_listen_count": listens,
+            }
+
+        # MusicBrainz and ListenBrainz figures for "RENAISSANCE beyonce" (2026-10-26).
+        results = [
+            album("film", "RENAISSANCE: A Film by Beyoncé (Live)", "Beyoncé", 14, 676),
+            album("self-titled", "BEYONCÉ", "Beyoncé", 18_394, 318_906),
+            album("renaissance", "RENAISSANCE", "Beyoncé", 11_320, 453_186),
+            album("band", "Renaissance", "Renaissance", 239, 1_985),
+        ]
+
+        ranked = rank_results("RENAISSANCE beyonce", results, MediaTypes.MUSIC.value)
+
+        self.assertEqual(
+            [item["media_id"] for item in ranked],
+            ["renaissance", "film", "self-titled", "band"],
+        )
+        self.assertNotIn("artist_name", ranked[0])
+
+    def test_a_query_naming_only_the_artist_counts_every_word_found(self):
+        results = [
+            {"media_id": "west", "title": "West", "artist_name": "Lucinda Williams"},
+            {"media_id": "graduation", "title": "Graduation", "artist_name": "Kanye West"},
+        ]
+
+        ranked = rank_results("kanye west", results, MediaTypes.MUSIC.value)
+
+        self.assertEqual([item["media_id"] for item in ranked], ["graduation", "west"])
