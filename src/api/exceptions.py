@@ -62,6 +62,61 @@ class PersonProviderUnavailable(exceptions.APIException):
     default_code = "provider_unavailable"
 
 
+class TVValidationError(exceptions.APIException):
+    """An invalid TV request (plan 2.3.8): 400 validation_error.
+
+    detail is the user copy, or a {field: [messages]} dict for field errors.
+    """
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = "One or more fields are invalid."
+    default_code = "validation_error"
+
+
+class TVConflictError(exceptions.APIException):
+    """A TV action that isn't available now: 409 with the domain's code.
+
+    tv_log_blocks, tv_action_unavailable or tv_state_changed. A stale version carries
+    the show's new state version and count in error.tv (TV-705).
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "This change isn't available right now."
+    default_code = "tv_action_unavailable"
+
+    def __init__(self, detail=None, code=None, tv=None):
+        """Keep the domain's code on the instance, as BookTrackingConflict users do."""
+        super().__init__(detail=detail)
+        if code:
+            self.default_code = code
+        self.tv = tv or None
+
+
+class TVDetailsUnavailableError(exceptions.APIException):
+    """The provider can't be reached and nothing is stored (TV-103): retryable 503."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "TV details are unavailable right now"
+    default_code = "tv_details_unavailable"
+
+
+def tv_api_error(error):
+    """Return the API exception for a TV domain error, or None for anything else.
+
+    tv_tracking.TVConflict and its subclasses are 409s; tv_tracking.TVInvalid and
+    tv_listing.InvalidEpisode are 400s; tv_listing.TVDetailsUnavailable is a 503.
+    """
+    from app import tv_listing, tv_tracking
+
+    if isinstance(error, tv_tracking.TVConflict):
+        return TVConflictError(detail=error.message, code=error.code, tv=error.extra or None)
+    if isinstance(error, (tv_tracking.TVInvalid, tv_listing.InvalidEpisode)):
+        return TVValidationError(detail=error.message)
+    if isinstance(error, tv_listing.TVDetailsUnavailable):
+        return TVDetailsUnavailableError(detail=error.message)
+    return None
+
+
 def _code_for_status(status_code):
     if status_code == status.HTTP_401_UNAUTHORIZED:
         return "authentication_required"
@@ -78,6 +133,7 @@ def _code_for_status(status_code):
 
 def api_exception_handler(exc, context):
     """Return consistent JSON error envelopes for API clients."""
+    exc = tv_api_error(exc) or exc
     if isinstance(exc, ProviderAPIError):
         return Response(
             {
@@ -123,4 +179,7 @@ def api_exception_handler(exc, context):
             "request_id": context["request"].headers.get("X-Request-ID"),
         },
     }
+    if getattr(exc, "tv", None):
+        # tv_state_changed: the show's new version and count, so the app can ask again.
+        response.data["error"]["tv"] = exc.tv
     return response

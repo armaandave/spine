@@ -93,6 +93,19 @@ class CustomDurationField(forms.CharField):
             raise forms.ValidationError(msg) from e
 
 
+def manual_parent_seasons(user):
+    """Return the season Items of the manual shows the user tracks."""
+    return Item.objects.filter(
+        source=Sources.MANUAL.value,
+        media_type=MediaTypes.SEASON.value,
+        media_id__in=TV.objects.filter(
+            user=user,
+            item__source=Sources.MANUAL.value,
+            item__media_type=MediaTypes.TV.value,
+        ).values("item__media_id"),
+    ).order_by("title", "season_number")
+
+
 class ManualItemForm(forms.ModelForm):
     """Form for adding items to the database."""
 
@@ -103,9 +116,12 @@ class ManualItemForm(forms.ModelForm):
         label="Parent TV Show",
     )
 
+    # A season's Item, not its tracking: a season gets tracking only once something
+    # under it is watched (TV-205), so episodes can be added to any season of a
+    # manual show the user tracks.
     parent_season = forms.ModelChoiceField(
         required=False,
-        queryset=Season.objects.none(),
+        queryset=Item.objects.none(),
         empty_label="Select",
         label="Parent Season",
     )
@@ -133,11 +149,7 @@ class ManualItemForm(forms.ModelForm):
                 item__source=Sources.MANUAL.value,
                 item__media_type=MediaTypes.TV.value,
             )
-            self.fields["parent_season"].queryset = Season.objects.filter(
-                user=self.user,
-                item__source=Sources.MANUAL.value,
-                item__media_type=MediaTypes.SEASON.value,
-            )
+            self.fields["parent_season"].queryset = manual_parent_seasons(self.user)
         self.fields["image"].required = False
         self.fields["title"].required = False
 
@@ -170,8 +182,8 @@ class ManualItemForm(forms.ModelForm):
                         "Parent season is required for episodes",
                     )
                     return cleaned_data
-                cleaned_data["title"] = parent.item.title
-                cleaned_data["season_number"] = parent.item.season_number
+                cleaned_data["title"] = parent.title
+                cleaned_data["season_number"] = parent.season_number
         else:
             # For standalone media, title is required
             if not cleaned_data.get("title"):
@@ -191,8 +203,8 @@ class ManualItemForm(forms.ModelForm):
             instance.media_id = parent_tv.item.media_id
         elif instance.media_type == MediaTypes.EPISODE.value:
             parent_season = self.cleaned_data["parent_season"]
-            instance.media_id = parent_season.item.media_id
-            instance.season_number = parent_season.item.season_number
+            instance.media_id = parent_season.media_id
+            instance.season_number = parent_season.season_number
         else:
             instance.media_id = Item.generate_manual_id()
 

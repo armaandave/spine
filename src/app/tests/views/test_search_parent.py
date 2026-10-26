@@ -113,7 +113,11 @@ class SearchParentViewTests(TestCase):
         self.assertNotIn("results", response.context)
 
     def test_search_parent_season_valid_query(self):
-        """Test search_parent_season with a valid query."""
+        """Test search_parent_season with a valid query.
+
+        TV-205: results are season Items of the user's manual shows (they used to be
+        season tracking rows, which a season with nothing watched no longer has).
+        """
         response = self.client.get(reverse("search_parent_season") + "?q=Test")
 
         self.assertEqual(response.status_code, 200)
@@ -122,7 +126,7 @@ class SearchParentViewTests(TestCase):
         self.assertIn("query", response.context)
 
         self.assertEqual(len(response.context["results"]), 1)
-        self.assertEqual(response.context["results"][0], self.season1)
+        self.assertEqual(response.context["results"][0], self.season1.item)
         self.assertEqual(response.context["query"], "Test")
 
     def test_search_parent_season_no_results(self):

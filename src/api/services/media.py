@@ -46,6 +46,7 @@ from api.serializers.common import (
     saved_still_url,
     seasons_from_metadata,
     synopsis_from_payload,
+    user_state_for_item,
 )
 from api.services import completion as completion_service
 from api.services.filters import (
@@ -53,7 +54,7 @@ from api.services.filters import (
     person_rating_source,
     update_item_filter_metadata,
 )
-from app import config, single_weight
+from app import config, single_weight, tv_listing, tv_tracking
 from app.curation import (
     curated_image_url,
     is_curator,
@@ -1045,7 +1046,7 @@ def _fetch_detail_metadata(*, cache_key, source, media_type, media_id, season_nu
     return metadata
 
 
-def media_detail(
+def media_detail(  # noqa: C901, PLR0912, PLR0915
     *,
     source,
     media_type,
@@ -1071,6 +1072,9 @@ def media_detail(
         episode_number=episode_number,
         include_music_enrichment=include_music_enrichment,
     )
+    # Metadata fetched in this request, which also refreshes a show's stored episode
+    # lists (TV-103); a cached copy may be older than the stored lists.
+    fetched_metadata = None
 
     if media_type == MediaTypes.MUSIC.value:
         metadata = _music_cache_data(
@@ -1092,14 +1096,27 @@ def media_detail(
     else:
         metadata = cache.get(cache_key)
         if metadata is None:
-            metadata = _fetch_detail_metadata(
-                cache_key=cache_key,
-                source=source,
-                media_type=media_type,
-                media_id=media_id,
-                season_number=season_number,
-                episode_number=episode_number,
-            )
+            try:
+                metadata = _fetch_detail_metadata(
+                    cache_key=cache_key,
+                    source=source,
+                    media_type=media_type,
+                    media_id=media_id,
+                    season_number=season_number,
+                    episode_number=episode_number,
+                )
+            except provider_services.ProviderAPIError as error:
+                if media_type == MediaTypes.SEASON.value and error.status_code == requests.codes.not_found:
+                    # TV-103: a season the provider no longer lists.
+                    return _unlisted_season_detail(
+                        source=source,
+                        media_id=media_id,
+                        season_number=season_number,
+                        request=request,
+                        user=user,
+                    )
+                raise
+            fetched_metadata = metadata
 
     primary_metadata = metadata
     if media_type == MediaTypes.ANIME.value:
@@ -1126,6 +1143,23 @@ def media_detail(
         summary["overview"] = synopsis
     ref = summary["ref"]
     item = _external_rating_item(ref, primary_metadata)
+    tv_detail = (
+        _tv_detail(
+            media_type,
+            item,
+            season_number=season_number,
+            metadata=fetched_metadata,
+            user=user,
+        )
+        if tv_tracking.supports(media_type)
+        else None
+    )
+    if tv_detail is not None:
+        # The viewer's TV state, whether or not they track the show (plan 2.3.1).
+        if summary["user_state"] is None:
+            summary["ref"]["item_id"] = item.id
+            summary["user_state"] = user_state_for_item(user, item)
+        summary["user_state"]["tv"] = tv_detail["state"]
     from streaming import payloads as streaming_payloads
     from streaming import sync as streaming_sync
 
@@ -1167,6 +1201,7 @@ def media_detail(
             metadata,
             request=request,
             user=user,
+            tv_seasons=tv_detail["seasons"] if tv_detail is not None else None,
         )
         if media_type == MediaTypes.TV.value
         else []
@@ -1190,6 +1225,7 @@ def media_detail(
                 user,
                 request=request,
             ),
+            tv_episodes=tv_detail["episodes"] if tv_detail is not None else None,
         )
         if enriched_episode_metadata is not None
         else []
@@ -1202,7 +1238,11 @@ def media_detail(
         user=user,
     )
     completion = None
-    if user and user.is_authenticated and media_type == MediaTypes.TV.value:
+    if tv_detail is not None and media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
+        # Watched over aired regular episodes (TV-104); a season's own episodes.
+        counts = tv_detail["state"] if media_type == MediaTypes.TV.value else tv_detail["state"]["season"]
+        completion = _tv_completion(counts)
+    elif user and user.is_authenticated and media_type == MediaTypes.TV.value:
         completion = completion_service.completion_payload(
             sum(
                 (season.get("completion") or {}).get("completed_count", 0)
@@ -1251,6 +1291,7 @@ def media_detail(
         "crew": crew_from_metadata(metadata, request=request),
         "seasons": seasons,
         "episodes": episodes,
+        **_tv_unlisted_keys(media_type, tv_detail),
         "completion": completion,
         "custom_backdrop_url": custom_backdrop_url,
         "custom_poster_url": absolute_url(request, viewer_poster.custom_image_url) if viewer_poster else None,
@@ -1273,6 +1314,170 @@ def media_detail(
             episode_number=episode_number,
         ),
         **rating_payload,
+    }
+
+
+def _tv_show_item_for(item, *, create):
+    """Return the tv Item of a tv, season or episode Item; create it only when asked."""
+    if item.media_type == MediaTypes.TV.value:
+        return item
+    show_item = Item.objects.filter(
+        source=item.source,
+        media_type=MediaTypes.TV.value,
+        media_id=item.media_id,
+        season_number=None,
+        episode_number=None,
+    ).first()
+    if show_item is None and create:
+        show_item = tv_listing.show_item_for(item)
+    return show_item
+
+
+def _tv_listing(show_item):
+    """Return the show's listing, or its stored copy when the provider is down."""
+    try:
+        return tv_listing.get_listing(show_item)
+    except tv_listing.TVDetailsUnavailable:
+        return tv_listing.stored_listing(show_item)
+
+
+def _tv_detail(media_type, item, *, season_number, metadata, user):
+    """Feed the stored episode lists and return the viewer's TV state for a detail page.
+
+    Metadata fetched in this request updates the show's stored copy (TV-103). For a
+    signed-in viewer, returns the detail TVShowState for the page and the season cards,
+    episode states and unlisted seasons or episodes it shows. No TV rule lives here.
+    """
+    if item is None:
+        return None
+    signed_in = bool(user and user.is_authenticated)
+    show_item = _tv_show_item_for(item, create=False)
+    if metadata is not None and show_item is not None:
+        if media_type == MediaTypes.TV.value:
+            tv_listing.update_from_metadata(show_item, metadata)
+        elif media_type == MediaTypes.SEASON.value:
+            tv_listing.update_from_metadata(show_item, metadata, season_number=season_number)
+    if not signed_in:
+        return None
+    try:
+        if show_item is None:
+            show_item = _tv_show_item_for(item, create=True)
+        listing = _tv_listing(show_item)
+        detail = {"state": tv_tracking.state_payload(user, item, listing=listing)}
+        if media_type == MediaTypes.TV.value:
+            detail["seasons"] = tv_tracking.season_card_states(user, show_item, listing)
+            detail["unlisted_seasons"] = tv_tracking.unlisted_seasons(user, show_item, listing)
+        elif media_type == MediaTypes.SEASON.value:
+            detail["episodes"] = tv_tracking.episode_states(user, show_item, season_number, listing)
+            detail["unlisted_episodes"] = tv_tracking.unlisted_episodes(
+                user,
+                show_item,
+                season_number,
+                listing,
+            )
+    except tv_listing.TVDetailsUnavailable:
+        logger.warning("TV details unavailable for %s; the page shows no TV state", item)
+        return None
+    return detail
+
+
+def _tv_completion(counts):
+    """Return completion from TV counts, or null when the episode lists aren't known."""
+    if counts is None or counts.get("watched_count") is None or counts.get("aired_count") is None:
+        return None
+    return completion_service.completion_payload(counts["watched_count"], counts["aired_count"])
+
+
+def _tv_unlisted_keys(media_type, tv_detail):
+    """Return the seasons or episodes the provider no longer lists (TV-103, TV-900)."""
+    if media_type == MediaTypes.TV.value:
+        return {"tv_unlisted_seasons": tv_detail["unlisted_seasons"] if tv_detail else []}
+    if media_type == MediaTypes.SEASON.value:
+        return {"tv_unlisted_episodes": tv_detail["unlisted_episodes"] if tv_detail else []}
+    return {}
+
+
+def _unlisted_season_detail(*, source, media_id, season_number, request, user):
+    """Answer a season page the provider no longer lists from stored data (TV-103).
+
+    200 when the viewer has a viewing, log, mark, stars or heart under the season, with
+    title "Season N", the show's image, no listed episodes and the tracked ones in
+    tv_unlisted_episodes; otherwise 404, as for any season the provider doesn't list.
+    """
+    if not (user and user.is_authenticated) or season_number is None:
+        raise Http404
+    show_item = Item.objects.filter(
+        source=source,
+        media_type=MediaTypes.TV.value,
+        media_id=media_id,
+        season_number=None,
+        episode_number=None,
+    ).first()
+    if show_item is None:
+        raise Http404
+    listing = _tv_listing(show_item)
+    tracked = {
+        season["season_number"] for season in tv_tracking.unlisted_seasons(user, show_item, listing)
+    }
+    if season_number not in tracked:
+        raise Http404
+    season_item, _ = Item.objects.get_or_create(
+        source=source,
+        media_type=MediaTypes.SEASON.value,
+        media_id=media_id,
+        season_number=season_number,
+        episode_number=None,
+        defaults={"title": show_item.title, "image": show_item.image},
+    )
+    title = tv_listing.season_label(season_number)
+    summary = media_summary_from_provider(
+        {
+            "media_id": media_id,
+            "title": title,
+            "image": show_item.image,
+            "season_number": season_number,
+        },
+        MediaTypes.SEASON.value,
+        source,
+        request=request,
+        user=user,
+        item=season_item,
+    )
+    summary["title"] = title
+    summary["user_state"]["tv"] = tv_tracking.state_payload(user, season_item, listing=listing)
+    return {
+        **summary,
+        "overview": None,
+        "synopsis": None,
+        "backdrop_url": None,
+        "logo_url": None,
+        "logo_width": None,
+        "logo_height": None,
+        "logo_aspect_ratio": None,
+        "custom_logo_url": None,
+        "details": {},
+        "parent": None,
+        "external_links": {},
+        "cast": [],
+        "crew": [],
+        "seasons": [],
+        "episodes": [],
+        "tv_unlisted_episodes": tv_tracking.unlisted_episodes(user, show_item, season_number, listing),
+        "completion": None,
+        "custom_backdrop_url": None,
+        "custom_poster_url": None,
+        "related": {},
+        "related_sections": [],
+        "providers": None,
+        "where_to_watch": None,
+        "community": community_stats(
+            source=source,
+            media_type=MediaTypes.SEASON.value,
+            media_id=media_id,
+            season_number=season_number,
+        ),
+        "external_ratings": [],
+        "external_ratings_preparation": {"state": "ready", "retry_after_seconds": 2},
     }
 
 
@@ -4825,9 +5030,17 @@ def community_stats(
         entries = entries.filter(user__profile_private=False)
     else:
         entries = entries.exclude(visibility="private")
-    # Episodes have no current rating, so they still count their logs' ratings.
+    # Episodes have no current rating: each person counts once, with their newest rated
+    # log by log date and then by when it was saved (TV-502, TV-503).
     if media_type == MediaTypes.EPISODE.value:
-        stored_ratings = [entry.rating for entry in entries if entry.rating is not None]
+        newest = {}
+        for user_id, rating in (
+            entries.filter(rating__isnull=False)
+            .order_by("user_id", "-consumed_at", "-created_at", "-id")
+            .values_list("user_id", "rating")
+        ):
+            newest.setdefault(user_id, rating)
+        stored_ratings = list(newest.values())
     else:
         stored_ratings = _current_ratings(media_type, item)
     half_star = single_weight.uses_half_star_rating(media_type)

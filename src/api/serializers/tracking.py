@@ -37,6 +37,82 @@ class TrackingWriteSerializer(serializers.Serializer):
     mutation_id = serializers.UUIDField(required=False, allow_null=True)
 
 
+TV_RATING_MESSAGE = "Rating must be a whole number from 1 to 10."
+TV_RATING_MIN = 1
+TV_RATING_MAX = 10
+
+
+def validate_tv_rating(value):
+    """Return a TV rating as a whole number 1-10, or None to clear it (TV-504).
+
+    TV keeps the doubled 0-10 wire scale, so new writes accept only the ten half-star
+    values: whole numbers 1 to 10.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise serializers.ValidationError(TV_RATING_MESSAGE)
+    try:
+        rating = Decimal(str(value))
+    except (ArithmeticError, TypeError, ValueError) as error:
+        raise serializers.ValidationError(TV_RATING_MESSAGE) from error
+    if not rating.is_finite() or rating != rating.to_integral_value():
+        raise serializers.ValidationError(TV_RATING_MESSAGE)
+    if not TV_RATING_MIN <= rating <= TV_RATING_MAX:
+        raise serializers.ValidationError(TV_RATING_MESSAGE)
+    return int(rating)
+
+
+class TVRatingField(serializers.Field):
+    """A TV rating on the 0-10 wire scale: a whole number 1-10, or null (TV-504)."""
+
+    def __init__(self, **kwargs):
+        """Allow null, which clears the stars."""
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        return validate_tv_rating(data)
+
+    def to_representation(self, value):
+        return value
+
+
+class TVEpisodeCoordinateSerializer(serializers.Serializer):
+    """One episode's season and episode numbers (plan 2.3.5, `from` and `to`)."""
+
+    season_number = GameIntegerField(min_value=0)
+    episode_number = GameIntegerField(min_value=0)
+
+
+class TVActionSerializer(serializers.Serializer):
+    """The body of POST tracking/{source}/tv/{id}/actions/{action}/ (plan 2.3.7).
+
+    Every key is optional unless the action needs it; the view checks what each action
+    needs. `from` is a Python keyword, so it is declared in get_fields().
+    """
+
+    season_number = GameIntegerField(min_value=0, required=False, allow_null=True)
+    episode_number = GameIntegerField(min_value=0, required=False, allow_null=True)
+    viewing_id = GameIntegerField(min_value=1, required=False, allow_null=True)
+    mutation_id = serializers.UUIDField(required=False, allow_null=True)
+    expected_version = GameIntegerField(
+        min_value=0,
+        max_value=9223372036854775807,
+        required=False,
+        allow_null=True,
+    )
+    confirm = serializers.BooleanField(required=False, default=False)
+    to = TVEpisodeCoordinateSerializer(required=False, allow_null=True)
+    offer_season_number = GameIntegerField(min_value=0, required=False, allow_null=True)
+    rating = TVRatingField(required=False)
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["from"] = TVEpisodeCoordinateSerializer(required=False, allow_null=True)
+        return fields
+
+
 class ConsumeSerializer(serializers.Serializer):
     """Validate consume action payloads."""
 

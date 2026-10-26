@@ -25,7 +25,8 @@ from api.serializers.profile import (
     preferences_payload,
     profile_payload,
 )
-from app import book_tracking, exposure
+from api.services import tracking as tracking_service
+from app import book_tracking, exposure, tv_tracking
 from app.curation import prime_curated_artwork
 from app.models import MediaLike, MediaTypes
 from app.providers import services as provider_services
@@ -106,6 +107,8 @@ class LikedMediaView(APIView):
         serializer = HOFItemWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = self._item_for_ref(serializer.validated_data["ref"], create=True)
+        if tv_tracking.supports(item):
+            return Response(self._tv_like(request, item, liked=True))
         try:
             set_media_like(request.user, item, liked=True)
         except book_tracking.BookTrackingConflict as error:
@@ -118,12 +121,50 @@ class LikedMediaView(APIView):
         serializer = HOFItemWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = self._item_for_ref(serializer.validated_data["ref"], create=False)
+        if item is not None and tv_tracking.supports(item):
+            payload = self._tv_like(request, item, liked=False)
+            payload.pop("media")
+            return Response(payload)
         if item is not None:
             set_media_like(request.user, item, liked=False)
         return Response({"liked": False})
 
+    @staticmethod
+    def _tv_like(request, item, *, liked):
+        """Set a show's, season's or episode's heart (TV-303 to TV-305, TV-501).
+
+        On a show the user hasn't started, a heart marks it watched. The response
+        carries the page's detail TV state in media.user_state (the app replaces its
+        page state with it) and the envelope keys, with the earlier-episodes question.
+        """
+        result = tracking_service._call_tv(
+            tv_tracking.set_like,
+            request.user,
+            item,
+            liked,
+            entry_point=tv_tracking.APP,
+        )
+        envelope = tracking_service.tv_envelope(result, item)
+        media = media_summary_from_item(item, request=request, user=request.user)
+        media["user_state"]["tv"] = envelope["tv"]
+        return {
+            "liked": liked,
+            "media": media,
+            "tv": envelope["tv"],
+            "season": envelope["season"],
+            "episode": envelope["episode"],
+            "earlier_unwatched": envelope["earlier_unwatched"],
+        }
+
     def _item_for_ref(self, ref, *, create):
         exposure.require_media_type(ref["media_type"])
+        if tv_tracking.supports(ref["media_type"]):
+            # A season ref needs its number, an episode ref both (TV-106).
+            tracking_service.require_tv_numbers(
+                ref["media_type"],
+                ref.get("season_number"),
+                ref.get("episode_number"),
+            )
         item = find_item(ref)
         if item is not None or not create:
             return item

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from importlib import import_module
 from unittest.mock import MagicMock, patch
 
@@ -1786,6 +1786,13 @@ class ApiV1FoundationTests(TestCase):
 
     @patch("app.models.providers.services.get_media_metadata")
     def test_episode_watch_records_season_progress_change(self, metadata_mock):
+        """An installed build's episode watch records the season's progress change.
+
+        Rewritten fixture (TV-205, TV-703): the old cascade left an empty In progress
+        season before the first watch, which Spine no longer creates, so the season now
+        comes from the tick itself; the metadata fake also answers the show request the
+        stored episode lists need (TV-103). The ProgressChange assertions are unchanged.
+        """
         user = get_user_model().objects.create_user(username="season-progress-change", password="strong-password-123")
         tv_item = Item.objects.create(
             source=Sources.TMDB.value,
@@ -1800,9 +1807,9 @@ class ApiV1FoundationTests(TestCase):
             season_number=1,
             title="Season Progress Change",
         )
-        tv = TV.objects.create(user=user, item=tv_item, status=Status.IN_PROGRESS.value)
-        Season.objects.create(user=user, item=season_item, related_tv=tv, status=Status.IN_PROGRESS.value)
+        TV.objects.create(user=user, item=tv_item, status=Status.IN_PROGRESS.value)
         metadata_mock.side_effect = lambda media_type, *_args: {
+            "tv": {"related": {"seasons": [{"season_number": 1, "first_air_date": "2020-01-01"}]}},
             "season": {
                 "episodes": [
                     {"episode_number": 1, "air_date": "2020-01-01"},
@@ -2194,6 +2201,13 @@ class ApiV1FoundationTests(TestCase):
         metadata_mock,
         _fetch_releases_mock,
     ):
+        """Two logs of one episode, the second a rewatch, keep two viewings (TV-402).
+
+        Rewritten date expectations (TV-407): a TV log's date is a calendar date, so
+        each log's own viewing is on the log's calendar day (an installed build's
+        datetime is converted to it) rather than at the datetime sent. The metadata
+        fake also answers the show request the stored episode lists need (TV-103).
+        """
         user = get_user_model().objects.create_user(
             username="diary-episode",
             password="strong-password-123",
@@ -2236,6 +2250,12 @@ class ApiV1FoundationTests(TestCase):
                 }
             if media_type == "tv_with_seasons":
                 return {"season/1": {"episodes": season_episodes}}
+            if media_type == MediaTypes.TV.value:
+                return {
+                    "title": "Example Show",
+                    "image": "https://example.com/show.jpg",
+                    "related": {"seasons": [{"season_number": 1, "first_air_date": "2025-01-01"}]},
+                }
             message = f"Unexpected metadata request: {media_type}"
             raise AssertionError(message)
 
@@ -2287,14 +2307,11 @@ class ApiV1FoundationTests(TestCase):
         watched = Episode.objects.filter(
             related_season=season,
             item=episode_item,
-        ).order_by("end_date")
+        ).order_by("watched_on")
         self.assertEqual(watched.count(), 2)
         self.assertEqual(
-            list(watched.values_list("end_date", flat=True)),
-            [
-                datetime(2025, 4, 5, 12, 34, 56, tzinfo=UTC),
-                datetime(2025, 4, 6, 1, 2, 3, tzinfo=UTC),
-            ],
+            list(watched.values_list("watched_on", flat=True)),
+            [date(2025, 4, 5), date(2025, 4, 6)],
         )
         season.refresh_from_db()
         self.assertEqual(season.status, Status.IN_PROGRESS.value)

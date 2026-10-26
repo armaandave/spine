@@ -1,17 +1,22 @@
+from datetime import datetime
+
+import requests
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 
 from api.serializers.common import (
+    find_item,
     get_or_create_item_from_metadata,
     media_summary_from_item,
     user_summary,
 )
 from api.services import tracking as tracking_service
-from app import single_weight
-from app.models import MediaLike, MediaTypes, Tag
+from app import single_weight, tv_tracking
+from app.models import Item, MediaLike, MediaTypes, Sources, Tag, TVListing
 from app.providers import services as provider_services
 from app.services import create_diary_entry, update_diary_entry
 from social.models import Activity, ContentLike
@@ -37,15 +42,22 @@ def diary_payload(entry, request=None, viewer=None):
             ).exists()
         )
     is_single_weight = single_weight.uses_half_star_rating(entry.item)
+    media = media_summary_from_item(
+        entry.item,
+        request=request,
+        user=viewer,
+        include_user_state=False,
+    )
+    if not hasattr(entry, "tv_show_title"):
+        prime_show_titles([entry])
+    # TV-702: "Show · Season 1" and "Show · S1 E4 · Title" need the show's and the
+    # episode's own titles; Trakt and Simkl give episode Items the show's title.
+    media["show_title"] = entry.tv_show_title
+    media["episode_title"] = entry.tv_episode_title
     payload = {
         "id": entry.id,
         "user": user_summary(entry.user, request=request),
-        "media": media_summary_from_item(
-            entry.item,
-            request=request,
-            user=viewer,
-            include_user_state=False,
-        ),
+        "media": media,
         "consumed_at": (
             single_weight.calendar_date(entry.consumed_at).isoformat()
             if is_single_weight
@@ -67,11 +79,89 @@ def diary_payload(entry, request=None, viewer=None):
         "viewer_has_liked": bool(viewer_has_liked),
         "created_at": entry.created_at,
         "updated_at": entry.updated_at,
+        "tv_log": _tv_log(entry, viewer),
     }
     if entry.item.media_type == "game":
         session = getattr(entry, "game_playthrough", None)
         payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": (entry.progress_snapshot or {}).get("total_minutes"), "percentage": (entry.progress_snapshot or {}).get("percentage")})
     return payload
+
+
+def _tv_log(entry, viewer):
+    """Return a TV log's tv_log for its owner only: what it covers and would unmark."""
+    if not tv_tracking.supports(entry.item):
+        return None
+    if viewer is None or not viewer.is_authenticated or viewer.pk != entry.user_id:
+        return None
+    return tv_tracking.log_info(entry)
+
+
+def prime_show_titles(entries):
+    """Set each entry's show and episode titles with a bounded number of queries.
+
+    Season and episode logs get their show's title; episode logs get the episode's title
+    from the stored listing (manual shows: the episode Item's own title), or null when
+    unknown. Two queries for a page: the shows' Items and their stored listings.
+    """
+    entries = list(entries)
+    tv_entries = []
+    for entry in entries:
+        entry.tv_show_title = None
+        entry.tv_episode_title = None
+        if entry.item.media_type in (MediaTypes.SEASON.value, MediaTypes.EPISODE.value):
+            tv_entries.append(entry)
+    if not tv_entries:
+        return
+    keys = {(entry.item.source, entry.item.media_id) for entry in tv_entries}
+    shows = {
+        (show.source, show.media_id): show
+        for show in Item.objects.filter(
+            media_type=MediaTypes.TV.value,
+            season_number=None,
+            episode_number=None,
+            source__in={source for source, _ in keys},
+            media_id__in={media_id for _, media_id in keys},
+        ).only("id", "source", "media_id", "title")
+        if (show.source, show.media_id) in keys
+    }
+    listings = dict(
+        TVListing.objects.filter(
+            item_id__in=[show.pk for show in shows.values()],
+        ).values_list("item_id", "seasons"),
+    )
+    for entry in tv_entries:
+        show = shows.get((entry.item.source, entry.item.media_id))
+        if show is None:
+            continue
+        entry.tv_show_title = show.title
+        if entry.item.media_type != MediaTypes.EPISODE.value:
+            continue
+        if entry.item.source == Sources.MANUAL.value:
+            entry.tv_episode_title = entry.item.title or None
+            continue
+        entry.tv_episode_title = _listed_episode_title(
+            listings.get(show.pk),
+            entry.item.season_number,
+            entry.item.episode_number,
+        )
+
+
+def _listed_episode_title(seasons, season_number, episode_number):
+    """Return an episode's title from a stored listing's TVListing.seasons JSON."""
+    season = (seasons or {}).get(str(season_number)) or {}
+    for row in season.get("episodes") or ():
+        if row and int(row[0]) == episode_number:
+            return (row[2] if len(row) > 2 else "") or None
+    return None
+
+
+def prime_tv_logs(entries, viewer):
+    """Work out tv_log for the viewer's own TV logs on a page, once per show."""
+    if viewer is None or not viewer.is_authenticated:
+        return
+    tv_tracking.prime_log_info(
+        entry for entry in entries if entry.user_id == viewer.pk and tv_tracking.supports(entry.item)
+    )
 
 
 def prime_diary_likes(entries, viewer):
@@ -104,6 +194,8 @@ def prime_diary_likes(entries, viewer):
 def create_entry(user, data):
     """Create a diary entry from API payload."""
     ref = data["ref"]
+    if tv_tracking.supports(ref["media_type"]):
+        return _create_tv_entry(user, data)
     metadata = provider_services.get_media_metadata(
         ref["media_type"],
         ref["media_id"],
@@ -125,7 +217,6 @@ def create_entry(user, data):
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
     auto_mark_consumed = data.get("auto_mark_consumed", False)
-    watch_episode = auto_mark_consumed and ref["media_type"] == MediaTypes.EPISODE.value
 
     with transaction.atomic():
         item = get_or_create_item_from_metadata(ref, metadata)
@@ -156,23 +247,12 @@ def create_entry(user, data):
                 if is_single_weight
                 else data.get("is_rewatch", False)
             ),
-            # Episodes use Season.watch below so every rewatch remains a distinct
-            # Episode row instead of rewriting all repeats for the same Item.
-            auto_mark_consumed=auto_mark_consumed and not watch_episode,
+            auto_mark_consumed=auto_mark_consumed,
             tags=data.get("tags", []),
             review_title=data.get("review_title", ""),
             contains_spoilers=data.get("contains_spoilers", False),
             visibility="public" if is_single_weight else data.get("visibility", "public"),
         )
-        if watch_episode:
-            tracking_service.watch_episode(
-                user,
-                source=ref["source"],
-                media_id=ref["media_id"],
-                season_number=ref["season_number"],
-                episode_number=ref["episode_number"],
-                watched_at=consumed_at,
-            )
         if not is_single_weight:
             Activity.objects.create(
                 actor=user,
@@ -189,10 +269,105 @@ def create_entry(user, data):
     return entry
 
 
+TV_LOG_FIELDS = (
+    "consumed_at",
+    "rating",
+    "review",
+    "review_title",
+    "liked",
+    "is_rewatch",
+    "contains_spoilers",
+    "visibility",
+)
+
+
+def _create_tv_entry(user, data):
+    """Save a TV log through tv_tracking.create_log (TV-400 to TV-407, TV-703).
+
+    It fetches what it needs before its own transaction, so no provider call runs inside
+    one. auto_mark_consumed is ignored: every TV log counts its target watched. A date
+    or datetime becomes the user's calendar date, and a future one is a 400. The log
+    posts its one diary activity itself. A mutation ID applies the log at most once.
+
+    Installed builds send a datetime and no mutation ID; they get the server's rules but
+    no earlier-episodes question or season-finish composer (LEGACY_APP).
+    """
+    ref = data["ref"]
+    tracking_service.require_tv_numbers(
+        ref["media_type"],
+        ref.get("season_number"),
+        ref.get("episode_number"),
+    )
+    item = find_item(ref)
+    if item is None:
+        try:
+            metadata = provider_services.get_media_metadata(
+                ref["media_type"],
+                ref["media_id"],
+                ref["source"],
+                [ref.get("season_number")] if ref.get("season_number") is not None else None,
+                ref.get("episode_number"),
+            )
+        except provider_services.ProviderAPIError as error:
+            if error.status_code != requests.codes.not_found:
+                raise
+            # The provider doesn't list it; tv_tracking says why it's rejected (TV-106).
+            item = tracking_service.resolve_tv_item(
+                source=ref["source"],
+                media_type=ref["media_type"],
+                media_id=ref["media_id"],
+                season_number=ref.get("season_number"),
+                episode_number=ref.get("episode_number"),
+            )
+        else:
+            item = get_or_create_item_from_metadata(ref, metadata)
+    consumed_at = data.get("consumed_at")
+    installed_build = isinstance(consumed_at, datetime) and not data.get("mutation_id")
+    result = tracking_service._call_tv(
+        tv_tracking.create_log,
+        user,
+        item,
+        consumed_at=consumed_at,
+        rating=data.get("rating"),
+        review=data.get("review", ""),
+        liked=data.get("liked"),
+        is_rewatch=data.get("is_rewatch"),
+        tags=data.get("tags") or [],
+        review_title=data.get("review_title", ""),
+        contains_spoilers=data.get("contains_spoilers", False),
+        visibility=data.get("visibility", "public"),
+        entry_point=tv_tracking.LEGACY_APP if installed_build else tv_tracking.APP,
+        mutation_id=data.get("mutation_id"),
+    )
+    entry = result.entry
+    if entry is None:
+        # A repeated mutation whose log has since been deleted.
+        raise NotFound
+    entry.tv_write = result
+    return entry
+
+
+def _update_tv_entry(entry, data, tags):
+    """Edit a TV log through tv_tracking.update_log (TV-405, TV-407, TV-501, TV-502)."""
+    payload = {key: value for key, value in data.items() if key in TV_LOG_FIELDS}
+    result = tracking_service._call_tv(
+        tv_tracking.update_log,
+        entry,
+        payload,
+        tags=tags,
+        entry_point=tv_tracking.APP,
+    )
+    updated = result.entry or entry
+    updated.tv_write = result
+    return updated
+
+
 def update_entry(entry, data):
     """Update a diary entry from API payload."""
     data = dict(data)
     tags = data.pop("tags", None)
+    if tv_tracking.supports(entry.item):
+        return _update_tv_entry(entry, data, tags)
     if single_weight.uses_half_star_rating(entry.item):
         try:
             if "rating" in data:
