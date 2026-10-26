@@ -6,6 +6,8 @@ struct MediaFilterButton: View {
     var options: MediaFilterOptionsResponse = .empty
     var mediaTypes: [String] = APIConstants.fallbackMediaTypes
     var showsTagFilter = true
+    /// A Liquid Glass circle instead of the flat one.
+    var usesGlass = false
     /// For the Streaming Services screen the sheet can open.
     var onUnauthorized: () -> Void = {}
     var onApply: () -> Void
@@ -21,7 +23,8 @@ struct MediaFilterButton: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 34, height: 34)
-                    .background(.white.opacity(0.10), in: Circle())
+                    .background(.white.opacity(usesGlass ? 0 : 0.10), in: Circle())
+                    .glassEffect(usesGlass ? .regular.interactive() : .identity, in: .circle)
 
                 if filter.activeCount > 0 {
                     Text("\(filter.activeCount)")

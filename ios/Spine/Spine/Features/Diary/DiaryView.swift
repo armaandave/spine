@@ -319,6 +319,7 @@ struct MediaDiaryView: View {
                     .padding(.top, 18)
                     .padding(.bottom, 28)
                 }
+                .diaryPinnedHeaders()
                 .refreshable {
                     await viewModel.load()
                 }
@@ -480,8 +481,6 @@ struct DiaryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                SpinePageBackground()
-
                 ScrollViewReader { diaryProxy in
                     ScrollViewReader { monthProxy in
                         ZStack {
@@ -512,11 +511,17 @@ struct DiaryView: View {
                     }
                 }
             }
+            .background {
+                // A faint wash of the newest log's artwork, like the log sheet's.
+                LogBackdrop(url: URL(string: viewModel.entries.first?.media.displayPosterURL ?? ""))
+            }
             .overlay(alignment: .top) {
-                DiaryTopSafeAreaScrim()
+                DiaryTopSoftScrim()
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .sensoryFeedback(.selection, trigger: monthDisplayMode)
+            .sensoryFeedback(.selection, trigger: viewModel.filter.mediaType)
             .task {
                 await viewModel.loadIfNeeded(loadsFilterOptions: true)
             }
@@ -555,10 +560,11 @@ struct DiaryView: View {
                 diaryContent(monthProxy: monthProxy)
                     .spineContentTransition(value: contentPhase)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
+        .diaryPinnedHeaders()
         .refreshable {
             await reloadDiary()
         }
@@ -633,7 +639,7 @@ struct DiaryView: View {
                     showDiary(sectionID, proxy: diaryProxy)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 28)
         }
@@ -717,10 +723,12 @@ struct DiaryView: View {
                 filter: $viewModel.filter,
                 scope: .diary,
                 options: viewModel.filterOptions,
+                usesGlass: true,
                 onUnauthorized: onUnauthorized
             ) {
                 Task { await reloadDiary(loadsFilterOptions: true) }
             }
+            .environment(\.colorScheme, .dark)
         }
         .padding(.bottom, 14)
     }
@@ -764,6 +772,37 @@ struct DiaryView: View {
             guard let last = viewModel.entries.last else { return }
             await viewModel.loadNextPageIfNeeded(currentEntry: last)
         }
+    }
+}
+
+/// Blurs whatever scrolls under the status bar, fading out just below it, so the page's
+/// backdrop shows through instead of a solid band.
+private struct DiaryTopSoftScrim: View {
+    private static let fade: CGFloat = 18
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.safeAreaInsets.top + Self.fade
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: proxy.safeAreaInsets.top / height),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .frame(height: height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
+        }
+        .environment(\.colorScheme, .dark)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
