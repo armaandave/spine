@@ -243,14 +243,16 @@ struct DiaryEntryRow: View {
 
     private var summary: DiaryEntrySummary { DiaryEntrySummary(entry: entry) }
 
-    /// The media page's "3★ ♥" tracking line, plus a mark when there's a review.
+    /// "★★★½ ♥" plus a mark when there's a review.
     private var summaryLine: some View {
         HStack(spacing: 6) {
-            if let stars = summary.stars {
-                HStack(spacing: 2) {
-                    Text(stars)
-                    Image(systemName: "star.fill")
+            if !summary.starSymbols.isEmpty {
+                HStack(spacing: 1) {
+                    ForEach(Array(summary.starSymbols.enumerated()), id: \.offset) { _, symbol in
+                        Image(systemName: symbol)
+                    }
                 }
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.yellow)
             }
             if summary.liked {
@@ -331,7 +333,14 @@ struct DiaryEntrySummary: Equatable {
         }
     }
 
-    var isEmpty: Bool { stars == nil && !liked && !hasReview }
+    /// A filled star per whole star, then a half star for a .5: "3.5" is ★★★½.
+    var starSymbols: [String] {
+        guard let value = stars.flatMap(Double.init) else { return [] }
+        let whole = Array(repeating: "star.fill", count: Int(value))
+        return value - Double(Int(value)) >= 0.5 ? whole + ["star.leadinghalf.filled"] : whole
+    }
+
+    var isEmpty: Bool { starSymbols.isEmpty && !liked && !hasReview }
 
     var accessibilityLabel: String {
         [stars.map { "Rated \($0) out of 5 stars" }, liked ? "Liked" : nil, hasReview ? "Has review" : nil]
