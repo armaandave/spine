@@ -156,6 +156,10 @@ class Activity(models.Model):
 class ProgressChange(models.Model):
     """Durable progress delta for tracked media."""
 
+    # Starting a title is recorded as a step from 0 to 1 of this kind, so activity can
+    # show "started reading" before any progress. It isn't progress itself.
+    START = "start"
+
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -176,6 +180,26 @@ class ProgressChange(models.Model):
             models.Index(fields=["actor", "item", "-created_at"]),
             models.Index(fields=["-created_at", "id"]),
         ]
+
+    @classmethod
+    def record_start(cls, actor, item, **context):
+        """Record starting a title; context such as a journey id rides along."""
+
+        def snapshot(value):
+            return {
+                "kind": cls.START,
+                "value": value,
+                "max": 1,
+                "unit": cls.START,
+                **context,
+            }
+
+        return cls.objects.create(
+            actor=actor,
+            item=item,
+            previous_progress=snapshot(0),
+            current_progress=snapshot(1),
+        )
 
 
 class SocialAuditLog(models.Model):

@@ -1,60 +1,53 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.pagination import FeedCursorPagination
 from api.serializers.social import LikeSerializer
+from api.services import activity as activity_service
 from api.services import social as social_service
 from app import exposure
-from app.curation import prime_curated_artwork
 from social.models import Follow, FollowStatus
 
 
 class FeedView(APIView):
-    """Current user's reverse-chronological feed."""
+    """Activity of the people the current user follows, newest first."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        queryset = social_service.feed_queryset(request.user).filter(
-            Q(item__isnull=True) | Q(item__media_type__in=exposure.media_types()),
-        )
+        logs, progress = activity_service.feed_sources(request.user)
+        media_types = exposure.media_types()
         media_type = request.query_params.get("media_type")
         if media_type:
             exposure.require_media_type(media_type)
-            queryset = queryset.filter(item__media_type=media_type)
-        paginator = FeedCursorPagination()
-        page = paginator.paginate_queryset(queryset, request, view=self)
-        prime_curated_artwork(activity.item for activity in page)
-        data = [
-            social_service.activity_payload(activity, request=request, viewer=request.user)
-            for activity in page
-        ]
-        return paginator.get_paginated_response(data)
+            media_types = activity_service.media_type_family(media_type)
+        return activity_service.page_response(
+            request,
+            logs.filter(item__media_type__in=media_types),
+            progress.filter(item__media_type__in=media_types),
+        )
 
 
 class UserActivityView(APIView):
-    """Activity for a public profile."""
+    """A profile's activity, newest first."""
 
     permission_classes = [AllowAny]
 
     def get(self, request, username):
         user = get_object_or_404(get_user_model(), username=username)
-        queryset = social_service.user_activity_queryset(request.user, user).filter(
-            Q(item__isnull=True) | Q(item__media_type__in=exposure.media_types()),
+        sources = activity_service.profile_sources(request.user, user)
+        if sources is None:
+            return Response({"next_cursor": None, "previous_cursor": None, "results": []})
+        logs, progress = sources
+        media_types = exposure.media_types()
+        return activity_service.page_response(
+            request,
+            logs.filter(item__media_type__in=media_types),
+            progress.filter(item__media_type__in=media_types),
         )
-        paginator = FeedCursorPagination()
-        page = paginator.paginate_queryset(queryset, request, view=self)
-        prime_curated_artwork(activity.item for activity in page)
-        data = [
-            social_service.activity_payload(activity, request=request, viewer=request.user)
-            for activity in page
-        ]
-        return paginator.get_paginated_response(data)
 
 
 class FollowView(APIView):

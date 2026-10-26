@@ -1,28 +1,19 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from api.permissions import can_view_user_profile, users_blocked
-from api.serializers.common import media_summary_from_item, user_summary
+from app import single_weight
 from app.models import DiaryEntry
 from lists.models import CustomList
 from social.models import (
-    Activity,
     Block,
     ContentLike,
     Follow,
     FollowStatus,
     SocialAuditLog,
     Visibility,
-)
-
-MEDIA_ACTIVITY_VERBS = (
-    "diary_created",
-    "rating_updated",
-    "progress_updated",
-    "list_item_added",
 )
 
 
@@ -116,70 +107,11 @@ def set_like(user, *, target_type, target_id, liked):
     }
 
 
-def feed_queryset(user):
-    """Return activities visible in the current user's feed."""
-    following = Follow.objects.filter(
-        from_user=user,
-        status=FollowStatus.ACCEPTED,
-    ).values("to_user")
-    return _media_activity(
-        Activity.objects.filter(
-            actor__in=following,
-            visibility__in=[Visibility.PUBLIC, Visibility.FOLLOWERS],
-        ),
-    ).select_related("actor", "item")
-
-
-def user_activity_queryset(viewer, target_user):
-    """Return visible activity for a profile."""
-    if not can_view_user_profile(viewer, target_user):
-        return Activity.objects.none()
-    queryset = Activity.objects.filter(actor=target_user)
-    if viewer != target_user:
-        visibilities = [Visibility.PUBLIC]
-        if viewer.is_authenticated and Follow.objects.filter(
-            from_user=viewer,
-            to_user=target_user,
-            status=FollowStatus.ACCEPTED,
-        ).exists():
-            visibilities.append(Visibility.FOLLOWERS)
-        queryset = queryset.filter(visibility__in=visibilities)
-    return _media_activity(queryset).select_related("actor", "item")
-
-
-def _media_activity(queryset):
-    """Return supported feed activity, including provider-backed list people."""
-    return _with_live_targets(
-        queryset.filter(
-            Q(verb__in=MEDIA_ACTIVITY_VERBS, item__isnull=False)
-            | Q(
-                verb="list_item_added",
-                target_type=ContentLike.CUSTOM_LIST,
-                item__isnull=True,
-                snapshot__entry_type="person",
-            ),
-        ),
-    )
-
-
-def _with_live_targets(queryset):
-    """Hide activity after its backing diary entry or list is gone."""
-    return queryset.annotate(
-        diary_exists=Exists(DiaryEntry.objects.filter(id=OuterRef("target_id"))),
-        list_exists=Exists(CustomList.objects.filter(id=OuterRef("target_id"))),
-    ).filter(
-        (~Q(target_type=ContentLike.DIARY_ENTRY) | Q(diary_exists=True))
-        & (~Q(target_type=ContentLike.CUSTOM_LIST) | Q(list_exists=True)),
-    )
-
-
 def _can_view_diary_entry(viewer, entry):
     if not can_view_user_profile(viewer, entry.user):
         return False
     if viewer == entry.user:
         return True
-    from app import single_weight
-
     if single_weight.uses_half_star_rating(entry.item):
         return True
     if entry.visibility == Visibility.PUBLIC:
@@ -189,43 +121,3 @@ def _can_view_diary_entry(viewer, entry):
         to_user=entry.user,
         status=FollowStatus.ACCEPTED,
     ).exists()
-
-
-def activity_payload(activity, request=None, viewer=None):
-    """Serialize a materialized feed item."""
-    snapshot = activity.snapshot or {}
-    object_payload = {
-        "type": activity.target_type,
-        "id": activity.target_id,
-        **snapshot,
-    }
-    if activity.verb == "list_item_added" and not object_payload.get("name"):
-        object_payload["name"] = snapshot.get("list_name")
-    if activity.verb == "progress_updated":
-        object_payload = {
-            "type": activity.target_type,
-            "id": activity.target_id,
-            "previous": snapshot.get("previous"),
-            "current": snapshot.get("current"),
-        }
-    return {
-        "id": activity.id,
-        "type": activity.verb,
-        "created_at": activity.created_at,
-        "actor": user_summary(activity.actor, request=request),
-        "media": media_summary_from_item(activity.item, request=request) if activity.item else None,
-        "person": snapshot.get("person"),
-        "object": object_payload,
-        "viewer": {
-            "can_view": True,
-            "has_liked": bool(
-                viewer
-                and viewer.is_authenticated
-                and ContentLike.objects.filter(
-                    user=viewer,
-                    target_type=activity.target_type,
-                    target_id=activity.target_id,
-                ).exists()
-            ),
-        },
-    }
