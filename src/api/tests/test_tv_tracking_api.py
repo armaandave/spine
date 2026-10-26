@@ -1006,6 +1006,35 @@ class TVListEndpointTests(TVAPITestCase):
         self.assertEqual(self.titles(results), ["Chosen", "Newer", "Older"])
         self.assertEqual(results[0]["tracking"]["tv"]["up_next"]["episode_number"], 1)
 
+    def test_tv_701_continue_watching_names_up_next_and_sends_its_still(self):
+        # Touch and hold on a Continue Watching card previews up next: its still and
+        # title, from the stored listing (no provider calls; TV-207 bounds the reads).
+        show = self.make_show(
+            title="Stills",
+            seasons={
+                1: [
+                    FakeEpisode(1, date(2026, 1, 5), "One", still_path="/one.jpg"),
+                    FakeEpisode(2, date(2026, 1, 12), "Two", still_path="/two.jpg"),
+                    FakeEpisode(3, date(2026, 1, 19), "Three"),
+                ],
+            },
+        )
+        self.tick(show, 1, 1)
+        calls = self.fake.count()
+
+        up_next = self.tracked(media_type="tv", continue_watching="true")[0]["tracking"]["tv"]["up_next"]
+
+        self.assertEqual(
+            (up_next["episode_number"], up_next["title"], up_next["image_url"]),
+            (2, "Two", "https://image.tmdb.org/t/p/w500/two.jpg"),
+        )
+        self.assertEqual(self.fake.count(), calls)
+        self.tick(show, 1, 2)
+        up_next = self.tracked(media_type="tv", continue_watching="true")[0]["tracking"]["tv"]["up_next"]
+        self.assertEqual((up_next["title"], up_next["image_url"]), ("Three", None), "E3 has no still")
+        # Other library lists don't load it.
+        self.assertIsNone(self.tracked(media_type="tv")[0]["tracking"]["tv"]["up_next"]["image_url"])
+
     def test_tv_900_home_season_list_has_only_started_unfinished_seasons(self):
         started = self.make_show(title="Started")
         finished = self.make_show(title="Finished")

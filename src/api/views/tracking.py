@@ -107,6 +107,9 @@ class TrackingListView(MediaExposureMixin, APIView):
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(queryset, request, view=self))
         _prime_progress(page, media_type)
+        if continue_watching:
+            # One query: up next's title and still, for the hold preview (TV-701).
+            tv_tracking.prime_up_next_episodes(page)
         prime_collection_items(
             [media.item for media in page],
             request.user,

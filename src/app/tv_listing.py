@@ -238,10 +238,7 @@ class ShowListing:
     def episode_still(self, season_number, episode_number) -> str | None:
         """Return a listed episode's still at the size of a season's episode rows, or None."""
         listed = self.episode(season_number, episode_number)
-        image = listed.image if listed is not None else None
-        if not image or image == settings.IMG_NONE or not image.startswith(("http://", "https://")):
-            return None
-        return tmdb.sized_image_url(image, "w500")
+        return still_url(listed.image if listed is not None else None)
 
     @cached_property
     def _by_number(self):
@@ -458,6 +455,23 @@ def show_item_for(item):
 def season_label(season_number):
     """Return "Specials" for season 0, else "Season N"."""
     return "Specials" if season_number == 0 else f"Season {season_number}"
+
+
+def still_url(image) -> str | None:
+    """Return an episode's stored image as a still at the size of a season's episode rows, or None."""
+    if not image or image == settings.IMG_NONE or not image.startswith(("http://", "https://")):
+        return None
+    return tmdb.sized_image_url(image, "w500")
+
+
+def stored_episode(seasons, season_number, episode_number) -> tuple[str | None, str | None]:
+    """Return one episode's (title, still) from a stored listing's seasons JSON, or (None, None)."""
+    entry = (seasons or {}).get(str(season_number))
+    for row in (entry.get("episodes") or ()) if isinstance(entry, dict) else ():
+        if row and int(row[0]) == episode_number:
+            title = row[2] if len(row) > 2 else None
+            return title or None, still_url(row[3] if len(row) > 3 else None)
+    return None, None
 
 
 class _Copy:

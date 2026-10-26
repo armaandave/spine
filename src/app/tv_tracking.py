@@ -4850,13 +4850,15 @@ def list_payload(tv):
         watched_count, aired_count = primed if primed is not None else (None, None)
     up_next = None
     if not legacy and tv.up_next_season is not None:
+        # Continue Watching primes the episode's title and still (prime_up_next_episodes).
+        title, image_url = getattr(tv, "_tv_up_next_episode", (None, None))
         up_next = {
             "season_number": tv.up_next_season,
             "episode_number": tv.up_next_episode,
-            "title": None,
+            "title": title,
             "air_date": _iso(tv.up_next_air_date),
             "is_new": tv.up_next_is_new,
-            "image_url": None,
+            "image_url": image_url,
         }
     next_airing = None
     if not legacy and tv.next_air_season is not None:
@@ -5036,6 +5038,26 @@ def _json(value):
     return value
 
 
+def prime_up_next_episodes(rows):
+    """Set up next's title and still on TV rows from their stored listings, in one query.
+
+    Continue Watching's touch-and-hold preview names the episode and shows its still
+    (TV-701). Both come from the stored copy (TV-103), never the provider.
+    """
+    tv_rows = [row for row in rows if isinstance(row, TV) and row.up_next_season is not None]
+    if not tv_rows:
+        return
+    stored = dict(
+        TVListing.objects.filter(item_id__in={row.item_id for row in tv_rows}).values_list("item_id", "seasons"),
+    )
+    for row in tv_rows:
+        row._tv_up_next_episode = tv_listing.stored_episode(
+            _json(stored.get(row.item_id)),
+            row.up_next_season,
+            row.up_next_episode,
+        )
+
+
 def prime_progress(rows):
     """Set fallback progress on TV and Season rows not yet worked out, one query each kind.
 
@@ -5136,6 +5158,7 @@ __all__ = [
     "plan_legacy",
     "prepare_items",
     "prime_progress",
+    "prime_up_next_episodes",
     "progress_payload",
     "rebuild_log_viewings",
     "reconcile_imported",
