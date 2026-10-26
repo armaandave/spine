@@ -821,7 +821,28 @@ def music(release_group_mbid, *, include_enrichment=True):
         release_group_mbid,
         group.get("title") or "",
     )
+    runtime = _album_runtime_minutes(data["music"]["representative_release"])
+    if runtime is not None:
+        data["runtime"] = runtime
     return data
+
+
+def _album_runtime_minutes(representative_release):
+    """Return the album length in minutes, or None unless every track has a length."""
+    tracks = [
+        track
+        for medium in (representative_release or {}).get("media") or []
+        for track in medium.get("tracks") or []
+    ]
+    if not tracks:
+        return None
+    lengths = [
+        track.get("length_ms") or (track.get("recording") or {}).get("length_ms")
+        for track in tracks
+    ]
+    if not all(isinstance(length, int) and length > 0 for length in lengths):
+        return None
+    return max(1, round(sum(lengths) / 60000))
 
 
 def _music_enrichment(release_group_mbid, title):

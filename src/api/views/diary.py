@@ -66,7 +66,7 @@ class DiaryListView(APIView):
         filter_service.ensure_filter_metadata(entries, request.query_params)
         entries = filter_service.apply_item_filters(entries, request.query_params)
         entries = filter_service.apply_rating_range(entries, request.query_params, "rating")
-        entries = filter_service.apply_watched_range(entries, request.query_params, "consumed_at")
+        entries = filter_service.apply_diary_date_range(entries, request.query_params, owner=request.user)
         entries = filter_service.apply_user_status_filter(
             entries,
             request.user,

@@ -515,6 +515,9 @@ def book(media_id):
                 "number_of_pages": book_data.get("pages"),
                 "publish_date": release_date,
                 "release_date": release_date,  # Formatted release date for details display
+                # The book's first publication, which stats use as its year; the
+                # dates above belong to the default edition.
+                "original_release_date": format_release_date(book_release_date),
                 "author": book_data.get("cached_contributors"),
                 "authors": authors_for_details,
                 "publishers": publishers,
@@ -559,6 +562,140 @@ def saved_book(media_id):
         },
         "related": {},
     }
+
+
+BOOK_METADATA_BATCH_SIZE = 50
+BOOK_METADATA_BATCH_QUERY = """
+query BookMetadataBatch($ids: [Int!]) {
+  books(where: {id: {_in: $ids}}) {
+    id
+    title
+    cached_tags(path: "Genre")
+    pages
+    release_date
+    cached_featured_series
+    default_cover_edition {
+      release_date
+    }
+  }
+}
+"""
+SERIES_BATCH_QUERY = """
+query SeriesBatch($ids: [Int!]) {
+  series(where: {id: {_in: $ids}}) {
+    id
+    name
+    primary_books_count
+    book_series(order_by: {position: asc}) {
+      position
+      compilation
+      book {
+        id
+        title
+        slug
+        users_read_count
+        cached_image(path: "url")
+      }
+    }
+  }
+}
+"""
+
+
+def book_metadata_batch(media_ids):
+    """Return the stored-metadata fields of many books, keyed by media id.
+
+    Each value has the shape book() returns, limited to what Item metadata stores:
+    title, pages, genres, the release dates (including original_release_date) and the
+    featured series with its members. Two requests per 50 books (the books, then
+    their series not already cached) instead of book()'s 2-3 per book. Requests go
+    through services.api_request, so a quota scope's budget and 429 blocks apply;
+    quota.Deferred and ProviderAPIError propagate. Ids Hardcover doesn't return are
+    left out.
+    """
+    ids = list(dict.fromkeys(int(media_id) for media_id in media_ids))
+    results = {}
+    for start in range(0, len(ids), BOOK_METADATA_BATCH_SIZE):
+        rows = _graphql_batch(
+            BOOK_METADATA_BATCH_QUERY,
+            ids[start : start + BOOK_METADATA_BATCH_SIZE],
+            "books",
+        )
+        featured = {row["id"]: get_featured_series(row.get("cached_featured_series")) for row in rows}
+        series = _series_pages({value["id"] for value in featured.values() if value})
+        for row in rows:
+            results[str(row["id"])] = _book_metadata(row, featured[row["id"]], series)
+    return results
+
+
+def _book_metadata(book_data, featured_series, series):
+    """Format one batch row like book()'s metadata."""
+    default_edition = book_data.get("default_cover_edition") or {}
+    book_release_date = book_data.get("release_date")
+    release_date = format_release_date(default_edition.get("release_date") or book_release_date)
+    series_items = series.get(str(featured_series["id"]), {}).get("books", []) if featured_series else []
+    related = {}
+    if featured_series and series_items:
+        related[featured_series["name"]] = series_items
+    return {
+        "media_id": book_data["id"],
+        "source": Sources.HARDCOVER.value,
+        "media_type": MediaTypes.BOOK.value,
+        "title": book_data.get("title") or "",
+        "max_progress": book_data.get("pages"),
+        "genres": get_tags(book_data.get("cached_tags")),
+        "details": {
+            "number_of_pages": book_data.get("pages"),
+            "publish_date": release_date,
+            "release_date": release_date,
+            "original_release_date": format_release_date(book_release_date),
+            "series_id": featured_series.get("id") if featured_series else None,
+            "series_name": featured_series.get("name") if featured_series else None,
+            "series_position": featured_series.get("position") if featured_series else None,
+        },
+        "related": related,
+    }
+
+
+def _series_pages(series_ids):
+    """Return series_page() data for many series, keyed by str id: cache, then one request."""
+    pages = {}
+    missing = []
+    for series_id in sorted(series_ids, key=str):
+        cached = cache.get(_series_cache_key(series_id))
+        if cached is not None:
+            pages[str(series_id)] = cached
+        else:
+            missing.append(int(series_id))
+    if missing:
+        for series in _graphql_batch(SERIES_BATCH_QUERY, missing, "series"):
+            data = _series_page_data(series, series["id"])
+            cache.set(_series_cache_key(series["id"]), data)
+            pages[data["series_id"]] = data
+    return pages
+
+
+def _graphql_batch(query, ids, field):
+    """POST one batch query and return its rows, raising ProviderAPIError on errors."""
+    try:
+        response = services.api_request(
+            Sources.HARDCOVER.value,
+            "POST",
+            base_url,
+            params={"query": query, "variables": {"ids": ids}},
+            headers={"Authorization": settings.HARDCOVER_API},
+        )
+    except requests.exceptions.HTTPError as error:
+        handle_error(error)
+    data = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(data, dict) or response.get("errors"):
+        logger.error("Hardcover batch %s query failed: %s", field, response)
+        raise services.ProviderAPIError(
+            Sources.HARDCOVER.value,
+            ValueError("GraphQL error"),
+            f"the {field} batch query failed",
+        )
+    return data.get(field) or []
 
 
 def get_featured_series(series_data):
@@ -936,7 +1073,7 @@ def get_series_books(series_id):
 
 def series_page(series_id):
     """Return one Hardcover series with only its primary numbered books."""
-    cache_key = f"{Sources.HARDCOVER.value}_series_{series_id}_v1"
+    cache_key = _series_cache_key(series_id)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -983,19 +1120,28 @@ def series_page(series_id):
         }
 
     series = response.get("data", {}).get("series_by_pk") or {}
+    data = _series_page_data(series, series_id)
+    cache.set(cache_key, data)
+    return data
+
+
+def _series_cache_key(series_id):
+    return f"{Sources.HARDCOVER.value}_series_{series_id}_v1"
+
+
+def _series_page_data(series, series_id):
+    """Format a Hardcover series row (with its book_series) as series_page() returns it."""
     books = _primary_series_books(
         series.get("book_series") or [],
         series.get("primary_books_count"),
     )
-    data = {
+    return {
         "series_id": str(series.get("id") or series_id),
         "source": Sources.HARDCOVER.value,
         "name": series.get("name") or "",
         "book_count": series.get("primary_books_count") or len(books),
         "books": books,
     }
-    cache.set(cache_key, data)
-    return data
 
 
 def _primary_series_books(rows, primary_books_count):

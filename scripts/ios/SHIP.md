@@ -152,6 +152,46 @@ covers both (decided 2026-10-26):
 
 Remove this section once the production repair has run.
 
+### The metadata fill, with the ship that adds `src/app/migrations/0088_item_metadata_version.py`
+
+Stats need each tracked or logged title's year, runtime, genres, themes and original
+language. Titles stored before this ship are filled once by a paced fill
+(`src/app/metadata_fill.py`, command `fill_item_metadata`): progress lives in the
+database, it only fills blanks, and its own pacing keeps MusicBrainz at one call every
+3 s. The user's "ship this" covers both runs below.
+
+1. **Canary, before the ship (optional).** From the feature worktree:
+   `scripts/ios/test-backend.sh use 4`, then `scripts/ios/test-backend.sh fill-metadata`
+   (a dry run in the checkout being served, with no provider calls). Check its counts,
+   then `scripts/ios/test-backend.sh release`.
+2. **Test backend, with the ship.** After `scripts/ios/test-backend.sh update` (step 6),
+   run `scripts/ios/test-backend.sh fill-metadata`. If it fails, stop and report.
+   Otherwise run `scripts/ios/test-backend.sh fill-metadata --apply`: in-process and
+   paced, minutes for the test accounts. Its beat runs the hourly sweep from now on.
+   Finish this before production's fill starts: both call MusicBrainz from this Mac's IP.
+3. **Production,** after the deploy is verified (step 8):
+   - `docker exec spine python manage.py fill_item_metadata`: the dry run. Read the
+     pending, stamp-only and failed-before counts, the estimated calls and minutes by
+     type and provider, and the rough number of new series members (each is queued for
+     external ratings).
+   - `docker exec spine python manage.py fill_item_metadata --apply --limit 20`, then
+     spot-check years, runtimes and genres on a few of those titles.
+   - `docker exec spine python manage.py fill_item_metadata --apply --queue` starts the
+     Celery chain. Watch it with `docker logs -f spine 2>&1 | grep "metadata fill"`: one
+     line per ~30 s chunk.
+   - The hourly sweep (beat "Sweep item metadata") also starts the chain whenever titles
+     are pending and none is queued or running, so it may already be running; `--queue`
+     then says so, which is fine.
+   - **Expect about 2-4 h**; the dry run's figures take precedence. Comics go at 60 an
+     hour and albums run last, about 15 s each.
+   - **A deploy that interrupts it is fine:** progress is in the database, and the
+     hourly sweep starts the chain again.
+4. **Finish.** Re-run the dry run until only titles waiting for a retry remain (a
+   provider that was down or out of budget; they are retried after 7 days). Report the
+   counts by type. The pre-deploy backup is the way back; the fill only fills blanks.
+
+Remove this section once the production fill has finished.
+
 ## Workflow B: roll back after a bad ship
 
 - **Backend.** Redeploy the last good commit of `myapp-main`:

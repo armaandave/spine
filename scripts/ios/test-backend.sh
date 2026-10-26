@@ -22,6 +22,9 @@
 #   update          move it to origin/myapp-main, after a ship
 #   repair-tv [--apply]  run the TV repair (reconcile_tv) on its lasting test database: a dry run,
 #                   or --apply; for the ship that brings the TV tracking contract (SHIP.md)
+#   fill-metadata [--apply]  run the metadata fill (fill_item_metadata) in the checkout being served,
+#                   on its database: a dry run with no provider calls, or --apply (paced, in this
+#                   process); for the ship that brings the stats data foundation (SHIP.md)
 #   install [ref]   create its checkout (at origin/myapp-main, or ref) and launchd job; once
 #   uninstall       stop it and remove the launchd job; the checkout and database stay
 #   serve           what launchd runs; not for direct use
@@ -250,6 +253,29 @@ repair_tv() {
   uv run --locked python manage.py reconcile_tv ${apply:+"$apply"}
 }
 
+# The metadata fill (src/app/metadata_fill.py) in the checkout being served: a branch's during "use"
+# (on its copy of the test database), else myapp-main's. Only SQLite, and Redis DB 5 under that
+# checkout's own prefix, the one its backend uses, so the fill shares its pacing and lock.
+fill_metadata() {
+  local apply=${1:-} checkout=$test_checkout path="" until=0
+  case "$apply" in ""|--apply) ;; *) die "usage: scripts/ios/test-backend.sh fill-metadata [--apply]" ;; esac
+  installed
+  [ -z "${DB_HOST:-}" ] || die "DB_HOST is set, which would point the fill at Postgres. Unset it."
+  if [ -f "$state" ]; then
+    read -r path until < "$state" || true
+    if [ -d "$path/src" ] && [ "${until:-0}" -gt "$(date +%s)" ]; then checkout=$path; fi
+  fi
+  [ "$checkout" != "$main_root" ] || die "the main checkout's database holds personal data"
+  echo "Filling in $checkout"
+  cd "$checkout/src"
+  export REDIS_URL=redis://localhost:6379/5 CELERY_REDIS_URL=redis://localhost:6379/5
+  export REDIS_PREFIX="local-$(basename "$checkout"):"
+  local vendor
+  vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
+  [ "$vendor" = sqlite ] || die "the settings use '$vendor', not the test backend's SQLite database"
+  uv run --locked python manage.py fill_item_metadata ${apply:+"$apply"}
+}
+
 uninstall() {
   launchctl bootout "$domain/$label" 2>/dev/null || true
   rm -f "$plist" "$state"
@@ -263,9 +289,10 @@ case "${1:-}" in
   release) release "${2:-}" ;;
   update) update ;;
   repair-tv) repair_tv "${2:-}" ;;
+  fill-metadata) fill_metadata "${2:-}" ;;
   install) install "${2:-}" ;;
   uninstall) uninstall ;;
   serve) serve ;;
-  -h|--help|"") sed -n '2,27p' "$0" ;;
+  -h|--help|"") sed -n '2,30p' "$0" ;;
   *) echo "Unknown command: $1" >&2; exit 2 ;;
 esac

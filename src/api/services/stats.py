@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
 
@@ -26,14 +26,15 @@ from django.db.models import (
     When,
     Window,
 )
-from django.db.models.functions import RowNumber, TruncDate
+from django.db.models.functions import RowNumber
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
 from api.serializers.common import media_summary_from_item, prime_collection_items
 from api.services import completion as completion_service
-from app import config, exposure
+from api.services import filters as filter_service
+from app import config, exposure, user_calendar
 from app.curation import prime_curated_artwork
 from app.models import (
     USER_OWNED_MEDIA_TYPES,
@@ -163,16 +164,10 @@ def ranged_diary_entries(*, user, viewer, stats_range):
     """Return visible diary entries inside the requested stats range."""
     diary_entries = visible_diary_entries(user=user, viewer=viewer)
     if not stats_range.is_all_time:
-        # These media use UTC midnight as a calendar-date carrier, not an instant.
-        calendar_types = Q(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES)
+        # Each log's day: a UTC-midnight carrier keeps its date, a moment is read on
+        # the owner's calendar, so every viewer counts the same days.
         diary_entries = diary_entries.filter(
-            (calendar_types & Q(
-                consumed_at__gte=datetime.combine(stats_range.start_date, time.min, tzinfo=UTC),
-                consumed_at__lte=datetime.combine(stats_range.end_date, time.max, tzinfo=UTC),
-            )) | (~calendar_types & Q(
-                consumed_at__gte=stats_range.start_datetime,
-                consumed_at__lte=stats_range.end_datetime,
-            )),
+            filter_service.log_day_range_q(user, stats_range.start_date, stats_range.end_date),
         )
     return diary_entries
 
@@ -218,7 +213,7 @@ def build_stats_payload(*, user, viewer, request, stats_range):
         game_completions += Game.objects.filter(user=user, completed_manually=True).count()
     tracking_by_type = _tracking_summaries(user)
     liked_total, likes_by_type = _like_summaries(user)
-    activity = _activity_payload(diary_entries, stats_range)
+    activity = _activity_payload(diary_entries, stats_range, owner=user)
     rating_distribution, ratings_by_type = _rating_distributions(diary_entries)
     top_rated, top_rated_by_type = _top_rated_payloads(diary_entries, request, owner=user)
     most_logged, most_logged_by_type, most_logged_totals = _most_logged_payloads(
@@ -574,18 +569,9 @@ def _diary_summaries(entries):
         average_rating=Avg("rating"),
         review_count=Count("id", filter=review_filter),
     )
-    rating_values = [
-        wire_rating(rating, media_type)
-        for media_type, rating in entries.exclude(rating__isnull=True).values_list(
-            "item__media_type",
-            "rating",
-        )
-    ]
-    aggregate["average_rating"] = (
-        sum(rating_values, Decimal(0)) / len(rating_values)
-        if rating_values
-        else None
-    )
+    # Every type stores ratings out of 10, so the overall average is in stars.
+    if aggregate["average_rating"] is not None:
+        aggregate["average_rating"] = Decimal(str(aggregate["average_rating"])) / 2
     summary = _normalized_diary_summary(aggregate)
 
     by_type = {media_type: _empty_diary_summary() for media_type in _primary_media_types()}
@@ -666,14 +652,9 @@ def _like_summaries(user):
     return sum(by_type.values()), by_type
 
 
-def _activity_payload(entries, stats_range):
+def _activity_payload(entries, stats_range, *, owner):
     rows = list(
-        entries.annotate(
-            activity_date=Case(
-                When(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES, then=TruncDate("consumed_at", tzinfo=UTC)),
-                default=TruncDate("consumed_at", tzinfo=timezone.get_current_timezone()),
-            ),
-        )
+        entries.annotate(activity_date=filter_service.log_day_expression(owner))
         .values("activity_date")
         .annotate(count=Count("id"))
         .order_by("activity_date")
@@ -687,8 +668,8 @@ def _activity_payload(entries, stats_range):
     for activity_date, count in day_counts.items():
         month_counts[activity_date.strftime("%Y-%m")] += count
 
-    reference_date = stats_range.end_date or timezone.localdate()
-    reference_date = min(reference_date, timezone.localdate())
+    today = user_calendar.today(owner)
+    reference_date = min(stats_range.end_date or today, today)
     current_streak, longest_streak = _streaks(set(day_counts), reference_date)
     weekday_counts = Counter(activity_date.weekday() for activity_date in day_counts)
     most_active_weekday = None
@@ -786,21 +767,17 @@ def wire_rating(value, media_type):
 
 
 def _top_rated_payloads(entries, request, *, owner):
+    # Ranked on the stored values, which share one scale; the legacy wire keeps
+    # each type's own scale because installed builds guess it from the value.
     rows = list(
         entries.exclude(rating__isnull=True)
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("item_id", "stats_media_type")
         .annotate(rating=Max("rating"), last_consumed_at=Max("consumed_at"))
+        .order_by("-rating", "-last_consumed_at", "item_id")
     )
     for row in rows:
         row["rating"] = wire_rating(row["rating"], row["stats_media_type"])
-    rows.sort(
-        key=lambda row: (
-            -Decimal(row["rating"]),
-            -row["last_consumed_at"].timestamp(),
-            row["item_id"],
-        ),
-    )
     overall_rows = rows[:TOP_LEVEL_MEDIA_LIMIT]
     type_rows = _limited_rows_by_type(rows, MEDIA_TYPE_MEDIA_LIMIT)
     items = _ranked_items(overall_rows, type_rows, owner)

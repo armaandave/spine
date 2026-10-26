@@ -124,6 +124,8 @@ class HowLongToBeatImporter:
             return
 
         item, _ = self._create_or_update_item(game)
+        # Only the search result's release date; the metadata fill completes the Item.
+        helpers.store_free_metadata(item, {"release_date": game.get("release_date")})
 
         # Check if we should process this entry based on mode
         if not helpers.should_process_media(

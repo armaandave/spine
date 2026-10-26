@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app import tv_listing, tv_tracking, user_calendar
 from app.models import MediaTypes, Sources
 from app.providers import services
@@ -241,4 +242,5 @@ class TVWebhookMixin:
                 "image": metadata.get("image") or settings.IMG_NONE,
             },
         )
+        store_item_metadata(show_item, metadata)
         return show_item

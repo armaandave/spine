@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app import helpers as app_helpers
 from app.models import MediaTypes, Sources, Status
 from app.providers import services
@@ -231,6 +232,7 @@ class SimklImporter:
                         "image": metadata["image"],
                     },
                 )
+                store_item_metadata(tv_item, metadata)
 
                 tv_instance = app.models.TV(
                     item=tv_item,
@@ -275,6 +277,7 @@ class SimklImporter:
                     "image": season_metadata["image"],
                 },
             )
+            store_item_metadata(season_item, season_metadata)
 
             if episodes[-1]["number"] == season_metadata["max_progress"]:
                 season_status = Status.COMPLETED.value
@@ -303,6 +306,10 @@ class SimklImporter:
                         "title": metadata["title"],
                         "image": ep_img,
                     },
+                )
+                store_item_metadata(
+                    episode_item,
+                    helpers.tmdb_episode_metadata(season_metadata, episode["number"]),
                 )
 
                 episode_instance = app.models.Episode(
@@ -382,6 +389,7 @@ class SimklImporter:
                         "image": metadata["image"],
                     },
                 )
+                store_item_metadata(movie_item, metadata)
 
                 movie_instance = app.models.Movie(
                     item=movie_item,
@@ -458,6 +466,7 @@ class SimklImporter:
                         "image": metadata["image"],
                     },
                 )
+                store_item_metadata(anime_item, metadata)
 
                 anime_instance = app.models.Anime(
                     item=anime_item,

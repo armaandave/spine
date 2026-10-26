@@ -6,6 +6,7 @@ from django.db import transaction
 
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry
+from integrations.imports import helpers
 from integrations.imports.storygraph.parser import parse_export
 from integrations.imports.storygraph.resolver import StoryGraphResolver
 
@@ -88,12 +89,16 @@ class StoryGraphImporter:
         }
         if total_pages:
             defaults["total_pages"] = total_pages
-        return Item.objects.update_or_create(
+        item = Item.objects.update_or_create(
             media_id=str(result["media_id"]),
             source=source,
             media_type=MediaTypes.BOOK.value,
             defaults=defaults,
         )[0]
+        # Only the search result's first publication year; the metadata fill
+        # completes the Item later.
+        helpers.store_free_metadata(item, {"first_publish_year": result.get("first_publish_year")})
+        return item
 
     def _create_book(self, item, row):
         read_dates = [read_date.end for read_date in row.read_dates]

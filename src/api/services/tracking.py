@@ -700,7 +700,8 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
     """Return a season or episode Item of the show, creating it from the show's copy.
 
     No provider call: a new Item takes the show's title and image, or the stored
-    listing's episode title, as tv_tracking does for the Items a write needs.
+    listing's episode title, plus the listing's date and length, as tv_tracking does
+    for the Items a write needs.
     """
     if media_type == MediaTypes.TV.value:
         return show_item
@@ -718,13 +719,15 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
         raise NotFound
     title = show_item.title
     image = show_item.image
+    listing = tv_listing.stored_listing(show_item)
+    # The listing's dates and lengths come along; genres stay on the show.
+    fields = listing.item_fields(media_type, season_number, episode_number) if listing else {}
     if media_type == MediaTypes.EPISODE.value:
-        listing = tv_listing.stored_listing(show_item)
         listed = listing.episode(season_number, episode_number) if listing else None
         if listed is not None:
             title = listed.title or title
             image = listed.image or image
-    item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image})
+    item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image, **fields})
     return item
 
 

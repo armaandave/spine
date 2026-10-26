@@ -14,6 +14,7 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 import app
+from api.services.item_metadata import is_metadata_current, store_item_metadata
 from app import single_weight, tv_tracking
 from app.models import MediaTypes
 
@@ -26,6 +27,25 @@ class MediaImportError(Exception):
 
 class MediaImportUnexpectedError(Exception):
     """Custom exception for unexpected import errors."""
+
+
+def store_free_metadata(item, metadata):
+    """Store the metadata an import got without an extra provider call.
+
+    It is partial, so the Item isn't stamped and no task is queued: the hourly
+    metadata fill completes it. An Item already holding its provider's full record
+    is left alone.
+    """
+    if item is not None and not is_metadata_current(item):
+        store_item_metadata(item, metadata, complete=False, persist_series=False)
+
+
+def tmdb_episode_metadata(season_metadata, episode_number):
+    """Return one episode's air date and length from TMDB season metadata, for storing."""
+    for episode in season_metadata.get("episodes") or []:
+        if episode.get("episode_number") == episode_number:
+            return {"release_date": episode.get("air_date"), "runtime": episode.get("runtime")}
+    return {}
 
 
 def get_existing_media(user):

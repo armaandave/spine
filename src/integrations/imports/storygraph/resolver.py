@@ -39,7 +39,14 @@ class StoryGraphResolver:
 
     def _search(self, query, source):
         try:
-            results = services.search(MediaTypes.BOOK.value, query, 1, source).get("results", [])
+            # Ranking fields kept: the importer stores the result's first_publish_year.
+            results = services.search(
+                MediaTypes.BOOK.value,
+                query,
+                1,
+                source,
+                preserve_ranking_fields=True,
+            ).get("results", [])
         except services.ProviderAPIError as error:
             logger.warning("StoryGraph %s lookup failed for %s: %s", source, query, error)
             return None

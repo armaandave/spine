@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import requests
 from django.core.cache import cache
 
+from api.services.item_metadata import store_item_metadata
 from app import tv_tracking
 from app.models import Item, MediaTypes
 from app.providers import services, tmdb
@@ -131,6 +132,7 @@ def process_tv_seasons(tv_item, seasons_to_process, events_bulk):
                 "image": season_metadata["image"],
             },
         )
+        store_item_metadata(season_item, season_metadata)
 
         processed_season_items.append(season_item)
         process_season_episodes(season_item, season_metadata, events_bulk)

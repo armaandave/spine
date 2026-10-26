@@ -7,6 +7,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
+from api.services.item_metadata import store_item_metadata
 from app import exposure, helpers
 from app.models import Item, MediaManager, MediaTypes
 from app.providers import services
@@ -294,6 +295,7 @@ def lists_modal(
             title=metadata["title"],
             image=metadata["image"],
         )
+        store_item_metadata(item, metadata)
 
     custom_lists = CustomList.objects.get_user_lists_with_item(request.user, item)
 

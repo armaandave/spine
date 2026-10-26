@@ -257,6 +257,7 @@ A tracked season or episode the provider no longer lists keeps its viewings, log
 Such a season is shown after Specials under its stored number, and such an episode last in its season.
 
 Spine keeps a stored copy of each season's listed episode numbers and air dates, updated whenever it fetches them, and uses it when the provider can't be reached.
+The copy also keeps each episode's length, for statistics; no TV rule reads it.
 A write that needs a season Spine has no copy of is rejected with a retryable "TV details are unavailable right now" error and changes nothing.
 Surfaces show no count for such a season rather than an invented 0.
 

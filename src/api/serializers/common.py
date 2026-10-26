@@ -249,7 +249,7 @@ def find_item(ref):
 
 def get_or_create_item_from_metadata(ref, metadata):
     """Get or create an Item using provider metadata."""
-    from api.services.filters import update_item_filter_metadata
+    from api.services.item_metadata import store_item_metadata
 
     defaults = {
         "title": metadata.get("title") or metadata.get("name") or ref["media_id"],
@@ -270,7 +270,7 @@ def get_or_create_item_from_metadata(ref, metadata):
     if defaults.get("total_pages") and item.total_pages != defaults["total_pages"]:
         item.total_pages = defaults["total_pages"]
         item.save(update_fields=["total_pages"])
-    update_item_filter_metadata(item, metadata)
+    store_item_metadata(item, metadata)
     return item
 
 

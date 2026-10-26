@@ -138,9 +138,9 @@ class KitsuImporter:
         url = f"{self.KITSU_API_BASE_URL}/library-entries"
 
         if media_type == MediaTypes.ANIME.value:
-            media_fields = "canonicalTitle,posterImage,episodeCount,mappings"
+            media_fields = "canonicalTitle,posterImage,episodeCount,mappings,startDate,episodeLength"
         else:
-            media_fields = "canonicalTitle,posterImage,chapterCount,mappings"
+            media_fields = "canonicalTitle,posterImage,chapterCount,mappings,startDate"
 
         params = {
             "filter[user_id]": self.kitsu_id,
@@ -328,6 +328,13 @@ class KitsuImporter:
                 "title": kitsu_metadata["attributes"]["canonicalTitle"],
                 "image": image_url,
             },
+        )
+        # Only the free fields (start date, episode length in minutes); the metadata
+        # fill completes the Item later.
+        attributes = kitsu_metadata["attributes"]
+        helpers.store_free_metadata(
+            item,
+            {"start_date": attributes.get("startDate"), "runtime": attributes.get("episodeLength")},
         )
         return item
 

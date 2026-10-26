@@ -970,6 +970,8 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
     if show_item.source == Sources.MANUAL.value:
         msg = f"Manual show {show_item} has no Item for {missing_seasons or missing_episodes}"
         raise TVInvalid(msg)
+    # The listing's dates and lengths come along (for statistics); genres stay on the
+    # show, which stats and the diary fold to.
     new_items = [
         Item(
             media_id=show_item.media_id,
@@ -978,6 +980,7 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
             season_number=number,
             title=show_item.title,
             image=show_item.image or settings.IMG_NONE,
+            **(listing.item_fields(MediaTypes.SEASON.value, number) if listing else {}),
         )
         for number in missing_seasons
     ]
@@ -992,6 +995,11 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
                 episode_number=episode_number,
                 title=(listed.title if listed and listed.title else show_item.title),
                 image=(listed.image if listed and listed.image else settings.IMG_NONE),
+                **(
+                    listing.item_fields(MediaTypes.EPISODE.value, season_number, episode_number)
+                    if listing
+                    else {}
+                ),
             ),
         )
     Item.objects.bulk_create(new_items, ignore_conflicts=True)

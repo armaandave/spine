@@ -715,6 +715,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Refresh music genre albums",
         "schedule": crontab(hour=4, minute=30, day_of_week="mon"),  # weekly
     },
+    "sweep_item_metadata": {
+        "task": "Sweep item metadata",
+        # every hour; fills what was tracked or logged lately, resumes the metadata fill
+        "schedule": 60 * 60,
+    },
 }
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
