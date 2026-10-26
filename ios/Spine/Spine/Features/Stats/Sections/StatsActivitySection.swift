@@ -109,9 +109,10 @@ enum StatsActivityChartData {
         return utcFormatter(template: "MMMMyyyy", locale: locale).string(from: date)
     }
 
-    /// "August 2025 · 31 titles".
+    /// "August 2025". No count: it counts each title once per day, so a title on five days
+    /// counts five times and "31 titles" would overstate it.
     static func busiestMonthText(_ month: StatsBusiestMonth, locale: Locale = .current) -> String {
-        "\(monthTitle(month.month, locale: locale)) · \(StatsChartCopy.count(month.count, "title", "titles"))"
+        monthTitle(month.month, locale: locale)
     }
 
     /// "Sat, 2 Aug 2025 · 6 titles".
@@ -157,11 +158,7 @@ enum StatsActivityChartData {
     }
 
     private static func utcFormatter(template: String, locale: Locale) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.setLocalizedDateFormatFromTemplate(template)
-        return formatter
+        StatsDateFormatters.utc(template: template, locale: locale)
     }
 }
 
@@ -213,6 +210,16 @@ private struct StatsMonthsChartCard: View {
             .frame(height: 170)
             .accessibilityLabel("Activity by month")
             .accessibilityChartDescriptor(descriptor)
+            .accessibilityActions {
+                // VoiceOver can't tap a bar, so each month with logs gets an action.
+                if let onDrillDown {
+                    ForEach(months.filter { $0.count > 0 }) { month in
+                        Button("Show \(StatsActivityChartData.monthTitle(month.month)) logs") {
+                            onDrillDown(.month(month.month))
+                        }
+                    }
+                }
+            }
 
             if isStacked, legendTypes.count > 1 {
                 StatsTypeLegend(mediaTypes: legendTypes)

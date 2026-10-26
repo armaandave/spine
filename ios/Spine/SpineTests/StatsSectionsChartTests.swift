@@ -66,15 +66,36 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(decade.averageText, "3.65")
     }
 
-    func testRatingsModeLeavesYearsWithoutRatingsEmpty() {
-        let points = StatsReleaseYearsChartData.yearSeries(
-            [year(2020, titles: 3, rated: 0), year(2021, titles: 1, rated: 1, average: "4.5")],
-            currentYear: 2021
-        )
+    func testLongSpansFoldOlderYearsIntoOneBeforeBar() {
+        let rows = [
+            year(1488, titles: 1, logs: 1, rated: 1, average: "5.0", byType: ["book": 1]),
+            year(1813, titles: 2, logs: 3, rated: 0, byType: ["book": 2]),
+            year(2020, titles: 4, logs: 4),
+        ]
 
-        XCTAssertNil(points[0].value(for: .ratings))
-        XCTAssertEqual(points[1].value(for: .ratings), 4.5)
-        XCTAssertEqual(points[0].value(for: .titles), 3)
+        let years = StatsReleaseYearsChartData.yearSeries(rows, currentYear: 2025)
+        XCTAssertEqual(years.count, StatsReleaseYearsChartData.maximumBars + 1)
+        let before = years[0]
+        XCTAssertTrue(before.isEarlier)
+        XCTAssertEqual(before.label, "Before 1876")
+        XCTAssertEqual([before.titles, before.logs, before.rated], [3, 4, 1])
+        XCTAssertEqual(before.byType, ["book": 3])
+        XCTAssertEqual(before.averageText, "5.0")
+        XCTAssertEqual(years[1].start, 1876)
+        XCTAssertEqual(years.last?.start, 2025)
+        XCTAssertNil(StatsReleaseYearsChartData.drillDown(for: before), "The Before bar has no single range")
+        XCTAssertFalse(StatsReleaseYearsChartData.axisLabels(years).contains("Before 1876"))
+        XCTAssertLessThanOrEqual(StatsReleaseYearsChartData.axisLabels(years).count, 7)
+
+        let ancient = [year(-750, titles: 1), year(2020, titles: 1)]
+        let decades = StatsReleaseYearsChartData.decadeSeries(ancient, currentYear: 2025)
+        XCTAssertEqual(decades.count, StatsReleaseYearsChartData.maximumBars + 1)
+        XCTAssertEqual(decades[0].label, "Before 530")
+        XCTAssertEqual(decades[1].label, "530s")
+        XCTAssertEqual(decades.last?.label, "2020s")
+
+        let short = StatsReleaseYearsChartData.yearSeries([year(1990), year(2019)], currentYear: 2019)
+        XCTAssertFalse(short.contains { $0.isEarlier }, "A span that fits has no Before bar")
     }
 
     func testTitlesStackByTypeOnGlobalOnly() {
@@ -83,16 +104,13 @@ final class StatsSectionsChartTests: XCTestCase {
             currentYear: 2024
         )
 
-        let stacked = StatsReleaseYearsChartData.parts(points, mode: .titles, stacked: true)
+        let stacked = StatsReleaseYearsChartData.parts(points, stacked: true)
         XCTAssertEqual(stacked.map(\.mediaType), ["movie", "tv"])
         XCTAssertEqual(stacked.map(\.value), [2, 1])
 
-        let logs = StatsReleaseYearsChartData.parts(points, mode: .logs, stacked: true)
-        XCTAssertEqual(logs.map(\.mediaType), [nil])
-        XCTAssertEqual(logs.map(\.value), [4])
-
-        let typeTab = StatsReleaseYearsChartData.parts(points, mode: .titles, stacked: false)
-        XCTAssertEqual(typeTab.count, 1)
+        let typeTab = StatsReleaseYearsChartData.parts(points, stacked: false)
+        XCTAssertEqual(typeTab.map(\.mediaType), [nil])
+        XCTAssertEqual(typeTab.map(\.value), [3])
     }
 
     func testAxisLabelsStepOnRoundYears() {
@@ -108,7 +126,7 @@ final class StatsSectionsChartTests: XCTestCase {
             currentYear: 2016
         )
 
-        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .titles), "Most titles from 2015")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points), "Most titles from 2015")
     }
 
     func testReleaseDrillDownsAreAYearOrADecade() {
@@ -332,7 +350,8 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsActivityChartData.monthTitle("nonsense", locale: locale), "nonsense")
         XCTAssertEqual(
             StatsActivityChartData.busiestMonthText(StatsBusiestMonth(month: "2025-08", count: 31), locale: locale),
-            "August 2025 · 31 titles"
+            "August 2025",
+            "The month's count adds up title-days, so it isn't shown as titles"
         )
         XCTAssertEqual(
             StatsActivityChartData.busiestDayText(StatsBusiestDay(date: "2025-08-02", count: 1), locale: locale),
@@ -432,7 +451,7 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsRankSort.mostTitle(for: "book"), "Most read")
         XCTAssertEqual(StatsRankSort.mostTitle(for: "game"), "Most played")
         XCTAssertEqual(StatsRankSort.mostTitle(for: "music"), "Most listened")
-        XCTAssertEqual(StatsRankSort.mostTitle(for: nil), "Most logged")
+        XCTAssertEqual(StatsRankSort.mostTitle(for: nil), "Most titles")
         XCTAssertEqual(StatsRankSort.highestRated.title(mostTitle: "Most read"), "Highest rated")
     }
 

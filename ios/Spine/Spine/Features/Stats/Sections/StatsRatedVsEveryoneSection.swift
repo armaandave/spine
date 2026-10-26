@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Rated higher than most (STAT-217): a segmented Higher / Lower control over rows of poster,
-/// title, your stars and "Everyone 3.4". With only one side, the control goes and the title
-/// says which side it is. One view per row, for the page's lazy stack.
+/// title, your stars and "Everyone 3.4". The title never changes; with only one side, the
+/// control starts on that side and the other says it has none. One view per row, for the
+/// page's lazy stack.
 struct StatsRatedVsEveryoneSection: View {
     let ratedVsEveryone: StatsRatedVsEveryone
     let onOpenTitle: (MediaSummary) -> Void
@@ -22,9 +23,10 @@ struct StatsRatedVsEveryoneSection: View {
     }
 
     enum Row: Hashable, Identifiable {
-        case title(String)
+        case title
         case picker
         case compared(StatsComparedTitle, side: Side, isFirst: Bool, isLast: Bool)
+        case empty(Side)
         case sources(String)
 
         var id: String {
@@ -32,21 +34,23 @@ struct StatsRatedVsEveryoneSection: View {
             case .title: "vs.title"
             case .picker: "vs.picker"
             case let .compared(item, side, _, _): "vs.\(side.rawValue).\(item.id)"
+            case let .empty(side): "vs.\(side.rawValue).empty"
             case .sources: "vs.sources"
             }
         }
     }
 
-    @State private var chosenSide: Side = .higher
+    /// The side the user picked; nil until they pick one.
+    @State private var chosenSide: Side?
 
     var body: some View {
         let side = Self.effectiveSide(chosen: chosenSide, in: ratedVsEveryone)
         ForEach(Self.rows(for: ratedVsEveryone, side: side)) { row in
             switch row {
-            case let .title(title):
-                StatsSectionTitle(title)
+            case .title:
+                StatsSectionTitle(Self.title)
             case .picker:
-                Picker("Rated", selection: $chosenSide) {
+                Picker("Rated", selection: Binding(get: { side }, set: { chosenSide = $0 })) {
                     ForEach(Side.allCases) { side in
                         Text(side.title).tag(side)
                     }
@@ -77,6 +81,14 @@ struct StatsRatedVsEveryoneSection: View {
                 .accessibilityLabel(Self.accessibilityLabel(for: item))
                 .accessibilityAddTraits(.isButton)
                 .statsCardSlice(isFirst: isFirst, isLast: isLast, gapAfter: hasSources ? 0 : StatsSectionLayout.sectionGap)
+            case let .empty(side):
+                Text(Self.emptyText(side))
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                    .diaryCard()
+                    .padding(.bottom, hasSources ? 0 : StatsSectionLayout.sectionGap)
             case let .sources(text):
                 Text(text)
                     .font(.footnote)
@@ -95,25 +107,21 @@ struct StatsRatedVsEveryoneSection: View {
 
     // MARK: - Data shaping
 
-    /// The chosen side, or the other one when the chosen side has no rows.
-    static func effectiveSide(chosen: Side, in section: StatsRatedVsEveryone) -> Side {
-        switch chosen {
-        case .higher: section.higher.isEmpty && !section.lower.isEmpty ? .lower : .higher
-        case .lower: section.lower.isEmpty && !section.higher.isEmpty ? .higher : .lower
-        }
-    }
+    /// The section's title, whichever side is showing (STAT-217).
+    static let title = "Rated higher than most"
 
-    /// "Rated higher than most", or "Rated lower than most" when only that side has rows.
-    static func title(for section: StatsRatedVsEveryone) -> String {
-        section.higher.isEmpty && !section.lower.isEmpty ? "Rated lower than most" : "Rated higher than most"
+    /// The side the user picked, else Higher, or Lower when only Lower has rows.
+    static func effectiveSide(chosen: Side?, in section: StatsRatedVsEveryone) -> Side {
+        if let chosen { return chosen }
+        return section.higher.isEmpty && !section.lower.isEmpty ? .lower : .higher
     }
 
     static func rows(for section: StatsRatedVsEveryone, side: Side) -> [Row] {
         guard !section.isEmpty else { return [] }
         let items = side == .higher ? section.higher : section.lower
-        var rows: [Row] = [.title(title(for: section))]
-        if !section.higher.isEmpty, !section.lower.isEmpty {
-            rows.append(.picker)
+        var rows: [Row] = [.title, .picker]
+        if items.isEmpty {
+            rows.append(.empty(side))
         }
         for (index, item) in items.enumerated() {
             rows.append(.compared(item, side: side, isFirst: index == 0, isLast: index == items.count - 1))
@@ -122,6 +130,11 @@ struct StatsRatedVsEveryoneSection: View {
             rows.append(.sources(note))
         }
         return rows
+    }
+
+    /// "No titles rated lower than most".
+    static func emptyText(_ side: Side) -> String {
+        "No titles rated \(side == .higher ? "higher" : "lower") than most"
     }
 
     /// "Everyone 3.4".

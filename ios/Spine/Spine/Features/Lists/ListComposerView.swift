@@ -243,25 +243,31 @@ struct ListComposerView: View {
                 }
             }
 
-            TextField("Add tags", text: Bindable(tagDraft).query, axis: .vertical)
-                .lineLimit(1...3)
-                .textFieldStyle(.plain)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($focusedField, equals: .tags)
-                .font(.system(size: 16, weight: .regular, design: .rounded))
-                .foregroundStyle(.white)
-                .onChange(of: tagDraft.query) { _, text in
-                    if LogTagDraft.containsSeparator(text) {
-                        tagDraft.updateQuery(text)
+            if tagDraft.isFull {
+                Text("A list can have up to \(ListTagRules.maximumCount) tags.")
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.5))
+            } else {
+                TextField("Add tags", text: Bindable(tagDraft).query, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.plain)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .tags)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white)
+                    .onChange(of: tagDraft.query) { _, text in
+                        if LogTagDraft.containsSeparator(text) {
+                            tagDraft.updateQuery(text)
+                        }
                     }
-                }
-                .onSubmit {
-                    tagDraft.commitQuery()
-                    focusedField = .tags
-                }
+                    .onSubmit {
+                        tagDraft.commitQuery()
+                        focusedField = .tags
+                    }
+            }
 
-            if focusedField == .tags, !tagDraft.suggestions.isEmpty {
+            if focusedField == .tags, !tagDraft.isFull, !tagDraft.suggestions.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(tagDraft.suggestions, id: \.name) { suggestion in
                         Divider().overlay(.white.opacity(0.1))

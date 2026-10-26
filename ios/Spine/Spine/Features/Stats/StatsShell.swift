@@ -32,10 +32,10 @@ struct StatsShell<Content: View>: View {
                 ) { period in
                     viewModel.selectPeriod(period)
                 }
-                .padding(.bottom, 14)
+                .padding(.bottom, 26)
 
                 mediaPicker
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 30)
 
                 stateRows
             }
@@ -86,22 +86,28 @@ struct StatsShell<Content: View>: View {
         }
 
         if let page = viewModel.page {
+            // The page on screen answers `pageScope`, which differs from the selection after a
+            // failed load.
+            let pagePeriod = viewModel.pageScope?.period ?? viewModel.selectedPeriod
             Group {
                 if page.isEmpty {
                     DiaryStateCard(
                         title: "Nothing here yet",
                         systemImage: "chart.bar",
-                        message: viewModel.selectedPeriod == .allTime
+                        message: pagePeriod == .allTime
                             ? "Log or track something to start seeing your stats."
-                            : "Nothing logged in \(viewModel.selectedPeriod.title). Try another year."
+                            : "Nothing logged in \(pagePeriod.title). Try another year."
                     )
                 } else {
                     content(page)
                 }
             }
-            .opacity(viewModel.isDimmed ? 0.45 : 1)
+            // Only the dimming animates: a new page lands in the same update that ends it, and
+            // its rows shouldn't animate in.
+            .animation(.easeInOut(duration: SpineMotion.standardDuration)) { rows in
+                rows.opacity(viewModel.isDimmed ? 0.45 : 1)
+            }
             .allowsHitTesting(!viewModel.isDimmed)
-            .animation(.easeInOut(duration: SpineMotion.standardDuration), value: viewModel.isDimmed)
         } else if let message = viewModel.fullErrorMessage {
             VStack(spacing: 16) {
                 DiaryStateCard(

@@ -30,6 +30,7 @@ extension StatsTitlesPageModel where Item == StatsRatedTitle {
 struct StatsHighestRatedListView: View {
     @State private var viewModel: StatsHighestRatedViewModel
     let scopeTitle: String
+    let drillDownContext: StatsDrillDownContext?
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
     let diaryRepository: DiaryRepository
@@ -39,10 +40,12 @@ struct StatsHighestRatedListView: View {
     let onSelectTab: (AppTab) -> Void
     let onUnauthorized: () -> Void
 
-    /// `scopeTitle` names the tab and range ("Movies · 2025").
+    /// `scopeTitle` names the tab and range ("Movies · 2025"). `drillDownContext` makes a
+    /// poster open the same thing it opens on the page (STAT-401); nil opens the title page.
     init(
         viewModel: StatsHighestRatedViewModel,
         scopeTitle: String,
+        drillDownContext: StatsDrillDownContext? = nil,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
@@ -54,6 +57,7 @@ struct StatsHighestRatedListView: View {
     ) {
         _viewModel = State(initialValue: viewModel)
         self.scopeTitle = scopeTitle
+        self.drillDownContext = drillDownContext
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -72,6 +76,7 @@ struct StatsHighestRatedListView: View {
             emptyTitle: "Nothing rated yet",
             emptyMessage: "Titles you rate will appear here.",
             gridID: "highestRatedAll",
+            drillDownContext: drillDownContext,
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
             diaryRepository: diaryRepository,

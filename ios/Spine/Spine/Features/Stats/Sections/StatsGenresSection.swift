@@ -13,14 +13,15 @@ enum StatsRankSort: String, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
 
     /// "Most watched" for movies, TV and anime, "Most read" for books, manga and comics,
-    /// "Most played" for games, "Most listened" for music, "Most logged" on Global.
+    /// "Most played" for games, "Most listened" for music, "Most titles" on Global, where the
+    /// rows are ranked by titles across every type.
     static func mostTitle(for mediaType: String?) -> String {
         switch mediaType {
         case "movie", "tv", "anime": "Most watched"
         case "book", "manga", "comic": "Most read"
         case "game": "Most played"
         case "music": "Most listened"
-        default: "Most logged"
+        default: "Most titles"
         }
     }
 

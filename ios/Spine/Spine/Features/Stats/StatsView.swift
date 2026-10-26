@@ -146,7 +146,11 @@ struct StatsView: View {
         switch section {
         case .header:
             if let header = page.header {
-                StatsHeaderSection(header: header, mediaType: mediaType)
+                StatsHeaderSection(
+                    header: header,
+                    mediaType: mediaType,
+                    onOpenLikes: isOwnStats ? { open(.liked, page: page) } : nil
+                )
             }
         case .time:
             if let time = page.time {
@@ -274,6 +278,11 @@ struct StatsView: View {
         }
     }
 
+    /// The show-all screens' context, so a poster there opens what it opens on the page.
+    private func drillDownContext(for scope: StatsScope) -> StatsDrillDownContext {
+        StatsDrillDownContext(period: scope.period, mediaType: scope.mediaType, isOwnStats: isOwnStats)
+    }
+
     private func showHighestRated(_ page: StatsPage) {
         destination = .highestRated(scope(of: page), total: page.highestRated?.total ?? 0)
     }
@@ -294,6 +303,7 @@ struct StatsView: View {
                     onUnauthorized: services.onUnauthorized
                 ),
                 scopeTitle: StatsPageSection.scopeTitle(mediaType: scope.mediaType, period: scope.period),
+                drillDownContext: drillDownContext(for: scope),
                 mediaRepository: services.mediaRepository,
                 trackingRepository: services.trackingRepository,
                 diaryRepository: services.diaryRepository,
@@ -315,6 +325,7 @@ struct StatsView: View {
                 ),
                 title: title,
                 scopeTitle: StatsPageSection.scopeTitle(mediaType: scope.mediaType, period: scope.period),
+                drillDownContext: drillDownContext(for: scope),
                 mediaRepository: services.mediaRepository,
                 trackingRepository: services.trackingRepository,
                 diaryRepository: services.diaryRepository,

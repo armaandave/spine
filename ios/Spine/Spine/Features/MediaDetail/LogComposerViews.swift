@@ -29,9 +29,20 @@ final class LogTagDraft {
     var query = ""
     private(set) var library: [DiaryTagSuggestion] = []
     private var hasLoaded = false
+    /// The most tags it takes, or nil for no limit.
+    let maximumCount: Int?
+    /// The longest a tag can be; longer ones are cut. Nil for no limit.
+    let maximumLength: Int?
 
-    init(tags: [String] = []) {
+    init(tags: [String] = [], maximumCount: Int? = nil, maximumLength: Int? = nil) {
         self.tags = tags
+        self.maximumCount = maximumCount
+        self.maximumLength = maximumLength
+    }
+
+    /// Whether it has as many tags as it takes.
+    var isFull: Bool {
+        maximumCount.map { tags.count >= $0 } ?? false
     }
 
     var suggestions: [DiaryTagSuggestion] {
@@ -82,8 +93,11 @@ final class LogTagDraft {
     }
 
     func add(_ rawTag: String) {
-        let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
+        var tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let maximumLength, tag.count > maximumLength {
+            tag = String(tag.prefix(maximumLength)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !isFull, !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
         tags.append(tag)
     }
 

@@ -6,6 +6,8 @@ struct StatsHeaderSection: View {
     let header: StatsHeader
     /// The tab: nil on Global.
     let mediaType: String?
+    /// Opens the liked logs (STAT-401); nil on someone else's stats, where nothing opens.
+    var onOpenLikes: (() -> Void)?
 
     struct Count: Hashable, Identifiable {
         let label: String
@@ -35,12 +37,26 @@ struct StatsHeaderSection: View {
                 countsCard
                     .padding(.bottom, header.details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
             case let .detail(detail, isFirst, isLast):
-                StatsLabelValueRow(
-                    label: detail.label,
-                    value: Self.detailValue(detail),
-                    showsSeparator: !isLast
-                )
-                .statsCardSlice(isFirst: isFirst, isLast: isLast)
+                if let onOpenLikes, Self.opensLikes(detail) {
+                    Button(action: onOpenLikes) {
+                        StatsLabelValueRow(
+                            label: detail.label,
+                            value: Self.detailValue(detail),
+                            showsChevron: true,
+                            showsSeparator: !isLast
+                        )
+                    }
+                    .buttonStyle(DiaryRowButtonStyle())
+                    .accessibilityAddTraits(.isButton)
+                    .statsCardSlice(isFirst: isFirst, isLast: isLast)
+                } else {
+                    StatsLabelValueRow(
+                        label: detail.label,
+                        value: Self.detailValue(detail),
+                        showsSeparator: !isLast
+                    )
+                    .statsCardSlice(isFirst: isFirst, isLast: isLast)
+                }
             }
         }
     }
@@ -94,6 +110,11 @@ struct StatsHeaderSection: View {
         return [.counts] + details.enumerated().map { index, detail in
             .detail(detail, isFirst: index == 0, isLast: index == details.count - 1)
         }
+    }
+
+    /// Whether a detail row opens the liked logs: the "likes" row, when it counts any.
+    static func opensLikes(_ detail: StatsHeaderDetail) -> Bool {
+        detail.key == "likes" && detail.value > 0
     }
 
     /// Titles, logs, active days and the longest daily streak. "Titles" names the tab's kind.

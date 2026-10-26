@@ -181,16 +181,13 @@ struct StatsTopSection: View {
         return top.items.count >= 2 ? "Top \(top.items.count)" : "Top"
     }
 
-    /// The owner's hint in the fallback: "Tag a ranked movie list top2025 to show it here."
-    /// Other viewers get no hint (STAT-004).
+    /// The owner's hint in the fallback, as the server words it: "Tag a ranked movie list
+    /// top2025" (STAT-208). Other viewers get no hint (STAT-004).
     static func hintText(for top: StatsTop) -> String? {
         guard !top.isFromList,
-              var hint = top.tagHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let hint = top.tagHint?.trimmingCharacters(in: .whitespacesAndNewlines),
               !hint.isEmpty else { return nil }
-        while hint.hasSuffix(".") {
-            hint.removeLast()
-        }
-        return "\(hint) to show it here."
+        return hint
     }
 
     static func rows(for top: StatsTop, highestRatedTotal: Int = 0, canShowAll: Bool = true) -> [Row] {

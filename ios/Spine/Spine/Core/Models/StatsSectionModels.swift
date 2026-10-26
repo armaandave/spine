@@ -1023,9 +1023,10 @@ private struct StatsLossyArray<Element: Decodable>: Decodable {
         while !container.isAtEnd {
             if let element = try? container.decode(Element.self) {
                 elements.append(element)
-            } else {
-                // A failed decode doesn't advance the container; skip the element.
-                _ = try? container.decode(StatsSkippedValue.self)
+            } else if (try? container.decode(StatsSkippedValue.self)) == nil {
+                // A failed decode doesn't advance the container, so skip the element; if even
+                // that fails, stop rather than spin on the same element.
+                break
             }
         }
         self.elements = elements

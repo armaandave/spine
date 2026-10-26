@@ -217,18 +217,40 @@ enum StatsTitleFormat {
     /// "Mar 12, 2024" in the US). It's a calendar day, so it's read and shown in UTC and never
     /// shifts with the phone's zone.
     static func day(_ text: String, locale: Locale = .current) -> String? {
+        guard let date = StatsDateFormatters.dayParser.date(from: text) else { return nil }
+        return StatsDateFormatters.utc(template: "dMMMy", locale: locale, gregorian: true).string(from: date)
+    }
+}
+
+/// Date formatters for the Stats screens, made once and reused: charts and grids format many
+/// dates on every redraw, and making a formatter costs far more than using one.
+enum StatsDateFormatters {
+    private static var cache: [String: DateFormatter] = [:]
+
+    /// Reads a contract day ("2024-03-12") as midnight UTC.
+    static let dayParser: DateFormatter = {
         let parser = DateFormatter()
         parser.calendar = Calendar(identifier: .gregorian)
         parser.locale = Locale(identifier: "en_US_POSIX")
         parser.timeZone = TimeZone(secondsFromGMT: 0)
         parser.dateFormat = "yyyy-MM-dd"
-        guard let date = parser.date(from: text) else { return nil }
+        return parser
+    }()
 
+    /// A UTC formatter for a localized template, one per template, locale and calendar.
+    static func utc(template: String, locale: Locale, gregorian: Bool = false) -> DateFormatter {
+        let key = "\(template)|\(locale.identifier)|\(gregorian)"
+        if let formatter = cache[key] {
+            return formatter
+        }
         let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
+        if gregorian {
+            formatter.calendar = Calendar(identifier: .gregorian)
+        }
         formatter.locale = locale
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.setLocalizedDateFormatFromTemplate("dMMMy")
-        return formatter.string(from: date)
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        cache[key] = formatter
+        return formatter
     }
 }

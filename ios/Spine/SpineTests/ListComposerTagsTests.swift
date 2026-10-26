@@ -19,6 +19,27 @@ final class ListComposerTagsTests: XCTestCase {
         XCTAssertEqual(ListTagRules.normalized(["top2025", "  Favorites ", "favorites"]), ["top2025", "Favorites"])
     }
 
+    func testListTagsStopAtTwentyOfAHundredCharacters() {
+        let draft = LogTagDraft(maximumCount: ListTagRules.maximumCount, maximumLength: ListTagRules.maximumLength)
+        for index in 1 ... 25 {
+            draft.add("tag\(index)")
+        }
+        XCTAssertEqual(draft.tags.count, 20, "The server refuses a 21st tag")
+        XCTAssertTrue(draft.isFull)
+
+        draft.remove("tag1")
+        XCTAssertFalse(draft.isFull)
+        draft.add(String(repeating: "a", count: 140))
+        XCTAssertEqual(draft.tags.last?.count, 100, "A long tag is cut to 100 characters")
+
+        let diaryDraft = LogTagDraft()
+        for index in 1 ... 25 {
+            diaryDraft.add("tag\(index)")
+        }
+        XCTAssertEqual(diaryDraft.tags.count, 25, "Log tags keep no limit")
+        XCTAssertFalse(diaryDraft.isFull)
+    }
+
     // MARK: - Suggestions
 
     func testTopTagsAreThisYearLastYearAndAllTime() {

@@ -54,6 +54,9 @@ final class StatsTitlesPageModel<Item: Identifiable> {
         requestGeneration &+= 1
         let generation = requestGeneration
         isLoadingInitial = true
+        // A next page still on its way belongs to the old generation and won't clear its own
+        // flag, so clear it here or paging would stay blocked.
+        isLoadingNextPage = false
         errorMessage = nil
         nextPageErrorMessage = nil
         defer {
@@ -164,6 +167,7 @@ struct StatsMostLoggedView: View {
     @State private var viewModel: StatsMostLoggedViewModel
     let title: String
     let scopeTitle: String
+    let drillDownContext: StatsDrillDownContext?
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
     let diaryRepository: DiaryRepository
@@ -174,11 +178,13 @@ struct StatsMostLoggedView: View {
     let onUnauthorized: () -> Void
 
     /// `title` is the section's label ("Most watched"); `scopeTitle` names the tab and range
-    /// ("Movies · 2025").
+    /// ("Movies · 2025"). `drillDownContext` makes a poster open the same thing it opens on the
+    /// page (STAT-401); nil opens the title page.
     init(
         viewModel: StatsMostLoggedViewModel,
         title: String = "Most logged",
         scopeTitle: String,
+        drillDownContext: StatsDrillDownContext? = nil,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
@@ -191,6 +197,7 @@ struct StatsMostLoggedView: View {
         _viewModel = State(initialValue: viewModel)
         self.title = title
         self.scopeTitle = scopeTitle
+        self.drillDownContext = drillDownContext
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -209,6 +216,7 @@ struct StatsMostLoggedView: View {
             emptyTitle: "Nothing logged twice yet",
             emptyMessage: "Titles you log more than once will appear here.",
             gridID: "mostLoggedAll",
+            drillDownContext: drillDownContext,
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
             diaryRepository: diaryRepository,
@@ -224,7 +232,8 @@ struct StatsMostLoggedView: View {
 }
 
 /// A Stats show-all page: the count, then the posters in rows of four (each row its own lazy
-/// item), loading the next page as the end comes near. Tapping a poster opens the title.
+/// item), loading the next page as the end comes near. Tapping a poster opens what it opens on
+/// the page: on your own stats the title's logs, otherwise the title page (STAT-401).
 struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
     let viewModel: StatsTitlesPageModel<Item>
     let title: String
@@ -232,6 +241,8 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
     let emptyTitle: String
     let emptyMessage: String
     let gridID: String
+    /// Whose stats and which scope; nil always opens the title page.
+    let drillDownContext: StatsDrillDownContext?
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
     let diaryRepository: DiaryRepository
@@ -240,10 +251,11 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
     let selectedTab: AppTab
     let onSelectTab: (AppTab) -> Void
     let onUnauthorized: () -> Void
-    /// The cell for an item; call `open` to open its title.
+    /// The cell for an item; call `open` to open it.
     let cell: (_ item: Item, _ open: @escaping () -> Void) -> Cell
 
     @State private var selectedRef: MediaRef?
+    @State private var diaryRoute: StatsRoute?
 
     init(
         viewModel: StatsTitlesPageModel<Item>,
@@ -252,6 +264,7 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
         emptyTitle: String,
         emptyMessage: String,
         gridID: String,
+        drillDownContext: StatsDrillDownContext? = nil,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
@@ -268,6 +281,7 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
         self.emptyTitle = emptyTitle
         self.emptyMessage = emptyMessage
         self.gridID = gridID
+        self.drillDownContext = drillDownContext
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -323,6 +337,31 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
                 onUnauthorized: onUnauthorized
             )
         }
+        .navigationDestination(item: $diaryRoute) { route in
+            if case let .diary(drillDown, context) = route {
+                FilteredDiaryView(
+                    title: drillDown.diaryTitle(in: context),
+                    filter: drillDown.diaryFilter(in: context),
+                    diaryRepository: diaryRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized
+                )
+            }
+        }
+    }
+
+    /// The page's drill-down for a title: its logs on your own stats, else the title page.
+    private func open(_ item: Item) {
+        if let drillDownContext,
+           case let .diary(drillDown, context)? = StatsDrillDown.title(item.media).route(in: drillDownContext) {
+            diaryRoute = .diary(drillDown, context)
+        } else {
+            selectedRef = item.media.ref
+        }
     }
 
     private var headline: some View {
@@ -361,7 +400,7 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
             let items = viewModel.items
             ForEach(StatsPosterGridLayout.rows(items, idPrefix: gridID)) { row in
                 StatsPosterGridRowView(row: row) { item in
-                    cell(item) { selectedRef = item.media.ref }
+                    cell(item) { open(item) }
                 }
                 .padding(.bottom, StatsPosterGridLayout.rowSpacing)
                 .onAppear {

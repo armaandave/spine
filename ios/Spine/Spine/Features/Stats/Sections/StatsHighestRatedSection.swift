@@ -60,19 +60,31 @@ struct StatsHighestRatedSection: View {
     }
 }
 
-/// A rated poster: the artwork and its gold stars. Shared with the show-all page.
+/// A rated poster: the artwork and its gold stars, and "S2" or "Specials" under a season, which
+/// is rated on its own and can share its show's artwork. Shared with the show-all page.
 struct StatsRatedPosterCell: View {
     let title: StatsRatedTitle
     let action: () -> Void
 
     var body: some View {
         StatsPosterCell(media: title.media, accessibilityText: Self.accessibilityText(for: title), action: action) {
-            if let stars = title.stars?.value {
-                StatsStars(stars: stars, size: 10)
-            } else {
-                Color.clear.frame(height: 12)
+            VStack(alignment: .leading, spacing: 3) {
+                if let stars = title.stars?.value {
+                    StatsStars(stars: stars, size: 10)
+                } else {
+                    Color.clear.frame(height: 12)
+                }
+                if let season = Self.seasonTag(for: title.media.ref) {
+                    StatsPosterCaption(text: season)
+                }
             }
         }
+    }
+
+    /// "S2" for a season, "Specials" for season 0, nil for anything else.
+    static func seasonTag(for ref: MediaRef) -> String? {
+        guard ref.mediaType == "season", let number = ref.seasonNumber else { return nil }
+        return number == 0 ? "Specials" : "S\(number)"
     }
 
     static func accessibilityText(for title: StatsRatedTitle) -> String {

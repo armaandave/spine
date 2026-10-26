@@ -144,7 +144,11 @@ final class ListComposerViewModel {
         case let .edit(list):
             initialTags = ListTagRules.normalized(list.tags)
         }
-        tagDraft = LogTagDraft(tags: initialTags)
+        tagDraft = LogTagDraft(
+            tags: initialTags,
+            maximumCount: ListTagRules.maximumCount,
+            maximumLength: ListTagRules.maximumLength
+        )
 
         switch mode {
         case let .create(type):
@@ -645,6 +649,10 @@ final class ListComposerViewModel {
 
 /// List tags (STAT-402): who writes them, how they're cleaned up, and what's suggested.
 enum ListTagRules {
+    /// The server takes at most 20 tags of at most 100 characters each, and refuses more.
+    static let maximumCount = 20
+    static let maximumLength = 100
+
     /// The owner writes a list's tags. A new list is always the creator's. When the signed-in user isn't
     /// known, a list without collaborators can only be edited by its owner.
     static func canEditTags(mode: ListComposerMode, currentUserId: Int?) -> Bool {

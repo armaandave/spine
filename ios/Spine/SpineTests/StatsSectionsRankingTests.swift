@@ -216,16 +216,16 @@ final class StatsSectionsRankingTests: XCTestCase {
 
         XCTAssertFalse(top.isFromList)
         XCTAssertEqual(StatsTopSection.title(for: top), "Highest rated")
-        XCTAssertEqual(StatsTopSection.hintText(for: top), "Tag a ranked movie list top2025 to show it here.")
+        XCTAssertEqual(StatsTopSection.hintText(for: top), "Tag a ranked movie list top2025")
 
         let rows = StatsTopSection.rows(for: top, highestRatedTotal: 40)
         XCTAssertEqual(Array(rows.suffix(2)), [
-            .note("Tag a ranked movie list top2025 to show it here.", systemImage: "tag", isLast: false),
+            .note("Tag a ranked movie list top2025", systemImage: "tag", isLast: false),
             .showAllRated(total: 40),
         ])
 
         let noShowAll = StatsTopSection.rows(for: top, highestRatedTotal: 3)
-        XCTAssertEqual(noShowAll.last, .note("Tag a ranked movie list top2025 to show it here.", systemImage: "tag", isLast: true))
+        XCTAssertEqual(noShowAll.last, .note("Tag a ranked movie list top2025", systemImage: "tag", isLast: true))
         XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).last, noShowAll.last)
     }
 
@@ -240,9 +240,9 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertTrue(isLast)
     }
 
-    func testHintKeepsOneFullStopAndIgnoresBlanks() throws {
-        let dotted = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 1, list: false, tagHint: "Tag a ranked list with mixed media topalltime."))
-        XCTAssertEqual(StatsTopSection.hintText(for: dotted), "Tag a ranked list with mixed media topalltime to show it here.")
+    func testHintIsTheServersTextAndIgnoresBlanks() throws {
+        let allTime = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 1, list: false, tagHint: " Tag a ranked list with mixed media topalltime "))
+        XCTAssertEqual(StatsTopSection.hintText(for: allTime), "Tag a ranked list with mixed media topalltime")
 
         let blank = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 1, list: false, tagHint: "  "))
         XCTAssertNil(StatsTopSection.hintText(for: blank))
@@ -358,31 +358,48 @@ final class StatsSectionsRankingTests: XCTestCase {
 
     // MARK: - Rated higher than most
 
-    func testRatedVsEveryoneHasAPickerOnlyWithBothSides() throws {
+    func testRatedVsEveryoneHasATitleAndPickerThenTheSidesRows() throws {
         let both = try Self.decode(StatsRatedVsEveryone.self, Self.ratedVsEveryoneJSON(higher: 2, lower: 1))
         let rows = StatsRatedVsEveryoneSection.rows(for: both, side: .higher)
 
         XCTAssertEqual(Array(rows.map(\.id).prefix(2)), ["vs.title", "vs.picker"])
         XCTAssertEqual(Self.comparedTitles(rows), ["H1", "H2"])
         XCTAssertEqual(rows.last, .sources("Everyone's ratings from Letterboxd and IMDb"))
-        XCTAssertEqual(StatsRatedVsEveryoneSection.title(for: both), "Rated higher than most")
+        XCTAssertEqual(StatsRatedVsEveryoneSection.title, "Rated higher than most")
 
         let lowerRows = StatsRatedVsEveryoneSection.rows(for: both, side: .lower)
         XCTAssertEqual(Self.comparedTitles(lowerRows, withEdges: true), ["L1truetrue"])
     }
 
-    func testRatedVsEveryoneWithOneSideDropsThePickerAndNamesTheSide() throws {
+    func testRatedVsEveryoneWithOneSideStartsOnItAndKeepsTheTitle() throws {
         let lowerOnly = try Self.decode(StatsRatedVsEveryone.self, Self.ratedVsEveryoneJSON(higher: 0, lower: 2))
 
-        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: .higher, in: lowerOnly), .lower)
-        XCTAssertEqual(StatsRatedVsEveryoneSection.title(for: lowerOnly), "Rated lower than most")
-        XCTAssertFalse(StatsRatedVsEveryoneSection.rows(for: lowerOnly, side: .lower).contains(.picker))
+        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: nil, in: lowerOnly), .lower)
+        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: .higher, in: lowerOnly), .higher, "The user's pick stands")
+        let lowerRows = StatsRatedVsEveryoneSection.rows(for: lowerOnly, side: .lower)
+        XCTAssertEqual(Array(lowerRows.map(\.id).prefix(2)), ["vs.title", "vs.picker"])
+        XCTAssertEqual(Self.comparedTitles(lowerRows), ["L1", "L2"])
+
+        let higherRows = StatsRatedVsEveryoneSection.rows(for: lowerOnly, side: .higher)
+        XCTAssertTrue(higherRows.contains(.empty(.higher)))
+        XCTAssertTrue(Self.comparedTitles(higherRows).isEmpty)
+        XCTAssertEqual(StatsRatedVsEveryoneSection.emptyText(.higher), "No titles rated higher than most")
 
         let higherOnly = try Self.decode(StatsRatedVsEveryone.self, Self.ratedVsEveryoneJSON(higher: 1, lower: 0))
-        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: .lower, in: higherOnly), .higher)
-        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: .lower, in: try Self.decode(StatsRatedVsEveryone.self, Self.ratedVsEveryoneJSON(higher: 1, lower: 1))), .lower)
+        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: nil, in: higherOnly), .higher)
+        XCTAssertEqual(StatsRatedVsEveryoneSection.effectiveSide(chosen: nil, in: try Self.decode(StatsRatedVsEveryone.self, Self.ratedVsEveryoneJSON(higher: 1, lower: 1))), .higher)
 
         XCTAssertTrue(StatsRatedVsEveryoneSection.rows(for: StatsRatedVsEveryone(sources: [], higher: [], lower: []), side: .higher).isEmpty)
+    }
+
+    func testSeasonsInHighestRatedGetTheirSeasonTag() {
+        let season = MediaRef(itemId: 5, source: "tmdb", mediaType: "season", mediaId: "1", seasonNumber: 2, episodeNumber: nil)
+        let specials = MediaRef(itemId: 6, source: "tmdb", mediaType: "season", mediaId: "1", seasonNumber: 0, episodeNumber: nil)
+        let show = MediaRef(itemId: 7, source: "tmdb", mediaType: "tv", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
+
+        XCTAssertEqual(StatsRatedPosterCell.seasonTag(for: season), "S2")
+        XCTAssertEqual(StatsRatedPosterCell.seasonTag(for: specials), "Specials")
+        XCTAssertNil(StatsRatedPosterCell.seasonTag(for: show))
     }
 
     func testRatedVsEveryoneWords() throws {
@@ -443,6 +460,41 @@ final class StatsSectionsRankingTests: XCTestCase {
             StatsShowAllFakeRequest(kind: "highest", username: "mika", period: .year(2025), mediaType: "movie", page: nil, pageSize: 48),
             StatsShowAllFakeRequest(kind: "highest", username: "mika", period: .year(2025), mediaType: "movie", page: "2", pageSize: 48),
         ])
+    }
+
+    func testRefreshingWhileANextPageLoadsKeepsPagingWorking() async throws {
+        let gate = RefreshGate()
+        var isHolding = false
+        var heldOnce = false
+        let model = StatsTitlesPageModel<Tile>(pageSize: 2, onUnauthorized: {}) { page, _ in
+            if page == "2", !heldOnce {
+                heldOnce = true
+                isHolding = true
+                await gate.wait()
+                isHolding = false
+            }
+            return .init(
+                count: 4,
+                next: page == nil ? "https://example.com/api/v1/stats/me/highest-rated/?page=2" : nil,
+                results: (page == nil ? [1, 2] : [3, 4]).map { Tile(id: $0) }
+            )
+        }
+
+        await model.load()
+        let heldPage = Task { await model.loadNextPage() }
+        while !isHolding { await Task.yield() }
+        XCTAssertTrue(model.isLoadingNextPage)
+
+        // Pull to refresh while the next page is still on its way.
+        await model.load()
+        XCTAssertFalse(model.isLoadingNextPage)
+        await gate.open()
+        await heldPage.value
+        XCTAssertEqual(model.items.map(\.id), [1, 2], "The old generation's page is dropped")
+
+        await model.loadNextPage()
+        XCTAssertEqual(model.items.map(\.id), [1, 2, 3, 4], "Paging still works after the refresh")
+        XCTAssertFalse(model.isLoadingNextPage)
     }
 
     func testMostLoggedShowAllUsesTheFoldedEndpoint() async throws {
