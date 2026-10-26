@@ -122,7 +122,10 @@ final class ProfileViewModel {
         }
 
         do {
-            let activity = try await activityRepository.userActivity(username: username, limit: 6)
+            let activity = try await activityRepository.userActivity(
+                username: username,
+                limit: ProfileRecentActivityRailModel.fetchLimit
+            )
             guard generation == requestGeneration else { return }
             recentActivityItems = activity
             activityErrorMessage = nil
@@ -803,11 +806,11 @@ struct ProfileView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
-                        .background(.black.opacity(0.34), in: Circle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(.circle)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Back")
                 .padding(.top, topSafeAreaInset + 6)
                 .padding(.leading, 16)
@@ -851,11 +854,11 @@ struct ProfileView: View {
         } label: {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Settings")
     }
 
@@ -1883,16 +1886,41 @@ struct ProfileRecentActivityRailItem: Identifiable {
 }
 
 enum ProfileRecentActivityRailModel {
+    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail.
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
-        activities.compactMap { activity in
+        var seenTitles = Set<String>()
+        return activities.compactMap { activity in
             if let person = activity.person {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .person(person))
             }
-            if let media = activity.media {
+            if let media = activity.media, seenTitles.insert(media.ref.id).inserted {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
             }
             return nil
         }
+    }
+
+    /// Activity the rail asks for: more than it shows, so repeated titles still leave it full.
+    static let fetchLimit = 24
+
+    static let minimumSpacing: CGFloat = 4
+
+    static func visibleCount(width: CGFloat, itemCount: Int) -> Int {
+        let itemWidth = PosterSlot.profileRail.size.width
+        return max(1, min(min(6, itemCount), Int((width + minimumSpacing) / (itemWidth + minimumSpacing))))
+    }
+
+    /// The tallest artwork among the shown items, so a rail of square album covers isn't padded to poster height.
+    static func artworkHeight(for items: [ProfileRecentActivityRailItem]) -> CGFloat {
+        let heights = items.map { item in
+            switch item.subject {
+            case let .media(media):
+                PosterSlot.profileRail.artworkSize(mediaType: media.ref.mediaType, orientation: media.posterOrientation).height
+            case .person:
+                PosterSlot.profileRail.size.height
+            }
+        }
+        return heights.max() ?? PosterSlot.profileRail.size.height
     }
 
     static func progressDeltaText(for activity: ActivityItem, media: MediaSummary) -> String? {
@@ -1923,6 +1951,8 @@ enum ProfileRecentActivityRailModel {
 
     static func fallbackLabel(for activity: ActivityItem) -> String? {
         switch activity.type {
+        case "progress_updated":
+            clean(activity.object.label)
         case "list_created":
             clean(activity.object.name)
         case "list_item_added":
@@ -1946,17 +1976,23 @@ enum ProfileRecentActivityRailModel {
 private struct RecentActivityRail: View {
     let items: [ActivityItem]
     let action: (ProfileRecentActivityRailItem) -> Void
+    @State private var width: CGFloat?
 
     private var visibleItems: [ProfileRecentActivityRailItem] {
         ProfileRecentActivityRailModel.items(from: items)
     }
 
+    /// The items that fit the rail's width; all of them until it's measured.
+    private var shownItems: [ProfileRecentActivityRailItem] {
+        guard let width else { return visibleItems }
+        return Array(visibleItems.prefix(ProfileRecentActivityRailModel.visibleCount(width: width, itemCount: visibleItems.count)))
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let itemWidth = PosterSlot.profileRail.size.width
-            let minimumSpacing: CGFloat = 4
-            let maximumVisibleCount = min(6, visibleItems.count)
-            let visibleCount = max(1, min(maximumVisibleCount, Int((proxy.size.width + minimumSpacing) / (itemWidth + minimumSpacing))))
+            let minimumSpacing = ProfileRecentActivityRailModel.minimumSpacing
+            let visibleCount = ProfileRecentActivityRailModel.visibleCount(width: proxy.size.width, itemCount: visibleItems.count)
             let spacing = visibleCount > 1
                 ? min(10, max(minimumSpacing, (proxy.size.width - itemWidth * CGFloat(visibleCount)) / CGFloat(visibleCount - 1)))
                 : 0
@@ -1970,7 +2006,8 @@ private struct RecentActivityRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: PosterSlot.profileRail.size.height + 7 + 12.5)
+        .frame(height: ProfileRecentActivityRailModel.artworkHeight(for: shownItems) + 7 + 12.5)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 

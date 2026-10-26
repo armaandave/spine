@@ -423,6 +423,10 @@ entries do not have independent visibility settings in this contract.
 Private profiles do not expose these activities to viewers who cannot view the
 profile.
 
+These rules govern the `social.Activity` rows written. What people see as
+activity is defined in [the activity contract](activity-contract.md): logs only,
+so standalone rating rows are not shown.
+
 ## Import laws
 
 ### SW-500: Imports use the same state model

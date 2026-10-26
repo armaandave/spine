@@ -298,6 +298,8 @@ struct ActivityItem: Codable, Identifiable {
     let id: Int
     let type: String
     let createdAt: String?
+    /// The log's date, which orders activity; older servers don't send it.
+    let consumedAt: String?
     let actor: UserSummary
     let media: MediaSummary?
     let person: ActivityPersonSnapshot?
@@ -307,6 +309,7 @@ struct ActivityItem: Codable, Identifiable {
         id: Int,
         type: String,
         createdAt: String?,
+        consumedAt: String? = nil,
         actor: UserSummary,
         media: MediaSummary?,
         person: ActivityPersonSnapshot? = nil,
@@ -315,6 +318,7 @@ struct ActivityItem: Codable, Identifiable {
         self.id = id
         self.type = type
         self.createdAt = createdAt
+        self.consumedAt = consumedAt
         self.actor = actor
         self.media = media
         self.person = person
@@ -342,6 +346,9 @@ struct ActivityObject: Codable {
     let rating: String?
     let liked: Bool?
     let name: String?
+    /// A day's progress, whole ("watched 4 episodes") and short ("4 episodes").
+    var summary: String? = nil
+    var label: String? = nil
 }
 
 struct ActivityCursorResponse: Codable {

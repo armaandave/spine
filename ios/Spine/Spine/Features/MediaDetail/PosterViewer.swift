@@ -180,14 +180,11 @@ struct PosterViewer: View {
         Button(action: dismissFromButton) {
             Image(systemName: "xmark")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 42, height: 42)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle().stroke(.white.opacity(0.12))
-                }
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Close poster")
         .accessibilityIdentifier("poster-viewer.close")
     }

@@ -261,6 +261,8 @@ SpecialModels = [
     "ItemFilterFacet",
     "BookCreditOverride",
     "MusicGenreAlbum",
+    "MusicAlbumLink",
+    "AppleAlbum",
     "UserMessage",
     "TVListing",
     "TVMutation",

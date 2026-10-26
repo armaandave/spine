@@ -1,0 +1,63 @@
+{
+  "data": [
+    {
+      "id": "1587795158",
+      "type": "albums",
+      "attributes": {
+        "name": "Donda",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/donda/1587795158",
+        "playParams": {
+          "id": "1587795158",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-08-29",
+        "trackCount": 27
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1595496182",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1595496182",
+      "type": "albums",
+      "attributes": {
+        "name": "Donda (Deluxe)",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/donda-deluxe/1595496182",
+        "playParams": {
+          "id": "1595496182",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-08-29",
+        "contentRating": "clean",
+        "trackCount": 32
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1587795158",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

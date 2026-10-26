@@ -26,6 +26,9 @@ This page outlines the environment variables used in the YamTrack project.
 | `MUSICBRAINZ_CONTACT` | Contact email or URL included in Spine's server-side MusicBrainz User-Agent. Set a meaningful, monitored production contact; do not rely on the development default for deployment. |
 | `MUSIC_DEFAULT_MARKET` | Server-wide ISO 3166-1 market used to select representative music releases. Defaults to `US`; every web and worker process in a deployment must use the same value. |
 | `LISTENBRAINZ_TOKEN` | Optional server-side ListenBrainz user token used to popularity-rank MusicBrainz release-group search candidates. Keep it out of the iOS app and Git. Search falls back to MusicBrainz ordering when unset or unavailable. |
+| `APPLE_MUSIC_TEAM_ID` | Apple Developer Team ID that owns the Apple Music (MusicKit) key. The server signs its own short-lived Apple Music API developer tokens with the key; nothing calls Apple Music while any of the three key settings is empty. |
+| `APPLE_MUSIC_KEY_ID` | Key ID of the Apple Music (MusicKit) private key. |
+| `APPLE_MUSIC_PRIVATE_KEY` | The Apple Music private key: the `.p8` file's contents, base64-encoded on one line (`base64 < AuthKey_<KEY_ID>.p8 \| tr -d '\n'`). Server-side only; keep it out of the iOS app, logs and Git. The storefront comes from `MUSIC_DEFAULT_MARKET`. |
 
 ## Media Import
 

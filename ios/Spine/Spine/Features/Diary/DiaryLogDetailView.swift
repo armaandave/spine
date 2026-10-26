@@ -163,6 +163,7 @@ struct DiaryLogDetailView: View {
     @State private var isEditing = false
     @State private var isDeleteConfirmationPresented = false
     @State private var edgeDragOffset: CGFloat = 0
+    @State private var topSafeAreaInset: CGFloat = 0
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -221,50 +222,55 @@ struct DiaryLogDetailView: View {
             .scrollContentBackground(.hidden)
             .ignoresSafeArea(edges: .top)
 
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(.black.opacity(0.34), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-
-                Spacer()
-
-                if canManageEntry {
-                    Button("Edit") {
-                        isEditing = true
-                    }
-                    .disabled(viewModel.isDeleting)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 13)
-                    .frame(height: 38)
-                    .background(.black.opacity(0.34), in: Capsule())
-                    .buttonStyle(.plain)
-
-                    Button(role: .destructive) {
-                        isDeleteConfirmationPresented = true
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    Button {
+                        dismiss()
                     } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .bold))
                             .frame(width: 38, height: 38)
-                            .background(.black.opacity(0.34), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Delete")
-                    .disabled(viewModel.isDeleting)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityLabel("Back")
+
+                    Spacer()
+
+                    if canManageEntry {
+                        Button {
+                            isEditing = true
+                        } label: {
+                            Text("Edit")
+                                .font(.system(size: 14, weight: .heavy))
+                                .padding(.horizontal, 13)
+                                .frame(height: 38)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(.capsule)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .disabled(viewModel.isDeleting)
+
+                        Button(role: .destructive) {
+                            isDeleteConfirmationPresented = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .bold))
+                                .frame(width: 38, height: 38)
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(.circle)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Delete")
+                        .disabled(viewModel.isDeleting)
+                    }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .tabBar)
         .dismissExplorationOnReturnHome()
@@ -359,91 +365,91 @@ struct DiaryLogDetailView: View {
     }
 
     private func hero(_ entry: DiaryEntry) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            DiaryLogHeroArtwork(entry: entry, detail: viewModel.mediaDetail)
-                .frame(height: 420)
-                .offset(y: BackdropLayout.topOffset)
+        HStack(alignment: .bottom, spacing: 14) {
+            MediaArtwork(
+                url: viewModel.mediaDetail?.displayPosterURL ?? entry.media.displayPosterURL,
+                title: entry.media.title,
+                slot: .hero,
+                mediaType: entry.media.ref.mediaType,
+                orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation
+            )
+            .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
-            HStack(alignment: .bottom, spacing: 14) {
-                MediaArtwork(
-                    url: viewModel.mediaDetail?.displayPosterURL ?? entry.media.displayPosterURL,
-                    title: entry.media.title,
-                    slot: .hero,
-                    mediaType: entry.media.ref.mediaType,
-                    orientation: viewModel.mediaDetail?.posterOrientation ?? entry.media.posterOrientation
-                )
-                .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(mediaTypeLabel(entry.media.ref.mediaType))
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .textCase(.uppercase)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(mediaTypeLabel(entry.media.ref.mediaType))
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .textCase(.uppercase)
-
-                    if let logged = DiaryLogFormat.dateLabel(entry.consumedAt) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            if entry.isTrueReread ?? entry.isRewatch {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.74))
-                                    .accessibilityLabel(entry.media.ref.repeatLabel)
-                            }
-
-                            Text("Logged \(logged)")
-                                .font(.system(size: 13, weight: .heavy))
-                                .foregroundStyle(.white.opacity(0.72))
+                if let logged = DiaryLogFormat.dateLabel(entry.consumedAt) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if entry.isTrueReread ?? entry.isRewatch {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.74))
+                                .accessibilityLabel(entry.media.ref.repeatLabel)
                         }
 
-                        if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
-                            Text(age)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.58))
-                        }
+                        Text("Logged \(logged)")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(.white.opacity(0.72))
                     }
 
-                    if entry.media.ref.mediaType == "game" {
-                        let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.percentage).summary
-                        if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
-                    }
-                    let parts = titleParts(TVTrackingPresentation.diaryTitle(for: entry.media))
-                    HStack(alignment: .firstTextBaseline, spacing: 7) {
-                        if let detail = viewModel.mediaDetail {
-                            MediaTitleDisplay(
-                                detail: detail,
-                                title: parts.title,
-                                showsLogo: .constant(true),
-                                font: .system(size: 31, weight: .black),
-                                lineLimit: 4,
-                                minimumScaleFactor: 0.72,
-                                maxLogoHeight: 48,
-                                alignment: .leading,
-                                onTap: { presentedRef = entry.media.ref },
-                                onLongPress: nil
-                            )
-                        } else {
-                            Text(parts.title)
-                                .font(.system(size: 31, weight: .black))
-                                .foregroundStyle(.white)
-                                .lineLimit(4)
-                                .minimumScaleFactor(0.72)
-                        }
-
-                    }
-
-                    if let metadata = heroMetadata(entry) {
-                        Text(metadata)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.66))
-                            .lineLimit(2)
+                    if let age = DiaryLogFormat.ageLabel(entry.consumedAt) {
+                        Text(age)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.58))
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if entry.media.ref.mediaType == "game" {
+                    let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.percentage).summary
+                    if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
+                }
+                let parts = titleParts(TVTrackingPresentation.diaryTitle(for: entry.media))
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    if let detail = viewModel.mediaDetail {
+                        MediaTitleDisplay(
+                            detail: detail,
+                            title: parts.title,
+                            showsLogo: .constant(true),
+                            font: .system(size: 31, weight: .black),
+                            lineLimit: 4,
+                            minimumScaleFactor: 0.72,
+                            maxLogoHeight: 48,
+                            alignment: .leading,
+                            onTap: { presentedRef = entry.media.ref },
+                            onLongPress: nil
+                        )
+                    } else {
+                        Text(parts.title)
+                            .font(.system(size: 31, weight: .black))
+                            .foregroundStyle(.white)
+                            .lineLimit(4)
+                            .minimumScaleFactor(0.72)
+                    }
+
+                }
+
+                if let metadata = heroMetadata(entry) {
+                    Text(metadata)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(2)
+                }
             }
-            .onTapGesture { presentedRef = entry.media.ref }
-            .accessibilityLabel("View \(entry.media.displayTitle)")
-            .accessibilityAddTraits(.isButton)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onTapGesture { presentedRef = entry.media.ref }
+        .accessibilityLabel("View \(entry.media.displayTitle)")
+        .accessibilityAddTraits(.isButton)
+        .padding(.horizontal, 16)
+        // The top bar ends 50 pt below the safe area; the artwork starts 18 pt under it, whatever its shape.
+        .padding(.top, topSafeAreaInset + 68)
+        .padding(.bottom, 22)
+        .background {
+            DiaryLogHeroArtwork(entry: entry, detail: viewModel.mediaDetail)
+                .offset(y: BackdropLayout.topOffset)
         }
     }
 

@@ -1,0 +1,125 @@
+{
+  "data": [
+    {
+      "id": "269572838",
+      "type": "albums",
+      "attributes": {
+        "name": "Thriller",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/thriller/269572838",
+        "playParams": {
+          "id": "269572838",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1982-11-29",
+        "trackCount": 9
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "269572927",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "269573042",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Be Mine",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM19902987"
+              }
+            },
+            {
+              "id": "269573208",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine (with Paul McCartney)",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM19902988"
+              }
+            },
+            {
+              "id": "269573303",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "269573341",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "269573364",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "269573405",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "269573447",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing)",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM19902993"
+              }
+            },
+            {
+              "id": "269573478",
+              "type": "songs",
+              "attributes": {
+                "name": "The Lady in My Life",
+                "albumName": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM19902994"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

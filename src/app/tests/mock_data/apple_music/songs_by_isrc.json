@@ -1,0 +1,445 @@
+{
+  "data": [
+    {
+      "id": "1440826864",
+      "type": "songs",
+      "attributes": {
+        "name": "Hyperpower!",
+        "albumName": "Year Zero",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USUM70727128"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1440826538",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6811042440",
+      "type": "songs",
+      "attributes": {
+        "name": "HYPERPOWER!",
+        "albumName": "Year Zero",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USUM70727128"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "6811042436",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1737859181",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Summer Roadtrip",
+        "discNumber": 1,
+        "trackNumber": 11,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1737859170",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786643243",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 1,
+        "trackNumber": 17,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1794645015",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 2,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1796270563",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 2,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1796270264",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1657869393",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "SOS",
+        "discNumber": 1,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1657869377",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1741741472",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Beach Beats",
+        "discNumber": 1,
+        "trackNumber": 7,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1741741316",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1737552889",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Pop Summer Hits 2024",
+        "discNumber": 1,
+        "trackNumber": 3,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1737552675",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1744476125",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Hot Girl Summer 2024",
+        "discNumber": 1,
+        "trackNumber": 11,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1744475890",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1681326678",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "TikTok Summer Hits/Viral Songs",
+        "discNumber": 1,
+        "trackNumber": 27,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1681325322",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1664548466",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Kill Bill - Single",
+        "discNumber": 1,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1664548283",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1741665111",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Summer Viral Hits",
+        "discNumber": 1,
+        "trackNumber": 11,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1741664975",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1741692579",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Viral Summer Hits",
+        "discNumber": 1,
+        "trackNumber": 29,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1741690872",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1744491097",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Summer Smash Hits",
+        "discNumber": 1,
+        "trackNumber": 23,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1744490535",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1741782801",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Pop Pool Party Hits",
+        "discNumber": 1,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1741782315",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1744639020",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Summer Party Hits",
+        "discNumber": 1,
+        "trackNumber": 31,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1744637760",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1784376530",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Hits 2025 - As Mais Tocadas",
+        "discNumber": 1,
+        "trackNumber": 16,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1784375980",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1752188664",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Musica Estate 2024",
+        "discNumber": 1,
+        "trackNumber": 15,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1752187903",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1752207646",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "Hit Estate 2024",
+        "discNumber": 1,
+        "trackNumber": 18,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1752207272",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1658650488",
+      "type": "songs",
+      "attributes": {
+        "name": "Kill Bill",
+        "albumName": "SOS",
+        "discNumber": 1,
+        "trackNumber": 2,
+        "isrc": "USRC12204584"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1658650093",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

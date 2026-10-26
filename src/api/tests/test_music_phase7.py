@@ -133,9 +133,10 @@ class MusicListsSocialTests(TestCase):
         self.assertTrue(MediaLike.objects.filter(user=self.owner, item=self.music_item).exists())
         self.assertEqual(diary_like.status_code, status.HTTP_200_OK)
         self.assertEqual(list_like.status_code, status.HTTP_200_OK)
+        # Activity is logs only: adding the album to a list isn't in the feed.
         self.assertEqual(
-            {activity["type"] for activity in feed.data["results"]},
-            {"diary_created", "list_item_added"},
+            [activity["type"] for activity in feed.data["results"]],
+            ["diary_created"],
         )
         self.assertTrue(all(activity["media"]["title"] == "Year Zero" for activity in feed.data["results"]))
         self.assertTrue(all(activity["viewer"]["has_liked"] for activity in feed.data["results"]))
