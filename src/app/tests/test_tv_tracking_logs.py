@@ -430,7 +430,7 @@ class TV407LogDateTests(TVTrackingTestCase):
 class TV703FeedTests(TVTrackingTestCase):
     """TV-703: ticks don't post; each log posts one diary activity with its stars."""
 
-    def test_tv_703_ticks_marks_and_fills_post_nothing_and_logs_post_once(self):
+    def test_tv_703_ticks_marks_and_fills_write_no_activity_row_and_logs_write_one(self):
         from social.models import Activity
 
         show = self.make_show({1: 3, 2: 3})

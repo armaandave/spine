@@ -545,10 +545,22 @@ class TV207ReconcileTests(TVTrackingTestCase):
         self.tick(show, 1, 1)
         self.tick(show, 1, 2)
         tv_tracking.mark_watched(self.user, show)
-        changes = list(ProgressChange.objects.order_by("id").values_list("item__season_number", "current_progress"))
+        # The first tick also starts the show, recorded on the show (activity contract).
+        starts = ProgressChange.objects.filter(current_progress__kind=ProgressChange.START)
+        self.assertEqual(list(starts.values_list("item", flat=True)), [show.pk])
+        changes = list(
+            ProgressChange.objects.exclude(current_progress__kind=ProgressChange.START)
+            .order_by("id")
+            .values_list("item__season_number", "previous_progress", "current_progress"),
+        )
         self.assertEqual(
-            [(season, progress["value"]) for season, progress in changes],
+            [(season, progress["value"]) for season, _, progress in changes],
             [(1, 1), (1, 2), (1, 3), (2, 2)],
+        )
+        # Ticks move progress; the mark records each season's new count without moving it (TV-703).
+        self.assertEqual(
+            [(season, previous["value"]) for season, previous, _ in changes],
+            [(1, 0), (1, 1), (1, 3), (2, 2)],
         )
         self.assertFalse(Activity.objects.exists())
 

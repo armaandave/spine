@@ -219,7 +219,7 @@ class TVActionEndpointTests(TVAPITestCase):
         self.assertEqual(viewing.kind, "tick")
         self.assertEqual(viewing.watched_on, OCT_25)
 
-    def test_tv_703_ticks_post_no_feed_activity_but_record_progress(self):
+    def test_tv_703_ticks_write_no_activity_row_and_record_progress(self):
         show = self.make_show()
 
         self.ticks(show, 1, [1, 2])

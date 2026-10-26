@@ -78,6 +78,8 @@ ENTRY_POINTS = (APP, LEGACY_APP, WEB, WEBHOOK, IMPORT, JOB, HOOK, REPAIR)
 WORKING_OUT = (APP, LEGACY_APP, WEB, REPAIR)
 # Entry points whose direct API calls get 400s and 409s rather than being ignored.
 API_ENTRY_POINTS = (APP, LEGACY_APP)
+# Entry points whose writes can start a show in activity (TV-703); imports and jobs can't.
+ACTIVITY_ENTRY_POINTS = (APP, LEGACY_APP, WEB, WEBHOOK)
 
 TV_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
 TICK = Episode.Kind.TICK.value
@@ -1081,6 +1083,12 @@ class _Ctx:
         self.new_seasons = set()
         # {season number: (watched, aired)} before the write, for seasons never worked out.
         self.progress_baseline = {}
+        # Each season's ticks and (item, aired) before the write: activity counts only
+        # how ticks moved (TV-703). None outside a write: nothing counts.
+        self.ticks_before = None
+        self.season_rows_before = {}
+        # Set by a tick, Watching or a rewatch, which can start the show (TV-703).
+        self.may_start = False
         self.facts = None
         self._calc = None
         self.reload()
@@ -1424,6 +1432,8 @@ def _run_locked(
     elif tv is not None and tv.legacy_pending and entry_point == WEBHOOK:
         _record_legacy_facts(ctx)
     _take_progress_baseline(ctx)
+    ctx.ticks_before = _ticks_by_season(ctx.facts)
+    ctx.season_rows_before = {number: (row.item_id, row.aired_count) for number, row in ctx.facts.seasons.items()}
     outcome = body(ctx) or {}
     result = WriteResult(
         user=user,
@@ -1448,6 +1458,7 @@ def _run_locked(
                 )
         ctx.tv.refresh_from_db()
         result.tv = ctx.tv
+        _record_start(ctx)
     if mutation_id is not None or outcome.get("record_mutation"):
         TVMutation.objects.create(
             user=user,
@@ -1495,6 +1506,74 @@ def _take_progress_baseline(ctx):
     ctx.invalidate()
 
 
+def _ticks_by_season(facts):
+    """Return {season number: tick viewings}, the viewings activity counts (TV-703)."""
+    ticks = {}
+    for viewing in facts.viewings:
+        if viewing.kind == TICK:
+            ticks[viewing.season] = ticks.get(viewing.season, 0) + 1
+    return ticks
+
+
+def _ticks_moved(ctx, number, ticks_after):
+    """Return how a write moved a season's ticks; 0 outside a write (TV-703)."""
+    if ctx.ticks_before is None:
+        return 0
+    return ticks_after.get(number, 0) - ctx.ticks_before.get(number, 0)
+
+
+def _progress_change(ctx, item_id, *, previous, current):
+    """Return an unsaved season ProgressChange; previous and current are (value, max)."""
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    def snapshot(value, maximum):
+        return {"kind": "episodes", "value": value, "max": maximum, "unit": "episode"}
+
+    return ProgressChange(
+        actor=ctx.user,
+        item_id=item_id,
+        previous_progress=snapshot(*previous),
+        current_progress=snapshot(*current),
+    )
+
+
+def _record_start(ctx):
+    """Record starting the show: a tick, Watching or a rewatch that put it in Watching.
+
+    Resuming a paused show isn't starting it; starting again after finishing or
+    dropping is (docs/activity-contract.md, AC-1). Imports and jobs start nothing.
+    """
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    if (
+        ctx.may_start
+        and ctx.entry_point in ACTIVITY_ENTRY_POINTS
+        and ctx.tv.status == WATCHING
+        and ctx.status_before not in (WATCHING, PAUSED)
+    ):
+        ProgressChange.record_start(ctx.user, ctx.show_item)
+
+
+def _forget_progress(ctx, season_numbers=None):
+    """Delete the show's recorded starts and progress, or only some seasons' (AC-2)."""
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    rows = ProgressChange.objects.filter(
+        actor=ctx.user,
+        item__source=ctx.show_item.source,
+        item__media_id=ctx.show_item.media_id,
+    )
+    if season_numbers is None:
+        rows = rows.filter(item__media_type__in=(MediaTypes.TV.value, MediaTypes.SEASON.value))
+    else:
+        rows = rows.filter(item__media_type=MediaTypes.SEASON.value, item__season_number__in=season_numbers)
+        if ctx.ticks_before is not None:
+            for number in season_numbers:
+                ctx.ticks_before.pop(number, None)
+                ctx.season_rows_before.pop(number, None)
+    rows.delete()
+
+
 def _normalize_viewing_days(ctx):
     """Give non-fill viewings their calendar day when only end_date is stored."""
     updates = []
@@ -1514,9 +1593,9 @@ def _reconcile(ctx, *, fresh=False):  # noqa: C901, PLR0912, PLR0915
     """Work out and store the show's and each season's state from the facts (TV-207).
 
     Writes only changed values; bumps state_version when anything under the show
-    changed; records one ProgressChange per season whose watched count changed (no
-    Activity, TV-703); ends a finished rewatch (TV-602); never invents a date, deletes
-    a fact or changes a choice; idempotent.
+    changed; records one ProgressChange per season whose watched count changed, moved
+    only by its ticks (TV-703); ends a finished rewatch (TV-602); never invents a date,
+    deletes a fact or changes a choice; idempotent.
     """
     from social.models import ProgressChange  # noqa: PLC0415
 
@@ -1570,6 +1649,7 @@ def _reconcile(ctx, *, fresh=False):  # noqa: C901, PLR0912, PLR0915
     season_cache_rows = []
     season_cache_fields = set()
     progress_changes = []
+    ticks_after = _ticks_by_season(ctx.facts)
     for number, row in ctx.facts.seasons.items():
         season = calc.seasons.get(number)
         if season is None:
@@ -1606,24 +1686,26 @@ def _reconcile(ctx, *, fresh=False):  # noqa: C901, PLR0912, PLR0915
             and (was_worked_out or number in ctx.new_seasons)
             and (previous_watched or 0) != season.watched_count
         ):
+            # Only ticks move progress. Marks, fills, logs and rewatches record the new
+            # count without moving it: installed builds' Home shows the count, and
+            # activity shows nothing for them (TV-703, activity contract AC-1).
             progress_changes.append(
-                ProgressChange(
-                    actor=ctx.user,
-                    item_id=row.item_id,
-                    previous_progress={
-                        "kind": "episodes",
-                        "value": previous_watched or 0,
-                        "max": previous_aired if previous_aired is not None else season.aired_count,
-                        "unit": "episode",
-                    },
-                    current_progress={
-                        "kind": "episodes",
-                        "value": season.watched_count,
-                        "max": season.aired_count,
-                        "unit": "episode",
-                    },
+                _progress_change(
+                    ctx,
+                    row.item_id,
+                    previous=(
+                        season.watched_count - _ticks_moved(ctx, number, ticks_after),
+                        previous_aired if previous_aired is not None else season.aired_count,
+                    ),
+                    current=(season.watched_count, season.aired_count),
                 ),
             )
+    # A season an untick or unmark emptied is deleted; its lost ticks still count
+    # against that day's progress (activity contract AC-2).
+    for number, (item_id, aired) in ctx.season_rows_before.items():
+        moved = _ticks_moved(ctx, number, ticks_after)
+        if number not in ctx.facts.seasons and moved:
+            progress_changes.append(_progress_change(ctx, item_id, previous=(-moved, aired), current=(0, aired)))
     if season_status_rows:
         bulk_update_with_history(
             season_status_rows,
@@ -2284,10 +2366,14 @@ def _delete_season_rows(ctx, numbers):
 
 
 def _leave_library(ctx):
-    """Delete the show's rows and clear its opinions, keeping custom lists (TV-003)."""
+    """Delete the show's rows, starts and progress and clear its opinions (TV-003).
+
+    Custom lists keep it. A removed title leaves activity (activity contract AC-2).
+    """
     if ctx.tv is None or ctx.tv.pk is None:
         return
     _delete_season_rows(ctx, list(ctx.facts.seasons))
+    _forget_progress(ctx)
     _clear_all_opinions(ctx)
     tv_id = ctx.tv.pk
     TV.objects.filter(pk=tv_id).delete()
@@ -2476,6 +2562,7 @@ def _do_tick(ctx, season_number, episode_number, *, at=None):
     was_finished = bool(season and season.finished)
     ctx.add_viewing(season_number, episode_number, kind=TICK, day=day, end_date=end_date)
     ctx.end_choice()
+    ctx.may_start = True
     ctx.reload()
     earlier = None
     if first:
@@ -2953,6 +3040,7 @@ def _do_choose(ctx, status, *, quiet=False):
         values.pop("choice_at")
     ctx.set_tv(**values)
     ctx.changed = True
+    ctx.may_start = status == WATCHING
     return {"changed": True}
 
 
@@ -2991,6 +3079,7 @@ def _do_start_rewatch(ctx, season_number):
         values.update({"choice": "", "ended_choice": "", "ended_choice_at": None})
     ctx.set_tv(**values)
     ctx.changed = True
+    ctx.may_start = True
     return {"changed": True}
 
 
@@ -3088,6 +3177,8 @@ def delete_season_tracking(user, show_item, season_number, *, entry_point=APP, m
             return {"changed": False}
         ctx.delete_viewings([viewing for viewing in ctx.facts.viewings if viewing.season == season_number])
         _delete_season_rows(ctx, [season_number])
+        # Deleting a season's tracking deletes its progress, as for any title (AC-2).
+        _forget_progress(ctx, [season_number])
         left = _after_removal(ctx)
         return {"changed": True, "left_library": left}
 

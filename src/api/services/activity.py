@@ -28,7 +28,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.fields.json import KT
-from django.db.models.functions import Cast, Concat, TruncDate
+from django.db.models.functions import Cast, Concat, TruncDate, TruncDay
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -187,10 +187,15 @@ def _progress_days(changes, logs):
 
 
 def _log_day():
-    """Return a log's calendar day, as the diary shows it."""
+    """Return a log's calendar day, as the diary shows it.
+
+    Half-star media logs, and TV logs saved as calendar dates (TV-407), store their day
+    as UTC midnight; any other log is read on the server's local day.
+    """
     return Case(
         When(
-            item__media_type__in=list(single_weight.HALF_STAR_MEDIA_TYPES),
+            Q(item__media_type__in=list(single_weight.HALF_STAR_MEDIA_TYPES))
+            | Q(item__media_type__in=TV_TYPES, consumed_at=TruncDay("consumed_at", tzinfo=UTC)),
             then=TruncDate("consumed_at", tzinfo=UTC),
         ),
         default=TruncDate("consumed_at", tzinfo=timezone.get_current_timezone()),

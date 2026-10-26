@@ -14,6 +14,7 @@ Use the single-weight, book and game contracts as the shared foundation:
 - [Single-Weight Consumption Contract](single-weight-consumption-contract.md)
 - [Book Tracking Contract](book-tracking-contract.md)
 - [Game Tracking Contract](game-tracking-contract.md)
+- [Activity Contract](activity-contract.md), for what activity shows (TV-703)
 
 Inherit established behavior where TV introduces no difference.
 The TV-specific laws below override conflicting single-weight, book or game behavior.
@@ -47,7 +48,7 @@ The following rules are inherited without another approval step:
 | Pause and Drop keep progress | BK-303, BK-305 (their progress-keeping rules only) | Pausing or dropping keeps every viewing, log and mark. Coming back continues from the same place (TV-007). |
 | Imports | SW-500 to SW-504 (an imported rating or like follows TV-303 and TV-304, not SW-501's direct consumption), GM-501 (its rule against inferring status from inactivity) | Imports use the same state model and create no feed activity. Spine never infers Paused or Dropped from provider inactivity. TV-800 to TV-804 add the TV rules. |
 | Consistency | BK-500, BK-501, SW-700 | The backend decides every transition. Retries and double taps never duplicate viewings or marks, and logs from the new build never duplicate (TV-705). Every surface shows the same state after a write. |
-| Privacy and activity | SW-400 (as the target; this contract doesn't change TV visibility), SW-401 | Activity stays action-specific, and TV-703 settles ticks. Moving TV logs from per-entry visibility to account-level visibility is outside this contract (Scope boundary). |
+| Privacy and activity | SW-400 (as the target; this contract doesn't change TV visibility), SW-401 | Activity follows [the activity contract](activity-contract.md): logs, a day's ticks as progress on the show, and starting the show (TV-703). Moving TV logs from per-entry visibility to account-level visibility is outside this contract (Scope boundary). |
 
 Do not inherit:
 
@@ -211,7 +212,7 @@ A tick stores that moment and its day on the user's calendar.
 Users can tick on the episode page, in the season's episode list, on the show page's Up next row, and from a Continue Watching card's touch-and-hold menu (TV-701).
 Unaired episodes show their air date in place of a tick, or "TBA" when they have none.
 
-A tick creates no log and no feed item (TV-703).
+A tick creates no log. Activity shows the day's ticks as progress on the show (TV-703).
 It puts the show in the library, ends a Planning, Paused or Dropped choice, and leaves the show in its worked-out status: Completed when finished (TV-201), otherwise Watching.
 A tick's date is never taken from a preference or the air date.
 
@@ -535,7 +536,7 @@ On a started show, a season's stars and heart are opinion only (TV-304), whether
 The eye can undo the mark (TV-302).
 Clearing the stars or turning the heart off never unmarks anything (SW-201, GM-301).
 The optional star picker may follow the heart; dismissing it keeps the mark and the heart (SW-011).
-Direct stars create rating activity under SW-401; a heart creates none.
+Direct stars write a rating activity row under SW-401, which activity doesn't show (TV-703); a heart writes none.
 
 While nothing under a show or season has aired, its heart is opinion only: it saves and marks nothing.
 Its stars are unavailable then, with the reason "Nothing has aired yet."
@@ -860,16 +861,28 @@ The Diary lists logs of shows, seasons and episodes, and its TV filter includes 
 Season logs read "Show · Season 1", episode logs read "Show · S1 E4 · Title", and show logs read the show's title.
 Each row's stars and heart are that log's own.
 
-### TV-703: Ticks don't post to the feed
+### TV-703: Activity follows the activity contract
 
-Ticks, unticks, marks and fills create no feed activity.
-Each log creates one diary activity, including its stars (SW-401).
-It creates no separate rating activity and no second feed item when it adds or claims a viewing.
-Directly setting stars on a show or season creates or updates rating activity (SW-401).
-Hearts create no feed activity.
+What people see as activity is defined in [the activity contract](activity-contract.md), and TV follows it:
 
-The user's own Home still shows progress through Continue Watching (TV-701).
-Every write that changes a season's watched count records a progress change for that season, without feed activity, because installed builds' Home shows the latest one (TV-900).
+- A day's ticks on a show, across all its seasons, are one item of progress on the show, told in episodes: "watched 4 episodes" (AC-1).
+- Unticks count against that day's ticks. A day that didn't move forward shows nothing (AC-2).
+- Marks and fills aren't progress: the show and season eyes, Mark watched up to here, the Yes to the earlier-episodes question, and a log's fills (AC-1).
+- Starting the show is activity: choosing Watching, a tick that puts the show in Watching, or starting a rewatch. Resuming a paused show isn't starting it; starting again after finishing or dropping is. Progress that day replaces the start (AC-1, AC-2).
+- A log of the show, or of any of its seasons or episodes, is one item on its calendar day (TV-407). It replaces that day's start and progress for everyone who can see the log (AC-2).
+- When the show leaves the library, its starts and progress go with it. Deleting a season's tracking removes that season's progress (AC-2).
+- Imports, scheduled jobs and the repair start nothing and record no progress.
+
+Every write that changes a season's watched count records one progress change for that season, because installed builds' Home shows the latest one (TV-900).
+Its current value is the season's new count. Its previous value is that count less how far the write's ticks moved it, so a mark, fill, log or rewatch records the new count without moving it.
+A start is recorded on the show.
+
+As SW-401 notes for other media, the `social.Activity` rows Spine writes aren't what activity shows.
+For TV, ticks, unticks, marks and fills write none.
+Each log writes one diary row, including its stars (SW-401), and no separate rating row or second row when it adds or claims a viewing.
+Directly setting stars on a show or season writes or updates a rating row (SW-401). Hearts write none.
+
+The user's own Home also shows progress through Continue Watching (TV-701).
 
 ### TV-704: Calendar and notifications follow the show's status
 
@@ -998,7 +1011,7 @@ New information arrives in new keys, which installed builds ignore:
 - what a write just finished; and
 - whether a write left earlier episodes unwatched, with the range the question names.
 
-Every write that changes a season's watched count writes the progress change that installed builds' Home shows (`src/api/services/tracking.py:458-482`; `ios/Spine/Spine/Core/Models/TrackingModels.swift:114-126`), without feed activity (TV-703).
+Every write that changes a season's watched count writes the progress change that installed builds' Home shows (`src/api/services/tracking.py:458-482`; `ios/Spine/Spine/Core/Models/TrackingModels.swift:114-126`). Only its ticks move it, so a mark, fill or log shows the new count there without being progress in activity (TV-703).
 
 Installed builds get these laws as soon as the server ships:
 
@@ -1038,7 +1051,7 @@ Run date cases under a non-UTC timezone, including a server on America/New_York 
 
 | Case | Action | Required result | Laws |
 | --- | --- | --- | --- |
-| A-01 | Tick S1 E1 of an untracked show. | The show is in Watching with S1 E2 up next and "1 of N". No log, no season tracking beyond Season 1, no feed item. | TV-100, TV-105, TV-205, TV-703 |
+| A-01 | Tick S1 E1 of an untracked show. | The show is in Watching with S1 E2 up next and "1 of N". No log and no season tracking beyond Season 1. Activity shows "watched 1 episode" for the show. | TV-100, TV-105, TV-205, TV-703 |
 | A-02 | Double tap or retry a tick. | One viewing. | TV-101, TV-705 |
 | A-03 | Tick, then untick, the only episode of an untracked show. | The show leaves the library. | TV-102, TV-208 |
 | A-04 | Untick an episode whose only viewing is a season log's fill. | Nothing changes. The message names the season log. | TV-102 |
@@ -1066,7 +1079,7 @@ Run date cases under a non-UTC timezone, including a server on America/New_York 
 | A-26 | Tap the filled eye of a show finished by ticking, with and without an episode log. | Without logs it asks "Mark all 62 episodes unwatched?". With a log the option is unavailable. | TV-302 |
 | A-27 | Tap the filled eye of a show with a show log. | Nothing changes: "Delete your show log first." | TV-302 |
 | A-28 | Heart a show the user hasn't started, from the new build and from an installed build. Dismiss the star picker. | The show is marked watched, Completed and hearted in both. The new build's eye can undo the mark; the installed build's can't. | TV-303, TV-900 |
-| A-29 | Set stars on a show at S2 E3. | Opinion only. Status and up next are unchanged. Rating activity is created. | TV-304, TV-703 |
+| A-29 | Set stars on a show at S2 E3. | Opinion only. Status and up next are unchanged. A rating activity row is written, which activity doesn't show. | TV-304, TV-703 |
 | A-30 | Set stars on an unwatched Season 4 while watching Season 2. | Opinion only. Season 4 stays unwatched, and up next stays in Season 2. | TV-303, TV-304 |
 | A-31 | Heart an unwatched episode, then unheart it. | The episode is marked watched undated, then stays watched. | TV-305 |
 | A-32 | Save a rated season log, change the season's stars directly, then edit the log's stars. | The log sets and links the stars. The direct change unlinks them. The edit leaves the current stars alone. | TV-501 |
@@ -1127,7 +1140,8 @@ After trying the app on 2026-10-26, the user asked for four changes, now in the 
 
 Then the user chose touch and hold for marking progress from Home: Continue Watching's tick gave way to the card's menu (TV-100, TV-701).
 
-Whether ticks post to friends' feeds was settled by the maintainer defaults in AGENTS.md section 9: the feed includes logs, ratings and list activity, so ticks don't post (TV-703).
+Whether ticks post to friends' feeds was first settled by AGENTS.md section 9, whose feed then held logs, ratings and list activity, so ticks didn't post.
+The activity contract (`docs/activity-contract.md`) replaced that on 2026-10-26: a day's ticks are progress on the show, and TV-703 now follows it.
 
 Writing the laws settled details the approved design leaves open.
 Two reviews, one for consistency and one for feasibility against the code, checked each detail against the design, the five decisions and the inherited contracts; the laws above include their corrections.
