@@ -96,7 +96,7 @@ from app.utils.color import build_accent_palette, get_poster_accent_from_url
 
 SEARCH_TTL = 60 * 60 * 6
 SEARCH_CACHE_VERSION = "v3"
-MUSIC_SEARCH_CACHE_VERSION = "v5"
+MUSIC_SEARCH_CACHE_VERSION = "v6"
 MUSIC_CACHE_STALE_TTL = 60 * 60 * 24 * 7
 MUSIC_CACHE_LOCK_TIMEOUT = 120
 MUSIC_REFRESH_SCHEDULE_TTL = 60
