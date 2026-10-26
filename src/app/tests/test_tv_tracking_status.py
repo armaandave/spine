@@ -763,3 +763,24 @@ class TV206RefreshDueTests(TVTrackingTestCase):
         tv = self.tv(show)
         self.assertEqual((tv.status, tv.caught_up), ("In progress", False))
         self.assertEqual((tv.up_next_season, tv.up_next_episode), (1, 7))
+
+    def test_tv_206_a_season_log_never_covers_an_episode_that_airs_later(self):
+        """A log covers only what had aired when it was saved, so E3 airing reopens it."""
+        show = self.make_show(
+            {1: [OCT_25 - timedelta(days=14), OCT_25 - timedelta(days=7), OCT_25 + timedelta(days=2)]},
+            status="Returning Series",
+        )
+        entry = self.log(self.season_item(show, 1)).entry
+        self.assertEqual(entry.progress_snapshot["tv"]["covers"], {"1": [1, 2]})
+        self.assertTrue(self.tv(show).caught_up)
+
+        self.clock.advance(days=3)
+        self.assertTrue(tv_tracking.refresh_due(self.tv(show)))
+        tv = self.tv(show)
+        self.assertEqual((tv.status, tv.caught_up), ("In progress", False))
+        self.assertEqual((tv.up_next_season, tv.up_next_episode), (1, 3))
+        self.assertEqual(self.watched(show), {(1, 1), (1, 2)})
+        season = tv_tracking.state_payload(self.user, self.season_item(show, 1))["season"]
+        self.assertEqual((season["state"], season["watched_count"], season["aired_count"]), ("in_progress", 2, 3))
+        entry.refresh_from_db()
+        self.assertEqual(entry.progress_snapshot["tv"]["covers"], {"1": [1, 2]})

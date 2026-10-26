@@ -362,6 +362,23 @@ class TV107EarlierEpisodesTests(TVTrackingTestCase):
                 to_ref={"season_number": 1, "episode_number": 2},
             )
 
+    def test_tv_107_asks_again_only_after_the_show_leaves_the_library(self):
+        """The question is used up while the show stays; starting fresh asks again."""
+        held = self.make_show({1: 2, 2: 2})
+        tv_tracking.choose(self.user, held, "Paused")
+        self.assertIsNotNone(self.tick(held, 2, 1).earlier_unwatched)
+        self.untick(held, 2, 1)
+        # TV-208: the untick restores Paused, so the show never left the library.
+        self.assertEqual(self.status(held), "Paused")
+        self.assertIsNone(self.tick(held, 2, 1).earlier_unwatched)
+
+        fresh = self.make_show({1: 2, 2: 2})
+        self.assertIsNotNone(self.tick(fresh, 2, 1).earlier_unwatched)
+        self.untick(fresh, 2, 1)
+        self.assertIsNone(self.tv(fresh))
+        again = self.tick(fresh, 2, 1).earlier_unwatched
+        self.assertEqual(again["question"], "Also mark S1 E1–E2 watched?")
+
 
 class TV108MarkUpToTests(TVTrackingTestCase):
     """TV-108: Mark watched up to here."""

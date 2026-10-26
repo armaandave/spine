@@ -74,7 +74,7 @@ Run from the feature worktree unless a step says otherwise.
    - the backend changes and the compatibility verdict
    - each migration (it runs during the deploy)
    - any one-time data step the ship carries ("One-time data steps", below), which
-     runs after the deploy
+     runs after the deploy, or waits for the user's request where the step says so
    - that the push deploys production once CI passes, and makes TestFlight build ~N if
      the iOS app changed, which you'll add to "Me"
 
@@ -99,7 +99,8 @@ Run from the feature worktree unless a step says otherwise.
      answers as expected (an unauthenticated request to a new route gets 401, not 404).
    - `docker logs --since 10m spine 2>&1 | grep -iE 'error|traceback'` shows nothing new.
    - If the ship carries a one-time data step ("One-time data steps", below), run it
-     now. The user's ship request covers it.
+     now. The user's ship request covers it, except a part the step says waits for
+     the user's request.
 9. **Build,** only if the push changed the iOS app; otherwise skip to step 10. If
    `AGENTS.md` ("App Store Connect") has no Spine app ID yet, TestFlight isn't set up:
    skip this step and say so.
@@ -132,22 +133,24 @@ Some ships carry a data step that has to run once, right after their deploy is v
 
 TV shows stored before the TV tracking contract stay unworked until this repair runs
 (`docs/tv-tracking-contract.md`, TV-801). Until then the new build's Continue Watching on
-Home and Profile leaves them out, and Library rows count their episodes without the
-number aired. It runs on the test backend first, then on production:
+Home and Profile leaves them out, shows and seasons that only have logs stay out of the
+Library, and Library rows count their episodes without the number aired. It runs on the
+test backend first, and on production only when the user asks (TV-801):
 
-1. After `scripts/ios/test-backend.sh update` (step 6), run
+1. With the ship, after `scripts/ios/test-backend.sh update` (step 6), run
    `scripts/ios/test-backend.sh repair-tv`, a dry run that lists every status it would
    change. If its summary shows errors, stop and report. Otherwise run
    `scripts/ios/test-backend.sh repair-tv --apply`.
-2. Once production is verified, run the dry run there:
-   `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
+2. Production waits for the user's request; "ship this" doesn't cover it. In the ship
+   report, say the repair is waiting and what it fixes. When the user asks, run the dry
+   run: `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
    can't be repaired, stop and report. Otherwise run
    `docker exec spine python manage.py reconcile_tv --apply`. It is safe to run again: a
    show already worked out reports nothing.
-3. Report the summary's counts (shows checked and changed, newly in the Library, status
-   changes) with the ship.
+3. Report each run's counts (shows checked and changed, newly in the Library, status
+   changes).
 
-Remove this section once that ship is done.
+Remove this section once the production repair has run.
 
 ## Workflow B: roll back after a bad ship
 

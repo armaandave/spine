@@ -180,6 +180,26 @@ class TV602EndTests(TVTrackingTestCase):
         self.assertIsNone(tv.rewatch_started_at)
         self.assertEqual(tv.status, "Completed")
 
+    def test_tv_602_a_finished_rewatch_of_a_returning_show_is_caught_up_again(self):
+        """After the rewatch, the status comes from all history: Completed, caught up."""
+        premiere = date(2027, 3, 12)
+        show = self.make_show(
+            {1: 2},
+            status="Returning Series",
+            next_episode_to_air={"season_number": 2, "episode_number": 1, "air_date": premiere},
+        )
+        tv_tracking.mark_watched(self.user, show)
+        self.assertTrue(self.state(show)["caught_up"])
+        self.advance()
+        tv_tracking.start_rewatch(self.user, show)
+        self.assertEqual(self.status(show), "In progress")
+        self.ticks(show, 1, (1, 2))
+        state = self.state(show)
+        self.assertIsNone(state["rewatch"])
+        self.assertEqual(state["status"], "Completed")
+        self.assertTrue(state["caught_up"])
+        self.assertEqual(state["next_airing"]["air_date"], premiere.isoformat())
+
 
 class TV603EpisodeRewatchTests(TVTrackingTestCase):
     """TV-603: rewatching one episode never reopens anything."""

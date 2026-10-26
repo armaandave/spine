@@ -193,6 +193,20 @@ class TV500OwnStarsTests(TVTrackingTestCase):
         season = Season.objects.get(item__season_number=1)
         self.assertIsNone(season.score)
 
+    def test_tv_500_a_show_log_never_sets_its_seasons_stars_or_hearts(self):
+        show = self.make_show({1: 2, 2: 2})
+        tv_tracking.set_rating(self.user, self.season_item(show, 2), 4)
+        self.log(show, rating=9, liked=True)
+        tv = self.tv(show)
+        self.assertEqual(str(tv.score), "9.0")
+        self.assertTrue(MediaLike.objects.filter(user=self.user, item=show).exists())
+        scores = dict(Season.objects.filter(related_tv=tv).values_list("item__season_number", "score"))
+        self.assertIsNone(scores[1])
+        self.assertEqual(str(scores[2]), "4.0")
+        self.assertFalse(
+            MediaLike.objects.filter(user=self.user, item__in=[self.season_item(show, 1), self.season_item(show, 2)]).exists(),
+        )
+
 
 class TV501SourceRulesTests(TVTrackingTestCase):
     """TV-501: show and season stars and hearts follow the shared source rules."""

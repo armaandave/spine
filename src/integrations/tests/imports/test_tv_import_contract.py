@@ -468,6 +468,16 @@ class TVImportContractTests(TestCase):
 
         self.assertEqual(second, first)
 
+    def test_tv_504_an_imported_off_scale_score_is_kept_as_it_is(self):
+        """Imports keep a source's off-scale score; the app's ten values don't apply."""
+        self.import_csv([
+            self.row("tv", status=Status.COMPLETED.value, score="7.3"),
+            self.row("season", season=1, status=Status.COMPLETED.value, score="6.7"),
+        ])
+
+        self.assertEqual(str(self.tv().score), "7.3")
+        self.assertEqual(str(Season.objects.get(related_tv=self.tv(), item__season_number=1).score), "6.7")
+
 
 @override_settings(TIME_ZONE="America/New_York")
 class TVImportSourceTests(TestCase):
