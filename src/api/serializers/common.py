@@ -7,8 +7,13 @@ from django.utils.text import slugify
 from rest_framework import serializers
 
 from api.services import completion as completion_service
-from app import config, single_weight
-from app.curation import curated_image_url, picked_image_urls, prime_curated_artwork
+from app import config, music_catalog, single_weight
+from app.curation import (
+    curated_image_url,
+    music_picks_apply,
+    picked_image_urls,
+    prime_curated_artwork,
+)
 from app.models import (
     BasicMedia,
     CustomBackdropPreference,
@@ -227,7 +232,12 @@ def media_ref_from_item(item):
 
 
 def find_item(ref):
-    """Find an Item for a media ref if it has already been materialized."""
+    """Find an Item for a media ref if it has already been materialized.
+
+    A music album is found under its canonical ref, so an old MusicBrainz ref of an
+    album that moved finds the Item that holds it now.
+    """
+    ref = music_catalog.canonical_media_ref(ref)
     return Item.objects.filter(
         source=ref["source"],
         media_type=ref["media_type"],
@@ -238,9 +248,13 @@ def find_item(ref):
 
 
 def get_or_create_item_from_metadata(ref, metadata):
-    """Get or create an Item using provider metadata."""
+    """Get or create an Item using provider metadata.
+
+    A music album is stored under its canonical ref.
+    """
     from api.services.filters import update_item_filter_metadata
 
+    ref = music_catalog.canonical_media_ref(ref)
     defaults = {
         "title": metadata.get("title") or metadata.get("name") or ref["media_id"],
         "image": metadata.get("image") or settings.IMG_NONE,
@@ -486,6 +500,12 @@ def media_summary_from_provider(
             else {}
         ),
         **({"relation": payload["relation"]} if payload.get("relation") else {}),
+        # "explicit" or "clean", for Apple Music albums that Apple rates.
+        **(
+            {"content_rating": payload["content_rating"]}
+            if payload.get("content_rating")
+            else {}
+        ),
         "subtitle": payload.get("year") or payload.get("subtitle"),
         "overview": synopsis_from_payload(payload),
         **with_curated_artwork(artwork, item, request=request),
@@ -717,7 +737,7 @@ def custom_poster_url_for_user(user, ref, request=None, item=None):
 
     if item is None:
         item = find_item(ref)
-    if item is None:
+    if item is None or not music_picks_apply(item):
         return None
     prefetched = getattr(item, "viewer_custom_poster_preferences", None)
     preference = prefetched[0] if prefetched else None
@@ -734,7 +754,7 @@ def custom_backdrop_url_for_user(user, ref, request=None, item=None):
 
     if item is None:
         item = find_item(ref)
-    if item is None:
+    if item is None or not music_picks_apply(item):
         return None
     prefetched = getattr(item, "viewer_custom_backdrop_preferences", None)
     preference = prefetched[0] if prefetched else None
@@ -817,6 +837,17 @@ def related_sections_from_payload(related, media_type, source, request=None, use
             if key not in {"seasons", "all_related"} and values
         ]
 
+    # One lookup for every section, so albums that moved open under their canonical ref.
+    payloads = [
+        value.get("item", value) if isinstance(value, dict) else value
+        for _, _, values in candidates
+        for value in values
+    ]
+    canonical = music_catalog.canonical_music_refs(
+        music_catalog.payload_ref(payload, source=source, media_type=media_type)
+        for payload in payloads
+        if isinstance(payload, dict)
+    )
     sections = []
     for key, title, values in candidates:
         items = []
@@ -835,6 +866,7 @@ def related_sections_from_payload(related, media_type, source, request=None, use
             payload = value.get("item", value) if isinstance(value, dict) else value
             if not isinstance(payload, dict):
                 continue
+            payload = music_catalog.with_canonical_ref(payload, canonical, source=source, media_type=media_type)
             item_media_type = payload.get("media_type", media_type)
             item_source = payload.get("source", source)
             summary = media_summary_from_provider(

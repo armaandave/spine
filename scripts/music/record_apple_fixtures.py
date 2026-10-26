@@ -7,8 +7,13 @@ Usage, from the repo root:
 PATH (or $APPLE_MUSIC_TOKEN_FILE) is a file holding a short-lived Apple Music
 developer token, minted outside the repo and saved with mode 600. This script never
 signs, prints or logs a token. It keeps to 2 requests a second, keeps only the
-fields the code and tests read (no artwork, editorial notes or previews), and
-refuses to write a file that contains Authorization text or anything token-like.
+fields the code and tests read (no editorial notes or previews; artwork only on
+album pages), and refuses to write a file that contains Authorization text or
+anything token-like.
+
+``--only GROUP`` records one group of fixtures (repeat it for several): ``catalog``
+for the listing rule and client tests, ``album_pages`` for album and song pages,
+``search`` for search, people search and artist pages.
 
 Apple's catalog changes, so re-recording can move IDs and counts that the tests
 assert. Re-record only when the tests need new data, and review the diff.
@@ -34,6 +39,20 @@ CATALOG = "/v1/catalog/us"
 MIN_INTERVAL = 0.5  # 2 requests a second
 RETRIES = 3
 SZA_ARTIST_ID = "605800394"
+# Search fixtures, by name: queries whose first page the search tests read, and one
+# read over two pages.
+SEARCHES = {
+    "renaissance": "renaissance",
+    "thriller": "thriller",
+    "sos": "sos",
+    "my_turn": "lil baby my turn",
+    "donda": "kanye west donda",
+}
+TWO_PAGE_SEARCH = ("sza_sos", "sza sos")
+ARTIST_VIEWS = "full-albums,singles,live-albums,compilation-albums,appears-on-albums"
+# A view's next page asks for up to this many albums.
+ARTIST_VIEW_LIMIT = 100
+ALBUM_BATCH = 100
 ALBUM_FIELDS = (
     "name",
     "artistName",
@@ -46,6 +65,40 @@ ALBUM_FIELDS = (
 )
 SONG_FIELDS = ("name", "albumName", "discNumber", "trackNumber", "isrc")
 ARTIST_FIELDS = ("name", "url")
+# Artist pages and people search also read the artist's picture.
+PAGE_ARTIST_FIELDS = (*ARTIST_FIELDS, "artwork")
+# Album pages also read the barcode, genres, label, kind and artwork.
+PAGE_ALBUM_FIELDS = (
+    *ALBUM_FIELDS,
+    "upc",
+    "genreNames",
+    "recordLabel",
+    "isSingle",
+    "isCompilation",
+    "artwork",
+)
+PAGE_SONG_FIELDS = (
+    *SONG_FIELDS,
+    "artistName",
+    "composerName",
+    "durationInMillis",
+    "contentRating",
+    "releaseDate",
+    "url",
+)
+ARTWORK_FIELDS = ("url", "width", "height")
+PAGE_PARAMS = {"include": "tracks,artists", "views": "other-versions,related-albums"}
+# Album pages, by fixture name: an album, its re-upload, a two-disc deluxe, a
+# pre-order and a video album.
+ALBUM_PAGES = {
+    "page_sos.json": "1657869377",
+    "page_lana.json": "1794644675",
+    "page_lana_38.json": "1786643044",
+    "page_thriller.json": "269572838",
+    "page_whos_next_deluxe.json": "1440850317",
+    "page_weathered_preorder.json": "6803287133",
+    "page_multitude_video.json": "1621698801",
+}
 ERROR_FIELDS = ("status", "code", "title", "detail")
 FORBIDDEN = re.compile(
     r"authorization|bearer\s|eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}",
@@ -184,6 +237,97 @@ def trim_error(response):
     return {"status": response.status_code, "body": body}
 
 
+def trim_page_album(resource):
+    """Keep what an album page reads: attributes, tracks, artists and both views."""
+    album = trim_view_album(resource)
+    relationships = resource.get("relationships") or {}
+    tracks = relationships.get("tracks") or {}
+    artists = relationships.get("artists") or {}
+    album["relationships"] = {
+        "tracks": {
+            "data": [
+                {
+                    "id": song["id"],
+                    "type": song.get("type", "songs"),
+                    "attributes": _pick(song.get("attributes"), PAGE_SONG_FIELDS),
+                }
+                for song in tracks.get("data") or []
+            ],
+            **({"next": tracks["next"]} if tracks.get("next") else {}),
+        },
+        "artists": {
+            "data": [
+                {
+                    "id": artist["id"],
+                    "type": artist.get("type", "artists"),
+                    "attributes": _pick(artist.get("attributes"), ARTIST_FIELDS),
+                }
+                for artist in artists.get("data") or []
+            ],
+        },
+    }
+    album["views"] = {
+        name: trim_view(view, member=trim_view_album)
+        for name, view in (resource.get("views") or {}).items()
+    }
+    return album
+
+
+def trim_view_album(resource):
+    """Keep an album's page attributes, with only the artwork link and size."""
+    attributes = _pick(resource.get("attributes"), PAGE_ALBUM_FIELDS)
+    if "artwork" in attributes:
+        attributes["artwork"] = _pick(attributes["artwork"], ARTWORK_FIELDS)
+    return {
+        "id": resource["id"],
+        "type": resource.get("type", "albums"),
+        "attributes": attributes,
+    }
+
+
+def trim_family_album(resource):
+    """Keep an album's page attributes and its other versions' page attributes."""
+    album = trim_view_album(resource)
+    views = trim_page_views(resource)
+    if views:
+        album["views"] = views
+    return album
+
+
+def trim_page_views(resource):
+    """Keep a resource's views, with their albums' page attributes."""
+    views = resource.get("views") or {}
+    return {
+        name: trim_view(view, member=trim_view_album) for name, view in views.items()
+    }
+
+
+def trim_page_artist(resource):
+    """Keep an artist's name, link, picture and album views with their attributes."""
+    attributes = _pick(resource.get("attributes"), PAGE_ARTIST_FIELDS)
+    if "artwork" in attributes:
+        attributes["artwork"] = _pick(attributes["artwork"], ARTWORK_FIELDS)
+    artist = {
+        "id": resource["id"],
+        "type": resource.get("type", "artists"),
+        "attributes": attributes,
+    }
+    views = trim_page_views(resource)
+    if views:
+        artist["views"] = views
+    return artist
+
+
+def trim_search_page(response, kind):
+    """Keep one search page of albums or artists, with page attributes and next link."""
+    results = (response.get("results") or {}).get(kind) or {}
+    member = trim_view_album if kind == "albums" else trim_page_artist
+    trimmed = {"data": [member(resource) for resource in results.get("data") or []]}
+    if results.get("next"):
+        trimmed["next"] = results["next"]
+    return {"results": {kind: trimmed}}
+
+
 def _ref(resource):
     return {"id": resource["id"], "type": resource.get("type", "albums")}
 
@@ -222,8 +366,70 @@ def titled_ids(response, artist, title):
     return ids
 
 
-def record(recorder):
-    """Record every fixture the step 1 tests read."""
+def record_album_pages(recorder):
+    """Record the album pages the album and song page tests read."""
+    blood_bank = recorder.catalog(
+        "search",
+        {"term": "bon iver blood bank", "types": "albums", "limit": 10},
+    )
+    ep_id = titled_ids(blood_bank, "Bon Iver", "Blood Bank - EP")[0]
+    for name, album_id in {**ALBUM_PAGES, "page_blood_bank_ep.json": ep_id}.items():
+        page = recorder.catalog(f"albums/{album_id}", PAGE_PARAMS)
+        albums = [trim_page_album(album) for album in page["data"]]
+        recorder.write(name, {"data": albums})
+
+
+def record_families(recorder, name, ids):
+    """Write one batch of albums with their version families' page attributes."""
+    params = {"ids": ",".join(ids), "views": "other-versions"}
+    families = recorder.catalog("albums", params)
+    albums = [trim_family_album(album) for album in families.get("data") or []]
+    recorder.write(name, {"data": albums})
+
+
+def record_search_page(recorder, name, response):
+    """Write a search page and the batch of its albums' version families."""
+    recorder.write(f"search_albums_{name}.json", trim_search_page(response, "albums"))
+    ids = [album["id"] for album in response["results"]["albums"]["data"]]
+    record_families(recorder, f"search_families_{name}.json", ids)
+
+
+def record_search(recorder):
+    """Record the search, people search and artist page fixtures."""
+    for name, term in SEARCHES.items():
+        params = {"term": term, "types": "albums", "limit": 25}
+        record_search_page(recorder, name, recorder.catalog("search", params))
+    name, term = TWO_PAGE_SEARCH
+    first = recorder.catalog("search", {"term": term, "types": "albums", "limit": 25})
+    record_search_page(recorder, f"{name}_1", first)
+    second = recorder.get(first["results"]["albums"]["next"], {"limit": 25}).json()
+    record_search_page(recorder, f"{name}_2", second)
+
+    params = {"term": "sza", "types": "artists", "limit": 10}
+    artists = recorder.catalog("search", params)
+    recorder.write("search_artists_sza.json", trim_search_page(artists, "artists"))
+
+    artist = recorder.catalog(f"artists/{SZA_ARTIST_ID}", {"views": ARTIST_VIEWS})
+    recorder.write("person_sza.json", {"data": [trim_page_artist(artist["data"][0])]})
+    views = artist["data"][0].get("views") or {}
+    ids = [album["id"] for view in views.values() for album in view.get("data") or []]
+    for view_name, view in views.items():
+        if view.get("next"):
+            more = recorder.get(view["next"], {"limit": ARTIST_VIEW_LIMIT}).json()
+            albums = more.get("data") or []
+            ids.extend(album["id"] for album in albums)
+            trimmed = {"data": [trim_view_album(album) for album in albums]}
+            if more.get("next"):
+                trimmed["next"] = more["next"]
+            recorder.write(f"person_sza_{view_name}_2.json", trimmed)
+    ids = list(dict.fromkeys(ids))
+    for number, start in enumerate(range(0, len(ids), ALBUM_BATCH), start=1):
+        batch = ids[start : start + ALBUM_BATCH]
+        record_families(recorder, f"person_sza_families_{number}.json", batch)
+
+
+def record_catalog(recorder):
+    """Record every fixture the listing rule and client tests read."""
     first = recorder.catalog(
         "search",
         {"term": "sza sos", "types": "albums", "limit": 25},
@@ -302,6 +508,13 @@ def record(recorder):
     recorder.write("error_404.json", trim_error(missing))
 
 
+GROUPS = {
+    "catalog": record_catalog,
+    "album_pages": record_album_pages,
+    "search": record_search,
+}
+
+
 def read_token(path):
     """Return the token from a private file outside the repo."""
     path = Path(path).expanduser().resolve()
@@ -329,11 +542,19 @@ def main():
         default=DEFAULT_OUT,
         help="fixture directory",
     )
+    parser.add_argument(
+        "--only",
+        action="append",
+        choices=sorted(GROUPS),
+        help="record only this group of fixtures (default: every group)",
+    )
     args = parser.parse_args()
     if not args.token_file:
         parser.error("pass --token-file or set APPLE_MUSIC_TOKEN_FILE")
     args.out.mkdir(parents=True, exist_ok=True)
-    record(Recorder(read_token(args.token_file), args.out))
+    recorder = Recorder(read_token(args.token_file), args.out)
+    for group in args.only or GROUPS:
+        GROUPS[group](recorder)
 
 
 if __name__ == "__main__":

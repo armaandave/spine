@@ -1,0 +1,1612 @@
+{
+  "data": [
+    {
+      "id": "1595496182",
+      "type": "albums",
+      "attributes": {
+        "name": "Donda (Deluxe)",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/donda-deluxe/1595496182",
+        "playParams": {
+          "id": "1595496182",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-08-29",
+        "contentRating": "clean",
+        "trackCount": 32,
+        "upc": "00602445249848",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams II, LLC / Def Jam Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/cf/a7/f9/cfa7f9be-2d62-89a4-19bf-26276ab39f16/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1587795158",
+              "type": "albums",
+              "attributes": {
+                "name": "Donda",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/donda/1587795158",
+                "playParams": {
+                  "id": "1587795158",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2021-08-29",
+                "trackCount": 27,
+                "upc": "00602438975563",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Rock The World/IDJ/Kanye LP7",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/62/13/7b/62137b3f-7722-59f5-2ee1-b5aff9426869/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1818888557",
+      "type": "albums",
+      "attributes": {
+        "name": "DONDA 2",
+        "artistName": "Ye",
+        "url": "https://music.apple.com/us/album/donda-2/1818888557",
+        "playParams": {
+          "id": "1818888557",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-04-29",
+        "contentRating": "explicit",
+        "trackCount": 21,
+        "upc": "0692788674308",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "YZY",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/be/fd/7f/befd7f1d-9764-766f-f041-7a7f8654892a/749912.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1587795158",
+      "type": "albums",
+      "attributes": {
+        "name": "Donda",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/donda/1587795158",
+        "playParams": {
+          "id": "1587795158",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-08-29",
+        "trackCount": 27,
+        "upc": "00602438975563",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Rock The World/IDJ/Kanye LP7",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/62/13/7b/62137b3f-7722-59f5-2ee1-b5aff9426869/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1595496182",
+              "type": "albums",
+              "attributes": {
+                "name": "Donda (Deluxe)",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/donda-deluxe/1595496182",
+                "playParams": {
+                  "id": "1595496182",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2021-08-29",
+                "contentRating": "clean",
+                "trackCount": 32,
+                "upc": "00602445249848",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Getting Out Our Dreams II, LLC / Def Jam Recordings",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/cf/a7/f9/cfa7f9be-2d62-89a4-19bf-26276ab39f16/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1442966257",
+      "type": "albums",
+      "attributes": {
+        "name": "The Life of Pablo",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/the-life-of-pablo/1442966257",
+        "playParams": {
+          "id": "1442966257",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-04-05",
+        "contentRating": "clean",
+        "trackCount": 19,
+        "upc": "00602547908339",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Hardcore Rap"
+        ],
+        "recordLabel": "Rock The World/IDJ/Kanye LP7",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/ec/fd/e0/ecfde04e-6db2-e55e-41fe-83c87a52b16e/00602547908339.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1443063578",
+              "type": "albums",
+              "attributes": {
+                "name": "The Life of Pablo",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/the-life-of-pablo/1443063578",
+                "playParams": {
+                  "id": "1443063578",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2016-02-14",
+                "contentRating": "explicit",
+                "trackCount": 20,
+                "upc": "00602557027334",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Hardcore Rap"
+                ],
+                "recordLabel": "Rock The World/IDJ/Kanye LP7",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/ab/74/4a/ab744ae9-235f-0a2f-9f8a-74ddee3c339e/16UMGIM37046.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1609149054",
+      "type": "albums",
+      "attributes": {
+        "name": "808s & Heartbreak (Exclusive Edition)",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/808s-heartbreak-exclusive-edition/1609149054",
+        "playParams": {
+          "id": "1609149054",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2008-01-01",
+        "trackCount": 14,
+        "upc": "00602517919198",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Roc-A-Fella",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/f3/61/19/f36119b9-4d88-05eb-4306-2ae0e7decf88/08UMGIM26559.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 900,
+          "height": 900
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1441410287",
+              "type": "albums",
+              "attributes": {
+                "name": "808s & Heartbreak",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/808s-heartbreak/1441410287",
+                "playParams": {
+                  "id": "1441410287",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2008-11-25",
+                "trackCount": 14,
+                "upc": "00602537665181",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/4d/75/2d/4d752db1-022d-f65d-40a1-a2390f01427a/13UAEIM26465.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1400,
+                  "height": 1400
+                }
+              }
+            },
+            {
+              "id": "1440895024",
+              "type": "albums",
+              "attributes": {
+                "name": "808s & Heartbreak",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/808s-heartbreak/1440895024",
+                "playParams": {
+                  "id": "1440895024",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2008-01-01",
+                "trackCount": 12,
+                "upc": "00602557134230",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/fb/5c/f2/fb5cf235-2ae9-34c3-1ddb-ef896fb14175/16UMGIM58688.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1441460375",
+      "type": "albums",
+      "attributes": {
+        "name": "ye",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/ye/1441460375",
+        "playParams": {
+          "id": "1441460375",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-06-06",
+        "contentRating": "clean",
+        "trackCount": 7,
+        "upc": "00602577303098",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f8/92/62/f892628e-bfd5-2437-c1f5-0ebbd366de09/00602577303098.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1441456689",
+              "type": "albums",
+              "attributes": {
+                "name": "ye",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/ye/1441456689",
+                "playParams": {
+                  "id": "1441456689",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-06-01",
+                "contentRating": "explicit",
+                "trackCount": 7,
+                "upc": "00602577303135",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/76/1b/36/761b368d-a267-4a99-9689-f5daf9bb1325/18UMGIM26291.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1396710872",
+      "type": "albums",
+      "attributes": {
+        "name": "KIDS SEE GHOSTS",
+        "artistName": "KIDS SEE GHOSTS, Kanye West & Kid Cudi",
+        "url": "https://music.apple.com/us/album/kids-see-ghosts/1396710872",
+        "playParams": {
+          "id": "1396710872",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-06-08",
+        "contentRating": "explicit",
+        "trackCount": 7,
+        "upc": "00602567803881",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/2c/bc/1c/2cbc1cca-7881-2605-875c-536f553cc79a/00602567803881.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1397651890",
+              "type": "albums",
+              "attributes": {
+                "name": "KIDS SEE GHOSTS",
+                "artistName": "KIDS SEE GHOSTS, Kanye West & Kid Cudi",
+                "url": "https://music.apple.com/us/album/kids-see-ghosts/1397651890",
+                "playParams": {
+                  "id": "1397651890",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-06-08",
+                "contentRating": "clean",
+                "trackCount": 7,
+                "upc": "00602567794318",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap"
+                ],
+                "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/3f/2e/d3/3f2ed3b1-d260-4e92-816b-4beac102c676/00602567794318.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1762101173",
+      "type": "albums",
+      "attributes": {
+        "name": "VULTURES 2",
+        "artistName": "¥$, Kanye West & Ty Dolla $ign",
+        "url": "https://music.apple.com/us/album/vultures-2/1762101173",
+        "playParams": {
+          "id": "1762101173",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-08-03",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "0748777756774",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "YZY",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/d9/e3/b3/d9e3b369-0fd1-d505-4cf7-0eebada5dbdd/358175.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1761882317",
+              "type": "albums",
+              "attributes": {
+                "name": "VULTURES 2",
+                "artistName": "¥$, Kanye West & Ty Dolla $ign",
+                "url": "https://music.apple.com/us/album/vultures-2/1761882317",
+                "playParams": {
+                  "id": "1761882317",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-08-03",
+                "contentRating": "clean",
+                "trackCount": 16,
+                "upc": "0748777752363",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "YZY",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/bf/db/25/bfdb25f8-1518-d6d9-32ad-053cc9f87d88/357949.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1441410287",
+      "type": "albums",
+      "attributes": {
+        "name": "808s & Heartbreak",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/808s-heartbreak/1441410287",
+        "playParams": {
+          "id": "1441410287",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2008-11-25",
+        "trackCount": 14,
+        "upc": "00602537665181",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Roc-A-Fella",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/4d/75/2d/4d752db1-022d-f65d-40a1-a2390f01427a/13UAEIM26465.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1609149054",
+              "type": "albums",
+              "attributes": {
+                "name": "808s & Heartbreak (Exclusive Edition)",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/808s-heartbreak-exclusive-edition/1609149054",
+                "playParams": {
+                  "id": "1609149054",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2008-01-01",
+                "trackCount": 14,
+                "upc": "00602517919198",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/f3/61/19/f36119b9-4d88-05eb-4306-2ae0e7decf88/08UMGIM26559.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 900,
+                  "height": 900
+                }
+              }
+            },
+            {
+              "id": "1440895024",
+              "type": "albums",
+              "attributes": {
+                "name": "808s & Heartbreak",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/808s-heartbreak/1440895024",
+                "playParams": {
+                  "id": "1440895024",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2008-01-01",
+                "trackCount": 12,
+                "upc": "00602557134230",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/fb/5c/f2/fb5cf235-2ae9-34c3-1ddb-ef896fb14175/16UMGIM58688.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1440848092",
+      "type": "albums",
+      "attributes": {
+        "name": "Watch the Throne",
+        "artistName": "JAŸ-Z & Kanye West",
+        "url": "https://music.apple.com/us/album/watch-the-throne/1440848092",
+        "playParams": {
+          "id": "1440848092",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2011-08-08",
+        "contentRating": "explicit",
+        "trackCount": 12,
+        "upc": "00602547790200",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Hardcore Rap",
+          "East Coast Rap",
+          "Rap"
+        ],
+        "recordLabel": "Roc Nation/RocAFella/IDJ",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ff/a8/ef/ffa8efdf-396a-ece7-ddbf-be10db4e5ae7/11UMGIM20800.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440845249",
+              "type": "albums",
+              "attributes": {
+                "name": "Watch the Throne (Deluxe)",
+                "artistName": "JAŸ-Z & Kanye West",
+                "url": "https://music.apple.com/us/album/watch-the-throne-deluxe/1440845249",
+                "playParams": {
+                  "id": "1440845249",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2011-08-08",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "00602547790163",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Roc Nation/RocAFella/IDJ",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/b1/d0/32/b1d03292-7f4e-2304-df0f-1a690d44c6cc/11UMGIM20800.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1440766278",
+              "type": "albums",
+              "attributes": {
+                "name": "Watch the Throne (Deluxe Version)",
+                "artistName": "JAŸ-Z & Kanye West",
+                "url": "https://music.apple.com/us/album/watch-the-throne-deluxe-version/1440766278",
+                "playParams": {
+                  "id": "1440766278",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2011-08-08",
+                "contentRating": "clean",
+                "trackCount": 16,
+                "upc": "00602527812526",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Hardcore Rap",
+                  "East Coast Rap",
+                  "Rap"
+                ],
+                "recordLabel": "Roc Nation/RocAFella/IDJ",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/18/f5/07/18f5070d-b5dc-796c-bce4-42badb41a762/00602527812526.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1442227821",
+              "type": "albums",
+              "attributes": {
+                "name": "Watch the Throne",
+                "artistName": "JAŸ-Z & Kanye West",
+                "url": "https://music.apple.com/us/album/watch-the-throne/1442227821",
+                "playParams": {
+                  "id": "1442227821",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2011-08-08",
+                "contentRating": "clean",
+                "trackCount": 12,
+                "upc": "00602527812519",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Hardcore Rap",
+                  "East Coast Rap",
+                  "Rap"
+                ],
+                "recordLabel": "Roc Nation/RocAFella/IDJ",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/40/8b/82/408b8223-24f4-38a1-47b0-709618af8481/00602527812519.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1435565663",
+      "type": "albums",
+      "attributes": {
+        "name": "I Love It - Single",
+        "artistName": "Kanye West & Lil Pump",
+        "url": "https://music.apple.com/us/album/i-love-it-single/1435565663",
+        "playParams": {
+          "id": "1435565663",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-09-06",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602577081774",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a2/3c/93/a23c930f-a7e7-b2e0-89e3-61883133db4f/00602577081774.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1435565636",
+              "type": "albums",
+              "attributes": {
+                "name": "I Love It - Single",
+                "artistName": "Kanye West & Lil Pump",
+                "url": "https://music.apple.com/us/album/i-love-it-single/1435565636",
+                "playParams": {
+                  "id": "1435565636",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-09-06",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "00602577081811",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap"
+                ],
+                "recordLabel": "Getting Out Our Dreams, Inc./Def Jam Recordings",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/01/9a/a9/019aa93f-ff97-1e5a-9980-a9d92ad0eea6/00602577081811.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1378632290",
+      "type": "albums",
+      "attributes": {
+        "name": "Watch (feat. Lil Uzi Vert & Kanye West) - Single",
+        "artistName": "Travis Scott",
+        "url": "https://music.apple.com/us/album/watch-feat-lil-uzi-vert-kanye-west-single/1378632290",
+        "playParams": {
+          "id": "1378632290",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-05-04",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886447093788",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Cactus Jack / Epic",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/9e/7b/56/9e7b560d-59ce-dda7-5b8a-99130d4816a6/886447093788.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1378730785",
+              "type": "albums",
+              "attributes": {
+                "name": "Watch (feat. Lil Uzi Vert & Kanye West) - Single",
+                "artistName": "Travis Scott",
+                "url": "https://music.apple.com/us/album/watch-feat-lil-uzi-vert-kanye-west-single/1378730785",
+                "playParams": {
+                  "id": "1378730785",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-05-04",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "886447093795",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Cactus Jack / Epic",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/a5/0e/2f/a50e2fe3-38bd-937b-c973-62b7bd392a99/886447093795.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1605174349",
+      "type": "albums",
+      "attributes": {
+        "name": "Eazy - Single",
+        "artistName": "The Game & Kanye West",
+        "url": "https://music.apple.com/us/album/eazy-single/1605174349",
+        "playParams": {
+          "id": "1605174349",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-01-16",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "859753069594",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "100 Entertainment, Inc",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/d6/b6/99/d6b699ba-3670-13ea-40d2-80035832a34a/859753069594_cover.jpg/{w}x{h}bb.jpg",
+          "width": 1600,
+          "height": 1600
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1634036049",
+              "type": "albums",
+              "attributes": {
+                "name": "Eazy - Single",
+                "artistName": "The Game & Kanye West",
+                "url": "https://music.apple.com/us/album/eazy-single/1634036049",
+                "playParams": {
+                  "id": "1634036049",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-01-15",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00859753069259",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "100 Entertainment, Inc.",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/ff/0f/7f/ff0f7fc8-c076-0e7e-393d-e5d5f3124727/22UMGIM67585.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1609158283",
+      "type": "albums",
+      "attributes": {
+        "name": "City of Gods - Single",
+        "artistName": "Fivio Foreign, Kanye West & Alicia Keys",
+        "url": "https://music.apple.com/us/album/city-of-gods-single/1609158283",
+        "playParams": {
+          "id": "1609158283",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-02-15",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886449898480",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "RichFish/Columbia",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/43/08/da/4308da76-be8e-3235-d56e-e11bdc0e78c4/886449898480.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1609511549",
+              "type": "albums",
+              "attributes": {
+                "name": "City of Gods - Single",
+                "artistName": "Fivio Foreign, Kanye West & Alicia Keys",
+                "url": "https://music.apple.com/us/album/city-of-gods-single/1609511549",
+                "playParams": {
+                  "id": "1609511549",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-02-11",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "886449898497",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "RichFish/Columbia",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/40/fe/2b/40fe2b8a-700f-8564-1550-f9f7a890edd2/886449898497.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1632349053",
+      "type": "albums",
+      "attributes": {
+        "name": "Hot Shit - Single",
+        "artistName": "Cardi B, Kanye West & Lil Durk",
+        "url": "https://music.apple.com/us/album/hot-shit-single/1632349053",
+        "playParams": {
+          "id": "1632349053",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-07-01",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "075679736956",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Atlantic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/38/56/19/385619cd-d17f-c491-23ca-a046c4b71af3/075679736956.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1632352629",
+              "type": "albums",
+              "attributes": {
+                "name": "Hot Shit - Single",
+                "artistName": "Cardi B, Kanye West & Lil Durk",
+                "url": "https://music.apple.com/us/album/hot-shit-single/1632352629",
+                "playParams": {
+                  "id": "1632352629",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-07-01",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "075679736949",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Atlantic Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/5e/00/7e/5e007e85-d731-7c96-f23c-3fc849a904f7/075679736949.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1445169359",
+      "type": "albums",
+      "attributes": {
+        "name": "Mercy (feat. Big Sean, Pusha T & 2 Chainz) - Single",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/mercy-feat-big-sean-pusha-t-2-chainz-single/1445169359",
+        "playParams": {
+          "id": "1445169359",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2012-01-01",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602537032761",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams Inc. (G.O.O.D.) Music / IDJ",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/85/d4/0f/85d40f9b-566e-4c9b-88a6-18c587712713/12UMGIM14730.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1624802944",
+      "type": "albums",
+      "attributes": {
+        "name": "True Love - Single",
+        "artistName": "Kanye West & XXXTENTACION",
+        "url": "https://music.apple.com/us/album/true-love-single/1624802944",
+        "playParams": {
+          "id": "1624802944",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-05-27",
+        "trackCount": 1,
+        "upc": "196589180247",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Columbia",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/3a/c4/be/3ac4be92-f255-b735-605f-3d531bf7a487/dj.kvenstal.jpg/{w}x{h}bb.jpg",
+          "width": 3299,
+          "height": 3299
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1445170915",
+      "type": "albums",
+      "attributes": {
+        "name": "FourFiveSeconds - Single",
+        "artistName": "Rihanna and Kanye West and Paul McCartney",
+        "url": "https://music.apple.com/us/album/fourfiveseconds-single/1445170915",
+        "playParams": {
+          "id": "1445170915",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-01-24",
+        "trackCount": 1,
+        "upc": "00602547235398",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "Rock",
+          "Singer/Songwriter"
+        ],
+        "recordLabel": "Roc Nation / Rihanna",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b1/f2/24/b1f224ad-40fb-ae22-b632-de330c70b540/00602547235398.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 5000,
+          "height": 5000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1521391166",
+      "type": "albums",
+      "attributes": {
+        "name": "Wash Us in the Blood (feat. Travis Scott) - Single",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/wash-us-in-the-blood-feat-travis-scott-single/1521391166",
+        "playParams": {
+          "id": "1521391166",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-06-30",
+        "trackCount": 1,
+        "upc": "00602508347542",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams II / Def Jam Recordings",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/d1/4b/2d/d14b2df3-167c-37de-2689-8aaa4bbd64d2/20UMGIM54771.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 6000,
+          "height": 6000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1440763821",
+      "type": "albums",
+      "attributes": {
+        "name": "Late Registration",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/late-registration/1440763821",
+        "playParams": {
+          "id": "1440763821",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2005-08-30",
+        "contentRating": "clean",
+        "trackCount": 21,
+        "upc": "00602498824030",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "East Coast Rap",
+          "Alternative Rap"
+        ],
+        "recordLabel": "Roc-A-Fella",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/0e/90/3c/0e903c43-9d81-f91b-90f1-727a58f7fb2c/00602498824030.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1411
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440668749",
+              "type": "albums",
+              "attributes": {
+                "name": "Late Registration",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/late-registration/1440668749",
+                "playParams": {
+                  "id": "1440668749",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2005-08-30",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "00602498824016",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Alternative Rap"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/00/68/13/006813b3-9ca1-2e6f-98df-4ef78cd6cb49/06UMGIM20452.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1423,
+                  "height": 1412
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1437467864",
+      "type": "albums",
+      "attributes": {
+        "name": "The College Dropout",
+        "artistName": "Kanye West",
+        "url": "https://music.apple.com/us/album/the-college-dropout/1437467864",
+        "playParams": {
+          "id": "1437467864",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2004-02-10",
+        "contentRating": "clean",
+        "trackCount": 21,
+        "upc": "00602567924326",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Alternative Rap"
+        ],
+        "recordLabel": "Roc-A-Fella",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/15/05/09/15050911-a2f1-9ebc-0d16-6e8faad1cf80/00602567924326.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1412872568",
+              "type": "albums",
+              "attributes": {
+                "name": "The College Dropout",
+                "artistName": "Kanye West",
+                "url": "https://music.apple.com/us/album/the-college-dropout/1412872568",
+                "playParams": {
+                  "id": "1412872568",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2004-02-10",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "00602567922186",
+                "genreNames": [
+                  "Hip-Hop",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Roc-A-Fella",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/0d/73/b1/0d73b181-2716-f7a6-a340-0a3f81eacfb9/06UMGIM15686.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1587238350",
+      "type": "albums",
+      "attributes": {
+        "name": "Hurricane (feat. Lil Baby) - Single",
+        "artistName": "Kanye West & The Weeknd",
+        "url": "https://music.apple.com/us/album/hurricane-feat-lil-baby-single/1587238350",
+        "playParams": {
+          "id": "1587238350",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-08-29",
+        "trackCount": 1,
+        "upc": "00602438919956",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams II, LLC / Def Jam Recordings",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d3/36/7f/d3367fc3-f0f5-bb79-db1d-9055ae7631d8/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1595490862",
+      "type": "albums",
+      "attributes": {
+        "name": "Life Of The Party - Single",
+        "artistName": "Kanye West & André 3000",
+        "url": "https://music.apple.com/us/album/life-of-the-party-single/1595490862",
+        "playParams": {
+          "id": "1595490862",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-11-14",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602445250028",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Getting Out Our Dreams II, LLC / Def Jam Recordings",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/20/69/f6/2069f6fc-b764-a341-c391-f3aa492a492f/21UMGIM64738.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1760997037",
+      "type": "albums",
+      "attributes": {
+        "name": "VULTURES 1",
+        "artistName": "¥$, Kanye West & Ty Dolla $ign",
+        "url": "https://music.apple.com/us/album/vultures-1/1760997037",
+        "playParams": {
+          "id": "1760997037",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-02-10",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "723277394381",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "YZY",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c2/0c/a5/c20ca53d-ae1e-31eb-af1d-faffc0b1b286/354766.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1762090727",
+      "type": "albums",
+      "attributes": {
+        "name": "CARNIVAL (feat. Rich The Kid, Playboi Carti) - Single",
+        "artistName": "¥$, Kanye West & Ty Dolla $ign",
+        "url": "https://music.apple.com/us/album/carnival-feat-rich-the-kid-playboi-carti-single/1762090727",
+        "playParams": {
+          "id": "1762090727",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-02-08",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "801867241427",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Ye",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1b/f2/c1/1bf2c1ed-97de-3c77-3a2b-9f468fcdd26c/355393.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1762090531",
+              "type": "albums",
+              "attributes": {
+                "name": "CARNIVAL (feat. Rich The Kid, Playboi Carti) - Single",
+                "artistName": "¥$, Kanye West & Ty Dolla $ign",
+                "url": "https://music.apple.com/us/album/carnival-feat-rich-the-kid-playboi-carti-single/1762090531",
+                "playParams": {
+                  "id": "1762090531",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-02-08",
+                "trackCount": 1,
+                "upc": "723277388199",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Ye",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/da/51/99/da519983-d78a-985b-3cb5-00b35a095fe3/355376.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

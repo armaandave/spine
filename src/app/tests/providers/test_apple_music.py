@@ -14,6 +14,14 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from pyrate_limiter import Duration, RedisBucket
 
+from app.models import (
+    AppleAlbum,
+    Item,
+    ItemFilterFacet,
+    MediaTypes,
+    MusicAlbumLink,
+    Sources,
+)
 from app.providers import apple_music, services
 
 # Recorded by scripts/music/record_apple_fixtures.py.
@@ -38,6 +46,33 @@ SIGNING_KEY, SIGNING_KEY_SETTING = throwaway_key()
 
 def fixture(name):
     return json.loads((FIXTURES / name).read_text())
+
+
+def page(name, **attributes):
+    """Return a recorded album page, with its album's attributes changed if asked."""
+    data = fixture(name)
+    data["data"][0]["attributes"].update(attributes)
+    return data
+
+
+def apple_item(media_id, title="SOS", image="https://example.com/cover.jpg", **fields):
+    return Item.objects.create(
+        source=Sources.APPLE_MUSIC.value,
+        media_type=MediaTypes.MUSIC.value,
+        media_id=media_id,
+        title=title,
+        image=image,
+        **fields,
+    )
+
+
+def genre_facets(item, *values):
+    for value in values:
+        ItemFilterFacet.objects.create(
+            item=item,
+            facet_type=ItemFilterFacet.FacetType.GENRE,
+            value=value,
+        )
 
 
 def clear_pause():
@@ -520,4 +555,503 @@ class AppleMusicRateLimitTests(TestCase):
                 },
             ),
             4,
+        )
+
+
+SOS_URL = "https://music.apple.com/us/album/sos/1657869377"
+SOS_CREDIT = {
+    "artist_mbid": None,
+    "name": "SZA",
+    "join_phrase": "",
+    "artist_source": "apple_music",
+    "artist_id": "605800394",
+}
+
+
+class AlbumPageTests(AppleMusicTestCase):
+    def test_album_page_has_todays_music_shape(self):
+        fake = self.apple((200, fixture("page_sos.json")))
+
+        album = apple_music.music("1657869377")
+
+        self.assertEqual(urlsplit(fake.requests[0].url).path, "/v1/catalog/us/albums/1657869377")
+        self.assertEqual(
+            query(fake.requests[0]),
+            {"include": "tracks,artists", "views": "other-versions,related-albums"},
+        )
+        self.assertEqual(
+            {key: album[key] for key in ("media_id", "source", "media_type", "title", "subtitle")},
+            {
+                "media_id": "1657869377",
+                "source": "apple_music",
+                "media_type": "music",
+                "title": "SOS",
+                "subtitle": "SZA",
+            },
+        )
+        self.assertEqual(album["max_progress"], 1)
+        self.assertEqual(album["release_date"], "2022-12-09")
+        self.assertEqual(album["details"]["first_release_date"], "2022-12-09")
+        self.assertEqual(album["details"]["primary_type"], "Album")
+        self.assertIsNone(album["score"])
+        self.assertIsNone(album["details"]["annotation"])
+        self.assertEqual(album["external_links"], {"Apple Music": SOS_URL})
+        self.assertEqual(album["related"], {})
+        self.assertEqual(
+            album["image"],
+            "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/"
+            "bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+        )
+        music = album["music"]
+        self.assertEqual(music["release_group_mbid"], "1657869377")
+        self.assertEqual(
+            music["cover_art"],
+            {"source": "apple_music", "release_group_mbid": "1657869377", "fallback_used": True},
+        )
+        self.assertEqual(music["content_rating"], "explicit")
+        self.assertEqual(music["artist_credit"], [SOS_CREDIT])
+        release = music["representative_release"]
+        self.assertEqual(
+            {key: value for key, value in release.items() if key not in {"media", "streaming_links"}},
+            {
+                "release_mbid": "1657869377",
+                "title": "SOS",
+                "status": "Official",
+                "date": "2022-12-09",
+                "country": "US",
+                "barcode": "196589564931",
+                "selection_basis": "apple_music",
+                "labels": [
+                    {
+                        "label_mbid": None,
+                        "name": "Top Dawg Entertainment/RCA Records",
+                        "catalog_number": None,
+                    },
+                ],
+                "format": "Digital Media",
+                "is_deluxe_or_remastered": False,
+                "disc_count": 1,
+                "track_count": 23,
+            },
+        )
+
+    def test_tracks_map_to_todays_track_shape(self):
+        self.apple((200, fixture("page_sos.json")))
+
+        medium = apple_music.music("1657869377")["music"]["representative_release"]["media"][0]
+
+        self.assertEqual(
+            {key: value for key, value in medium.items() if key != "tracks"},
+            {
+                "medium_mbid": None,
+                "position": 1,
+                "title": None,
+                "format": "Digital Media",
+                "track_count": 23,
+            },
+        )
+        self.assertEqual(
+            medium["tracks"][1],
+            {
+                "track_mbid": "1657869393",
+                "disc_number": 1,
+                "position": 2,
+                "number": "2",
+                "title": "Kill Bill",
+                "length_ms": 153947,
+                "artist_credit": [SOS_CREDIT],
+                "content_rating": None,
+                "recording": {
+                    "recording_mbid": "1657869393",
+                    "title": "Kill Bill",
+                    "length_ms": 153947,
+                    "disambiguation": None,
+                    "first_release_date": "2022-12-09",
+                    "is_video": False,
+                    "isrcs": ["USRC12204584"],
+                    "composer_name": "SZA, Rob Bisel & Carter Lang",
+                    "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393",
+                },
+            },
+        )
+        self.assertEqual(medium["tracks"][0]["content_rating"], "explicit")
+
+    def test_a_song_on_the_album_twice_gets_a_unique_track_id(self):
+        sos = fixture("page_sos.json")
+        tracks = sos["data"][0]["relationships"]["tracks"]["data"]
+        repeat = copy.deepcopy(tracks[0])
+        repeat["attributes"]["trackNumber"] = 24
+        tracks.append(repeat)
+        self.apple((200, sos))
+
+        tracks = apple_music.music("1657869377")["music"]["representative_release"]["media"][0]["tracks"]
+
+        self.assertEqual([track["track_mbid"] for track in tracks].count("1657869385"), 1)
+        self.assertEqual(tracks[-1]["track_mbid"], "1657869385-2")
+        self.assertEqual(tracks[-1]["recording"]["recording_mbid"], "1657869385")
+
+    def test_a_featured_song_credits_its_own_artists_as_text(self):
+        sos = fixture("page_sos.json")
+        sos["data"][0]["relationships"]["tracks"]["data"][0]["attributes"]["artistName"] = "SZA & Travis Scott"
+        self.apple((200, sos))
+
+        track = apple_music.music("1657869377")["music"]["representative_release"]["media"][0]["tracks"][0]
+
+        self.assertEqual(
+            track["artist_credit"],
+            [{"artist_mbid": None, "name": "SZA & Travis Scott", "join_phrase": ""}],
+        )
+
+    def test_several_album_artists_join_as_a_list(self):
+        sos = fixture("page_sos.json")
+        sos["data"][0]["relationships"]["artists"]["data"] = [
+            {"id": "1", "type": "artists", "attributes": {"name": "Metro Boomin"}},
+            {"id": "2", "type": "artists", "attributes": {"name": "Future"}},
+            {"id": "3", "type": "artists", "attributes": {"name": "Travis Scott"}},
+        ]
+        self.apple((200, sos))
+
+        credits = apple_music.music("1657869377")["music"]["artist_credit"]
+
+        self.assertEqual(
+            [(credit["name"], credit["join_phrase"], credit["artist_id"]) for credit in credits],
+            [("Metro Boomin", ", ", "1"), ("Future", " & ", "2"), ("Travis Scott", "", "3")],
+        )
+        self.assertTrue(all(credit["artist_mbid"] is None for credit in credits))
+
+    def test_ep_and_single_suffixes_become_the_album_type(self):
+        self.apple((200, fixture("page_blood_bank_ep.json")))
+
+        album = apple_music.music("789755317")
+
+        self.assertEqual(album["title"], "Blood Bank")
+        self.assertEqual(album["music"]["primary_type"], "EP")
+        self.assertEqual(album["details"]["primary_type"], "EP")
+        self.assertEqual(album["music"]["representative_release"]["title"], "Blood Bank")
+        cases = (
+            ({"name": "Kill Bill - Single"}, ("Kill Bill", "Single")),
+            ({"name": "Kill Bill", "isSingle": True}, ("Kill Bill", "Single")),
+            ({"name": "SOS"}, ("SOS", "Album")),
+            ({"name": "Blood Bank - ep "}, ("Blood Bank", "EP")),
+        )
+        for attributes, expected in cases:
+            with self.subTest(attributes=attributes):
+                self.assertEqual(apple_music.album_title(attributes), expected)
+
+    def test_two_disc_deluxe_keeps_its_discs(self):
+        self.apple((200, fixture("page_lana.json")))
+
+        release = apple_music.music("1794644675")["music"]["representative_release"]
+
+        self.assertEqual(release["disc_count"], 2)
+        self.assertEqual(release["track_count"], 42)
+        self.assertTrue(release["is_deluxe_or_remastered"])
+        self.assertEqual([medium["position"] for medium in release["media"]], [1, 2])
+        self.assertEqual([medium["track_count"] for medium in release["media"]], [19, 23])
+        second_disc = release["media"][1]["tracks"]
+        self.assertEqual([track["number"] for track in second_disc[:3]], ["1", "2", "3"])
+        self.assertTrue(all(track["disc_number"] == 2 for track in second_disc))
+        track_ids = [track["track_mbid"] for medium in release["media"] for track in medium["tracks"]]
+        self.assertEqual(len(set(track_ids)), 42)
+
+    def test_video_album_marks_its_videos(self):
+        self.apple((200, fixture("page_multitude_video.json")))
+
+        tracks = apple_music.music("1621698801")["music"]["representative_release"]["media"][0]["tracks"]
+
+        self.assertEqual(
+            [track["position"] for track in tracks if track["recording"]["is_video"]],
+            [13, 14, 15],
+        )
+
+    def test_a_pre_order_gets_its_release_date(self):
+        self.apple((200, fixture("page_weathered_preorder.json")))
+
+        album = apple_music.music("6803287133")
+
+        self.assertEqual(album["media_id"], "6803287133")
+        self.assertEqual(album["release_date"], "2026-11-20")
+        self.assertEqual(album["details"]["first_release_date"], "2026-11-20")
+        self.assertEqual(album["max_progress"], 1)
+        self.assertTrue(album["music"]["representative_release"]["is_deluxe_or_remastered"])
+
+    def test_artwork_is_filled_at_600_and_never_longer_than_an_item_holds(self):
+        artwork = {"url": "https://is1-ssl.mzstatic.com/image/thumb/a.jpg/{w}x{h}{c}.{f}"}
+        self.assertEqual(
+            apple_music.artwork_url(artwork),
+            "https://is1-ssl.mzstatic.com/image/thumb/a.jpg/600x600bb.jpg",
+        )
+        self.assertIsNone(apple_music.artwork_url({"url": "https://example.com/" + "a" * 190 + "/{w}x{h}bb.jpg"}))
+        self.assertIsNone(apple_music.artwork_url(None))
+
+        too_long = {"url": "https://example.com/" + "a" * 190 + "/{w}x{h}bb.jpg"}
+        self.apple((200, page("page_sos.json", artwork=too_long)))
+
+        self.assertEqual(apple_music.music("1657869377")["image"], settings.IMG_NONE)
+
+    def test_the_album_page_is_cached(self):
+        fake = self.apple((200, fixture("page_sos.json")))
+
+        first = apple_music.music("1657869377")
+        second = apple_music.music("1657869377")
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(fake.requests), 1)
+
+    def test_a_404_without_an_item_raises(self):
+        fake = self.apple((404, fixture("error_404.json")["body"]))
+
+        with self.assertRaises(services.ProviderAPIError) as raised:
+            apple_music.music("1")
+
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(len(fake.requests), 1)
+
+
+class AlbumIdentityTests(AppleMusicTestCase):
+    def test_a_re_upload_opens_as_its_listing_with_the_best_members_tracks(self):
+        fake = self.apple((200, fixture("page_lana_38.json")), (200, fixture("page_lana.json")))
+
+        album = apple_music.music("1786643044")
+
+        self.assertEqual(album["media_id"], "1794644675")
+        self.assertEqual(album["music"]["release_group_mbid"], "1794644675")
+        self.assertEqual(album["music"]["representative_release"]["track_count"], 42)
+        self.assertEqual(
+            album["external_links"],
+            {"Apple Music": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675"},
+        )
+        self.assertEqual(
+            [urlsplit(request.url).path.rsplit("/", 1)[-1] for request in fake.requests],
+            ["1786643044", "1794644675"],
+        )
+        rows = dict(AppleAlbum.objects.values_list("apple_album_id", "canonical_id"))
+        self.assertEqual(
+            rows,
+            {"1786643044": "1794644675", "1794644675": "1794644675", "1796270264": "1794644675"},
+        )
+        self.assertEqual(AppleAlbum.objects.get(apple_album_id="1786643044").upc, "196871766890")
+
+    def test_an_item_keeps_its_identity_and_still_shows_the_best_tracks(self):
+        apple_item("1786643044", title="SOS Deluxe: LANA")
+        self.apple((200, fixture("page_lana_38.json")), (200, fixture("page_lana.json")))
+
+        album = apple_music.music("1786643044")
+
+        self.assertEqual(album["media_id"], "1786643044")
+        self.assertEqual(album["music"]["representative_release"]["track_count"], 42)
+        self.assertEqual(
+            set(AppleAlbum.objects.values_list("canonical_id", flat=True)),
+            {"1786643044"},
+        )
+
+    def test_the_best_member_falls_back_to_the_album_asked_for(self):
+        self.apple((200, fixture("page_lana_38.json")), (503, {"errors": []}))
+
+        album = apple_music.music("1786643044")
+
+        self.assertEqual(album["media_id"], "1794644675")
+        self.assertEqual(album["music"]["representative_release"]["track_count"], 38)
+
+    def test_every_family_member_gets_a_row_and_keeps_a_known_barcode(self):
+        AppleAlbum.objects.create(apple_album_id="1658650093", canonical_id="1658650093", upc="196589564955")
+        sos = fixture("page_sos.json")
+        del sos["data"][0]["views"]["other-versions"]["data"][0]["attributes"]["upc"]
+        self.apple((200, sos))
+
+        apple_music.music("1657869377")
+
+        self.assertEqual(
+            {row.apple_album_id: (row.canonical_id, row.upc) for row in AppleAlbum.objects.all()},
+            {
+                "1657869377": ("1657869377", "196589564931"),
+                "1658650093": ("1657869377", "196589564955"),
+            },
+        )
+
+    def test_a_taken_down_album_with_an_item_opens_its_successor_by_barcode(self):
+        apple_item("1111111111", title="SOS")
+        AppleAlbum.objects.create(apple_album_id="1111111111", canonical_id="1111111111", upc="196589564931")
+        fake = self.apple(
+            (404, fixture("error_404.json")["body"]),
+            (200, fixture("albums_by_upc_sos.json")),
+            (200, fixture("page_sos.json")),
+        )
+
+        album = apple_music.music("1111111111")
+
+        self.assertEqual(album["media_id"], "1111111111")
+        self.assertEqual(album["music"]["representative_release"]["track_count"], 23)
+        self.assertEqual(query(fake.requests[1]), {"filter[upc]": "196589564931"})
+        self.assertEqual(urlsplit(fake.requests[2].url).path, "/v1/catalog/us/albums/1657869377")
+        self.assertEqual(
+            dict(AppleAlbum.objects.values_list("apple_album_id", "canonical_id")),
+            {"1111111111": "1111111111", "1657869377": "1111111111", "1658650093": "1111111111"},
+        )
+
+    def test_no_successor_without_a_matching_title(self):
+        apple_item("1111111111", title="Ctrl")
+        AppleAlbum.objects.create(apple_album_id="1111111111", canonical_id="1111111111", upc="196589564931")
+        self.apple((404, fixture("error_404.json")["body"]), (200, fixture("albums_by_upc_sos.json")))
+
+        with self.assertRaises(services.ProviderAPIError) as raised:
+            apple_music.music("1111111111")
+
+        self.assertEqual(raised.exception.status_code, 404)
+
+
+class AlbumLinkTests(AppleMusicTestCase):
+    def setUp(self):
+        super().setUp()
+        self.apple((200, fixture("page_sos.json")))
+
+    def links(self):
+        return apple_music.music("1657869377")["music"]["representative_release"]["streaming_links"]
+
+    def test_apple_music_first_then_a_spotify_search(self):
+        self.assertEqual(
+            self.links(),
+            [
+                {"service": "music.apple.com", "url": SOS_URL, "kind": "album"},
+                {
+                    "service": "open.spotify.com",
+                    "url": "https://open.spotify.com/search/SZA%20SOS/albums",
+                    "kind": "search",
+                },
+            ],
+        )
+
+    def test_the_exact_spotify_album_when_the_bridge_or_a_link_knows_it(self):
+        spotify = "https://open.spotify.com/album/07w0rG5TETcyihsEIZR3qG"
+        link = MusicAlbumLink.objects.create(
+            release_group_mbid="b5a2f2f3-1111-4b5b-9ad1-07d3c3a5f8e4",
+            apple_album_id="1657869377",
+            status=MusicAlbumLink.Status.REVIEW,
+            spotify_url=spotify,
+        )
+        self.assertEqual(self.links()[1]["kind"], "search")
+
+        link.status = MusicAlbumLink.Status.APPLIED
+        link.save()
+        self.assertEqual(
+            self.links()[1],
+            {"service": "open.spotify.com", "url": spotify, "kind": "album"},
+        )
+
+        link.delete()
+        AppleAlbum.objects.filter(apple_album_id="1657869377").update(spotify_url=spotify, spotify_exact=True)
+        self.assertEqual(self.links()[1], {"service": "open.spotify.com", "url": spotify, "kind": "album"})
+
+
+class AlbumGenreAndDateTests(AppleMusicTestCase):
+    def bridge(self, **fields):
+        AppleAlbum.objects.update_or_create(
+            apple_album_id="1657869377",
+            defaults={"canonical_id": "1657869377", "release_group_mbid": "rg", **fields},
+        )
+
+    def test_apple_genres_in_musicbrainz_words_without_music(self):
+        self.apple((200, fixture("page_sos.json")), (200, fixture("page_whos_next_deluxe.json")))
+
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b"])
+        self.assertEqual(
+            apple_music.music("1440850317")["genres"],
+            ["hard rock", "rock", "arena rock", "rock and roll"],
+        )
+
+    def test_the_bridge_then_the_item_and_never_fewer_than_the_item(self):
+        self.apple((200, fixture("page_sos.json")))
+        item = apple_item("1657869377")
+        genre_facets(item, "contemporary r&b", "alternative r&b")
+
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["alternative r&b", "contemporary r&b"])
+
+        self.bridge(genres=["contemporary r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["alternative r&b", "contemporary r&b"])
+
+        self.bridge(genres=["r&b", "contemporary r&b", "soul"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b", "contemporary r&b", "soul"])
+
+    def test_the_release_date_is_musicbrainzs_when_surely_earlier_for_the_same_title(self):
+        self.apple((200, fixture("page_sos.json")))
+        cases = (
+            ({"same_title": True, "first_release_date": "2022-12-08"}, "2022-12-08"),
+            ({"same_title": False, "first_release_date": "2022-12-08"}, "2022-12-09"),
+            ({"same_title": True, "first_release_date": "2022"}, "2022-12-09"),
+            ({"same_title": True, "first_release_date": "2021-05"}, "2021-05"),
+            ({"same_title": True, "first_release_date": "2023-01-01"}, "2022-12-09"),
+            ({"same_title": True, "first_release_date": ""}, "2022-12-09"),
+        )
+        for fields, expected in cases:
+            with self.subTest(fields=fields):
+                self.bridge(**fields)
+                album = apple_music.music("1657869377")
+                self.assertEqual(album["release_date"], expected)
+                self.assertEqual(album["details"]["first_release_date"], expected)
+
+    def test_a_partial_apple_date_gives_way_to_an_earlier_musicbrainz_date(self):
+        self.apple((200, page("page_sos.json", releaseDate="2022")))
+        self.bridge(same_title=True, first_release_date="2021-12-31")
+
+        self.assertEqual(apple_music.music("1657869377")["release_date"], "2021-12-31")
+
+
+class SongPageTests(AppleMusicTestCase):
+    def test_a_song_comes_from_its_albums_payload(self):
+        self.apple((200, fixture("page_sos.json")))
+        album = apple_music.music("1657869377")
+
+        song = apple_music.recording(album, "1657869393")
+
+        track = album["music"]["representative_release"]["media"][0]["tracks"][1]
+        self.assertEqual(song["recording_mbid"], "1657869393")
+        self.assertEqual(song["title"], "Kill Bill")
+        self.assertFalse(song["is_video"])
+        self.assertEqual(song["isrcs"], ["USRC12204584"])
+        self.assertEqual(song["artist_credit"], [SOS_CREDIT])
+        self.assertEqual(
+            song["credits"],
+            [{"artist_mbid": None, "name": "SZA, Rob Bisel & Carter Lang", "roles": ["composer"]}],
+        )
+        self.assertEqual((song["works"], song["alternative_recordings"]), ([], []))
+        self.assertEqual(
+            song["context_release"],
+            {"release_mbid": "1657869377", "medium_mbid": None, "track": track},
+        )
+        self.assertEqual(
+            [(release["release_mbid"], release["release_group_mbid"]) for release in song["releases"]],
+            [("1657869377", "1657869377")],
+        )
+        self.assertEqual(
+            song["external_links"],
+            {"Apple Music": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"},
+        )
+        self.assertEqual(song["genres"], ["r&b"])
+
+    def test_a_song_not_on_the_album_is_none(self):
+        self.apple((200, fixture("page_sos.json")))
+        album = apple_music.music("1657869377")
+
+        self.assertIsNone(apple_music.recording(album, "999"))
+        self.assertIsNone(apple_music.recording({"music": None}, "1657869393"))
+
+
+class AlbumSourceTests(AppleMusicTestCase):
+    def test_apple_refs_go_to_apple_and_others_to_musicbrainz(self):
+        self.apple((200, fixture("page_sos.json")))
+
+        album = services.get_media_metadata("music", "1657869377", "apple_music")
+
+        self.assertEqual(album["source"], "apple_music")
+        with patch("app.providers.services.musicbrainz.music", return_value={"source": "musicbrainz"}) as music:
+            services.get_media_metadata("music", "3bd76d40-7f0e-36b7-9348-91a33afee20e", "musicbrainz")
+            services.get_media_metadata(
+                "music",
+                "3bd76d40-7f0e-36b7-9348-91a33afee20e",
+                "musicbrainz",
+                include_music_enrichment=False,
+            )
+        self.assertEqual(
+            [call.kwargs for call in music.call_args_list],
+            [{}, {"include_enrichment": False}],
         )

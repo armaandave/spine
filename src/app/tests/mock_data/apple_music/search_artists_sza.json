@@ -1,0 +1,124 @@
+{
+  "results": {
+    "artists": {
+      "data": [
+        {
+          "id": "605800394",
+          "type": "artists",
+          "attributes": {
+            "name": "SZA",
+            "url": "https://music.apple.com/us/artist/sza/605800394",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages221/v4/6e/00/30/6e003069-1d1f-480c-aab8-806892e73877/ami-identity-294a220289779df8e389876bc46ac060-2024-12-20T20-08-51.286Z_cropped.png/{w}x{h}bb.jpg",
+              "width": 7108,
+              "height": 7108
+            }
+          }
+        },
+        {
+          "id": "1883011141",
+          "type": "artists",
+          "attributes": {
+            "name": "The Sza",
+            "url": "https://music.apple.com/us/artist/the-sza/1883011141",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/37/98/49/379849c8-10f6-5d05-af7c-28e925b5b452/5064022299021_cover.jpg/{w}x{h}ac.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1613011948",
+          "type": "artists",
+          "attributes": {
+            "name": "SZA Sza",
+            "url": "https://music.apple.com/us/artist/sza-sza/1613011948"
+          }
+        },
+        {
+          "id": "1868458121",
+          "type": "artists",
+          "attributes": {
+            "name": "Iman 'SZA' Solana Rowe",
+            "url": "https://music.apple.com/us/artist/iman-sza-solana-rowe/1868458121"
+          }
+        },
+        {
+          "id": "1625538093",
+          "type": "artists",
+          "attributes": {
+            "name": "Sza R3",
+            "url": "https://music.apple.com/us/artist/sza-r3/1625538093",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/29/94/71/29947160-262e-4f13-9397-be17ad00bb86/198004762700.jpg/{w}x{h}ac.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1065610723",
+          "type": "artists",
+          "attributes": {
+            "name": "Rumbo´szá Orquesta",
+            "url": "https://music.apple.com/us/artist/rumbo-sz%C3%A1-orquesta/1065610723",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music2/v4/f9/7c/a2/f97ca240-aaf5-1a58-3511-edc378cbb492/cover.jpg/{w}x{h}ac.jpg",
+              "width": 1440,
+              "height": 1440
+            }
+          }
+        },
+        {
+          "id": "1377413450",
+          "type": "artists",
+          "attributes": {
+            "name": "LSD",
+            "url": "https://music.apple.com/us/artist/lsd/1377413450",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/cd/b1/7d/cdb17dc5-53f9-8f39-3b7e-92e632482663/mzl.tubuoqip.jpg/{w}x{h}bb.jpg",
+              "width": 2400,
+              "height": 2400
+            }
+          }
+        },
+        {
+          "id": "1575626206",
+          "type": "artists",
+          "attributes": {
+            "name": "Ms. Sza",
+            "url": "https://music.apple.com/us/artist/ms-sza/1575626206"
+          }
+        },
+        {
+          "id": "1511322160",
+          "type": "artists",
+          "attributes": {
+            "name": "Thiago Sza",
+            "url": "https://music.apple.com/us/artist/thiago-sza/1511322160",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/7c/45/34/7c45349b-2af7-5c1d-d396-f417e3b7304f/pr_source.png/{w}x{h}bb.jpg",
+              "width": 618,
+              "height": 618
+            }
+          }
+        },
+        {
+          "id": "28721078",
+          "type": "artists",
+          "attributes": {
+            "name": "Sia",
+            "url": "https://music.apple.com/us/artist/sia/28721078",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages211/v4/a9/09/18/a9091850-af3a-ffbf-65e3-349d5b6eb926/ami-identity-e481968227e39f49322f9ea36d4ae0b8-2026-03-05T20-24-38.844Z_cropped.png/{w}x{h}bb.jpg",
+              "width": 1920,
+              "height": 1920
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=10&term=sza&types=artists"
+    }
+  }
+}

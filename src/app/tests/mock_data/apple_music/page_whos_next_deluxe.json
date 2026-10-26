@@ -1,0 +1,947 @@
+{
+  "data": [
+    {
+      "id": "1440850317",
+      "type": "albums",
+      "attributes": {
+        "name": "Who's Next (Deluxe Edition)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/whos-next-deluxe-edition/1440850317",
+        "playParams": {
+          "id": "1440850317",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1971-08-14",
+        "trackCount": 29,
+        "upc": "00602547269683",
+        "genreNames": [
+          "Hard Rock",
+          "Music",
+          "Rock",
+          "Arena Rock",
+          "Rock & Roll"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/1c/e8/a4/1ce8a442-eef1-0af2-cf09-30ef0e734731/00602547269683.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1440850320",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "GBUM71405411",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 299876,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/baba-oriley/1440850317?i=1440850320"
+              }
+            },
+            {
+              "id": "1440850323",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "GBUM71405412",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 333368,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/bargain/1440850317?i=1440850323"
+              }
+            },
+            {
+              "id": "1440850325",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't for Keeping",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "GBUM71405413",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 130528,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/love-aint-for-keeping/1440850317?i=1440850325"
+              }
+            },
+            {
+              "id": "1440850327",
+              "type": "songs",
+              "attributes": {
+                "name": "My Wife",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "GBUM71405414",
+                "artistName": "The Who",
+                "composerName": "John Entwistle",
+                "durationInMillis": 215633,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/my-wife/1440850317?i=1440850327"
+              }
+            },
+            {
+              "id": "1440850329",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "GBUM71405415",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 379920,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/the-song-is-over/1440850317?i=1440850329"
+              }
+            },
+            {
+              "id": "1440850511",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "GBUM71405416",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 289130,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/getting-in-tune/1440850317?i=1440850511"
+              }
+            },
+            {
+              "id": "1440850513",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Mobile",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "GBUM71405417",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 223260,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/going-mobile/1440850317?i=1440850513"
+              }
+            },
+            {
+              "id": "1440850517",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "GBUM71405418",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 220402,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/behind-blue-eyes/1440850317?i=1440850517"
+              }
+            },
+            {
+              "id": "1440850519",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "GBUM71405419",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 516312,
+                "releaseDate": "1971-06-25",
+                "url": "https://music.apple.com/us/album/wont-get-fooled-again/1440850317?i=1440850519"
+              }
+            },
+            {
+              "id": "1440850523",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Don't You Do It (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "GBUM71405420",
+                "artistName": "The Who",
+                "composerName": "BRIAN HOLLAND, Lamont Dozier & EDDIE HOLLAND",
+                "durationInMillis": 523249,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/baby-dont-you-do-it-new-york-record-plant-session/1440850317?i=1440850523"
+              }
+            },
+            {
+              "id": "1440850530",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "GBUM71405421",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 407289,
+                "releaseDate": "2003-01-01",
+                "url": "https://music.apple.com/us/album/getting-in-tune-new-york-record-plant-session/1440850317?i=1440850530"
+              }
+            },
+            {
+              "id": "1440850532",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure and Easy (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "GBUM71405422",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 278229,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/pure-and-easy-new-york-record-plant-session/1440850317?i=1440850532"
+              }
+            },
+            {
+              "id": "1440850535",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't for Keeping (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "GBUM71405423",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 245056,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/love-aint-for-keeping-new-york-record-plant-session/1440850317?i=1440850535"
+              }
+            },
+            {
+              "id": "1440850536",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "GBUM71405424",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 207696,
+                "releaseDate": "1971-08-14",
+                "url": "https://music.apple.com/us/album/behind-blue-eyes-new-york-record-plant-session/1440850317?i=1440850536"
+              }
+            },
+            {
+              "id": "1440850601",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (New York Record Plant Session)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "GBUM71405425",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 527887,
+                "releaseDate": "2003-01-01",
+                "url": "https://music.apple.com/us/album/wont-get-fooled-again-new-york-record-plant-session/1440850317?i=1440850601"
+              }
+            },
+            {
+              "id": "1440850604",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't for Keeping (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "GBUM71405427",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 180503,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/love-aint-for-keeping-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850604"
+              }
+            },
+            {
+              "id": "1440850617",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure and Easy (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "GBUM71405428",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 389235,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/pure-and-easy-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850617"
+              }
+            },
+            {
+              "id": "1440850620",
+              "type": "songs",
+              "attributes": {
+                "name": "Young Man Blues (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "GBUM71405429",
+                "artistName": "The Who",
+                "composerName": "Mose Allison",
+                "durationInMillis": 289705,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/young-man-blues-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850620"
+              }
+            },
+            {
+              "id": "1440850624",
+              "type": "songs",
+              "attributes": {
+                "name": "Time Is Passing (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "GBUM71405430",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 239257,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/time-is-passing-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850624"
+              }
+            },
+            {
+              "id": "1440850629",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "GBUM71405431",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 294691,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/behind-blue-eyes-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850629"
+              }
+            },
+            {
+              "id": "1440850732",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don't Even Know Myself (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "GBUM71405432",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 342731,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/i-dont-even-know-myself-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850732"
+              }
+            },
+            {
+              "id": "1440850744",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Much of Anything (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "GBUM71405433",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 262099,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/too-much-of-anything-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850744"
+              }
+            },
+            {
+              "id": "1440850750",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "GBUM71405434",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 425365,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/getting-in-tune-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850750"
+              }
+            },
+            {
+              "id": "1440850781",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 24,
+                "isrc": "GBUM71405435",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 342714,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/bargain-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850781"
+              }
+            },
+            {
+              "id": "1440850782",
+              "type": "songs",
+              "attributes": {
+                "name": "Water (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 25,
+                "isrc": "GBUM71405436",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 512518,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/water-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850782"
+              }
+            },
+            {
+              "id": "1440850783",
+              "type": "songs",
+              "attributes": {
+                "name": "My Generation (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 26,
+                "isrc": "GBUM71405437",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 178333,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/my-generation-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850783"
+              }
+            },
+            {
+              "id": "1440850785",
+              "type": "songs",
+              "attributes": {
+                "name": "(I'm A) Road Runner (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 27,
+                "isrc": "GBUM71405438",
+                "artistName": "The Who",
+                "composerName": "BRIAN HOLLAND, Lamont Dozier & EDDIE HOLLAND",
+                "durationInMillis": 194323,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/im-a-road-runner-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850785"
+              }
+            },
+            {
+              "id": "1440850787",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 28,
+                "isrc": "GBUM71405439",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 381833,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/naked-eye-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850787"
+              }
+            },
+            {
+              "id": "1440850788",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (Live at the Young Vic, London, 04/26/71)",
+                "albumName": "Who's Next (Deluxe Edition)",
+                "discNumber": 1,
+                "trackNumber": 29,
+                "isrc": "GBUM71405440",
+                "artistName": "The Who",
+                "composerName": "Pete Townshend",
+                "durationInMillis": 522160,
+                "releaseDate": "2003-03-25",
+                "url": "https://music.apple.com/us/album/wont-get-fooled-again-live-at-the-young-vic-london-04-26-71/1440850317?i=1440850788"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "61499",
+              "type": "artists",
+              "attributes": {
+                "name": "The Who",
+                "url": "https://music.apple.com/us/artist/the-who/61499"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1706357665",
+              "type": "albums",
+              "attributes": {
+                "name": "Who's Next (Remastered 2022)",
+                "artistName": "The Who",
+                "url": "https://music.apple.com/us/album/whos-next-remastered-2022/1706357665",
+                "playParams": {
+                  "id": "1706357665",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1971-08-14",
+                "trackCount": 9,
+                "upc": "00602458480429",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Arena Rock",
+                  "Hard Rock"
+                ],
+                "recordLabel": "UMC (Universal Music Catalogue)",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/a5/e7/70/a5e7703c-4e30-da7a-a319-2d3caef42c0e/23UM1IM04872.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1440815866",
+              "type": "albums",
+              "attributes": {
+                "name": "Who's Next (Bonus Track Version)",
+                "artistName": "The Who",
+                "url": "https://music.apple.com/us/album/whos-next-bonus-track-version/1440815866",
+                "playParams": {
+                  "id": "1440815866",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1971-08-14",
+                "trackCount": 16,
+                "upc": "00602547140265",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Arena Rock",
+                  "Rock & Roll",
+                  "Pop",
+                  "Pop/Rock"
+                ],
+                "recordLabel": "Geffen",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/4e/d5/19/4ed519ca-3f8b-65ee-eb21-89d5c6a0b44e/00602547140265.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1500643395",
+              "type": "albums",
+              "attributes": {
+                "name": "Beggars Banquet (2018 Remaster)",
+                "artistName": "The Rolling Stones",
+                "url": "https://music.apple.com/us/album/beggars-banquet-2018-remaster/1500643395",
+                "playParams": {
+                  "id": "1500643395",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1968-12-06",
+                "trackCount": 10,
+                "upc": "00018771872528",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Pop",
+                  "Pop/Rock",
+                  "Rock & Roll",
+                  "Blues-Rock",
+                  "Arena Rock"
+                ],
+                "recordLabel": "ABKCO Music & Records, Inc.",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a3/d1/78/a3d178a8-f1c2-c1c3-1c5d-d78ab3af9768/20UMGIM13726.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "580707622",
+              "type": "albums",
+              "attributes": {
+                "name": "In Through the Out Door (Remastered)",
+                "artistName": "Led Zeppelin",
+                "url": "https://music.apple.com/us/album/in-through-the-out-door-remastered/580707622",
+                "playParams": {
+                  "id": "580707622",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1979-08-22",
+                "trackCount": 7,
+                "upc": "603497926084",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Arena Rock",
+                  "Metal",
+                  "Hard Rock",
+                  "Blues",
+                  "Country Blues"
+                ],
+                "recordLabel": "Rhino Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music7/v4/32/33/78/32337882-4dcf-b4ff-c2b1-988297b1aa2a/dj.bazmvvpg.jpg/{w}x{h}bb.jpg",
+                  "width": 2400,
+                  "height": 2400
+                }
+              }
+            },
+            {
+              "id": "1440920886",
+              "type": "albums",
+              "attributes": {
+                "name": "The Very Best of Cream",
+                "artistName": "Cream",
+                "url": "https://music.apple.com/us/album/the-very-best-of-cream/1440920886",
+                "playParams": {
+                  "id": "1440920886",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1995-05-09",
+                "trackCount": 20,
+                "upc": "00731452375223",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Blues-Rock",
+                  "Arena Rock",
+                  "Blues",
+                  "Hard Rock",
+                  "Country Blues",
+                  "Psychedelic"
+                ],
+                "recordLabel": "Polydor Records",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/3b/00/c3/3b00c3be-7a86-2dfc-4450-b64df12bcab1/00731452375223.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1423,
+                  "height": 1411
+                }
+              }
+            },
+            {
+              "id": "1442953668",
+              "type": "albums",
+              "attributes": {
+                "name": "Truancy: The Very Best of Pete Townshend",
+                "artistName": "Pete Townshend",
+                "url": "https://music.apple.com/us/album/truancy-the-very-best-of-pete-townshend/1442953668",
+                "playParams": {
+                  "id": "1442953668",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2015-06-22",
+                "trackCount": 17,
+                "upc": "00602547328359",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Singer/Songwriter",
+                  "Hard Rock",
+                  "Arena Rock",
+                  "Rock & Roll",
+                  "Pop",
+                  "Pop/Rock"
+                ],
+                "recordLabel": "UMC (Universal Music Catalogue)",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/42/0f/b8/420fb86f-b010-e00d-6840-095cc859e420/00602547328359.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1049017157",
+              "type": "albums",
+              "attributes": {
+                "name": "The Yes Album",
+                "artistName": "Yes",
+                "url": "https://music.apple.com/us/album/the-yes-album/1049017157",
+                "playParams": {
+                  "id": "1049017157",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1971-02-19",
+                "trackCount": 6,
+                "upc": "603497885008",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Prog-Rock/Art Rock",
+                  "Pop",
+                  "Pop/Rock",
+                  "Arena Rock"
+                ],
+                "recordLabel": "Rhino Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/86/7d/53/867d5395-c432-10bb-ad3e-282dbbbbee44/mzm.cugkfmth.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1434891596",
+              "type": "albums",
+              "attributes": {
+                "name": "20th Century Masters – The Millennium Collection: The Best of The Allman Brothers Band",
+                "artistName": "The Allman Brothers Band",
+                "url": "https://music.apple.com/us/album/20th-century-masters-the-millennium-collection-the/1434891596",
+                "playParams": {
+                  "id": "1434891596",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2000-01-25",
+                "trackCount": 11,
+                "upc": "00602567827269",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Hard Rock",
+                  "Blues-Rock",
+                  "Blues",
+                  "Southern Rock",
+                  "Arena Rock"
+                ],
+                "recordLabel": "Universal Records",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/8e/a2/6c/8ea26c49-d586-5a24-0a79-51a30efd7aa6/06UMGIM01213.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1247653101",
+              "type": "albums",
+              "attributes": {
+                "name": "Decade",
+                "artistName": "Neil Young",
+                "url": "https://music.apple.com/us/album/decade/1247653101",
+                "playParams": {
+                  "id": "1247653101",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1977-10-28",
+                "trackCount": 35,
+                "upc": "093624915447",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Singer/Songwriter",
+                  "Folk-Rock",
+                  "Pop",
+                  "Pop/Rock",
+                  "Hard Rock",
+                  "Singer/Songwriter",
+                  "Arena Rock",
+                  "Southern Rock",
+                  "Psychedelic"
+                ],
+                "recordLabel": "Reprise",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music127/v4/15/f9/f4/15f9f4c3-358c-5893-ca8e-8a8a541029ba/093624915447.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1556346195",
+              "type": "albums",
+              "attributes": {
+                "name": "Déjà Vu (50th Anniversary Deluxe Edition)",
+                "artistName": "Crosby, Stills, Nash & Young",
+                "url": "https://music.apple.com/us/album/d%C3%A9j%C3%A0-vu-50th-anniversary-deluxe-edition/1556346195",
+                "playParams": {
+                  "id": "1556346195",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1970-03-11",
+                "trackCount": 48,
+                "upc": "603497845613",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Pop",
+                  "Pop/Rock",
+                  "Singer/Songwriter",
+                  "Arena Rock"
+                ],
+                "recordLabel": "Rhino Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/1c/bb/59/1cbb59cc-be85-9db7-9762-65c525e07c81/603497845613.jpg/{w}x{h}bb.jpg",
+                  "width": 4000,
+                  "height": 4000
+                }
+              }
+            },
+            {
+              "id": "516620010",
+              "type": "albums",
+              "attributes": {
+                "name": "The Essential Blue Öyster Cult",
+                "artistName": "Blue Öyster Cult",
+                "url": "https://music.apple.com/us/album/the-essential-blue-%C3%B6yster-cult/516620010",
+                "playParams": {
+                  "id": "516620010",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2003-04-01",
+                "trackCount": 31,
+                "upc": "886443329966",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Pop",
+                  "Pop/Rock",
+                  "Metal",
+                  "Arena Rock"
+                ],
+                "recordLabel": "Columbia/Legacy",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/19/63/db/1963db13-e2d9-e211-e4e6-12bf0620760a/886443329966.jpg/{w}x{h}bb.jpg",
+                  "width": 1415,
+                  "height": 1415
+                }
+              }
+            },
+            {
+              "id": "293281369",
+              "type": "albums",
+              "attributes": {
+                "name": "The Byrds",
+                "artistName": "The Byrds",
+                "url": "https://music.apple.com/us/album/the-byrds/293281369",
+                "playParams": {
+                  "id": "293281369",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1990-10-01",
+                "trackCount": 90,
+                "upc": "074644677324",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Pop",
+                  "Pop/Rock",
+                  "Singer/Songwriter",
+                  "Folk-Rock",
+                  "Psychedelic",
+                  "Southern Rock",
+                  "Country",
+                  "Soft Rock"
+                ],
+                "recordLabel": "Legacy/Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/da/4c/f2/da4cf25c-d4b5-bdef-d4f6-bd498901288c/074644677324.jpg/{w}x{h}bb.jpg",
+                  "width": 1608,
+                  "height": 1608
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/1440850317/view/related-albums?offset=17"
+        }
+      }
+    }
+  ]
+}

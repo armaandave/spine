@@ -1,0 +1,881 @@
+{
+  "ref": {
+    "item_id": 952,
+    "source": "apple_music",
+    "media_type": "music",
+    "media_id": "1657869377",
+    "season_number": null,
+    "episode_number": null
+  },
+  "title": "SOS",
+  "subtitle": "SZA",
+  "overview": null,
+  "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+  "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+  "backdrop_url": null,
+  "poster_aspect_ratio": 1.0,
+  "poster_width": 600,
+  "poster_height": 600,
+  "poster_orientation": "square",
+  "poster_accent_color": null,
+  "release_date": "2022-12-09",
+  "genres": [
+    "r&b"
+  ],
+  "languages": [],
+  "roles": [],
+  "credit_roles": [],
+  "default_source": "apple_music",
+  "position": null,
+  "custom_poster_url": null,
+  "user_state": {
+    "is_tracked": true,
+    "tracking_id": 953,
+    "status": "Completed",
+    "rating": null,
+    "in_lists": [],
+    "diary_entry_id": null,
+    "diary_count": 0,
+    "diary_rating": null,
+    "diary_consumed_at": null,
+    "has_liked": false,
+    "direct_consumption": false,
+    "rating_source_diary_entry_id": null,
+    "like_source_diary_entry_id": null,
+    "like_is_independent": false
+  },
+  "synopsis": null,
+  "logo_url": null,
+  "logo_width": null,
+  "logo_height": null,
+  "logo_aspect_ratio": null,
+  "custom_logo_url": null,
+  "details": {
+    "artist": "SZA",
+    "artist_credits": [
+      {
+        "artist_mbid": null,
+        "name": "SZA",
+        "join_phrase": "",
+        "artist_source": "apple_music",
+        "artist_id": "605800394"
+      }
+    ],
+    "first_release_date": "2022-12-09",
+    "primary_type": "Album",
+    "secondary_types": [],
+    "disambiguation": null,
+    "release_count": null,
+    "annotation": null,
+    "genres": [
+      "r&b"
+    ]
+  },
+  "music": {
+    "release_group_mbid": "1657869377",
+    "primary_type": "Album",
+    "secondary_types": [],
+    "disambiguation": null,
+    "annotation": null,
+    "first_release_date": "2022-12-09",
+    "release_count": null,
+    "artist_credit": [
+      {
+        "artist_mbid": null,
+        "name": "SZA",
+        "join_phrase": "",
+        "artist_source": "apple_music",
+        "artist_id": "605800394"
+      }
+    ],
+    "content_rating": "explicit",
+    "cover_art": {
+      "source": "apple_music",
+      "release_group_mbid": "1657869377",
+      "fallback_used": true
+    },
+    "representative_release": {
+      "release_mbid": "1657869377",
+      "title": "SOS",
+      "status": "Official",
+      "date": "2022-12-09",
+      "country": "US",
+      "barcode": "196589564931",
+      "selection_basis": "apple_music",
+      "labels": [
+        {
+          "label_mbid": null,
+          "name": "Top Dawg Entertainment/RCA Records",
+          "catalog_number": null
+        }
+      ],
+      "format": "Digital Media",
+      "is_deluxe_or_remastered": false,
+      "streaming_links": [
+        {
+          "service": "music.apple.com",
+          "url": "https://music.apple.com/us/album/sos/1657869377",
+          "kind": "album"
+        },
+        {
+          "service": "open.spotify.com",
+          "url": "https://open.spotify.com/search/SZA%20SOS/albums",
+          "kind": "search"
+        }
+      ],
+      "disc_count": 1,
+      "track_count": 23,
+      "media": [
+        {
+          "medium_mbid": null,
+          "position": 1,
+          "title": null,
+          "format": "Digital Media",
+          "track_count": 23,
+          "tracks": [
+            {
+              "track_mbid": "1657869385",
+              "disc_number": 1,
+              "position": 1,
+              "number": "1",
+              "title": "SOS",
+              "length_ms": 117773,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869385",
+                "title": "SOS",
+                "length_ms": 117773,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204583"
+                ],
+                "composer_name": "SZA, Jahlil Gunter, Rob Bisel & Gabriel Samuel Hardeman",
+                "source_url": "https://music.apple.com/us/album/sos/1657869377?i=1657869385"
+              }
+            },
+            {
+              "track_mbid": "1657869393",
+              "disc_number": 1,
+              "position": 2,
+              "number": "2",
+              "title": "Kill Bill",
+              "length_ms": 153947,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869393",
+                "title": "Kill Bill",
+                "length_ms": 153947,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204584"
+                ],
+                "composer_name": "SZA, Rob Bisel & Carter Lang",
+                "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"
+              }
+            },
+            {
+              "track_mbid": "1657869394",
+              "disc_number": 1,
+              "position": 3,
+              "number": "3",
+              "title": "Seek & Destroy",
+              "length_ms": 203733,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869394",
+                "title": "Seek & Destroy",
+                "length_ms": 203733,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204585"
+                ],
+                "composer_name": "SZA, Rob Bisel, Carter Lang, Cody Fayne & Tyran Donaldson",
+                "source_url": "https://music.apple.com/us/album/seek-destroy/1657869377?i=1657869394"
+              }
+            },
+            {
+              "track_mbid": "1657869395",
+              "disc_number": 1,
+              "position": 4,
+              "number": "4",
+              "title": "Low",
+              "length_ms": 181080,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869395",
+                "title": "Low",
+                "length_ms": 181080,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204586"
+                ],
+                "composer_name": "SZA, Alessandro Buccellati, Rob Bisel, Joseph Pincus, Jocelyn A. Donald, Fabian Rashad Johnson & Rashad Johnson",
+                "source_url": "https://music.apple.com/us/album/low/1657869377?i=1657869395"
+              }
+            },
+            {
+              "track_mbid": "1657869464",
+              "disc_number": 1,
+              "position": 5,
+              "number": "5",
+              "title": "Love Language",
+              "length_ms": 183893,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869464",
+                "title": "Love Language",
+                "length_ms": 183893,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204588"
+                ],
+                "composer_name": "SZA, Carter Lang, Cody Fayne, Jakob Rabitsch, Pharrell Williams, Rob Bisel, Chad Hugo, Tyrone Griffin Jr, Anthony Clemons, Jr. & Jazzaé De Waal",
+                "source_url": "https://music.apple.com/us/album/love-language/1657869377?i=1657869464"
+              }
+            },
+            {
+              "track_mbid": "1657869466",
+              "disc_number": 1,
+              "position": 6,
+              "number": "6",
+              "title": "Blind",
+              "length_ms": 150720,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869466",
+                "title": "Blind",
+                "length_ms": 150720,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204589"
+                ],
+                "composer_name": "SZA, Rob Bisel, Carter Lang, Margaux Alexis Rosalena Whitney & Will Miller",
+                "source_url": "https://music.apple.com/us/album/blind/1657869377?i=1657869466"
+              }
+            },
+            {
+              "track_mbid": "1657869488",
+              "disc_number": 1,
+              "position": 7,
+              "number": "7",
+              "title": "Used (feat. Don Toliver)",
+              "length_ms": 146951,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869488",
+                "title": "Used (feat. Don Toliver)",
+                "length_ms": 146951,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204590"
+                ],
+                "composer_name": "SZA, Dacoury Natche, Caleb Toliver & John Hill",
+                "source_url": "https://music.apple.com/us/album/used-feat-don-toliver/1657869377?i=1657869488"
+              }
+            },
+            {
+              "track_mbid": "1657869492",
+              "disc_number": 1,
+              "position": 8,
+              "number": "8",
+              "title": "Snooze",
+              "length_ms": 201800,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869492",
+                "title": "Snooze",
+                "length_ms": 201800,
+                "disambiguation": null,
+                "first_release_date": "2022-12-08",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204591"
+                ],
+                "composer_name": "SZA, Kenny B. Edmonds, Khris Riddick-Tynes, Leon Thomas & Blair Ferguson",
+                "source_url": "https://music.apple.com/us/album/snooze/1657869377?i=1657869492"
+              }
+            },
+            {
+              "track_mbid": "1657869493",
+              "disc_number": 1,
+              "position": 9,
+              "number": "9",
+              "title": "Notice Me",
+              "length_ms": 160920,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869493",
+                "title": "Notice Me",
+                "length_ms": 160920,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204592"
+                ],
+                "composer_name": "SZA, Michael Uzowuru, Teo Halm, Carter Lang & Cody Fayne",
+                "source_url": "https://music.apple.com/us/album/notice-me/1657869377?i=1657869493"
+              }
+            },
+            {
+              "track_mbid": "1657869494",
+              "disc_number": 1,
+              "position": 10,
+              "number": "10",
+              "title": "Gone Girl",
+              "length_ms": 244027,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869494",
+                "title": "Gone Girl",
+                "length_ms": 244027,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204593"
+                ],
+                "composer_name": "SZA, Cody Fayne, Carter Lang, Rob Bisel, Jeff Bhasker, Emile Haynie & Gregory Landfair, Jr.",
+                "source_url": "https://music.apple.com/us/album/gone-girl/1657869377?i=1657869494"
+              }
+            },
+            {
+              "track_mbid": "1657869495",
+              "disc_number": 1,
+              "position": 11,
+              "number": "11",
+              "title": "Smoking on my Ex Pack",
+              "length_ms": 83827,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869495",
+                "title": "Smoking on my Ex Pack",
+                "length_ms": 83827,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204594"
+                ],
+                "composer_name": "SZA, Jahlil Gunter, Skip Scarborough & Raina Taylor",
+                "source_url": "https://music.apple.com/us/album/smoking-on-my-ex-pack/1657869377?i=1657869495"
+              }
+            },
+            {
+              "track_mbid": "1657869526",
+              "disc_number": 1,
+              "position": 12,
+              "number": "12",
+              "title": "Ghost in the Machine (feat. Phoebe Bridgers)",
+              "length_ms": 218587,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869526",
+                "title": "Ghost in the Machine (feat. Phoebe Bridgers)",
+                "length_ms": 218587,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204595"
+                ],
+                "composer_name": "Phoebe Bridgers, SZA, Carter Lang, Rob Bisel, Matt Cohn & Marshall Vore",
+                "source_url": "https://music.apple.com/us/album/ghost-in-the-machine-feat-phoebe-bridgers/1657869377?i=1657869526"
+              }
+            },
+            {
+              "track_mbid": "1657869529",
+              "disc_number": 1,
+              "position": 13,
+              "number": "13",
+              "title": "F2F",
+              "length_ms": 185040,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869529",
+                "title": "F2F",
+                "length_ms": 185040,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204596"
+                ],
+                "composer_name": "SZA, Carter Lang & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/f2f/1657869377?i=1657869529"
+              }
+            },
+            {
+              "track_mbid": "1657869532",
+              "disc_number": 1,
+              "position": 14,
+              "number": "14",
+              "title": "Nobody Gets Me",
+              "length_ms": 180853,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869532",
+                "title": "Nobody Gets Me",
+                "length_ms": 180853,
+                "disambiguation": null,
+                "first_release_date": "2022-12-05",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204598"
+                ],
+                "composer_name": "SZA, Benjamin Levin, Rob Bisel & Carter Lang",
+                "source_url": "https://music.apple.com/us/album/nobody-gets-me/1657869377?i=1657869532"
+              }
+            },
+            {
+              "track_mbid": "1657869533",
+              "disc_number": 1,
+              "position": 15,
+              "number": "15",
+              "title": "Conceited",
+              "length_ms": 151413,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869533",
+                "title": "Conceited",
+                "length_ms": 151413,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204587"
+                ],
+                "composer_name": "SZA, Cody Fayne & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/conceited/1657869377?i=1657869533"
+              }
+            },
+            {
+              "track_mbid": "1657869534",
+              "disc_number": 1,
+              "position": 16,
+              "number": "16",
+              "title": "Special",
+              "length_ms": 158840,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869534",
+                "title": "Special",
+                "length_ms": 158840,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204597"
+                ],
+                "composer_name": "SZA, Benjamin Levin, Rob Bisel, Shellback, Blake Slatkin & Omer Fedi",
+                "source_url": "https://music.apple.com/us/album/special/1657869377?i=1657869534"
+              }
+            },
+            {
+              "track_mbid": "1657869535",
+              "disc_number": 1,
+              "position": 17,
+              "number": "17",
+              "title": "Too Late",
+              "length_ms": 164427,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869535",
+                "title": "Too Late",
+                "length_ms": 164427,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204600"
+                ],
+                "composer_name": "SZA, Sammy Witte, Rob Bisel, Carter Lang, Cody Fayne & Sven Gamsky",
+                "source_url": "https://music.apple.com/us/album/too-late/1657869377?i=1657869535"
+              }
+            },
+            {
+              "track_mbid": "1657869536",
+              "disc_number": 1,
+              "position": 18,
+              "number": "18",
+              "title": "Far",
+              "length_ms": 180680,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869536",
+                "title": "Far",
+                "length_ms": 180680,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204601"
+                ],
+                "composer_name": "SZA, Carter Lang, Rob Bisel, Tyran Donaldson, Carlos \"Loshendrix\" Munoz & Eliot Dubock",
+                "source_url": "https://music.apple.com/us/album/far/1657869377?i=1657869536"
+              }
+            },
+            {
+              "track_mbid": "1657869537",
+              "disc_number": 1,
+              "position": 19,
+              "number": "19",
+              "title": "Shirt",
+              "length_ms": 181840,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869537",
+                "title": "Shirt",
+                "length_ms": 181840,
+                "disambiguation": null,
+                "first_release_date": "2022-10-28",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12203632"
+                ],
+                "composer_name": "SZA, Rodney Jerkins & Rob Gueringer",
+                "source_url": "https://music.apple.com/us/album/shirt/1657869377?i=1657869537"
+              }
+            },
+            {
+              "track_mbid": "1657869546",
+              "disc_number": 1,
+              "position": 20,
+              "number": "20",
+              "title": "Open Arms (feat. Travis Scott)",
+              "length_ms": 239613,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869546",
+                "title": "Open Arms (feat. Travis Scott)",
+                "length_ms": 239613,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204602"
+                ],
+                "composer_name": "SZA, Jacques Webster II, Teo Halm, Douglas Ford, Michael Uzowuru & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/open-arms-feat-travis-scott/1657869377?i=1657869546"
+              }
+            },
+            {
+              "track_mbid": "1657869547",
+              "disc_number": 1,
+              "position": 21,
+              "number": "21",
+              "title": "I Hate U",
+              "length_ms": 173907,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869547",
+                "title": "I Hate U",
+                "length_ms": 173907,
+                "disambiguation": null,
+                "first_release_date": "2021-12-03",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12103605"
+                ],
+                "composer_name": "SZA, Carter Lang, Rob Bisel, Cody Fayne & Dylan Patrice",
+                "source_url": "https://music.apple.com/us/album/i-hate-u/1657869377?i=1657869547"
+              }
+            },
+            {
+              "track_mbid": "1657869723",
+              "disc_number": 1,
+              "position": 22,
+              "number": "22",
+              "title": "Good Days",
+              "length_ms": 278480,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869723",
+                "title": "Good Days",
+                "length_ms": 278480,
+                "disambiguation": null,
+                "first_release_date": "2020-12-25",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12004189"
+                ],
+                "composer_name": "SZA, Carter Lang, Christopher Ruelas, Carlos Munoz & Jacob Collier",
+                "source_url": "https://music.apple.com/us/album/good-days/1657869377?i=1657869723"
+              }
+            },
+            {
+              "track_mbid": "1657869726",
+              "disc_number": 1,
+              "position": 23,
+              "number": "23",
+              "title": "Forgiveless (feat. Ol' Dirty Bastard)",
+              "length_ms": 141960,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869726",
+                "title": "Forgiveless (feat. Ol' Dirty Bastard)",
+                "length_ms": 141960,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204603"
+                ],
+                "composer_name": "SZA, Rodney Jerkins, Russell Tyrone Jones, Mark Bell, Guy Sigsworth & Björk Guðmundsdóttir",
+                "source_url": "https://music.apple.com/us/album/forgiveless-feat-ol-dirty-bastard/1657869377?i=1657869726"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "parent": null,
+  "external_links": {
+    "Apple Music": "https://music.apple.com/us/album/sos/1657869377"
+  },
+  "cast": [],
+  "crew": [],
+  "seasons": [],
+  "episodes": [],
+  "completion": null,
+  "custom_backdrop_url": null,
+  "related": {},
+  "related_sections": [],
+  "providers": null,
+  "where_to_watch": null,
+  "community": {
+    "average_rating": null,
+    "rating_count": 0,
+    "diary_count": 0,
+    "review_count": 0,
+    "liked_count": 0,
+    "rating_distribution": []
+  },
+  "external_ratings": [],
+  "external_ratings_preparation": {
+    "state": "ready",
+    "retry_after_seconds": 2
+  }
+}

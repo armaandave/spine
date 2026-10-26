@@ -1,0 +1,770 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1534816297",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn (Deluxe)",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn-deluxe/1534816297",
+            "playParams": {
+              "id": "1534816297",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "explicit",
+            "trackCount": 38,
+            "upc": "00602435321721",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/70/97/3a/70973a36-b897-e20e-4698-c05d4f5ee24f/20UMGIM30253.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1498988850",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn/1498988850",
+            "playParams": {
+              "id": "1498988850",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "explicit",
+            "trackCount": 20,
+            "upc": "00602508756481",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/78/e9/9b/78e99b99-84a0-9673-90b4-2b5c23ab4a51/20UMGIM04591.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1509850659",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn (Deluxe)",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn-deluxe/1509850659",
+            "playParams": {
+              "id": "1509850659",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "clean",
+            "trackCount": 26,
+            "upc": "00602507145255",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/9b/60/27/9b60278b-be33-9726-84d7-322718eacc1a/20UMGIM30254.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1499567361",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn/1499567361",
+            "playParams": {
+              "id": "1499567361",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "clean",
+            "trackCount": 20,
+            "upc": "00602508756511",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/b8/e4/29/b8e429b5-54b7-6ba3-a2db-29b426dc2b45/20UMGIM04592.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1443676945",
+          "type": "albums",
+          "attributes": {
+            "name": "Street Gossip",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/street-gossip/1443676945",
+            "playParams": {
+              "id": "1443676945",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-11-30",
+            "contentRating": "explicit",
+            "trackCount": 13,
+            "upc": "00602577321948",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Rap"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records/Capitol Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/df/b1/44/dfb1447b-79ee-f7c3-8e22-374f82535153/18UMGIM77804.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1456667605",
+          "type": "albums",
+          "attributes": {
+            "name": "Sold Out Dates (feat. Lil Baby) - Single",
+            "artistName": "Gunna",
+            "url": "https://music.apple.com/us/album/sold-out-dates-feat-lil-baby-single/1456667605",
+            "playParams": {
+              "id": "1456667605",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-04-16",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "814908027775",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "300 Entertainment",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/aa/68/12/aa681269-547b-8cf2-707a-aeace94fac05/814908027775.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "1648587138",
+          "type": "albums",
+          "attributes": {
+            "name": "It's Only Me",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/its-only-me/1648587138",
+            "playParams": {
+              "id": "1648587138",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-10-14",
+            "contentRating": "explicit",
+            "trackCount": 23,
+            "upc": "00602448706072",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/9f/c0/99/9fc09958-180d-e66a-bbf7-9462289435f6/22UM1IM13098.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1534811491",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn (Deluxe)",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn-deluxe/1534811491",
+            "playParams": {
+              "id": "1534811491",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "clean",
+            "trackCount": 27,
+            "upc": "00602435333892",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/03/73/c3/0373c310-69ad-747f-ae78-14cf03b0464b/20UMGIM30254.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1473187049",
+          "type": "albums",
+          "attributes": {
+            "name": "Baby - Single",
+            "artistName": "Quality Control, Lil Baby & DaBaby",
+            "url": "https://music.apple.com/us/album/baby-single/1473187049",
+            "playParams": {
+              "id": "1473187049",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-07-17",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602508117367",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f2/4d/33/f24d33f7-2b11-87ca-2c9e-fba3b6bb5328/19UMGIM64072.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1494073580",
+          "type": "albums",
+          "attributes": {
+            "name": "Sum 2 Prove - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/sum-2-prove-single/1494073580",
+            "playParams": {
+              "id": "1494073580",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-01-10",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602508685507",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/68/97/09/689709b0-6bfb-0a8f-1518-2e3dea4bcd11/20UMGIM00630.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1510840178",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn (Deluxe)",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/my-turn-deluxe/1510840178",
+            "playParams": {
+              "id": "1510840178",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-02-28",
+            "contentRating": "explicit",
+            "trackCount": 35,
+            "upc": "00602507169398",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/9f/8f/f9/9f8ff9e7-cbb4-efd6-1335-c0b001f2649a/20UMGIM30253.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1569712089",
+          "type": "albums",
+          "attributes": {
+            "name": "The Voice of the Heroes",
+            "artistName": "Lil Baby & Lil Durk",
+            "url": "https://music.apple.com/us/album/the-voice-of-the-heroes/1569712089",
+            "playParams": {
+              "id": "1569712089",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-06-04",
+            "contentRating": "explicit",
+            "trackCount": 18,
+            "upc": "00602438396085",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Alamo Records/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/9a/51/3f/9a513f0d-452a-a4de-aa54-3d629a94d2c3/21UMGIM47174.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1437955279",
+          "type": "albums",
+          "attributes": {
+            "name": "Drip Harder",
+            "artistName": "Lil Baby & Gunna",
+            "url": "https://music.apple.com/us/album/drip-harder/1437955279",
+            "playParams": {
+              "id": "1437955279",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-10-05",
+            "contentRating": "explicit",
+            "trackCount": 13,
+            "upc": "00602577108037",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Rap",
+              "Dirty South",
+              "Hardcore Rap"
+            ],
+            "recordLabel": "Quality Control Music/Young Stoner Life Records, a 300 Entertainment Label/Motown Records/Capitol Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/e0/6e/7c/e06e7c84-345e-3617-7108-cda9ca9ccc68/18UMGIM62579.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1485954690",
+          "type": "albums",
+          "attributes": {
+            "name": "Woah - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/woah-single/1485954690",
+            "playParams": {
+              "id": "1485954690",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-11-08",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602508522574",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a4/7d/ff/a47dffa2-9998-aab8-0dc8-bf72ba63ec98/19UMGIM99885.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6772240453",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn - Single",
+            "artistName": "Valiant, Shenseea & Rvssian",
+            "url": "https://music.apple.com/us/album/my-turn-single/6772240453",
+            "playParams": {
+              "id": "6772240453",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-05-22",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "199384422536",
+            "genreNames": [
+              "Reggae",
+              "Music",
+              "Modern Dancehall"
+            ],
+            "recordLabel": "Head Concussion Records - 21st Hapilos",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2e/1b/0f/2e1b0fe0-0ecd-aebb-a88b-930a371aaed2/19338.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1517903056",
+          "type": "albums",
+          "attributes": {
+            "name": "The Bigger Picture - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/the-bigger-picture-single/1517903056",
+            "playParams": {
+              "id": "1517903056",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-06-12",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602507360368",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/42/bc/e6/42bce690-9f9e-93a5-f0c9-10d02cb2934e/20UMGIM48548.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1618285311",
+          "type": "albums",
+          "attributes": {
+            "name": "In A Minute - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/in-a-minute-single/1618285311",
+            "playParams": {
+              "id": "1618285311",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-04-08",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602445837779",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/fc/1e/a5/fc1ea575-13ff-4a85-c158-962042ecdcd8/22UMGIM38834.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1384782173",
+          "type": "albums",
+          "attributes": {
+            "name": "Harder Than Ever",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/harder-than-ever/1384782173",
+            "playParams": {
+              "id": "1384782173",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-05-18",
+            "contentRating": "explicit",
+            "trackCount": 17,
+            "upc": "00602567713999",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Rap",
+              "Dirty South",
+              "Hardcore Rap"
+            ],
+            "recordLabel": "Quality Control Music, LLC",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/b2/21/04/b22104c5-b230-4e99-2b98-e99c664b88c7/18UMGIM28345.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1618153462",
+          "type": "albums",
+          "attributes": {
+            "name": "Right On - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/right-on-single/1618153462",
+            "playParams": {
+              "id": "1618153462",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-04-08",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602445833726",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/56/6d/ce/566dceeb-e2ea-24ff-f601-1c18497b87f8/22UMGIM37903.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1440928174",
+          "type": "albums",
+          "attributes": {
+            "name": "Too Hard",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/too-hard/1440928174",
+            "playParams": {
+              "id": "1440928174",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-12-01",
+            "contentRating": "explicit",
+            "trackCount": 16,
+            "upc": "00842812104855",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Rap",
+              "Hardcore Rap",
+              "Dirty South"
+            ],
+            "recordLabel": "Quality Control Music (Caroline)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/93/e7/aa/93e7aa59-da8b-15bc-2992-5803f70fe8fa/17UM1IM55478.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "920055134",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn",
+            "artistName": "Big Quis",
+            "url": "https://music.apple.com/us/album/my-turn/920055134",
+            "playParams": {
+              "id": "920055134",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2014-09-19",
+            "contentRating": "explicit",
+            "trackCount": 16,
+            "upc": "889211058914",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Cte",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/0a/3f/9a/0a3f9ac9-dbe5-1ea1-8ad1-b87853ca141e/889211058914.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1882937650",
+          "type": "albums",
+          "attributes": {
+            "name": "My Turn - Single",
+            "artistName": "Mac-K the K Baby",
+            "url": "https://music.apple.com/us/album/my-turn-single/1882937650",
+            "playParams": {
+              "id": "1882937650",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-03-10",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "822299251112",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Oneway Dumbway",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/fe/f8/1cfef858-8900-8bb8-e1a3-1b020b118407/822299251112.png/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1450317766",
+          "type": "albums",
+          "attributes": {
+            "name": "Put a Date on It (feat. Lil Baby) - Single",
+            "artistName": "Yo Gotti",
+            "url": "https://music.apple.com/us/album/put-a-date-on-it-feat-lil-baby-single/1450317766",
+            "playParams": {
+              "id": "1450317766",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-01-25",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "886447499627",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Epic/CMG",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/f9/7f/bd/f97fbd6a-2da2-7d32-ecd0-257765ed72f7/886447499627.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1556527567",
+          "type": "albums",
+          "attributes": {
+            "name": "Real As It Gets (feat. EST Gee) - Single",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/real-as-it-gets-feat-est-gee-single/1556527567",
+            "playParams": {
+              "id": "1556527567",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-03-04",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "00602435939599",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f4/21/8a/f4218a2a-ad3e-73a0-84f5-0309a4153022/21UMGIM18556.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1786672591",
+          "type": "albums",
+          "attributes": {
+            "name": "WHAM",
+            "artistName": "Lil Baby",
+            "url": "https://music.apple.com/us/album/wham/1786672591",
+            "playParams": {
+              "id": "1786672591",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2025-01-03",
+            "contentRating": "explicit",
+            "trackCount": 15,
+            "upc": "00602475693871",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Quality Control Music/Motown Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/a5/43/d2/a543d286-abf2-5cc5-5515-1feb4a56293d/24UM1IM32309.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=lil+baby+my+turn&types=albums"
+    }
+  }
+}

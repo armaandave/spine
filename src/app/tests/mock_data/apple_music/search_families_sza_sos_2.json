@@ -1,0 +1,1509 @@
+{
+  "data": [
+    {
+      "id": "6780604582",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS (feat. MeatCanyon & Sybyr) - Single",
+        "artistName": "Jasiah",
+        "url": "https://music.apple.com/us/album/sos-feat-meatcanyon-sybyr-single/6780604582",
+        "playParams": {
+          "id": "6780604582",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-06-26",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "712132032551",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Electronic"
+        ],
+        "recordLabel": "Jasiah",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c0/bc/c1/c0bcc102-84ce-e86c-3175-c3f59aed0cc9/712132032551_cover.jpg/{w}x{h}bb.jpg",
+          "width": 2048,
+          "height": 2048
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1886836633",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS - Single",
+        "artistName": "Forrest Frank & PARTY WAVE",
+        "url": "https://music.apple.com/us/album/sos-single/1886836633",
+        "playParams": {
+          "id": "1886836633",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-03-27",
+        "trackCount": 1,
+        "upc": "810129960730",
+        "genreNames": [
+          "CCM",
+          "Music",
+          "Christian",
+          "Pop"
+        ],
+        "recordLabel": "2026 river house records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c6/26/d5/c626d5b4-fb26-0241-500f-fa6e69fd6be8/810129960730.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1546390012",
+      "type": "albums",
+      "attributes": {
+        "name": "Good Days - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/good-days-single/1546390012",
+        "playParams": {
+          "id": "1546390012",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-12-25",
+        "contentRating": "clean",
+        "trackCount": 1,
+        "upc": "886449007394",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/0e/5c/6e/0e5c6e76-928a-bb8c-ec7d-b323f6079f67/886449007394.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1546390050",
+              "type": "albums",
+              "attributes": {
+                "name": "Good Days - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/good-days-single/1546390050",
+                "playParams": {
+                  "id": "1546390050",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-12-25",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "886449006717",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/ef/09/cf/ef09cf1f-a057-6039-00d3-7b5d14c7eba1/886449006717.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1682342493",
+      "type": "albums",
+      "attributes": {
+        "name": "Kill Bill (feat. Doja Cat) - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/kill-bill-feat-doja-cat-single/1682342493",
+        "playParams": {
+          "id": "1682342493",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-04-14",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "196871049795",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/49/47/85/49478558-fe84-8374-017e-924623505f28/196871049795.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1239977075",
+      "type": "albums",
+      "attributes": {
+        "name": "Ctrl",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/ctrl/1239977075",
+        "playParams": {
+          "id": "1239977075",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-06-09",
+        "contentRating": "clean",
+        "trackCount": 14,
+        "upc": "886446548449",
+        "genreNames": [
+          "R&B/Soul",
+          "Music",
+          "Contemporary R&B"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/a2/bc/ad/a2bcad46-b389-4be1-8bac-5a0959b0b8e4/886446548449.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1628387909",
+              "type": "albums",
+              "attributes": {
+                "name": "Ctrl (Deluxe)",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/ctrl-deluxe/1628387909",
+                "playParams": {
+                  "id": "1628387909",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-06-09",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "196589231000",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0f/62/05/0f620515-5166-410e-64ae-5c209e7f6609/196589231000.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1239976329",
+              "type": "albums",
+              "attributes": {
+                "name": "Ctrl",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/ctrl/1239976329",
+                "playParams": {
+                  "id": "1239976329",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-06-09",
+                "contentRating": "explicit",
+                "trackCount": 14,
+                "upc": "886446548432",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music",
+                  "Contemporary R&B"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/20/28/8f/20288f6f-fbf2-fb0f-6732-e7d334e1ff50/886446548432.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1840029743",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS - Single",
+        "artistName": "J Abdiel, De La Ghetto & NTG",
+        "url": "https://music.apple.com/us/album/sos-single/1840029743",
+        "playParams": {
+          "id": "1840029743",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-10-02",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "199538799545",
+        "genreNames": [
+          "Urbano latino",
+          "Music",
+          "Latin"
+        ],
+        "recordLabel": "SONAR LLC.",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/22/4c/dd/224cdd89-936e-ebaa-37b4-1fb44e5fd921/199538799545.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1781270319",
+      "type": "albums",
+      "attributes": {
+        "name": "GNX",
+        "artistName": "Kendrick Lamar",
+        "url": "https://music.apple.com/us/album/gnx/1781270319",
+        "playParams": {
+          "id": "1781270319",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-11-22",
+        "contentRating": "explicit",
+        "trackCount": 12,
+        "upc": "00602475681137",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "pgLang, under exclusive license to Interscope Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/50/c2/cc/50c2cc95-3658-9417-0d4b-831abde44ba1/24UM1IM28978.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1781316864",
+              "type": "albums",
+              "attributes": {
+                "name": "GNX",
+                "artistName": "Kendrick Lamar",
+                "url": "https://music.apple.com/us/album/gnx/1781316864",
+                "playParams": {
+                  "id": "1781316864",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-11-21",
+                "contentRating": "clean",
+                "trackCount": 12,
+                "upc": "00602475654940",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "pgLang, under exclusive license to Interscope Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/54/28/14/54281424-eece-0935-299d-fdd2ab403f92/24UM1IM28978.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1417709876",
+      "type": "albums",
+      "attributes": {
+        "name": "Brown Noise: Loops for Relaxation, Deep Sleep, Meditation, And Babies",
+        "artistName": "SleepTherapy",
+        "url": "https://music.apple.com/us/album/brown-noise-loops-for-relaxation-deep-sleep-meditation/1417709876",
+        "playParams": {
+          "id": "1417709876",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-07-17",
+        "trackCount": 8,
+        "upc": "859727751685",
+        "genreNames": [
+          "New Age",
+          "Music",
+          "Instrumental"
+        ],
+        "recordLabel": "SleepTherapy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/21/1e/77/211e77f4-beed-c073-526c-c182bbed597f/859727751685_cover.jpg/{w}x{h}bb.jpg",
+          "width": 5000,
+          "height": 5000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1368156323",
+      "type": "albums",
+      "attributes": {
+        "name": "Invasion of Privacy",
+        "artistName": "Cardi B",
+        "url": "https://music.apple.com/us/album/invasion-of-privacy/1368156323",
+        "playParams": {
+          "id": "1368156323",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-04-06",
+        "contentRating": "explicit",
+        "trackCount": 13,
+        "upc": "075679873682",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "East Coast Rap",
+          "Hardcore Rap",
+          "Rap"
+        ],
+        "recordLabel": "Atlantic/KSR",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/6a/f7/6c/6af76c1c-4d8e-c761-8856-34d273b4703b/075679873682.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1368105671",
+              "type": "albums",
+              "attributes": {
+                "name": "Invasion of Privacy",
+                "artistName": "Cardi B",
+                "url": "https://music.apple.com/us/album/invasion-of-privacy/1368105671",
+                "playParams": {
+                  "id": "1368105671",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-04-06",
+                "contentRating": "clean",
+                "trackCount": 13,
+                "upc": "075679873675",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Hardcore Rap",
+                  "East Coast Rap"
+                ],
+                "recordLabel": "Atlantic/KSR",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ca/58/e5/ca58e5e3-acb7-8ca3-6af9-ad63af3b71f1/075679873675.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1732348411",
+      "type": "albums",
+      "attributes": {
+        "name": "Saturn - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/saturn-single/1732348411",
+        "playParams": {
+          "id": "1732348411",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-02-22",
+        "trackCount": 5,
+        "upc": "196871881180",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/0f/90/a8/0f90a856-0447-d846-fa7b-b9c937e72310/196871881180.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1669006146",
+      "type": "albums",
+      "attributes": {
+        "name": "Special (feat. SZA) - Single",
+        "artistName": "Lizzo",
+        "url": "https://music.apple.com/us/album/special-feat-sza-single/1669006146",
+        "playParams": {
+          "id": "1669006146",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-02-09",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "075679702074",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Atlantic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/3c/e2/12/3ce212cd-0858-cc93-2d9e-3db610bb2d1b/075679702074.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1671656945",
+              "type": "albums",
+              "attributes": {
+                "name": "Special (feat. SZA) - Single",
+                "artistName": "Lizzo",
+                "url": "https://music.apple.com/us/album/special-feat-sza-single/1671656945",
+                "playParams": {
+                  "id": "1671656945",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-02-09",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "075679695550",
+                "genreNames": [
+                  "Pop",
+                  "Music"
+                ],
+                "recordLabel": "Atlantic Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/eb/a7/07/eba70779-5f7a-0e58-b0d7-20af86f9daa9/075679695550.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1667650945",
+      "type": "albums",
+      "attributes": {
+        "name": "Kill Bill (Acoustic) - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/kill-bill-acoustic-single/1667650945",
+        "playParams": {
+          "id": "1667650945",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-01-24",
+        "trackCount": 1,
+        "upc": "196589852540",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/f5/5a/7e/f55a7eac-7991-7169-4d95-f8bc8f32bdfc/196589852540.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "6776568824",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS - Single",
+        "artistName": "TUKI.",
+        "url": "https://music.apple.com/us/album/sos-single/6776568824",
+        "playParams": {
+          "id": "6776568824",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-06-22",
+        "trackCount": 1,
+        "upc": "4547366827576",
+        "genreNames": [
+          "J-Pop",
+          "Music"
+        ],
+        "recordLabel": "The Lunar Landing Plan",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9b/83/43/9b834341-effa-7c17-0208-0ce6adec522a/4547366827576.jpg/{w}x{h}bb.jpg",
+          "width": 5315,
+          "height": 5315
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "6815232330",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS",
+        "artistName": "Tye Henney",
+        "url": "https://music.apple.com/us/album/sos/6815232330",
+        "playParams": {
+          "id": "6815232330",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-02-14",
+        "contentRating": "explicit",
+        "trackCount": 8,
+        "upc": "196429865624",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "7ev Muzik",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a0/fd/3b/a0fd3b5e-784f-dfa6-35ea-c9d00f8c5e38/50a2324b-780a-4bcf-bc38-bd4ceed36da0.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1486262969",
+      "type": "albums",
+      "attributes": {
+        "name": "Hot Pink",
+        "artistName": "Doja Cat",
+        "url": "https://music.apple.com/us/album/hot-pink/1486262969",
+        "playParams": {
+          "id": "1486262969",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-11-07",
+        "contentRating": "explicit",
+        "trackCount": 12,
+        "upc": "886447991824",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Kemosabe Records/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/5b/14/ea/5b14eabe-3fbd-4f00-273d-4760dfbb5aef/886447991824.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1560224889",
+              "type": "albums",
+              "attributes": {
+                "name": "Hot Pink (Video Deluxe)",
+                "artistName": "Doja Cat",
+                "url": "https://music.apple.com/us/album/hot-pink-video-deluxe/1560224889",
+                "playParams": {
+                  "id": "1560224889",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2019-11-07",
+                "contentRating": "explicit",
+                "trackCount": 30,
+                "upc": "886449157273",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Kemosabe Records/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/e4/00/aa/e400aa3d-6fa9-14f1-faf7-f74a0c1ad3af/886449157273.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1486465096",
+              "type": "albums",
+              "attributes": {
+                "name": "Hot Pink",
+                "artistName": "Doja Cat",
+                "url": "https://music.apple.com/us/album/hot-pink/1486465096",
+                "playParams": {
+                  "id": "1486465096",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2019-11-07",
+                "contentRating": "clean",
+                "trackCount": 12,
+                "upc": "886447991831",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Kemosabe Records/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/f3/03/40/f30340af-55d6-11bb-f59c-b03705360715/886447991831.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1440818106",
+      "type": "albums",
+      "attributes": {
+        "name": "Finally Rich (Deluxe Version)",
+        "artistName": "Chief Keef",
+        "url": "https://music.apple.com/us/album/finally-rich-deluxe-version/1440818106",
+        "playParams": {
+          "id": "1440818106",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2012-12-18",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "00602537240388",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Gangsta Rap",
+          "Rap",
+          "Hardcore Rap"
+        ],
+        "recordLabel": "UMGRI Interscope",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/df/91/5f/df915f26-bb16-dfad-1066-ccfc62f75782/12UMGIM59941.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1657546373",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich (Complete Edition)",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich-complete-edition/1657546373",
+                "playParams": {
+                  "id": "1657546373",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-12-18",
+                "contentRating": "explicit",
+                "trackCount": 22,
+                "upc": "00602448997975",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/7c/75/c0/7c75c073-c8a6-7b25-07d0-3806e6e6dd68/22UM1IM35356.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1440853396",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich/1440853396",
+                "playParams": {
+                  "id": "1440853396",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-12-18",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602537240395",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Gangsta Rap",
+                  "Rap",
+                  "Hardcore Rap"
+                ],
+                "recordLabel": "UMGRI Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/f6/26/ac/f626ac4b-61a2-551c-20d7-085c477de868/12UMGIM59936.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1444005836",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich/1444005836",
+                "playParams": {
+                  "id": "1444005836",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-01-01",
+                "contentRating": "clean",
+                "trackCount": 12,
+                "upc": "00602537260201",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Gangsta Rap",
+                  "Hardcore Rap"
+                ],
+                "recordLabel": "UMGRI Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/0a/4c/c2/0a4cc286-d3fa-9782-ec88-6f36be8e6750/12UMGIM59937.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1728151465",
+      "type": "albums",
+      "attributes": {
+        "name": "Apple Music Live: SZA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/apple-music-live-sza/1728151465",
+        "playParams": {
+          "id": "1728151465",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-31",
+        "contentRating": "explicit",
+        "trackCount": 20,
+        "upc": "196871800990",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/09/6a/be/096abee6-90be-596a-e4d2-8947fe17e28f/196871800990.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "6820960843",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS - Single",
+        "artistName": "Clay \"Krucial\" Perry III & Hitkidd",
+        "url": "https://music.apple.com/us/album/sos-single/6820960843",
+        "playParams": {
+          "id": "6820960843",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-10-16",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "888193915826",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Life's Krucial/Campsouth Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/d6/eb/e7/d6ebe71d-803e-3bb4-0a9c-5cac1ede1221/888193915826-copy-f46b4916.png/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1440903005",
+      "type": "albums",
+      "attributes": {
+        "name": "Black Panther: The Album",
+        "artistName": "Kendrick Lamar",
+        "url": "https://music.apple.com/us/album/black-panther-the-album/1440903005",
+        "playParams": {
+          "id": "1440903005",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-02-09",
+        "contentRating": "clean",
+        "trackCount": 14,
+        "upc": "00602567350224",
+        "genreNames": [
+          "Soundtrack",
+          "Music",
+          "Hip-Hop/Rap",
+          "Rap",
+          "R&B/Soul",
+          "Contemporary R&B",
+          "Soundtrack"
+        ],
+        "recordLabel": "Black Panther (TDE/DMG) PS",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/4d/16/55/4d165549-3d11-86dc-fcbf-be7fe0bcadfb/18UMGIM00002.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440906927",
+              "type": "albums",
+              "attributes": {
+                "name": "Black Panther: The Album",
+                "artistName": "Kendrick Lamar",
+                "url": "https://music.apple.com/us/album/black-panther-the-album/1440906927",
+                "playParams": {
+                  "id": "1440906927",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-02-09",
+                "contentRating": "explicit",
+                "trackCount": 14,
+                "upc": "00602567350248",
+                "genreNames": [
+                  "Soundtrack",
+                  "Music",
+                  "Hip-Hop/Rap",
+                  "Rap",
+                  "Soundtrack",
+                  "R&B/Soul",
+                  "Contemporary R&B"
+                ],
+                "recordLabel": "Black Panther (TDE/DMG) PS",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/0f/7c/f9/0f7cf9a6-651f-53ae-e374-6be14630bfae/18UMGIM00001.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1704183235",
+      "type": "albums",
+      "attributes": {
+        "name": "Snooze - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/snooze-single/1704183235",
+        "playParams": {
+          "id": "1704183235",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-08-25",
+        "contentRating": "explicit",
+        "trackCount": 4,
+        "upc": "196871251334",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/f9/fa/49/f9fa49f5-022a-ae48-071c-3a2616df998e/196871251334.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1615478007",
+      "type": "albums",
+      "attributes": {
+        "name": "No Love (Extended Version) - Single",
+        "artistName": "Summer Walker, SZA & Cardi B",
+        "url": "https://music.apple.com/us/album/no-love-extended-version-single/1615478007",
+        "playParams": {
+          "id": "1615478007",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-03-25",
+        "contentRating": "clean",
+        "trackCount": 1,
+        "upc": "00602445730094",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "LVRN/Interscope Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/58/cf/0a/58cf0af2-25fe-740d-a869-574e55f3a504/22UMGIM27510.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1615477870",
+              "type": "albums",
+              "attributes": {
+                "name": "No Love (Extended Version) - Single",
+                "artistName": "Summer Walker, SZA & Cardi B",
+                "url": "https://music.apple.com/us/album/no-love-extended-version-single/1615477870",
+                "playParams": {
+                  "id": "1615477870",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-03-25",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00602445730063",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "LVRN/Interscope Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/91/a7/d8/91a7d82d-5416-2d72-014f-c62ed8a1e89c/22UMGIM27509.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1664548283",
+      "type": "albums",
+      "attributes": {
+        "name": "Kill Bill - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/kill-bill-single/1664548283",
+        "playParams": {
+          "id": "1664548283",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2023-01-13",
+        "trackCount": 5,
+        "upc": "196589809599",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/eb/ac/2a/ebac2ae4-db4f-0973-037e-7a563acab8cf/196589809599.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1707436500",
+      "type": "albums",
+      "attributes": {
+        "name": "Snooze (Acoustic) [feat. Justin Bieber] - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/snooze-acoustic-feat-justin-bieber-single/1707436500",
+        "playParams": {
+          "id": "1707436500",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-09-14",
+        "contentRating": "clean",
+        "trackCount": 1,
+        "upc": "196871470735",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/db/4d/6a/db4d6a3b-25c1-78ee-a61d-ad9655ce280e/196871470735.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1707428950",
+              "type": "albums",
+              "attributes": {
+                "name": "Snooze (feat. Justin Bieber) [Acoustic] - Single",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/snooze-feat-justin-bieber-acoustic-single/1707428950",
+                "playParams": {
+                  "id": "1707428950",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-15",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "196871470711",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/74/4f/ee/744feec2-9a88-6313-7073-1627ffa9bafb/196871470711.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1473303796",
+      "type": "albums",
+      "attributes": {
+        "name": "Best Of",
+        "artistName": "The S.O.S. Band",
+        "url": "https://music.apple.com/us/album/best-of/1473303796",
+        "playParams": {
+          "id": "1473303796",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2011-01-01",
+        "trackCount": 12,
+        "upc": "00602508113864",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Clarence Avant Catalog",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c4/88/52/c48852ff-b542-2884-a696-ca39e0b4cdf3/19UMGIM65658.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1444005836",
+      "type": "albums",
+      "attributes": {
+        "name": "Finally Rich",
+        "artistName": "Chief Keef",
+        "url": "https://music.apple.com/us/album/finally-rich/1444005836",
+        "playParams": {
+          "id": "1444005836",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2012-01-01",
+        "contentRating": "clean",
+        "trackCount": 12,
+        "upc": "00602537260201",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Gangsta Rap",
+          "Hardcore Rap"
+        ],
+        "recordLabel": "UMGRI Interscope",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/0a/4c/c2/0a4cc286-d3fa-9782-ec88-6f36be8e6750/12UMGIM59937.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440818106",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich (Deluxe Version)",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich-deluxe-version/1440818106",
+                "playParams": {
+                  "id": "1440818106",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-12-18",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "00602537240388",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Gangsta Rap",
+                  "Rap",
+                  "Hardcore Rap"
+                ],
+                "recordLabel": "UMGRI Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/df/91/5f/df915f26-bb16-dfad-1066-ccfc62f75782/12UMGIM59941.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1657546373",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich (Complete Edition)",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich-complete-edition/1657546373",
+                "playParams": {
+                  "id": "1657546373",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-12-18",
+                "contentRating": "explicit",
+                "trackCount": 22,
+                "upc": "00602448997975",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/7c/75/c0/7c75c073-c8a6-7b25-07d0-3806e6e6dd68/22UM1IM35356.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1440853396",
+              "type": "albums",
+              "attributes": {
+                "name": "Finally Rich",
+                "artistName": "Chief Keef",
+                "url": "https://music.apple.com/us/album/finally-rich/1440853396",
+                "playParams": {
+                  "id": "1440853396",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-12-18",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602537240395",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Gangsta Rap",
+                  "Rap",
+                  "Hardcore Rap"
+                ],
+                "recordLabel": "UMGRI Interscope",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/f6/26/ac/f626ac4b-61a2-551c-20d7-085c477de868/12UMGIM59936.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
