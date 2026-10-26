@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from app import tv_tracking
-from app.models import Item, MediaTypes
+from app.models import TV, Item, MediaTypes
 from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now
 from social.models import ProgressChange
 
@@ -71,7 +71,24 @@ class TVActivityTests(TestCase):
         )
         return item
 
+    def episode_item(self, season, episode, show=None):
+        show = show or self.show
+        item, _ = Item.objects.get_or_create(
+            media_id=show.media_id,
+            source=show.source,
+            media_type=MediaTypes.EPISODE.value,
+            season_number=season,
+            episode_number=episode,
+            defaults={"title": f"Episode {episode}", "image": show.image},
+        )
+        return item
+
     # Reading
+
+    def tv_status(self, show=None):
+        """Return the show's (status, choice)."""
+        tv = TV.objects.get(user=self.user, item=show or self.show)
+        return (tv.status, tv.choice)
 
     def activity(self, viewer=None):
         """Return (day, type, media type, title, summary) for each activity item."""
@@ -237,3 +254,46 @@ class TVActivityTests(TestCase):
 
         self.assertEqual(self.activity(), [])
         self.assertFalse(ProgressChange.objects.filter(actor=self.user).exists())
+
+    def test_unticking_back_to_planning_or_dropped_takes_the_start_back(self):
+        # Planning on Oct 24; a tick on Oct 25 starts the show, and unticking it puts
+        # the show back in Planning (TV-208): Oct 25 didn't move forward.
+        self.at(24, 20)
+        self.choose("Planning")
+        self.at(25, 20)
+        self.tick(1, 1)
+        self.untick(1, 1)
+
+        self.assertEqual(self.tv_status(), (tv_tracking.PLANNING, tv_tracking.PLANNING))
+        self.assertEqual(self.activity(), [])
+
+        # Dropped after a day of progress: a tick the next day starts it again, and
+        # unticking that tick drops it again.
+        andor = make_show(self.fake, title="Andor", seasons={1: 3})
+        self.tick(1, 1, show=andor)
+        self.choose("Dropped", show=andor)
+        self.at(26, 20)
+        self.tick(1, 2, show=andor)
+        self.untick(1, 2, show=andor)
+
+        self.assertEqual(self.tv_status(andor), (tv_tracking.DROPPED, tv_tracking.DROPPED))
+        self.assertEqual(self.activity(), [self.progress("2026-10-25", "watched 1 episode", "Andor")])
+
+    def test_an_untick_that_leaves_the_episode_watched_still_nets_the_day(self):
+        self.tick(1, 1)
+        self.tick(1, 2)
+        self.at(26, 20)
+        self.tick(1, 3)
+        # A rewatch log of E3 dated Oct 25 adds its own viewing, so unticking E3 leaves
+        # it watched: season 1's count stays 3, but Oct 26's only tick is gone.
+        self.clock.advance(minutes=1)
+        tv_tracking.create_log(self.user, self.episode_item(1, 3), consumed_at=OCT_25, is_rewatch=True)
+        self.untick(1, 3)
+
+        # Oct 26 netted to nothing; the log replaces Oct 25's progress.
+        self.assertEqual(self.activity(), [("2026-10-25", "diary_created", "episode", "Episode 3", "log")])
+        season_one = ProgressChange.objects.filter(item=self.season_item(1)).order_by("id")
+        self.assertEqual(
+            [(change.previous_progress["value"], change.current_progress["value"]) for change in season_one],
+            [(0, 1), (1, 2), (2, 3), (4, 3)],
+        )

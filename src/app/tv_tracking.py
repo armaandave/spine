@@ -1574,6 +1574,18 @@ def _forget_progress(ctx, season_numbers=None):
     rows.delete()
 
 
+def _forget_starts_since(ctx, since):
+    """Delete the show's starts recorded since `since`."""
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    ProgressChange.objects.filter(
+        actor=ctx.user,
+        item=ctx.show_item,
+        current_progress__kind=ProgressChange.START,
+        created_at__gte=since,
+    ).delete()
+
+
 def _normalize_viewing_days(ctx):
     """Give non-fill viewings their calendar day when only end_date is stored."""
     updates = []
@@ -1680,21 +1692,24 @@ def _reconcile(ctx, *, fresh=False):  # noqa: C901, PLR0912, PLR0915
                 setattr(row, name, values[name])
             season_cache_rows.append(row)
             season_cache_fields.update(changed_fields)
+        moved = _ticks_moved(ctx, number, ticks_after)
         if (
             season.loaded
             and season.listed
             and (was_worked_out or number in ctx.new_seasons)
-            and (previous_watched or 0) != season.watched_count
+            and ((previous_watched or 0) != season.watched_count or moved)
         ):
             # Only ticks move progress. Marks, fills, logs and rewatches record the new
             # count without moving it: installed builds' Home shows the count, and
-            # activity shows nothing for them (TV-703, activity contract AC-1).
+            # activity shows nothing for them (TV-703, activity contract AC-1). Ticks
+            # that moved without changing the count, such as unticking an episode a log
+            # still covers, still count.
             progress_changes.append(
                 _progress_change(
                     ctx,
                     row.item_id,
                     previous=(
-                        season.watched_count - _ticks_moved(ctx, number, ticks_after),
+                        season.watched_count - moved,
                         previous_aired if previous_aired is not None else season.aired_count,
                     ),
                     current=(season.watched_count, season.aired_count),
@@ -2406,6 +2421,9 @@ def _after_removal(ctx):
         ) or any(log.created_at >= since for log in ctx.facts.logs)
         if not remaining:
             ctx.set_tv(choice=tv.ended_choice, ended_choice="", ended_choice_at=None)
+            # The undone write's start goes with it: the show is back in Planning or
+            # Dropped (activity contract AC-2).
+            _forget_starts_since(ctx, since)
             if not recorded:
                 _clear_all_opinions(ctx)
             ctx.invalidate()

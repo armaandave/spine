@@ -3981,6 +3981,35 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    func testProfileRecentActivityRailShowsAShowOnceAcrossItsSeasonsAndEpisodes() {
+        func activity(_ id: Int, _ mediaType: String, mediaId: String = "1396", season: Int? = nil, episode: Int? = nil) -> ActivityItem {
+            ActivityItem(
+                id: id,
+                type: mediaType == "tv" ? "progress_updated" : "diary_created",
+                createdAt: "2026-10-26T12:00:00Z",
+                actor: UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil),
+                media: MediaSummary(
+                    ref: MediaRef(itemId: nil, source: "tmdb", mediaType: mediaType, mediaId: mediaId,
+                                  seasonNumber: season, episodeNumber: episode),
+                    title: "Breaking Bad",
+                    posterUrl: nil,
+                    posterOrientation: .portrait
+                ),
+                object: ActivityObject(type: "diary", id: id, previous: nil, current: nil, rating: nil, liked: nil, name: nil)
+            )
+        }
+        let items = [
+            activity(1, "episode", season: 2, episode: 5),
+            activity(-2, "tv"),
+            activity(3, "season", season: 2),
+            activity(4, "movie", mediaId: "1396"),
+            activity(5, "season", mediaId: "1399", season: 1),
+        ]
+
+        // The show's newest activity stands for it; a movie with the same id is another title.
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: items).map(\.activity.id), [1, 4, 5])
+    }
+
     func testProfileRecentActivityRailFitsSquareAlbumArt() {
         let albums = (1...5).map { activityItem(id: $0, title: "Album \($0)", mediaType: "music") }
         let movie = activityItem(id: 6, title: "Movie")

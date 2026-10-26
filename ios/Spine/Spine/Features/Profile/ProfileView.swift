@@ -103,6 +103,17 @@ final class ProfileViewModel {
         await load()
     }
 
+    /// A write changed a title. Continue Watching's own tick or untick keeps its card where it is (TV-701) but still
+    /// reloads Recent Activity, where the tick is the day's progress (activity contract AC-4); any other write reloads
+    /// the profile.
+    func mediaStateDidChange(origin: UUID?) async {
+        if origin == continueWatching.changeOrigin {
+            await loadRecentActivity(generation: requestGeneration)
+        } else {
+            await reload()
+        }
+    }
+
     func isSavingHallOfFameSlot(_ mediaType: String) -> Bool {
         savingHallOfFameSlots.contains(mediaType)
     }
@@ -651,9 +662,9 @@ struct ProfileView: View {
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                // A Continue Watching write updates its own card where it is (TV-701).
-                if notification.userInfo?["origin"] as? UUID == viewModel.continueWatching.changeOrigin { return }
-                Swift.Task<Void, Never> { await viewModel.reload() }
+                Swift.Task<Void, Never> {
+                    await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID)
+                }
             }
             .continueWatchingPresentations(
                 viewModel.continueWatching,
@@ -1886,14 +1897,15 @@ struct ProfileRecentActivityRailItem: Identifiable {
 }
 
 enum ProfileRecentActivityRailModel {
-    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail.
+    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail. A show's
+    /// season and episode logs count as the show (activity contract AC-1).
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
         var seenTitles = Set<String>()
         return activities.compactMap { activity in
             if let person = activity.person {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .person(person))
             }
-            if let media = activity.media, seenTitles.insert(media.ref.id).inserted {
+            if let media = activity.media, seenTitles.insert((media.ref.parentTVRef ?? media.ref).id).inserted {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
             }
             return nil

@@ -64,6 +64,16 @@ final class HomeViewModel {
         await load()
     }
 
+    /// A write changed a title. Continue Watching's own tick or untick keeps its card where it is (TV-701) but still
+    /// reloads activity, where the tick is the day's progress (activity contract AC-4); any other write reloads Home.
+    func mediaStateDidChange(origin: UUID?) async {
+        if origin == continueWatching.changeOrigin {
+            await loadActivity()
+        } else {
+            await reload()
+        }
+    }
+
     func loadInProgress() async {
         let mediaTypes = InProgressLibraryLoader.mediaTypes(from: profile)
         guard !mediaTypes.isEmpty else {
@@ -218,9 +228,7 @@ struct HomeView: View {
                 Task { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                // A Continue Watching write updates its own card where it is (TV-701).
-                if notification.userInfo?["origin"] as? UUID == viewModel.continueWatching.changeOrigin { return }
-                Task { await viewModel.reload() }
+                Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
             }
             .onChange(of: selectedTab) { _, tab in
                 // Leaving Home ends the cards' undo (TV-701). Back on Home after a tick from its menu: the rail

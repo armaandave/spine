@@ -528,6 +528,59 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertNil(ticks.undos[crown.id])
     }
 
+    func testTV703TheMenusTickReloadsActivityButLeavesTheRail() async {
+        // A tick is the day's progress in activity, so Home and Profile reload their activity after their own menu's
+        // tick or untick (activity contract AC-4), and leave the rail where it is (TV-701).
+        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
+        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
+        let progress = ActivityItem(
+            id: -7,
+            type: "progress_updated",
+            createdAt: "2026-10-26T20:00:00Z",
+            actor: UserSummary(id: 1, username: "armaan", displayName: "Armaan", avatarUrl: nil),
+            media: crown.media,
+            object: ActivityObject(type: "progress_day", id: -7, previous: nil, current: nil, rating: nil, liked: nil, name: nil)
+        )
+        let homeActivity = CountingActivityRepository()
+        let home = HomeViewModel(
+            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
+            trackingRepository: tracking,
+            activityRepository: homeActivity,
+            onUnauthorized: {}
+        )
+        await home.load()
+        XCTAssertEqual(homeActivity.requestCount, 1)
+        XCTAssertEqual(tracking.continueWatchingPages.count, 1)
+
+        homeActivity.results = [progress]
+        await home.mediaStateDidChange(origin: home.continueWatching.changeOrigin)
+        XCTAssertEqual(home.activityItems.map(\.id), [-7], "Home's activity shows the tick")
+        XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The rail doesn't reload")
+        // Any other screen's write reloads Home.
+        await home.mediaStateDidChange(origin: UUID())
+        XCTAssertEqual(homeActivity.requestCount, 3)
+        XCTAssertEqual(tracking.continueWatchingPages.count, 2)
+
+        let profileActivity = CountingActivityRepository()
+        let profile = ProfileViewModel(
+            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
+            trackingRepository: tracking,
+            activityRepository: profileActivity,
+            onUnauthorized: {}
+        )
+        await profile.load()
+        XCTAssertEqual(profileActivity.requestCount, 1)
+        XCTAssertEqual(tracking.continueWatchingPages.count, 3)
+
+        profileActivity.results = [progress]
+        await profile.mediaStateDidChange(origin: profile.continueWatching.changeOrigin)
+        XCTAssertEqual(profile.recentActivityItems.map(\.id), [-7], "Recent Activity shows the tick")
+        XCTAssertEqual(tracking.continueWatchingPages.count, 3, "The rail doesn't reload")
+        await profile.mediaStateDidChange(origin: nil)
+        XCTAssertEqual(profileActivity.requestCount, 3)
+        XCTAssertEqual(tracking.continueWatchingPages.count, 4)
+    }
+
     func testTV102AnUndoWhoseViewingIsGoneSaysSoAndEndsTheUndo() async throws {
         let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
         let viewModel = homeViewModel()
@@ -1267,6 +1320,16 @@ final class SurfacesProfileRepository: ProfileRepository {
 
 struct SurfacesActivityRepository: ActivityRepository {
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem] { [] }
+}
+
+final class CountingActivityRepository: ActivityRepository {
+    private(set) var requestCount = 0
+    var results: [ActivityItem] = []
+
+    func userActivity(username: String, limit: Int) async throws -> [ActivityItem] {
+        requestCount += 1
+        return results
+    }
 }
 
 struct SurfacesFilterOptionsRepository: FilterOptionsRepository {
