@@ -46,16 +46,8 @@ def diary_payload(entry, request=None, viewer=None):
             user=viewer,
             include_user_state=False,
         ),
-        "consumed_at": (
-            single_weight.calendar_date(entry.consumed_at).isoformat()
-            if is_single_weight
-            else entry.consumed_at
-        ),
-        "rating": (
-            str(single_weight.rating_to_wire(entry.rating))
-            if is_single_weight and entry.rating is not None
-            else str(entry.rating) if entry.rating is not None else None
-        ),
+        "consumed_at": consumed_at_payload(entry),
+        "rating": rating_payload(entry),
         "review_title": entry.review_title,
         "review": entry.review,
         "contains_spoilers": entry.contains_spoilers,
@@ -72,6 +64,22 @@ def diary_payload(entry, request=None, viewer=None):
         session = getattr(entry, "game_playthrough", None)
         payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": (entry.progress_snapshot or {}).get("total_minutes"), "percentage": (entry.progress_snapshot or {}).get("percentage")})
     return payload
+
+
+def consumed_at_payload(entry):
+    """Return a log's date as the API shows it: a calendar date for half-star media."""
+    if single_weight.uses_half_star_rating(entry.item):
+        return single_weight.calendar_date(entry.consumed_at).isoformat()
+    return entry.consumed_at
+
+
+def rating_payload(entry):
+    """Return a log's rating on the API scale, or None."""
+    if entry.rating is None:
+        return None
+    if single_weight.uses_half_star_rating(entry.item):
+        return str(single_weight.rating_to_wire(entry.rating))
+    return str(entry.rating)
 
 
 def prime_diary_likes(entries, viewer):

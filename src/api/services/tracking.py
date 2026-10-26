@@ -83,6 +83,7 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             data,
         )
 
+    previous_status = media.status if existing_media else None
     for api_field, model_field in {
         "status": "status",
         "rating": "score",
@@ -96,6 +97,12 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
         ):
             setattr(media, model_field, data[api_field])
     media.save()
+    # Resuming something paused isn't starting it.
+    if media.status == Status.IN_PROGRESS.value and previous_status not in {
+        Status.IN_PROGRESS.value,
+        Status.PAUSED.value,
+    }:
+        ProgressChange.record_start(user, media.item)
     if previous_progress is not None:
         _record_progress_change(user, media, previous_progress)
     return media
@@ -169,7 +176,6 @@ def watch_episode(user, *, source, media_id, season_number, episode_number, watc
             media_id=media_id,
             season_number=season_number,
         )
-        previous_progress = _progress_snapshot(season) if season is not None else None
         if season is None:
             season = create_or_update_tracking(
                 user,
@@ -178,6 +184,8 @@ def watch_episode(user, *, source, media_id, season_number, episode_number, watc
                 media_id=media_id,
                 data={"season_number": season_number, "status": Status.IN_PROGRESS.value},
             )
+        # Taken after creating a new season, so its first episode counts as progress.
+        previous_progress = _progress_snapshot(season)
         season.watch(episode_number, watched_at or timezone.now().replace(second=0, microsecond=0))
         season.refresh_from_db()
         _record_progress_change(user, season, previous_progress)

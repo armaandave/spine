@@ -195,6 +195,9 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _push(game, session.status, "playthrough", session)
+    from social.models import ProgressChange
+
+    ProgressChange.record_start(user, item, playthrough_id=session.pk)
     return _sync_state(game)
 
 
@@ -389,6 +392,8 @@ def update_progress(
     day = _day(progressed_on or timezone.localdate())
     if session.start_date and day < session.start_date:
         raise ValidationError("Progress cannot predate the start date.")
+    _record_progress_change(user, item, session, "minute", session.total_minutes, minutes)
+    _record_progress_change(user, item, session, "percent", session.percentage, percent)
     if minutes is not UNSET:
         session.total_minutes = minutes
         session.minutes_updated_on = day
@@ -401,6 +406,36 @@ def update_progress(
         session.first_progress_on = min(session.first_progress_on or day, day)
         session.save()
     return _sync_state(game)
+
+
+def _record_progress_change(user, item, session, unit, previous, current):
+    """Record playtime or percentage moving, the history daily activity reads."""
+    from social.models import ProgressChange
+
+    if current is UNSET or current is None or current == (previous or 0):
+        return
+    kind, maximum = ("minutes", None) if unit == "minute" else ("percentage", 100)
+
+    def snapshot(value):
+        return {"kind": kind, "value": value, "max": maximum, "unit": unit, "playthrough_id": session.pk}
+
+    ProgressChange.objects.create(
+        actor=user,
+        item=item,
+        previous_progress=snapshot(previous or 0),
+        current_progress=snapshot(current),
+    )
+
+
+def _delete_progress_history(user, item, playthrough_id):
+    """Drop a deleted playthrough's recorded start and progress, as books do."""
+    from social.models import ProgressChange
+
+    ProgressChange.objects.filter(
+        actor=user,
+        item=item,
+        current_progress__playthrough_id=playthrough_id,
+    ).delete()
 
 
 @transaction.atomic
@@ -667,6 +702,7 @@ def delete_completion(user, entry):
             session.percentage_linked = False
             session.save()
         else:
+            _delete_progress_history(user, entry.item, session.pk)
             session.delete()
     result = _sync_state(game) if game else None
     single_weight._queue_statistics(user.pk, old_date)
@@ -683,6 +719,7 @@ def delete_playthrough(user, item, playthrough_id):
         return game
     if session.completion_diary_entry_id:
         raise HistoryExists("Delete this completion log first.")
+    _delete_progress_history(user, item, session.pk)
     session.delete()
     return _sync_state(game)
 
