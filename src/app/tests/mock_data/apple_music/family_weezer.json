@@ -1,0 +1,317 @@
+{
+  "data": [
+    {
+      "id": "1890580956",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (2024 Remaster)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-2024-remaster/1890580956",
+        "playParams": {
+          "id": "1890580956",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1994-05-10",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440869641",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6772364953",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer/6772364953",
+        "playParams": {
+          "id": "6772364953",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-08-21",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1450270988",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Teal Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-teal-album/1450270988",
+        "playParams": {
+          "id": "1450270988",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-01-24",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1440868131",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Green Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-green-album/1440868131",
+        "playParams": {
+          "id": "1440868131",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2001-05-15",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1440869641",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Deluxe Edition)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-deluxe-edition/1440869641",
+        "playParams": {
+          "id": "1440869641",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1994-05-10",
+        "trackCount": 24
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1890580956",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1440865387",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Red Album) [Deluxe Edition]",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-red-album-deluxe-edition/1440865387",
+        "playParams": {
+          "id": "1440865387",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2008-06-03",
+        "trackCount": 15
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1443225062",
+              "type": "albums"
+            },
+            {
+              "id": "1443275314",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1100739016",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (White Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-white-album/1100739016",
+        "playParams": {
+          "id": "1100739016",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-04-01",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1160756134",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1442329821",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Black Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-black-album/1442329821",
+        "playParams": {
+          "id": "1442329821",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-03-01",
+        "contentRating": "explicit",
+        "trackCount": 10
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1160756134",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (White Album) [Deluxe Edition]",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-white-album-deluxe-edition/1160756134",
+        "playParams": {
+          "id": "1160756134",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-04-01",
+        "contentRating": "explicit",
+        "trackCount": 14
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1100739016",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1443225062",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Red Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-red-album/1443225062",
+        "playParams": {
+          "id": "1443225062",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2008-01-01",
+        "trackCount": 12
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440865387",
+              "type": "albums"
+            },
+            {
+              "id": "1443275314",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1443275314",
+      "type": "albums",
+      "attributes": {
+        "name": "Weezer (Red Album)",
+        "artistName": "Weezer",
+        "url": "https://music.apple.com/us/album/weezer-red-album/1443275314",
+        "playParams": {
+          "id": "1443275314",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2008-06-03",
+        "trackCount": 11
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440865387",
+              "type": "albums"
+            },
+            {
+              "id": "1443225062",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

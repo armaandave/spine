@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "1147788150",
+      "type": "albums",
+      "attributes": {
+        "name": "Year Zero",
+        "artistName": "Nine Inch Nails",
+        "url": "https://music.apple.com/us/album/year-zero/1440826538",
+        "playParams": {
+          "id": "1147788150",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2007-04-13",
+        "contentRating": "explicit",
+        "trackCount": 16
+      }
+    },
+    {
+      "id": "1440826538",
+      "type": "albums",
+      "attributes": {
+        "name": "Year Zero",
+        "artistName": "Nine Inch Nails",
+        "url": "https://music.apple.com/us/album/year-zero/1440826538",
+        "playParams": {
+          "id": "1440826538",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2007-04-13",
+        "contentRating": "explicit",
+        "trackCount": 16
+      }
+    }
+  ]
+}

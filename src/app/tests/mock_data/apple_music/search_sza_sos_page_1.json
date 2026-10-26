@@ -1,0 +1,430 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1657869377",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos/1657869377",
+            "playParams": {
+              "id": "1657869377",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-12-09",
+            "contentRating": "explicit",
+            "trackCount": 23
+          }
+        },
+        {
+          "id": "1658650093",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos/1658650093",
+            "playParams": {
+              "id": "1658650093",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-12-09",
+            "contentRating": "clean",
+            "trackCount": 23
+          }
+        },
+        {
+          "id": "1794644675",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS Deluxe: LANA",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+            "playParams": {
+              "id": "1794644675",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-12-20",
+            "contentRating": "explicit",
+            "trackCount": 42
+          }
+        },
+        {
+          "id": "1796270264",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS Deluxe: LANA",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos-deluxe-lana/1796270264",
+            "playParams": {
+              "id": "1796270264",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-02-08",
+            "contentRating": "clean",
+            "trackCount": 42
+          }
+        },
+        {
+          "id": "1628387909",
+          "type": "albums",
+          "attributes": {
+            "name": "Ctrl (Deluxe)",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/ctrl-deluxe/1628387909",
+            "playParams": {
+              "id": "1628387909",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-06-09",
+            "contentRating": "explicit",
+            "trackCount": 21
+          }
+        },
+        {
+          "id": "1239976329",
+          "type": "albums",
+          "attributes": {
+            "name": "Ctrl",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/ctrl/1239976329",
+            "playParams": {
+              "id": "1239976329",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-06-09",
+            "contentRating": "explicit",
+            "trackCount": 14
+          }
+        },
+        {
+          "id": "1786643044",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS Deluxe: LANA",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos-deluxe-lana/1786643044",
+            "playParams": {
+              "id": "1786643044",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-12-20",
+            "contentRating": "explicit",
+            "trackCount": 38
+          }
+        },
+        {
+          "id": "1546390050",
+          "type": "albums",
+          "attributes": {
+            "name": "Good Days - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/good-days-single/1546390050",
+            "playParams": {
+              "id": "1546390050",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-12-25",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1598221271",
+          "type": "albums",
+          "attributes": {
+            "name": "I Hate U - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/i-hate-u-single/1598221271",
+            "playParams": {
+              "id": "1598221271",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-12-03",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1689825179",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (sza on sax)",
+            "artistName": "Hank Lee Nelson",
+            "url": "https://music.apple.com/us/album/sos-sza-on-sax/1689825179",
+            "playParams": {
+              "id": "1689825179",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-06-06",
+            "trackCount": 11
+          }
+        },
+        {
+          "id": "1457882147",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (feat. Aloe Blacc) - Single",
+            "artistName": "Avicii",
+            "url": "https://music.apple.com/us/album/sos-feat-aloe-blacc-single/1457882147",
+            "playParams": {
+              "id": "1457882147",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2019-03-10",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1764132972",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Sex on Sight) - Single",
+            "artistName": "Victoria Monét & USHER",
+            "url": "https://music.apple.com/us/album/sos-sex-on-sight-single/1764132972",
+            "playParams": {
+              "id": "1764132972",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-08-29",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1569461513",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Acoustic) - Single",
+            "artistName": "Sueco",
+            "url": "https://music.apple.com/us/album/sos-acoustic-single/1569461513",
+            "playParams": {
+              "id": "1569461513",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-05-20",
+            "contentRating": "clean",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "6790866229",
+          "type": "albums",
+          "attributes": {
+            "name": "S.O.S.",
+            "artistName": "Real Boston Richey",
+            "url": "https://music.apple.com/us/album/s-o-s/6790866229",
+            "playParams": {
+              "id": "6790866229",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-07-24",
+            "contentRating": "explicit",
+            "trackCount": 10
+          }
+        },
+        {
+          "id": "1568082861",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Acoustic) - Single",
+            "artistName": "Sueco",
+            "url": "https://music.apple.com/us/album/sos-acoustic-single/1568082861",
+            "playParams": {
+              "id": "1568082861",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-05-21",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1440906927",
+          "type": "albums",
+          "attributes": {
+            "name": "Black Panther: The Album",
+            "artistName": "Kendrick Lamar",
+            "url": "https://music.apple.com/us/album/black-panther-the-album/1440906927",
+            "playParams": {
+              "id": "1440906927",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-02-09",
+            "contentRating": "explicit",
+            "trackCount": 14
+          }
+        },
+        {
+          "id": "1707479914",
+          "type": "albums",
+          "attributes": {
+            "name": "Slime You Out (feat. SZA) - Single",
+            "artistName": "Drake",
+            "url": "https://music.apple.com/us/album/slime-you-out-feat-sza-single/1707479914",
+            "playParams": {
+              "id": "1707479914",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-09-15",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1530112355",
+          "type": "albums",
+          "attributes": {
+            "name": "Hit Different (feat. Ty Dolla $ign) - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/hit-different-feat-ty-dolla-%24ign-single/1530112355",
+            "playParams": {
+              "id": "1530112355",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-09-04",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1649413469",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos Sza - Single",
+            "artistName": "BLAZE 2.0",
+            "url": "https://music.apple.com/us/album/sos-sza-single/1649413469",
+            "playParams": {
+              "id": "1649413469",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2022-10-08",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1485073558",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos",
+            "artistName": "Millencolin",
+            "url": "https://music.apple.com/us/album/sos/1485073558",
+            "playParams": {
+              "id": "1485073558",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-02-15",
+            "trackCount": 12
+          }
+        },
+        {
+          "id": "1648735510",
+          "type": "albums",
+          "attributes": {
+            "name": "Shirt - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/shirt-single/1648735510",
+            "playParams": {
+              "id": "1648735510",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-10-28",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1837323466",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "ALYSSA",
+            "url": "https://music.apple.com/us/album/sos-single/1837323466",
+            "playParams": {
+              "id": "1837323466",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-09-26",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1324746772",
+          "type": "albums",
+          "attributes": {
+            "name": "The Weekend (Funk Wav Remix) - Single",
+            "artistName": "SZA & Calvin Harris",
+            "url": "https://music.apple.com/us/album/the-weekend-funk-wav-remix-single/1324746772",
+            "playParams": {
+              "id": "1324746772",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-12-15",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1707428950",
+          "type": "albums",
+          "attributes": {
+            "name": "Snooze (feat. Justin Bieber) [Acoustic] - Single",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/snooze-feat-justin-bieber-acoustic-single/1707428950",
+            "playParams": {
+              "id": "1707428950",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-09-15",
+            "contentRating": "explicit",
+            "trackCount": 1
+          }
+        },
+        {
+          "id": "1764994407",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Sex on Sight) - EP",
+            "artistName": "Victoria Monét & USHER",
+            "url": "https://music.apple.com/us/album/sos-sex-on-sight-ep/1764994407",
+            "playParams": {
+              "id": "1764994407",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-09-06",
+            "contentRating": "explicit",
+            "trackCount": 5
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=sza+sos&types=albums"
+    }
+  }
+}

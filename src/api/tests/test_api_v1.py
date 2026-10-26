@@ -99,6 +99,7 @@ class ApiV1FoundationTests(TestCase):
             [Sources.MUSICBRAINZ.value],
         )
         self.assertIn(Sources.MUSICBRAINZ.value, meta.data["source_choices"])
+        self.assertIn(Sources.APPLE_MUSIC.value, meta.data["source_choices"])
         self.assertEqual(
             sources.data[MediaTypes.MUSIC.value],
             [Sources.MUSICBRAINZ.value],
@@ -328,6 +329,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertNotIn(MediaTypes.MUSIC.value, meta.data["media_types"])
         self.assertNotIn(MediaTypes.MUSIC.value, meta.data["sources"])
         self.assertNotIn(Sources.MUSICBRAINZ.value, meta.data["source_choices"])
+        self.assertNotIn(Sources.APPLE_MUSIC.value, meta.data["source_choices"])
         self.assertNotIn(MediaTypes.MUSIC.value, sources.data)
 
     @override_settings(MUSIC_ENABLED=False)

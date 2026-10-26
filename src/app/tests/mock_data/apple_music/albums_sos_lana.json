@@ -1,0 +1,166 @@
+{
+  "data": [
+    {
+      "id": "1657869377",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos/1657869377",
+        "playParams": {
+          "id": "1657869377",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-12-09",
+        "contentRating": "explicit",
+        "trackCount": 23
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1658650093",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1658650093",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos/1658650093",
+        "playParams": {
+          "id": "1658650093",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-12-09",
+        "contentRating": "clean",
+        "trackCount": 23
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1657869377",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1794644675",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+        "playParams": {
+          "id": "1794644675",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 42
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums"
+            },
+            {
+              "id": "1796270264",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786643044",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1786643044",
+        "playParams": {
+          "id": "1786643044",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 38
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums"
+            },
+            {
+              "id": "1796270264",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1796270264",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1796270264",
+        "playParams": {
+          "id": "1796270264",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-02-08",
+        "contentRating": "clean",
+        "trackCount": 42
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums"
+            },
+            {
+              "id": "1786643044",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
