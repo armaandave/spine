@@ -154,16 +154,11 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
             candidate.pop("provider_rank_boost", None)
     start = (page - 1) * settings.PER_PAGE
     results = ranked[start : start + settings.PER_PAGE]
-    try:
-        total_results = int(response.get("count", len(ranked)))
-    except (TypeError, ValueError):
-        total_results = len(ranked)
-    # Popular albums can add to the albums MusicBrainz counted.
-    total_results = min(max(len(ranked), total_results), SEARCH_CANDIDATE_LIMIT)
+    # MusicBrainz's first 100 albums plus any popular ones: all a page can reach.
     return helpers.format_search_response(
         page,
         settings.PER_PAGE,
-        total_results,
+        len(ranked),
         results,
     )
 
@@ -185,10 +180,13 @@ def _with_popular_albums(query, candidates):
         if album.release_group_mbid in by_id:
             by_id[album.release_group_mbid].update(counts)
             continue
+        # Featured lists check the credited artist before taking a match.
+        credits = [{"artist_mbid": None, "name": album.artist, "join_phrase": ""}] if album.artist else []
         candidates.append(
             {
                 **_genre_album_result(album),
                 **counts,
+                "artist_credits": credits,
                 "primary_type": "Album",
                 "artist_name": album.artist,
                 "provider_rank_boost": 100,

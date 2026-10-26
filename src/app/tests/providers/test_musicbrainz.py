@@ -17,6 +17,8 @@ from pyrate_limiter import Duration, Rate, RateItem, RedisBucket
 
 from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import musicbrainz, services
+from lists.featured.resolve import pick_title_match
+from lists.featured.types import Entry
 
 RUN_PROVIDER_TESTS = os.environ.get("RUN_PROVIDER_TESTS") == "1"
 requires_provider_network = unittest.skipUnless(
@@ -881,17 +883,23 @@ class MusicBrainzTests(TestCase):
             },
         }
 
-        results = musicbrainz.search("renaissance", 1)["results"]
+        response = musicbrainz.search("renaissance", 1)
+        results = response["results"]
 
         self.assertEqual(
             [item["media_id"] for item in results],
             ["beyonce-renaissance", "vanilla-fudge-renaissance"],
         )
+        self.assertEqual(response["total_results"], 2)
         self.assertEqual(results[0]["subtitle"], "Beyoncé · 2022 · Album")
         for key in ("total_user_count", "artist_name", "provider_rank_boost"):
             self.assertNotIn(key, results[0])
         lookup_popularity.assert_called_once_with(
             ["vanilla-fudge-renaissance", "beyonce-renaissance"],
+        )
+        # Featured lists still check the artist: another artist's "Renaissance" isn't it.
+        self.assertIsNone(
+            pick_title_match(Entry(1, "Renaissance", creator="Marcus Miller"), results[:1]),
         )
 
     @patch("app.providers.musicbrainz.lookup_release_group_popularity")

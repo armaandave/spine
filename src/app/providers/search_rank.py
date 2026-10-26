@@ -109,9 +109,10 @@ def _artist_relevance(normalized_query, normalized_title, result):
     """Score the title against the query words that aren't in the artist's name.
 
     "renaissance beyonce" then matches Beyoncé's "RENAISSANCE" exactly. A query
-    found entirely in the artist's name scores as every word found.
+    found entirely in the artist's name scores as every word found. Little words
+    stay with the title, so "the wall" doesn't match "Wall" by The Kills exactly.
     """
-    artist_tokens = set(normalize_search_text(result.get("artist_name")).split())
+    artist_tokens = set(normalize_search_text(result.get("artist_name")).split()) - STOP_WORDS
     query_tokens = normalized_query.split()
     title_words = [token for token in query_tokens if token not in artist_tokens]
     if len(title_words) == len(query_tokens):

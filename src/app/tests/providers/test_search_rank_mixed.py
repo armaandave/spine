@@ -307,3 +307,16 @@ class MixedSearchRankTests(SimpleTestCase):
         ranked = rank_results("kanye west", results, MediaTypes.MUSIC.value)
 
         self.assertEqual([item["media_id"] for item in ranked], ["graduation", "west"])
+
+    def test_little_words_in_the_artist_stay_with_the_title(self):
+        results = [
+            {"media_id": media_id, "title": title, "artist_name": artist, "release_date": "1979"}
+            for media_id, title, artist in (
+                ("kills", "Wall", "The Kills"),
+                ("floyd", "The Wall", "Pink Floyd"),
+            )
+        ]
+
+        ranked = rank_results("the wall", results, MediaTypes.MUSIC.value)
+
+        self.assertEqual([item["media_id"] for item in ranked], ["floyd", "kills"])
