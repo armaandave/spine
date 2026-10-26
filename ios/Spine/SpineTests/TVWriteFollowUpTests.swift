@@ -130,13 +130,55 @@ final class TVWriteFollowUpTests: XCTestCase {
         XCTAssertEqual(tracking.actions.map(\.action), [.markEarlier])
     }
 
-    func testAFailedYesStillOffersTheFirstResponsesSeason() async {
+    func testAFailedYesAsksAgainWithTheReasonAndTryAgainResendsTheSameMutation() async throws {
+        // SW-700: a failed Yes isn't silent and doesn't use the question up.
         followUp.handle(TVWriteEnvelope(changed: true, finished: Self.finished(season: 3),
                                         earlierUnwatched: Self.question(offer: 3)))
-        tracking.actionError = APIError.httpStatus(503, #"{"error":{"code":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#)
+        tracking.actionError = APIError.httpStatus(503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#)
         await followUp.answer(yes: true)
         XCTAssertEqual(followUp.errorMessage, "TV details are unavailable right now")
+        XCTAssertEqual(followUp.question?.question, "Also mark Seasons 1–2 watched?", "The question comes back")
+        XCTAssertNil(followUp.composer, "The composer waits for the answer")
+        XCTAssertTrue(followUp.isActive)
+
+        tracking.actionError = nil
+        await followUp.answer(yes: true)
+        XCTAssertEqual(tracking.actions.count, 2)
+        let first = try XCTUnwrap(tracking.actions.first?.request.mutationId)
+        XCTAssertEqual(tracking.actions.last?.request.mutationId, first, "Try Again applies at most once (TV-705)")
+        XCTAssertNil(followUp.errorMessage)
+        XCTAssertNil(followUp.question)
         XCTAssertEqual(followUp.composer?.finished.seasonNumber, 3)
+    }
+
+    func testAFailedYesThenNotNowStillOffersTheFirstResponsesSeason() async {
+        followUp.handle(TVWriteEnvelope(changed: true, finished: Self.finished(season: 3),
+                                        earlierUnwatched: Self.question(offer: 3)))
+        tracking.actionError = APIError.network(URLError(.notConnectedToInternet))
+        await followUp.answer(yes: true)
+        XCTAssertNotNil(followUp.errorMessage)
+
+        await followUp.answer(yes: false)
+        XCTAssertEqual(tracking.actions.count, 1, "Not Now sends nothing")
+        XCTAssertNil(followUp.errorMessage)
+        XCTAssertEqual(followUp.composer?.finished.seasonNumber, 3)
+    }
+
+    func testTV403TheComposerOpensEvenWhenTheSeasonPageCantLoad() async throws {
+        // The server offers the season's log once; a failed page load must not use the offer up silently.
+        media.detailError = APIError.network(URLError(.timedOut))
+        followUp.showTitle = "Breaking Bad"
+        followUp.handle(TVWriteEnvelope(changed: true, finished: Self.finished(season: 1)))
+        XCTAssertTrue(followUp.isActive, "Loading counts as active")
+        await followUp.loading?.value
+
+        let composer = try XCTUnwrap(followUp.composer)
+        XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
+        XCTAssertEqual(composer.detail.ref, MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399",
+                                                     seasonNumber: 1, episodeNumber: nil))
+        XCTAssertEqual(composer.detail.title, "Breaking Bad")
+        followUp.composerDismissed()
+        XCTAssertFalse(followUp.isActive)
     }
 
     func testASeasonOrEpisodeRefActsOnTheShow() {
@@ -171,9 +213,11 @@ final class TVWriteFollowUpTests: XCTestCase {
 
 final class TVDataMediaRepository: MediaRepository {
     var detailRequests: [MediaRef] = []
+    var detailError: Error?
 
     func detail(ref: MediaRef) async throws -> MediaDetail {
         detailRequests.append(ref)
+        if let detailError { throw detailError }
         return MediaDetail(ref: ref, title: ref.seasonNumber.map { "Season \($0)" } ?? "A Show")
     }
 

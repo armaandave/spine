@@ -11,8 +11,12 @@ struct TVFollowUpComposer: Identifiable {
 /// the season-finish composer once for the season the write finished (TV-403).
 ///
 /// - Yes sends `mark_earlier` with a mutation ID and `offer_season_number`. No, or dismissing, sends nothing.
+/// - A Yes that fails asks again with the reason, and Try Again resends it with the same mutation ID, so it applies
+///   at most once (SW-700, TV-705). Not Now then goes on as No.
 /// - Whatever the answer, the composer opens for the season the first response named. A Yes can also name the
 ///   write's own season (`offer_season_number`); any other season only the Yes finished gets no composer.
+/// - The server offers each season's composer once, so it opens even when the season's page can't be loaded,
+///   from what the follow-up already has.
 @MainActor
 @Observable
 final class TVWriteFollowUp {
@@ -22,7 +26,12 @@ final class TVWriteFollowUp {
     /// The season-finish composer to present.
     private(set) var composer: TVFollowUpComposer?
     private(set) var isSending = false
-    var errorMessage: String?
+    /// Why the last Yes failed; the question is asked again with it.
+    private(set) var errorMessage: String?
+    /// Answers and composer loads in flight.
+    private(set) var pendingWork = 0
+    /// The show's title, for a composer whose season page couldn't be loaded.
+    @ObservationIgnored var showTitle: String?
     /// Receives the Yes response, so the presenting screen can fold it in and refresh.
     @ObservationIgnored var onResponse: ((TVActionResponse) -> Void)?
     /// The last question shown, so the alert keeps its title while it animates away.
@@ -34,6 +43,8 @@ final class TVWriteFollowUp {
     @ObservationIgnored private let mediaRepository: MediaRepository
     @ObservationIgnored private var pendingFinished: TVFinished?
     @ObservationIgnored private var generation = 0
+    /// The mutation ID of a Yes that failed, kept while its question is asked again.
+    @ObservationIgnored private var retryMutationId: UUID?
 
     /// `showRef` may be the show or one of its seasons or episodes; actions go to the show.
     init(showRef: MediaRef, trackingRepository: TrackingRepository, mediaRepository: MediaRepository) {
@@ -41,6 +52,9 @@ final class TVWriteFollowUp {
         self.trackingRepository = trackingRepository
         self.mediaRepository = mediaRepository
     }
+
+    /// Whether it has something to show or is still working towards it.
+    var isActive: Bool { question != nil || composer != nil || pendingWork > 0 }
 
     /// Call after every TV write, log or heart with its envelope.
     func handle(_ envelope: TVWriteEnvelope) {
@@ -52,6 +66,8 @@ final class TVWriteFollowUp {
         if let earlier = envelope.earlierUnwatched {
             generation += 1
             lastQuestionText = earlier.question
+            errorMessage = nil
+            retryMutationId = nil
             question = earlier
             pendingFinished = envelope.finished
             return
@@ -59,20 +75,22 @@ final class TVWriteFollowUp {
         guard let finished = envelope.finished else { return }
         generation += 1
         let current = generation
-        loading = Task { await present(finished, generation: current) }
+        run { [self] in await present(finished, generation: current) }
     }
 
     /// Answers the question and waits for everything it starts.
     func answer(yes: Bool) async {
         guard let taken = takeQuestion() else { return }
+        pendingWork += 1
         await resolve(taken, yes: yes)
+        pendingWork -= 1
     }
 
     /// Answers the question from a button: takes it at once, so a second tap or the alert's dismissal can't answer
     /// it again.
     func respond(yes: Bool) {
         guard let taken = takeQuestion() else { return }
-        loading = Task { await resolve(taken, yes: yes) }
+        run { [self] in await resolve(taken, yes: yes) }
     }
 
     /// The composer closed, saved or not ("Not now" saves nothing, SW-301).
@@ -80,10 +98,19 @@ final class TVWriteFollowUp {
         composer = nil
     }
 
+    private func run(_ work: @escaping () async -> Void) {
+        pendingWork += 1
+        loading = Task { [self] in
+            await work()
+            pendingWork -= 1
+        }
+    }
+
     private struct TakenQuestion {
         let question: TVEarlierUnwatched
         let firstFinished: TVFinished?
         let generation: Int
+        let mutationId: UUID
     }
 
     private func takeQuestion() -> TakenQuestion? {
@@ -92,7 +119,10 @@ final class TVWriteFollowUp {
         let firstFinished = pendingFinished
         pendingFinished = nil
         generation += 1
-        return TakenQuestion(question: question, firstFinished: firstFinished, generation: generation)
+        let mutationId = retryMutationId ?? UUID()
+        retryMutationId = nil
+        return TakenQuestion(question: question, firstFinished: firstFinished, generation: generation,
+                             mutationId: mutationId)
     }
 
     private func resolve(_ taken: TakenQuestion, yes: Bool) async {
@@ -100,7 +130,7 @@ final class TVWriteFollowUp {
         if yes {
             isSending = true
             let request = TVActionRequest(
-                mutationId: UUID(),
+                mutationId: taken.mutationId,
                 from: taken.question.from,
                 to: taken.question.to,
                 offerSeasonNumber: taken.question.offerSeasonNumber
@@ -112,6 +142,8 @@ final class TVWriteFollowUp {
                     action: .markEarlier,
                     request: request
                 )
+                isSending = false
+                errorMessage = nil
                 onResponse?(response)
                 if offer == nil,
                    let offered = taken.question.offerSeasonNumber,
@@ -119,11 +151,25 @@ final class TVWriteFollowUp {
                    finished.seasonNumber == offered {
                     offer = finished
                 }
+            } catch is CancellationError {
+                isSending = false
+                return
             } catch {
+                isSending = false
+                // A lost response may still have landed: every screen showing the show refreshes.
+                if case APIError.network = error { MediaStateChange.post(ref: showRef) }
+                // Ask again with the reason. Try Again resends the same mutation ID, so a Yes that did land applies
+                // once; Not Now goes on as No.
+                guard taken.generation == generation, question == nil else { return }
                 errorMessage = (error as? APIError)?.apiErrorMessage ?? error.localizedDescription
+                retryMutationId = taken.mutationId
+                lastQuestionText = taken.question.question
+                pendingFinished = taken.firstFinished
+                question = taken.question
+                return
             }
-            isSending = false
         }
+        errorMessage = nil
         guard let offer, taken.generation == generation else { return }
         await present(offer, generation: taken.generation)
     }
@@ -133,15 +179,22 @@ final class TVWriteFollowUp {
             MediaRef(itemId: nil, source: showRef.source, mediaType: "season", mediaId: showRef.mediaId,
                      seasonNumber: seasonNumber, episodeNumber: nil)
         } ?? showRef
+        let detail: MediaDetail
         do {
-            let detail = try await mediaRepository.detail(ref: ref)
-            guard current == generation, question == nil else { return }
-            composer = TVFollowUpComposer(finished: finished, detail: detail)
+            detail = try await mediaRepository.detail(ref: ref)
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = (error as? APIError)?.apiErrorMessage ?? error.localizedDescription
+            // The page didn't load, but the server has offered this season's log once already (TV-403): open the
+            // composer from what the follow-up has. The write's defaults are in `finished.composer`.
+            detail = MediaDetail(
+                ref: ref,
+                title: showTitle ?? finished.composer.initialTarget?.title
+                    ?? finished.seasonNumber.map(TVTrackingPresentation.seasonTitle) ?? "Log"
+            )
         }
+        guard current == generation, question == nil else { return }
+        composer = TVFollowUpComposer(finished: finished, detail: detail)
     }
 }
 
@@ -171,8 +224,13 @@ private struct TVWriteFollowUpModifier<Composer: View>: ViewModifier {
                     }
                 )
             ) {
-                Button("Mark Watched") { followUp.respond(yes: true) }
+                Button(followUp.errorMessage == nil ? "Mark Watched" : "Try Again") { followUp.respond(yes: true) }
                 Button("Not Now", role: .cancel) { followUp.respond(yes: false) }
+            } message: {
+                // A Yes that failed is asked again, with the reason (SW-700).
+                if let message = followUp.errorMessage {
+                    Text("These episodes weren't marked. \(message)")
+                }
             }
             .fullScreenCover(
                 item: Binding(

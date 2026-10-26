@@ -609,6 +609,146 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertNil(results.first?.tracking)
     }
 
+    // MARK: Page scope after a write (TV-404, TV-705)
+
+    func testTV404AnActionFromASeasonPageNamesThePageAndTakesItsFreshComposer() async throws {
+        // A-56: the Season 1 eye, then Log Season at once, defaults to Rewatch: the response carries the page's
+        // composer, so nothing waits for the reload.
+        holdRefreshes()
+        let page = model(Fixtures.seasonDetail(episodes: [Fixtures.episode(1)]))
+        XCTAssertEqual(page.viewer?.tv?.composer?.initialTarget?.isRewatch, false)
+        var tv = Fixtures.show()
+        var season = Fixtures.season(eye: TVEyeState(filled: true, tap: .unmarkMarks))
+        season.state = .watched
+        tv.season = season
+        tv.composer = Fixtures.composer([Fixtures.target("season:1", level: .season, season: 1, isRewatch: true)])
+        tracking.responses = [.success(TVActionResponse(tracking: Fixtures.showTracking,
+                                                        envelope: TVWriteEnvelope(tv: tv, season: season, changed: true)))]
+
+        let marked = await page.markTVWatched(seasonNumber: 1).value
+
+        XCTAssertTrue(marked)
+        let sent = try XCTUnwrap(tracking.sent.first)
+        XCTAssertEqual(sent.request.pageSeasonNumber, 1)
+        XCTAssertNil(sent.request.pageEpisodeNumber)
+        XCTAssertEqual(try Fixtures.json(sent.request)["page_season_number"] as? Int, 1)
+        XCTAssertEqual(page.viewer?.tv?.composer?.initialTarget?.isRewatch, true, "The composer has the mark's defaults")
+        XCTAssertEqual(page.viewer?.tv?.season?.state, .watched)
+
+        // The show page names no page; a response about another page never replaces this page's level.
+        let showPage = model(Fixtures.showDetail(tv: Fixtures.show(composer: Fixtures.showComposer)))
+        tracking.responses = [.success(TVActionResponse(tracking: Fixtures.showTracking,
+                                                        envelope: TVWriteEnvelope(tv: tv, changed: true)))]
+        let rated = await showPage.rateTV(steps: 8).value
+        XCTAssertTrue(rated)
+        XCTAssertNil(tracking.sent.last?.request.pageSeasonNumber)
+        XCTAssertNil(showPage.viewer?.tv?.season, "A season-scoped state doesn't turn the show page into a season page")
+        XCTAssertEqual(showPage.viewer?.tv?.composer, Fixtures.showComposer)
+    }
+
+    func testTV400ALogSavedOnItsEpisodePageShowsTheEpisodeWatchedAtOnce() async throws {
+        holdRefreshes()
+        let page = model(Fixtures.episodeDetail(Fixtures.episode(3)))
+        var tv = Fixtures.show()
+        let watched = Fixtures.episode(3, watched: true, viewing: 41)
+        tv.episode = watched
+        tv.composer = Fixtures.composer([Fixtures.target("episode:1:3", level: .episode, season: 1, episode: 3, isRewatch: true)])
+
+        page.applyLogSave(MediaLogSaveResult(
+            ref: Fixtures.episodeRef(3),
+            tracking: nil,
+            diaryEntry: try Fixtures.entry(),
+            tvEnvelope: TVWriteEnvelope(tv: tv, episode: watched, changed: true)
+        ))
+
+        XCTAssertEqual(page.viewer?.tv?.episode?.watched, true, "The eye fills without waiting for the reload")
+        XCTAssertEqual(page.viewer?.isTracked, true)
+        XCTAssertEqual(page.confirmedTVEpisode(seasonNumber: 1, episodeNumber: 3)?.untickViewingId, 41)
+        XCTAssertEqual(page.viewer?.tv?.composer?.initialTarget?.isRewatch, true, "Logging it again defaults to Rewatch")
+    }
+
+    func testTV401ALogSavedOnItsSeasonPageShowsEveryEpisodeWatchedAtOnce() async throws {
+        holdRefreshes()
+        let rows = [Fixtures.episode(1, watched: true, viewing: 5), Fixtures.episode(2), Fixtures.episode(3)]
+        let page = model(Fixtures.seasonDetail(episodes: rows))
+        var season = Fixtures.season(eye: TVEyeState(filled: true, tap: .blocked, message: "Delete your Season 1 log first."))
+        season.state = .watched
+        season.watchedCount = 3
+        season.started = true
+        season.status = "Completed"
+        var tv = Fixtures.show()
+        tv.season = season
+
+        page.applyLogSave(MediaLogSaveResult(
+            ref: Fixtures.seasonRef,
+            tracking: nil,
+            diaryEntry: try Fixtures.entry(),
+            tvEnvelope: TVWriteEnvelope(tv: tv, season: season, changed: true)
+        ))
+
+        let viewer = try XCTUnwrap(page.viewer)
+        XCTAssertEqual(viewer.status, "Completed")
+        XCTAssertEqual(viewer.tv?.season?.watchedCount, 3)
+        for row in rows {
+            XCTAssertTrue(viewer.tvIsWatched(try XCTUnwrap(page.tvEpisodeState(row))), "E\(row.episodeNumber) is filled")
+        }
+
+        // The composer names its page, so the response carries that page's state.
+        let diary = PagesDiaryRepository()
+        let composer = MediaLogViewModel(
+            detail: Fixtures.seasonDetail(episodes: rows),
+            trackingRepository: tracking,
+            diaryRepository: diary,
+            onUnauthorized: {},
+            onSaved: {},
+            tvPage: Fixtures.seasonRef
+        )
+        let saved = await composer.save()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(diary.created.first?.pageSeasonNumber, 1)
+        XCTAssertNil(diary.created.first?.pageEpisodeNumber)
+        XCTAssertEqual(try Fixtures.json(try XCTUnwrap(diary.created.first))["page_season_number"] as? Int, 1)
+    }
+
+    func testTV302AnUndoFromASeasonPageKeepsTheTicksTheServerKept() async throws {
+        // Tick E1, mark the season with its eye, then undo the mark (case 2): E1 stays ticked at once.
+        holdRefreshes()
+        let rows = [Fixtures.episode(1), Fixtures.episode(2)]
+        let page = model(Fixtures.seasonDetail(episodes: rows, eye: TVEyeState(filled: true, tap: .unmarkMarks)))
+        let ticked = Fixtures.episode(1, watched: true, viewing: 41)
+        tracking.responses = [.success(Fixtures.envelopeResponse(episode: ticked))]
+        let tick = await page.tickTVEpisode(seasonNumber: 1, episodeNumber: 1).value
+        XCTAssertTrue(tick)
+        var season = Fixtures.season()
+        season.watchedCount = 1
+        season.started = true
+        season.state = .inProgress
+        tracking.responses = [.success(TVActionResponse(tracking: Fixtures.showTracking, envelope: TVWriteEnvelope(
+            tv: Fixtures.show(), season: season, changed: true, seasonEpisodes: [ticked, Fixtures.episode(2)]
+        )))]
+
+        page.tapTVEye()
+        let undone = await page.settled()
+
+        XCTAssertTrue(undone)
+        let viewer = try XCTUnwrap(page.viewer)
+        XCTAssertTrue(viewer.tvIsWatched(try XCTUnwrap(page.tvEpisodeState(rows[0]))), "The kept tick stays ticked")
+        XCTAssertFalse(viewer.tvIsWatched(try XCTUnwrap(page.tvEpisodeState(rows[1]))))
+        XCTAssertEqual(page.confirmedTVEpisode(seasonNumber: 1, episodeNumber: 1)?.untickViewingId, 41)
+        XCTAssertEqual(page.tvSeasonState(Fixtures.season())?.watchedCount, 1)
+    }
+
+    func testTV705AnEpisodePageRefreshesWhenItsShowChangesElsewhere() async {
+        // The show page opened over an episode page marks the show watched (TV-300) and posts the show's ref.
+        let page = model(Fixtures.episodeDetail(Fixtures.episode(3)))
+        XCTAssertTrue(media.detailRequests.isEmpty)
+
+        page.handleMediaStateChange(["ref": Fixtures.showRef])
+        await page.refreshFinished()
+
+        XCTAssertEqual(media.detailRequests.map(\.id), [Fixtures.episodeRef(3).id])
+    }
+
     // MARK: Lists and lines (TV-004, TV-103, TV-200, TV-202, TV-600)
 
     func testTV004SeasonCardsPutSpecialsLastThenSeasonsNoLongerListed() {
@@ -748,7 +888,7 @@ private enum Fixtures {
 
     static let unavailable = APIError.httpStatus(
         503,
-        #"{"error":{"code":"tv_details_unavailable","message":"TV details are unavailable right now","fields":{},"request_id":"r1"}}"#
+        #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now","fields":{},"request_id":"r1"}}"#
     )
 
     static func stateChanged(version: Int, count: Int) -> APIError {

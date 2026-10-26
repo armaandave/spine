@@ -113,6 +113,11 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertNil(badge(Self.showState(status: "In progress", caughtUp: true)))
         XCTAssertNil(badge(Self.showState(status: "Completed", finished: true)))
         XCTAssertNil(badge(Self.showState(status: "Planning", started: false)))
+        // A Paused or Dropped show with nothing watched names no episode, though the server stores an up next.
+        XCTAssertNil(badge(Self.showState(status: "Paused", started: false, upNext: (1, 1))))
+        XCTAssertNil(badge(Self.showState(status: "Dropped", started: false, upNext: (1, 1))))
+        XCTAssertEqual(badge(Self.showState(status: "In progress", upNext: (1, 1))), "S1 E1",
+                       "Watching with nothing watched still names the first episode (TV-005)")
     }
 
     func testTV700EmptySectionsDescribeWhatAppearsThere() {
@@ -207,6 +212,41 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(media.detailRequests.map(\.seasonNumber), [1])
     }
 
+    func testTV403TicksOnTwoShowsKeepEachShowsComposer() async throws {
+        // Show A's tick finishes its season; show B's tick answers while A's composer is still loading.
+        let showA = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
+        let showB = Self.showItem("1399", "Game of Thrones", tv: Self.showState(status: "In progress", upNext: (2, 10)))
+        let viewModel = HomeViewModel(
+            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
+            trackingRepository: tracking,
+            activityRepository: SurfacesActivityRepository(),
+            mediaRepository: media,
+            onUnauthorized: {}
+        )
+        viewModel.inProgressItems = [showA, showB]
+        tracking.actionResponses = [
+            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))),
+            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true)),
+            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 2))),
+        ]
+
+        let ticks = viewModel.continueWatching
+        _ = await ticks.tick(showA)
+        let followUpA = try XCTUnwrap(ticks.followUp)
+        _ = await ticks.tick(showB)  // finishes nothing
+        XCTAssertTrue(ticks.followUp === followUpA, "A tick with nothing to follow up replaces nothing")
+        _ = await ticks.tick(showB)  // finishes Season 2 while A's composer may still be loading
+        XCTAssertTrue(ticks.followUp === followUpA, "The first follow-up stays on screen")
+
+        for followUp in ticks.followUps { await followUp.loading?.value }
+        XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1396")
+        XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 1, "A's composer opens")
+        followUpA.composerDismissed()
+        XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1399", "Then B's opens")
+        XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 2)
+        XCTAssertEqual(media.detailRequests.map(\.mediaId), ["1396", "1399"])
+    }
+
     func testTV107HomeTickAsksTheEarlierEpisodesQuestionFirst() async throws {
         let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (3, 1)))
         let viewModel = HomeViewModel(
@@ -249,7 +289,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
         )
         viewModel.inProgressItems = [show]
         tracking.actionError = APIError.httpStatus(
-            503, #"{"error":{"code":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#
+            503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#
         )
 
         await viewModel.tickUpNext(show)

@@ -103,9 +103,10 @@ final class TVTrackingPresentationTests: XCTestCase {
         tv.nextAiring?.airDate = "2026-10-27"
         XCTAssertEqual(caughtUp(tv), "Caught up · E7 on Tue")
 
+        // A Completed show waiting for its next season names the date, even within six days (TV-202, TV-700).
         var completed = show(status: "Completed", watched: 20, aired: 20, caughtUp: true)
         completed.nextAiring = TVAiring(seasonNumber: 3, episodeNumber: 1, airDate: "2026-10-30")
-        XCTAssertEqual(caughtUp(completed), "Caught up · S3 on Fri")
+        XCTAssertEqual(caughtUp(completed), "Caught up · S3 on Oct 30")
         completed.nextAiring = TVAiring(seasonNumber: 3, episodeNumber: nil, airDate: "2027-03-12")
         XCTAssertEqual(caughtUp(completed), "Caught up · S3 on Mar 12")
         completed.nextAiring = nil

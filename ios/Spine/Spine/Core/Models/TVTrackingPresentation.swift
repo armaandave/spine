@@ -57,8 +57,8 @@ nonisolated enum TVTrackingPresentation {
     // MARK: Caught up (TV-202)
 
     /// "Caught up · S3 on Mar 12" for a Completed show waiting for its next season, "Caught up · E7 on Thu" for a
-    /// Watching show mid-season, and "Caught up" when the next episode has no date. The next episode's day reads as
-    /// a weekday when it airs within six days, otherwise as a date.
+    /// Watching show mid-season, and "Caught up" when the next episode has no date. Only the mid-season line reads
+    /// the day as a weekday when it airs within six days; the next season's line always names the date (TV-202).
     static func caughtUpLine(
         for tv: TVShowState,
         today: Date = Date(),
@@ -66,11 +66,10 @@ nonisolated enum TVTrackingPresentation {
     ) -> String {
         guard let next = tv.nextAiring, let airDate = calendarDate(next.airDate, calendar: calendar)
         else { return "Caught up" }
-        let day = airDayText(airDate, today: today, calendar: calendar)
         if tv.status == "In progress", let episode = next.episodeNumber, episode > 1 {
-            return "Caught up · E\(episode) on \(day)"
+            return "Caught up · E\(episode) on \(airDayText(airDate, today: today, calendar: calendar))"
         }
-        return "Caught up · S\(next.seasonNumber) on \(day)"
+        return "Caught up · S\(next.seasonNumber) on \(shortDate(airDate, calendar: calendar))"
     }
 
     /// "Thu" when the day is within six days of today, otherwise "Mar 12".

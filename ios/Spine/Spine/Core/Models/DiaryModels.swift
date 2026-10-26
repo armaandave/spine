@@ -25,8 +25,12 @@ struct DiaryEntry: Codable, Identifiable {
     let updatedAt: String?
     /// The owner's view of a TV log: its level, coverage and what deleting it unmarks (TV-406). Nil for others.
     var tvLog: TVLogInfo? = nil
-    /// A TV log's create response adds the write envelope keys (plan section 2.3.7).
+    /// A TV log's create and update responses add the write envelope keys (plan section 2.3.7): `tv` scoped to the
+    /// page the log was saved from, and the log target's own `season` and `episode`.
     var tv: TVShowState? = nil
+    var season: TVSeasonState? = nil
+    var episode: TVEpisodeState? = nil
+    var seasonEpisodes: [TVEpisodeState]? = nil
     var finished: TVFinished? = nil
     var earlierUnwatched: TVEarlierUnwatched? = nil
 }
@@ -92,6 +96,10 @@ struct DiaryEntryWriteRequest: Encodable {
     let mutationId: UUID?
     /// False leaves `is_rewatch` out, so the server's TV-404 default applies (a TV log whose default hasn't loaded).
     var includesIsRewatch = true
+    /// A TV log saved from a season or episode page names that page, so the response's `tv` carries the page's
+    /// state and composer (TV-404, TV-705).
+    var pageSeasonNumber: Int?
+    var pageEpisodeNumber: Int?
 
     init(
         ref: MediaRef,
@@ -137,6 +145,8 @@ struct DiaryEntryWriteRequest: Encodable {
         case tags
         case journeyId
         case mutationId
+        case pageSeasonNumber
+        case pageEpisodeNumber
     }
 
     func encode(to encoder: Encoder) throws {
@@ -163,6 +173,8 @@ struct DiaryEntryWriteRequest: Encodable {
         try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(journeyId, forKey: .journeyId)
         try container.encodeIfPresent(mutationId, forKey: .mutationId)
+        try container.encodeIfPresent(pageSeasonNumber, forKey: .pageSeasonNumber)
+        try container.encodeIfPresent(pageEpisodeNumber, forKey: .pageEpisodeNumber)
     }
 }
 

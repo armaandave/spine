@@ -51,6 +51,9 @@ final class MediaLogViewModel {
     let tvComposer: TVComposer?
     /// One per composer session: a retried save never logs twice (TV-705).
     private let completionMutationId = UUID()
+    /// The TV page the composer was opened from, so a saved log's response carries that page's state and composer
+    /// (TV-404, TV-705); nil when no page folds the response in.
+    let tvPage: MediaRef?
 
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
@@ -71,9 +74,11 @@ final class MediaLogViewModel {
         onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void,
-        tvComposer: TVComposer? = nil
+        tvComposer: TVComposer? = nil,
+        tvPage: MediaRef? = nil
     ) {
         self.detail = detail
+        self.tvPage = tvPage
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.completionJourneyId = completionJourneyId
@@ -432,7 +437,7 @@ final class MediaLogViewModel {
             throw MediaLogError.unavailable(target.reason ?? "Nothing has aired yet.")
         }
         let ref = selectedRef
-        let (entry, envelope) = try await diaryRepository.createTV(DiaryEntryWriteRequest(
+        var request = DiaryEntryWriteRequest(
             ref: ref,
             consumedAt: consumedAt,
             rating: Self.ratingDecimal(for: ratingSteps, mediaType: ref.mediaType),
@@ -445,7 +450,12 @@ final class MediaLogViewModel {
             visibility: visibility,
             tags: tagDraft.tags,
             mutationId: completionMutationId
-        ))
+        )
+        if let tvPage, tvPage.mediaType == "season" || tvPage.isEpisode {
+            request.pageSeasonNumber = tvPage.seasonNumber
+            request.pageEpisodeNumber = tvPage.isEpisode ? tvPage.episodeNumber : nil
+        }
+        let (entry, envelope) = try await diaryRepository.createTV(request)
         return MediaLogSaveResult(ref: ref, tracking: nil, diaryEntry: entry, tvEnvelope: envelope)
     }
 
@@ -552,7 +562,8 @@ struct MediaLogView: View {
         onResult: ((MediaLogSaveResult) -> Void)? = nil,
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void,
-        tvComposer: TVComposer? = nil
+        tvComposer: TVComposer? = nil,
+        tvPage: MediaRef? = nil
     ) {
         _viewModel = State(initialValue: MediaLogViewModel(
             detail: detail,
@@ -566,7 +577,8 @@ struct MediaLogView: View {
             onResult: onResult,
             onUnauthorized: onUnauthorized,
             onSaved: onSaved,
-            tvComposer: tvComposer
+            tvComposer: tvComposer,
+            tvPage: tvPage
         ))
     }
 

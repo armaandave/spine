@@ -295,7 +295,8 @@ final class MediaDetailViewModel {
         if changedRef.id == ref.id {
             return true
         }
-        if ["tv", "season"].contains(detail.ref.mediaType),
+        // A show or season write elsewhere changes which episodes are watched, so episode pages refresh too (TV-705).
+        if ["tv", "season", "episode"].contains(detail.ref.mediaType),
            detail.ref.source == changedRef.source,
            detail.ref.mediaId == changedRef.mediaId {
             return true
@@ -701,18 +702,21 @@ final class MediaDetailViewModel {
     }
 
     /// Sends a TV action through the write queue. `request` runs when the write is sent, from confirmed state;
-    /// nil means there is nothing left to send. The response folds in, then goes to `tvFollowUp`.
+    /// nil means there is nothing left to send. It names this page when it is a season or episode page, so the
+    /// response's `tv` carries the page's state and composer (TV-404). The response folds in, then goes to
+    /// `tvFollowUp`.
     @discardableResult
     private func sendTV(
         _ action: TVAction,
         projection: TrackingProjection.Projection? = nil,
         eyeSpinner: Bool = false,
         onStateChanged: ((TVStateChange) -> Void)? = nil,
-        afterSuccess: (() -> Void)? = nil,
+        afterSuccess: ((TVWriteEnvelope) -> Void)? = nil,
         request: @escaping () throws -> TVActionRequest?
     ) -> Task<Bool, Never> {
         let show = tvShowRef
         let repository = trackingRepository
+        let page = ref
         return enqueue(
             projection,
             ref: ref,
@@ -723,7 +727,7 @@ final class MediaDetailViewModel {
                 var projected = UserMediaState.untracked
                 projection?(&projected)
                 tvConfirmed.record(projected: projected.tvPending, envelope: response.envelope)
-                afterSuccess?()
+                afterSuccess?(response.envelope)
                 tvFollowUp.handle(response.envelope)
             },
             onConflict: onStateChanged.map { handler in
@@ -734,7 +738,11 @@ final class MediaDetailViewModel {
                 }
             }
         ) {
-            guard let body = try request() else { return .unknown }
+            guard var body = try request() else { return .unknown }
+            if page.mediaType == "season" || page.isEpisode {
+                body.pageSeasonNumber = page.seasonNumber
+                body.pageEpisodeNumber = page.isEpisode ? page.episodeNumber : nil
+            }
             return .tv(try await repository.performTVAction(
                 source: show.source,
                 mediaId: show.mediaId,
@@ -890,7 +898,7 @@ final class MediaDetailViewModel {
                     expectedVersion: change.stateVersion
                 )
             },
-            afterSuccess: { [self] in tvConfirmed.clearWatches(seasonNumber: seasonNumber) }
+            afterSuccess: { [self] envelope in tvConfirmed.recordUnmark(seasonNumber: seasonNumber, envelope: envelope) }
         ) { [self] in
             TVActionRequest(
                 seasonNumber: seasonNumber,
@@ -964,7 +972,7 @@ final class MediaDetailViewModel {
                     expectedVersion: change.stateVersion
                 )
             },
-            afterSuccess: { [self] in tvConfirmed = TVConfirmedWrites() }
+            afterSuccess: { [self] _ in tvConfirmed = TVConfirmedWrites() }
         ) { [self] in
             TVActionRequest(
                 mutationId: mutationId(for: "tv.remove.\(expectedVersion ?? -1)"),
@@ -1209,16 +1217,27 @@ final class MediaDetailViewModel {
         if let envelope = result.tvEnvelope {
             if let tv = envelope.tv, detail != nil {
                 var state = detail?.userState ?? .untracked
-                state.tv = tv.keepingPageScope(of: state.tv, season: envelope.season, episode: envelope.episode)
                 if ref.mediaType == "tv" {
+                    state.tv = tv.keepingPageScope(of: state.tv, season: envelope.season, episode: envelope.episode)
                     // Every log puts the show in the library (TV-400).
                     state.isTracked = tv.inLibrary
                     state.status = tv.status
+                } else {
+                    // A season or episode page takes its own level's state, and the composer defaults after the
+                    // log, from the response at once (TV-400, TV-404, TV-705).
+                    state = state.applying(tvEnvelope: envelope, tracking: nil)
                 }
                 stateGeneration += 1
                 if detail?.userState != state { detail?.userState = state }
             }
-            tvConfirmed.record(projected: TVPendingWatches(), envelope: envelope)
+            // A season or show log counts every aired episode under it watched (TV-401), as that level's eye does.
+            var counted = TVPendingWatches()
+            switch result.ref.mediaType {
+            case "season": if let seasonNumber = result.ref.seasonNumber { counted.markedSeasons.insert(seasonNumber) }
+            case "tv": counted.markedShow = true
+            default: break
+            }
+            tvConfirmed.record(projected: counted, envelope: envelope)
             if followsUp, envelope.hasFollowUp { deferredTVEnvelope = envelope }
             scheduleRefresh(.communityAndReviews, after: writeRefreshDelay)
             return
@@ -2316,7 +2335,8 @@ private struct MediaDetailPageView: View {
                 onResult: { viewModel.applyLogSave($0, followsUp: false) },
                 onUnauthorized: onUnauthorized,
                 onSaved: {},
-                tvComposer: item.finished.composer
+                tvComposer: item.finished.composer,
+                tvPage: ref
             )
         }
         .fullScreenCover(isPresented: $isBackdropPickerPresented, onDismiss: applyPendingBackdropSave) {
@@ -2369,8 +2389,10 @@ private struct MediaDetailPageView: View {
                     preselectedRatingSteps: completionRatingSteps,
                     stateChangeOrigin: viewModel.changeOrigin,
                     onResult: { viewModel.applyLogSave($0) },
-                    onUnauthorized: onUnauthorized
-                ) {}
+                    onUnauthorized: onUnauthorized,
+                    onSaved: {},
+                    tvPage: ref
+                )
             }
         }
         .fullScreenCover(isPresented: $isPosterPickerPresented, onDismiss: applyPendingPosterSave) {

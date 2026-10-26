@@ -172,24 +172,23 @@ nonisolated struct TVPendingWatches: Hashable {
 }
 
 nonisolated extension TVShowState {
-    /// A show state from a write or a tracking read describes the show, but a season or episode page also holds
-    /// that level's state and its own composer. Keeps those when this state doesn't carry them, taking `season` or
-    /// `episode` from the same response when it is the page's.
+    /// A show state from a write or a tracking read may describe the show, or another page than this one, while a
+    /// season or episode page holds that level's state and its own composer. A state scoped to this page replaces it
+    /// whole (its composer has the defaults after the write, TV-404). Otherwise the page keeps its own level and
+    /// composer, taking `season` or `episode` from the same response when it is the page's.
     func keepingPageScope(
         of current: TVShowState?,
         season: TVSeasonState? = nil,
         episode: TVEpisodeState? = nil
     ) -> TVShowState {
         guard let current else { return self }
+        let samePage = self.season?.seasonNumber == current.season?.seasonNumber
+            && self.episode?.coordinate == current.episode?.coordinate
+        guard !samePage else { return self }
         var next = self
-        if next.season == nil, let pageSeason = current.season {
-            next.season = season?.seasonNumber == pageSeason.seasonNumber ? season : pageSeason
-            next.composer = current.composer
-        }
-        if next.episode == nil, let pageEpisode = current.episode {
-            next.episode = episode?.coordinate == pageEpisode.coordinate ? episode : pageEpisode
-            next.composer = current.composer
-        }
+        next.season = current.season.map { page in season?.seasonNumber == page.seasonNumber ? season ?? page : page }
+        next.episode = current.episode.map { page in episode?.coordinate == page.coordinate ? episode ?? page : page }
+        next.composer = current.composer
         return next
     }
 

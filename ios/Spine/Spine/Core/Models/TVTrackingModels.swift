@@ -661,6 +661,9 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
     var changed: Bool
     var finished: TVFinished?
     var earlierUnwatched: TVEarlierUnwatched?
+    /// A write from a season page also carries that season's episode states, so its rows show the write at once
+    /// (TV-302, TV-705). Nil elsewhere.
+    var seasonEpisodes: [TVEpisodeState]?
 
     static let empty = TVWriteEnvelope()
 
@@ -670,7 +673,8 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         episode: TVEpisodeState? = nil,
         changed: Bool = false,
         finished: TVFinished? = nil,
-        earlierUnwatched: TVEarlierUnwatched? = nil
+        earlierUnwatched: TVEarlierUnwatched? = nil,
+        seasonEpisodes: [TVEpisodeState]? = nil
     ) {
         self.tv = tv
         self.season = season
@@ -678,6 +682,7 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         self.changed = changed
         self.finished = finished
         self.earlierUnwatched = earlierUnwatched
+        self.seasonEpisodes = seasonEpisodes
     }
 
     init(from decoder: Decoder) throws {
@@ -688,16 +693,21 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         changed = try c.decodeIfPresent(Bool.self, forKey: .changed) ?? false
         finished = try c.decodeIfPresent(TVFinished.self, forKey: .finished)
         earlierUnwatched = try c.decodeIfPresent(TVEarlierUnwatched.self, forKey: .earlierUnwatched)
+        seasonEpisodes = try c.decodeIfPresent([TVEpisodeState].self, forKey: .seasonEpisodes)
     }
 
-    /// A diary create returns the entry plus `tv`, `finished` and `earlier_unwatched`.
+    /// A diary create or update returns the entry plus `tv`, the log target's `season` and `episode`, `finished`
+    /// and `earlier_unwatched` (and `season_episodes` from a season page).
     @MainActor
     init(diaryEntry entry: DiaryEntry) {
         self.init(
             tv: entry.tv,
+            season: entry.season,
+            episode: entry.episode,
             changed: entry.tv != nil,
             finished: entry.finished,
-            earlierUnwatched: entry.earlierUnwatched
+            earlierUnwatched: entry.earlierUnwatched,
+            seasonEpisodes: entry.seasonEpisodes
         )
     }
 
@@ -763,6 +773,10 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
     var offerSeasonNumber: Int?
     var rating: Int?
     var includesRating: Bool
+    /// The season or episode page the action comes from, so the response's `tv` carries that page's state and
+    /// composer (TV-404, TV-705). Nil from the show page, Home and Profile.
+    var pageSeasonNumber: Int?
+    var pageEpisodeNumber: Int?
 
     init(
         seasonNumber: Int? = nil,
@@ -792,7 +806,7 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case seasonNumber, episodeNumber, viewingId, mutationId, expectedVersion, confirm, from, to
-        case offerSeasonNumber, rating
+        case offerSeasonNumber, rating, pageSeasonNumber, pageEpisodeNumber
     }
 
     func encode(to encoder: Encoder) throws {
@@ -809,6 +823,8 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
         if includesRating || rating != nil {
             try c.encode(rating, forKey: .rating)
         }
+        try c.encodeIfPresent(pageSeasonNumber, forKey: .pageSeasonNumber)
+        try c.encodeIfPresent(pageEpisodeNumber, forKey: .pageEpisodeNumber)
     }
 }
 
@@ -839,8 +855,9 @@ struct TVActionResponse: Decodable, Equatable {
 // MARK: Errors
 
 extension APIError {
-    /// `error.code` from the API's error envelope, for example "tv_state_changed", "tv_log_blocks",
-    /// "tv_action_unavailable" or "tv_details_unavailable" (plan section 2.3.8).
+    /// `error.code` from the API's error envelope, for example "tv_state_changed", "tv_log_blocks" or
+    /// "tv_action_unavailable" (plan section 2.3.8). TV details being unavailable is "provider_unavailable" with
+    /// `error.reason` "tv_details_unavailable" (TV-103).
     var apiErrorCode: String? {
         apiErrorEnvelope?["code"] as? String
     }

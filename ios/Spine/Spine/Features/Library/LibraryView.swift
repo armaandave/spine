@@ -986,11 +986,13 @@ enum TVLibraryCard {
         return statusTitle(item.tracking.tv?.status ?? item.tracking.status)
     }
 
-    /// The short badge on a grid poster: the episode up next while the show is Watching, Paused or Dropped.
+    /// The short badge on a grid poster: the episode up next while the show is Watching, Paused or Dropped. A Paused
+    /// or Dropped show with nothing watched names no episode, as its card line doesn't (TV-700).
     static func gridBadge(for item: LibraryItem) -> String? {
         guard let tv = item.tracking.tv, !tv.caughtUp,
               ["In progress", "Paused", "Dropped"].contains(tv.status ?? "")
         else { return nil }
+        if tv.status != "In progress", !tv.started { return nil }
         return tv.upNextCode
     }
 

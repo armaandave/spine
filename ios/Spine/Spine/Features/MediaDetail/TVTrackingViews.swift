@@ -31,19 +31,35 @@ struct TVConfirmedWrites: Equatable {
         if let season = envelope.season {
             seasons[season.seasonNumber] = season
         }
+        recordSeasonEpisodes(envelope.seasonEpisodes)
     }
 
-    /// After an eye's undo: nothing this page recorded under that eye is known to be watched any more.
-    mutating func clearWatches(seasonNumber: Int?) {
-        guard let seasonNumber else {
+    /// The server's answer for every episode of a season page: it replaces what the page recorded for them.
+    private mutating func recordSeasonEpisodes(_ states: [TVEpisodeState]?) {
+        for episode in states ?? [] {
+            episodes[episode.coordinate] = episode
+            watches.episodes[episode.coordinate] = episode.watched
+        }
+    }
+
+    /// After an eye's undo (TV-302): nothing this page recorded under that eye is known to be watched any more, and
+    /// the season states it recorded there are stale. The response's own season, and on a season page every
+    /// episode's state (`season_episodes`: the ticks and logs the undo kept), replace them at once; elsewhere the
+    /// refresh does.
+    mutating func recordUnmark(seasonNumber: Int?, envelope: TVWriteEnvelope) {
+        if let seasonNumber {
+            watches.markedSeasons.remove(seasonNumber)
+            watches.episodes = watches.episodes.filter { $0.key.seasonNumber != seasonNumber }
+            episodes = episodes.filter { $0.key.seasonNumber != seasonNumber }
+            seasons[seasonNumber] = nil
+            if seasonNumber != 0 { watches.markedShow = false }
+        } else {
             watches = TVPendingWatches()
             episodes = [:]
-            return
+            seasons = [:]
         }
-        watches.markedSeasons.remove(seasonNumber)
-        watches.episodes = watches.episodes.filter { $0.key.seasonNumber != seasonNumber }
-        episodes = episodes.filter { $0.key.seasonNumber != seasonNumber }
-        if seasonNumber != 0 { watches.markedShow = false }
+        if let season = envelope.season { seasons[season.seasonNumber] = season }
+        recordSeasonEpisodes(envelope.seasonEpisodes)
     }
 }
 

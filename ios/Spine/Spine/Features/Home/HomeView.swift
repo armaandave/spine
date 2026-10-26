@@ -1,17 +1,20 @@
 import SwiftUI
 
 /// Continue Watching's inline tick on Home and Profile (TV-100, TV-701). It ticks a show's up-next episode with a
-/// mutation ID, shows the tick at once, and restores the row when the tick fails (TV-705). The response goes to a
-/// `TVWriteFollowUp`, which asks the earlier-episodes question and opens the season-finish composer (TV-107,
-/// TV-403).
+/// mutation ID, shows the tick at once, and restores the row when the tick fails (TV-705). The response goes to the
+/// show's `TVWriteFollowUp`, which asks the earlier-episodes question and opens the season-finish composer (TV-107,
+/// TV-403). Ticks on several shows each keep their follow-up; they show one at a time, oldest first.
 @MainActor
 @Observable
 final class ContinueWatchingTicks {
     /// Rows with a tick in flight: their tick shows as done until the server answers.
     private(set) var pendingIDs: Set<String> = []
     var errorMessage: String?
-    /// The follow-up of the latest tick, for the screen to present.
-    private(set) var followUp: TVWriteFollowUp?
+    /// One follow-up per show, in the order their ticks answered.
+    private(set) var followUps: [TVWriteFollowUp] = []
+    /// The follow-up for the screen to present: the oldest one with something to show, else the latest, so a
+    /// composer that is closing keeps its host.
+    var followUp: TVWriteFollowUp? { followUps.first(where: \.isActive) ?? followUps.last }
     /// Recognizes this screen's own state-change posts.
     let changeOrigin = UUID()
 
@@ -51,7 +54,7 @@ final class ContinueWatchingTicks {
                     mutationId: UUID()
                 )
             )
-            followUp(for: ref).handle(response.envelope)
+            followUp(for: item).handle(response.envelope)
             MediaStateChange.post(ref: ref, origin: changeOrigin)
             return response
         } catch is CancellationError {
@@ -65,13 +68,18 @@ final class ContinueWatchingTicks {
         }
     }
 
-    /// One follow-up per show; a new show replaces an idle one.
-    private func followUp(for ref: MediaRef) -> TVWriteFollowUp {
-        if let followUp, followUp.showRef == (ref.parentTVRef ?? ref) {
-            return followUp
+    /// The show's follow-up. A show without one gets a new one, after the follow-ups still showing or loading
+    /// something, so a tick on another show never drops a question or composer (TV-403); idle ones go.
+    private func followUp(for item: LibraryItem) -> TVWriteFollowUp {
+        let ref = item.media.ref
+        let showRef = ref.parentTVRef ?? ref
+        if let existing = followUps.first(where: { $0.showRef == showRef }) {
+            return existing
         }
+        followUps.removeAll { !$0.isActive }
         let next = TVWriteFollowUp(showRef: ref, trackingRepository: trackingRepository, mediaRepository: mediaRepository)
-        followUp = next
+        next.showTitle = item.media.title
+        followUps.append(next)
         return next
     }
 }

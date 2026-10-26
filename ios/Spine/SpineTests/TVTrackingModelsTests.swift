@@ -368,11 +368,13 @@ final class TVTrackingModelsTests: XCTestCase {
         let conflict = APIError.httpStatus(409, #"{"error":{"code":"tv_state_changed","message":"Changed.","fields":{},"request_id":"r1","tv":{"state_version":9,"count":61}}}"#)
         XCTAssertEqual(conflict.apiErrorCode, "tv_state_changed")
         XCTAssertEqual(conflict.apiErrorMessage, "Changed.")
-        XCTAssertEqual(APIError.httpStatus(503, #"{"error":{"code":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#).apiErrorMessage,
-                       "TV details are unavailable right now")
-        // TV-103: the retryable 503 shows the server's message, not "can't reach the server".
+        // TV-103: the retryable 503 is provider_unavailable (which installed builds show) with a reason; it shows
+        // the server's message, not "can't reach the server", and no request ID.
+        let unavailable = APIError.httpStatus(503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now","request_id":"r9"}}"#)
+        XCTAssertEqual(unavailable.apiErrorMessage, "TV details are unavailable right now")
+        XCTAssertEqual(unavailable.localizedDescription, "TV details are unavailable right now")
         XCTAssertEqual(APIError.httpStatus(503, #"{"error":{"code":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#).localizedDescription,
-                       "TV details are unavailable right now")
+                       "TV details are unavailable right now", "Servers from before the reason sent their own code")
         XCTAssertEqual(APIError.httpStatus(409, #"{"error":{"code":"tv_log_blocks","message":"Delete this show's logs first."}}"#).apiErrorCode, "tv_log_blocks")
         XCTAssertNil(APIError.httpStatus(500, "<html>").apiErrorCode)
         XCTAssertNil(APIError.httpStatus(404, nil).apiErrorCode)
