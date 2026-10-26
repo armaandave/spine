@@ -373,6 +373,7 @@ def prime_collection_items(items, user, *, media_by_item=None):
             actor=user,
             item_id__in=item_ids,
         )
+        .exclude(current_progress__kind=ProgressChange.START)
         .annotate(
             viewer_row=Window(
                 RowNumber(),
@@ -1051,6 +1052,7 @@ def latest_progress_change_for(media):
         return media.viewer_latest_progress_change
     return (
         ProgressChange.objects.filter(actor=media.user, item=media.item)
+        .exclude(current_progress__kind=ProgressChange.START)
         .order_by("-created_at", "-id")
         .first()
     )

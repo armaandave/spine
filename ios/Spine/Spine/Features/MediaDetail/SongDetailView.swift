@@ -262,11 +262,11 @@ struct SongDetailView: View {
         Button { dismiss() } label: {
             Image(systemName: "chevron.left")
                 .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .background(.black.opacity(0.48), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Back to album")
     }
 

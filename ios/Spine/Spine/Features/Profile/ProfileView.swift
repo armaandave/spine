@@ -113,7 +113,10 @@ final class ProfileViewModel {
         }
 
         do {
-            let activity = try await activityRepository.userActivity(username: username, limit: 6)
+            let activity = try await activityRepository.userActivity(
+                username: username,
+                limit: ProfileRecentActivityRailModel.fetchLimit
+            )
             guard generation == requestGeneration else { return }
             recentActivityItems = activity
             activityErrorMessage = nil
@@ -760,11 +763,11 @@ struct ProfileView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .heavy))
-                        .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
-                        .background(.black.opacity(0.34), in: Circle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(.circle)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel("Back")
                 .padding(.top, topSafeAreaInset + 6)
                 .padding(.leading, 16)
@@ -808,11 +811,11 @@ struct ProfileView: View {
         } label: {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Settings")
     }
 
@@ -1833,17 +1836,22 @@ struct ProfileRecentActivityRailItem: Identifiable {
 }
 
 enum ProfileRecentActivityRailModel {
+    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail.
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
-        activities.compactMap { activity in
+        var seenTitles = Set<String>()
+        return activities.compactMap { activity in
             if let person = activity.person {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .person(person))
             }
-            if let media = activity.media {
+            if let media = activity.media, seenTitles.insert(media.ref.id).inserted {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
             }
             return nil
         }
     }
+
+    /// Activity the rail asks for: more than it shows, so repeated titles still leave it full.
+    static let fetchLimit = 24
 
     static let minimumSpacing: CGFloat = 4
 
@@ -1893,6 +1901,8 @@ enum ProfileRecentActivityRailModel {
 
     static func fallbackLabel(for activity: ActivityItem) -> String? {
         switch activity.type {
+        case "progress_updated":
+            clean(activity.object.label)
         case "list_created":
             clean(activity.object.name)
         case "list_item_added":

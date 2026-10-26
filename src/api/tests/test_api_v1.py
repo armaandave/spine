@@ -1757,7 +1757,11 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["progress"]["value"], 5)
         self.assertIsNone(response.data["latest_progress_change"])
-        self.assertFalse(ProgressChange.objects.filter(actor=user).exists())
+        # Starting it is recorded (for activity), but its first progress isn't a change.
+        self.assertEqual(
+            list(ProgressChange.objects.filter(actor=user).values_list("current_progress__kind", flat=True)),
+            [ProgressChange.START],
+        )
 
     def test_book_progress_records_progress_change_and_tracking_list_exposes_latest(self):
         user = get_user_model().objects.create_user(username="book-progress-change", password="strong-password-123")
@@ -1779,7 +1783,7 @@ class ApiV1FoundationTests(TestCase):
         list_response = self.client.get("/api/v1/tracking/?media_type=book&status=In progress")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        change = ProgressChange.objects.get(actor=user, item=item)
+        change = ProgressChange.objects.exclude(current_progress__kind=ProgressChange.START).get(actor=user, item=item)
         self.assertEqual(change.previous_progress["value"], 42)
         self.assertEqual(change.current_progress["value"], 58)
         self.assertEqual(response.data["latest_progress_change"]["previous"]["value"], 42)
@@ -1834,7 +1838,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(change.current_progress["value"], 1)
         self.assertEqual(response.data["latest_progress_change"]["current"]["value"], 1)
 
-    def test_user_activity_includes_progress_updated_payload(self):
+    def test_user_activity_ignores_stored_activity_rows(self):
         user = get_user_model().objects.create_user(username="progress-activity", password="strong-password-123")
         item = Item.objects.create(
             source=Sources.OPENLIBRARY.value,
@@ -1842,21 +1846,15 @@ class ApiV1FoundationTests(TestCase):
             media_id="progress-activity",
             title="Progress Activity",
         )
-        change = ProgressChange.objects.create(
-            actor=user,
-            item=item,
-            previous_progress={"kind": "percentage", "value": 42, "max": 100, "unit": "percent"},
-            current_progress={"kind": "percentage", "value": 58, "max": 100, "unit": "percent"},
-        )
         Activity.objects.create(
             actor=user,
             verb="progress_updated",
             target_type="progress_change",
-            target_id=change.id,
+            target_id=1,
             item=item,
             snapshot={
-                "previous": change.previous_progress,
-                "current": change.current_progress,
+                "previous": {"kind": "percentage", "value": 42, "max": 100, "unit": "percent"},
+                "current": {"kind": "percentage", "value": 58, "max": 100, "unit": "percent"},
             },
         )
         Activity.objects.create(
@@ -1873,6 +1871,7 @@ class ApiV1FoundationTests(TestCase):
             target_id=1,
             item=item,
         )
+        entry = DiaryEntry.objects.create(user=user, item=item, consumed_at=timezone.now())
         self.client.force_authenticate(user)
 
         response = self.client.get("/api/v1/users/progress-activity/activity/")
@@ -1880,10 +1879,9 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
         activity = response.data["results"][0]
-        self.assertEqual(activity["type"], "progress_updated")
-        self.assertEqual(activity["object"]["type"], "progress_change")
-        self.assertEqual(activity["object"]["previous"]["value"], 42)
-        self.assertEqual(activity["object"]["current"]["value"], 58)
+        self.assertEqual(activity["type"], "diary_created")
+        self.assertEqual(activity["object"]["type"], "diary")
+        self.assertEqual(activity["object"]["id"], entry.id)
 
     def test_user_activity_hides_deleted_diary_targets(self):
         user = get_user_model().objects.create_user(username="deleted-diary-activity", password="strong-password-123")
@@ -2250,7 +2248,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(season.status, Status.IN_PROGRESS.value)
         self.assertEqual(season.progress, 1)
 
-    def test_diary_update_emits_audit_not_recent_activity(self):
+    def test_diary_update_emits_audit_and_activity_stays_one_log(self):
         user = get_user_model().objects.create_user(username="diary-social-log", password="strong-password-123")
         item = self._create_movie_items(1, title_prefix="Social Log", media_id_prefix="social-log")[0]
         entry = DiaryEntry.objects.create(user=user, item=item, consumed_at=datetime(2025, 1, 1, tzinfo=UTC))
@@ -2259,11 +2257,16 @@ class ApiV1FoundationTests(TestCase):
         patched = self.client.patch(f"/api/v1/diary/{entry.id}/", {"rating": "3.5"}, format="json")
         activity_response = self.client.get("/api/v1/users/diary-social-log/activity/")
         deleted = self.client.delete(f"/api/v1/diary/{entry.id}/")
+        after_delete = self.client.get("/api/v1/users/diary-social-log/activity/")
 
         self.assertEqual(patched.status_code, status.HTTP_200_OK)
         self.assertEqual(activity_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(activity_response.data["results"], [])
+        self.assertEqual(
+            [(activity["object"]["id"], activity["object"]["rating"]) for activity in activity_response.data["results"]],
+            [(entry.id, "3.5")],
+        )
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(after_delete.data["results"], [])
         self.assertFalse(Activity.objects.filter(actor=user, target_type="diary", target_id=entry.id).exists())
         self.assertTrue(SocialAuditLog.objects.filter(actor=user, action="diary_updated", target_id=entry.id).exists())
         self.assertTrue(SocialAuditLog.objects.filter(actor=user, action="diary_deleted", target_id=entry.id).exists())

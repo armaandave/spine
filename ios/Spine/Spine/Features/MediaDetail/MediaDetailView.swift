@@ -2192,16 +2192,18 @@ private struct MediaDetailPageView: View {
     }
 
     private var topButtons: some View {
-        HStack {
-            CircleIconButton(systemName: "chevron.left", label: "Back") {
-                dismissRatingPicker()
-                dismiss()
-            }
-            Spacer()
-            if viewModel.detail != nil {
-                CircleIconButton(systemName: "ellipsis", label: "More") {
+        GlassEffectContainer {
+            HStack {
+                CircleIconButton(systemName: "chevron.left", label: "Back") {
                     dismissRatingPicker()
-                    presentedSheet = .posterMenu
+                    dismiss()
+                }
+                Spacer()
+                if viewModel.detail != nil {
+                    CircleIconButton(systemName: "ellipsis", label: "More") {
+                        dismissRatingPicker()
+                        presentedSheet = .posterMenu
+                    }
                 }
             }
         }
@@ -4173,11 +4175,11 @@ private struct CircleIconButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(label)
     }
 }

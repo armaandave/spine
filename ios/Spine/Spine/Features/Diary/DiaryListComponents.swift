@@ -664,7 +664,7 @@ enum DiaryDateFormatter {
         return date.formatted(.dateTime.day())
     }
 
-    private static func date(from rawValue: String?) -> Date? {
+    static func date(from rawValue: String?) -> Date? {
         guard let rawValue else { return nil }
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

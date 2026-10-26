@@ -937,11 +937,11 @@ private struct CompanyBackButton: View {
         Button(action: action) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Back")
     }
 }

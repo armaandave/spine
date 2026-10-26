@@ -272,12 +272,12 @@ struct ActivityFeedRow: View {
 
                 Spacer(minLength: 8)
 
-                if let timestamp = ActivityTimestampFormatter.shortText(from: activity.createdAt) {
+                if let timestamp = ActivityTimestampFormatter.text(for: activity) {
                     Text(timestamp)
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.white.opacity(0.42))
                         .lineLimit(1)
-                        .accessibilityLabel(ActivityTimestampFormatter.fullText(from: activity.createdAt) ?? timestamp)
+                        .accessibilityLabel(ActivityTimestampFormatter.accessibilityText(for: activity) ?? timestamp)
                 }
             }
 
@@ -428,7 +428,7 @@ enum ActivityFeedPresentation {
     static func actionText(for activity: ActivityItem) -> String {
         switch activity.type {
         case "progress_updated":
-            "updated progress"
+            clean(activity.object.summary) ?? "updated progress"
         case "diary_created":
             activity.media?.ref.mediaType == "music"
                 ? "listened to an album"
@@ -529,6 +529,35 @@ enum ActivityDestination: Equatable {
 }
 
 enum ActivityTimestampFormatter {
+    /// The log's date, read like the diary reads it; the posting time from older servers.
+    static func text(for activity: ActivityItem, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> String? {
+        guard activity.consumedAt != nil else { return shortText(from: activity.createdAt, now: now) }
+        return logDateText(from: activity.consumedAt, now: now, calendar: calendar)
+    }
+
+    static func accessibilityText(for activity: ActivityItem) -> String? {
+        guard activity.consumedAt != nil else { return fullText(from: activity.createdAt) }
+        return DiaryDateFormatter.date(from: activity.consumedAt)?.formatted(date: .long, time: .omitted)
+    }
+
+    /// "Today", "Yesterday", "Oct 24", or "Oct 24, 2019" outside this year.
+    static func logDateText(from rawValue: String?, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> String? {
+        guard let date = DiaryDateFormatter.date(from: rawValue) else { return nil }
+        if calendar.isDate(date, inSameDayAs: now) {
+            return "Today"
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        if !calendar.isDate(date, equalTo: now, toGranularity: .year) {
+            style = style.year()
+        }
+        style.calendar = calendar
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
+    }
+
     static func shortText(from rawValue: String?, now: Date = Date()) -> String? {
         guard let date = date(from: rawValue) else { return nil }
         let interval = max(0, now.timeIntervalSince(date))

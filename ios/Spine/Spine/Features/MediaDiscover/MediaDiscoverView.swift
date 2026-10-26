@@ -406,6 +406,7 @@ private struct MediaDiscoverFilterPill: View {
     }
 }
 
+/// Goes in a toolbar item, which draws the glass around it; the frame keeps the whole circle tappable.
 struct MediaDiscoverBackButton: View {
     let action: () -> Void
 
@@ -413,9 +414,8 @@ struct MediaDiscoverBackButton: View {
         Button(action: action) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
-                .background(.black.opacity(0.34), in: Circle())
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back")

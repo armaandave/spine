@@ -404,19 +404,21 @@ struct PersonDetailView: View {
             content
                 .spineContentTransition(value: contentPhase)
 
-            HStack {
-                PersonCircleIconButton(systemName: "chevron.left", label: "Back") {
-                    dismiss()
-                }
-                .accessibilityIdentifier("person-detail.back")
-
-                Spacer()
-
-                if viewModel.detail != nil {
-                    PersonCircleIconButton(systemName: "ellipsis", label: "More") {
-                        presentedSheet = .actions
+            GlassEffectContainer {
+                HStack {
+                    PersonCircleIconButton(systemName: "chevron.left", label: "Back") {
+                        dismiss()
                     }
-                    .accessibilityIdentifier("person-detail.more")
+                    .accessibilityIdentifier("person-detail.back")
+
+                    Spacer()
+
+                    if viewModel.detail != nil {
+                        PersonCircleIconButton(systemName: "ellipsis", label: "More") {
+                            presentedSheet = .actions
+                        }
+                        .accessibilityIdentifier("person-detail.more")
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -1334,11 +1336,11 @@ private struct PersonCircleIconButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .background(.black.opacity(0.34), in: Circle())
         }
         .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(label)
     }
 }
