@@ -39,6 +39,7 @@ from api.services.stats_scope import (
     one_decimal,
     rating_bound,
     stars,
+    union_ids,
 )
 from app.external_ratings import rating_source_is_exposed, source_label
 from app.models import ExternalRating, Item, MediaTypes
@@ -191,17 +192,17 @@ def highest_rated_queryset(scope):
         .annotate(stats_day=scope.log_day())
         .order_by("-stats_day", "-id")
     )
-    candidates = Q(id__in=rated_logs.values("item_id"))
+    candidates = [rated_logs.values("item_id")]
     if scope.is_all_time:
         for media_type in media_types:
             scored = apps.get_model("app", media_type).objects.filter(
                 user=scope.owner,
                 score__isnull=False,
             )
-            candidates |= Q(id__in=scored.values("item_id"))
+            candidates.append(scored.values("item_id"))
     items = (
         Item.objects.filter(media_type__in=media_types)
-        .filter(candidates)
+        .filter(id__in=union_ids(*candidates))
         .annotate(
             log_rating=Subquery(newest.values("rating")[:1], output_field=STORED_RATING),
             rating_day=Subquery(newest.values("stats_day")[:1], output_field=DateField()),
@@ -421,7 +422,7 @@ def most_logged_queryset(scope):
     """
     non_tv_logs = scope.entries.exclude(item__media_type__in=TV_ITEM_TYPES)
     repeated = non_tv_logs.values("item_id").annotate(times=Count("id")).filter(times__gte=MOST_LOGGED_MIN_TIMES)
-    candidates = Q(id__in=repeated.values("item_id"))
+    candidates = [repeated.values("item_id")]
 
     own_logs = non_tv_logs.filter(item_id=OuterRef("pk")).values("item_id")
     times = Subquery(own_logs.annotate(times=Count("id")).values("times")[:1], output_field=IntegerField())
@@ -430,10 +431,8 @@ def most_logged_queryset(scope):
         output_field=DateField(),
     )
     if scope.counts_tv:
-        candidates |= Q(
-            media_type__in=(MediaTypes.TV.value, MediaTypes.EPISODE.value),
-            id__in=scope.viewings.annotate(stats_title_id=scope.title_id()).values("stats_title_id"),
-        )
+        # A viewing's title is its show, or the episode itself when the show is missing.
+        candidates.append(scope.viewings.annotate(stats_title_id=scope.title_id()).values("stats_title_id"))
         show_viewings = scope.viewings.filter(item__source=OuterRef("source"), item__media_id=OuterRef("media_id"))
         own_viewings = scope.viewings.filter(item_id=OuterRef("pk"))
         times = Case(
@@ -449,7 +448,7 @@ def most_logged_queryset(scope):
             output_field=DateField(),
         )
     return (
-        Item.objects.filter(candidates)
+        Item.objects.filter(id__in=union_ids(*candidates))
         .annotate(times=times, last_day=last_day)
         .filter(times__gte=MOST_LOGGED_MIN_TIMES)
         .order_by(F("times").desc(), F("last_day").desc(nulls_last=True), "id")

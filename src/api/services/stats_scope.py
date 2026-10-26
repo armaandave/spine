@@ -444,12 +444,11 @@ class StatsScope:
 
     def titles_q(self):
         """Match the scope's title Items (STAT-105) on an Item queryset."""
-        condition = Q(id__in=self.log_title_ids())
+        parts = [self.log_title_ids()]
         if self.counts_tv:
-            condition |= Q(id__in=self.viewing_title_ids())
-        for item_ids in self.undated_completion_item_ids():
-            condition |= Q(id__in=item_ids)
-        return condition
+            parts.append(self.viewing_title_ids())
+        parts.extend(self.undated_completion_item_ids())
+        return Q(id__in=union_ids(*parts))
 
     @cached_property
     def titles(self):
@@ -515,6 +514,16 @@ class StatsScope:
 
     def media_summary(self, item_id):
         return self.media_summaries([item_id]).get(item_id)
+
+
+def union_ids(*querysets):
+    """One subquery of every ID the one-column querysets return, for ``id__in``.
+
+    OR'd ``id__in`` subqueries make Postgres scan every Item and test each one; one
+    UNION lets it join the few IDs to the primary key.
+    """
+    first, *rest = [queryset.order_by() for queryset in querysets]
+    return first.union(*rest) if rest else first
 
 
 def latest_tracking_rows(media_type, owner):

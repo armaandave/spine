@@ -27,8 +27,9 @@ from django.db.models import (
 )
 from django.db.models.functions import RowNumber
 
+from api.services import filters as filter_service
 from api.services import stats_time
-from api.services.stats_scope import day_string, media_type_bucket
+from api.services.stats_scope import day_string, media_type_bucket, union_ids
 from app import exposure
 from app.models import (
     TV,
@@ -121,11 +122,11 @@ def _log_counts(scope):
 
 def liked_titles(scope):
     """Count titles with a liked visible log in range; All Time adds MediaLike."""
-    liked = Q(id__in=scope.entries.filter(liked=True).annotate(stats_title=scope.title_id()).values("stats_title"))
+    liked = [scope.entries.filter(liked=True).annotate(stats_title=scope.title_id()).values("stats_title")]
     if scope.is_all_time:
         likes = MediaLike.objects.filter(scope.tab_q(), user=scope.owner)
-        liked |= Q(id__in=likes.annotate(stats_title=scope.title_id()).values("stats_title"))
-    return Item.objects.filter(liked).count()
+        liked.append(likes.annotate(stats_title=scope.title_id()).values("stats_title"))
+    return Item.objects.filter(id__in=union_ids(*liked)).count()
 
 
 def _type_details(scope):
@@ -174,8 +175,10 @@ def _dropped_book_journeys(scope):
         status=Status.DROPPED.value,
     )
     if not scope.is_all_time:
-        start, before = stats_time.moment_bounds(scope)
-        journeys = journeys.filter(end_date__gte=start, end_date__lt=before)
+        # End dates are UTC-midnight date carriers (book_tracking), read per row.
+        journeys = journeys.filter(
+            filter_service.log_day_range_q(scope.owner, scope.start_date, scope.end_date, "end_date"),
+        )
     return journeys.count()
 
 

@@ -14,19 +14,29 @@ from unittest import mock
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models.signals import post_delete, post_save
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from api.services import stats_cache, stats_v2_ratings
 from api.services.stats_scope import build_scope
 from api.views import stats as stats_views
-from app import book_tracking, metadata_fill, services, single_weight, tv_tracking
+from app import (
+    book_tracking,
+    metadata_fill,
+    services,
+    single_weight,
+    tv_repair,
+    tv_tracking,
+)
 from app.models import (
     TV,
     Book,
     BookSession,
+    CustomBackdropPreference,
+    CustomPosterPreference,
     DiaryEntry,
     DiaryEntryTag,
     Episode,
@@ -151,6 +161,46 @@ class ReceiverTests(StatsCacheBase):
 
         self.assertBumps(self.owner, create)
         self.assertBumps(self.owner, DiaryEntryTag.objects.get(pk=link.pk).delete)
+
+    def tagged_log(self, count):
+        with self.captureOnCommitCallbacks(execute=True):
+            entry = self.log()
+            for index in range(count):
+                tag, _ = Tag.objects.get_or_create(name=f"tag {index}")
+                DiaryEntryTag.objects.create(diary_entry=entry, tag=tag)
+        return DiaryEntry.objects.get(pk=entry.pk)
+
+    def queries_to(self, write):
+        with self.captureOnCommitCallbacks(execute=True), CaptureQueriesContext(connection) as queries:
+            write()
+        return len(queries)
+
+    def test_deleting_a_log_reads_no_parent_per_tag(self):
+        # The cascade's tag rows are skipped; the log's own receiver bumps the owner.
+        few = self.queries_to(self.tagged_log(1).delete)
+        many = self.queries_to(self.tagged_log(6).delete)
+        self.assertEqual(few, many)
+        self.assertBumps(self.owner, self.tagged_log(3).delete)
+
+    def test_clearing_a_logs_tags_reads_the_log_once(self):
+        few = self.queries_to(DiaryEntryTag.objects.filter(diary_entry=self.tagged_log(1)).delete)
+        many = self.queries_to(DiaryEntryTag.objects.filter(diary_entry=self.tagged_log(6)).delete)
+        self.assertEqual(few, many)
+        entry = self.tagged_log(3)
+        self.assertBumps(self.owner, DiaryEntryTag.objects.filter(diary_entry=entry).delete)
+
+    def test_a_poster_or_backdrop_pick_bumps_its_owner(self):
+        for model in (CustomPosterPreference, CustomBackdropPreference):
+            with self.subTest(model=model.__name__):
+                self.assertBumps(
+                    self.owner,
+                    lambda model=model: model.objects.update_or_create(
+                        user=self.owner,
+                        item=self.movie_item,
+                        defaults={"custom_image_url": "https://example.com/new.jpg"},
+                    ),
+                )
+                self.assertBumps(self.owner, model.objects.filter(user=self.owner).delete)
 
     def test_a_like_saved_and_deleted_bumps_its_owner(self):
         self.assertBumps(self.owner, lambda: MediaLike.objects.create(user=self.owner, item=self.movie_item))
@@ -466,6 +516,17 @@ class TVBumpTests(VersionAssertions, TVTrackingTestCase):
 
         self.assertBumps(self.user, reconcile)
         self.assertNoBump(self.user, reconcile)
+
+    def test_filling_empty_stars_bumps_the_owner(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            DiaryEntry.objects.create(user=self.user, item=self.show, consumed_at=MAR_2025, rating=8)
+        tv = TV.objects.get(user=self.user, item=self.show)
+        TV.objects.filter(pk=tv.pk).update(score=None, rating_source=None)
+        TV.history.filter(id=tv.pk).update(score=None)
+        filled = []
+        self.assertBumps(self.user, lambda: filled.extend(tv_repair.fill_empty_stars(self.user, self.show)))
+        self.assertEqual(len(filled), 1)
+        self.assertNoBump(self.user, lambda: tv_repair.fill_empty_stars(self.user, self.show))
 
     def test_reconciling_imported_shows_bumps_the_owner(self):
         self.assertBumps(self.user, lambda: tv_tracking.reconcile_imported(self.user, [self.show]))

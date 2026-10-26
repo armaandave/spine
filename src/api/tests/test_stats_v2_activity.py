@@ -294,6 +294,20 @@ class ReadsAndCompletionsTests(ActivityBase):
         # The dropped book has no log and no manual completion: not a title.
         self.assertEqual(self.summary(ALL_TIME, tab="book")["header"]["titles"], 1)
 
+    def test_did_not_finish_on_new_years_day_in_every_owner_zone(self):
+        # End dates are UTC-midnight carriers: 1 January stays in 2025 everywhere.
+        dropped = self.item(MediaTypes.BOOK.value, "dropped")
+        dropped_book = self.tracking(Book, dropped, status=Status.DROPPED.value)
+        BookSession.objects.bulk_create(
+            [BookSession(related_book=dropped_book, status=Status.DROPPED.value, end_date=utc_day(2025, 1, 1))],
+        )
+        for zone in OWNER_ZONES:
+            with self.subTest(owner_zone=zone):
+                self.set_zone(zone)
+                year = detail_value(self.summary(YEAR_2025, tab="book"), "did_not_finish")
+                before = detail_value(self.summary(YEAR_2024, tab="book"), "did_not_finish")
+                self.assertEqual((year, before), (1, 0))
+
     def test_game_completions_and_abandoned(self):
         title = self.item(MediaTypes.GAME.value, "title")
         game = self.tracking(Game, title, completed_manually=True)

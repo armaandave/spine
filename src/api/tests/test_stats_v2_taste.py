@@ -162,6 +162,15 @@ class GlobalGenreTests(TasteBase):
 
         self.assertEqual(genres["coverage"], {"known": 4, "total": 6})
 
+    def test_coverage_counts_titles_of_one_type_in_different_groups(self):
+        self.log(self.item("movie", "1", genres=["Drama"]))
+        self.log(self.item("movie", "2", genres=["Comedy"]))
+
+        genres = taste.build_genres(self.scope())
+
+        self.assertEqual(sorted((row["key"], row["titles"]) for row in genres["rows"]), [("comedy", 1), ("drama", 1)])
+        self.assertEqual(genres["coverage"], {"known": 2, "total": 2})
+
     def test_a_title_counts_once_however_many_values_reach_a_group(self):
         film = self.item("movie", "1", genres=["Action", "Adventure", "Western"])
         self.log(film)

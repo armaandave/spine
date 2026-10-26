@@ -22,7 +22,7 @@ from app.curation import prime_curated_artwork
 
 def stats_payload(user, request):
     """Build legacy chart keys plus the native-client stats contract."""
-    stats_range = stats_service.parse_stats_range(request.query_params)
+    stats_range = stats_service.parse_stats_range(request.query_params, owner=user)
     native_payload = stats_service.build_stats_payload(
         user=user,
         viewer=request.user,
@@ -156,7 +156,7 @@ def most_logged_response(user, request):
                 page_size,
             ),
         )
-    stats_range = stats_service.parse_stats_range(request.query_params)
+    stats_range = stats_service.parse_stats_range(request.query_params, owner=user)
     media_type = stats_service.parse_stats_media_type(request.query_params.get("media_type"))
     entries = stats_service.ranged_diary_entries(
         user=user,

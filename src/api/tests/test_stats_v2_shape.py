@@ -601,6 +601,18 @@ class StatsV2RequestTests(StatsV2Base):
                     self.assertIn(key, data)
                 self.assertNotIn("header", data)
 
+    def test_the_legacy_range_is_on_the_owners_calendar_for_every_viewer(self):
+        # STAT-900: at NOW it is 27 October in Auckland, the 26th in New York.
+        self.owner.calendar_timezone = NEW_YORK
+        self.owner.save(update_fields=["calendar_timezone"])
+        expected = {"start_date": "2025-10-26", "end_date": "2026-10-26", "timezone": NEW_YORK, "is_all_time": False}
+        owner = self.get(self.owner, {}, zone=NEW_YORK).data
+        follower = self.get(self.follower, {}, path=self.user_path(), zone=AUCKLAND).data
+        self.assertEqual((owner["schema_version"], follower["schema_version"]), (1, 1))
+        self.assertEqual(owner["range"], expected)
+        self.assertEqual(follower["range"], expected)
+        self.assertEqual((follower["list_progress"], follower["series_progress"]), ([], []))
+
     def test_invalid_requests_answer_400_with_the_field(self):
         cases = [
             ({"start_date": "2025-13-01", "end_date": "2025-12-31"}, "start_date"),

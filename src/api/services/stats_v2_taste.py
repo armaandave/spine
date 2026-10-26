@@ -15,7 +15,16 @@ from collections import defaultdict
 from functools import reduce
 from operator import or_
 
-from django.db.models import Avg, Count, Exists, OuterRef, Q, Subquery
+from django.db.models import (
+    Avg,
+    BooleanField,
+    Count,
+    Exists,
+    ExpressionWrapper,
+    OuterRef,
+    Q,
+    Subquery,
+)
 from django.db.models.functions import ExtractYear
 
 from api.services import genre_groups
@@ -159,10 +168,7 @@ def _type_genres(scope):
     total = len(rows)
     rows = rows[:MAX_ROWS]
     rated = _rated_by_row(scope.entries, [_facet_items(GENRE, row["values"]) for row in rows])
-    coverage = titles.aggregate(
-        total=Count("id"),
-        known=Count("id", filter=Q(id__in=ItemFilterFacet.objects.filter(facet_type=GENRE).values("item_id"))),
-    )
+    coverage = titles.aggregate(total=Count("id"), known=Count("id", filter=_has_facet(GENRE)))
     return {
         "rows": [
             {
@@ -199,34 +205,39 @@ def _global_genres(scope):
             pairs_by_group[group][media_type].add(value)
 
     groups = [key for key, _label in genre_groups.GROUPS if key in pairs_by_group]
-    subqueries = {key: _group_items(pairs_by_group[key]) for key in groups}
-    aggregates = {f"group_{index}": Count("id", filter=Q(id__in=subqueries[key])) for index, key in enumerate(groups)}
-    if groups:
-        any_group = _group_items(
-            {
-                media_type: values
-                for by_type in pairs_by_group.values()
-                for media_type, values in by_type.items()
-            },
-        )
-        aggregates["known"] = Count("id", filter=Q(id__in=any_group))
+    # Every group's values together: a title is known when it has any of them.
+    any_group = defaultdict(set)
+    for by_type in pairs_by_group.values():
+        for media_type, values in by_type.items():
+            any_group[media_type] |= values
     by_group = defaultdict(dict)
-    known = total = 0
-    for row in (
-        titles.annotate(stats_bucket=media_type_bucket("media_type"))
-        .values("stats_bucket")
-        .annotate(total=Count("id"), **aggregates)
-    ):
-        total += row["total"]
-        known += row.get("known", 0)
-        for index, key in enumerate(groups):
-            if row[f"group_{index}"]:
-                by_group[key][row["stats_bucket"]] = row[f"group_{index}"]
+    known = 0
+    if groups:
+        # One pass over the facets of the scope's titles; each title has one bucket.
+        aggregates = {
+            f"group_{index}": Count("item_id", distinct=True, filter=_pairs_q(pairs_by_group[key]))
+            for index, key in enumerate(groups)
+        }
+        for row in (
+            ItemFilterFacet.objects.filter(
+                facet_type__in=genre_groups.GENRE_FACET_TYPES,
+                item_id__in=titles.values("id"),
+            )
+            .annotate(stats_bucket=media_type_bucket("item__media_type"))
+            .values("stats_bucket")
+            .annotate(known=Count("item_id", distinct=True, filter=_pairs_q(any_group)), **aggregates)
+            .order_by()
+        ):
+            known += row["known"]
+            for index, key in enumerate(groups):
+                if row[f"group_{index}"]:
+                    by_group[key][row["stats_bucket"]] = row[f"group_{index}"]
+    total = titles.count()
 
     groups = [key for key in groups if by_group[key]]
     rated = _rated_by_row(
         scope.entries.exclude(item__media_type=music),
-        [subqueries[key] for key in groups],
+        [_group_items(pairs_by_group[key]) for key in groups],
     )
     rows = [
         {
@@ -263,10 +274,10 @@ def _native_rows(titles, facet_type):
     (ties: the first alphabetically), values every stored spelling, most used first.
     Rows are sorted by titles, then name.
     """
+    facets = ItemFilterFacet.objects.filter(facet_type=facet_type, item_id__in=titles.values("id"))
     spellings = defaultdict(list)
     for value, count in (
-        ItemFilterFacet.objects.filter(facet_type=facet_type, item_id__in=titles.values("id"))
-        .values("value")
+        facets.values("value")
         .annotate(count=Count("item_id", distinct=True))
         .values_list("value", "count")
     ):
@@ -283,9 +294,9 @@ def _native_rows(titles, facet_type):
             merged[f"merged_{len(merged)}"] = (row, values)
         rows.append(row)
     if merged:
-        counts = titles.aggregate(
+        counts = facets.aggregate(
             **{
-                key: Count("id", filter=Q(id__in=_facet_items(facet_type, values)))
+                key: Count("item_id", distinct=True, filter=Q(value__in=values))
                 for key, (_row, values) in merged.items()
             },
         )
@@ -296,24 +307,31 @@ def _native_rows(titles, facet_type):
 
 
 def _facet_items(facet_type, values):
-    """Item IDs with a facet of the type whose value is one of values."""
-    return ItemFilterFacet.objects.filter(facet_type=facet_type, value__in=values).values("item_id")
+    """Facets of the type whose value is one of values (for _rated_by_row)."""
+    return ItemFilterFacet.objects.filter(facet_type=facet_type, value__in=values)
 
 
-def _group_items(values_by_type):
-    """Item IDs with a genre or theme value in the group, matched on its own type."""
-    condition = reduce(
+def _pairs_q(values_by_type):
+    """Match genre or theme facets whose value is in the set for its Item's type."""
+    return reduce(
         or_,
         (
             Q(item__media_type=media_type, value__in=sorted(values))
             for media_type, values in sorted(values_by_type.items())
         ),
     )
-    return (
-        ItemFilterFacet.objects.filter(facet_type__in=genre_groups.GENRE_FACET_TYPES)
-        .filter(condition)
-        .values("item_id")
+
+
+def _group_items(values_by_type):
+    """Genre and theme facets in the group, each matched on its own type."""
+    return ItemFilterFacet.objects.filter(facet_type__in=genre_groups.GENRE_FACET_TYPES).filter(
+        _pairs_q(values_by_type),
     )
+
+
+def _has_facet(facet_type):
+    """Match Items with a facet of the type: one index probe per Item, never a scan."""
+    return Q(Exists(ItemFilterFacet.objects.filter(item_id=OuterRef("id"), facet_type=facet_type)))
 
 
 # The languages section, STAT-212
@@ -337,13 +355,7 @@ def build_languages(scope):
         .values_list("value", "stats_bucket", "count")
     ):
         by_language[value][bucket] += count
-    coverage = titles.aggregate(
-        total=Count("id"),
-        known=Count(
-            "id",
-            filter=Q(id__in=ItemFilterFacet.objects.filter(facet_type=ORIGINAL_LANGUAGE).values("item_id")),
-        ),
-    )
+    coverage = titles.aggregate(total=Count("id"), known=Count("id", filter=_has_facet(ORIGINAL_LANGUAGE)))
     rated = {
         row["title_language"]: row
         for row in _entries_with_title(scope.entries.filter(item__media_type__in=item_types))
@@ -393,21 +405,34 @@ def _title_field(field):
     return Subquery(Item.objects.filter(id=OuterRef("stats_title_id")).values(field)[:1])
 
 
-def _rated_by_row(entries, row_items):
+def _rated_by_row(entries, row_facets):
     """Return [(rated logs, average stored rating)] per row, in one aggregate.
 
-    ``row_items`` holds, per row, a subquery of the title Item IDs in that row. A
-    log counts in a row when it is rated and its title is in the row (STAT-210).
+    ``row_facets`` holds, per row, a queryset of the facets that put an Item in that
+    row. A log counts in a row when it is rated and its title has one (STAT-210):
+    a correlated EXISTS per log and row, an index probe on (item, facet type).
     """
-    if not row_items:
+    if not row_facets:
         return []
+    flags = {
+        f"stats_in_row_{index}": ExpressionWrapper(
+            Exists(facets.filter(item_id=OuterRef("stats_title_id"))),
+            output_field=BooleanField(),
+        )
+        for index, facets in enumerate(row_facets)
+    }
     aggregates = {}
-    for index, item_ids in enumerate(row_items):
-        in_row = Q(stats_title_id__in=item_ids)
+    for index in range(len(row_facets)):
+        in_row = Q(**{f"stats_in_row_{index}": True})
         aggregates[f"rated_{index}"] = Count("id", filter=in_row)
         aggregates[f"average_{index}"] = Avg("rating", filter=in_row)
-    result = _entries_with_title(entries.filter(rating__isnull=False)).aggregate(**aggregates)
-    return [(result[f"rated_{index}"], result[f"average_{index}"]) for index in range(len(row_items))]
+    # The flags are annotated first, as in stats_v2_activity._log_counts.
+    result = (
+        _entries_with_title(entries.filter(rating__isnull=False))
+        .annotate(**flags)
+        .aggregate(**aggregates)
+    )
+    return [(result[f"rated_{index}"], result[f"average_{index}"]) for index in range(len(row_facets))]
 
 
 def _ordered_by_type(by_type):
