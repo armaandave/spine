@@ -47,6 +47,9 @@ struct TrackingState: Codable, Equatable {
     let diaryCount: Int?
     let book: BookTrackingState?
     let game: GameTrackingState?
+    /// The show's TV state (detail variant on `GET tracking/{source}/{tv|season|episode}/{id}/` and in TV write
+    /// responses, list variant in `GET tracking/?media_type=tv` rows). Nil for other media types.
+    var tv: TVShowState? = nil
 
     init(
         trackingId: Int,
@@ -66,7 +69,8 @@ struct TrackingState: Codable, Equatable {
         likeIsIndependent: Bool? = nil,
         diaryCount: Int? = nil,
         book: BookTrackingState? = nil,
-        game: GameTrackingState? = nil
+        game: GameTrackingState? = nil,
+        tv: TVShowState? = nil
     ) {
         self.trackingId = trackingId
         self.status = status
@@ -86,6 +90,7 @@ struct TrackingState: Codable, Equatable {
         self.diaryCount = diaryCount
         self.book = book
         self.game = game
+        self.tv = tv
     }
 
     func replacingProgress(_ progress: ProgressState?) -> TrackingState {
@@ -107,7 +112,8 @@ struct TrackingState: Codable, Equatable {
             likeIsIndependent: likeIsIndependent,
             diaryCount: diaryCount,
             book: book,
-            game: game
+            game: game,
+            tv: tv
         )
     }
 

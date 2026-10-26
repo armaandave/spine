@@ -38,6 +38,11 @@ enum APIError: LocalizedError {
                     if code == "provider_unavailable" {
                         return messageWithRequestID(message, error: error)
                     }
+                    // TV-103: a retryable 503 whose message says what to do ("TV details are
+                    // unavailable right now"); not a server outage.
+                    if code == "tv_details_unavailable" {
+                        return message
+                    }
                     if code == "validation_error",
                        let fields = error["fields"] as? [String: Any],
                        let validationMessage = validationMessage(from: fields) {

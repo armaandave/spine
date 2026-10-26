@@ -166,9 +166,21 @@ protocol TrackingRepository {
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState
     func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState?
     func completeGame(ref: MediaRef, request: GameCompletionWriteRequest) async throws -> BookCompletionResponse
+    /// `POST tracking/{source}/tv/{id}/actions/{action}/` (plan section 2.3.7).
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse
+    /// Continue Watching: shows in Watching with an aired up next, in the server's order (TV-701).
+    func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem>
 }
 
 extension TrackingRepository {
+    func performTVAction(source _: String, mediaId _: String, action _: TVAction, request _: TVActionRequest) async throws -> TVActionResponse {
+        fatalError("Not implemented")
+    }
+
+    func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem> {
+        try await list(mediaType: "tv", page: page, status: InProgressLibraryLoader.status, query: nil)
+    }
+
     func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
     func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState? { fatalError("Not implemented") }
@@ -235,6 +247,11 @@ protocol DiaryRepository {
     func create(_ request: DiaryEntryWriteRequest) async throws -> DiaryEntry
     func update(id: Int, request: DiaryEntryUpdateRequest) async throws -> DiaryEntry
     func delete(id: Int) async throws
+    /// Deletes a TV log. When the deletion would unmark episodes and `expectedVersion` is stale, the server answers
+    /// 409 `tv_state_changed` and changes nothing (TV-406, TV-705).
+    func delete(id: Int, expectedVersion: Int?, mutationId: UUID?) async throws
+    /// Creates a TV log and returns the write envelope its response adds (`tv`, `finished`, `earlier_unwatched`).
+    func createTV(_ request: DiaryEntryWriteRequest) async throws -> (DiaryEntry, TVWriteEnvelope)
     func setLike(entryId: Int, liked: Bool) async throws -> LikeState
     func tags(query: String, mine: Bool) async throws -> [DiaryTagSuggestion]
     func tags(query: String) async throws -> [DiaryTagSuggestion]
@@ -299,6 +316,15 @@ extension DiaryRepository {
 
     func delete(id: Int) async throws {
         fatalError("Not implemented")
+    }
+
+    func delete(id: Int, expectedVersion _: Int?, mutationId _: UUID?) async throws {
+        try await delete(id: id)
+    }
+
+    func createTV(_ request: DiaryEntryWriteRequest) async throws -> (DiaryEntry, TVWriteEnvelope) {
+        let entry = try await create(request)
+        return (entry, TVWriteEnvelope(diaryEntry: entry))
     }
 
     func tags(query: String, mine: Bool) async throws -> [DiaryTagSuggestion] {
@@ -971,6 +997,25 @@ struct APITrackingRepository: TrackingRepository {
         try await client.post("/tracking/\(ref.source)/game/\(ref.mediaId)/complete/", body: request, authenticated: true)
     }
 
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        try await client.post(
+            "/tracking/\(source)/tv/\(mediaId)/actions/\(action.rawValue)/",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem> {
+        var query = [
+            URLQueryItem(name: "media_type", value: "tv"),
+            URLQueryItem(name: "continue_watching", value: "true"),
+        ]
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return try await client.get("/tracking/", query: query, authenticated: true)
+    }
+
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState {
         try await client.post(
             "/tracking/\(source)/book/\(mediaId)/progress/",
@@ -1068,11 +1113,27 @@ struct APIDiaryRepository: DiaryRepository {
     }
 
     func delete(id: Int) async throws {
+        try await delete(id: id, expectedVersion: nil, mutationId: nil)
+    }
+
+    func delete(id: Int, expectedVersion: Int?, mutationId: UUID?) async throws {
+        var query: [URLQueryItem] = []
+        if let expectedVersion {
+            query.append(URLQueryItem(name: "expected_version", value: String(expectedVersion)))
+        }
+        if let mutationId {
+            query.append(URLQueryItem(name: "mutation_id", value: mutationId.uuidString.lowercased()))
+        }
         do {
-            let _: EmptyResponse = try await client.delete("/diary/\(id)/", authenticated: true)
+            let _: EmptyResponse = try await client.delete("/diary/\(id)/", query: query, authenticated: true)
         } catch APIError.httpStatus(404, _) {
             // A retry after a lost response has already achieved the requested state.
         }
+    }
+
+    func createTV(_ request: DiaryEntryWriteRequest) async throws -> (DiaryEntry, TVWriteEnvelope) {
+        let entry = try await create(request)
+        return (entry, TVWriteEnvelope(diaryEntry: entry))
     }
 
     func setLike(entryId: Int, liked: Bool) async throws -> LikeState {
