@@ -6,6 +6,7 @@ from django.conf import settings
 from app.models import MediaTypes
 
 RANKING_KEYS = {
+    "artist_name",
     "author_name",
     "edition_count",
     "first_publish_year",
@@ -78,18 +79,9 @@ def rank_mixed_results(query, candidates, *, limit):
 def _score(query, result, media_type):
     normalized_query = normalize_search_text(query)
     normalized_title = normalize_search_text(result.get("title") or result.get("name"))
-    query_tokens = normalized_query.split()
-    title_tokens = normalized_title.split()
-
-    canonical_query = _without_stop_words(query_tokens)
-    canonical_title = _without_stop_words(title_tokens)
-    score = _relevance_score(
-        normalized_query,
-        normalized_title,
-        query_tokens,
-        title_tokens,
-        canonical_query,
-        canonical_title,
+    score = max(
+        _title_relevance(normalized_query, normalized_title),
+        _artist_relevance(normalized_query, normalized_title, result),
     )
     popularity = _popularity_score(result)
     score += popularity
@@ -98,6 +90,36 @@ def _score(query, result, media_type):
     score += _first_number(result, ("provider_rank_boost",))
     score -= _junk_penalty(normalized_query, normalized_title, result, popularity)
     return score
+
+
+def _title_relevance(normalized_query, normalized_title):
+    query_tokens = normalized_query.split()
+    title_tokens = normalized_title.split()
+    return _relevance_score(
+        normalized_query,
+        normalized_title,
+        query_tokens,
+        title_tokens,
+        _without_stop_words(query_tokens),
+        _without_stop_words(title_tokens),
+    )
+
+
+def _artist_relevance(normalized_query, normalized_title, result):
+    """Score the title against the query words that aren't in the artist's name.
+
+    "renaissance beyonce" then matches Beyoncé's "RENAISSANCE" exactly. A query
+    found entirely in the artist's name scores as every word found. Little words
+    stay with the title, so "the wall" doesn't match "Wall" by The Kills exactly.
+    """
+    artist_tokens = set(normalize_search_text(result.get("artist_name")).split()) - STOP_WORDS
+    query_tokens = normalized_query.split()
+    title_words = [token for token in query_tokens if token not in artist_tokens]
+    if len(title_words) == len(query_tokens):
+        return 0
+    if not title_words:
+        return 42  # every word found, as in _relevance_score
+    return _title_relevance(" ".join(title_words), normalized_title)
 
 
 def _relevance_score(

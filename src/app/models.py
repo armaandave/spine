@@ -452,6 +452,9 @@ class MusicGenreAlbum(models.Model):
     page_views = models.PositiveBigIntegerField(default=0)
     listeners = models.PositiveIntegerField()
     listens = models.PositiveBigIntegerField()
+    # Title and artist without case or accents, padded with spaces so music
+    # search can match whole words (" beyonce ").
+    search_text = models.TextField(blank=True, default="")
 
     class Meta:
         constraints = [

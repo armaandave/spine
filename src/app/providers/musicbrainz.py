@@ -10,12 +10,13 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Q
 from redis.exceptions import LockError, RedisError
 
 from app import helpers
 from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import services
-from app.providers.search_rank import rank_results
+from app.providers.search_rank import normalize_search_text, rank_results
 
 MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2"
 LISTENBRAINZ_URL = "https://api.listenbrainz.org/1/popularity/release-group"
@@ -61,6 +62,7 @@ DETAIL_CACHE_TTL = 24 * 60 * 60
 MISSING_COVER_CACHE_TTL = 6 * 60 * 60
 CACHE_LOCK_TIMEOUT = 120
 SEARCH_CANDIDATE_LIMIT = 100
+POPULAR_SEARCH_LIMIT = 25
 ARTIST_RELEASE_GROUP_LIMIT = 500
 ARTIST_RELEASE_GROUP_PAGE_SIZE = 100
 LISTENBRAINZ_TIMEOUT = 5
@@ -125,6 +127,10 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
     candidates = [
         _search_result(group) for group in response.get("release-groups", [])
     ]
+    for candidate in candidates:
+        # Ranking counts words found in the artist too ("renaissance beyonce").
+        candidate["artist_name"] = _artist_credit_text(candidate["artist_credits"])
+    candidates = _with_popular_albums(query, candidates)
     popularity = (
         {}
         if preserve_ranking_fields
@@ -148,17 +154,67 @@ def search(query, page, *, preserve_ranking_fields=False, timeout=None):
             candidate.pop("provider_rank_boost", None)
     start = (page - 1) * settings.PER_PAGE
     results = ranked[start : start + settings.PER_PAGE]
-    try:
-        total_results = int(response.get("count", len(ranked)))
-    except (TypeError, ValueError):
-        total_results = len(ranked)
-    total_results = min(max(0, total_results), SEARCH_CANDIDATE_LIMIT)
+    # MusicBrainz's first 100 albums plus any popular ones: all a page can reach.
     return helpers.format_search_response(
         page,
         settings.PER_PAGE,
-        total_results,
+        len(ranked),
         results,
     )
+
+
+def _with_popular_albums(query, candidates):
+    """Add known popular albums that match every word of the query.
+
+    MusicBrainz returns its 100 best text matches, and they can all be obscure:
+    over 1,000 albums are called "Renaissance", and Beyoncé's isn't in the 100.
+    The weekly genre albums fill that gap, with their listening counts, at no
+    extra MusicBrainz request. They match every word, as its best matches do.
+    """
+    by_id = {candidate["media_id"]: candidate for candidate in candidates}
+    for album in _popular_album_matches(query):
+        counts = {
+            "total_user_count": album.listeners,
+            "total_listen_count": album.listens,
+        }
+        if album.release_group_mbid in by_id:
+            by_id[album.release_group_mbid].update(counts)
+            continue
+        # Featured lists check the credited artist before taking a match.
+        credits = [{"artist_mbid": None, "name": album.artist, "join_phrase": ""}] if album.artist else []
+        candidates.append(
+            {
+                **_genre_album_result(album),
+                **counts,
+                "artist_credits": credits,
+                "primary_type": "Album",
+                "artist_name": album.artist,
+                "provider_rank_boost": 100,
+            },
+        )
+    return candidates
+
+
+def _popular_album_matches(query):
+    """Return the most listened genre albums with every word in title or artist.
+
+    As in the MusicBrainz query, the last word may be unfinished.
+    """
+    words = normalize_search_text(query).split()
+    if not words:
+        return []
+    *finished, last = words
+    matches = Q()
+    for word in finished:
+        matches &= Q(search_text__contains=f" {word} ")
+    matches &= Q(search_text__contains=f" {last}" if len(last) > 1 else f" {last} ")
+    rows = (
+        MusicGenreAlbum.objects.filter(matches)
+        .values("release_group_mbid", "title", "artist", "release_date", "listeners", "listens")
+        .distinct()
+        .order_by("-listeners", "-listens", "release_group_mbid")[:POPULAR_SEARCH_LIMIT]
+    )
+    return [MusicGenreAlbum(**row) for row in rows]
 
 
 def search_people(query, *, limit=10, timeout=None):
@@ -412,16 +468,19 @@ def refresh_genre_albums():
     for release_group_mbid, row in albums.items():
         release_group = row.get("release_group") or {}
         listeners, listens = _album_popularity(row)
+        title = release_group.get("name") or ""
+        artist = (row.get("artist") or {}).get("name") or ""
         entries.extend(
             MusicGenreAlbum(
                 genre=genre,
                 release_group_mbid=release_group_mbid,
-                title=release_group.get("name") or "",
-                artist=(row.get("artist") or {}).get("name") or "",
+                title=title,
+                artist=artist,
                 release_date=str(release_group.get("date") or "")[:10],
                 page_views=page_views.get(release_group_mbid, 0),
                 listeners=listeners,
                 listens=listens,
+                search_text=f" {normalize_search_text(f'{title} {artist}')} ",
             )
             for genre in _album_genres(row)
         )

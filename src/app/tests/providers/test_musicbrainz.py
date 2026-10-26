@@ -17,6 +17,8 @@ from pyrate_limiter import Duration, Rate, RateItem, RedisBucket
 
 from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import musicbrainz, services
+from lists.featured.resolve import pick_title_match
+from lists.featured.types import Entry
 
 RUN_PROVIDER_TESTS = os.environ.get("RUN_PROVIDER_TESTS") == "1"
 requires_provider_network = unittest.skipUnless(
@@ -564,6 +566,7 @@ class MusicBrainzTests(TestCase):
             (gkmc.title, gkmc.artist, gkmc.release_date, gkmc.listeners, gkmc.listens),
             ("good kid, m.A.A.d city", "Kendrick Lamar", "2012-10-22", 85_000, 850_000),
         )
+        self.assertEqual(gkmc.search_text, " good kid m a a d city kendrick lamar ")
 
     @override_settings(LISTENBRAINZ_TOKEN="lb-token")
     @patch("app.providers.musicbrainz.services.api_request")
@@ -825,6 +828,172 @@ class MusicBrainzTests(TestCase):
             limit=musicbrainz.SEARCH_CANDIDATE_LIMIT,
             offset=0,
         )
+
+    @patch("app.providers.musicbrainz.lookup_release_group_popularity")
+    @patch("app.providers.musicbrainz.search_release_groups")
+    def test_search_adds_popular_albums_musicbrainz_did_not_return(
+        self,
+        search_release_groups,
+        lookup_popularity,
+    ):
+        # Over 1,000 albums are called "Renaissance", and MusicBrainz's 100 miss Beyoncé's.
+        MusicGenreAlbum.objects.bulk_create(
+            [
+                MusicGenreAlbum(
+                    genre=genre,
+                    release_group_mbid="beyonce-renaissance",
+                    title="RENAISSANCE",
+                    artist="Beyoncé",
+                    release_date="2022-07-29",
+                    listeners=11_320,
+                    listens=453_186,
+                    search_text=" renaissance beyonce ",
+                )
+                for genre in ("dance-pop", "house")
+            ]
+            + [
+                MusicGenreAlbum(
+                    genre="dance-pop",
+                    release_group_mbid="beyonce-lemonade",
+                    title="Lemonade",
+                    artist="Beyoncé",
+                    listeners=9_000,
+                    listens=200_000,
+                    search_text=" lemonade beyonce ",
+                ),
+            ],
+        )
+        search_release_groups.return_value = {
+            "count": 1242,
+            "release-groups": [
+                {
+                    "id": "vanilla-fudge-renaissance",
+                    "title": "Renaissance",
+                    "score": 100,
+                    "first-release-date": "1968",
+                    "primary-type": "Album",
+                    "artist-credit": [{"name": "Vanilla Fudge"}],
+                },
+            ],
+        }
+        lookup_popularity.return_value = {
+            "vanilla-fudge-renaissance": {
+                "total_user_count": 1_568,
+                "total_listen_count": 8_021,
+            },
+        }
+
+        response = musicbrainz.search("renaissance", 1)
+        results = response["results"]
+
+        self.assertEqual(
+            [item["media_id"] for item in results],
+            ["beyonce-renaissance", "vanilla-fudge-renaissance"],
+        )
+        self.assertEqual(response["total_results"], 2)
+        self.assertEqual(results[0]["subtitle"], "Beyoncé · 2022 · Album")
+        for key in ("total_user_count", "artist_name", "provider_rank_boost"):
+            self.assertNotIn(key, results[0])
+        lookup_popularity.assert_called_once_with(
+            ["vanilla-fudge-renaissance", "beyonce-renaissance"],
+        )
+        # Featured lists still check the artist: another artist's "Renaissance" isn't it.
+        self.assertIsNone(
+            pick_title_match(Entry(1, "Renaissance", creator="Marcus Miller"), results[:1]),
+        )
+
+    @patch("app.providers.musicbrainz.lookup_release_group_popularity")
+    @patch("app.providers.musicbrainz.search_release_groups")
+    def test_all_search_takes_listening_counts_from_popular_albums(
+        self,
+        search_release_groups,
+        lookup_popularity,
+    ):
+        MusicGenreAlbum.objects.create(
+            genre="dance-pop",
+            release_group_mbid="beyonce-renaissance",
+            title="RENAISSANCE",
+            artist="Beyoncé",
+            listeners=11_320,
+            listens=453_186,
+            search_text=" renaissance beyonce ",
+        )
+        search_release_groups.return_value = {
+            "count": 2,
+            "release-groups": [
+                {
+                    "id": "vanilla-fudge-renaissance",
+                    "title": "Renaissance",
+                    "score": 100,
+                    "artist-credit": [{"name": "Vanilla Fudge"}],
+                },
+                {
+                    "id": "beyonce-renaissance",
+                    "title": "RENAISSANCE",
+                    "score": 100,
+                    "artist-credit": [{"name": "Beyoncé"}],
+                },
+            ],
+        }
+
+        results = musicbrainz.search("renaissance", 1, preserve_ranking_fields=True)["results"]
+
+        lookup_popularity.assert_not_called()
+        self.assertEqual(
+            [item["media_id"] for item in results],
+            ["beyonce-renaissance", "vanilla-fudge-renaissance"],
+        )
+        self.assertEqual(results[0]["total_user_count"], 11_320)
+
+    def test_popular_album_matches_need_every_word_in_title_or_artist(self):
+        MusicGenreAlbum.objects.bulk_create(
+            [
+                MusicGenreAlbum(
+                    genre=genre,
+                    release_group_mbid="renaissance",
+                    title="RENAISSANCE",
+                    artist="Beyoncé",
+                    listeners=11_320,
+                    listens=453_186,
+                    search_text=" renaissance beyonce ",
+                )
+                for genre in ("dance-pop", "house")
+            ]
+            + [
+                MusicGenreAlbum(
+                    genre="dance-pop",
+                    release_group_mbid="lemonade",
+                    title="Lemonade",
+                    artist="Beyoncé",
+                    listeners=9_000,
+                    listens=200_000,
+                    search_text=" lemonade beyonce ",
+                ),
+                MusicGenreAlbum(
+                    genre="metal",
+                    release_group_mbid="darkness",
+                    title="Darkness Ages",
+                    artist="Band",
+                    listeners=5,
+                    listens=5,
+                    search_text=" darkness ages band ",
+                ),
+            ],
+        )
+
+        def matches(query):
+            return [
+                album.release_group_mbid
+                for album in musicbrainz._popular_album_matches(query)
+            ]
+
+        self.assertEqual(matches("BEYONCÉ"), ["renaissance", "lemonade"])
+        self.assertEqual(matches("Renaissance beyonce"), ["renaissance"])
+        self.assertEqual(matches("beyonce renaiss"), ["renaissance"])
+        self.assertEqual(matches("renaiss beyonce"), [])
+        self.assertEqual(matches("dark ages"), [])
+        self.assertEqual(matches("ages d"), [])
+        self.assertEqual(matches("!!"), [])
 
     @override_settings(
         LISTENBRAINZ_TOKEN="listenbrainz-token",
