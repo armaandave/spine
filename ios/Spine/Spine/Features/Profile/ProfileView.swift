@@ -19,6 +19,9 @@ final class ProfileViewModel {
 
     /// Continue Watching's episode sheet on the user's own profile (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
+    /// Every In progress card's "Update progress ›": shows open the episode sheet, other titles their page's progress
+    /// UI (TV-701).
+    let progressUpdates: InProgressUpdates
 
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
@@ -42,16 +45,30 @@ final class ProfileViewModel {
         self.username = username
         self.onUnauthorized = onUnauthorized
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
+        let mediaRepository = mediaRepository ?? AppRepositories.current().media
+        let diaryRepository = diaryRepository ?? AppRepositories.current().diary
         continueWatching = ContinueWatchingTicks(
-            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
-            diaryRepository: diaryRepository ?? AppRepositories.current().diary,
+            diaryRepository: diaryRepository,
+            onUnauthorized: onUnauthorized
+        )
+        progressUpdates = InProgressUpdates(
+            continueWatching: continueWatching,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
         continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
             inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
+        }
+        // So does a write from another card's progress UI.
+        progressUpdates.onUpdate = { [weak self] id, state in
+            guard let self else { return }
+            inProgressItems = InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems)
         }
     }
 
@@ -111,9 +128,9 @@ final class ProfileViewModel {
         await load()
     }
 
-    /// A write changed a title. A tick or untick in Continue Watching's sheet keeps its card where it is (TV-701) but
-    /// still reloads Recent Activity, where the tick is the day's progress (activity contract AC-4); any other write
-    /// reloads the profile.
+    /// A write changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's
+    /// or game's progress) keeps its card where it is (TV-701) but still reloads Recent Activity, where it is the day's
+    /// progress (activity contract AC-4); any other write reloads the profile.
     func mediaStateDidChange(origin: UUID?) async {
         if origin == continueWatching.changeOrigin {
             await loadRecentActivity(generation: requestGeneration)
@@ -182,6 +199,7 @@ final class ProfileViewModel {
             inProgressItems = items
             inProgressErrorMessage = nil
             continueWatching.railDidLoad()
+            progressUpdates.railDidLoad()
         } catch is CancellationError {
             return
         } catch {
@@ -687,6 +705,14 @@ struct ProfileView: View {
                 selectedEpisodes = selection.context
                 selectedRef = selection.ref
             }
+            .inProgressUpdatePresentations(
+                viewModel.progressUpdates,
+                screenOpenedOther: selectedRef != nil || selectedPerson != nil || isSettingsPresented
+                    || hofPickerSlot != nil || isProfileBackdropSearchPresented,
+                trackingRepository: trackingRepository,
+                diaryRepository: diaryRepository,
+                onUnauthorized: onUnauthorized
+            )
             .fullScreenCover(item: $selectedRef, onDismiss: {
                 selectedRef = nil
                 selectedEpisodes = nil
@@ -1311,7 +1337,14 @@ struct ProfileView: View {
                 } else {
                     InProgressRail(
                         items: viewModel.inProgressItems,
-                        onOpenEpisodes: { viewModel.continueWatching.openEpisodes(for: $0) }
+                        loadingItemID: viewModel.progressUpdates.loadingItemID,
+                        onUpdateProgress: { item in
+                            Swift.Task<Void, Never> {
+                                if let ref = await viewModel.progressUpdates.updateProgress(for: item) {
+                                    selectedRef = ref
+                                }
+                            }
+                        }
                     ) { item in
                         selectedRef = item.media.ref
                     }
@@ -2033,110 +2066,33 @@ private struct RecentActivityRail: View {
     }
 }
 
+/// The own profile's In progress rail: three to five cards that fit the width, each the poster, then the title and
+/// "Update progress ›" (TV-701).
 private struct InProgressRail: View {
-    /// The room under a show's poster for its title, up to two lines, and its up-next line (TV-701).
-    @ScaledMetric(relativeTo: .caption) private var upNextLineHeight: CGFloat = 52
-
     let items: [LibraryItem]
-    /// A show's line opens its episode sheet (TV-701).
-    var onOpenEpisodes: (LibraryItem) -> Void = { _ in }
+    /// The card whose page is loading before its progress UI opens.
+    var loadingItemID: String?
+    let onUpdateProgress: (LibraryItem) -> Void
     let action: (LibraryItem) -> Void
+    @State private var width: CGFloat = 0
 
     var body: some View {
-        GeometryReader { proxy in
-            let spacing: CGFloat = 10
-            let itemWidth = PosterSlot.profileRail.size.width
-            let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
-            HStack(alignment: .top, spacing: spacing) {
-                ForEach(Array(items.prefix(visibleCount))) { item in
-                    InProgressPoster(item: item, onOpenEpisodes: { onOpenEpisodes(item) }) {
-                        action(item)
-                    }
-                    .frame(width: itemWidth)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .frame(height: PosterSlot.profileRail.size.height + (showsUpNextLines ? upNextLineHeight : 0))
-    }
-
-    private var showsUpNextLines: Bool {
-        items.contains { ContinueWatchingTicks.state(of: $0) != nil }
-    }
-}
-
-private struct InProgressPoster: View {
-    let item: LibraryItem
-    var onOpenEpisodes: () -> Void = {}
-    let action: () -> Void
-
-    var body: some View {
-        if let tv = continueWatching, tv.upNext != nil {
-            // A show in Continue Watching: the poster opens the show; the title and "S2 E5 next ›" open up next's
-            // season, one button with its own pressed state (TV-701).
-            VStack(alignment: .leading, spacing: 0) {
-                Button(action: action) {
-                    artwork
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("View \(item.media.title)")
-
-                Button(action: onOpenEpisodes) {
-                    titleAndLine(tv)
-                        .padding(.top, 4)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(ContinueWatchingLineButtonStyle())
-                .accessibilityLabel(
-                    TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.displayTitle, tv: tv)
+        let spacing: CGFloat = 10
+        let itemWidth = PosterSlot.profileRail.size.width
+        let visibleCount = max(3, min(5, Int((width + spacing) / (itemWidth + spacing))))
+        HStack(alignment: .top, spacing: spacing) {
+            ForEach(Array(items.prefix(visibleCount))) { item in
+                InProgressCard(
+                    item: item,
+                    slot: .profileRail,
+                    isLoading: loadingItemID == item.id,
+                    onOpen: { action(item) },
+                    onUpdateProgress: { onUpdateProgress(item) }
                 )
-                .accessibilityIdentifier("continue-watching.line")
             }
-        } else {
-            Button(action: action) {
-                VStack(alignment: .leading, spacing: 4) {
-                    artwork
-
-                    // A show a tick just caught up or finished stays until the profile loads again (TV-701).
-                    if let tv = continueWatching {
-                        titleAndLine(tv)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel)
+            Spacer(minLength: 0)
         }
-    }
-
-    private var artwork: some View {
-        MediaArtwork(
-            url: item.media.displayPosterURL,
-            title: item.media.title,
-            slot: .profileRail,
-            mediaType: item.media.ref.mediaType,
-            orientation: item.media.posterOrientation
-        )
-    }
-
-    /// A show's title, then its up-next line, as on Home (TV-701).
-    private func titleAndLine(_ tv: TVShowState) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(item.media.displayTitle)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
-            ContinueWatchingLine(tv: tv)
-        }
-    }
-
-    private var continueWatching: TVShowState? {
-        ContinueWatchingTicks.state(of: item)
-    }
-
-    private var accessibilityLabel: String {
-        guard let continueWatching else { return "View \(item.media.title)" }
-        return TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.title, tv: continueWatching)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 

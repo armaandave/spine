@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Continue Watching on Home and Profile (TV-701). A show's card opens the show from its poster, and from its title
-/// and line ("S2 E5 next ›") a sheet of up next's season (`ContinueWatchingEpisodes`). A write in the sheet changes the
-/// card's line where it is; the rail re-sorts the next time the screen loads it.
+/// and "Update progress ›" a sheet of up next's season (`ContinueWatchingEpisodes`). A write in the sheet changes the
+/// card's show state where it is; the rail re-sorts the next time the screen loads it.
 @MainActor
 @Observable
 final class ContinueWatchingTicks {
@@ -175,14 +175,47 @@ final class ContinueWatchingEpisodes: Identifiable {
 
     /// The season's episodes once they have loaded; until then up next's row alone, from what the card has.
     var rows: [TVEpisodeRowModel] {
-        let loaded = season.detail.map {
-            TVEpisodeRowModel.rows(episodes: $0.episodes ?? [], unlisted: $0.tvUnlistedEpisodes)
-        } ?? []
+        let loaded = seasonRows
         return loaded.isEmpty ? [TVEpisodeRowModel.upNext(upNext)] : loaded
     }
 
-    /// The row the list opens on: up next's.
-    var startRowID: String { TVEpisodeRowModel.upNext(upNext).id }
+    /// The list the sheet shows: up next's row alone while the season loads, then the whole season. When it becomes
+    /// the whole season, the list shows the new rows together with a request for up next's row (TV-701). Left to
+    /// itself, SwiftUI kept up next's row in place by its estimate of the rows that arrived above it, which missed
+    /// their spacing and depended on the rows it had laid out, so the sheet opened rows away from up next.
+    var listID: String {
+        "S\(seasonNumber)" + (seasonRows.isEmpty ? "-up-next" : "")
+    }
+
+    /// The row at the top of the list as it opens: up next's.
+    var startRowID: String {
+        let rows = rows
+        return rows.first { $0.episodeNumber == upNext.episodeNumber && $0.listed }?.id
+            ?? rows.first { $0.episodeNumber == upNext.episodeNumber }?.id
+            ?? TVEpisodeRowModel.upNext(upNext).id
+    }
+
+    /// Up next's row and the rows below it.
+    var rowsFromStart: Int {
+        Self.rowsFromStart(rows: rows, startRowID: startRowID)
+    }
+
+    static func rowsFromStart(rows: [TVEpisodeRowModel], startRowID: String) -> Int {
+        rows.count - (rows.firstIndex { $0.id == startRowID } ?? 0)
+    }
+
+    /// The room the list leaves under its last row, so up next's row can reach the top: the list's height and two
+    /// rows more, less the rows from up next down. The two rows cover the bars over the list's top and bottom, which
+    /// the list's height leaves out. Accessibility sizes make rows taller, which only leaves more room than it needs.
+    static func roomBelowRows(viewportHeight: CGFloat, rowsFromStart: Int) -> CGFloat {
+        max(0, viewportHeight - CGFloat(rowsFromStart - 2) * (TVEpisodeRows.rowHeight + TVEpisodeRows.spacing))
+    }
+
+    private var seasonRows: [TVEpisodeRowModel] {
+        season.detail.map {
+            TVEpisodeRowModel.rows(episodes: $0.episodes ?? [], unlisted: $0.tvUnlistedEpisodes)
+        } ?? []
+    }
 
     /// Log Season… in the ··· menu: once the season has loaded, and when its page would offer it (TV-404).
     var canLogSeason: Bool {
@@ -247,40 +280,6 @@ final class ContinueWatchingEpisodes: Identifiable {
     static func episodeRef(show: MediaRef, seasonNumber: Int, episodeNumber: Int) -> MediaRef {
         MediaRef(itemId: nil, source: show.source, mediaType: "episode", mediaId: show.mediaId,
                  seasonNumber: seasonNumber, episodeNumber: episodeNumber)
-    }
-}
-
-/// The line under a show in Continue Watching (TV-701): "S2 E5 next · 4 of 10 ›", in SF's condensed width when that is
-/// what fits, or "S2 E5 next ›" where the count doesn't fit at all. The chevron shows while there is an up next to
-/// open; a card a tick has just caught up or finished reads as its Library card does, without one.
-struct ContinueWatchingLine: View {
-    let tv: TVShowState
-
-    var body: some View {
-        if let line = TVTrackingPresentation.continueWatchingLine(for: tv) {
-            let short = TVTrackingPresentation.continueWatchingLine(for: tv, includesProgress: false) ?? line
-            ViewThatFits(in: .horizontal) {
-                text(line)
-                text(line).fontWidth(.condensed)
-                text(short).minimumScaleFactor(0.7)
-            }
-            .font(.caption2.weight(.bold))
-            .lineLimit(1)
-            .foregroundStyle(tv.upNext?.isNew == true ? Color.white : Color.white.opacity(0.54))
-        }
-    }
-
-    private func text(_ line: String) -> Text {
-        tv.upNext == nil ? Text(line) : Text("\(line) \(Image(systemName: "chevron.forward"))")
-    }
-}
-
-/// A card's title and line, one button that opens the episode sheet: it dims while pressed.
-struct ContinueWatchingLineButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.45 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -357,8 +356,8 @@ private struct ContinueWatchingPresentations: ViewModifier {
 }
 
 /// Continue Watching's episode sheet (TV-701): half height, with the season's episodes in the season page's rows,
-/// ✕ to close, and a ··· menu with Log Season… and Open Show. It opens scrolled to up next's row, which shows at once
-/// from the card while the rest of the season loads.
+/// ✕ to close, and a ··· menu with Log Season… and Open Show. It opens with up next's row at the top, which shows at
+/// once from the card while the rest of the season loads.
 private struct ContinueWatchingEpisodesSheet: View {
     let episodes: ContinueWatchingEpisodes
     let trackingRepository: TrackingRepository
@@ -366,76 +365,50 @@ private struct ContinueWatchingEpisodesSheet: View {
     let onUnauthorized: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var scrolledRowID: String?
     @State private var isLogPresented = false
     @State private var failures = 0
 
     var body: some View {
         let season = episodes.season
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    LazyVStack(spacing: 16) {
-                        TVEpisodeRows(
-                            rows: episodes.rows,
-                            state: { season.tvEpisodeState($0.tv) },
-                            isWatched: { season.tvIsWatched($0) },
-                            onTick: { episodes.toggle($0) },
-                            onMarkUpTo: { season.askMarkTVUpTo($0) },
-                            onSelect: { episodes.openEpisode($0) }
-                        )
-                    }
-                    .scrollTargetLayout()
-
-                    if season.detail == nil {
-                        loadingState(season)
-                    }
-                }
-            }
-            // Margins the scroll view knows about, so opening on a row further down doesn't also shift the rows
-            // sideways by the padding.
-            .contentMargins(.horizontal, 16, for: .scrollContent)
-            .contentMargins(.top, 4, for: .scrollContent)
-            .contentMargins(.bottom, 24, for: .scrollContent)
-            .scrollPosition(id: $scrolledRowID, anchor: .top)
-            // A new season is a new list: its rows don't animate from the last season's ticks.
-            .id(episodes.seasonNumber)
-            .navigationTitle(episodes.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) {
-                        dismiss()
-                    } label: {
-                        Label("Close", systemImage: "xmark")
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
-                               systemImage: "square.and.pencil") {
-                            openLog()
+            ContinueWatchingEpisodeList(episodes: episodes)
+                // A new season is a new list: its rows don't animate from the last season's ticks.
+                .id(episodes.seasonNumber)
+                .navigationTitle(episodes.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(role: .close) {
+                            dismiss()
+                        } label: {
+                            Label("Close", systemImage: "xmark")
                         }
-                        .disabled(!episodes.canLogSeason)
-                        Button("Open Show", systemImage: "tv") {
-                            episodes.openShow()
-                        }
-                    } label: {
-                        Label("More", systemImage: "ellipsis")
                     }
-                    .accessibilityIdentifier("continue-watching.episodes.more")
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Button("Log \(TVTrackingPresentation.seasonTitle(episodes.seasonNumber))…",
+                                   systemImage: "square.and.pencil") {
+                                openLog()
+                            }
+                            .disabled(!episodes.canLogSeason)
+                            Button("Open Show", systemImage: "tv") {
+                                episodes.openShow()
+                            }
+                        } label: {
+                            Label("More", systemImage: "ellipsis")
+                        }
+                        .accessibilityIdentifier("continue-watching.episodes.more")
+                    }
                 }
-            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .task(id: episodes.seasonNumber) {
-            // Opens on up next, then loads the rest of the season around it. A sheet coming back from a cover over
-            // it keeps its place.
+            // Loads the rest of the season around up next's row. A sheet coming back from a cover over it keeps its
+            // list and its place.
             let season = episodes.season
             guard season.detail == nil else { return }
-            scrolledRowID = episodes.startRowID
             await season.load()
         }
         .alert(episodes.failureTitle, isPresented: Binding(
@@ -500,6 +473,90 @@ private struct ContinueWatchingEpisodesSheet: View {
         }
     }
 
+    /// Log Season… opens the season page's composer once the season's writes have settled, as on its page (TV-404).
+    private func openLog() {
+        let season = episodes.season
+        Task {
+            guard await season.settled() else { return }
+            isLogPresented = true
+        }
+    }
+
+    /// The log's question or the next composer can follow now; a saved log may move the sheet on a season.
+    private func logClosed() {
+        episodes.season.releaseDeferredTVFollowUp()
+        episodes.composerClosed()
+    }
+}
+
+/// The episode sheet's list of one season (TV-701), opening with up next's row at the top. It starts as up next's row
+/// alone, and when the rest of the season arrives it shows those rows in the same update that asks for up next's
+/// row, so SwiftUI places that row itself instead of guessing how far the rows above it moved it.
+private struct ContinueWatchingEpisodeList: View {
+    let episodes: ContinueWatchingEpisodes
+    /// Where the list is scrolled: on up next's row, until the user scrolls it.
+    @State private var position: ScrollPosition
+    /// The list on screen (`ContinueWatchingEpisodes.listID`): it catches up with the model together with the scroll
+    /// position.
+    @State private var shownListID: String
+
+    init(episodes: ContinueWatchingEpisodes) {
+        self.episodes = episodes
+        _position = State(initialValue: ScrollPosition(id: episodes.startRowID, anchor: .top))
+        _shownListID = State(initialValue: episodes.listID)
+    }
+
+    /// The season's rows once the list shows them; until then up next's row alone, as it opened.
+    private var rows: [TVEpisodeRowModel] {
+        shownListID == episodes.listID ? episodes.rows : [TVEpisodeRowModel.upNext(episodes.upNext)]
+    }
+
+    var body: some View {
+        let season = episodes.season
+        let rows = rows
+        let rowsFromStart = ContinueWatchingEpisodes.rowsFromStart(rows: rows, startRowID: episodes.startRowID)
+        ScrollView {
+            VStack(spacing: TVEpisodeRows.spacing) {
+                // Every row laid out, not a lazy stack: a lazy stack guesses the height of the rows above up next
+                // that it hasn't built, and moved up next by rows when its guesses changed, as the sheet grew to its
+                // full height. A season is at most a few dozen rows.
+                VStack(spacing: TVEpisodeRows.spacing) {
+                    TVEpisodeRows(
+                        rows: rows,
+                        state: { season.tvEpisodeState($0.tv) },
+                        isWatched: { season.tvIsWatched($0) },
+                        onTick: { episodes.toggle($0) },
+                        onMarkUpTo: { season.askMarkTVUpTo($0) },
+                        onSelect: { episodes.openEpisode($0) }
+                    )
+                }
+                .scrollTargetLayout()
+
+                if season.detail == nil {
+                    loadingState(season)
+                }
+
+                // Room under the last row, so up next's row reaches the top even near the end of the season.
+                Color.clear
+                    .containerRelativeFrame(.vertical) { height, _ in
+                        ContinueWatchingEpisodes.roomBelowRows(viewportHeight: height, rowsFromStart: rowsFromStart)
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
+        // Margins the scroll view knows about, so opening on a row further down doesn't also shift the rows
+        // sideways by the padding.
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .contentMargins(.top, 4, for: .scrollContent)
+        .contentMargins(.bottom, 24, for: .scrollContent)
+        .scrollPosition($position, anchor: .top)
+        .onChange(of: episodes.listID) { _, listID in
+            // The season's rows and up next's row, in one update.
+            shownListID = listID
+            position.scrollTo(id: episodes.startRowID, anchor: .top)
+        }
+    }
+
     @ViewBuilder
     private func loadingState(_ season: MediaDetailViewModel) -> some View {
         if let error = season.errorMessage {
@@ -520,21 +577,6 @@ private struct ContinueWatchingEpisodesSheet: View {
             ProgressView()
                 .frame(maxWidth: .infinity)
         }
-    }
-
-    /// Log Season… opens the season page's composer once the season's writes have settled, as on its page (TV-404).
-    private func openLog() {
-        let season = episodes.season
-        Task {
-            guard await season.settled() else { return }
-            isLogPresented = true
-        }
-    }
-
-    /// The log's question or the next composer can follow now; a saved log may move the sheet on a season.
-    private func logClosed() {
-        episodes.season.releaseDeferredTVFollowUp()
-        episodes.composerClosed()
     }
 }
 

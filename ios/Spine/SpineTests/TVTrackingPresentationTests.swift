@@ -134,14 +134,12 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new), "S3 E1 · New")
         XCTAssertNil(TVTrackingPresentation.continueWatchingLine(for: show(status: "In progress")))
 
-        // One line: up next, then the count. A card too narrow for the count drops it.
+        // Up next, then the count, for VoiceOver: the card itself reads "Update progress ›".
         let watching = show(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: watching), "S2 E5 next · 4 of 10")
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: watching, includesProgress: false), "S2 E5 next")
         new.watchedCount = 20
         new.airedCount = 21
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new), "S3 E1 · New · 20 of 21")
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new, includesProgress: false), "S3 E1 · New")
     }
 
     func testTV701ACardATickCaughtUpOrFinishedReadsAsItsLibraryCardUntilHomeReloads() {
@@ -156,18 +154,19 @@ final class TVTrackingPresentationTests: XCTestCase {
     }
 
     func testTV701TheLineOpensUpNextsSeasonAndSaysSo() {
-        // The title and line are one button that opens up next's season; VoiceOver reads where it goes.
+        // The title and "Update progress ›" are one button that opens up next's season; VoiceOver reads where the
+        // show stands, which the card no longer shows.
         let tv = show(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))
         XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Crown", tv: tv),
-                       "The Crown, S2 E5 next, 4 of 10, shows Season 2 episodes")
+                       "The Crown, update progress, S2 E5 next, 4 of 10")
         var new = show(status: "In progress", watched: 20, aired: 21, upNext: (3, 1))
         new.upNext?.isNew = true
         XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Bear", tv: new),
-                       "The Bear, S3 E1, New, 20 of 21, shows Season 3 episodes")
-        // A card a tick left without up next opens only the show, and says nothing of episodes.
+                       "The Bear, update progress, S3 E1, New, 20 of 21")
+        // A card a tick left without up next opens the show, and reads its count.
         XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Crown",
                                                                                   tv: show(status: "Completed", watched: 10, aired: 10)),
-                       "The Crown, 10 of 10")
+                       "The Crown, update progress, 10 of 10")
 
         // The sheet is titled with the show and season, by the provider's name for it once it has loaded.
         XCTAssertEqual(TVTrackingPresentation.episodeSheetTitle(show: "The Crown", seasonNumber: 2), "The Crown · Season 2")

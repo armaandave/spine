@@ -831,17 +831,18 @@ Continue Watching on Home and Profile lists shows, not seasons.
 It lists every show in Watching with an aired up-next episode, most recently watched first.
 That order goes by the latest calendar day of a tick or log under the show, then by when it was recorded; a show with nothing watched goes by when Watching was chosen.
 
-Each card shows the show's poster and title, then one line, for example "S1 E2 next · 4 of 10 ›".
-It reads "S3 E1 · New · 20 of 21 ›" when up next aired after the user's latest viewing of the show.
-Where the count doesn't fit, as on Profile's narrower cards, the line leaves it out.
+Each card shows the show's poster and title, then one line, "Update progress ›", in the app's normal width.
+Every card in the In progress row reads the same, whatever its media type, and shows no counts (see "Update progress on other media" below).
 The card has no tick of its own and no touch-and-hold menu.
 
 Tapping the poster opens the show.
 The title and the line are one button, at least 44 points tall, which dims while pressed. It opens a half-height sheet of up next's season, titled with the show and the season as the season page names it ("The Crown · Season 2").
-VoiceOver reads the button as "The Crown, S2 E5 next, 4 of 10, shows Season 2 episodes".
+VoiceOver reads the button with where the show stands, which the card no longer shows: "The Crown, update progress, S2 E5 next, 4 of 10".
+A card a tick has just caught up or finished has no up next until the row reloads, so its button opens the show.
 
-The sheet lists the whole season in the season page's episode rows, opening with up next's row at the top.
+The sheet lists the whole season in the season page's episode rows, opening with up next's row at the top, every time: on the first open and on every reopen, at the half and the full height, before and after the season has loaded, and however near the season's start or end up next is.
 That row shows at once, with up next's title and still from the card, while the rest of the season loads with the season page's request; nothing covers the sheet while it loads.
+When the rest of the season arrives, the list shows its rows together with a request for up next's row, rather than leaving the list to shift by an estimate of the rows above it, and the list leaves room under its last row for up next's row to reach the top near the end of a season.
 In the sheet, as on the season page:
 
 - tapping a tick marks the episode watched (TV-100), and tapping a filled tick unticks it (TV-102);
@@ -855,12 +856,27 @@ When Log Season closes, saved or not, and up next has moved on to a later season
 A row or Open Show tapped while a write is on its way opens its page once that write answers, and not when the write asks the question, opens Log Season or fails.
 A sheet closed before its write answers leaves that write's question, Log Season or failure message to show over the screen.
 
-After each write in the sheet, the card's line changes where it is, and Home's activity or Profile's Recent Activity reloads (TV-703).
+After each write in the sheet, the card's show state changes where it is, and Home's activity or Profile's Recent Activity reloads (TV-703).
 A failed tick or untick restores its row, with an error haptic and a short message (TV-705).
 The show keeps its place in the row until the screen next loads it: on the next visit or a pull to refresh.
 Continue Watching sends up next's title and still from the stored listing (TV-207).
 
 Caught-up, Planning, Paused, Dropped and Completed shows are not listed.
+
+#### Update progress on other media
+
+The In progress row on Home and Profile mixes shows with the user's other titles in progress, and every card reads the same: poster, title, "Update progress ›".
+The title and that line open the title's own progress UI over the screen, the one its media page uses, without leaving the screen:
+
+- a book: the page's progress panel, with pages or percent and its Reading, Paused, Finished and DNF row (BK-301); saving the last page or tapping Finished opens the completion log (BK-302);
+- a game: the page's progress sheet, with hours or percent, its Playing, Paused, Finished and Dropped row, Edit Dates, Restart and Delete; Finished opens the completion log;
+- a manga or a comic: the page's log composer, opened on Progress.
+
+Each runs on the title's page model, with the page's writes and follow-ups: one request per change; a status change shows at once and rolls back on failure with the page's alert, and a progress save that fails says so in the panel or sheet; every failure comes with an error haptic.
+A book that isn't being read or paused, a game without a playthrough to update, and anime, movies and music, whose pages have no progress UI, open the title's page instead.
+The title's page loads before its progress UI opens. If the user taps another card, opens anything else or leaves the screen first, neither the progress UI nor the page opens.
+After a change the card stays where it is until the row reloads on the next visit, and Home's activity or Profile's Recent Activity reloads, as after a tick (TV-703).
+VoiceOver reads the button with where the title stands, for example "Project Hail Mary, update progress, 40 of 476 pages", and reads the new progress as soon as a change is saved.
 
 ### TV-702: The Diary shows every TV log
 
@@ -1146,6 +1162,7 @@ After trying the app on 2026-10-26, the user asked for four changes, now in the 
 - Log on the show page starts on Whole show (TV-404).
 
 Then the user chose how to mark progress from Home: a Continue Watching card's title and line open a half-height sheet of up next's season, in the season page's episode rows (TV-100, TV-701). The touch-and-hold menu built first was removed.
+After trying it on 2026-10-27, the user asked for one line under every In progress card, "Update progress ›", for every media type, opening each title's own progress UI, and for the sheet always to open with up next at the top (TV-701).
 
 Whether ticks post to friends' feeds was first settled by AGENTS.md section 9, whose feed then held logs, ratings and list activity, so ticks didn't post.
 The activity contract (`docs/activity-contract.md`) replaced that on 2026-10-26: a day's ticks are progress on the show, and TV-703 now follows it.

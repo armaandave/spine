@@ -269,6 +269,74 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(named.title, "The Crown · Series 2")
     }
 
+    func testTV701TheSheetKeepsUpNextAtTheTopAsItsSeasonLoads() async throws {
+        // The list opens on up next's row alone. When the season arrives it is a new list (`listID`), which the sheet
+        // shows together with a request for the same row, now with rows above it; ticks change neither. Left to
+        // SwiftUI's estimate of the rows arriving above it, the sheet opened rows away from up next (TV-701).
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4)
+        let gate = holdDetails()
+
+        viewModel.continueWatching.openEpisodes(for: crown)
+        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
+        XCTAssertEqual(sheet.listID, "S2-up-next")
+        XCTAssertEqual(sheet.rows.map(\.id), ["listed-5"])
+        XCTAssertEqual(sheet.startRowID, "listed-5")
+        XCTAssertEqual(sheet.rowsFromStart, 1)
+
+        let load = Task { await sheet.season.load() }
+        await gate.open()
+        await load.value
+        XCTAssertEqual(sheet.listID, "S2", "The whole season: the sheet asks for up next's row again")
+        XCTAssertNotEqual(sheet.listID, "S2-up-next")
+        XCTAssertEqual(sheet.startRowID, "listed-5", "The same row")
+        XCTAssertEqual(sheet.rows.firstIndex { $0.id == sheet.startRowID }, 4, "Four rows above it")
+        XCTAssertEqual(sheet.rowsFromStart, 6)
+
+        // A tick changes the rows' ticks, not the list, which stays where the user has it.
+        holdDetails()
+        let ids = sheet.rows.map(\.id)
+        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv)))
+        _ = await sheet.season.settled()
+        XCTAssertEqual(sheet.listID, "S2")
+        XCTAssertEqual(sheet.rows.map(\.id), ids)
+        XCTAssertEqual(sheet.startRowID, "listed-5")
+
+        // Closed and opened again after the tick: the new up next's row is the one at the top.
+        viewModel.continueWatching.episodes = nil
+        _ = viewModel.continueWatching.sheetDidClose()
+        media.detailGate = nil
+        viewModel.continueWatching.openEpisodes(for: viewModel.inProgressItems[0])
+        let again = try XCTUnwrap(viewModel.continueWatching.episodes)
+        XCTAssertEqual(again.listID, "S2-up-next")
+        XCTAssertEqual(again.startRowID, "listed-6")
+        await again.season.load()
+        XCTAssertEqual(again.listID, "S2")
+        XCTAssertEqual(again.startRowID, "listed-6")
+    }
+
+    func testTV701UpNextReachesTheTopEvenAtTheEndOfTheSeason() async throws {
+        // The list leaves room under its last row for up next's row to reach the top: up next E10 of 10 has only
+        // itself below the top.
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        XCTAssertEqual(sheet.startRowID, "listed-10")
+        XCTAssertEqual(sheet.rowsFromStart, 1)
+        // A row and the space under it take 100 points; the half-height sheet's list is about 340 points tall. The
+        // room is two rows more than the list's height less the rows from up next down: a new list takes its place
+        // before it knows the bars over its top and bottom.
+        XCTAssertEqual(ContinueWatchingEpisodes.roomBelowRows(viewportHeight: 340, rowsFromStart: 1), 440)
+        XCTAssertEqual(ContinueWatchingEpisodes.roomBelowRows(viewportHeight: 340, rowsFromStart: 3), 240)
+        XCTAssertEqual(ContinueWatchingEpisodes.roomBelowRows(viewportHeight: 340, rowsFromStart: 6), 0,
+                       "Mid-season, the rows below are room enough")
+        XCTAssertEqual(ContinueWatchingEpisodes.roomBelowRows(viewportHeight: 760, rowsFromStart: 6), 360,
+                       "At the large height, more")
+    }
+
     func testTV701OnlyAShowWithAnUpNextOpensTheSheet() {
         let ticks = homeViewModel().continueWatching
         ticks.openEpisodes(for: Self.showItem("1", "Caught Up", tv: Self.showState(status: "In progress", caughtUp: true)))

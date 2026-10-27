@@ -15,6 +15,9 @@ final class HomeViewModel {
 
     /// Continue Watching's episode sheet (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
+    /// Every In progress card's "Update progress ›": shows open the episode sheet, other titles their page's progress
+    /// UI (TV-701).
+    let progressUpdates: InProgressUpdates
 
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
@@ -34,16 +37,30 @@ final class HomeViewModel {
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
+        let mediaRepository = mediaRepository ?? AppRepositories.current().media
+        let diaryRepository = diaryRepository ?? AppRepositories.current().diary
         continueWatching = ContinueWatchingTicks(
-            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
-            diaryRepository: diaryRepository ?? AppRepositories.current().diary,
+            diaryRepository: diaryRepository,
+            onUnauthorized: onUnauthorized
+        )
+        progressUpdates = InProgressUpdates(
+            continueWatching: continueWatching,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         )
         // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
         continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
             inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
+        }
+        // So does a write from another card's progress UI.
+        progressUpdates.onUpdate = { [weak self] id, state in
+            guard let self else { return }
+            inProgressItems = InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems)
         }
     }
 
@@ -72,9 +89,9 @@ final class HomeViewModel {
         await load()
     }
 
-    /// A write changed a title. A tick or untick in Continue Watching's sheet keeps its card where it is (TV-701) but
-    /// still reloads activity, where the tick is the day's progress (activity contract AC-4); any other write reloads
-    /// Home.
+    /// A write changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's
+    /// or game's progress) keeps its card where it is (TV-701) but still reloads activity, where it is the day's
+    /// progress (activity contract AC-4); any other write reloads Home.
     func mediaStateDidChange(origin: UUID?) async {
         if origin == continueWatching.changeOrigin {
             await loadActivity()
@@ -103,12 +120,18 @@ final class HomeViewModel {
                 limit: 10
             )
             continueWatching.railDidLoad()
+            progressUpdates.railDidLoad()
         } catch is CancellationError {
             return
         } catch {
             inProgressErrorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
+    }
+
+    /// A write from a card's own progress UI changed a card since the rail last loaded (TV-701).
+    var inProgressNeedsReload: Bool {
+        continueWatching.needsReload || progressUpdates.needsReload
     }
 
     func loadActivity() async {
@@ -244,9 +267,9 @@ struct HomeView: View {
                 Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
             }
             .onChange(of: selectedTab) { _, tab in
-                // Back on Home after a tick in Continue Watching's sheet: the rail re-sorts now, not under the
-                // user's finger (TV-701).
-                if tab == .home, viewModel.continueWatching.needsReload {
+                // Back on Home after a card's progress changed: the rail re-sorts now, not under the user's finger
+                // (TV-701).
+                if tab == .home, viewModel.inProgressNeedsReload {
                     Task { await viewModel.loadInProgress() }
                 }
             }
@@ -304,6 +327,13 @@ struct HomeView: View {
                 selectedEpisodes = selection.context
                 selectedRef = selection.ref
             }
+            .inProgressUpdatePresentations(
+                viewModel.progressUpdates,
+                screenOpenedOther: selectedRef != nil || selectedPerson != nil || selectedActivityEntry != nil,
+                trackingRepository: trackingRepository,
+                diaryRepository: diaryRepository,
+                onUnauthorized: onUnauthorized
+            )
             .fullScreenCover(item: $selectedActivityEntry, onDismiss: { selectedActivityEntry = nil }) { selection in
                 DiaryLogDetailNavigationCover(
                     entryId: selection.id,
@@ -389,12 +419,13 @@ struct HomeView: View {
                     }
                 } else {
                     SpineRail(items: viewModel.inProgressItems) { item in
-                        HomeInProgressPoster(
+                        InProgressCard(
                             item: item,
-                            onOpenEpisodes: { viewModel.continueWatching.openEpisodes(for: item) }
-                        ) {
-                            selectedRef = item.media.ref
-                        }
+                            slot: .carousel,
+                            isLoading: viewModel.progressUpdates.loadingItemID == item.id,
+                            onOpen: { selectedRef = item.media.ref },
+                            onUpdateProgress: { updateProgress(item) }
+                        )
                     }
                 }
             }
@@ -491,6 +522,15 @@ struct HomeView: View {
             hasContent: !viewModel.activityItems.isEmpty,
             hasError: viewModel.activityErrorMessage != nil
         )
+    }
+
+    /// A card's title and "Update progress ›": its progress UI over Home, or its page when it has none.
+    private func updateProgress(_ item: LibraryItem) {
+        Task {
+            if let ref = await viewModel.progressUpdates.updateProgress(for: item) {
+                selectedRef = ref
+            }
+        }
     }
 
     private func handleActivityTap(_ activity: ActivityItem) {
@@ -605,109 +645,6 @@ private struct HomeAvatar: View {
         .overlay {
             Circle().stroke(.white.opacity(0.12), lineWidth: 1)
         }
-    }
-}
-
-private struct HomeInProgressPoster: View {
-    let item: LibraryItem
-    /// A show's title and line open its episode sheet (TV-701).
-    var onOpenEpisodes: () -> Void = {}
-    let action: () -> Void
-
-    var body: some View {
-        Group {
-            if let tv = continueWatching, tv.upNext != nil {
-                // A show in Continue Watching: the poster opens the show; the title and "S2 E5 next ›" open up
-                // next's season, one button with its own pressed state (TV-701).
-                VStack(alignment: .leading, spacing: 0) {
-                    Button(action: action) {
-                        artwork
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("View \(item.media.displayTitle)")
-
-                    Button(action: onOpenEpisodes) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            title
-                            ContinueWatchingLine(tv: tv)
-                        }
-                        .padding(.top, 8)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(ContinueWatchingLineButtonStyle())
-                    .accessibilityLabel(
-                        TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.displayTitle, tv: tv)
-                    )
-                    .accessibilityIdentifier("continue-watching.line")
-                }
-            } else {
-                Button(action: action) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        artwork
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            title
-
-                            // A show a tick just caught up or finished stays until Home loads again (TV-701).
-                            if let continueWatching {
-                                ContinueWatchingLine(tv: continueWatching)
-                            } else if let progressDelta {
-                                ProgressDeltaInlineView(delta: progressDelta)
-                            } else {
-                                Text(metadataText)
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white.opacity(0.54))
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel)
-            }
-        }
-        .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
-    }
-
-    private var artwork: some View {
-        MediaArtwork(
-            url: item.media.displayPosterURL,
-            title: item.media.title,
-            slot: .carousel,
-            mediaType: item.media.ref.mediaType,
-            orientation: item.media.posterOrientation
-        )
-        .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
-    }
-
-    private var title: some View {
-        Text(item.media.displayTitle)
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
-            .lineLimit(2)
-    }
-
-    private var continueWatching: TVShowState? {
-        ContinueWatchingTicks.state(of: item)
-    }
-
-    private var progressDelta: ProgressChangeDisplay? {
-        guard item.media.ref.mediaType != "game" else { return nil }
-        return item.tracking.latestProgressChange?.compactDisplayParts(
-            preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
-        )
-    }
-
-    private var metadataText: String {
-        item.tracking.homeProgressText(preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref))
-    }
-
-    private var accessibilityLabel: String {
-        if let continueWatching {
-            return TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.displayTitle, tv: continueWatching)
-        }
-        return "View \(item.media.displayTitle), \(metadataText)"
     }
 }
 

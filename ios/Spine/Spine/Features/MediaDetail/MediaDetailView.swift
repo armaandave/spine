@@ -8579,10 +8579,15 @@ private struct EpisodesSection: View {
     }
 }
 
-/// A season's episode rows, for a lazy stack: the season page's list, and Continue Watching's episode sheet (TV-701).
+/// A season's episode rows, for a stack: the season page's list, and Continue Watching's episode sheet (TV-701).
 /// Each row ticks and unticks its episode (TV-100, TV-102), opens its page, and offers Mark watched up to here on a
 /// long press (TV-108).
 struct TVEpisodeRows: View {
+    /// A row's height at the usual text sizes; accessibility sizes stack the row and make it taller.
+    static let rowHeight: CGFloat = 84
+    /// The space between rows in a list of them.
+    static let spacing: CGFloat = 16
+
     let rows: [TVEpisodeRowModel]
     /// An episode's current TV state: a confirmed write's answer when the list predates it.
     let state: (TVEpisodeRowModel) -> TVEpisodeState?
@@ -8659,7 +8664,8 @@ private struct EpisodeCard: View {
             trailingView
                 .padding(.trailing, trailingPadding)
         }
-        .frame(maxWidth: .infinity, minHeight: 84, maxHeight: 84, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: TVEpisodeRows.rowHeight, maxHeight: TVEpisodeRows.rowHeight,
+               alignment: .leading)
     }
 
     private var accessibilityLayout: some View {

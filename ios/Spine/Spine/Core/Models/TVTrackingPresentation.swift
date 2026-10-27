@@ -127,31 +127,28 @@ nonisolated enum TVTrackingPresentation {
 
     // MARK: Continue Watching (TV-701)
 
-    /// The line under a show in Continue Watching: "S2 E5 next · 4 of 10", or "S3 E1 · New · 20 of 21" when up next
-    /// aired after the user's latest viewing of the show. Without `includesProgress` it is just "S2 E5 next", for a
-    /// card too narrow for the count. A card that a tick has just caught up or finished stays put until Home loads
-    /// again, and reads as the show's Library card does ("Caught up · E7 on Thu"), else its count.
+    /// Where a show on an In progress card stands, which its card no longer shows but VoiceOver reads: "S2 E5 next ·
+    /// 4 of 10", or "S3 E1 · New · 20 of 21" when up next aired after the user's latest viewing of the show. A card
+    /// that a tick has just caught up or finished stays put until Home loads again, and reads as the show's Library
+    /// card does ("Caught up · E7 on Thu"), else its count.
     static func continueWatchingLine(
         for tv: TVShowState,
-        includesProgress: Bool = true,
         today: Date = Date(),
         calendar: Calendar = .autoupdatingCurrent
     ) -> String? {
-        let progress = includesProgress ? progressText(watched: tv.watchedCount, aired: tv.airedCount) : nil
+        let progress = progressText(watched: tv.watchedCount, aired: tv.airedCount)
         guard let upNext = tv.upNext else {
-            return cardLine(for: tv, today: today, calendar: calendar)
-                ?? progressText(watched: tv.watchedCount, aired: tv.airedCount)
+            return cardLine(for: tv, today: today, calendar: calendar) ?? progress
         }
         let code = episodeCode(season: upNext.seasonNumber, episode: upNext.episodeNumber)
         return [upNext.isNew ? "\(code) · New" : "\(code) next", progress].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// VoiceOver's label for a card's title and line, the button that opens up next's season: "The Crown, S2 E5 next,
-    /// 4 of 10, shows Season 2 episodes". Without up next the card only opens the show, and reads the show and its line.
+    /// VoiceOver's label for a show card's title and "Update progress ›", the button that opens up next's season:
+    /// "The Crown, update progress, S2 E5 next, 4 of 10".
     static func continueWatchingAccessibilityLabel(show: String, tv: TVShowState) -> String {
         let line = continueWatchingLine(for: tv)?.replacingOccurrences(of: " · ", with: ", ")
-        let opens = tv.upNext.map { "shows \(seasonTitle($0.seasonNumber)) episodes" }
-        return [show, line, opens].compactMap { $0 }.joined(separator: ", ")
+        return [show, "update progress", line].compactMap { $0 }.joined(separator: ", ")
     }
 
     /// The title of a card's episode sheet: "The Crown · Season 2", or the provider's name for the season when the

@@ -62,6 +62,7 @@ Existing shared behavior needs implementation checks, not repeated product appro
 Users can start and finish a game without entering hours or percentage.
 Status actions are the primary tracking controls.
 Update Progress is a secondary action.
+The "Update progress ›" line on a game's In progress card on Home and Profile opens the same progress sheet over Home or Profile, with the same actions and follow-ups (TV-701).
 
 Starting a playthrough does not invent progress.
 Both progress values remain unknown until the user supplies them.
