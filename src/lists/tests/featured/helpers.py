@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from app.providers import quota
 from lists.featured import engine, overrides, ratings, registry
@@ -119,6 +119,7 @@ def no_overrides():
         yield
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class FeaturedTestCase(TestCase):
     """Base class: empty cache, a ``Spine`` owner, and run helpers."""
 

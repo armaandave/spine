@@ -38,6 +38,7 @@ def tmdb_result(media_id, title, release_date):
     }
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class ResolverTestCase(TestCase):
     # A database test: music matches are made canonical from the link tables.
     def setUp(self):

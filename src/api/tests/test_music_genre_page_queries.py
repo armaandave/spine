@@ -34,7 +34,7 @@ from app.models import (
     Status,
 )
 from app.models import Music as MusicTracking
-from app.providers import services
+from app.providers import apple_music, musicbrainz, services
 from app.tests.providers.test_apple_music import AppleMusicTestCase, apple_item
 from lists.models import CustomList, CustomListItem
 
@@ -52,13 +52,21 @@ class GenrePageQueryTests(AppleMusicTestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.list = CustomList.objects.create(owner=self.user, name="Albums")
+        self.chart_rows = {}
+        for target, answer in (
+            ("_chart_genre_id", lambda genre: genre),
+            ("_genre_chart", lambda genre: self.chart_rows.get(genre, [])),
+        ):
+            stub = patch.object(apple_music, target, side_effect=answer)
+            stub.start()
+            self.addCleanup(stub.stop)
         # A MusicBrainz page with fewer than 100 known albums tops up from a search.
         search = patch("app.providers.musicbrainz._search_genre", return_value=[])
         search.start()
         self.addCleanup(search.stop)
 
     def genre_album(self, genre, mbid, index):
-        MusicGenreAlbum.objects.create(
+        album = MusicGenreAlbum.objects.create(
             genre=genre,
             release_group_mbid=mbid,
             title=f"Album {index}",
@@ -68,6 +76,8 @@ class GenrePageQueryTests(AppleMusicTestCase):
             listeners=1,
             listens=1,
         )
+        self.chart_rows.setdefault(genre, []).append(musicbrainz.genre_album_result(album))
+
 
     def logged(self, item, index):
         """Track, log, like and list an album, as the viewer."""
@@ -91,6 +101,7 @@ class GenrePageQueryTests(AppleMusicTestCase):
             apple_image=item.image,
         )
         self.genre_album(genre, f"{genre}-{index}", index)
+        self.chart_rows[genre][-1].update(source=APPLE, media_id=apple_id, title=item.title, image=item.image)
         return item
 
     def musicbrainz_album(self, genre, index):
@@ -168,6 +179,7 @@ class GenrePageQueryTests(AppleMusicTestCase):
             apple_image="https://example.com/333.jpg",
         )
         self.genre_album("soul", "soul-2", 2)
+        self.chart_rows["soul"][-1].update(source=APPLE, media_id="333", title="Album 2", image="https://example.com/333.jpg")
 
         for catalog, third in ((APPLE, (APPLE, "333")), (MUSICBRAINZ, (MUSICBRAINZ, "soul-2"))):
             with self.subTest(catalog=catalog), override_settings(MUSIC_CATALOG_SOURCE=catalog):

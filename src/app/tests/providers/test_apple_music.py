@@ -138,6 +138,7 @@ class FakeApple:
     APPLE_MUSIC_KEY_ID=KEY_ID,
     APPLE_MUSIC_PRIVATE_KEY=SIGNING_KEY_SETTING,
     MUSIC_DEFAULT_MARKET="US",
+    MUSIC_CATALOG_SOURCE="musicbrainz",
 )
 class AppleMusicTestCase(TestCase):
     def setUp(self):
@@ -1032,44 +1033,44 @@ class AlbumGenreAndDateTests(AppleMusicTestCase):
             defaults={"canonical_id": "1657869377", "release_group_mbid": "rg", **fields},
         )
 
-    def test_apple_genres_in_musicbrainz_words_without_music(self):
+    def test_apple_labels_without_the_music_catch_all(self):
         self.apple((200, fixture("page_sos.json")), (200, fixture("page_whos_next_deluxe.json")))
 
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["R&B/Soul"])
         self.assertEqual(
             apple_music.music("1440850317")["genres"],
-            ["hard rock", "rock", "arena rock", "rock and roll"],
+            ["Hard Rock", "Rock", "Arena Rock", "Rock & Roll"],
         )
 
-    def test_the_bridge_then_the_item_then_apples(self):
+    def test_apples_genres_win_over_old_item_and_bridge_genres(self):
         self.apple((200, fixture("page_sos.json")))
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["R&B/Soul"])
 
         item = apple_item("1657869377")
         genre_facets(item, "contemporary r&b", "alternative r&b")
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["alternative r&b", "contemporary r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["R&B/Soul"])
 
-        # MusicBrainz's genres win once the bridge has them, even when they are fewer.
+        # A MusicBrainz bridge must not replace Apple labels.
         self.bridge(genres=["contemporary r&b"])
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["contemporary r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["R&B/Soul"])
 
-        self.bridge(genres=["r&b", "contemporary r&b", "soul"])
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b", "contemporary r&b", "soul"])
+        self.bridge(genres=["r&b", "soul"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["R&B/Soul"])
 
-    def test_an_album_saved_before_its_bridge_moves_to_musicbrainzs_genres(self):
+    def test_an_album_keeps_apples_genres_after_its_bridge_arrives(self):
         self.apple((200, fixture("page_whos_next_deluxe.json")))
         item = apple_item("1440850317", title="Who's Next (Deluxe Edition)")
         album = apple_music.music("1440850317")
-        self.assertEqual(album["genres"], ["hard rock", "rock", "arena rock", "rock and roll"])
+        self.assertEqual(album["genres"], ["Hard Rock", "Rock", "Arena Rock", "Rock & Roll"])
         genre_facets(item, *album["genres"])
 
         AppleAlbum.objects.filter(apple_album_id="1440850317").update(release_group_mbid="rg", genres=["hard rock", "rock"])
 
-        self.assertEqual(apple_music.music("1440850317")["genres"], ["hard rock", "rock"])
+        self.assertEqual(apple_music.music("1440850317")["genres"], ["Hard Rock", "Rock", "Arena Rock", "Rock & Roll"])
         bridge = AppleAlbum.objects.get(apple_album_id="1440850317")
         self.assertEqual(
             apple_music.filter_metadata("1440850317", {}, bridge)["genres"],
-            ["hard rock", "rock"],
+            ["Arena Rock", "Hard Rock", "Rock", "Rock & Roll"],
         )
 
     def test_the_release_date_is_musicbrainzs_when_surely_earlier_for_the_same_title(self):
@@ -1126,7 +1127,7 @@ class SongPageTests(AppleMusicTestCase):
             song["external_links"],
             {"Apple Music": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"},
         )
-        self.assertEqual(song["genres"], ["r&b"])
+        self.assertEqual(song["genres"], ["R&B/Soul"])
 
     def test_a_song_not_on_the_album_is_none(self):
         self.apple((200, fixture("page_sos.json")))

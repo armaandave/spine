@@ -22,6 +22,8 @@ class Command(BaseCommand):
         steps = parser.add_subparsers(dest="step", required=True)
         check = steps.add_parser("check", help="Test the Apple Music key and count what needs attention")
         check.add_argument("--repair", action="store_true", help="Join strays' rows to the albums that moved")
+        genres = steps.add_parser("genres", help="Refresh stored Apple album genres (dry run unless --apply)")
+        genres.add_argument("--apply", action="store_true", help="Fetch Apple labels and update genre facets")
         map_step = steps.add_parser("map", help="Match MusicBrainz albums to Apple Music albums (link rows only)")
         map_step.add_argument("--limit", type=int, default=None, help="Look at this many albums at most")
         report = steps.add_parser("report", help="Count every album; --csv writes each one's row")
@@ -47,6 +49,10 @@ class Command(BaseCommand):
         try:
             if step == "check":
                 counts = music_move.check(repair_strays=options["repair"])
+            elif step == "genres":
+                from app.apple_genres import refresh_stored_genres  # noqa: PLC0415
+
+                counts = refresh_stored_genres(apply=options["apply"])
             elif step == "map":
                 counts = music_move.map_albums(limit=options["limit"])
             elif step == "report":

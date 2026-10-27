@@ -1319,6 +1319,9 @@ def check(*, repair_strays=False):
             "Apple Music albums not from the move": _apple_items_not_moved().count(),
         },
     )
+    if config.music_catalog_source() == Sources.APPLE_MUSIC:
+        result["genre browsing"] = "Apple Music charts (no album matching required)"
+        return result
     genres, below = genre_coverage()
     result["genre pages"] = len(genres)
     result["genre pages under the gate"] = len(below)

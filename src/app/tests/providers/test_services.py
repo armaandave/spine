@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from app.models import MediaTypes, Sources
 from app.providers import (
@@ -768,6 +768,7 @@ class ServicesTests(TestCase):
         mock_search.assert_called_once_with("year zero", 1)
 
     @patch("app.providers.services.musicbrainz.discover")
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_discover_musicbrainz_genre(self, discover):
         discover.return_value = {"results": [{"title": "Year Zero"}]}
 

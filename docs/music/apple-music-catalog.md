@@ -8,42 +8,23 @@ the genre pages.
 
 ## Status
 
-Step 1, the groundwork, is in place:
+The Apple catalog is the default. Search, artist search, artist pages and genre
+browsing use Apple Music. The installed app already supports these responses.
 
-- the `apple_music` source
-- the `MusicAlbumLink` and `AppleAlbum` tables
-- the Apple Music API client
-- the listing rule
+On 2026-10-27 Armaan chose Apple's genre vocabulary and native charts instead of
+reconstructing MusicBrainz genre pages. Album and song genres use Apple's labels,
+minus the catch-all "Music". A MusicBrainz bridge may supply an earlier release date
+or an exact Spotify URL, but it never replaces Apple genres.
 
-Step 2 is being built. So far:
-
-- the catalog setting
-- Apple album and song pages for `apple_music` refs
-- the Item fallback when Apple Music fails
-- Apple search, people search and artist pages for the `apple_music` source
-- canonical refs at every entry point, so an album's old MusicBrainz ref and its Apple
-  aliases reach one Item
-- Other Versions, More by and You Might Also Like on Apple album pages
-- Apple's badge, the "Data from Apple Music" credit and the trademark line on the web's
-  Apple album pages
-- the MusicBrainz bridge of Apple albums, filled in the background
-- genre albums linked to Apple albums, and Apple genre pages from them
-- featured lists: the `apple_album` ID, canonical music matches, and a pause for the
-  data move
-- the data move and its undo (`manage.py music_catalog`, run on production through
-  `scripts/music-catalog-production.sh`), and the fallback to MusicBrainz
-
-The catalog setting still defaults to MusicBrainz, so search, people search, genre
-pages, featured lists and every existing album are served from MusicBrainz. Only a
-request that names an `apple_music` ref or source reaches Apple Music. No album has
-moved, so canonical refs change nothing yet. The two background tasks below do
-nothing until the Apple Music key is set.
+The original library migration is complete. Safe catch-up matches can still move
+through `scripts/music-catalog-production.sh`; unmatched or review albums keep their
+MusicBrainz Items and logs. Old MusicBrainz refs continue to resolve canonically.
 
 ## Catalog setting
 
 - `MUSIC_CATALOG_SOURCE` picks where new music albums come from: `apple_music`, or
   anything else for MusicBrainz, so a typo falls back safely.
-- It defaults to `MUSIC_CATALOG_DEFAULT` (`musicbrainz`). Tests always use the default,
+- It defaults to `MUSIC_CATALOG_DEFAULT` (`apple_music`). Tests always use the default,
   never `.env`.
 - `app.config.get_sources` and `get_default_source_name` read it at call time for
   music. `MEDIA_TYPE_CONFIG` is built when the module loads, so its music entry can't
@@ -221,7 +202,7 @@ top-level import would be circular.
 | `title` | Apple's name without " - EP" / " - Single"; the suffix becomes `primary_type` |
 | `image` | The artwork template at 600x600; anything over 200 characters (`Item.image`) is the placeholder |
 | `release_date`, `details.first_release_date` | Apple's `releaseDate`, or MusicBrainz's first release date from the bridge when it is surely earlier and the release group has the same title |
-| `genres` | The bridge's MusicBrainz genres whenever it has any, else the Item's genre filters, else Apple's genres in MusicBrainz's words (`app/music_catalog.py`, without "Music"). Album pages rewrite the Item's genre filters from this list: Apple's broad genres give way to MusicBrainz's once the bridge has them, and the list is empty only when all three are, so the filters are never emptied |
+| `genres` | Apple’s `genreNames`, with the catch-all "Music" removed. Stored facets are used only when Apple omits the field. Bridges never replace these labels. |
 | `music.release_group_mbid`, `representative_release.release_mbid` | The Apple album ID |
 | `music.cover_art` | `{source: "apple_music", release_group_mbid: <id>, fallback_used: true}` |
 | `selection_basis`, `country`, `format`, `status` | `"apple_music"`, the storefront, `"Digital Media"`, `"Official"` |
@@ -418,69 +399,40 @@ pages read it for their genres, date and Spotify button (see Album pages).
   - An album with no barcode, or one MusicBrainz doesn't know, is only marked as
     checked, so it isn't queued again for a month.
 - **`same_title`** is set when Apple's title, without " - EP" / " - Single", is the
-  release group's. SOS Deluxe: LANA's barcode leads to SOS's release group: LANA gets
-  its genres, but not its 2022 date.
+  release group's. SOS Deluxe: LANA's barcode leads to SOS's release group: LANA retains
+  its own genres and date.
 - **After filling,** an Item that holds the album gets its genre and date filters again
-  (`apple_music.filter_metadata`, the album page's own rules, so MusicBrainz's genres
-  replace Apple's), and the album's cached detail pages, both stages and their
+  (`apple_music.filter_metadata`, the album page's own rules, so Apple genre labels
+  remain authoritative), and the album's cached detail pages, both stages and their
   `:validation` keys, are dropped (`api.services.media.drop_music_detail_cache`).
 
 ## Genre pages
 
-The genre pages keep MusicBrainz's detailed genres. `MusicGenreAlbum` stays keyed by
-release group, and its weekly refresh is unchanged apart from one addition.
+Genre pages use Apple's album charts directly. There is no MusicBrainz-to-Apple
+coverage requirement and no matching queue on the browsing path.
 
-- **Wikidata's Apple Music IDs.** The weekly refresh's Wikidata query also asks for
-  each album's Apple Music album ID (P2281), through `OPTIONAL`, so no album drops out.
-  The winning album's lowest ID is stored on a link row
-  (`music_catalog.store_wikidata_apple_ids`): a release group with no row gets an
-  unchecked `unmatched` row (method `wikidata`), and a row the genre link task may
-  write again gets the new ID. Every other row stays as it is.
-- **"Link genre albums to Apple"** (`app.music_links.link_genre_albums`) runs hourly
-  on the featured queue, at most 10 minutes a run, on the background Apple bucket,
-  most read-about albums first. No MusicBrainz requests, and it never writes the genre
-  table. It links each genre album with no link row, or whose own unmatched row is
-  unchecked or more than 30 days old:
-  1. Wikidata's ID, checked 100 at a time (`albums?ids=…&views=other-versions`): the
-     album must have the same artist and title, with no edition words the MusicBrainz
-     title lacks; the match is its listing's identity.
-  2. Otherwise Apple search (`apple_music.match_album`, below).
-
-  It writes tier-3 `matched` rows (method `wikidata` or `search`) or `unmatched` rows,
-  with the album's title, cover and genres. A failed Apple request ends the run; the
-  next run carries on.
-- **Whose rows are whose.** The genre link task writes only rows for release groups
-  with no row, and its own `unmatched` rows: those of albums no MusicBrainz Item holds,
-  or never checked (`music_catalog.genre_fill_rows`). Rows of albums that have an Item
-  belong to the data move, which always records when it checked them. Tier-3 rows feed
-  genre pages and featured lists; they never redirect old links and never move a
-  logged album.
-- **Matching by search** (`apple_music.match_album(title, artist)`): one background
-  search for "artist title" and one batch of the hits' version families. A hit counts
-  when it isn't a single, has the same artist and the same title, or the same once
-  " - EP" and trailing bracketed tags ("(Remastered)") are left out of Apple's title.
-  Names match without case, accents or punctuation. The match is the listing that
-  counts best: the exact title first, then no edition words such as "(Deluxe)" that the
-  MusicBrainz title lacks (a remaster or mix is neutral). Of listings that count the
-  same, the one Apple's search lists first wins, as Apple Music shows it first: Abbey
-  Road's "(2019 Mix)" before its "(Remastered)" and "(Remastered 2009)".
-- **Apple genre pages** (`apple_music.discover`), for a request with the `apple_music`
-  source, or any music genre request once the catalog is Apple Music (installed builds
-  send an older album's MusicBrainz source with its genre chip):
-  - the genre's albums that a matched or applied link row ties to an Apple album, in
-    the genre table's order
-  - each under its canonical ref; an album a MusicBrainz Item holds keeps its
-    MusicBrainz ref, so its data stays together
-  - an album two rows name is shown once
-  - the link row's title and cover, else the Item's, with MusicBrainz's artist and year
-  - no MusicBrainz top-up and no request at all when a page opens: six queries
-  - serving it, the API reads every album's Item and the viewer's state together
-    (`music_summaries_from_provider`), so a page takes the same number of queries
-    however many albums it has; MusicBrainz genre pages are served the same way
-  - a genre none of whose albums is linked yet (no genre rows, or none matched or
-    applied) gets MusicBrainz's genre page for it instead of an empty page
-    (`services.discover`), with its albums under their canonical refs like every
-    result list. A page past the last Apple album stays empty
+- `app/apple_genres.py` and `app/data/apple_music_genres.json` hold Apple's music
+  taxonomy (IDs/names/parents, recorded from Apple's public genre endpoint). This
+  lets album chips resolve without fuzzy album matching. The provider fetches and
+  caches Apple's supported chart genres for the storefront. Subgenre chips use the
+  nearest supported ancestor chart; legacy names such as `hip hop` and `r&b` have
+  explicit aliases. Unknown genres return an empty page.
+- `apple_music.discover` fetches the storefront's album chart, follows bounded
+  pagination (up to 200 entries), and folds clean twins/re-uploads with the same
+  listing rules as search. Pages are sliced after deduplication. The chart is cached
+  for an hour; failed requests are not cached as empty results.
+- An empty Apple chart stays empty, rather than switching silently to a different
+  catalog. The explicit MusicBrainz discovery path remains available when the catalog
+  setting is rolled back.
+- The legacy hourly genre matcher skips while Apple is the catalog. Its rows and
+  MusicBrainz genre data remain for compatibility and rollback.
+- Apple featured charts use the feed's Apple album IDs directly when the catalog is
+  Apple. MusicBrainz-derived editorial lists can continue to resolve through the
+  existing match/bridge path.
+- `scripts/music-catalog-production.sh genres` counts stored Apple albums without
+  making provider calls. `genres --apply --confirm` creates a verified backup, then
+  refreshes their genre facets in batches. Missing albums preserve their saved
+  genres; dates, ratings, logs, identity, likes and lists are untouched.
 
 ## Featured lists
 
@@ -553,7 +505,7 @@ deleted, and every move can be undone.
 
 | Step | What it does | Changes data |
 |---|---|---|
-| `check [--repair]` | Tests the key with one Apple Music request, then counts link rows by status, strays, albums kept on both, rows in tables the move doesn't know, Apple Music albums not from the move, and genre pages under the switch's gate (20 or more albums, under 80% of them linked). `--repair` joins strays first | Only with `--repair` |
+| `check [--repair]` | Tests the key with one Apple Music request, then counts link rows by status, strays, albums kept on both, rows in tables the move doesn't know, Apple Music albums not from the move, and legacy genre coverage when the catalog is MusicBrainz; Apple browsing needs no matching gate. `--repair` joins strays first | Only with `--repair` |
 | `map [--limit N]` | Matches albums to Apple Music albums. Writes link rows (and the `AppleAlbum` rows of the albums it sees), nothing else | No |
 | `report [--csv PATH]` | Counts every album by group and status. `--csv` writes one row per album to a file only its owner can read, or to standard output with `-` (the counts then go to standard error) | No |
 | `link --mbid M --apple A` | Records a manual pick | Yes |

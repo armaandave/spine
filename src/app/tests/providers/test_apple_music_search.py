@@ -431,7 +431,7 @@ class ArtistPageTests(AppleMusicTestCase):
                 "image": SOS_IMAGE,
                 "release_date": "2022-12-09",
                 "year": "2022",
-                "genres": ["r&b"],
+                "genres": ["R&B/Soul"],
                 "content_rating": "explicit",
                 "roles": ["Artist"],
                 "credit_roles": ["Albums"],

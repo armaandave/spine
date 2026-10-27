@@ -5,7 +5,7 @@ See docs/music/apple-music-catalog.md.
 - ``canonical_music_ref`` and its batch form ``canonical_music_refs``: the ref an
   album is stored under, so an old MusicBrainz ref, an Apple alias and the album's
   own ref all reach one Item. They read the database only, never the network.
-- ``apple_genre_names``: Apple's genres in MusicBrainz's words, for albums whose
+- ``apple_genre_names``: Apple's genre labels without the catch-all Music label, for albums whose
   MusicBrainz genres aren't known yet, so genre chips and library filters keep
   matching the MusicBrainz genre pages.
 - ``genre_fill_rows`` and ``store_wikidata_apple_ids``: the link rows the genre link
@@ -27,26 +27,6 @@ MUSICBRAINZ = Sources.MUSICBRAINZ.value
 # Matches good enough to send a MusicBrainz ref to Apple Music before its album moves.
 REDIRECT_TIERS = (1, 2)
 
-# Apple's genre names that MusicBrainz words differently. Any other name is used
-# lowercased, which matches MusicBrainz for most ("Pop", "Hard Rock", "Jazz").
-APPLE_GENRES = {
-    "alternative": "alternative rock",
-    "alternative rap": "alternative hip hop",
-    "electronica": "electronic",
-    "hardcore rap": "hardcore hip hop",
-    "hip-hop": "hip hop",
-    "hip-hop/rap": "hip hop",
-    "holiday": "christmas music",
-    "neo-soul": "neo soul",
-    "pop/rock": "pop rock",
-    "prog-rock/art rock": "progressive rock",
-    "psychedelic": "psychedelic rock",
-    "r&b/soul": "r&b",
-    "rap": "hip hop",
-    "rock & roll": "rock and roll",
-    "singer/songwriter": "singer-songwriter",
-    "underground rap": "underground hip hop",
-}
 # Apple files every album under "Music" as well, which says nothing.
 APPLE_CATCH_ALL_GENRE = "music"
 # Release groups per query when Wikidata's Apple Music IDs are stored.
@@ -54,15 +34,14 @@ WIKIDATA_STORE_BATCH = 500
 
 
 def apple_genre_names(names):
-    """Return Apple genre names as MusicBrainz genre names, once each, in Apple's order."""
-    genres = []
+    """Keep Apple's genre labels, omitting its catch-all Music label."""
+    genres, seen = [], set()
     for name in names or []:
-        key = " ".join(str(name or "").casefold().split())
-        if not key or key == APPLE_CATCH_ALL_GENRE:
-            continue
-        genre = APPLE_GENRES.get(key, key)
-        if genre not in genres:
-            genres.append(genre)
+        value = " ".join(str(name or "").split())
+        key = value.casefold()
+        if key and key != APPLE_CATCH_ALL_GENRE and key not in seen:
+            genres.append(value)
+            seen.add(key)
     return genres
 
 

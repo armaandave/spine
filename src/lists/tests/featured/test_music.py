@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import requests
 
+from django.test import override_settings
+
 from app.models import Item
 from app.providers import services
 from lists.featured import registry
@@ -253,6 +255,7 @@ class AppleMusicTests(FeaturedTestCase):
             },
         }
 
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_albums_resolve_through_urls_then_search(self):
         with api_routes(self.routes(load_fixture("music", "apple_us.json"))) as mocked:
             result = ADAPTERS["apple_music"].fetch(definition("apple-music-top-albums-us"))
@@ -265,6 +268,16 @@ class AppleMusicTests(FeaturedTestCase):
         self.assertEqual((unresolved.ids, unresolved.year, unresolved.rank), ({}, 2018, 3))
         url_call = next(call for call in mocked.call_args_list if "ws/2/url" in call.args[2])
         self.assertIn("https://music.apple.com/us/album/1440642493", url_call.kwargs["params"]["resource"])
+
+    @override_settings(MUSIC_CATALOG_SOURCE="apple_music")
+    def test_apple_chart_uses_native_ids_without_musicbrainz(self):
+        with api_routes({"rss.marketingtools.apple.com": load_fixture("music", "apple_us.json")}) as mocked:
+            result = ADAPTERS["apple_music"].fetch(definition("apple-music-top-albums-us"))
+        self.assertEqual(len(result.entries), 3)
+        self.assertTrue(all(entry.ids.get("apple_album") for entry in result.entries))
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(result.entries[0].ids, {"apple_album": "6822944288"})
+        self.assertIn("/600x600bb", result.entries[0].image)
 
     def test_uk_chart_also_looks_up_uk_urls(self):
         self.assertEqual(

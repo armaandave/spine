@@ -23,11 +23,12 @@ OTHER_MBID = "3bd76d40-7f0e-36b7-9348-91a33afee20e"
 
 class MusicCatalogSettingTests(SimpleTestCase):
     def test_tests_follow_the_codes_default(self):
-        self.assertEqual(settings.MUSIC_CATALOG_DEFAULT, "musicbrainz")
+        self.assertEqual(settings.MUSIC_CATALOG_DEFAULT, "apple_music")
         self.assertEqual(settings.MUSIC_CATALOG_SOURCE, settings.MUSIC_CATALOG_DEFAULT)
-        self.assertEqual(config.get_sources(MediaTypes.MUSIC.value), [Sources.MUSICBRAINZ])
-        self.assertEqual(config.get_default_source_name(MediaTypes.MUSIC.value), Sources.MUSICBRAINZ)
+        self.assertEqual(config.get_sources(MediaTypes.MUSIC.value), [Sources.APPLE_MUSIC])
+        self.assertEqual(config.get_default_source_name(MediaTypes.MUSIC.value), Sources.APPLE_MUSIC)
 
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_music_follows_the_setting_at_call_time(self):
         with override_settings(MUSIC_CATALOG_SOURCE="apple_music"):
             self.assertEqual(config.get_sources(MediaTypes.MUSIC.value), [Sources.APPLE_MUSIC])
@@ -51,17 +52,17 @@ class MusicCatalogSettingTests(SimpleTestCase):
 
 
 class AppleGenreNamesTests(SimpleTestCase):
-    def test_apple_genres_become_musicbrainz_genres(self):
-        self.assertEqual(apple_genre_names(["Hip-Hop/Rap", "Music"]), ["hip hop"])
-        self.assertEqual(apple_genre_names(["R&B/Soul", "Music", "Contemporary R&B"]), ["r&b", "contemporary r&b"])
+    def test_apple_genres_keep_apples_own_labels(self):
+        self.assertEqual(apple_genre_names(["Hip-Hop/Rap", "Music"]), ["Hip-Hop/Rap"])
+        self.assertEqual(apple_genre_names(["R&B/Soul", "Music", "Contemporary R&B"]), ["R&B/Soul", "Contemporary R&B"])
         self.assertEqual(
             apple_genre_names(["Hard Rock", "Music", "Rock", "Arena Rock", "Rock & Roll"]),
-            ["hard rock", "rock", "arena rock", "rock and roll"],
+            ["Hard Rock", "Rock", "Arena Rock", "Rock & Roll"],
         )
-        self.assertEqual(apple_genre_names(["Singer/Songwriter", "Alternative"]), ["singer-songwriter", "alternative rock"])
+        self.assertEqual(apple_genre_names(["Singer/Songwriter", "Alternative"]), ["Singer/Songwriter", "Alternative"])
 
     def test_each_genre_once_and_nothing_for_music_alone(self):
-        self.assertEqual(apple_genre_names(["Hip-Hop/Rap", "Rap", " hip-hop/rap "]), ["hip hop"])
+        self.assertEqual(apple_genre_names(["Hip-Hop/Rap", "Rap", " hip-hop/rap "]), ["Hip-Hop/Rap", "Rap"])
         self.assertEqual(apple_genre_names(["Music"]), [])
         self.assertEqual(apple_genre_names(None), [])
 
@@ -80,6 +81,7 @@ def link(status, *, apple_album_id=SOS, item=None, mbid=SOS_MBID, **fields):
     )
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class CanonicalMusicRefTests(TestCase):
     """The six rules, in order, and their batch form."""
 
