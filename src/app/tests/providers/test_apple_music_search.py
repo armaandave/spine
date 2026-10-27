@@ -21,6 +21,9 @@ from app.tests.providers.test_apple_music import (
 )
 
 SZA_ID = "605800394"
+SAVAGE_ID = "894820464"
+AMERICAN_DREAM = "1724494274"
+AMERICAN_DREAM_VARIANTS = {"1729925845", "1729923680", "1729916799"}
 SOS_IMAGE = (
     "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/"
     "bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg"
@@ -288,6 +291,32 @@ class AlbumSearchTests(AppleMusicTestCase):
         self.assertEqual(ids(results)[0], "1657869377")
         self.assertEqual(len(fake.requests), 4)
 
+    def test_remix_variants_next_to_their_album_are_left_out(self):
+        self.apple(*search_answers("american_dream"))
+
+        results = apple_music.search_albums("21 savage american dream", 1, preserve_ranking_fields=True)["results"]
+
+        # The sped up, slowed down and nightcore albums fold into american dream (whose
+        # clean twin is its own listing); SAVAGE MODE II's chopped not slopped album stays.
+        self.assertEqual(ids(results)[:4], [AMERICAN_DREAM, "1534209957", "1446918493", "1444898453"])
+        self.assertFalse(set(AMERICAN_DREAM_VARIANTS) & set(ids(results)))
+        self.assertIn("1536235462", ids(results))
+        self.assertEqual(
+            [row["provider_rank_boost"] for row in results[:3]],
+            [apple_music.rank_boost(0), apple_music.rank_boost(1), apple_music.rank_boost(2)],
+        )
+
+    def test_a_remix_variant_without_its_album_stays(self):
+        answers = search_answers("american_dream")
+        for answer in answers:
+            data = answer[1]["data"] if "data" in answer[1] else answer[1]["results"]["albums"]["data"]
+            data[:] = [album for album in data if album["id"] not in {AMERICAN_DREAM, "1725240183"}]
+        self.apple(*answers)
+
+        results = apple_music.search_albums("21 savage american dream", 1)["results"]
+
+        self.assertTrue(set(AMERICAN_DREAM_VARIANTS) <= set(ids(results)))
+
 
 class PeopleSearchTests(AppleMusicTestCase):
     def test_artists_with_their_pictures(self):
@@ -451,7 +480,29 @@ class ArtistPageTests(AppleMusicTestCase):
             apple_music.person_page("1")
 
         self.assertEqual(raised.exception.status_code, 404)
-        self.assertIsNone(cache.get("apple_music_v1_artist_page_1"))
+        self.assertIsNone(cache.get(f"apple_music_{apple_music.ARTIST_PAGE_CACHE_VERSION}_artist_page_1"))
+
+
+class ArtistPageVariantTests(AppleMusicTestCase):
+    def test_21_savages_albums_leave_out_american_dreams_variants(self):
+        fake = self.apple(
+            (200, fixture("person_21_savage.json")),
+            (200, fixture("person_21_savage_full-albums_2.json")),
+            (200, fixture("person_21_savage_singles_2.json")),
+            (200, fixture("person_21_savage_appears-on-albums_2.json")),
+            (200, fixture("person_21_savage_families_1.json")),
+        )
+
+        page = apple_music.person_page(SAVAGE_ID)
+
+        self.assertEqual(len(fake.requests), 5)
+        albums = [credit["media_id"] for credit in page["credits"] if "Albums" in credit["credit_roles"]]
+        self.assertIn(AMERICAN_DREAM, albums)
+        self.assertFalse(set(AMERICAN_DREAM_VARIANTS) & set(albums))
+        self.assertEqual(len(albums), 11)
+        # Appears On keeps its singles, sped up ones included.
+        appears_on = [credit["title"] for credit in page["credits"] if "Appears on" in credit["credit_roles"]]
+        self.assertIn("Loophole (feat. 21 Savage) [Sped Up & Slowed Down]", appears_on)
 
 
 class SourceTests(AppleMusicTestCase):

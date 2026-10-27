@@ -1,0 +1,484 @@
+{
+  "data": [
+    {
+      "id": "1608951475",
+      "type": "albums",
+      "attributes": {
+        "name": "Peru (Remix) - Single",
+        "artistName": "Fireboy DML, 21 Savage & Blxst",
+        "url": "https://music.apple.com/us/album/peru-remix-single/1608951475",
+        "playParams": {
+          "id": "1608951475",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-02-11",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "194690752810",
+        "genreNames": [
+          "Afrobeats",
+          "Music",
+          "African"
+        ],
+        "recordLabel": "YBNL Nation / EMPIRE",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/cf/22/d5/cf22d5e7-5dfd-1b08-40c3-81a09d72154f/194690752810_cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1607880039",
+      "type": "albums",
+      "attributes": {
+        "name": "Don't Play That - Single",
+        "artistName": "King Von & 21 Savage",
+        "url": "https://music.apple.com/us/album/dont-play-that-single/1607880039",
+        "playParams": {
+          "id": "1607880039",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-02-04",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "194690707285",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Forever and a Day, LLC / EMPIRE",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/6f/0c/0a/6f0c0ab2-e0a7-3051-e0c4-b5ec0ab243be/194690707285_cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1579580198",
+      "type": "albums",
+      "attributes": {
+        "name": "Lazy Susan (feat. Warren Hue & 马思唯) - Single",
+        "artistName": "21 Savage & Rich Brian",
+        "url": "https://music.apple.com/us/album/lazy-susan-feat-warren-hue-%E9%A9%AC%E6%80%9D%E5%94%AF-single/1579580198",
+        "playParams": {
+          "id": "1579580198",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2021-08-09",
+        "trackCount": 1,
+        "upc": "00602438736966",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "MARVEL/Hollywood Records, Inc./Interscope Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/10/f9/1b/10f91b6b-b18f-54f2-1b98-885e5140e0c7/21UMGIM71041.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1566843813",
+      "type": "albums",
+      "attributes": {
+        "name": "Spiral: From the Book of Saw Soundtrack - EP",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/spiral-from-the-book-of-saw-soundtrack-ep/1566843813",
+        "playParams": {
+          "id": "1566843813",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-05-14",
+        "contentRating": "explicit",
+        "trackCount": 4,
+        "upc": "886449233359",
+        "genreNames": [
+          "Soundtrack",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/4c/55/55/4c555543-9f29-af29-d7ac-f67d7ef1a1b4/886449233359.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1564502253",
+      "type": "albums",
+      "attributes": {
+        "name": "Spiral",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/spiral/1564502253",
+        "playParams": {
+          "id": "1564502253",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-04-30",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886449233410",
+        "genreNames": [
+          "Soundtrack",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f5/e1/8e/f5e18ebb-6d3e-a29e-353c-0208c66d6b98/886449233410.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1511983934",
+      "type": "albums",
+      "attributes": {
+        "name": "Pressure - Single",
+        "artistName": "Real Recognize Rio & 21 Savage",
+        "url": "https://music.apple.com/us/album/pressure-single/1511983934",
+        "playParams": {
+          "id": "1511983934",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-05-05",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "859739061567",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang Music Group",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/6a/4d/a3/6a4da3bb-c629-7dae-8909-d8b4624aa7b2/859739061567_cover.jpg/{w}x{h}bb.jpg",
+          "width": 1600,
+          "height": 1600
+        }
+      }
+    },
+    {
+      "id": "1508056639",
+      "type": "albums",
+      "attributes": {
+        "name": "Secret (feat. Summer Walker) - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/secret-feat-summer-walker-single/1508056639",
+        "playParams": {
+          "id": "1508056639",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-04-17",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886448411208",
+        "genreNames": [
+          "R&B/Soul",
+          "Music",
+          "Hip-Hop/Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/ac/13/fc/ac13fc4a-3061-e2a9-bec4-9348555983ff/886448411208.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1485688403",
+      "type": "albums",
+      "attributes": {
+        "name": "Immortal - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/immortal-single/1485688403",
+        "playParams": {
+          "id": "1485688403",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-10-31",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886448108924",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/de/d3/b4/ded3b4d5-1df1-f1b1-c44f-20799492d5fc/886448108924.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1485048441",
+      "type": "albums",
+      "attributes": {
+        "name": "Motivation (Savage Remix) - Single",
+        "artistName": "Normani & 21 Savage",
+        "url": "https://music.apple.com/us/album/motivation-savage-remix-single/1485048441",
+        "playParams": {
+          "id": "1485048441",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-10-28",
+        "trackCount": 1,
+        "upc": "886448093008",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Keep Cool/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/f1/26/5f/f1265f8f-39b0-8f7b-0645-7e9b6e21a907/886448093008.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1348030820",
+      "type": "albums",
+      "attributes": {
+        "name": "Cocky (feat. London On Da Track) - Single",
+        "artistName": "A$AP Rocky, Gucci Mane & 21 Savage",
+        "url": "https://music.apple.com/us/album/cocky-feat-london-on-da-track-single/1348030820",
+        "playParams": {
+          "id": "1348030820",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-02-18",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886446960906",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "RCA Records Label",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/fe/96/7d/fe967de1-84be-2f87-313a-23b678a9c641/886446960906.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1263697026",
+      "type": "albums",
+      "attributes": {
+        "name": "Yea Yea Yea (Instrumental) - Single",
+        "artistName": "21 Savage & Mookie Mardi Gra",
+        "url": "https://music.apple.com/us/album/yea-yea-yea-instrumental-single/1263697026",
+        "playParams": {
+          "id": "1263697026",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-08-01",
+        "trackCount": 1,
+        "upc": "859722185454",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Deraj Enterprises",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/ed/47/9c/ed479c87-0fff-592f-787d-f6f5ab652f2f/859722185454_cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1263696580",
+      "type": "albums",
+      "attributes": {
+        "name": "Yea Yea Yea - Single",
+        "artistName": "21 Savage & Mookie Mardi Gra",
+        "url": "https://music.apple.com/us/album/yea-yea-yea-single/1263696580",
+        "playParams": {
+          "id": "1263696580",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-07-24",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "859722162523",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Deraj Enterprises",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/ff/96/d0/ff96d09d-a369-2997-74b8-4e7b3e5abb23/859722162523_cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1165518763",
+      "type": "albums",
+      "attributes": {
+        "name": "How to Ball - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/how-to-ball-single/1165518763",
+        "playParams": {
+          "id": "1165518763",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-10-14",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "0722512311688",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "101 Distribution",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/bc/2b/28/bc2b28f5-1dca-0efe-67be-8af26305807a/0722512311688.png/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      }
+    },
+    {
+      "id": "1114403108",
+      "type": "albums",
+      "attributes": {
+        "name": "One Foot - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/one-foot-single/1114403108",
+        "playParams": {
+          "id": "1114403108",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-05-15",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "840096533910",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music20/v4/77/a9/59/77a9595e-4691-4929-33af-e4f05910465b/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1114398483",
+      "type": "albums",
+      "attributes": {
+        "name": "Red Opps - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/red-opps-single/1114398483",
+        "playParams": {
+          "id": "1114398483",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-01-13",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "840096533972",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f6/c6/ae/f6c6aeb0-2a5b-72e2-77ab-476253773686/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1127016404",
+      "type": "albums",
+      "attributes": {
+        "name": "Vette (feat. Trouble) - Single",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/vette-feat-trouble-single/1127016404",
+        "playParams": {
+          "id": "1127016404",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-11-30",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "808391012622",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Spiffy Global",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music30/v4/50/56/f4/5056f4c6-1e35-0bb7-2b23-e4854f95473a/FullSizeRender.jpg/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      }
+    }
+  ]
+}

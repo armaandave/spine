@@ -969,6 +969,85 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertEqual(model.detail?.title, "Enriched album", "A full refresh patches only the state, so the enrichment stays.")
     }
 
+    func testMovedAlbumAdoptsItsAppleRefSkipsEnrichmentAndRefreshesAfterALog() async throws {
+        let musicBrainzRef = Self.musicDetail(title: "SOS").ref
+        let apple = Self.appleMusicDetail(title: "SOS")
+        let media = CountingMediaRepository(detail: apple)
+        let model = Self.model(ref: musicBrainzRef, media: media, tracking: ScriptedTrackingRepository())
+        let observer = PageObserver(model: model)
+
+        await model.load()
+
+        XCTAssertEqual(model.ref, apple.ref, "The page adopts the ref the album answered with.")
+        XCTAssertEqual(media.enrichmentCount, 0, "Apple Music albums have no enrichment stage.")
+        XCTAssertEqual(model.musicEnrichmentState, .idle)
+
+        // A log saved from another screen posts the album's Apple ref.
+        MediaStateChange.post(ref: apple.ref, origin: UUID())
+        await model.refreshFinished()
+        XCTAssertEqual(observer.received, 1)
+        XCTAssertEqual(media.detailCount, 2, "The page refreshes after a change to its album.")
+        XCTAssertEqual(media.detailRefs.map(\.id), [musicBrainzRef.id, apple.ref.id])
+
+        model.applyLogSave(MediaLogSaveResult(
+            ref: apple.ref,
+            tracking: Self.movieState(rating: "4.0"),
+            diaryEntry: try Self.entry(id: 123, consumedAt: Self.today, rating: nil)
+        ))
+        await model.refreshFinished()
+        XCTAssertEqual(model.viewer?.rating, "4.0", "The page's own log folds in without a full reload.")
+        XCTAssertEqual(media.detailCount, 2)
+    }
+
+    func testBareAppleAlbumRetriesOnceAndFillsInTheWholePage() async {
+        // While Apple Music fails, the server opens a saved album from its Item, with no music.
+        let bare = Self.appleMusicDetail(title: "SOS", music: nil)
+        let media = CountingMediaRepository(detail: Self.appleMusicDetail(title: "SOS"))
+        media.queuedResponses = [bare]
+        let model = Self.model(ref: bare.ref, media: media, tracking: ScriptedTrackingRepository())
+
+        await model.load()
+        await model.refreshFinished()
+
+        XCTAssertEqual(media.detailCount, 2, "One quiet retry")
+        XCTAssertNotNil(model.detail?.music, "The retry fills in the tracks, buttons and related albums.")
+        XCTAssertEqual(media.enrichmentCount, 0)
+
+        let stillBare = CountingMediaRepository(detail: bare)
+        let page = Self.model(ref: bare.ref, media: stillBare, tracking: ScriptedTrackingRepository())
+        await page.load()
+        await page.refreshFinished()
+        XCTAssertEqual(stillBare.detailCount, 2, "Only one retry")
+        XCTAssertNil(page.detail?.music)
+
+        stillBare.response = Self.appleMusicDetail(title: "SOS")
+        page.scheduleRefresh(.full, after: .zero)
+        await page.refreshFinished()
+        XCTAssertNotNil(page.detail?.music, "A later refresh, after a log, fills it in too.")
+    }
+
+    func testAppleAlbumRefreshReplacesThePageButNeverWithTheBareOne() async {
+        let album = Self.appleMusicDetail(title: "SOS")
+        let media = CountingMediaRepository(detail: album)
+        let model = Self.model(ref: album.ref, media: media, tracking: ScriptedTrackingRepository())
+        await model.load()
+        await model.refreshFinished()
+        XCTAssertEqual(media.detailCount, 1, "A whole page doesn't retry.")
+
+        media.response = Self.appleMusicDetail(title: "SOS, opened from its Item", music: nil)
+        model.scheduleRefresh(.full, after: .zero)
+        await model.refreshFinished()
+        XCTAssertNotNil(model.detail?.music, "The bare page never replaces one that has its music.")
+        XCTAssertEqual(model.detail?.title, "SOS")
+
+        // A page that opened partial (say without its related albums) gets the whole page on its next refresh.
+        media.response = Self.appleMusicDetail(title: "SOS, whole page")
+        model.scheduleRefresh(.full, after: .zero)
+        await model.refreshFinished()
+        XCTAssertEqual(model.detail?.title, "SOS, whole page")
+        XCTAssertEqual(media.enrichmentCount, 0)
+    }
+
     /// TV-504: season stars go through the TV `rate` action, in whole steps on the 0-10 wire with the season number
     /// (they used to PATCH the season's tracking with no season number). Season pages still refresh the whole detail.
     func testSeasonPageWritesRefreshTheWholeDetail() async throws {
@@ -1050,7 +1129,8 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
             diaryRepository: UnusedDiaryRepository(),
             onUnauthorized: {},
             writeRefreshDelay: .zero,
-            externalRefreshDelay: .zero
+            externalRefreshDelay: .zero,
+            bareAlbumRetryDelay: .zero
         )
     }
 
@@ -1061,9 +1141,9 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertTrue(condition(), "Timed out waiting for the condition.", file: file, line: line)
     }
 
-    private static func detail(ref: String, state: TrackingState?, title: String = "Fixture") -> MediaDetail {
+    private static func detail(ref: String, state: TrackingState?, title: String = "Fixture", music: String? = nil) -> MediaDetail {
         var detail = try! JSONDecoder.api.decode(MediaDetail.self, from: Data("""
-        {"ref":\(ref),"title":"\(title)","subtitle":null,"overview":null,"image_url":null,"poster_accent_color":null,
+        {"ref":\(ref),"title":"\(title)","music":\(music ?? "null"),"subtitle":null,"overview":null,"image_url":null,"poster_accent_color":null,
          "release_date":null,"default_source":null,"user_state":null,"backdrop_url":null,"details":{},"related":{},
          "providers":null,"community":null,"external_ratings":null,"reviews":null,"cast":null,"crew":null,
          "related_sections":null,"episodes":null,"seasons":null,"custom_poster_url":null}
@@ -1083,6 +1163,13 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
     private static func musicDetail(title: String) -> MediaDetail {
         detail(ref: #"{"item_id":305,"source":"musicbrainz","media_type":"music","media_id":"album-1","season_number":null,"episode_number":null}"#, state: nil, title: title)
     }
+
+    /// A whole Apple Music album page by default; `music: nil` is the page the server builds from the Item.
+    private static func appleMusicDetail(title: String, music: String? = MediaDetailTrackingPipelineTests.appleMusic) -> MediaDetail {
+        detail(ref: #"{"item_id":305,"source":"apple_music","media_type":"music","media_id":"1657869377","season_number":null,"episode_number":null}"#, state: nil, title: title, music: music)
+    }
+
+    private nonisolated static let appleMusic = #"{"release_group_mbid":"1657869377","content_rating":"explicit","cover_art":{"source":"apple_music","release_group_mbid":"1657869377","fallback_used":true}}"#
 
     private static func seasonDetail(title: String) -> MediaDetail {
         detail(ref: #"{"item_id":306,"source":"tmdb","media_type":"season","media_id":"1399","season_number":3,"episode_number":null}"#, state: nil, title: title)
@@ -1325,7 +1412,10 @@ private final class CountingMediaRepository: MediaRepository {
     var likeGate: RefreshGate?
     var likeError: Error?
     var likeResponse: MediaLikeResponse?
+    /// Answers detail calls in turn before `response`.
+    var queuedResponses: [MediaDetail] = []
     private(set) var detailCount = 0
+    private(set) var detailRefs: [MediaRef] = []
     private(set) var communityCount = 0
     private(set) var reviewPageCount = 0
     private(set) var enrichmentCount = 0
@@ -1339,7 +1429,8 @@ private final class CountingMediaRepository: MediaRepository {
 
     func detail(ref: MediaRef) async throws -> MediaDetail {
         detailCount += 1
-        let detail = response
+        detailRefs.append(ref)
+        let detail = queuedResponses.isEmpty ? response : queuedResponses.removeFirst()
         await detailGates[detailCount]?.wait()
         if let detailError { throw detailError }
         return detail

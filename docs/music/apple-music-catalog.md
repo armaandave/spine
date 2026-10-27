@@ -74,6 +74,24 @@ group as one **listing**.
   is hidden only when no member can be streamed. Its IDs still open. Being incomplete
   never hides a listing, since Apple Music shows albums it marks incomplete (Lemonade);
   it only puts a complete member first (rule 3 above).
+- **Remix variants** (`remix_variants`) are separate albums that Apple doesn't link to
+  their original: 21 Savage's *american dream* has *american dream (sped up)*, *(slowed
+  down)* and *(nightcore version)*, each with its own barcode. An album is a variant of
+  another only when all of these hold:
+  - its normalized name is exactly the other's followed by one of these markers, in
+    parentheses, in brackets or after " - ": sped up, slowed, slowed down, slowed +
+    reverb, super slowed, nightcore, nightcore version, reverb, 8D, instrumental, a
+    cappella, acapella
+  - both have the same artist name and the same artist IDs: the album's own, else
+    those of the artist whose page section it comes from. An album with neither is
+    never folded
+  - neither is a single
+  - the original is among the same albums
+
+  Edition, remaster, live and anniversary words are never markers, so "Thriller 25",
+  "SOS Deluxe: LANA" and Weezer's self-titled albums stay apart. A variant is left out
+  of artist pages, search and More by when its original is there, and is listed in the
+  original's Other Versions.
 
 ## Canonical refs (`src/app/music_catalog.py`)
 
@@ -209,7 +227,7 @@ top-level import would be circular.
 | `selection_basis`, `country`, `format`, `status` | `"apple_music"`, the storefront, `"Digital Media"`, `"Official"` |
 | `media[]`, `tracks[]` | Grouped by `discNumber`; `track_mbid` and `recording_mbid` are the song ID (`-2` and so on when a song repeats); `number` is a string; `is_video` for music videos |
 | `artist_credit[]` | One per Apple artist, joined as "A, B & C". `artist_mbid` is always null; the new `artist_source` and `artist_id` name the Apple artist |
-| `streaming_links` | Apple Music first (`kind: "album"`), then Spotify: the exact album when the bridge or a link row knows it (`kind: "album"`), else Spotify's search for the artist and album (`kind: "search"`) |
+| `streaming_links` | Apple Music first (`kind: "album"`), then Spotify: the exact album when the bridge or a link row knows it (`kind: "album"`), else Spotify's search for the artist and album (`kind: "search"`). The app shows a Spotify button only for a link to the album itself (`kind: "album"` or none), never for a search |
 | `score`, `annotation` | Null: no community score and no editor's notes |
 | `related` | On album pages, `other_versions`, `more_by_artist` and `related_albums` (below); empty for every other read |
 
@@ -236,8 +254,8 @@ stages, because installed builds replace the first stage's payload with the seco
 
 | Section | Title | Albums |
 |---|---|---|
-| `other_versions` | Other Versions | The other listings of the album's version family, in Apple's order, then its editions found by shared songs |
-| `more_by_artist` | More by *first artist* | The first album artist's Albums section on Apple Music (`artists/{id}/view/full-albums`), without this album |
+| `other_versions` | Other Versions | The other listings of the album's version family, in Apple's order, then its editions found by shared songs, then its remix variants in the first artist's Albums section |
+| `more_by_artist` | More by *first artist* | The first album artist's Albums section on Apple Music (`artists/{id}/view/full-albums`), without this album or remix variants whose original is there |
 | `related_albums` | You Might Also Like | Apple's similar albums by other artists, from the album page's `related-albums` view |
 
 - **At most 10 albums a section.** The album's own listing and hidden listings are left
@@ -255,7 +273,8 @@ stages, because installed builds replace the first stage's payload with the seco
 - **Badges.** Each other version has a `relation`: "Original album" for one whose songs
   are all on this album; else the first of "Live", "Anniversary", "Deluxe" (deluxe,
   expanded, bonus, extended, or a bare "edition") or "Remaster" that its title names;
-  else "Deluxe" for a bigger edition; else "Other version".
+  else "Deluxe" for a bigger edition; else "Other version", as for a remix variant.
+  The app shows no badge on album cards; VoiceOver reads the relation.
 - **Each album is a search row:** its listing's identity (or its own ID in the other two
   sections), title, 600x600 cover, "Artist · Year · Type" subtitle and content rating.
 - **Requests.** Up to three more per album page: the shared-songs lookup and its batch
@@ -298,7 +317,9 @@ Apple Music results once the catalog is `apple_music`.
   albums.
 - **Apple's order is kept.** There is no re-ranking, no popular-albums merge and no
   ListenBrainz lookup. A listing appears once, at the best position of any of its
-  members, and never again on a later page. Hidden listings are left out.
+  members, and never again on a later page. Hidden listings are left out, and so is a
+  remix variant whose original is on the same page. The batch names each album's
+  artist IDs; an album it leaves out isn't folded.
 - **Each row shows its listing:** its identity as `media_id`, and its best member's
   title, cover (600x600) and date. `AppleAlbum` rows are upserted for every album the
   page saw, as on album pages.
@@ -348,6 +369,8 @@ Apple Music results once the catalog is `apple_music`.
     albums. One batch then reads every album's version family.
   - Each album is shown as its listing, which folds Appears On's clean twins into one.
     Hidden listings are left out.
+  - A remix variant is left out of a section that holds its original, its artist IDs
+    being the page's artist. Appears On is other artists' albums, so it folds none.
   - An album in several sections is one credit in each of their groups.
   - Genres are Apple's, in MusicBrainz's words.
 
@@ -454,6 +477,10 @@ release group, and its weekly refresh is unchanged apart from one addition.
   - serving it, the API reads every album's Item and the viewer's state together
     (`music_summaries_from_provider`), so a page takes the same number of queries
     however many albums it has; MusicBrainz genre pages are served the same way
+  - a genre none of whose albums is linked yet (no genre rows, or none matched or
+    applied) gets MusicBrainz's genre page for it instead of an empty page
+    (`services.discover`), with its albums under their canonical refs like every
+    result list. A page past the last Apple album stays empty
 
 ## Featured lists
 
@@ -799,7 +826,12 @@ Recorded responses live in `src/app/tests/mock_data/apple_music/`.
   (`backfill_family_*.json`), and for No Fences one release's ISRCs, Apple Music's songs
   for them and a search. `--only match` records the album matcher's searches for
   Lemonade and Abbey Road with their families (`search_albums_lemonade.json`,
-  `search_albums_abbey_road.json` and their `search_families_*.json`).
+  `search_albums_abbey_road.json` and their `search_families_*.json`). `--only
+  variants` records 21 Savage's artist page (`person_21_savage*.json`), a search for
+  *american dream* whose family batch keeps each album's artist IDs
+  (`search_*_american_dream.json`), and the album's page, shared-songs lookup and
+  artist's albums (`page_american_dream.json`, `editions_songs_american_dream.json`,
+  `artist_albums_21_savage.json`).
 - The script trims each response to the fields the code reads. It refuses to write a
   file containing anything that looks like a token.
 - The tests sign with a throwaway key, and they fail on any request that would reach the

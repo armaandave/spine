@@ -1,6 +1,7 @@
 import base64
 import copy
 import json
+from http.client import RemoteDisconnected
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -13,6 +14,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from pyrate_limiter import Duration, RedisBucket
+from urllib3.exceptions import ProtocolError
 
 from app.models import (
     AppleAlbum,
@@ -385,6 +387,43 @@ class RequestTests(AppleMusicTestCase):
         self.assertEqual(len(fake.requests), 2)
         self.assertEqual(user.requests, [])
         self.assertFalse(apple_music.is_paused())
+
+    def test_a_dropped_connection_is_tried_once_more(self):
+        # What requests raises when Apple has closed an idle keep-alive connection.
+        dropped = requests.exceptions.ConnectionError(
+            ProtocolError(
+                "Connection aborted.",
+                RemoteDisconnected("Remote end closed connection without response"),
+            ),
+        )
+        for background in (False, True):
+            with self.subTest(background=background):
+                fake = self.apple(dropped, (200, fixture("album_thriller.json")), background=background)
+
+                album = apple_music.album("269572838", background=background)
+
+                self.assertEqual(album["id"], "269572838")
+                self.assertEqual(len(fake.requests), 2)
+                self.assertFalse(apple_music.is_paused())
+
+        fake = self.apple(dropped, dropped)
+        with self.assertRaisesMessage(services.ProviderAPIError, "network error"):
+            apple_music.album("269572838")
+        self.assertEqual(len(fake.requests), 2, "Only once more")
+        self.assertFalse(apple_music.is_paused())
+
+    def test_refused_connections_and_timeouts_are_not_tried_again(self):
+        for failure in (
+            requests.exceptions.ConnectionError("refused"),
+            requests.exceptions.ConnectTimeout("connect timed out"),
+            requests.exceptions.ReadTimeout("read timed out"),
+        ):
+            with self.subTest(failure=failure):
+                clear_pause()
+                fake = self.apple(failure)
+                with self.assertRaises(services.ProviderAPIError):
+                    apple_music.album("269572838")
+                self.assertEqual(len(fake.requests), 1)
 
     def test_errors_become_provider_errors_with_their_status(self):
         cases = (

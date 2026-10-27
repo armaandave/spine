@@ -3249,6 +3249,12 @@ private struct SettingsAboutView: View {
                         SettingsCard {
                             VStack(spacing: 0) {
                                 SettingsCreditLink(
+                                    title: "Apple Music",
+                                    detail: "Music metadata and album artwork",
+                                    url: URL(string: "https://music.apple.com/")!
+                                )
+                                SettingsDivider()
+                                SettingsCreditLink(
                                     title: "MusicBrainz",
                                     detail: "Music metadata",
                                     url: URL(string: "https://musicbrainz.org/")!
@@ -3281,9 +3287,12 @@ private struct SettingsAboutView: View {
                         }
                     }
 
-                    Text("©2026 Valve Corporation. Steam and the Steam logo are trademarks or registered trademarks of Valve Corporation.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.38))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Apple and Apple Music are trademarks of Apple Inc., registered in the U.S. and other countries.")
+                        Text("©2026 Valve Corporation. Steam and the Steam logo are trademarks or registered trademarks of Valve Corporation.")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.38))
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
