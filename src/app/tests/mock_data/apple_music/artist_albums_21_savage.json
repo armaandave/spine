@@ -1,0 +1,437 @@
+{
+  "data": [
+    {
+      "id": "1859497204",
+      "type": "albums",
+      "attributes": {
+        "name": "WHAT HAPPENED TO THE STREETS?",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/what-happened-to-the-streets/1859497204",
+        "playParams": {
+          "id": "1859497204",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-12-12",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196873915708",
+        "genreNames": [
+          "Rap",
+          "Music",
+          "Hip-Hop/Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/04/cf/73/04cf7356-aec2-2569-da3e-0d7ad9a3d40d/196873915708.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1729925845",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (slowed down)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-slowed-down/1729925845",
+        "playParams": {
+          "id": "1729925845",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-13",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841481",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/79/69/9b/79699b44-d735-148d-52bf-3d7cd80b0fd8/196871841481.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1724494274",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream/1724494274",
+        "playParams": {
+          "id": "1724494274",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-11",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871714549",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/9a/5d/9f9a5d3b-c310-7c44-9506-1f198e390e5f/196871714549.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1729923680",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (nightcore version)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-nightcore-version/1729923680",
+        "playParams": {
+          "id": "1729923680",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-09",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841511",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/c1/52/e6/c152e68f-a660-dd3c-2515-d1bdde660fca/196871841511.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1729916799",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (sped up)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-sped-up/1729916799",
+        "playParams": {
+          "id": "1729916799",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-09",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841436",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/57/6b/3e/576b3ea2-3a79-be8d-6000-0953cf79b4d0/196871841436.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1652998965",
+      "type": "albums",
+      "attributes": {
+        "name": "Her Loss",
+        "artistName": "Drake & 21 Savage",
+        "url": "https://music.apple.com/us/album/her-loss/1652998965",
+        "playParams": {
+          "id": "1652998965",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-11-04",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "00602448926067",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO / Republic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/c7/00/3f/c7003f83-3a43-1201-4aec-41be71ba64c5/22UM1IM29131.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1534209957",
+      "type": "albums",
+      "attributes": {
+        "name": "SAVAGE MODE II",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode-ii/1534209957",
+        "playParams": {
+          "id": "1534209957",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-10-02",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "886448747697",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/03/3d/e5/033de513-4e28-5d06-e42b-4f2d5ba65dce/886448747697.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1447717361",
+      "type": "albums",
+      "attributes": {
+        "name": "i am > i was (Deluxe)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/i-am-i-was-deluxe/1447717361",
+        "playParams": {
+          "id": "1447717361",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-12-21",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "886447502792",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Dirty South",
+          "Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/8a/50/1c8a507f-4f04-07e1-8c34-ce656a851625/886447502792.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1303426031",
+      "type": "albums",
+      "attributes": {
+        "name": "Without Warning",
+        "artistName": "21 Savage, Offset & Metro Boomin",
+        "url": "https://music.apple.com/us/album/without-warning/1303426031",
+        "playParams": {
+          "id": "1303426031",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-10-31",
+        "contentRating": "explicit",
+        "trackCount": 10,
+        "upc": "886446838526",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic/Quality Control Music/Motown/Capitol/Boominati Worldwide/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/24/25/f6/2425f66c-acda-ef4f-5682-ad543e088507/886446838526.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1254351754",
+      "type": "albums",
+      "attributes": {
+        "name": "Issa Album",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/issa-album/1254351754",
+        "playParams": {
+          "id": "1254351754",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-07-07",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "886446575674",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a8/f9/7e/a8f97eb8-d58c-b3d8-c4a3-359a53cd2b38/886446575674.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1165327406",
+      "type": "albums",
+      "attributes": {
+        "name": "Savage Season",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/savage-season/1165327406",
+        "playParams": {
+          "id": "1165327406",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-10-13",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "0722512312142",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "101 Distribution",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/ae/17/5f/ae175ff2-c288-282d-ad20-3432a8ec9fab/0722512312142.png/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      }
+    },
+    {
+      "id": "1133782044",
+      "type": "albums",
+      "attributes": {
+        "name": "Savage Mode",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode/1133782044",
+        "playParams": {
+          "id": "1133782044",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-07-15",
+        "contentRating": "explicit",
+        "trackCount": 9,
+        "upc": "886446010236",
+        "genreNames": [
+          "Rap",
+          "Music",
+          "Hip-Hop/Rap",
+          "Underground Rap",
+          "Hardcore Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/dd/5c/5c/dd5c5c4b-16d0-e74d-0075-5df0b6daf33c/886446010236.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1114376830",
+      "type": "albums",
+      "attributes": {
+        "name": "Slaughter King",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/slaughter-king/1114376830",
+        "playParams": {
+          "id": "1114376830",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-12-01",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "840096535723",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/01/36/84/01368464-ed5d-45b2-448a-2907b9c4400b/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1114660184",
+      "type": "albums",
+      "attributes": {
+        "name": "The Slaughter Tape",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/the-slaughter-tape/1114660184",
+        "playParams": {
+          "id": "1114660184",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-05-15",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "840096533552",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music60/v4/97/b7/df/97b7df0e-8c9f-43d9-ff39-1f4e1962e0d9/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    }
+  ]
+}

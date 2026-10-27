@@ -1185,15 +1185,10 @@ struct MusicStreamingDestination: Hashable, Identifiable {
 
     var id: String { url.absoluteString }
 
-    /// A Spotify link the server couldn't match to the album opens Spotify's search for it.
-    var opensSearch: Bool { kind?.lowercased() == "search" }
-
-    var actionTitle: String {
-        switch label {
-        case "Apple Music": "Listen on Apple Music"
-        case "Spotify": opensSearch ? "Search on Spotify" : "Open in Spotify"
-        default: "Open in \(label)"
-        }
+    /// "album" or no kind opens the album itself; "search" opens the service's search for it.
+    var opensAlbum: Bool {
+        guard let kind = kind?.lowercased() else { return true }
+        return kind == "album"
     }
 }
 
@@ -1287,10 +1282,11 @@ enum MusicAlbumPresentation {
         return links.compactMap { streamingDestination($0) }.filter { seen.insert($0.id).inserted }
     }
 
-    /// The album page's buttons: Apple Music always first, as Apple asks, then Spotify on its own row.
+    /// The album page's buttons: Apple Music first, then Spotify when its link opens the album itself. A Spotify
+    /// search for the album isn't shown.
     ///
     /// A MusicBrainz release can link the album in several Apple Music storefronts, sorted by URL, so `/gb/` comes
-    /// before `/us/`. The badge opens the listener's own storefront when it's there (a link without one opens it
+    /// before `/us/`. The button opens the listener's own storefront when it's there (a link without one opens it
     /// too), then the US one, then the first.
     static func listeningDestinations(
         _ links: [MusicStreamingLink],
@@ -1306,7 +1302,7 @@ enum MusicAlbumPresentation {
         let apple = destinations
             .filter { $0.label == "Apple Music" }
             .min { storefrontRank($0) < storefrontRank($1) }
-        let spotify = destinations.first { $0.label == "Spotify" }
+        let spotify = destinations.first { $0.label == "Spotify" && $0.opensAlbum }
         return [apple, spotify].compactMap { $0 }
     }
 
@@ -2707,8 +2703,7 @@ private struct MediaDetailPageView: View {
                         font: .system(size: 33, weight: .heavy),
                         lineLimit: nil,
                         minimumScaleFactor: 0.66,
-                        maxLogoHeight: 48,
-                        isExplicit: MusicContentRating.isExplicit(detail.music?.contentRating)
+                        maxLogoHeight: 48
                     )
 
                     if let credits = MediaCreditPresentation.make(for: detail) {
@@ -2973,8 +2968,7 @@ private struct MediaDetailPageView: View {
         font: Font,
         lineLimit: Int?,
         minimumScaleFactor: CGFloat,
-        maxLogoHeight: CGFloat,
-        isExplicit: Bool = false
+        maxLogoHeight: CGFloat
     ) -> some View {
         MediaTitleDisplay(
             detail: detail,
@@ -2984,7 +2978,6 @@ private struct MediaDetailPageView: View {
             lineLimit: lineLimit,
             minimumScaleFactor: minimumScaleFactor,
             maxLogoHeight: maxLogoHeight,
-            isExplicit: isExplicit,
             onTap: parentTVRef(detail).map { ref in
                 { presentedRef = ref }
             },
@@ -6361,19 +6354,28 @@ private struct MusicAlbumTrackRow: View {
     }
 }
 
-/// Apple's "Listen on Apple Music" badge first, then Spotify on its own row, for every album.
 private struct MusicStreamingButtons: View {
     let links: [MusicStreamingLink]
 
+    private var destinations: [MusicStreamingDestination] {
+        MusicAlbumPresentation.listeningDestinations(links)
+    }
+
     var body: some View {
-        let destinations = MusicAlbumPresentation.listeningDestinations(links)
         if !destinations.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(destinations) { destination in
-                    if destination.label == "Apple Music" {
-                        AppleMusicBadgeLink(url: destination.url)
-                    } else {
-                        SpotifyLinkButton(destination: destination)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(destinations) { destination in
+                        MusicStreamingButton(destination: destination)
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(destinations) { destination in
+                            MusicStreamingButton(destination: destination)
+                        }
                     }
                 }
             }
@@ -6381,44 +6383,61 @@ private struct MusicStreamingButtons: View {
     }
 }
 
-/// Apple's badge artwork, unaltered and linked straight to the album. Apple asks for at least 30 pt of height and
-/// clear space of a tenth of it, which the surrounding spacing gives.
-private struct AppleMusicBadgeLink: View {
-    let url: URL
-
-    var body: some View {
-        Link(destination: url) {
-            Image("ListenOnAppleMusicBadge")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 40)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Listen on Apple Music")
-        .accessibilityHint("Opens the album in Apple Music")
-    }
-}
-
-private struct SpotifyLinkButton: View {
+private struct MusicStreamingButton: View {
     let destination: MusicStreamingDestination
 
     var body: some View {
         Link(destination: destination.url) {
-            Label {
-                Text(destination.actionTitle)
-            } icon: {
-                Image("SpotifyIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
+            HStack(spacing: 8) {
+                serviceLogo
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(accentColor)
             }
-            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(.white.opacity(0.07), in: Capsule())
+            .glassEffect(
+                .regular.tint(accentColor.opacity(0.08)).interactive(),
+                in: .rect(cornerRadius: 20)
+            )
+            .overlay {
+                Capsule().stroke(.white.opacity(0.14), lineWidth: 0.75)
+            }
+            .shadow(color: accentColor.opacity(0.15), radius: 7, y: 2)
+            .contentShape(Capsule())
         }
-        .buttonStyle(.glass)
-        // About the badge's 40 pt, so the second service never outweighs Apple Music above it.
-        .controlSize(.regular)
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .accessibilityHint(destination.opensSearch ? "Searches Spotify for this album" : "Opens the album in Spotify")
+        .buttonStyle(.plain)
+        .accessibilityLabel("Listen on \(destination.label)")
+        .accessibilityHint("Opens using the system URL behavior")
+    }
+
+    private var accentColor: Color {
+        destination.label == "Spotify" ? Color(red: 0.12, green: 0.84, blue: 0.38) : .pink
+    }
+
+    @ViewBuilder
+    private var serviceLogo: some View {
+        switch destination.label {
+        case "Apple Music":
+            Image("AppleMusicIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        case "Spotify":
+            Image("SpotifyIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 24, height: 24)
+                .clipShape(Circle())
+        default:
+            Image(systemName: "music.note")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(width: 24, height: 24)
+        }
     }
 }
 
@@ -8013,7 +8032,14 @@ enum RelatedCardLayout {
         return artwork + spacing + titleHeight
     }
 
-    /// The card's badge ("Deluxe", "Original album") tells same-titled versions apart, so VoiceOver reads it too.
+    /// The badge on the card's artwork, such as an anime's "Sequel". Album cards show none: their relation
+    /// ("Deluxe", "Original album") is read by VoiceOver only.
+    static func badge(_ item: MediaSummary) -> String? {
+        guard item.ref.mediaType != "music" else { return nil }
+        return item.relation?.nilIfEmpty
+    }
+
+    /// The relation tells same-titled versions apart, so VoiceOver reads it.
     static func accessibilityLabel(_ item: MediaSummary) -> String {
         guard let relation = item.relation?.nilIfEmpty else { return "Open \(item.displayTitle)" }
         return "Open \(item.displayTitle), \(relation)"
@@ -8075,8 +8101,8 @@ private struct RecommendationsSection: View {
                                         orientation: item.posterOrientation
                                     )
                                     .overlay(alignment: .bottomLeading) {
-                                        if let relation = item.relation?.nilIfEmpty {
-                                            Text(relation)
+                                        if let badge = RelatedCardLayout.badge(item) {
+                                            Text(badge)
                                                 .font(.system(size: 9, weight: .heavy))
                                                 .foregroundStyle(.white.opacity(0.92))
                                                 .lineLimit(1)
@@ -8196,8 +8222,6 @@ struct MediaTitleDisplay: View {
     let minimumScaleFactor: CGFloat
     let maxLogoHeight: CGFloat
     let alignment: Alignment
-    /// Explicit albums end their title with Apple Music's "E".
-    let isExplicit: Bool
     let onTap: (() -> Void)?
     let onLongPress: (() -> Void)?
 
@@ -8210,7 +8234,6 @@ struct MediaTitleDisplay: View {
         minimumScaleFactor: CGFloat,
         maxLogoHeight: CGFloat,
         alignment: Alignment = .center,
-        isExplicit: Bool = false,
         onTap: (() -> Void)?,
         onLongPress: (() -> Void)?
     ) {
@@ -8222,7 +8245,6 @@ struct MediaTitleDisplay: View {
         self.minimumScaleFactor = minimumScaleFactor
         self.maxLogoHeight = maxLogoHeight
         self.alignment = alignment
-        self.isExplicit = isExplicit
         self.onTap = onTap
         self.onLongPress = onLongPress
     }
@@ -8273,23 +8295,17 @@ struct MediaTitleDisplay: View {
             guard canToggle, showsLogo else { return }
             onLongPress?()
         }
-        .accessibilityLabel(isExplicit ? "\(title), Explicit" : title)
+        .accessibilityLabel(title)
         .accessibilityHint(onTap != nil ? "Open media" : canToggle ? "Double tap to switch between logo and text title" : "")
         .accessibilityAddTraits(isInteractive ? .isButton : [])
     }
 
     private var titleText: some View {
-        Group {
-            if isExplicit {
-                Text.explicitPageTitle(title)
-            } else {
-                Text(title)
-            }
-        }
-        .font(font)
-        .foregroundStyle(.white)
-        .lineLimit(lineLimit)
-        .minimumScaleFactor(minimumScaleFactor)
+        Text(title)
+            .font(font)
+            .foregroundStyle(.white)
+            .lineLimit(lineLimit)
+            .minimumScaleFactor(minimumScaleFactor)
     }
 
     private var aspectRatio: CGFloat? {

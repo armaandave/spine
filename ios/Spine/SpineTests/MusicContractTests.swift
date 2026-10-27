@@ -1006,35 +1006,32 @@ final class MusicContractTests: XCTestCase {
         XCTAssertEqual(presentation.people.first?.personRef, PersonRef(source: "apple_music", id: "605800394"))
     }
 
-    func testListeningButtonsPutAppleMusicFirstAndNameWhatSpotifyOpens() throws {
+    func testListeningButtonsPutAppleMusicFirstAndShowSpotifyOnlyForTheAlbumItself() throws {
         let links = [
+            MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/search/SZA%20SOS/albums", kind: "search"),
             MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/album/abc", kind: "album"),
             MusicStreamingLink(service: "music.apple.com", url: "https://music.apple.com/us/album/sos/1", kind: "album"),
-            MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/search/SZA%20SOS/albums", kind: "search"),
             MusicStreamingLink(service: "qobuz.com", url: "https://open.qobuz.com/album/example"),
         ]
         let destinations = MusicAlbumPresentation.listeningDestinations(links)
         XCTAssertEqual(destinations.map(\.label), ["Apple Music", "Spotify"])
-        XCTAssertEqual(destinations.map(\.actionTitle), ["Listen on Apple Music", "Open in Spotify"])
+        XCTAssertEqual(destinations[1].url.absoluteString, "https://open.spotify.com/album/abc", "The album, never the search")
 
         let search = MusicAlbumPresentation.listeningDestinations([
             MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/search/SZA%20SOS/albums", kind: "search"),
         ])
-        XCTAssertEqual(search.map(\.actionTitle), ["Search on Spotify"])
-        XCTAssertTrue(search[0].opensSearch)
+        XCTAssertTrue(search.isEmpty, "A Spotify search link gets no button.")
 
         let musicBrainz = MusicAlbumPresentation.listeningDestinations([
             MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/album/abc"),
         ])
-        XCTAssertEqual(musicBrainz.map(\.actionTitle), ["Open in Spotify"], "A link without a kind opens the album.")
+        XCTAssertEqual(musicBrainz.map(\.label), ["Spotify"], "A link without a kind opens the album.")
 
         let apple = try XCTUnwrap(Self.appleAlbumDetail().music?.representativeRelease?.streamingLinks)
-        XCTAssertEqual(
-            MusicAlbumPresentation.listeningDestinations(apple).map(\.actionTitle),
-            ["Listen on Apple Music", "Search on Spotify"]
-        )
+        XCTAssertTrue(apple.contains { $0.kind == "search" }, "The Apple album's Spotify link is a search")
+        XCTAssertEqual(MusicAlbumPresentation.listeningDestinations(apple).map(\.label), ["Apple Music"])
         let year = try XCTUnwrap(Self.albumDetail().music?.representativeRelease?.streamingLinks)
-        XCTAssertEqual(MusicAlbumPresentation.listeningDestinations(year).map(\.actionTitle), ["Listen on Apple Music"])
+        XCTAssertEqual(MusicAlbumPresentation.listeningDestinations(year).map(\.label), ["Apple Music"])
     }
 
     func testExplicitBadgeShowsOnlyForExplicitContent() throws {
@@ -1109,58 +1106,21 @@ final class MusicContractTests: XCTestCase {
         XCTAssertEqual(detail.music?.representativeRelease?.trackCount, 23)
     }
 
-    func testListenOnAppleMusicBadgeRendersApplesArtwork() throws {
-        let badge = try XCTUnwrap(UIImage(named: "ListenOnAppleMusicBadge"))
-        XCTAssertEqual(badge.size.width / badge.size.height, 140.62 / 41, accuracy: 0.05)
-
-        // Points in the artwork's own 140.62 × 41 coordinates.
-        let scale: CGFloat = 4
-        let canvas = CGSize(width: 140.62 * scale, height: 41 * scale)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let rendered = try XCTUnwrap(UIGraphicsImageRenderer(size: canvas, format: format).image { _ in
-            badge.draw(in: CGRect(origin: .zero, size: canvas))
-        }.cgImage)
-        func pixel(_ x: CGFloat, _ y: CGFloat) -> (red: UInt8, green: UInt8, blue: UInt8) {
-            var rgba = [UInt8](repeating: 0, count: 4)
-            rgba.withUnsafeMutableBytes { buffer in
-                let context = CGContext(
-                    data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                )
-                // Moves the artwork so the asked-for point lands on the one pixel (Core Graphics counts up from the bottom).
-                context?.draw(rendered, in: CGRect(
-                    x: -x * scale, y: -(41 - y) * scale,
-                    width: CGFloat(rendered.width), height: CGFloat(rendered.height)
-                ))
-            }
-            return (rgba[0], rgba[1], rgba[2])
-        }
-
-        let background = pixel(70, 4)
-        XCTAssertLessThan(Int(background.red) + Int(background.green) + Int(background.blue), 60, "Black badge")
-        let icon = pixel(11, 20)
-        XCTAssertGreaterThan(icon.red, 200, "Apple Music's red icon")
-        XCTAssertLessThan(icon.green, 120)
-        let letter = pixel(71.3, 25)
-        XCTAssertGreaterThan(Int(letter.red) + Int(letter.green) + Int(letter.blue), 690, "White lettering (the l of Apple)")
-    }
-
-    func testAppleMusicBadgeOpensTheListenersStorefront() throws {
+    func testAppleMusicButtonOpensTheListenersStorefront() throws {
         // A MusicBrainz release's links, in the server's order: sorted by URL, so /gb/ comes first.
         let links = [
             MusicStreamingLink(service: "music.apple.com", url: "https://music.apple.com/gb/album/1794644675"),
             MusicStreamingLink(service: "music.apple.com", url: "https://music.apple.com/us/album/1794644675"),
             MusicStreamingLink(service: "open.spotify.com", url: "https://open.spotify.com/album/abc"),
         ]
-        func badgeURL(_ links: [MusicStreamingLink], region: String?) -> String? {
+        func appleURL(_ links: [MusicStreamingLink], region: String?) -> String? {
             MusicAlbumPresentation.listeningDestinations(links, region: region).first?.url.absoluteString
         }
 
-        XCTAssertEqual(badgeURL(links, region: "US"), "https://music.apple.com/us/album/1794644675")
-        XCTAssertEqual(badgeURL(links, region: "GB"), "https://music.apple.com/gb/album/1794644675")
-        XCTAssertEqual(badgeURL(links, region: "DE"), "https://music.apple.com/us/album/1794644675", "Else the US store")
-        XCTAssertEqual(badgeURL(links, region: nil), "https://music.apple.com/us/album/1794644675")
+        XCTAssertEqual(appleURL(links, region: "US"), "https://music.apple.com/us/album/1794644675")
+        XCTAssertEqual(appleURL(links, region: "GB"), "https://music.apple.com/gb/album/1794644675")
+        XCTAssertEqual(appleURL(links, region: "DE"), "https://music.apple.com/us/album/1794644675", "Else the US store")
+        XCTAssertEqual(appleURL(links, region: nil), "https://music.apple.com/us/album/1794644675")
         XCTAssertEqual(
             MusicAlbumPresentation.listeningDestinations(links, region: "GB").map(\.label),
             ["Apple Music", "Spotify"]
@@ -1168,17 +1128,17 @@ final class MusicContractTests: XCTestCase {
 
         let anyStore = [links[0], MusicStreamingLink(service: "music.apple.com", url: "https://music.apple.com/album/year-zero/1440766015")]
         XCTAssertEqual(
-            badgeURL(anyStore, region: "DE"),
+            appleURL(anyStore, region: "DE"),
             "https://music.apple.com/album/year-zero/1440766015",
             "A link without a storefront opens the listener's own."
         )
-        XCTAssertEqual(badgeURL(Array(links.prefix(1)), region: "US"), "https://music.apple.com/gb/album/1794644675")
+        XCTAssertEqual(appleURL(Array(links.prefix(1)), region: "US"), "https://music.apple.com/gb/album/1794644675")
 
         let apple = try XCTUnwrap(Self.appleAlbumDetail().music?.representativeRelease?.streamingLinks)
-        XCTAssertEqual(badgeURL(apple, region: "GB"), "https://music.apple.com/us/album/sos/1657869377")
+        XCTAssertEqual(appleURL(apple, region: "GB"), "https://music.apple.com/us/album/sos/1657869377")
     }
 
-    func testRelatedCardsAreAsTallAsTheirArtworkAndReadTheirBadge() throws {
+    func testRelatedCardsAreAsTallAsTheirArtworkAndReadTheirRelation() throws {
         let sections = try XCTUnwrap(Self.appleAlbumDetail().relatedSections)
         XCTAssertEqual(sections.map { RelatedCardLayout.height(for: $0.items) }, [140, 140, 140], "Square covers")
 
@@ -1191,6 +1151,14 @@ final class MusicContractTests: XCTestCase {
 
         XCTAssertEqual(RelatedCardLayout.accessibilityLabel(sections[0].items[0]), "Open SOS Deluxe: LANA, Deluxe")
         XCTAssertEqual(RelatedCardLayout.accessibilityLabel(sections[1].items[0]), "Open \(sections[1].items[0].displayTitle)")
+
+        XCTAssertNil(RelatedCardLayout.badge(sections[0].items[0]), "Album cards show no Deluxe badge")
+        let sequel = MediaSummary(
+            ref: MediaRef(itemId: nil, source: "mal", mediaType: "anime", mediaId: "5", seasonNumber: nil, episodeNumber: nil),
+            title: "Shingeki no Kyojin: The Final Season",
+            relation: "Sequel"
+        )
+        XCTAssertEqual(RelatedCardLayout.badge(sequel), "Sequel", "Anime and manga cards keep theirs")
     }
 
     func testExplicitSongPageShowsTheE() throws {

@@ -1,0 +1,654 @@
+{
+  "data": [
+    {
+      "id": "1724494274",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream/1724494274",
+        "playParams": {
+          "id": "1724494274",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-11",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871714549",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/9a/5d/9f9a5d3b-c310-7c44-9506-1f198e390e5f/196871714549.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1724494706",
+              "type": "songs",
+              "attributes": {
+                "name": "american dream",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM12304893",
+                "artistName": "21 Savage",
+                "composerName": "BK Rube, Sterling White, Isaiah Brown & James Owens",
+                "durationInMillis": 63416,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/american-dream/1724494274?i=1724494706"
+              }
+            },
+            {
+              "id": "1724494713",
+              "type": "songs",
+              "attributes": {
+                "name": "all of me",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM12304894",
+                "artistName": "21 Savage",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Yakki, Sterling White Jr., Jalen Jackson, Khaya Gilika, Jared Brown, Isaiah Brown, Raphael Oliveira & Billie Rae Calvin",
+                "durationInMillis": 198293,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/all-of-me/1724494274?i=1724494713"
+              }
+            },
+            {
+              "id": "1724494724",
+              "type": "songs",
+              "attributes": {
+                "name": "redrum",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM12309164",
+                "artistName": "21 Savage",
+                "composerName": "Shéyaa Bin Abraham-Joseph, London Holmes, Mateen Kyle Niknam & Vinicius De Moraes",
+                "durationInMillis": 270698,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/redrum/1724494274?i=1724494724"
+              }
+            },
+            {
+              "id": "1724494847",
+              "type": "songs",
+              "attributes": {
+                "name": "n.h.i.e.",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM12304895",
+                "artistName": "21 Savage & Doja Cat",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Amala Dlamini, Kurtis Mckenzie, Douglas Ford, Michael Orabiyi, Anthony Paul Jefferies & Jonah Stevens",
+                "durationInMillis": 143719,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/n-h-i-e/1724494274?i=1724494847"
+              }
+            },
+            {
+              "id": "1724494853",
+              "type": "songs",
+              "attributes": {
+                "name": "sneaky",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM12309176",
+                "artistName": "21 Savage",
+                "composerName": "Shéyaa Bin Abraham-Joseph & Edward Maclin Cooper III",
+                "durationInMillis": 201672,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/sneaky/1724494274?i=1724494853"
+              }
+            },
+            {
+              "id": "1724494854",
+              "type": "songs",
+              "attributes": {
+                "name": "pop ur shit",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM12309175",
+                "artistName": "21 Savage, Young Thug & Metro Boomin",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Jeffery Lamar Williams, Allen Ritter & Leland Tyler Wayne",
+                "durationInMillis": 193320,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/pop-ur-shit/1724494274?i=1724494854"
+              }
+            },
+            {
+              "id": "1724494860",
+              "type": "songs",
+              "attributes": {
+                "name": "letter to my brudda",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM12309166",
+                "artistName": "21 Savage",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Paola Barba, Tyrese McGriff, Kavi lybarger, Park Min Geon, Tchakalla Anthony Romeo & William Boyette",
+                "durationInMillis": 159134,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/letter-to-my-brudda/1724494274?i=1724494860"
+              }
+            },
+            {
+              "id": "1724494865",
+              "type": "songs",
+              "attributes": {
+                "name": "dangerous",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM12309167",
+                "artistName": "21 Savage, Lil Durk & Metro Boomin",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Durk Banks, Leland Tyler Wayne, Jahmal Gwin & Jahshua Brown",
+                "durationInMillis": 265305,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/dangerous/1724494274?i=1724494865"
+              }
+            },
+            {
+              "id": "1724494870",
+              "type": "songs",
+              "attributes": {
+                "name": "née-nah",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM12309168",
+                "artistName": "21 Savage, Travis Scott & Metro Boomin",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Jacques Webster II, Leland Tyler Wayne, Douglas Ford, Malcolm McLaren, William Handy & Rodney Argent",
+                "durationInMillis": 220584,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/n%C3%A9e-nah/1724494274?i=1724494870"
+              }
+            },
+            {
+              "id": "1724494876",
+              "type": "songs",
+              "attributes": {
+                "name": "see the real",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM12309165",
+                "artistName": "21 Savage",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Jason Cornet, Dylan Cleary-Krell, Joshua Parker, Jocelyn Donald, Jordan Holt-May & Samuel David Jimenez",
+                "durationInMillis": 182039,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/see-the-real/1724494274?i=1724494876"
+              }
+            },
+            {
+              "id": "1724495061",
+              "type": "songs",
+              "attributes": {
+                "name": "prove it",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USSM12309169",
+                "artistName": "21 Savage & Summer Walker",
+                "composerName": "Summer Walker, Shéyaa Bin Abraham-Joseph, Tye Beats, Edward Maclin Cooper III, Isaiah Brown, Tauren kngs Stovall, Keith Thomas, James Owens, Faith Evans & Carl Thompson",
+                "durationInMillis": 207586,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/prove-it/1724494274?i=1724495061"
+              }
+            },
+            {
+              "id": "1724495063",
+              "type": "songs",
+              "attributes": {
+                "name": "should've wore a bonnet",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USSM12309170",
+                "artistName": "21 Savage & Brent Faiyaz",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Christopher Wood, Ronald Nathan Latour Jr., John Julian, David Patino, Francis Esteban, Darryl Pearson, Donald Earle De Grate Jr, Joel Hailey & Daveon Jackson",
+                "durationInMillis": 186771,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/shouldve-wore-a-bonnet/1724494274?i=1724495063"
+              }
+            },
+            {
+              "id": "1724495068",
+              "type": "songs",
+              "attributes": {
+                "name": "just like me",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USSM12309171",
+                "artistName": "21 Savage, Burna Boy & Metro Boomin",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Damini Ebunoluwa Ogulu, Leland Tyler Wayne, Jahmal Gwin, Michael Mule, Isaac De Boni, Akeel Henry, Khadijah Lopez, Kira Huszar, Nevon Sinclair, Kevin Ekofo & Jordon Manswell",
+                "durationInMillis": 231338,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/just-like-me/1724494274?i=1724495068"
+              }
+            },
+            {
+              "id": "1724495070",
+              "type": "songs",
+              "attributes": {
+                "name": "red sky",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USSM12309172",
+                "artistName": "21 Savage, Tommy Newport & Mikky Ekko",
+                "composerName": "Tommy Newport, Shéyaa Bin Abraham-Joseph, Carlton Mays Jr., 4th Pyramid, Courtney Dwight, John Stephen Sudduth & Shaan Ramaprasad",
+                "durationInMillis": 176835,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-12",
+                "url": "https://music.apple.com/us/album/red-sky/1724494274?i=1724495070"
+              }
+            },
+            {
+              "id": "1724495073",
+              "type": "songs",
+              "attributes": {
+                "name": "dark days",
+                "albumName": "american dream",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USSM12309174",
+                "artistName": "21 Savage & Mariah the Scientist",
+                "composerName": "Shéyaa Bin Abraham-Joseph, Mariah Buckles, Atia Boggs, Yousef Sameh, Yakki, Ahmar Bailey, Jonas Lee, Kavi lybarger & Paola Madelaine Barba Amado",
+                "durationInMillis": 295073,
+                "contentRating": "explicit",
+                "releaseDate": "2024-01-10",
+                "url": "https://music.apple.com/us/album/dark-days/1724494274?i=1724495073"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists",
+              "attributes": {
+                "name": "21 Savage",
+                "url": "https://music.apple.com/us/artist/21-savage/894820464"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1725240183",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream/1725240183",
+                "playParams": {
+                  "id": "1725240183",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-12",
+                "contentRating": "clean",
+                "trackCount": 15,
+                "upc": "196871714556",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/77/84/5e/77845ee7-573c-efcc-4ce4-c9625fdce8c7/196871714556.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1737149923",
+              "type": "albums",
+              "attributes": {
+                "name": "WE DON'T TRUST YOU",
+                "artistName": "Future & Metro Boomin",
+                "url": "https://music.apple.com/us/album/we-dont-trust-you/1737149923",
+                "playParams": {
+                  "id": "1737149923",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-03-22",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "196871937382",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Wilburn Holding Co./Boominati/Epic/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/4e/9f/7b/4e9f7b71-28ad-a8dc-9b34-da532feb82f6/196871937382.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1707431017",
+              "type": "albums",
+              "attributes": {
+                "name": "SET IT OFF",
+                "artistName": "Offset",
+                "url": "https://music.apple.com/us/album/set-it-off/1707431017",
+                "playParams": {
+                  "id": "1707431017",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-13",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "00602458286915",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Motown Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/d6/e7/8f/d6e78f8f-9d05-c457-f309-6410881946d0/23UM1IM05140.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1699712635",
+              "type": "albums",
+              "attributes": {
+                "name": "UTOPIA",
+                "artistName": "Travis Scott",
+                "url": "https://music.apple.com/us/album/utopia/1699712635",
+                "playParams": {
+                  "id": "1699712635",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-07-28",
+                "contentRating": "explicit",
+                "trackCount": 19,
+                "upc": "196871341882",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Cactus Jack/Epic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/09/7d/b0/097db06f-8403-3cf7-7510-139e570ca66b/196871341882.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1694433081",
+              "type": "albums",
+              "attributes": {
+                "name": "BUSINESS IS BUSINESS (Metro's Version)",
+                "artistName": "Young Thug",
+                "url": "https://music.apple.com/us/album/business-is-business-metros-version/1694433081",
+                "playParams": {
+                  "id": "1694433081",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-06-22",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "075679677280",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "300 Entertainment/Atl",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/64/2c/ad/642cad5a-804f-02c4-01c4-26f1b51defd1/075679677280.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1744458034",
+              "type": "albums",
+              "attributes": {
+                "name": "One of Wun",
+                "artistName": "Gunna",
+                "url": "https://music.apple.com/us/album/one-of-wun/1744458034",
+                "playParams": {
+                  "id": "1744458034",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-05-10",
+                "contentRating": "explicit",
+                "trackCount": 20,
+                "upc": "075679660336",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "300 Entertainment",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/42/4e/45/424e4521-37b7-6f49-293a-98a1285ed7c5/075679660336.jpg/{w}x{h}bb.jpg",
+                  "width": 4000,
+                  "height": 4000
+                }
+              }
+            },
+            {
+              "id": "1716979097",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs Scary Hours Edition",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716979097",
+                "playParams": {
+                  "id": "1716979097",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "explicit",
+                "trackCount": 29,
+                "upc": "00602458922769",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/97/1a/a3/971aa332-2c7d-947c-33ed-4635d41115a4/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 6000,
+                  "height": 6000
+                }
+              }
+            },
+            {
+              "id": "1701758894",
+              "type": "albums",
+              "attributes": {
+                "name": "Pink Tape: Level 2 - EP",
+                "artistName": "Lil Uzi Vert",
+                "url": "https://music.apple.com/us/album/pink-tape-level-2-ep/1701758894",
+                "playParams": {
+                  "id": "1701758894",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2023-08-18",
+                "contentRating": "explicit",
+                "trackCount": 5,
+                "upc": "5059460226876",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Warner Music Group - X5 Music Group",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/c7/58/47/c7584753-0180-64ff-404b-00f4bc515621/5059460226876.jpg/{w}x{h}bb.jpg",
+                  "width": 1400,
+                  "height": 1400
+                }
+              }
+            },
+            {
+              "id": "1739698034",
+              "type": "albums",
+              "attributes": {
+                "name": "Might Delete Later",
+                "artistName": "J. Cole",
+                "url": "https://music.apple.com/us/album/might-delete-later/1739698034",
+                "playParams": {
+                  "id": "1739698034",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-04-05",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602465653861",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Cole World, Inc. under exclusive license to Interscope Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e5/91/e9/e591e93a-969f-6b82-9dc5-874edc3d22ba/24UMGIM38890.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1703112575",
+              "type": "albums",
+              "attributes": {
+                "name": "Rocket Power",
+                "artistName": "Quavo",
+                "url": "https://music.apple.com/us/album/rocket-power/1703112575",
+                "playParams": {
+                  "id": "1703112575",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-08-18",
+                "contentRating": "explicit",
+                "trackCount": 18,
+                "upc": "00602455938879",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Quality Control Music/Motown Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/2a/c8/72/2ac87234-2540-7e2d-a872-66959b6fa6f0/23UMGIM62676.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1789237341",
+              "type": "albums",
+              "attributes": {
+                "name": "WHAM (Extended Version)",
+                "artistName": "Lil Baby",
+                "url": "https://music.apple.com/us/album/wham-extended-version/1789237341",
+                "playParams": {
+                  "id": "1789237341",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-01-03",
+                "contentRating": "explicit",
+                "trackCount": 19,
+                "upc": "00602475808282",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Quality Control Music/Motown Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2d/dc/ee/2ddceec7-f66b-a0ea-b636-72346a2649a7/25UMGIM00552.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/1724494274/view/related-albums?offset=12"
+        }
+      }
+    }
+  ]
+}

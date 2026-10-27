@@ -66,7 +66,7 @@ PAGE_CACHE_VERSION = "v1"
 PAGE_CACHE_TTL = 24 * 60 * 60
 # Search: one Apple page of up to 25 albums per Spine page, cached with the listings
 # shown so far, so a later page never repeats one.
-SEARCH_CACHE_VERSION = "v1"
+SEARCH_CACHE_VERSION = "v2"
 SEARCH_CACHE_TTL = 6 * 60 * 60
 # All media search ranks Apple's first albums higher: 30 for the first, 3 less for
 # each one after it.
@@ -75,6 +75,7 @@ RANK_BOOST_STEP = 3
 # Apple's sections of an artist page, in Apple's order, and the music credit group
 # each one fills (Singles & EPs fills two).
 ARTIST_VIEWS = ("full-albums", "singles", "live-albums", "compilation-albums", "appears-on-albums")
+APPEARS_ON_VIEW = "appears-on-albums"
 ARTIST_VIEW_ROLES = {
     "full-albums": "Albums",
     "live-albums": "Live releases",
@@ -83,7 +84,7 @@ ARTIST_VIEW_ROLES = {
 }
 # Albums read from each section; Apple sends 10 at first and up to 100 a page after.
 ARTIST_VIEW_LIMIT = 100
-ARTIST_PAGE_CACHE_VERSION = "v1"
+ARTIST_PAGE_CACHE_VERSION = "v2"
 ARTIST_PAGE_CACHE_TTL = 24 * 60 * 60
 # An album page's related sections: Other Versions, More by the artist (from Apple's
 # Albums section of the artist page, cached for a day) and Apple's similar albums.
@@ -322,8 +323,10 @@ def _related(identity, members, family, album, *, today):
     """Return an album page's related sections, each at most 10 albums, and if all answered.
 
     - ``other_versions``: the other listings of the album's version family, then its
-      editions found by shared songs, each with a ``relation`` badge.
-    - ``more_by_artist``: the first artist's Albums section on Apple Music.
+      editions found by shared songs, each with a ``relation`` badge, then its remix
+      variants from the artist's Albums section (``music_listing.remix_variants``).
+    - ``more_by_artist``: the first artist's Albums section on Apple Music, without
+      remix variants whose original is there.
     - ``related_albums``: Apple's similar albums by other artists.
 
     ``members`` is the album's own listing, left out of every section, and ``family``
@@ -333,9 +336,18 @@ def _related(identity, members, family, album, *, today):
     """
     own_ids = _member_ids(members) | {identity}
     versions, complete = _other_versions(own_ids, family, album, today=today)
+    artists = _artist_ids(album)
+    by_artist = []
+    try:
+        by_artist = _artist_albums(artists[0]) if artists else []
+    except services.ProviderAPIError as error:
+        logger.warning("Apple Music more_by_artist of album %s are unavailable: %s", identity, error)
+        complete = complete and not transient(error)
+    variants = music_listing.remix_variants([album, *by_artist], artist_id=artists[0] if artists else None)
+    versions = [*versions, *_variant_rows(by_artist, variants, own_ids, versions, today=today)]
     sections = (
         ("other_versions", lambda: versions),
-        ("more_by_artist", lambda: _more_by_artist(album, own_ids, today=today)),
+        ("more_by_artist", lambda: _more_by_artist(by_artist, variants, own_ids, today=today)),
         ("related_albums", lambda: _similar_albums(album, own_ids, today=today)),
     )
     related = {}
@@ -823,18 +835,35 @@ def _search_page(term, previous):
     found_albums = [album for album in found.get("data") or [] if album.get("id")]
     listings = _listings_with_families(found_albums, today=today)
     shown = set(seen)
-    rows = []
+    picked = []
     for album in found_albums:
         identity, members = listings[str(album["id"])]
         if identity in shown or music_listing.is_hidden(members):
             continue
         shown.add(identity)
+        picked.append((_batch_copy(album, members), identity, members))
+    # A remix variant on the page with its original is left out. Only the batch's
+    # copies name their artist IDs, so a variant without one stays.
+    variants = music_listing.remix_variants([album for album, _, _ in picked])
+    rows = []
+    for album, identity, members in picked:
+        if str(album["id"]) in variants:
+            continue
         rows.append(_search_row(identity, members, position=len(seen) + len(rows), today=today))
     return {
         "results": rows,
         "next": found.get("next") or None,
         "seen": [*seen, *(row["media_id"] for row in rows)],
     }
+
+
+def _batch_copy(album, members):
+    """Return the listing member that is ``album`` as the family batch sent it, with its artists."""
+    album_id = str(album["id"])
+    return next(
+        (member for member in members if str(member.get("id")) == album_id and member.get("relationships")),
+        album,
+    )
 
 
 def _listings_with_families(found_albums, *, today, background=False):
@@ -903,12 +932,17 @@ def _person_page(artist_id):
     sections = [(view, _artist_view_albums(resource, view)) for view in ARTIST_VIEWS]
     today = timezone.localdate()
     listings = _listings_with_families([album for _, entries in sections for album in entries], today=today)
+    person_id = str(resource.get("id") or artist_id)
     credits = {}
     for view, entries in sections:
-        for entry in entries:
-            identity, members = listings[str(entry["id"])]
-            if music_listing.is_hidden(members):
+        shown = [entry for entry in entries if not music_listing.is_hidden(listings[str(entry["id"])][1])]
+        # A remix variant next to its original in the artist's own section is left
+        # out; the original's page lists it. Appears On is other artists' albums.
+        variants = {} if view == APPEARS_ON_VIEW else music_listing.remix_variants(shown, artist_id=person_id)
+        for entry in shown:
+            if str(entry["id"]) in variants:
                 continue
+            identity, members = listings[str(entry["id"])]
             role = ARTIST_VIEW_ROLES.get(view) or (
                 "EPs" if album_title(entry.get("attributes"))[1] == "EP" else "Singles"
             )
@@ -919,7 +953,7 @@ def _person_page(artist_id):
                 credit["credit_roles"].append(role)
     return {
         "source": Sources.APPLE_MUSIC.value,
-        "person_id": str(resource.get("id") or artist_id),
+        "person_id": person_id,
         "name": attributes.get("name") or "",
         "image": artwork_url(attributes.get("artwork"), max_length=None) or settings.IMG_NONE,
         "biography": None,
@@ -1101,16 +1135,34 @@ def _relation(title, songs):
     return "Deluxe" if songs == BIGGER else "Other version"
 
 
-def _more_by_artist(album, own_ids, *, today):
-    """Return the first artist's other albums, from their Albums section on Apple Music."""
-    artists = _artist_ids(album)
-    if not artists:
-        return []
+def _more_by_artist(entries, variants, own_ids, *, today):
+    """Return the first artist's other albums, from their Albums section on Apple Music.
+
+    ``variants`` (from ``music_listing.remix_variants``) are left out.
+    """
     return [
         _related_row(music_listing.url_album_id(entry), [entry], today=today)
-        for entry in _artist_albums(artists[0])
-        if not _member_ids([entry]) & own_ids and not music_listing.is_hidden([entry])
+        for entry in entries
+        if not _member_ids([entry]) & own_ids
+        and str(entry["id"]) not in variants
+        and not music_listing.is_hidden([entry])
     ]
+
+
+def _variant_rows(entries, variants, own_ids, versions, *, today):
+    """Return the album's remix variants among the artist's albums, for Other Versions."""
+    shown = own_ids | {row["media_id"] for row in versions}
+    rows = []
+    for entry in entries:
+        if (
+            variants.get(str(entry["id"])) in own_ids
+            and not _member_ids([entry]) & shown
+            and not music_listing.is_hidden([entry])
+        ):
+            shown |= _member_ids([entry])
+            row = _related_row(music_listing.url_album_id(entry), [entry], today=today)
+            rows.append({**row, "relation": "Other version"})
+    return rows
 
 
 def _artist_albums(artist_id):

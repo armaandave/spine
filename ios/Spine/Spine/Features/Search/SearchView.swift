@@ -881,7 +881,7 @@ extension Text {
         Text(Image(systemName: "e.square.fill")).accessibilityLabel("Explicit")
     }
 
-    /// An album or song page's title followed by the "E", in the title's colour. Those titles are a fixed 33 pt, so
+    /// A song page's title followed by the "E", in the title's colour. The title is a fixed 33 pt, so
     /// the badge is a fixed size too and stays in proportion at every text size.
     static func explicitPageTitle(_ title: String) -> Text {
         Text("\(title) \(explicitBadge.font(.system(size: 20, weight: .semibold)))")

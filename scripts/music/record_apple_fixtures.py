@@ -20,7 +20,8 @@ Other Versions and More by sections (it reads the recorded album pages, so recor
 and keeps MusicBrainz requests 3.5 seconds apart), ``backfill`` for what the data
 move's matcher reads (MusicBrainz release browses, also 3.5 seconds apart, and Apple
 Music's answers to their barcodes, songs and a search), ``match`` for the searches the
-album matcher makes (``apple_music.match_album``).
+album matcher makes (``apple_music.match_album``), ``variants`` for folding remix
+variants (sped up, slowed down) into their album.
 
 Apple's catalog changes, so re-recording can move IDs and counts that the tests
 assert. Re-record only when the tests need new data, and review the diff.
@@ -138,6 +139,11 @@ EDITION_PARAMS = {"include": "tracks", "views": "other-versions"}
 EDITION_SONG_FIELDS = ("name", "discNumber", "trackNumber", "isrc")
 # More by asks for this many of an artist's albums.
 ARTIST_ALBUMS_LIMIT = 20
+# Remix variants: 21 Savage's american dream and its sped up, slowed down and
+# nightcore albums, on his artist page, in a search and on the album's page.
+VARIANTS_ARTIST = ("21_savage", "894820464")
+VARIANTS_SEARCH = ("american_dream", "21 savage american dream")
+VARIANTS_PAGE = ("american_dream", "1724494274")
 ERROR_FIELDS = ("status", "code", "title", "detail")
 # The bridge's MusicBrainz answers, by fixture name: the album page whose barcode is
 # looked up. MusicBrainz's one request a second is shared with production on the
@@ -437,6 +443,15 @@ def trim_search_page(response, kind):
     return {"results": {kind: trimmed}}
 
 
+def trim_family_album_with_artists(resource):
+    """Keep an album's page attributes, its artist IDs and its other versions."""
+    album = trim_family_album(resource)
+    relationships = resource.get("relationships") or {}
+    artists = (relationships.get("artists") or {}).get("data") or []
+    album["relationships"] = {"artists": {"data": [_ref(artist) for artist in artists]}}
+    return album
+
+
 def trim_edition_album(resource):
     """Keep what the shared-songs check reads: attributes, artist IDs, ISRCs, family."""
     album = trim_family_album(resource)
@@ -510,19 +525,23 @@ def record_album_pages(recorder):
         recorder.write(name, {"data": albums})
 
 
-def record_families(recorder, name, ids):
-    """Write one batch of albums with their version families' page attributes."""
+def record_families(recorder, name, ids, *, artists=False):
+    """Write one batch of albums with their version families' page attributes.
+
+    ``artists`` also keeps each album's artist IDs, which folding remix variants reads.
+    """
     params = {"ids": ",".join(ids), "views": "other-versions"}
     families = recorder.catalog("albums", params)
-    albums = [trim_family_album(album) for album in families.get("data") or []]
+    trim = trim_family_album_with_artists if artists else trim_family_album
+    albums = [trim(album) for album in families.get("data") or []]
     recorder.write(name, {"data": albums})
 
 
-def record_search_page(recorder, name, response):
+def record_search_page(recorder, name, response, *, artists=False):
     """Write a search page and the batch of its albums' version families."""
     recorder.write(f"search_albums_{name}.json", trim_search_page(response, "albums"))
     ids = [album["id"] for album in response["results"]["albums"]["data"]]
-    record_families(recorder, f"search_families_{name}.json", ids)
+    record_families(recorder, f"search_families_{name}.json", ids, artists=artists)
 
 
 def record_search(recorder):
@@ -540,8 +559,14 @@ def record_search(recorder):
     artists = recorder.catalog("search", params)
     recorder.write("search_artists_sza.json", trim_search_page(artists, "artists"))
 
-    artist = recorder.catalog(f"artists/{SZA_ARTIST_ID}", {"views": ARTIST_VIEWS})
-    recorder.write("person_sza.json", {"data": [trim_page_artist(artist["data"][0])]})
+    record_person(recorder, "sza", SZA_ARTIST_ID)
+
+
+def record_person(recorder, slug, artist_id):
+    """Record an artist page: the artist, its sections' next pages and families."""
+    artist = recorder.catalog(f"artists/{artist_id}", {"views": ARTIST_VIEWS})
+    trimmed = {"data": [trim_page_artist(artist["data"][0])]}
+    recorder.write(f"person_{slug}.json", trimmed)
     views = artist["data"][0].get("views") or {}
     ids = [album["id"] for view in views.values() for album in view.get("data") or []]
     for view_name, view in views.items():
@@ -552,11 +577,11 @@ def record_search(recorder):
             trimmed = {"data": [trim_view_album(album) for album in albums]}
             if more.get("next"):
                 trimmed["next"] = more["next"]
-            recorder.write(f"person_sza_{view_name}_2.json", trimmed)
+            recorder.write(f"person_{slug}_{view_name}_2.json", trimmed)
     ids = list(dict.fromkeys(ids))
     for number, start in enumerate(range(0, len(ids), ALBUM_BATCH), start=1):
         batch = ids[start : start + ALBUM_BATCH]
-        record_families(recorder, f"person_sza_families_{number}.json", batch)
+        record_families(recorder, f"person_{slug}_families_{number}.json", batch)
 
 
 def record_match(recorder):
@@ -612,14 +637,34 @@ def record_related(recorder):
             artists.setdefault(artist["id"], artist["attributes"]["name"])
     record_editions(recorder, "kill_bill", [KILL_BILL_ISRC], SOS_ID)
     for artist_id, artist_name in artists.items():
-        path = f"artists/{artist_id}/view/full-albums"
-        response = recorder.catalog(path, {"limit": ARTIST_ALBUMS_LIMIT})
-        albums = [trim_view_album(album) for album in response.get("data") or []]
-        trimmed = {"data": albums}
-        if response.get("next"):
-            trimmed["next"] = response["next"]
         slug = re.sub(r"[^a-z0-9]+", "_", artist_name.casefold()).strip("_")
-        recorder.write(f"artist_albums_{slug}.json", trimmed)
+        record_artist_albums(recorder, slug, artist_id)
+
+
+def record_artist_albums(recorder, slug, artist_id):
+    """Record the artist's Albums section as More by reads it."""
+    path = f"artists/{artist_id}/view/full-albums"
+    response = recorder.catalog(path, {"limit": ARTIST_ALBUMS_LIMIT})
+    albums = [trim_view_album(album) for album in response.get("data") or []]
+    trimmed = {"data": albums}
+    if response.get("next"):
+        trimmed["next"] = response["next"]
+    recorder.write(f"artist_albums_{slug}.json", trimmed)
+
+
+def record_variants(recorder):
+    """Record the fixtures for folding remix variants into their album."""
+    slug, artist_id = VARIANTS_ARTIST
+    record_person(recorder, slug, artist_id)
+    name, term = VARIANTS_SEARCH
+    params = {"term": term, "types": "albums", "limit": 25}
+    record_search_page(recorder, name, recorder.catalog("search", params), artists=True)
+    name, album_id = VARIANTS_PAGE
+    page = recorder.catalog(f"albums/{album_id}", PAGE_PARAMS)
+    albums = [trim_page_album(album) for album in page["data"]]
+    recorder.write(f"page_{name}.json", {"data": albums})
+    record_editions(recorder, name, disc_opening_isrcs(albums[0]), album_id)
+    record_artist_albums(recorder, slug, artist_id)
 
 
 def barcode_query(upc):
@@ -917,6 +962,7 @@ GROUPS = {
     "bridge": record_bridge,
     "backfill": record_backfill,
     "match": record_match,
+    "variants": record_variants,
 }
 # Groups that make no Apple Music requests, so they need no token.
 MUSICBRAINZ_GROUPS = {"bridge"}

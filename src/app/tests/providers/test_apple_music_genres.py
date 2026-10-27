@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from app.models import AppleAlbum, Item, MediaTypes, MusicAlbumLink, MusicGenreAlbum, Sources
-from app.providers import apple_music, services
+from app.providers import apple_music, musicbrainz, services
 from app.tests.providers.test_apple_music import AppleMusicTestCase, apple_item
 
 MUSIC = MediaTypes.MUSIC.value
@@ -94,8 +94,43 @@ class AppleGenrePageTests(AppleMusicTestCase):
         self.assertEqual([row["media_id"] for row in second["results"]], ["222"])
         self.assertEqual((first["total_results"], first["total_pages"]), (3, 2))
 
-    def test_a_genre_with_no_linked_albums_is_empty(self):
+    @patch("app.providers.musicbrainz._search_genre")
+    def test_a_genre_with_no_linked_albums_shows_musicbrainzs_page(self, search_genre):
+        # Soul's albums have no Apple album yet (one waits in review); MusicBrainz's
+        # genre search also finds the moved album.
+        genre_album("unlinked", "Unlinked", 60, genre="soul")
+        genre_album("review", "In Review", 50, genre="soul")
+        search_genre.return_value = [musicbrainz.genre_album_result(MusicGenreAlbum(
+            genre="soul", release_group_mbid="moved", title="Moved (MusicBrainz)", artist="SZA",
+            release_date="2022", page_views=1, listeners=1, listens=1,
+        ))]
+
+        data = services.discover(MUSIC, source=APPLE, genre="Soul")
+
+        self.assertEqual(data, musicbrainz.discover(genre="soul"))
+        self.assertEqual(
+            self.refs(data),
+            [(MUSICBRAINZ, "unlinked", "Unlinked"), (MUSICBRAINZ, "review", "In Review"),
+             (MUSICBRAINZ, "moved", "Moved (MusicBrainz)")],
+        )
+
+        client = APIClient()
+        client.force_authenticate(get_user_model().objects.create_user(username="listener", password="pw-12345678"))
+        response = client.get("/api/v1/media/discover/?media_type=music&source=apple_music&genre=soul")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [(row["ref"]["source"], row["ref"]["media_id"]) for row in response.data["results"]],
+            [(MUSICBRAINZ, "unlinked"), (MUSICBRAINZ, "review"), (APPLE, "222")],
+            "The moved album is under its canonical ref",
+        )
+
+    @patch("app.providers.musicbrainz._search_genre", return_value=[])
+    def test_a_genre_with_no_albums_at_all_is_still_empty(self, _search_genre):
         self.assertEqual(services.discover(MUSIC, source=APPLE, genre="jazz")["results"], [])
+
+    def test_a_page_past_the_last_apple_album_stays_empty(self):
+        data = services.discover(MUSIC, source=APPLE, genre="r&b", page=5)
+        self.assertEqual((data["results"], data["total_results"]), ([], 3))
 
     def test_music_discovery_still_needs_a_genre_and_no_year(self):
         with self.assertRaisesMessage(ValueError, "year discovery is not supported for music."):
@@ -110,7 +145,7 @@ class AppleGenrePageTests(AppleMusicTestCase):
 
         with (
             override_settings(MUSIC_CATALOG_SOURCE=APPLE),
-            patch.object(apple_music, "discover", return_value={"results": []}) as apple_discover,
+            patch.object(apple_music, "discover", return_value={"results": [], "total_results": 1}) as apple_discover,
         ):
             # An older album's genre chip still sends its MusicBrainz source.
             services.discover(MUSIC, source=MUSICBRAINZ, genre="r&b")

@@ -8,6 +8,10 @@ network or database calls. See docs/music/apple-music-catalog.md.
   older upload and its re-upload. Edition words keep listings apart, so "SOS" and
   "SOS Deluxe: LANA" are two listings.
 - Its **identity** is the one album ID Spine stores for it (``pick_identity``).
+- A **remix variant** is a separate album that is another album plus a marker such
+  as "(sped up)", by the same artist (``remix_variants``). Artist pages and search
+  leave it out next to its original, and the original's page lists it in Other
+  Versions.
 """
 
 import calendar
@@ -35,6 +39,29 @@ _TITLE_CHARACTERS = str.maketrans(
     },
 )
 _CONTENT_RATING_ORDER = {"explicit": 0, "clean": 2}
+# The markers a remix variant adds to its original's name, normalized. Only these:
+# an edition, a remaster, a live album or a remix is an album of its own.
+VARIANT_MARKERS = frozenset(
+    {
+        "sped up",
+        "slowed",
+        "slowed down",
+        "slowed + reverb",
+        "super slowed",
+        "nightcore",
+        "nightcore version",
+        "reverb",
+        "8d",
+        "instrumental",
+        "a cappella",
+        "acapella",
+    },
+)
+# "<original> (<marker>)" (brackets read as parentheses) or "<original> - <marker>".
+_VARIANT_NAMES = (
+    re.compile(r"(?P<original>.+?) \((?P<marker>[^()]+)\)"),
+    re.compile(r"(?P<original>.+) - (?P<marker>[^()]+)"),
+)
 _RELEASE_DATE = re.compile(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?")
 _DIGITS = re.compile(r"[0-9]+")
 
@@ -152,6 +179,49 @@ def is_hidden(members):
     return not any(_streamable(album) for album in members)
 
 
+def variant_original_name(name):
+    """Return the normalized name a remix variant's name adds its marker to, or None.
+
+    "american dream (sped up)" and "american dream - Sped Up" give "american dream";
+    a name without a marker from ``VARIANT_MARKERS`` at its end gives None.
+    """
+    title = normalize_title(name)
+    for pattern in _VARIANT_NAMES:
+        match = pattern.fullmatch(title)
+        if match and match["marker"].strip() in VARIANT_MARKERS:
+            return match["original"].strip()
+    return None
+
+
+def remix_variants(albums, *, artist_id=None):
+    """Return ``{variant album ID: original album ID}`` for the remix variants in ``albums``.
+
+    A variant is folded only when its original is in ``albums`` too: an album whose
+    normalized name is exactly the variant's name without its marker, with the same
+    artist name and the same artist IDs. The artist IDs are the album's own
+    (``relationships.artists``), else ``artist_id``, the artist whose page section the
+    albums come from; an album with neither is never folded. Singles are never folded,
+    nor folded into. The first original in input order wins.
+    """
+    originals = {}
+    for album in albums:
+        key = _variant_artist(album, artist_id)
+        if key is not None:
+            name = normalize_title((album.get("attributes") or {}).get("name"))
+            originals.setdefault((*key, name), str(album.get("id") or ""))
+    variants = {}
+    for album in albums:
+        key = _variant_artist(album, artist_id)
+        original_name = variant_original_name((album.get("attributes") or {}).get("name"))
+        if key is None or original_name is None:
+            continue
+        original = originals.get((*key, original_name))
+        album_id = str(album.get("id") or "")
+        if original and original != album_id:
+            variants[album_id] = original
+    return variants
+
+
 def release_day(value):
     """Return the last day a release date could mean ("2010" is 2010-12-31), or None."""
     match = _RELEASE_DATE.fullmatch(str(value or "").strip())
@@ -184,6 +254,19 @@ def _listing_key(album):
         normalize_title(attributes.get("artistName")),
         normalize_title(attributes.get("name")),
     )
+
+
+def _variant_artist(album, artist_id):
+    """Return an album's ``(artist IDs, artist name)`` for folding variants, or None."""
+    attributes = album.get("attributes") or {}
+    artists = ((album.get("relationships") or {}).get("artists") or {}).get("data") or []
+    ids = tuple(str(artist["id"]) for artist in artists if artist.get("id"))
+    if not ids and artist_id:
+        ids = (str(artist_id),)
+    name = normalize_title(attributes.get("artistName"))
+    if not ids or not name or not album.get("id") or attributes.get("isSingle"):
+        return None
+    return ids, name
 
 
 def _family_ids(album):

@@ -1,0 +1,1970 @@
+{
+  "data": [
+    {
+      "id": "1724494274",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream/1724494274",
+        "playParams": {
+          "id": "1724494274",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-11",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871714549",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/9a/5d/9f9a5d3b-c310-7c44-9506-1f198e390e5f/196871714549.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1725240183",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream/1725240183",
+                "playParams": {
+                  "id": "1725240183",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-12",
+                "contentRating": "clean",
+                "trackCount": 15,
+                "upc": "196871714556",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/77/84/5e/77845ee7-573c-efcc-4ce4-c9625fdce8c7/196871714556.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1725240183",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream/1725240183",
+        "playParams": {
+          "id": "1725240183",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-12",
+        "contentRating": "clean",
+        "trackCount": 15,
+        "upc": "196871714556",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/77/84/5e/77845ee7-573c-efcc-4ce4-c9625fdce8c7/196871714556.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1724494274",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream/1724494274",
+                "playParams": {
+                  "id": "1724494274",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-11",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196871714549",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/9a/5d/9f9a5d3b-c310-7c44-9506-1f198e390e5f/196871714549.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1534263780",
+      "type": "albums",
+      "attributes": {
+        "name": "SAVAGE MODE II",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode-ii/1534263780",
+        "playParams": {
+          "id": "1534263780",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-10-02",
+        "contentRating": "clean",
+        "trackCount": 15,
+        "upc": "886448747703",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/53/ed/40/53ed4078-7d2a-076e-f9b9-ffb29e776c42/886448747703.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534209957",
+              "type": "albums",
+              "attributes": {
+                "name": "SAVAGE MODE II",
+                "artistName": "21 Savage & Metro Boomin",
+                "url": "https://music.apple.com/us/album/savage-mode-ii/1534209957",
+                "playParams": {
+                  "id": "1534209957",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-02",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "886448747697",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/03/3d/e5/033de513-4e28-5d06-e42b-4f2d5ba65dce/886448747697.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1536235462",
+              "type": "albums",
+              "attributes": {
+                "name": "SAVAGE MODE II [CHOPPED NOT SLOPPED]",
+                "artistName": "21 Savage & Metro Boomin",
+                "url": "https://music.apple.com/us/album/savage-mode-ii-chopped-not-slopped/1536235462",
+                "playParams": {
+                  "id": "1536235462",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-19",
+                "contentRating": "explicit",
+                "trackCount": 29,
+                "upc": "886448851288",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/5e/c2/37/5ec2371f-c967-1a00-800a-8ff0e0ff5b38/886448851288.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            },
+            {
+              "id": "670534462",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1729925845",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (slowed down)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-slowed-down/1729925845",
+        "playParams": {
+          "id": "1729925845",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-13",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841481",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/79/69/9b/79699b44-d735-148d-52bf-3d7cd80b0fd8/196871841481.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1729923680",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (nightcore version)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-nightcore-version/1729923680",
+        "playParams": {
+          "id": "1729923680",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-09",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841511",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/c1/52/e6/c152e68f-a660-dd3c-2515-d1bdde660fca/196871841511.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1729916799",
+      "type": "albums",
+      "attributes": {
+        "name": "american dream (sped up)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/american-dream-sped-up/1729916799",
+        "playParams": {
+          "id": "1729916799",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-01-09",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196871841436",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/57/6b/3e/576b3ea2-3a79-be8d-6000-0953cf79b4d0/196871841436.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1446918493",
+      "type": "albums",
+      "attributes": {
+        "name": "i am > i was",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/i-am-i-was/1446918493",
+        "playParams": {
+          "id": "1446918493",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-12-21",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "886447489512",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Dirty South",
+          "Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c6/28/44/c6284485-1493-014e-7659-6fa2c0ffec38/886447489512.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1447717361",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was (Deluxe)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was-deluxe/1447717361",
+                "playParams": {
+                  "id": "1447717361",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "886447502792",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/8a/50/1c8a507f-4f04-07e1-8c34-ce656a851625/886447502792.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1447452167",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was/1447452167",
+                "playParams": {
+                  "id": "1447452167",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "clean",
+                "trackCount": 15,
+                "upc": "886447365144",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/07/94/f7/0794f7c3-0042-6aa8-022e-ae008868eb75/886447365144.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1444898453",
+      "type": "albums",
+      "attributes": {
+        "name": "Sneakin' (feat. 21 Savage) - Single",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/sneakin-feat-21-savage-single/1444898453",
+        "playParams": {
+          "id": "1444898453",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-11-04",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602557276176",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Cash Money Records/Young Money Ent./Universal Rec.",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d8/07/8d/d8078d6e-1891-b9af-20b2-1a6500c5ef7b/16UMGIM75426.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "271256",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1859497204",
+      "type": "albums",
+      "attributes": {
+        "name": "WHAT HAPPENED TO THE STREETS?",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/what-happened-to-the-streets/1859497204",
+        "playParams": {
+          "id": "1859497204",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-12-12",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196873915708",
+        "genreNames": [
+          "Rap",
+          "Music",
+          "Hip-Hop/Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/04/cf/73/04cf7356-aec2-2569-da3e-0d7ad9a3d40d/196873915708.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1860789017",
+              "type": "albums",
+              "attributes": {
+                "name": "WHAT HAPPENED TO THE STREETS?",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/what-happened-to-the-streets/1860789017",
+                "playParams": {
+                  "id": "1860789017",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-12-10",
+                "contentRating": "clean",
+                "trackCount": 14,
+                "upc": "196873915715",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/de/61/31/de6131e2-a8ed-64c9-4904-f38b65b7f868/196873915715.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1254351754",
+      "type": "albums",
+      "attributes": {
+        "name": "Issa Album",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/issa-album/1254351754",
+        "playParams": {
+          "id": "1254351754",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-07-07",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "886446575674",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a8/f9/7e/a8f97eb8-d58c-b3d8-c4a3-359a53cd2b38/886446575674.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1256644768",
+              "type": "albums",
+              "attributes": {
+                "name": "Issa Album",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/issa-album/1256644768",
+                "playParams": {
+                  "id": "1256644768",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-07-07",
+                "contentRating": "clean",
+                "trackCount": 14,
+                "upc": "886446601298",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music127/v4/5e/f5/9d/5ef59d0c-4a01-56c5-81c2-c2a2942f55f7/886446601298.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1447717361",
+      "type": "albums",
+      "attributes": {
+        "name": "i am > i was (Deluxe)",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/i-am-i-was-deluxe/1447717361",
+        "playParams": {
+          "id": "1447717361",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-12-21",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "886447502792",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Dirty South",
+          "Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/8a/50/1c8a507f-4f04-07e1-8c34-ce656a851625/886447502792.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1446918493",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was/1446918493",
+                "playParams": {
+                  "id": "1446918493",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "886447489512",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c6/28/44/c6284485-1493-014e-7659-6fa2c0ffec38/886447489512.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1447452167",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was/1447452167",
+                "playParams": {
+                  "id": "1447452167",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "clean",
+                "trackCount": 15,
+                "upc": "886447365144",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/07/94/f7/0794f7c3-0042-6aa8-022e-ae008868eb75/886447365144.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1447452167",
+      "type": "albums",
+      "attributes": {
+        "name": "i am > i was",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/i-am-i-was/1447452167",
+        "playParams": {
+          "id": "1447452167",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-12-21",
+        "contentRating": "clean",
+        "trackCount": 15,
+        "upc": "886447365144",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/07/94/f7/0794f7c3-0042-6aa8-022e-ae008868eb75/886447365144.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1447717361",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was (Deluxe)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was-deluxe/1447717361",
+                "playParams": {
+                  "id": "1447717361",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "886447502792",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/8a/50/1c8a507f-4f04-07e1-8c34-ce656a851625/886447502792.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1446918493",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was/1446918493",
+                "playParams": {
+                  "id": "1446918493",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "886447489512",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c6/28/44/c6284485-1493-014e-7659-6fa2c0ffec38/886447489512.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1133782044",
+      "type": "albums",
+      "attributes": {
+        "name": "Savage Mode",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode/1133782044",
+        "playParams": {
+          "id": "1133782044",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-07-15",
+        "contentRating": "explicit",
+        "trackCount": 9,
+        "upc": "886446010236",
+        "genreNames": [
+          "Rap",
+          "Music",
+          "Hip-Hop/Rap",
+          "Underground Rap",
+          "Hardcore Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/dd/5c/5c/dd5c5c4b-16d0-e74d-0075-5df0b6daf33c/886446010236.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            },
+            {
+              "id": "670534462",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1653012564",
+      "type": "albums",
+      "attributes": {
+        "name": "Her Loss",
+        "artistName": "Drake & 21 Savage",
+        "url": "https://music.apple.com/us/album/her-loss/1653012564",
+        "playParams": {
+          "id": "1653012564",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-11-04",
+        "contentRating": "clean",
+        "trackCount": 16,
+        "upc": "00602448926159",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO / Republic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/e1/6e/6a/e16e6a89-3e6d-1936-1a9c-b51680bcd4c1/22UM1IM29132.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1652998965",
+              "type": "albums",
+              "attributes": {
+                "name": "Her Loss",
+                "artistName": "Drake & 21 Savage",
+                "url": "https://music.apple.com/us/album/her-loss/1652998965",
+                "playParams": {
+                  "id": "1652998965",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-11-04",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "00602448926067",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO / Republic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/c7/00/3f/c7003f83-3a43-1201-4aec-41be71ba64c5/22UM1IM29131.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "271256",
+              "type": "artists"
+            },
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1738363766",
+      "type": "albums",
+      "attributes": {
+        "name": "COWBOY CARTER",
+        "artistName": "Beyoncé",
+        "url": "https://music.apple.com/us/album/cowboy-carter/1738363766",
+        "playParams": {
+          "id": "1738363766",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-03-29",
+        "contentRating": "explicit",
+        "trackCount": 27,
+        "upc": "196871853729",
+        "genreNames": [
+          "Country",
+          "Music",
+          "Pop"
+        ],
+        "recordLabel": "Parkwood Entertainment/Columbia",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/bd/f6/83/bdf683a5-28de-08cb-cb91-2940c1e6270b/196871853729.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1738370746",
+              "type": "albums",
+              "attributes": {
+                "name": "COWBOY CARTER",
+                "artistName": "Beyoncé",
+                "url": "https://music.apple.com/us/album/cowboy-carter/1738370746",
+                "playParams": {
+                  "id": "1738370746",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-03-29",
+                "contentRating": "clean",
+                "trackCount": 27,
+                "upc": "196871853736",
+                "genreNames": [
+                  "Country",
+                  "Music",
+                  "Pop"
+                ],
+                "recordLabel": "Parkwood Entertainment/Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c6/9c/17/c69c17df-1835-77e7-58c1-ca04d44a0611/196871853736.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "1419227",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1536235462",
+      "type": "albums",
+      "attributes": {
+        "name": "SAVAGE MODE II [CHOPPED NOT SLOPPED]",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode-ii-chopped-not-slopped/1536235462",
+        "playParams": {
+          "id": "1536235462",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-10-19",
+        "contentRating": "explicit",
+        "trackCount": 29,
+        "upc": "886448851288",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/5e/c2/37/5ec2371f-c967-1a00-800a-8ff0e0ff5b38/886448851288.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1534209957",
+              "type": "albums",
+              "attributes": {
+                "name": "SAVAGE MODE II",
+                "artistName": "21 Savage & Metro Boomin",
+                "url": "https://music.apple.com/us/album/savage-mode-ii/1534209957",
+                "playParams": {
+                  "id": "1534209957",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-02",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "886448747697",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/03/3d/e5/033de513-4e28-5d06-e42b-4f2d5ba65dce/886448747697.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1534263780",
+              "type": "albums",
+              "attributes": {
+                "name": "SAVAGE MODE II",
+                "artistName": "21 Savage & Metro Boomin",
+                "url": "https://music.apple.com/us/album/savage-mode-ii/1534263780",
+                "playParams": {
+                  "id": "1534263780",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-02",
+                "contentRating": "clean",
+                "trackCount": 15,
+                "upc": "886448747703",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/53/ed/40/53ed4078-7d2a-076e-f9b9-ffb29e776c42/886448747703.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            },
+            {
+              "id": "670534462",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786697261",
+      "type": "albums",
+      "attributes": {
+        "name": "Outfit - Single",
+        "artistName": "Lil Baby & 21 Savage",
+        "url": "https://music.apple.com/us/album/outfit-single/1786697261",
+        "playParams": {
+          "id": "1786697261",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-01-02",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602475797166",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Quality Control Music/Motown Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/45/86/41/458641c6-b1c0-ed78-67ec-57cc8a4c424d/24UM1IM32309.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "1276656483",
+              "type": "artists"
+            },
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1256644768",
+      "type": "albums",
+      "attributes": {
+        "name": "Issa Album",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/issa-album/1256644768",
+        "playParams": {
+          "id": "1256644768",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-07-07",
+        "contentRating": "clean",
+        "trackCount": 14,
+        "upc": "886446601298",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC/Epic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music127/v4/5e/f5/9d/5ef59d0c-4a01-56c5-81c2-c2a2942f55f7/886446601298.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1254351754",
+              "type": "albums",
+              "attributes": {
+                "name": "Issa Album",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/issa-album/1254351754",
+                "playParams": {
+                  "id": "1254351754",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-07-07",
+                "contentRating": "explicit",
+                "trackCount": 14,
+                "upc": "886446575674",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a8/f9/7e/a8f97eb8-d58c-b3d8-c4a3-359a53cd2b38/886446575674.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1373820482",
+      "type": "albums",
+      "attributes": {
+        "name": "OTW - Single",
+        "artistName": "Khalid, 6LACK & Ty Dolla $ign",
+        "url": "https://music.apple.com/us/album/otw-single/1373820482",
+        "playParams": {
+          "id": "1373820482",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-04-20",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886447070451",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Right Hand Music Group, LLC/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/73/b4/98/73b49848-7fa4-d33f-35aa-846897f53ab3/886447070451.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1373822557",
+              "type": "albums",
+              "attributes": {
+                "name": "OTW - Single",
+                "artistName": "Khalid, 6LACK & Ty Dolla $ign",
+                "url": "https://music.apple.com/us/album/otw-single/1373822557",
+                "playParams": {
+                  "id": "1373822557",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-04-20",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "886447070468",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Right Hand Music Group, LLC/RCA Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/ea/f7/db/eaf7db11-a7a6-b313-e024-837033e1705a/886447070468.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "82842423",
+              "type": "artists"
+            },
+            {
+              "id": "1016633280",
+              "type": "artists"
+            },
+            {
+              "id": "602917745",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1114660184",
+      "type": "albums",
+      "attributes": {
+        "name": "The Slaughter Tape",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/the-slaughter-tape/1114660184",
+        "playParams": {
+          "id": "1114660184",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-05-15",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "840096533552",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music60/v4/97/b7/df/97b7df0e-8c9f-43d9-ff39-1f4e1962e0d9/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "894820464",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1573484415",
+      "type": "albums",
+      "attributes": {
+        "name": "CALL ME IF YOU GET LOST",
+        "artistName": "Tyler, The Creator",
+        "url": "https://music.apple.com/us/album/call-me-if-you-get-lost/1573484415",
+        "playParams": {
+          "id": "1573484415",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-06-25",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "886449377039",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Columbia",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/65/47/0a/65470a4c-a70f-4a0b-f77b-3edb39e9097a/886449377039.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1679454273",
+              "type": "albums",
+              "attributes": {
+                "name": "CALL ME IF YOU GET LOST: The Estate Sale",
+                "artistName": "Tyler, The Creator",
+                "url": "https://music.apple.com/us/album/call-me-if-you-get-lost-the-estate-sale/1679454273",
+                "playParams": {
+                  "id": "1679454273",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2021-06-25",
+                "contentRating": "explicit",
+                "trackCount": 24,
+                "upc": "196871011907",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/0b/4d/63/0b4d63aa-f47c-6905-fea3-8fc84dbf1083/196871011907.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "420368335",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1571821960",
+      "type": "albums",
+      "attributes": {
+        "name": "RY RY WORLD",
+        "artistName": "Mariah the Scientist",
+        "url": "https://music.apple.com/us/album/ry-ry-world/1571821960",
+        "playParams": {
+          "id": "1571821960",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-07-09",
+        "contentRating": "explicit",
+        "trackCount": 10,
+        "upc": "886449365159",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "One Umbrella/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8f/79/38/8f793876-4bce-b939-bf64-726fb6b28d30/886449365159.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "1475275447",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1168985937",
+      "type": "albums",
+      "attributes": {
+        "name": "DC4",
+        "artistName": "Meek Mill",
+        "url": "https://music.apple.com/us/album/dc4/1168985937",
+        "playParams": {
+          "id": "1168985937",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-10-28",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "075679908643",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Hardcore Rap",
+          "Rap"
+        ],
+        "recordLabel": "MMG/Atlantic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/70/7f/53/707f5319-be60-406a-83ac-475e2dddba0b/dj.rzqxcsnt.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1169146712",
+              "type": "albums",
+              "attributes": {
+                "name": "DC4",
+                "artistName": "Meek Mill",
+                "url": "https://music.apple.com/us/album/dc4/1169146712",
+                "playParams": {
+                  "id": "1169146712",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2016-10-27",
+                "contentRating": "clean",
+                "trackCount": 14,
+                "upc": "075679908636",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Hardcore Rap",
+                  "Rap"
+                ],
+                "recordLabel": "MMG/Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/5d/db/7c/5ddb7c9e-1643-d79d-4509-04b16e85ac26/075679908636.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "313865761",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1747857514",
+      "type": "albums",
+      "attributes": {
+        "name": "BAND4BAND - Single",
+        "artistName": "Central Cee & Lil Baby",
+        "url": "https://music.apple.com/us/album/band4band-single/1747857514",
+        "playParams": {
+          "id": "1747857514",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-05-23",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "196872143188",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "Columbia",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0d/e2/31/0de23199-713c-a145-73f5-be8d30510cb6/196872143188.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1749412136",
+              "type": "albums",
+              "attributes": {
+                "name": "BAND4BAND - Single",
+                "artistName": "Central Cee & Lil Baby",
+                "url": "https://music.apple.com/us/album/band4band-single/1749412136",
+                "playParams": {
+                  "id": "1749412136",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-05-23",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "196872154931",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap"
+                ],
+                "recordLabel": "Columbia",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e1/2d/c5/e12dc546-b50d-5a06-58cf-94227b0c78b9/196872154931.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "1085149646",
+              "type": "artists"
+            },
+            {
+              "id": "1276656483",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1011549230",
+      "type": "albums",
+      "attributes": {
+        "name": "Dreams Worth More Than Money",
+        "artistName": "Meek Mill",
+        "url": "https://music.apple.com/us/album/dreams-worth-more-than-money/1011549230",
+        "playParams": {
+          "id": "1011549230",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-06-29",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "075679923578",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Hardcore Rap",
+          "Rock",
+          "Rap"
+        ],
+        "recordLabel": "MMG/Atlantic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a6/16/25/a6162590-4434-40bf-6390-6e3df46c7bbe/075679923578.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1011554657",
+              "type": "albums",
+              "attributes": {
+                "name": "Dreams Worth More Than Money",
+                "artistName": "Meek Mill",
+                "url": "https://music.apple.com/us/album/dreams-worth-more-than-money/1011554657",
+                "playParams": {
+                  "id": "1011554657",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2015-06-29",
+                "contentRating": "clean",
+                "trackCount": 14,
+                "upc": "075679923554",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Hardcore Rap",
+                  "Rock",
+                  "Rap"
+                ],
+                "recordLabel": "MMG/Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/14/55/97/145597b7-a250-9d99-65ee-d8bfadcdfb72/075679923554.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "313865761",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

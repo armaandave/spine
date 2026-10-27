@@ -27,6 +27,7 @@ WHOS_NEXT_DELUXE = "1440850317"
 WHOS_NEXT_2022 = "1706357665"
 FATD = "1710685602"
 SCARY_HOURS = "1716979097"
+AMERICAN_DREAM = "1724494274"
 # Apple's album pages, by album: the fixture, its editions fixtures and its artist's.
 PAGES = {
     SOS: ("page_sos.json", "sos", "sza"),
@@ -304,6 +305,57 @@ class RelatedSectionTests(AppleMusicTestCase):
             sorted(services.get_media_metadata("music", SOS, "apple_music", include_music_related=True)["related"]),
             ["more_by_artist", "other_versions", "related_albums"],
         )
+
+    def test_remix_variants_are_other_versions_not_more_by(self, _today):
+        fake = self.apple(
+            (200, fixture("page_american_dream.json")),
+            (200, fixture("editions_songs_american_dream.json")),
+            (200, fixture("artist_albums_21_savage.json")),
+        )
+
+        album = apple_music.music(AMERICAN_DREAM, related=True)
+
+        self.assertEqual(
+            [path(request) for request in fake.requests],
+            [f"albums/{AMERICAN_DREAM}", "songs", "artists/894820464/view/full-albums"],
+        )
+        self.assertEqual(
+            badges(album["related"]["other_versions"]),
+            [
+                ("1729925845", "american dream (slowed down)", "Other version"),
+                ("1729923680", "american dream (nightcore version)", "Other version"),
+                ("1729916799", "american dream (sped up)", "Other version"),
+            ],
+        )
+        more_by = ids(album["related"]["more_by_artist"])
+        self.assertEqual(more_by[:2], ["1859497204", "1652998965"])
+        self.assertFalse(set(more_by) & {AMERICAN_DREAM, "1729925845", "1729923680", "1729916799"})
+
+    def test_a_variants_page_keeps_its_album_in_more_by(self, _today):
+        page = fixture("page_american_dream.json")
+        variant = page["data"][0]
+        variant["id"] = "1729916799"
+        variant["attributes"].update(
+            name="american dream (sped up)",
+            url="https://music.apple.com/us/album/american-dream-sped-up/1729916799",
+            playParams={"id": "1729916799", "kind": "album"},
+        )
+        variant["views"]["other-versions"]["data"] = []
+        self.apple(
+            (200, page),
+            # The albums that share its first song, left empty here.
+            (200, fixture("editions_songs_american_dream.json")),
+            (200, {"data": []}),
+            (200, fixture("artist_albums_21_savage.json")),
+        )
+
+        album = apple_music.music("1729916799", related=True)
+
+        self.assertNotIn("other_versions", album["related"])
+        more_by = ids(album["related"]["more_by_artist"])
+        self.assertIn(AMERICAN_DREAM, more_by)
+        # The other variants fold into american dream there too.
+        self.assertFalse(set(more_by) & {"1729925845", "1729923680"})
 
 
 class RelationTests(AppleMusicTestCase):

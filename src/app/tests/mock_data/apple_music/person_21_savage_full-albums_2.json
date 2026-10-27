@@ -1,0 +1,128 @@
+{
+  "data": [
+    {
+      "id": "1165327406",
+      "type": "albums",
+      "attributes": {
+        "name": "Savage Season",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/savage-season/1165327406",
+        "playParams": {
+          "id": "1165327406",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-10-13",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "0722512312142",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "101 Distribution",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/ae/17/5f/ae175ff2-c288-282d-ad20-3432a8ec9fab/0722512312142.png/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      }
+    },
+    {
+      "id": "1133782044",
+      "type": "albums",
+      "attributes": {
+        "name": "Savage Mode",
+        "artistName": "21 Savage & Metro Boomin",
+        "url": "https://music.apple.com/us/album/savage-mode/1133782044",
+        "playParams": {
+          "id": "1133782044",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-07-15",
+        "contentRating": "explicit",
+        "trackCount": 9,
+        "upc": "886446010236",
+        "genreNames": [
+          "Rap",
+          "Music",
+          "Hip-Hop/Rap",
+          "Underground Rap",
+          "Hardcore Rap",
+          "Dirty South"
+        ],
+        "recordLabel": "Slaughter Gang, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/dd/5c/5c/dd5c5c4b-16d0-e74d-0075-5df0b6daf33c/886446010236.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1114376830",
+      "type": "albums",
+      "attributes": {
+        "name": "Slaughter King",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/slaughter-king/1114376830",
+        "playParams": {
+          "id": "1114376830",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-12-01",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "840096535723",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/01/36/84/01368464-ed5d-45b2-448a-2907b9c4400b/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1114660184",
+      "type": "albums",
+      "attributes": {
+        "name": "The Slaughter Tape",
+        "artistName": "21 Savage",
+        "url": "https://music.apple.com/us/album/the-slaughter-tape/1114660184",
+        "playParams": {
+          "id": "1114660184",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-05-15",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "840096533552",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Slaughter Gang LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music60/v4/97/b7/df/97b7df0e-8c9f-43d9-ff39-1f4e1962e0d9/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    }
+  ]
+}
