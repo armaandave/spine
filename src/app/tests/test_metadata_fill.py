@@ -5,6 +5,7 @@ hardcover.book_metadata_batch, or FakeTVProvider for TV. The clock and the sleep
 fakes, so pacing is exact and nothing waits.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from unittest import mock
@@ -14,6 +15,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import CommandError, call_command
+from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 
@@ -466,6 +468,29 @@ class ErrorTests(FillTestCase):
         self.assertEqual([item.metadata_version for item in anime[streak:]], [0, 0])
         self.assertIsNone(anime[streak].metadata_attempted_at)
 
+    def test_the_stamp_streak_carries_across_chunks(self):
+        # A slow provider fits one title in a chunk: the count must survive the chain's
+        # state (JSON through Celery), or it never reaches the limit.
+        streak = metadata_fill.MAX_STAMP_STREAK
+        anime = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(streak + 2)]
+
+        def slow_failure(*args, **kwargs):
+            self.clock.now += metadata_fill.CHUNK_SECONDS + 1
+            raise TypeError("a parse bug for every title")
+
+        fetch = self.patch_metadata(slow_failure)
+
+        state, chunks = metadata_fill.initial_state(), 0
+        while state is not None:
+            state, _, _ = metadata_fill.run_chunk(json.loads(json.dumps(state)))
+            chunks += 1
+
+        self.assertGreaterEqual(chunks, streak)
+        self.assertEqual(fetch.call_count, streak)
+        self.refresh(*anime)
+        self.assertEqual([item.metadata_version for item in anime[: streak - 1]], [CURRENT] * (streak - 1))
+        self.assertEqual([item.metadata_version for item in anime[streak - 1 :]], [0, 0, 0])
+
     def test_a_stored_title_resets_the_stamp_streak(self):
         streak = metadata_fill.MAX_STAMP_STREAK
         missing = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(streak - 1)]
@@ -839,6 +864,34 @@ class SweepTests(FillTestCase):
     def test_the_sweep_is_an_hourly_beat_entry(self):
         entry = settings.CELERY_BEAT_SCHEDULE["sweep_item_metadata"]
         self.assertEqual((entry["task"], entry["schedule"]), ("Sweep item metadata", 60 * 60))
+
+
+class RollbackSchemaTests(TestCase):
+    """STAT-903: code from before 0088 (a rollback) still inserts Items."""
+
+    def test_an_item_inserted_without_the_new_columns_gets_their_defaults(self):
+        item = Item(
+            media_id="old-code-1",
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            title="Inserted by old code",
+            image=settings.IMG_NONE,
+        )
+        new_columns = {"metadata_version", "metadata_attempted_at"}
+        fields = [
+            field
+            for field in Item._meta.concrete_fields
+            if not field.primary_key and field.column not in new_columns
+        ]
+        columns = ", ".join(connection.ops.quote_name(field.column) for field in fields)
+        params = [field.get_db_prep_save(field.pre_save(item, add=True), connection) for field in fields]
+        placeholders = ", ".join(["%s"] * len(fields))
+        table = connection.ops.quote_name(Item._meta.db_table)
+        with connection.cursor() as cursor:
+            cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", params)  # noqa: S608
+
+        inserted = Item.objects.get(media_id="old-code-1")
+        self.assertEqual((inserted.metadata_version, inserted.metadata_attempted_at), (0, None))
 
 
 class TrackingRowsTests(FillTestCase):

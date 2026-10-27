@@ -322,9 +322,15 @@ def _chosen_sources(scope, candidates):
     all_sources = {source for sources in wanted.values() for source in sources}
     if not all_sources:
         return {}
+    # The candidates' IDs are read first: as a subquery, Postgres can re-run the
+    # candidates' per-title rating subqueries for every rating row when its row
+    # estimates are low (seen as a 40-minute query in the test suite).
+    candidate_ids = list(candidates.values_list("id", flat=True))
+    if not candidate_ids:
+        return {}
     available = set(
         _usable_ratings()
-        .filter(rating_source__in=all_sources, item_id__in=candidates.values("id"))
+        .filter(rating_source__in=all_sources, item_id__in=candidate_ids)
         .annotate(stats_type=media_type_bucket("item__media_type"))
         .values_list("stats_type", "rating_source")
         .distinct()

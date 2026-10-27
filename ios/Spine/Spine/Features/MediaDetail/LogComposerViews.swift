@@ -31,7 +31,8 @@ final class LogTagDraft {
     private var hasLoaded = false
     /// The most tags it takes, or nil for no limit.
     let maximumCount: Int?
-    /// The longest a tag can be; longer ones are cut. Nil for no limit.
+    /// The longest a tag can be, in Unicode code points (the server's count); longer ones are
+    /// cut. Nil for no limit.
     let maximumLength: Int?
 
     init(tags: [String] = [], maximumCount: Int? = nil, maximumLength: Int? = nil) {
@@ -94,8 +95,12 @@ final class LogTagDraft {
 
     func add(_ rawTag: String) {
         var tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let maximumLength, tag.count > maximumLength {
-            tag = String(tag.prefix(maximumLength)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let maximumLength, tag.unicodeScalars.count > maximumLength {
+            // Whole characters are dropped, so an emoji is never cut in half.
+            while tag.unicodeScalars.count > maximumLength {
+                tag.removeLast()
+            }
+            tag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         guard !isFull, !tag.isEmpty, !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
         tags.append(tag)

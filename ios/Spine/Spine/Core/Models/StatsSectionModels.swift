@@ -921,11 +921,12 @@ extension StatsGenreRow {
 }
 
 extension StatsMusicGenre {
-    private enum CodingKeys: String, CodingKey { case name, titles }
+    private enum CodingKeys: String, CodingKey { case name, values, titles }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
+        values = c.statsValue([String].self, forKey: .values)
         titles = c.statsInt(forKey: .titles)
     }
 }

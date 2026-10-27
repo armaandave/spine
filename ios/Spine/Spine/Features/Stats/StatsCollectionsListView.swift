@@ -68,6 +68,7 @@ struct StatsCollectionsListView: View {
         .navigationTitle(group.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .environment(\.colorScheme, .dark)
         .toolbar(.hidden, for: .tabBar)
         .task {
             if viewModel.items.isEmpty, viewModel.errorMessage == nil {

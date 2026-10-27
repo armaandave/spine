@@ -32,6 +32,12 @@ final class ListComposerTagsTests: XCTestCase {
         draft.add(String(repeating: "a", count: 140))
         XCTAssertEqual(draft.tags.last?.count, 100, "A long tag is cut to 100 characters")
 
+        // The server counts code points: a family emoji is 5 of them, so 30 are cut to 20.
+        draft.remove(String(repeating: "a", count: 100))
+        draft.add(String(repeating: "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", count: 30))
+        XCTAssertEqual(draft.tags.last?.unicodeScalars.count, 100)
+        XCTAssertEqual(draft.tags.last?.count, 20)
+
         let diaryDraft = LogTagDraft()
         for index in 1 ... 25 {
             diaryDraft.add("tag\(index)")
@@ -186,6 +192,22 @@ final class ListComposerTagsTests: XCTestCase {
 
         let request = try XCTUnwrap(repository.updates.first)
         XCTAssertEqual(request.tags, ["comfort", "Top 2025", "favorites"])
+    }
+
+    func testOwnerRenameLeavesUnchangedTagsOut() async throws {
+        // An imported list can hold more tags than a write accepts; a rename must still save.
+        let repository = TagsListRepository()
+        let imported = (1...25).map { "tag \($0)" }
+        let list = detail(owner: owner, tags: imported, items: [movie(5)])
+        repository.serverItems = list.items
+        let viewModel = makeViewModel(mode: .edit(list), repository: repository, currentUserId: owner.id)
+        viewModel.draft.name = "Renamed"
+
+        _ = await viewModel.save()
+
+        let request = try XCTUnwrap(repository.updates.first)
+        XCTAssertNil(request.tags)
+        XCTAssertEqual(request.name, "Renamed")
     }
 
     func testRemovingTheLastTagSendsAnEmptyListToClearIt() async throws {

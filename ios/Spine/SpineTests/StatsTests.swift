@@ -640,11 +640,29 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil), "The old page stays")
         XCTAssertFalse(viewModel.isDimmed, "It's undimmed once the load has failed")
         XCTAssertEqual(viewModel.selectedPeriod, .year(2023), "The pill stays where the user put it")
+        XCTAssertEqual(viewModel.bannerTitle, "Couldn't load All Media · 2023")
 
         viewModel.selectPeriod(.year(2024))
         XCTAssertNil(viewModel.bannerMessage, "A new load clears the banner")
         await settle(viewModel)
         XCTAssertNil(viewModel.bannerMessage)
+    }
+
+    func testAFailedTabSwitchNamesTheTabInTheBanner() async {
+        let repository = StatsPageRepositoryFake { scope in
+            if scope.mediaType == "movie" { throw APIError.invalidResponse }
+            return Self.page(for: scope)
+        }
+        let viewModel = makeViewModel(repository)
+        viewModel.appeared()
+        await settle(viewModel)
+
+        viewModel.selectMediaType("movie")
+        await settle(viewModel)
+
+        XCTAssertEqual(viewModel.selectedMediaType, "movie")
+        XCTAssertEqual(viewModel.pageScope, StatsScope(period: .allTime, mediaType: nil), "The old page stays")
+        XCTAssertEqual(viewModel.bannerTitle, "Couldn't load Movies · All Time")
     }
 
     func testViewModelErrorWithNothingOnScreenIsTheWholeStateAndRetries() async {

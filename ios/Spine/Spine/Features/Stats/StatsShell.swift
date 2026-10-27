@@ -46,15 +46,16 @@ struct StatsShell<Content: View>: View {
         .refreshable {
             await viewModel.refresh()
         }
-        // A dark page whatever the phone's appearance, as the other dark screens are, so
-        // segmented controls and the refresh spinner draw for a dark background.
-        .preferredColorScheme(.dark)
         .background {
             LogBackdrop(url: URL(string: viewModel.page?.featuredMedia?.displayPosterURL ?? ""))
         }
         .overlay(alignment: .top) {
             DiaryTopSoftScrim()
         }
+        // A dark page whatever the phone's appearance, so segmented controls and the refresh
+        // spinner draw for a dark background. The environment, not preferredColorScheme: that
+        // one sets the whole window and would turn the Profile screen underneath dark too.
+        .environment(\.colorScheme, .dark)
         .navigationTitle("Stats")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -80,7 +81,7 @@ struct StatsShell<Content: View>: View {
     private var stateRows: some View {
         if let message = viewModel.bannerMessage {
             StatsErrorBanner(
-                title: viewModel.errorScope.map { "Couldn't load \($0.period.title)" } ?? "Couldn't load stats",
+                title: viewModel.bannerTitle,
                 message: message
             ) {
                 viewModel.retry()
@@ -92,7 +93,8 @@ struct StatsShell<Content: View>: View {
             // The page on screen answers `pageScope`, which differs from the selection after a
             // failed load.
             let pagePeriod = viewModel.pageScope?.period ?? viewModel.selectedPeriod
-            Group {
+            // ForEach(subviews:) keeps every row its own lazy item; the dimming goes on each.
+            ForEach(subviews: Group {
                 if page.isEmpty {
                     DiaryStateCard(
                         title: "Nothing here yet",
@@ -104,13 +106,15 @@ struct StatsShell<Content: View>: View {
                 } else {
                     content(page)
                 }
+            }) { row in
+                // Only the dimming animates: a new page lands in the same update that ends it,
+                // and its rows shouldn't animate in.
+                row
+                    .animation(.easeInOut(duration: SpineMotion.standardDuration)) { row in
+                        row.opacity(viewModel.isDimmed ? 0.45 : 1)
+                    }
+                    .allowsHitTesting(!viewModel.isDimmed)
             }
-            // Only the dimming animates: a new page lands in the same update that ends it, and
-            // its rows shouldn't animate in.
-            .animation(.easeInOut(duration: SpineMotion.standardDuration)) { rows in
-                rows.opacity(viewModel.isDimmed ? 0.45 : 1)
-            }
-            .allowsHitTesting(!viewModel.isDimmed)
         } else if let message = viewModel.fullErrorMessage {
             VStack(spacing: 16) {
                 DiaryStateCard(

@@ -245,6 +245,7 @@ final class StatsRealPayloadTests: XCTestCase {
         let genres = json["genres"] as? JSON
         XCTAssertEqual(page.genres?.rows.count, rows(genres, "rows").count, "\(name): genres")
         XCTAssertEqual(page.genres?.music.count, rows(genres, "music").count, "\(name): music genres")
+        XCTAssertTrue(page.genres?.music.allSatisfy { !($0.values ?? []).isEmpty } ?? true, "\(name): music genre spellings")
         XCTAssertEqual(page.genres?.total, genres?["total"] as? Int, name)
         XCTAssertNotNil(page.genres?.coverage, name)
         if page.mediaType == nil {

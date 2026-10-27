@@ -966,6 +966,7 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | Most logged "Show all", Highest rated "Show all", Collections "Show all" | The show-all endpoints (STAT-310). |
 
 The diary lists logs, so a row counted in titles can open more logs than its number, and titles counted only as undated completions don't appear.
+A title row with no log in the range opens an empty diary: an All Time Highest rated title rated without a log, or a Top list title logged only in another year. The payload doesn't say whether a title has a log in the range, so the row can't tell in advance.
 
 ### STAT-402: Only a list's owner writes its tags
 

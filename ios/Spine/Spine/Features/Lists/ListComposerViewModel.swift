@@ -419,13 +419,16 @@ final class ListComposerViewModel {
     }
 
     private func saveDetails() async throws -> Int {
+        // Tags go only when they changed: a list imported with more tags than the server
+        // accepts on a write still saves a rename.
+        let tags = ListTagRules.normalized(tagDraft.tags)
         let request = CustomListWriteRequest(
             name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
             description: draft.description.trimmingCharacters(in: .whitespacesAndNewlines),
             visibility: draft.visibility,
             isRanked: draft.isRanked,
             listType: serverListID == nil && draft.listType == .people ? .people : nil,
-            tags: canEditTags ? ListTagRules.normalized(tagDraft.tags) : nil
+            tags: canEditTags && tags != initialTags ? tags : nil
         )
 
         if let serverListID {

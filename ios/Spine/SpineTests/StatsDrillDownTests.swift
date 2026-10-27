@@ -51,6 +51,18 @@ final class StatsDrillDownTests: XCTestCase {
         XCTAssertEqual(values("genre", in: query), ["Drama"])
     }
 
+    func testMusicGenreDecodesEverySpellingAndSendsThemAll() throws {
+        let json = #"{"rows": [], "total": 0, "coverage": null, "music": [{"name": "jazz", "values": ["jazz", "Jazz"], "titles": 26}]}"#
+        let genres = try JSONDecoder.api.decode(StatsGenres.self, from: Data(json.utf8))
+        XCTAssertEqual(genres.music.first?.values, ["jazz", "Jazz"])
+
+        let row = try XCTUnwrap(StatsRankedRowsData.rows(music: genres.music).first)
+        let query = pairs(row.drillDown.diaryFilter(in: ownGlobal2025))
+
+        XCTAssertEqual(values("genre", in: query), ["jazz", "Jazz"])
+        XCTAssertEqual(values("media_type", in: query), ["music"])
+    }
+
     func testGlobalGenreGroupSendsItsKeyAndOnlyThePartsTypes() {
         let row = StatsGenreRow(
             key: "scifi_fantasy", name: "Sci-Fi & Fantasy", values: nil, titles: 41, rated: 33,

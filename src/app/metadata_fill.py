@@ -380,7 +380,9 @@ def _mark_attempted(items):
 class _Run:
     """One chunk's work: what it did, which providers are blocked or waiting."""
 
-    def __init__(self, *, blocked=None, media_types=None, user=None, limit=None, budget=CHUNK_SECONDS):
+    def __init__(
+        self, *, blocked=None, stamp_streak=None, media_types=None, user=None, limit=None, budget=CHUNK_SECONDS,
+    ):
         self.blocked = dict(blocked or {})
         self.waiting = {}
         self.media_types = media_types
@@ -393,7 +395,9 @@ class _Run:
         self.handled_shows = set()
         self.hardcover = []
         self.stopped_for_musicbrainz = False
-        self.stamp_streak = Counter()
+        # Carried between chunks in the chain's state: a slow provider fits only a few
+        # titles in a chunk, so a per-chunk count would never reach MAX_STAMP_STREAK.
+        self.stamp_streak = Counter(stamp_streak or {})
 
     def pending(self):
         return pending_items(media_types=self.media_types, user=self.user)
@@ -719,6 +723,7 @@ def initial_state():
         "pass_progress": 0,
         "idle_passes": 0,
         "blocked": {},
+        "stamp_streak": {},
         "waiting_until": {},
         "done": 0,
     }
@@ -727,7 +732,14 @@ def initial_state():
 def run_chunk(state, *, budget=CHUNK_SECONDS, media_types=None, user=None, limit=None):
     """Run one chunk from `state`; return (next state or None when the chain ends, countdown, run)."""
     state = {**initial_state(), **(state or {})}
-    run = _Run(blocked=state["blocked"], media_types=media_types, user=user, limit=limit, budget=budget)
+    run = _Run(
+        blocked=state["blocked"],
+        stamp_streak=state["stamp_streak"],
+        media_types=media_types,
+        user=user,
+        limit=limit,
+        budget=budget,
+    )
     run.after = state["after"]
     phase, exhausted = _walk_phases(run, run.pending(), state["phase"])
 
@@ -736,6 +748,7 @@ def run_chunk(state, *, budget=CHUNK_SECONDS, media_types=None, user=None, limit
         phase=phase,
         after=run.after,
         blocked=run.blocked,
+        stamp_streak={provider: count for provider, count in run.stamp_streak.items() if count},
         waiting_until=waiting_until,
         pass_progress=state["pass_progress"] + run.progress,
         done=state["done"] + run.progress,

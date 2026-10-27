@@ -152,6 +152,14 @@ final class StatsViewModel {
         page == nil ? nil : errorMessage
     }
 
+    /// The banner's title. It names the tab and the year: after a failed switch the picker
+    /// shows the new tab over the old page.
+    var bannerTitle: String {
+        errorScope.map {
+            "Couldn't load \(StatsPageSection.scopeTitle(mediaType: $0.mediaType, period: $0.period))"
+        } ?? "Couldn't load stats"
+    }
+
     /// An error with nothing on screen.
     var fullErrorMessage: String? {
         page == nil ? errorMessage : nil

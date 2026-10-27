@@ -96,7 +96,7 @@ final class StatsPresentationTests: XCTestCase {
         XCTAssertNil(genres.rows.first?.values)
         XCTAssertEqual(genres.rows.first?.byType["anime"], 9)
         XCTAssertEqual(genres.total, 13)
-        XCTAssertEqual(genres.music, [StatsMusicGenre(name: "shoegaze", titles: 7)])
+        XCTAssertEqual(genres.music, [StatsMusicGenre(name: "shoegaze", values: ["shoegaze", "Shoegaze"], titles: 7)])
 
         let languages = try XCTUnwrap(page.languages)
         XCTAssertEqual(languages.rows.map(\.name), ["English", "Japanese"])
@@ -496,7 +496,7 @@ final class StatsPresentationTests: XCTestCase {
                   "by_type": {"movie": 20, "tv": 6, "anime": 9, "game": 6}}],
         "total": 13,
         "coverage": {"known": 380, "total": 412},
-        "music": [{"name": "shoegaze", "titles": 7}]
+        "music": [{"name": "shoegaze", "values": ["shoegaze", "Shoegaze"], "titles": 7}]
       },
       "languages": {
         "rows": [

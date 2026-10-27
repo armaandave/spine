@@ -314,6 +314,7 @@ struct StatsTitlesGridScreen<Item: StatsPosterTitle, Cell: View>: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .environment(\.colorScheme, .dark)
         .toolbar(.hidden, for: .tabBar)
         .task {
             if viewModel.items.isEmpty, viewModel.errorMessage == nil {

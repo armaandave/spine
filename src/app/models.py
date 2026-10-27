@@ -135,8 +135,9 @@ class Item(CalendarTriggerMixin, models.Model):
     )
     filter_metadata_updated_at = models.DateTimeField(null=True, blank=True)
     # The metadata rules (api.services.item_metadata.CURRENT_METADATA_VERSION) this
-    # Item was last filled under; 0 means never filled completely.
-    metadata_version = models.PositiveSmallIntegerField(default=0)
+    # Item was last filled under; 0 means never filled completely. The database default
+    # keeps code from before 0088 (a rollback) inserting Items.
+    metadata_version = models.PositiveSmallIntegerField(default=0, db_default=0)
     # The last fill attempt that failed for a temporary reason; null when none did.
     metadata_attempted_at = models.DateTimeField(null=True, blank=True)
 

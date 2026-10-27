@@ -157,10 +157,12 @@ Remove this section once the production repair has run.
 Stats need each tracked or logged title's year, runtime, genres, themes and original
 language. Titles stored before this ship are filled once by a paced fill
 (`src/app/metadata_fill.py`, command `fill_item_metadata`): progress lives in the
-database, it only fills blanks, and its own pacing keeps MusicBrainz at one call every
-3 s. Its hourly sweep (beat "Sweep item metadata") does nothing until a full fill is
-started by hand below, so a deploy never starts it early. The user's "ship this" covers
-both runs below.
+database, and its own pacing keeps MusicBrainz at one call every 3 s. It fills blanks
+and also refreshes stored years, runtimes and genres from the provider (book years move
+to the first publication); Apple Music albums keep their stored dates and genres. Its
+hourly sweep (beat "Sweep item metadata") does nothing until a full fill is started by
+hand below, so a deploy never starts it early. The user's "ship this" covers both runs
+below.
 
 1. **Canary, before the ship (optional).** From the feature worktree:
    `scripts/ios/test-backend.sh use 4`, then `scripts/ios/test-backend.sh fill-metadata`
@@ -178,7 +180,8 @@ both runs below.
      type and provider, and the rough number of new series members (each is queued for
      external ratings).
    - `docker exec spine python manage.py fill_item_metadata --apply --limit 20`, then
-     spot-check years, runtimes and genres on a few of those titles. It can fill more
+     spot-check years, runtimes and genres on a few of those titles: expect changed
+     values (refreshed from the provider), not only new ones. It can fill more
      than 20: a TV show fills all its pending seasons and episodes at once.
    - `docker exec spine python manage.py fill_item_metadata --apply --queue` starts the
      Celery chain on the featured worker and turns on the hourly sweep, which from then
@@ -192,7 +195,7 @@ both runs below.
 4. **Finish.** Re-run the dry run until only titles waiting for a retry remain (a
    provider that was down; they are retried after 7 days), plus any for a provider out
    of its daily budget (the sweep resumes them once it resets). Report the
-   counts by type. The pre-deploy backup is the way back; the fill only fills blanks.
+   counts by type. The pre-deploy backup is the way back: the fill replaces stored values, not only blanks.
 
 Remove this section once the production fill has finished.
 
