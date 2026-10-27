@@ -131,26 +131,19 @@ Run from the feature worktree unless a step says otherwise.
 Some ships carry a data step that has to run once, right after their deploy is verified
 (Workflow A, step 8). Each one says which ship carries it.
 
-### The TV repair, with the ship that adds `src/app/migrations/0085_tv_tracking_state.py`
+### The season poster repair, with the ship that adds `src/app/management/commands/repair_season_posters.py`
 
-TV shows stored before the TV tracking contract stay unworked until this repair runs
-(`docs/tv-tracking-contract.md`, TV-801). Until then the new build's Continue Watching on
-Home and Profile leaves them out, shows and seasons that only have logs stay out of the
-Library, and Library rows count their episodes without the number aired. It runs on the
-test backend first, then on production right after the deploy. The user's "ship this"
-covers both (decided 2026-10-26):
+The TV tracking ship (2df73ed9) gave some season Items their show's poster when tracking
+created them. This ship stops that; the repair puts back each affected season's own TMDB
+poster. It only changes `Item.image`, never a user's or an admin's artwork pick. The user's
+"ship this" covers it. On production, after the deploy is verified (step 8):
 
-1. With the ship, after `scripts/ios/test-backend.sh update` (step 6), run
-   `scripts/ios/test-backend.sh repair-tv`, a dry run that lists every status it would
-   change. If its summary shows errors, stop and report. Otherwise run
-   `scripts/ios/test-backend.sh repair-tv --apply`.
-2. On production, after the deploy is verified (step 8), run the dry run:
-   `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
-   can't be repaired, stop and report. Otherwise run
-   `docker exec spine python manage.py reconcile_tv --apply`. It is safe to run again: a
-   show already worked out reports nothing. The pre-deploy backup is the way back.
-3. Report each run's counts (shows checked and changed, newly in the Library, status
-   changes).
+1. Dry run: `docker exec spine python manage.py repair_season_posters`. Read the list of
+   seasons it would change; if anything looks wrong, stop and report.
+2. `docker exec spine python manage.py repair_season_posters --apply --record /tmp/season-posters.json`,
+   then copy the record out (`docker cp spine:/tmp/season-posters.json ~/projects/spine-backups/`).
+   `--undo <file>` restores the old images.
+3. Report the seasons changed.
 
 Remove this section once the production repair has run.
 
