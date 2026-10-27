@@ -8,9 +8,13 @@ See docs/music/apple-music-catalog.md.
 - ``apple_genre_names``: Apple's genres in MusicBrainz's words, for albums whose
   MusicBrainz genres aren't known yet, so genre chips and library filters keep
   matching the MusicBrainz genre pages.
+- ``genre_fill_rows`` and ``store_wikidata_apple_ids``: the link rows the genre link
+  fill may write, and Wikidata's Apple Music IDs for it to check.
 
 Don't import ``app.providers.apple_music`` here: it imports this module.
 """
+
+from itertools import batched
 
 from django.db.models import Exists, OuterRef, Q
 
@@ -45,6 +49,8 @@ APPLE_GENRES = {
 }
 # Apple files every album under "Music" as well, which says nothing.
 APPLE_CATCH_ALL_GENRE = "music"
+# Release groups per query when Wikidata's Apple Music IDs are stored.
+WIKIDATA_STORE_BATCH = 500
 
 
 def apple_genre_names(names):
@@ -172,6 +178,59 @@ def canonical_music_payloads(payloads, *, source=None, media_type=None):
     return results
 
 
+def genre_fill_rows():
+    """Return the link rows the genre link fill may write again: its ``unmatched`` rows.
+
+    An unmatched row is the fill's when no MusicBrainz Item holds the album, or when it
+    has never been checked (a Wikidata ID waiting for its check). The data move writes
+    the rows of albums that have an Item, always with a check time, so the fill never
+    touches them, nor any matched, applied, review or manual row.
+    """
+    held = Item.objects.filter(source=MUSICBRAINZ, media_type=MUSIC).values("media_id")
+    return MusicAlbumLink.objects.filter(status=MusicAlbumLink.Status.UNMATCHED).filter(
+        Q(checked_at__isnull=True) | ~Q(release_group_mbid__in=held),
+    )
+
+
+def store_wikidata_apple_ids(apple_ids):
+    """Record Wikidata's Apple Music album IDs (P2281) for the genre link fill to check.
+
+    ``apple_ids`` maps release groups to Wikidata's IDs, lowest first; the first is
+    kept. A release group with no link row gets an unchecked ``unmatched`` row. A row
+    the fill may write again gets the new ID and is checked on the fill's next run.
+    Every other row stays as it is. Returns how many rows were added and changed.
+    """
+    wanted = {mbid: str(ids[0]) for mbid, ids in apple_ids.items() if ids}
+    added = changed = 0
+    for chunk in batched(sorted(wanted), WIKIDATA_STORE_BATCH):
+        linked = set(
+            MusicAlbumLink.objects.filter(release_group_mbid__in=chunk).values_list(
+                "release_group_mbid",
+                flat=True,
+            ),
+        )
+        new = [
+            MusicAlbumLink(
+                release_group_mbid=mbid,
+                apple_album_id=wanted[mbid],
+                status=MusicAlbumLink.Status.UNMATCHED,
+                method=MusicAlbumLink.Method.WIKIDATA,
+            )
+            for mbid in chunk
+            if mbid not in linked
+        ]
+        added += len(MusicAlbumLink.objects.bulk_create(new, ignore_conflicts=True))
+        stale = []
+        for link in genre_fill_rows().filter(release_group_mbid__in=chunk):
+            if link.apple_album_id != wanted[link.release_group_mbid]:
+                link.apple_album_id = wanted[link.release_group_mbid]
+                link.method = MusicAlbumLink.Method.WIKIDATA
+                link.checked_at = None
+                stale.append(link)
+        changed += MusicAlbumLink.objects.bulk_update(stale, ["apple_album_id", "method", "checked_at"])
+    return {"added": added, "changed": changed}
+
+
 def _musicbrainz_ref(ref, link, *, bridged, musicbrainz_held, aliases, apple_catalog):
     """Apply rules 2 to 6 to one MusicBrainz ref."""
     mbid = ref[2]
@@ -242,7 +301,9 @@ def _links(musicbrainz_ids, apple_identities):
     """Read the link rows the rules need, in one query.
 
     Returns the row for each release group, and for each Apple identity that was
-    moved back to MusicBrainz, the release group whose Item still exists (rule 1).
+    moved back to MusicBrainz, the release group whose Item still exists (rule 1). A
+    reverted row names an Apple identity only once no Apple Item of it holds user rows
+    (``music_move.revert``), so an album a reverted one had joined keeps its ref.
     """
     rows = Q(pk__in=[])
     if musicbrainz_ids:

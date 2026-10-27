@@ -1,0 +1,48 @@
+{
+  "releases": [
+    {
+      "id": "b82458a3-7d3a-495f-861f-8698731c4dd0",
+      "score": 100,
+      "title": "SOS",
+      "status": "Official",
+      "barcode": "196589564931",
+      "artist-credit": [
+        {
+          "name": "SZA",
+          "artist": {
+            "id": "272989c8-5535-492d-a25c-9f58803e027f",
+            "name": "SZA",
+            "sort-name": "SZA"
+          }
+        }
+      ],
+      "release-group": {
+        "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+        "title": "SOS",
+        "primary-type": "Album"
+      }
+    },
+    {
+      "id": "b6e42e04-1600-4276-a71f-38e16e6dff14",
+      "score": 100,
+      "title": "SOS",
+      "status": "Official",
+      "barcode": "196589564931",
+      "artist-credit": [
+        {
+          "name": "SZA",
+          "artist": {
+            "id": "272989c8-5535-492d-a25c-9f58803e027f",
+            "name": "SZA",
+            "sort-name": "SZA"
+          }
+        }
+      ],
+      "release-group": {
+        "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+        "title": "SOS",
+        "primary-type": "Album"
+      }
+    }
+  ]
+}

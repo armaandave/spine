@@ -1,0 +1,856 @@
+{
+  "data": [
+    {
+      "id": "1710685602",
+      "type": "albums",
+      "attributes": {
+        "name": "For All The Dogs",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/for-all-the-dogs/1710685602",
+        "playParams": {
+          "id": "1710685602",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-10-06",
+        "contentRating": "explicit",
+        "trackCount": 23,
+        "upc": "00602458700121",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/21/50/ee/2150ee84-62c3-4190-7dfa-da30abd98ac8/23UM1IM09862.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1710685758",
+              "type": "songs",
+              "attributes": {
+                "name": "Virginia Beach",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USUG12306066",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, Harley Arsenault, Noah \"40\" Shebib, C. Breaux, J. Wuihun Ho & M. McCollum",
+                "durationInMillis": 251095,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/virginia-beach/1710685602?i=1710685758"
+              }
+            },
+            {
+              "id": "1710685762",
+              "type": "songs",
+              "attributes": {
+                "name": "Amen (feat. Teezo Touchdown)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USUG12306067",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, K. Wright, B. Scholefield, A. Thomas & R. Stanfield",
+                "durationInMillis": 141213,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/amen-feat-teezo-touchdown/1710685602?i=1710685762"
+              }
+            },
+            {
+              "id": "1710685768",
+              "type": "songs",
+              "attributes": {
+                "name": "Calling For You (feat. 21 Savage)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USUG12306068",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, S. Bin Abraham-Joseph, M. McCollum, Noah \"40\" Shebib, T. Flores, C. Small, J. Milfort, Gentuar Memishi, R. Cypriano, D. Graue & F. Leblanc",
+                "durationInMillis": 285630,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/calling-for-you-feat-21-savage/1710685602?i=1710685768"
+              }
+            },
+            {
+              "id": "1710685772",
+              "type": "songs",
+              "attributes": {
+                "name": "Fear Of Heights",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USUG12306069",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, Ozan Yildirim, N. Frascona, D. Clemons, M. Joseph, B. Saint Fort, D. Ford & S. Gebrelul",
+                "durationInMillis": 155154,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/fear-of-heights/1710685602?i=1710685772"
+              }
+            },
+            {
+              "id": "1710685776",
+              "type": "songs",
+              "attributes": {
+                "name": "Daylight",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USUG12306070",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, Joshua Luellen, Mk Brown, T. Cremeni, A. Bevilacqua, Adonis G & M. McCollum",
+                "durationInMillis": 164143,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/daylight/1710685602?i=1710685776"
+              }
+            },
+            {
+              "id": "1710685783",
+              "type": "songs",
+              "attributes": {
+                "name": "First Person Shooter (feat. J. Cole)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USUG12306071",
+                "artistName": "Drake",
+                "composerName": "J. Cole, Aubrey Drake Graham, A. Hernandez, M. Mule, I. De Boni, Coleman Name, Matthew Jehu Samuels, Ozan Yildirim, T.B. Chambers, J Washington Jr & S. Tidemand",
+                "durationInMillis": 247444,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/first-person-shooter-feat-j-cole/1710685602?i=1710685783"
+              }
+            },
+            {
+              "id": "1710685786",
+              "type": "songs",
+              "attributes": {
+                "name": "IDGAF (feat. Yeat)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USUG12306072",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, N. SMITH, B. Saint Fort, S. Shah, J. Taylor & N. Winstone",
+                "durationInMillis": 260111,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/idgaf-feat-yeat/1710685602?i=1710685786"
+              }
+            },
+            {
+              "id": "1710685789",
+              "type": "songs",
+              "attributes": {
+                "name": "7969 Santa",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USUG12306073",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, A. Thomas, N. Lieberthal, A. Lustig, J Sweet, B. Saint Fort, K. Cozart, T. Lament Taylor & T. Pittman",
+                "durationInMillis": 259847,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/7969-santa/1710685602?i=1710685789"
+              }
+            },
+            {
+              "id": "1710685793",
+              "type": "songs",
+              "attributes": {
+                "name": "Slime You Out (feat. SZA)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USUG12306064",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, S. Rowe, Noel Cadastre, Noah \"40\" Shebib, B. Saint Fort, D. Tennant, G. Lapointe & C. Powell",
+                "durationInMillis": 310491,
+                "contentRating": "explicit",
+                "releaseDate": "2023-09-15",
+                "url": "https://music.apple.com/us/album/slime-you-out-feat-sza/1710685602?i=1710685793"
+              }
+            },
+            {
+              "id": "1710685796",
+              "type": "songs",
+              "attributes": {
+                "name": "Bahamas Promises",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USUG12306074",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, J Sweet & R Nelson",
+                "durationInMillis": 184090,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/bahamas-promises/1710685602?i=1710685796"
+              }
+            },
+            {
+              "id": "1710685800",
+              "type": "songs",
+              "attributes": {
+                "name": "Tried Our Best",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USUG12306098",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, J Sweet & Noah \"40\" Shebib",
+                "durationInMillis": 209991,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/tried-our-best/1710685602?i=1710685800"
+              }
+            },
+            {
+              "id": "1710685803",
+              "type": "songs",
+              "attributes": {
+                "name": "Screw The World (Interlude)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USUG12306077",
+                "artistName": "Drake",
+                "composerName": "S. Barnes, J. C. Olivier, A. W. Felder, N. R. Harris, J. Hutchins, N. Jones, A. O'Bryant, D. Reeves, L. Smith & K. Walker",
+                "durationInMillis": 112093,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/screw-the-world-interlude/1710685602?i=1710685803"
+              }
+            },
+            {
+              "id": "1710685806",
+              "type": "songs",
+              "attributes": {
+                "name": "Drew A Picasso",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USUG12306078",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, John Alexander Hyszko, E Brown, T. Lumpkins, P. Campbell, K. Karimi, D. Wagner, Noah \"40\" Shebib & S. sisay",
+                "durationInMillis": 262769,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/drew-a-picasso/1710685602?i=1710685806"
+              }
+            },
+            {
+              "id": "1710685809",
+              "type": "songs",
+              "attributes": {
+                "name": "Members Only (feat. PARTYNEXTDOOR)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USUG12306079",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, J. Brathwaite, S. Vidal & Noah \"40\" Shebib",
+                "durationInMillis": 277721,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/members-only-feat-partynextdoor/1710685602?i=1710685809"
+              }
+            },
+            {
+              "id": "1710685813",
+              "type": "songs",
+              "attributes": {
+                "name": "What Would Pluto Do",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USUG12306080",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, M. McCollum, Gentuar Memishi, B. Pepple & B. Saint Fort",
+                "durationInMillis": 182998,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/what-would-pluto-do/1710685602?i=1710685813"
+              }
+            },
+            {
+              "id": "1710685878",
+              "type": "songs",
+              "attributes": {
+                "name": "All The Parties (feat. Chief Keef)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USUG12306081",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, B. Saint Fort, Maneesh Bidaye, Harley Arsenault, J Dolla Name, Matthew Jehu Samuels, Fierce Name, Coleman Name, N. Francis Tennant, C. Sean Lowe & M. McCollum",
+                "durationInMillis": 218612,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/all-the-parties-feat-chief-keef/1710685602?i=1710685878"
+              }
+            },
+            {
+              "id": "1710685883",
+              "type": "songs",
+              "attributes": {
+                "name": "8am in Charlotte",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USUG12306082",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, D. Williams, M. Dragoi, J. Wool, L. Santi & N. Eskridge",
+                "durationInMillis": 266848,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-05",
+                "url": "https://music.apple.com/us/album/8am-in-charlotte/1710685602?i=1710685883"
+              }
+            },
+            {
+              "id": "1710685888",
+              "type": "songs",
+              "attributes": {
+                "name": "BBL Love (Interlude)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USUG12306083",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, K. Barua & A. Thomas",
+                "durationInMillis": 161364,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/bbl-love-interlude/1710685602?i=1710685888"
+              }
+            },
+            {
+              "id": "1710685894",
+              "type": "songs",
+              "attributes": {
+                "name": "Gently (feat. Bad Bunny)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USUG12306084",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, B. Ocasio, Ozan Yildirim, N. Frascona & D. Blackmon",
+                "durationInMillis": 133694,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/gently-feat-bad-bunny/1710685602?i=1710685894"
+              }
+            },
+            {
+              "id": "1710685898",
+              "type": "songs",
+              "attributes": {
+                "name": "Rich Baby Daddy (feat. Sexyy Red & SZA)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "USUG12306085",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, J. Wherry, S. Rowe, D. Blackmon, J. Klahr, B. Saint Fort, R. Zastenker, S. Barot, M. Fellander-Tsai, T. Schaeferdiek, Y. Chain, D. Ford, F. Welch & I. Summers",
+                "durationInMillis": 319192,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/rich-baby-daddy-feat-sexyy-red-sza/1710685602?i=1710685898"
+              }
+            },
+            {
+              "id": "1710685970",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Late Night (feat. Lil Yachty)",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "USUG12306086",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, M. McCollum & D. Jackson",
+                "durationInMillis": 170415,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/another-late-night-feat-lil-yachty/1710685602?i=1710685970"
+              }
+            },
+            {
+              "id": "1710685974",
+              "type": "songs",
+              "attributes": {
+                "name": "Away From Home",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "USUG12306087",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, M. McCollum, J. Raisen, B. Saint Fort, J. L. Raisen & L. Levine",
+                "durationInMillis": 258593,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/away-from-home/1710685602?i=1710685974"
+              }
+            },
+            {
+              "id": "1710685978",
+              "type": "songs",
+              "attributes": {
+                "name": "Polar Opposites",
+                "albumName": "For All The Dogs",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "USUG12306088",
+                "artistName": "Drake",
+                "composerName": "Aubrey Drake Graham, M. McCollum, Gentuar Memishi, B. Pepple, A. Walters, O. Gomez & Noah \"40\" Shebib",
+                "durationInMillis": 257180,
+                "contentRating": "explicit",
+                "releaseDate": "2023-10-06",
+                "url": "https://music.apple.com/us/album/polar-opposites/1710685602?i=1710685978"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "271256",
+              "type": "artists",
+              "attributes": {
+                "name": "Drake",
+                "url": "https://music.apple.com/us/artist/drake/271256"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1716979097",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs Scary Hours Edition",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716979097",
+                "playParams": {
+                  "id": "1716979097",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "explicit",
+                "trackCount": 29,
+                "upc": "00602458922769",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/97/1a/a3/971aa332-2c7d-947c-33ed-4635d41115a4/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 6000,
+                  "height": 6000
+                }
+              }
+            },
+            {
+              "id": "1716986138",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs Scary Hours Edition",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716986138",
+                "playParams": {
+                  "id": "1716986138",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "clean",
+                "trackCount": 29,
+                "upc": "00602458922813",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/68/8b/a9/688ba9aa-4c90-c630-63c3-b6a7a0d945c2/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 6000,
+                  "height": 6000
+                }
+              }
+            },
+            {
+              "id": "1710694554",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs/1710694554",
+                "playParams": {
+                  "id": "1710694554",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "clean",
+                "trackCount": 23,
+                "upc": "00602458700138",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/fa/9e/e6/fa9ee672-0880-2b5b-a69d-981e8fcb807e/23UM1IM09863.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3600,
+                  "height": 3600
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1737149923",
+              "type": "albums",
+              "attributes": {
+                "name": "WE DON'T TRUST YOU",
+                "artistName": "Future & Metro Boomin",
+                "url": "https://music.apple.com/us/album/we-dont-trust-you/1737149923",
+                "playParams": {
+                  "id": "1737149923",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-03-22",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "196871937382",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Wilburn Holding Co./Boominati/Epic/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/4e/9f/7b/4e9f7b71-28ad-a8dc-9b34-da532feb82f6/196871937382.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1739698034",
+              "type": "albums",
+              "attributes": {
+                "name": "Might Delete Later",
+                "artistName": "J. Cole",
+                "url": "https://music.apple.com/us/album/might-delete-later/1739698034",
+                "playParams": {
+                  "id": "1739698034",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-04-05",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602465653861",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Cole World, Inc. under exclusive license to Interscope Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e5/91/e9/e591e93a-969f-6b82-9dc5-874edc3d22ba/24UMGIM38890.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1738702582",
+              "type": "albums",
+              "attributes": {
+                "name": "PARTYNEXTDOOR 4 (P4)",
+                "artistName": "PARTYNEXTDOOR",
+                "url": "https://music.apple.com/us/album/partynextdoor-4-p4/1738702582",
+                "playParams": {
+                  "id": "1738702582",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-04-26",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "808391229952",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "OVO Sound",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0d/de/c5/0ddec5e3-42f6-c550-6227-55dcd7d6b89a/39029.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1699712635",
+              "type": "albums",
+              "attributes": {
+                "name": "UTOPIA",
+                "artistName": "Travis Scott",
+                "url": "https://music.apple.com/us/album/utopia/1699712635",
+                "playParams": {
+                  "id": "1699712635",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-07-28",
+                "contentRating": "explicit",
+                "trackCount": 19,
+                "upc": "196871341882",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Cactus Jack/Epic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/09/7d/b0/097db06f-8403-3cf7-7510-139e570ca66b/196871341882.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1735996601",
+              "type": "albums",
+              "attributes": {
+                "name": "Bryson Tiller",
+                "artistName": "Bryson Tiller",
+                "url": "https://music.apple.com/us/album/bryson-tiller/1735996601",
+                "playParams": {
+                  "id": "1735996601",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-04-05",
+                "contentRating": "explicit",
+                "trackCount": 19,
+                "upc": "196871923804",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "TrapSoul/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/ff/f3/99/fff39926-46a2-db5e-b0b8-a6b248b09d90/196871923804.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1644437341",
+              "type": "albums",
+              "attributes": {
+                "name": "Sorry 4 What",
+                "artistName": "Tory Lanez",
+                "url": "https://music.apple.com/us/album/sorry-4-what/1644437341",
+                "playParams": {
+                  "id": "1644437341",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-09-30",
+                "contentRating": "explicit",
+                "trackCount": 20,
+                "upc": "795397458700",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Electronic",
+                  "Electronica"
+                ],
+                "recordLabel": "One Umbrella Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/77/a3/98/77a398f5-461a-ca60-ebe3-bb2df78d26e2/cover.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1694433081",
+              "type": "albums",
+              "attributes": {
+                "name": "BUSINESS IS BUSINESS (Metro's Version)",
+                "artistName": "Young Thug",
+                "url": "https://music.apple.com/us/album/business-is-business-metros-version/1694433081",
+                "playParams": {
+                  "id": "1694433081",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-06-22",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "075679677280",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "300 Entertainment/Atl",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/64/2c/ad/642cad5a-804f-02c4-01c4-26f1b51defd1/075679677280.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1704928221",
+              "type": "albums",
+              "attributes": {
+                "name": "Jackman.",
+                "artistName": "Jack Harlow",
+                "url": "https://music.apple.com/us/album/jackman/1704928221",
+                "playParams": {
+                  "id": "1704928221",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-04-28",
+                "contentRating": "explicit",
+                "trackCount": 13,
+                "upc": "075679670120",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Generation Now/Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/d7/96/81/d796816c-6a65-1ab0-4487-b2e04362d693/075679670120.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1712747991",
+              "type": "albums",
+              "attributes": {
+                "name": "Welcome 2 Collegrove",
+                "artistName": "2 Chainz & Lil Wayne",
+                "url": "https://music.apple.com/us/album/welcome-2-collegrove/1712747991",
+                "playParams": {
+                  "id": "1712747991",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-11-17",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "00602458751574",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Hardcore Rap",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "2Chainz PS/Def Jam",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/71/5d/3f/715d3fd0-b9e3-09b0-d2a6-ae759fcac79d/23UM1IM30775.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1712185848",
+              "type": "albums",
+              "attributes": {
+                "name": "Too Good To Be True",
+                "artistName": "Rick Ross & Meek Mill",
+                "url": "https://music.apple.com/us/album/too-good-to-be-true/1712185848",
+                "playParams": {
+                  "id": "1712185848",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-11-10",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "617513841138",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Maybach Music Group under exclusive license to gamma.",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/97/44/ad/9744ad95-890b-e5f3-2f8c-6c6983dd880e/TGTBT.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/1710685602/view/related-albums?offset=11"
+        }
+      }
+    }
+  ]
+}

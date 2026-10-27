@@ -1,0 +1,1030 @@
+{
+  "data": [
+    {
+      "id": "1794644675",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+        "playParams": {
+          "id": "1794644675",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 42,
+        "upc": "196872790276",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1786643044",
+                "playParams": {
+                  "id": "1786643044",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-12-20",
+                "contentRating": "explicit",
+                "trackCount": 38,
+                "upc": "196871766890",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/97/bd/88/97bd8804-7d3e-e6c8-0532-ff22877b931c/196871766890.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1796270264",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1796270264",
+                "playParams": {
+                  "id": "1796270264",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-02-08",
+                "contentRating": "clean",
+                "trackCount": 42,
+                "upc": "196871766913",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/50/fa/17/50fa1760-8a36-5cef-93bf-aab5b5257b18/196871766913.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1794644676",
+              "type": "songs",
+              "attributes": {
+                "name": "No More Hiding",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USRC12403823"
+              }
+            },
+            {
+              "id": "1794644678",
+              "type": "songs",
+              "attributes": {
+                "name": "What Do I Do",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USRC12403824"
+              }
+            },
+            {
+              "id": "1794644679",
+              "type": "songs",
+              "attributes": {
+                "name": "30 For 30 (with Kendrick Lamar)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USRC12403853"
+              }
+            },
+            {
+              "id": "1794644680",
+              "type": "songs",
+              "attributes": {
+                "name": "Diamond Boy (DTM)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USRC12403825"
+              }
+            },
+            {
+              "id": "1794644681",
+              "type": "songs",
+              "attributes": {
+                "name": "BMF",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USRC12403826"
+              }
+            },
+            {
+              "id": "1794644683",
+              "type": "songs",
+              "attributes": {
+                "name": "Scorsese Baby Daddy",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USRC12403827"
+              }
+            },
+            {
+              "id": "1794644685",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Me 4 Me",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USRC12403828"
+              }
+            },
+            {
+              "id": "1794644686",
+              "type": "songs",
+              "attributes": {
+                "name": "Chill Baby",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USRC12403829"
+              }
+            },
+            {
+              "id": "1794644688",
+              "type": "songs",
+              "attributes": {
+                "name": "My Turn",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USRC12403830"
+              }
+            },
+            {
+              "id": "1794644993",
+              "type": "songs",
+              "attributes": {
+                "name": "Crybaby",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USRC12403847"
+              }
+            },
+            {
+              "id": "1794644994",
+              "type": "songs",
+              "attributes": {
+                "name": "Kitchen",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USRC12403848"
+              }
+            },
+            {
+              "id": "1794644996",
+              "type": "songs",
+              "attributes": {
+                "name": "Get Behind Me (Interlude)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USRC12403854"
+              }
+            },
+            {
+              "id": "1794644997",
+              "type": "songs",
+              "attributes": {
+                "name": "Drive",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USRC12403822"
+              }
+            },
+            {
+              "id": "1794644999",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Life",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USRC12403849"
+              }
+            },
+            {
+              "id": "1794645003",
+              "type": "songs",
+              "attributes": {
+                "name": "Saturn",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USRC12400216"
+              }
+            },
+            {
+              "id": "1794645004",
+              "type": "songs",
+              "attributes": {
+                "name": "Joni (feat. Don Toliver)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USRC12403903"
+              }
+            },
+            {
+              "id": "1794645006",
+              "type": "songs",
+              "attributes": {
+                "name": "Take You Down",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USRC12403902"
+              }
+            },
+            {
+              "id": "1794645008",
+              "type": "songs",
+              "attributes": {
+                "name": "Open Arms (just SZA)",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USRC12500026"
+              }
+            },
+            {
+              "id": "1794645009",
+              "type": "songs",
+              "attributes": {
+                "name": "PSA",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USRC12403901"
+              }
+            },
+            {
+              "id": "1794645014",
+              "type": "songs",
+              "attributes": {
+                "name": "SOS",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "USRC12204583"
+              }
+            },
+            {
+              "id": "1794645015",
+              "type": "songs",
+              "attributes": {
+                "name": "Kill Bill",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "USRC12204584"
+              }
+            },
+            {
+              "id": "1794645017",
+              "type": "songs",
+              "attributes": {
+                "name": "Seek & Destroy",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "USRC12204585"
+              }
+            },
+            {
+              "id": "1794645080",
+              "type": "songs",
+              "attributes": {
+                "name": "Low",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "USRC12204586"
+              }
+            },
+            {
+              "id": "1794645081",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Language",
+                "discNumber": 2,
+                "trackNumber": 5,
+                "isrc": "USRC12204588"
+              }
+            },
+            {
+              "id": "1794645084",
+              "type": "songs",
+              "attributes": {
+                "name": "Blind",
+                "discNumber": 2,
+                "trackNumber": 6,
+                "isrc": "USRC12204589"
+              }
+            },
+            {
+              "id": "1794645086",
+              "type": "songs",
+              "attributes": {
+                "name": "Used (feat. Don Toliver)",
+                "discNumber": 2,
+                "trackNumber": 7,
+                "isrc": "USRC12204590"
+              }
+            },
+            {
+              "id": "1794645087",
+              "type": "songs",
+              "attributes": {
+                "name": "Snooze",
+                "discNumber": 2,
+                "trackNumber": 8,
+                "isrc": "USRC12204591"
+              }
+            },
+            {
+              "id": "1794645090",
+              "type": "songs",
+              "attributes": {
+                "name": "Notice Me",
+                "discNumber": 2,
+                "trackNumber": 9,
+                "isrc": "USRC12204592"
+              }
+            },
+            {
+              "id": "1794645094",
+              "type": "songs",
+              "attributes": {
+                "name": "Gone Girl",
+                "discNumber": 2,
+                "trackNumber": 10,
+                "isrc": "USRC12204593"
+              }
+            },
+            {
+              "id": "1794645103",
+              "type": "songs",
+              "attributes": {
+                "name": "Smoking on my Ex Pack",
+                "discNumber": 2,
+                "trackNumber": 11,
+                "isrc": "USRC12204594"
+              }
+            },
+            {
+              "id": "1794645106",
+              "type": "songs",
+              "attributes": {
+                "name": "Ghost in the Machine (feat. Phoebe Bridgers)",
+                "discNumber": 2,
+                "trackNumber": 12,
+                "isrc": "USRC12204595"
+              }
+            },
+            {
+              "id": "1794645107",
+              "type": "songs",
+              "attributes": {
+                "name": "F2F",
+                "discNumber": 2,
+                "trackNumber": 13,
+                "isrc": "USRC12204596"
+              }
+            },
+            {
+              "id": "1794645199",
+              "type": "songs",
+              "attributes": {
+                "name": "Nobody Gets Me",
+                "discNumber": 2,
+                "trackNumber": 14,
+                "isrc": "USRC12204598"
+              }
+            },
+            {
+              "id": "1794645201",
+              "type": "songs",
+              "attributes": {
+                "name": "Conceited",
+                "discNumber": 2,
+                "trackNumber": 15,
+                "isrc": "USRC12204587"
+              }
+            },
+            {
+              "id": "1794645202",
+              "type": "songs",
+              "attributes": {
+                "name": "Special",
+                "discNumber": 2,
+                "trackNumber": 16,
+                "isrc": "USRC12204597"
+              }
+            },
+            {
+              "id": "1794645205",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Late",
+                "discNumber": 2,
+                "trackNumber": 17,
+                "isrc": "USRC12204600"
+              }
+            },
+            {
+              "id": "1794645209",
+              "type": "songs",
+              "attributes": {
+                "name": "Far",
+                "discNumber": 2,
+                "trackNumber": 18,
+                "isrc": "USRC12204601"
+              }
+            },
+            {
+              "id": "1794645210",
+              "type": "songs",
+              "attributes": {
+                "name": "Shirt",
+                "discNumber": 2,
+                "trackNumber": 19,
+                "isrc": "USRC12203632"
+              }
+            },
+            {
+              "id": "1794645213",
+              "type": "songs",
+              "attributes": {
+                "name": "Open Arms (feat. Travis Scott)",
+                "discNumber": 2,
+                "trackNumber": 20,
+                "isrc": "USRC12204602"
+              }
+            },
+            {
+              "id": "1794645215",
+              "type": "songs",
+              "attributes": {
+                "name": "I Hate U",
+                "discNumber": 2,
+                "trackNumber": 21,
+                "isrc": "USRC12103605"
+              }
+            },
+            {
+              "id": "1794645223",
+              "type": "songs",
+              "attributes": {
+                "name": "Good Days",
+                "discNumber": 2,
+                "trackNumber": 22,
+                "isrc": "USRC12004189"
+              }
+            },
+            {
+              "id": "1794645225",
+              "type": "songs",
+              "attributes": {
+                "name": "Forgiveless (feat. Ol' Dirty Bastard)",
+                "discNumber": 2,
+                "trackNumber": 23,
+                "isrc": "USRC12204603"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "605800394",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786643044",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1786643044",
+        "playParams": {
+          "id": "1786643044",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 38,
+        "upc": "196871766890",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/97/bd/88/97bd8804-7d3e-e6c8-0532-ff22877b931c/196871766890.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+                "playParams": {
+                  "id": "1794644675",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-12-20",
+                "contentRating": "explicit",
+                "trackCount": 42,
+                "upc": "196872790276",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1796270264",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1796270264",
+                "playParams": {
+                  "id": "1796270264",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-02-08",
+                "contentRating": "clean",
+                "trackCount": 42,
+                "upc": "196871766913",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/50/fa/17/50fa1760-8a36-5cef-93bf-aab5b5257b18/196871766913.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1786643045",
+              "type": "songs",
+              "attributes": {
+                "name": "No More Hiding",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USRC12403823"
+              }
+            },
+            {
+              "id": "1786643046",
+              "type": "songs",
+              "attributes": {
+                "name": "What Do I Do",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USRC12403824"
+              }
+            },
+            {
+              "id": "1786643047",
+              "type": "songs",
+              "attributes": {
+                "name": "30 For 30 (with Kendrick Lamar)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USRC12403853"
+              }
+            },
+            {
+              "id": "1786643048",
+              "type": "songs",
+              "attributes": {
+                "name": "Diamond Boy (DTM)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USRC12403825"
+              }
+            },
+            {
+              "id": "1786643049",
+              "type": "songs",
+              "attributes": {
+                "name": "BMF",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USRC12403826"
+              }
+            },
+            {
+              "id": "1786643052",
+              "type": "songs",
+              "attributes": {
+                "name": "Scorsese Baby Daddy",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USRC12403827"
+              }
+            },
+            {
+              "id": "1786643053",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Me 4 Me",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USRC12403828"
+              }
+            },
+            {
+              "id": "1786643054",
+              "type": "songs",
+              "attributes": {
+                "name": "Chill Baby",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USRC12403829"
+              }
+            },
+            {
+              "id": "1786643055",
+              "type": "songs",
+              "attributes": {
+                "name": "My Turn",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USRC12403830"
+              }
+            },
+            {
+              "id": "1786643056",
+              "type": "songs",
+              "attributes": {
+                "name": "Crybaby",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USRC12403847"
+              }
+            },
+            {
+              "id": "1786643057",
+              "type": "songs",
+              "attributes": {
+                "name": "Kitchen",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USRC12403848"
+              }
+            },
+            {
+              "id": "1786643058",
+              "type": "songs",
+              "attributes": {
+                "name": "Get Behind Me (Interlude)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USRC12403854"
+              }
+            },
+            {
+              "id": "1786643239",
+              "type": "songs",
+              "attributes": {
+                "name": "Drive",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USRC12403822"
+              }
+            },
+            {
+              "id": "1786643240",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Life",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USRC12403849"
+              }
+            },
+            {
+              "id": "1786643241",
+              "type": "songs",
+              "attributes": {
+                "name": "Saturn",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USRC12400216"
+              }
+            },
+            {
+              "id": "1786643242",
+              "type": "songs",
+              "attributes": {
+                "name": "SOS",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USRC12204583"
+              }
+            },
+            {
+              "id": "1786643243",
+              "type": "songs",
+              "attributes": {
+                "name": "Kill Bill",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USRC12204584"
+              }
+            },
+            {
+              "id": "1786643247",
+              "type": "songs",
+              "attributes": {
+                "name": "Seek & Destroy",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USRC12204585"
+              }
+            },
+            {
+              "id": "1786643248",
+              "type": "songs",
+              "attributes": {
+                "name": "Low",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USRC12204586"
+              }
+            },
+            {
+              "id": "1786643249",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Language",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "USRC12204588"
+              }
+            },
+            {
+              "id": "1786643250",
+              "type": "songs",
+              "attributes": {
+                "name": "Blind",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "USRC12204589"
+              }
+            },
+            {
+              "id": "1786643251",
+              "type": "songs",
+              "attributes": {
+                "name": "Used (feat. Don Toliver)",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "USRC12204590"
+              }
+            },
+            {
+              "id": "1786643252",
+              "type": "songs",
+              "attributes": {
+                "name": "Snooze",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "USRC12204591"
+              }
+            },
+            {
+              "id": "1786643254",
+              "type": "songs",
+              "attributes": {
+                "name": "Notice Me",
+                "discNumber": 1,
+                "trackNumber": 24,
+                "isrc": "USRC12204592"
+              }
+            },
+            {
+              "id": "1786643255",
+              "type": "songs",
+              "attributes": {
+                "name": "Gone Girl",
+                "discNumber": 1,
+                "trackNumber": 25,
+                "isrc": "USRC12204593"
+              }
+            },
+            {
+              "id": "1786643257",
+              "type": "songs",
+              "attributes": {
+                "name": "Smoking on my Ex Pack",
+                "discNumber": 1,
+                "trackNumber": 26,
+                "isrc": "USRC12204594"
+              }
+            },
+            {
+              "id": "1786643259",
+              "type": "songs",
+              "attributes": {
+                "name": "Ghost in the Machine (feat. Phoebe Bridgers)",
+                "discNumber": 1,
+                "trackNumber": 27,
+                "isrc": "USRC12204595"
+              }
+            },
+            {
+              "id": "1786643264",
+              "type": "songs",
+              "attributes": {
+                "name": "F2F",
+                "discNumber": 1,
+                "trackNumber": 28,
+                "isrc": "USRC12204596"
+              }
+            },
+            {
+              "id": "1786643266",
+              "type": "songs",
+              "attributes": {
+                "name": "Nobody Gets Me",
+                "discNumber": 1,
+                "trackNumber": 29,
+                "isrc": "USRC12204598"
+              }
+            },
+            {
+              "id": "1786643479",
+              "type": "songs",
+              "attributes": {
+                "name": "Conceited",
+                "discNumber": 1,
+                "trackNumber": 30,
+                "isrc": "USRC12204587"
+              }
+            },
+            {
+              "id": "1786643481",
+              "type": "songs",
+              "attributes": {
+                "name": "Special",
+                "discNumber": 1,
+                "trackNumber": 31,
+                "isrc": "USRC12204597"
+              }
+            },
+            {
+              "id": "1786643486",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Late",
+                "discNumber": 1,
+                "trackNumber": 32,
+                "isrc": "USRC12204600"
+              }
+            },
+            {
+              "id": "1786643487",
+              "type": "songs",
+              "attributes": {
+                "name": "Far",
+                "discNumber": 1,
+                "trackNumber": 33,
+                "isrc": "USRC12204601"
+              }
+            },
+            {
+              "id": "1786643489",
+              "type": "songs",
+              "attributes": {
+                "name": "Shirt",
+                "discNumber": 1,
+                "trackNumber": 34,
+                "isrc": "USRC12203632"
+              }
+            },
+            {
+              "id": "1786643490",
+              "type": "songs",
+              "attributes": {
+                "name": "Open Arms (feat. Travis Scott)",
+                "discNumber": 1,
+                "trackNumber": 35,
+                "isrc": "USRC12204602"
+              }
+            },
+            {
+              "id": "1786643502",
+              "type": "songs",
+              "attributes": {
+                "name": "I Hate U",
+                "discNumber": 1,
+                "trackNumber": 36,
+                "isrc": "USRC12103605"
+              }
+            },
+            {
+              "id": "1786643506",
+              "type": "songs",
+              "attributes": {
+                "name": "Good Days",
+                "discNumber": 1,
+                "trackNumber": 37,
+                "isrc": "USRC12004189"
+              }
+            },
+            {
+              "id": "1786643507",
+              "type": "songs",
+              "attributes": {
+                "name": "Forgiveless (feat. Ol' Dirty Bastard)",
+                "discNumber": 1,
+                "trackNumber": 38,
+                "isrc": "USRC12204603"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "605800394",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+  "title": "SOS",
+  "primary-type": "Album",
+  "first-release-date": "2022-12-09",
+  "genres": [
+    {
+      "name": "contemporary r&b",
+      "count": 4
+    },
+    {
+      "name": "pop",
+      "count": 1
+    },
+    {
+      "name": "r&b",
+      "count": 3
+    },
+    {
+      "name": "soul",
+      "count": 2
+    }
+  ]
+}

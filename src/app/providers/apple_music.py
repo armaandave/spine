@@ -2,9 +2,10 @@
 
 Raw catalog fetches that return Apple's JSON resources unmapped, and the album, song,
 search and artist pages built from them in Spine's shapes (see
-docs/music/apple-music-catalog.md). Only ``apple_music`` refs and sources reach it:
-music is still catalogued from MusicBrainz unless ``MUSIC_CATALOG_SOURCE`` says
-otherwise.
+docs/music/apple-music-catalog.md). Also genre pages from the database, and the
+matching of MusicBrainz albums to Apple albums that genre pages and featured lists
+use. Only ``apple_music`` refs and sources reach it: music is still catalogued from
+MusicBrainz unless ``MUSIC_CATALOG_SOURCE`` says otherwise.
 
 The developer token is signed here from the ``APPLE_MUSIC_*`` key settings and kept
 in this process's memory only: never logged, never written to the cache.
@@ -15,8 +16,9 @@ import hashlib
 import logging
 import re
 import time
+import unicodedata
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import quote
 
 import jwt
@@ -26,17 +28,19 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
+from redis.exceptions import RedisError
 
-from app import music_catalog, music_listing
+from app import helpers, music_catalog, music_listing
 from app.models import (
     AppleAlbum,
     Item,
     ItemFilterFacet,
     MediaTypes,
     MusicAlbumLink,
+    MusicGenreAlbum,
     Sources,
 )
-from app.providers import services
+from app.providers import musicbrainz, quota, services
 from app.providers.search_rank import RANKING_KEYS
 
 APPLE_MUSIC_URL = "https://api.music.apple.com"
@@ -80,6 +84,28 @@ ARTIST_VIEW_ROLES = {
 ARTIST_VIEW_LIMIT = 100
 ARTIST_PAGE_CACHE_VERSION = "v1"
 ARTIST_PAGE_CACHE_TTL = 24 * 60 * 60
+# An album page's related sections: Other Versions, More by the artist (from Apple's
+# Albums section of the artist page, cached for a day) and Apple's similar albums.
+RELATED_LIMIT = 10
+ARTIST_ALBUMS_VIEW = "full-albums"
+# More than the section shows, so leaving out this album and hidden ones still fills it.
+ARTIST_ALBUMS_LIMIT = 20
+SIMILAR_VIEW = "related-albums"
+# Editions found by shared songs: albums that hold every song of this one (a bigger
+# edition) or whose songs are all on it (the original). Cached for a day.
+EDITIONS_CACHE_VERSION = "v1"
+EDITIONS_CACHE_TTL = 24 * 60 * 60
+BIGGER = "bigger"
+SMALLER = "smaller"
+SAME = "same"
+# An other version's badge, from the first words its title has.
+_RELATION_WORDS = (
+    ("Live", re.compile(r"\blive\b", re.IGNORECASE)),
+    ("Anniversary", re.compile(r"\banniversary\b", re.IGNORECASE)),
+    ("Deluxe", re.compile(r"\b(deluxe|expanded|bonus|extended|dlx)\b", re.IGNORECASE)),
+    ("Remaster", re.compile(r"\bremaster(ed)?\b", re.IGNORECASE)),
+    ("Deluxe", re.compile(r"\bedition\b", re.IGNORECASE)),
+)
 # Covers are stored at 600x600 (about 130 characters); Item.image holds 200.
 ARTWORK_SIZE = 600
 IMAGE_MAX_LENGTH = 200
@@ -91,6 +117,21 @@ _EDITION_WORDS = re.compile(
 )
 # Link rows whose exact Spotify album link can be shown.
 _SPOTIFY_LINK_STATUSES = (MusicAlbumLink.Status.MATCHED, MusicAlbumLink.Status.APPLIED)
+# Link rows whose Apple albums genre pages and featured lists show.
+_SHOWN_LINK_STATUSES = (MusicAlbumLink.Status.MATCHED, MusicAlbumLink.Status.APPLIED)
+# An album page whose MusicBrainz bridge is missing or this old adds its identity to a
+# Redis set, which the "Fill Apple album bridges" task empties (app/music_links.py).
+BRIDGE_QUEUE_KEY = "apple_music:bridge_queue"
+BRIDGE_MAX_AGE = timedelta(days=30)
+# Matching a MusicBrainz album to Apple Music: trailing bracketed tags may be left out
+# of Apple's title, and edition words the MusicBrainz title lacks rank an album lower.
+# Remasters and mixes don't count as another edition.
+_TRAILING_TAG = re.compile(r"\s*[\(\[][^\(\)\[\]]*[\)\]]\s*$")
+_EDITION_TAGS = re.compile(
+    r"\b(deluxe|expanded|anniversary|bonus|legacy|super|special|edition|version|live)\b",
+    re.IGNORECASE,
+)
+MATCH_TIER = 3
 logger = logging.getLogger(__name__)
 
 # (the key settings it was signed with, token, expiry)
@@ -231,7 +272,7 @@ def album_page(album_id):
     return resource
 
 
-def music(album_id):
+def music(album_id, *, related=False):
     """Return an Apple Music album in Spine's music metadata shape.
 
     The payload's ``media_id`` is the identity of the album's listing, which can
@@ -239,6 +280,7 @@ def music(album_id):
     link come from the listing's best member, which costs a second request only
     when that isn't the album asked for. One request serves both of the
     MusicBrainz page's stages. Every album the page sees gets an ``AppleAlbum`` row.
+    ``related`` also fills the page's related sections, at up to three more requests.
     """
     album_id = str(album_id)
     today = timezone.localdate()
@@ -250,19 +292,75 @@ def music(album_id):
         requested = _successor(album_id, today)
         if requested is None:
             raise
+    family = remember_listings(_family(requested), today=today)
     identity, members = next(
         (identity, members)
-        for identity, members in remember_listings(_family(requested), today=today)
+        for identity, members in family
         if any(member["id"] == requested["id"] for member in members)
     )
     content = requested
+    complete = True
     best_id = music_listing.url_album_id(music_listing.pick_content_member(members, today=today))
     if best_id != music_listing.url_album_id(requested):
         try:
             content = album_page(best_id)
-        except services.ProviderAPIError:
+        except services.ProviderAPIError as error:
             logger.warning("Apple Music album %s is unavailable; showing %s", best_id, album_id)
-    return _album_payload(identity, content)
+            complete = not transient(error)
+    payload = _album_payload(identity, content)
+    if related:
+        payload["related"], answered = _related(identity, members, family, content, today=today)
+        complete = complete and answered
+    if not complete:
+        # Apple failed for a moment, so the music caches don't keep this page.
+        payload[services.PARTIAL_PAGE] = True
+    return payload
+
+
+def _related(identity, members, family, album, *, today):
+    """Return an album page's related sections, each at most 10 albums, and if all answered.
+
+    - ``other_versions``: the other listings of the album's version family, then its
+      editions found by shared songs, each with a ``relation`` badge.
+    - ``more_by_artist``: the first artist's Albums section on Apple Music.
+    - ``related_albums``: Apple's similar albums by other artists.
+
+    ``members`` is the album's own listing, left out of every section, and ``family``
+    its version family's listings. A section Apple fails to answer is left out, so
+    the page still opens; the second value is False when a failure may pass
+    (``transient``). Hidden listings and empty sections are left out.
+    """
+    own_ids = _member_ids(members) | {identity}
+    versions, complete = _other_versions(own_ids, family, album, today=today)
+    sections = (
+        ("other_versions", lambda: versions),
+        ("more_by_artist", lambda: _more_by_artist(album, own_ids, today=today)),
+        ("related_albums", lambda: _similar_albums(album, own_ids, today=today)),
+    )
+    related = {}
+    for key, build in sections:
+        try:
+            rows = build()
+        except services.ProviderAPIError as error:
+            logger.warning("Apple Music %s of album %s are unavailable: %s", key, identity, error)
+            complete = complete and not transient(error)
+            continue
+        if rows:
+            related[key] = rows[:RELATED_LIMIT]
+    return related, complete
+
+
+def transient(error):
+    """Return whether an Apple Music failure may pass: no answer, the pause, a 429 or a 5xx.
+
+    A 404 or another 4xx would come back the same, so a page without that part is kept.
+    """
+    status = error.status_code
+    return (
+        status is None
+        or status == requests.codes.too_many_requests
+        or status >= requests.codes.internal_server_error
+    )
 
 
 def remember_listings(albums, *, today):
@@ -471,6 +569,210 @@ def person_page(artist_id):
     return page
 
 
+def discover(*, page=1, page_size=None, genre=None):
+    """Return a music genre page from Apple Music albums, most read about first.
+
+    The genre pages' albums (``MusicGenreAlbum``, filed under MusicBrainz's genres)
+    that a matched or applied link row ties to an Apple album, each under its
+    canonical ref. An album a MusicBrainz Item holds keeps its MusicBrainz ref, so its
+    data stays together. An album two rows name is shown once. Reads the database
+    only, so opening a page makes no request.
+    """
+    genre = " ".join(str(genre or "").split()).casefold()
+    if not genre:
+        raise ValueError("genre is required for music discovery.")
+    page = max(1, int(page))
+    per_page = page_size or settings.PER_PAGE
+    genre_albums = MusicGenreAlbum.objects.filter(genre=genre)
+    links = {
+        link.release_group_mbid: link
+        for link in MusicAlbumLink.objects.filter(
+            status__in=_SHOWN_LINK_STATUSES,
+            release_group_mbid__in=genre_albums.values("release_group_mbid"),
+        ).exclude(apple_album_id="")
+    }
+    rows = [album for album in genre_albums if album.release_group_mbid in links]
+    musicbrainz_refs = {
+        album.release_group_mbid: (Sources.MUSICBRAINZ.value, MediaTypes.MUSIC.value, album.release_group_mbid)
+        for album in rows
+    }
+    apple_refs = {
+        mbid: (Sources.APPLE_MUSIC.value, MediaTypes.MUSIC.value, link.apple_album_id)
+        for mbid, link in links.items()
+    }
+    canonical = music_catalog.canonical_music_refs([*musicbrainz_refs.values(), *apple_refs.values()])
+    held = set(
+        Item.objects.filter(
+            source=Sources.MUSICBRAINZ.value,
+            media_type=MediaTypes.MUSIC.value,
+            media_id__in=list(musicbrainz_refs),
+        ).values_list("media_id", flat=True),
+    )
+    shown = {}
+    for album in rows:
+        mbid = album.release_group_mbid
+        ref = canonical[musicbrainz_refs[mbid]]
+        if ref == musicbrainz_refs[mbid] and mbid not in held:
+            ref = canonical[apple_refs[mbid]]
+        shown.setdefault(ref, (album, links[mbid]))
+    start = (page - 1) * per_page
+    page_rows = list(shown.items())[start : start + per_page]
+    items = {
+        item.media_id: item
+        for item in Item.objects.filter(
+            source=Sources.APPLE_MUSIC.value,
+            media_type=MediaTypes.MUSIC.value,
+            media_id__in=[ref[2] for ref, _ in page_rows if ref[0] == Sources.APPLE_MUSIC.value],
+        )
+    }
+    results = [
+        _genre_album_row(ref, album, link, items.get(ref[2]))
+        for ref, (album, link) in page_rows
+    ]
+    data = helpers.format_search_response(page, per_page, len(shown), results)
+    data["per_page"] = per_page
+    return data
+
+
+def match_album(title, artist):
+    """Return the Apple Music album a MusicBrainz album's title and artist name, or None.
+
+    Two background requests: a search for "artist title", and one batch of the hits'
+    version families, so the listing rule folds clean twins and re-uploads. A hit
+    counts when it isn't a single, has the same artist, and has the same title, or the
+    same once " - EP" and trailing bracketed tags are left out of Apple's ("Abbey Road
+    (Remastered)"). The match is the one listing that counts best: the exact title,
+    then no edition words the MusicBrainz title lacks ("(Deluxe)"; a remaster or mix
+    is neutral). A tie is no match.
+
+    Returns ``{"media_id", "title", "image"}``: the listing's identity, and its best
+    member's title and 600x600 cover.
+    """
+    if not _loose(title) or not _loose(artist):
+        return None
+    response = search(f"{artist} {title}", types=("albums",), background=True)
+    found = ((response.get("results") or {}).get("albums") or {}).get("data") or []
+    ranks = {}
+    for album in found:
+        rank = _album_rank(album.get("attributes"), title, artist)
+        if album.get("id") and rank is not None:
+            ranks.setdefault(str(album["id"]), rank)
+    if not ranks:
+        return None
+    today = timezone.localdate()
+    hits = [album for album in found if str(album.get("id") or "") in ranks]
+    listings = _listings_with_families(hits, today=today, background=True)
+    best = {}
+    for album_id, rank in ranks.items():
+        identity, members = listings[album_id]
+        if not music_listing.is_hidden(members, today):
+            best[identity] = (min(rank, best[identity][0]) if identity in best else rank, members)
+    top = min((rank for rank, _ in best.values()), default=None)
+    winners = [identity for identity, (rank, _) in best.items() if rank == top]
+    if len(winners) != 1:
+        return None
+    return _match(winners[0], best[winners[0]][1], today=today)
+
+
+def match_album_ids(candidates):
+    """Return the Apple Music albums that Wikidata IDs name, when they pass the check.
+
+    ``candidates`` maps release groups to ``(Apple album ID, title, artist)``. One
+    background batch per 100 IDs reads the albums with their version families. An
+    album passes ``match_album``'s title and artist check, with no edition words the
+    MusicBrainz title lacks. Returns ``{release group: match}`` for those that pass,
+    each match its listing's identity, in ``match_album``'s shape.
+    """
+    ids = [str(apple_id) for apple_id, _, _ in candidates.values()]
+    batch = {
+        str(album["id"]): album
+        for album in albums(ids, views=(music_listing.FAMILY_VIEW,), background=True)
+        if str(album.get("id")) in ids
+    }
+    if not batch:
+        return {}
+    today = timezone.localdate()
+    listings = {}
+    family = [member for album in batch.values() for member in _family(album)]
+    for identity, members in remember_listings(family, today=today):
+        for album_id in _member_ids(members):
+            listings.setdefault(album_id, (identity, members))
+    by_id = {album_id: album for album in batch.values() for album_id in _member_ids([album])}
+    matches = {}
+    for mbid, (apple_id, title, artist) in candidates.items():
+        album = by_id.get(str(apple_id))
+        if album is None:
+            continue
+        rank = _album_rank(album.get("attributes"), title, artist)
+        identity, members = listings[str(album["id"])]
+        if rank is None or rank[1] or music_listing.is_hidden(members, today):
+            continue
+        matches[mbid] = _match(identity, members, today=today)
+    return matches
+
+
+def link_defaults(match, *, method, genres=(), apple_album_id=""):
+    """Return a link row's fields for a search or Wikidata answer, checked now.
+
+    A match is a tier-3 ``matched`` row, with the album's title and cover for genre
+    pages; no match is an ``unmatched`` row that keeps ``apple_album_id``, the ID that
+    failed its check.
+    """
+    fields = {
+        "status": MusicAlbumLink.Status.UNMATCHED,
+        "method": method,
+        "tier": None,
+        "apple_album_id": apple_album_id,
+        "apple_title": "",
+        "apple_image": "",
+        "genres": list(genres),
+        "checked_at": timezone.now(),
+    }
+    if match is not None:
+        fields.update(
+            status=MusicAlbumLink.Status.MATCHED,
+            tier=MATCH_TIER,
+            apple_album_id=match["media_id"],
+            apple_title=match["title"],
+            apple_image=match["image"],
+        )
+    return fields
+
+
+def ref_for_release_group(release_group_mbid, title, artist):
+    """Return the Apple Music album a featured list's MusicBrainz album stands for.
+
+    Its matched or applied link row's album. A release group with no row is matched
+    through Apple search (``match_album``) and recorded as a tier-3 row, matched or
+    not, so it is searched once; a row written meanwhile is kept. Returns
+    ``{"media_id", "title", "image"}``, or None.
+    """
+    link = MusicAlbumLink.objects.filter(release_group_mbid=str(release_group_mbid)).first()
+    if link is None:
+        link, _ = MusicAlbumLink.objects.get_or_create(
+            release_group_mbid=str(release_group_mbid),
+            defaults=link_defaults(match_album(title, artist), method=MusicAlbumLink.Method.SEARCH),
+        )
+    if link.status not in _SHOWN_LINK_STATUSES or not link.apple_album_id:
+        return None
+    return {"media_id": link.apple_album_id, "title": link.apple_title, "image": link.apple_image}
+
+
+def queue_bridge(album_id):
+    """Ask the bridge task to fill an album's MusicBrainz bridge; a failure only logs."""
+    try:
+        services.redis_db.sadd(bridge_queue_key(), str(album_id))
+    except RedisError as error:
+        logger.warning("Apple Music album %s wasn't queued for its bridge: %s", album_id, error)
+
+
+def bridge_is_stale(row, now=None):
+    """Return whether an ``AppleAlbum`` row's bridge is missing or a month old."""
+    if row is None or row.bridge_checked_at is None:
+        return True
+    return row.bridge_checked_at < (now or timezone.now()) - BRIDGE_MAX_AGE
+
+
 def _search_state(term, page):
     """Return a search page's rows, Apple's next link and the identities shown so far.
 
@@ -531,14 +833,17 @@ def _search_page(term, previous):
     }
 
 
-def _listings_with_families(found_albums, *, today):
+def _listings_with_families(found_albums, *, today, background=False):
     """Return each album's ``(identity, members)`` listing, by album ID, and record them.
 
     One batch request fetches the albums' version families; an album Apple leaves out
     of it is a listing of its own.
     """
     ids = list(dict.fromkeys(str(album["id"]) for album in found_albums))
-    batch = {str(album["id"]): album for album in albums(ids, views=(music_listing.FAMILY_VIEW,))}
+    batch = {
+        str(album["id"]): album
+        for album in albums(ids, views=(music_listing.FAMILY_VIEW,), background=background)
+    }
     by_id = {str(album["id"]): album for album in found_albums}
     family = [member for album_id in ids for member in _family(batch.get(album_id, by_id[album_id]))]
     listings = {}
@@ -656,6 +961,294 @@ def _artist_credit(identity, members, role, *, today):
         "vote_average": None,
         "vote_count": None,
     }
+
+
+def _other_versions(own_ids, family, album, *, today):
+    """Return the album's other editions, each listing once with its ``relation`` badge.
+
+    First the other listings of its version family, in Apple's order, then the
+    editions found by shared songs that the family lacks (SOS and SOS Deluxe: LANA are
+    separate families). If the shared-songs lookup fails, the family still shows, and
+    the second value is False when the failure may pass.
+    """
+    complete = True
+    try:
+        editions = _editions(album, own_ids)
+    except services.ProviderAPIError as error:
+        logger.warning(
+            "Apple Music editions of album %s are unavailable: %s",
+            music_listing.url_album_id(album),
+            error,
+        )
+        editions = []
+        complete = not transient(error)
+    songs = {
+        album_id: edition["songs"]
+        for edition in editions
+        for album_id in _member_ids([edition["album"]])
+    }
+    # The editions' families fold their clean twins and re-uploads into one listing.
+    edition_listings = (
+        [
+            (identity, members)
+            for identity, members in remember_listings(
+                [member for edition in editions for member in _family(edition["album"])],
+                today=today,
+            )
+            if _member_ids(members) & songs.keys()
+        ]
+        if editions
+        else []
+    )
+    rows = []
+    shown = set(own_ids)
+    for identity, members in [*family, *edition_listings]:
+        member_ids = _member_ids(members)
+        if member_ids & shown or music_listing.is_hidden(members, today):
+            continue
+        shown |= member_ids
+        row = _related_row(identity, members, today=today)
+        compared = next((songs[album_id] for album_id in sorted(member_ids) if album_id in songs), None)
+        rows.append({**row, "relation": _relation(row["title"], compared)})
+    return rows, complete
+
+
+def _editions(album, own_ids):
+    """Return the albums that share this album's songs, each as ``{"album", "songs"}``.
+
+    ``songs`` compares their songs with this album's: ``bigger`` holds all of them and
+    more, ``smaller`` has all of its own on this album, ``same`` has the same ones.
+    One request finds every album the first song of each disc is on, and one batch
+    reads those albums with their songs and version families. Kept: the same artists,
+    not a compilation or a single, and the same content rating (clean edits have their
+    own ISRCs). Cached for a day.
+    """
+    album_id = _path_value(music_listing.url_album_id(album))
+    cache_key = f"apple_music_{EDITIONS_CACHE_VERSION}_editions_{album_id}"
+    editions = cache.get(cache_key)
+    if editions is None:
+        editions = _shared_song_editions(album, own_ids)
+        cache.set(cache_key, editions, EDITIONS_CACHE_TTL)
+    return editions
+
+
+def _shared_song_editions(album, own_ids):
+    artists = set(_artist_ids(album))
+    isrcs = _isrcs(album)
+    # The first song of each disc: a deluxe can put its new songs first, as LANA does.
+    openers = _disc_openers(album)
+    if not artists or not openers:
+        return []
+    candidates = []
+    for song in songs_by_isrc(openers):
+        for entry in ((song.get("relationships") or {}).get("albums") or {}).get("data") or []:
+            candidate_id = str(entry.get("id") or "")
+            if candidate_id and candidate_id not in own_ids and candidate_id not in candidates:
+                candidates.append(candidate_id)
+    rating = (album.get("attributes") or {}).get("contentRating") or None
+    editions = []
+    batch = albums(candidates[:ALBUM_BATCH], views=(music_listing.FAMILY_VIEW,), include=("tracks",))
+    for candidate in batch:
+        attributes = candidate.get("attributes") or {}
+        songs = _compare_songs(isrcs, _isrcs(candidate))
+        if (
+            songs is None
+            or _member_ids([candidate]) & own_ids
+            or set(_artist_ids(candidate)) != artists
+            or attributes.get("isCompilation")
+            or attributes.get("isSingle")
+            or (attributes.get("contentRating") or None) != rating
+        ):
+            continue
+        relationships = {
+            name: value
+            for name, value in (candidate.get("relationships") or {}).items()
+            if name != "tracks"
+        }
+        editions.append({"album": {**candidate, "relationships": relationships}, "songs": songs})
+    return editions
+
+
+def _compare_songs(own, other):
+    """Return how ``other``'s ISRCs compare with ``own``: bigger, smaller, same or None."""
+    if not own or not other:
+        return None
+    if own == other:
+        return SAME
+    if own < other:
+        return BIGGER
+    if other < own:
+        return SMALLER
+    return None
+
+
+def _relation(title, songs):
+    """Return an other version's badge.
+
+    "Original album" for one whose songs are all on this album, else the first
+    edition words in its title, else "Deluxe" for one with more songs, else "Other
+    version".
+    """
+    if songs == SMALLER:
+        return "Original album"
+    for relation, words in _RELATION_WORDS:
+        if words.search(title or ""):
+            return relation
+    return "Deluxe" if songs == BIGGER else "Other version"
+
+
+def _more_by_artist(album, own_ids, *, today):
+    """Return the first artist's other albums, from their Albums section on Apple Music."""
+    artists = _artist_ids(album)
+    if not artists:
+        return []
+    return [
+        _related_row(music_listing.url_album_id(entry), [entry], today=today)
+        for entry in _artist_albums(artists[0])
+        if not _member_ids([entry]) & own_ids and not music_listing.is_hidden([entry], today)
+    ]
+
+
+def _artist_albums(artist_id):
+    """Return an artist's Albums section on Apple Music, cached for a day."""
+    cache_key = f"apple_music_{ARTIST_PAGE_CACHE_VERSION}_artist_albums_{_path_value(artist_id)}"
+    entries = cache.get(cache_key)
+    if entries is None:
+        response = _get(
+            f"artists/{_path_value(artist_id)}/view/{ARTIST_ALBUMS_VIEW}",
+            {"limit": ARTIST_ALBUMS_LIMIT},
+        )
+        entries = [entry for entry in response.get("data") or [] if entry.get("id")]
+        cache.set(cache_key, entries, ARTIST_PAGE_CACHE_TTL)
+    return entries
+
+
+def _similar_albums(album, own_ids, *, today):
+    """Return Apple's similar albums by other artists, from the album page's view."""
+    view = (album.get("views") or {}).get(SIMILAR_VIEW) or {}
+    return [
+        _related_row(music_listing.url_album_id(entry), [entry], today=today)
+        for entry in view.get("data") or []
+        if entry.get("id")
+        and not _member_ids([entry]) & own_ids
+        and not music_listing.is_hidden([entry], today)
+    ]
+
+
+def _related_row(identity, members, *, today):
+    """Return a related album as search shows it, without the ranking fields."""
+    row = _search_row(identity, members, position=0, today=today)
+    return {key: value for key, value in row.items() if key not in RANKING_KEYS}
+
+
+def _genre_album_row(ref, album, link, item):
+    """Return a genre page row: MusicBrainz's when the ref is, else the Apple album's.
+
+    An Apple album shows its link row's title and cover, else its Item's; the subtitle
+    keeps MusicBrainz's artist and first release year.
+    """
+    row = musicbrainz.genre_album_result(album)
+    if ref[0] != Sources.APPLE_MUSIC.value:
+        return row
+    return {
+        **row,
+        "source": Sources.APPLE_MUSIC.value,
+        "media_id": ref[2],
+        "title": link.apple_title or (item.title if item else "") or album.title,
+        "image": link.apple_image or (item.image if item else "") or settings.IMG_NONE,
+        "poster_width": ARTWORK_SIZE,
+        "poster_height": ARTWORK_SIZE,
+    }
+
+
+def _album_rank(attributes, title, artist):
+    """Return how well an Apple album stands for a MusicBrainz album, or None if it can't.
+
+    It can't when it is a single, has another artist, or has another title, even once
+    " - EP" and trailing bracketed tags are left out of Apple's. Otherwise ``(0, 0)``
+    is best: 1 first when the title isn't exactly the same, 1 second for edition words
+    the MusicBrainz title lacks.
+    """
+    attributes = attributes or {}
+    name, kind = album_title(attributes)
+    if kind == "Single" or not same_name(attributes.get("artistName"), artist):
+        return None
+    if not same_title(name, title):
+        return None
+    tagged = bool(_EDITION_TAGS.search(name)) and not _EDITION_TAGS.search(str(title or ""))
+    return (0 if same_name(name, title) else 1, 1 if tagged else 0)
+
+
+def _match(identity, members, *, today):
+    album = music_listing.pick_content_member(members, today=today)
+    attributes = album.get("attributes") or {}
+    return {
+        "media_id": identity,
+        "title": album_title(attributes)[0],
+        "image": artwork_url(attributes.get("artwork")) or "",
+    }
+
+
+def same_name(first, second):
+    """Return whether two names match: letters and digits only, without case or accents."""
+    return bool(_loose(first)) and _loose(first) == _loose(second)
+
+
+def same_title(apple_title, musicbrainz_title):
+    """Return whether an Apple album title names a MusicBrainz title.
+
+    The same, or the same once trailing bracketed tags ("(Remastered)") are left out
+    of Apple's.
+    """
+    return same_name(apple_title, musicbrainz_title) or same_name(_without_tags(apple_title), musicbrainz_title)
+
+
+def filter_metadata(identity, attributes, bridge):
+    """Return the genres and release date an album page gives its Item's filters.
+
+    For refreshing the filters without building the page: the same rules.
+    """
+    return {
+        "genres": _genres(identity, attributes, bridge),
+        "release_date": _release_date(attributes.get("releaseDate"), bridge),
+    }
+
+
+def _loose(text):
+    folded = unicodedata.normalize("NFKD", str(text or "")).casefold()
+    return "".join(char for char in folded if char.isalnum())
+
+
+def _without_tags(title):
+    """Return a title without its trailing bracketed tags ("Abbey Road (Remastered)")."""
+    title = str(title or "").strip()
+    while (stripped := _TRAILING_TAG.sub("", title)) not in (title, ""):
+        title = stripped
+    return title
+
+
+def _artist_ids(album):
+    """Return an album's Apple artist IDs, in Apple's order."""
+    artists = ((album.get("relationships") or {}).get("artists") or {}).get("data") or []
+    return [str(artist["id"]) for artist in artists if artist.get("id")]
+
+
+def _isrcs(album):
+    tracks = ((album.get("relationships") or {}).get("tracks") or {}).get("data") or []
+    return frozenset(
+        isrc for song in tracks if (isrc := str((song.get("attributes") or {}).get("isrc") or ""))
+    )
+
+
+def _disc_openers(album):
+    """Return the ISRC of the first song on each disc, in disc order."""
+    first = {}
+    for song in ((album.get("relationships") or {}).get("tracks") or {}).get("data") or []:
+        attributes = song.get("attributes") or {}
+        disc = _positive_int(attributes.get("discNumber")) or 1
+        if attributes.get("isrc") and disc not in first:
+            first[disc] = str(attributes["isrc"])
+    return [first[disc] for disc in sorted(first)][:FILTER_BATCH]
 
 
 def artwork_url(artwork, size=ARTWORK_SIZE, *, max_length=IMAGE_MAX_LENGTH):
@@ -911,11 +1504,16 @@ def _media(album, credits):
 
 
 def _bridge(identity, content_id):
-    """Return the MusicBrainz bridge for an album page: its identity's row, else its content's."""
+    """Return the MusicBrainz bridge for an album page: its identity's row, else its content's.
+
+    An identity whose bridge is missing or a month old is queued for the bridge task.
+    """
     rows = {
         row.apple_album_id: row
         for row in AppleAlbum.objects.filter(apple_album_id__in={identity, content_id})
     }
+    if bridge_is_stale(rows.get(identity)):
+        queue_bridge(identity)
     for row in (rows.get(identity), rows.get(content_id)):
         if row is not None and (row.release_group_mbid or row.genres or row.spotify_url):
             return row
@@ -949,13 +1547,14 @@ def _first_day(value):
 def _genres(identity, attributes, bridge):
     """Return MusicBrainz genre names: the bridge's, else the Item's, else Apple's mapped.
 
-    Album pages rewrite the Item's genre filters from this list, so it never holds
-    fewer genres than the Item already has.
+    Album pages rewrite the Item's genre filters from this list, so it is empty only
+    when all three are: MusicBrainz's genres replace Apple's broad ones once the bridge
+    has them, and an Item's filters are never emptied.
     """
-    item_genres = _item_genres(identity)
     bridge_genres = [str(genre) for genre in (bridge.genres if bridge is not None else []) if genre]
-    genres = bridge_genres or item_genres or music_catalog.apple_genre_names(attributes.get("genreNames"))
-    return genres if len(genres) >= len(item_genres) else item_genres
+    if bridge_genres:
+        return bridge_genres
+    return _item_genres(identity) or music_catalog.apple_genre_names(attributes.get("genreNames"))
 
 
 def _item_genres(album_id):
@@ -1009,8 +1608,10 @@ def _get(path, params=None, *, background=False):
 
     Requests someone is waiting on use the user-facing bucket, a 10-second timeout and
     no 429 retries; a 429, 5xx or timeout pauses them for a minute. ``background``
-    requests use the slower bucket and the usual retries, and ignore the pause.
+    requests use the slower bucket and the usual retries, and ignore the pause. So does
+    every request inside a ``quota.scope`` (featured list syncs), whatever its caller.
     """
+    background = background or quota.in_scope()
     url = _url(path)
     token = developer_token()
     if not background and is_paused():
@@ -1059,9 +1660,22 @@ def is_paused():
 
 
 def backoff_key():
-    # In Redis rather than the Django cache, which is a dummy cache under DEBUG.
+    return redis_key(BACKOFF_KEY)
+
+
+def bridge_queue_key():
+    """Return the Redis set of album IDs whose bridge the bridge task should fill."""
+    return redis_key(BRIDGE_QUEUE_KEY)
+
+
+def redis_key(name):
+    """Return a key in ``services.redis_db`` with this checkout's prefix.
+
+    Flags and queues live there rather than in the Django cache, which is a dummy cache
+    under DEBUG.
+    """
     prefix = f"{settings.REDIS_PREFIX}:" if settings.REDIS_PREFIX else ""
-    return prefix + BACKOFF_KEY
+    return prefix + name
 
 
 def _back_off():

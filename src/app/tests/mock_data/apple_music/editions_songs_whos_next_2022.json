@@ -1,0 +1,67 @@
+{
+  "data": [
+    {
+      "id": "1806381572",
+      "type": "songs",
+      "attributes": {
+        "name": "Baba O'Riley (Remastered 2022)",
+        "albumName": "The Best Of",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "GBUM72203480"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1806381564",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1698563960",
+      "type": "songs",
+      "attributes": {
+        "name": "Baba O'Riley (Remastered 2022)",
+        "albumName": "Who’s Next : Life House (Super Deluxe)",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "GBUM72203480"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1698563957",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1706357930",
+      "type": "songs",
+      "attributes": {
+        "name": "Baba O'Riley (Remastered 2022)",
+        "albumName": "Who's Next (Remastered 2022)",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "GBUM72203480"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1706357665",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

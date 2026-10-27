@@ -31,7 +31,12 @@ from app.models import (
     Sources,
     Status,
 )
-from app.tests.providers.test_apple_music import AppleMusicTestCase, apple_item, fixture
+from app.tests.providers.test_apple_music import (
+    AppleMusicTestCase,
+    apple_item,
+    fixture,
+    related_answers,
+)
 from integrations.imports import yamtrack
 from lists.models import CustomList, CustomListItem
 
@@ -106,8 +111,9 @@ class MovedAlbumAPITests(MovedAlbumTestCase):
     """Reads and writes with the old ref, as installed builds send them."""
 
     def test_every_api_entry_point_lands_on_the_moved_item(self):
-        # One Apple request in all, and none to MusicBrainz: the network is closed.
-        fake = self.apple((200, fixture("page_sos.json")))
+        # Four Apple requests in all (the page and its related sections, all cached),
+        # and none to MusicBrainz: the network is closed.
+        fake = self.apple((200, fixture("page_sos.json")), *related_answers())
         custom_list = CustomList.objects.create(owner=self.user, name="Favourites")
         url = f"/api/v1/media/musicbrainz/music/{SOS_MBID}"
 
@@ -195,7 +201,7 @@ class MovedAlbumAPITests(MovedAlbumTestCase):
 
         self.assert_one_album()
         self.assertEqual(Music.objects.filter(user=self.user).count(), 1)
-        self.assertEqual(len(fake.requests), 1)
+        self.assertEqual(len(fake.requests), 4)
 
     def test_yamtrack_import_lands_on_the_moved_item(self):
         for mode, existing in (("new", None), ("new", Status.PLANNING.value), ("overwrite", Status.PLANNING.value)):
@@ -233,7 +239,7 @@ class MovedAlbumAPITests(MovedAlbumTestCase):
         self.assert_one_album()
 
     def test_song_paths(self):
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
         AppleAlbum.objects.create(apple_album_id=SOS_CLEAN, canonical_id=SOS)
 
         for album_id in (SOS, SOS_CLEAN):
@@ -247,7 +253,7 @@ class MovedAlbumAPITests(MovedAlbumTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_old_builds_get_no_musicbrainz_artist_ids_or_ratings(self):
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
         ExternalRating.objects.create(
             item=self.item,
             rating_source="musicbrainz",

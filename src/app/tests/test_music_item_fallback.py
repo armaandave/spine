@@ -16,6 +16,7 @@ from app.tests.providers.test_apple_music import (
     apple_item,
     fixture,
     genre_facets,
+    related_answers,
 )
 from events.calendar.helpers import date_parser
 from events.calendar.other import process_other
@@ -133,7 +134,7 @@ class AppleItemFallbackTests(AppleMusicTestCase):
         self.apple((429, {"errors": []}))
         self.assertIsNone(services.get_media_metadata("music", ALBUM_ID, "apple_music")["music"])
         services.redis_db.delete(apple_music.backoff_key())
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
 
         response = self.client.get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/")
 

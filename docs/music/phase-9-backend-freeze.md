@@ -89,6 +89,10 @@ Music search accepts `q` (required), `page` (one-based, default `1`), and
 
 ### Representative release and tracklist
 
+This section describes MusicBrainz albums. An Apple Music album fills the same
+fields from the Apple Music album, and its song pages have their own route; see
+[apple-music-catalog.md](apple-music-catalog.md).
+
 There is no separate representative-release endpoint. Album detail returns it at
 `music.representative_release`; the complete ordered tracklist is
 `music.representative_release.media[].tracks[]`. A missing usable release is the
@@ -150,7 +154,8 @@ for tracking and diary filters. These endpoints have no request body.
 
 ### JSON conventions
 
-- Keys use `snake_case`; MBIDs are lowercase UUID strings.
+- Keys use `snake_case`; MBIDs are lowercase UUID strings. On an Apple Music album
+  the `*_mbid` fields hold Apple Music IDs (see apple-music-catalog.md).
 - Dates use ISO 8601. MusicBrainz metadata may preserve `YYYY`, `YYYY-MM`, or
   `YYYY-MM-DD`; API-created timestamps include an offset.
 - Nullable values are JSON `null`, never an empty object or fabricated value.

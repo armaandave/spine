@@ -52,6 +52,8 @@ MUSIC_PERSON_SOURCES = (Sources.MUSICBRAINZ.value, Sources.APPLE_MUSIC.value)
 RATE_LIMIT_FALLBACK = "rate_limit_fallback"
 # Marks a detail page built from the saved Item while its provider fails.
 ITEM_FALLBACK = "item_fallback"
+# Marks a detail page missing a part its provider failed to answer for a moment.
+PARTIAL_PAGE = "partial_page"
 PERSON_SEARCH_CACHE_VERSION = "v1"
 PERSON_SEARCH_TTL = 60 * 60
 
@@ -402,8 +404,13 @@ def get_media_metadata(
     episode_number=None,
     *,
     include_music_enrichment=True,
+    include_music_related=False,
 ):
-    """Return the metadata for the selected media."""
+    """Return the metadata for the selected media.
+
+    ``include_music_related`` also fills an Apple Music album page's related sections,
+    which only album pages show.
+    """
     if source == Sources.MANUAL.value:
         if media_type == MediaTypes.SEASON.value:
             return manual.season(media_id, season_numbers[0])
@@ -448,12 +455,13 @@ def get_media_metadata(
             source,
             media_id,
             include_music_enrichment=include_music_enrichment,
+            include_related=include_music_related,
         ),
     }
     return metadata_retrievers[media_type]()
 
 
-def _music_album(source, album_id, *, include_music_enrichment):
+def _music_album(source, album_id, *, include_music_enrichment, include_related=False):
     """Return an album from the catalog it is stored under now.
 
     An old MusicBrainz ref of an album that moved gets its Apple Music page, and the
@@ -465,7 +473,7 @@ def _music_album(source, album_id, *, include_music_enrichment):
         album_id,
     )
     if source == Sources.APPLE_MUSIC.value:
-        return _apple_music_album(album_id)
+        return _apple_music_album(album_id, related=include_related)
     if include_music_enrichment:
         return musicbrainz.music(album_id)
     return musicbrainz.music(album_id, include_enrichment=False)
@@ -479,7 +487,7 @@ def _apple_music():
     return apple_music
 
 
-def _apple_music_album(album_id):
+def _apple_music_album(album_id, *, related=False):
     """Return an Apple Music album, or its saved Item's basic page while Apple fails.
 
     Any Apple error counts (a bad key, no key, a takedown, a 429 or the pause after
@@ -487,7 +495,7 @@ def _apple_music_album(album_id):
     """
     apple_music = _apple_music()
     try:
-        return apple_music.music(album_id)
+        return apple_music.music(album_id, related=related)
     except ProviderAPIError as error:
         saved = apple_music.saved_album(album_id)
         if saved is None:
@@ -655,7 +663,10 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
             return openlibrary.discover(page=page, page_size=page_size, genre=genre, year=year)
         return hardcover.discover(page=page, page_size=page_size, genre=genre, year=year)
 
-    if source == Sources.MUSICBRAINZ.value and media_type == MediaTypes.MUSIC.value:
+    if (
+        source in (Sources.MUSICBRAINZ.value, Sources.APPLE_MUSIC.value)
+        and media_type == MediaTypes.MUSIC.value
+    ):
         if year:
             msg = "year discovery is not supported for music."
             raise ValueError(msg)
@@ -665,6 +676,10 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
         if not str(genre or "").strip():
             msg = "genre is required for MusicBrainz discovery."
             raise ValueError(msg)
+        # Genre pages follow the catalog, so a genre chip on an older MusicBrainz
+        # album opens Apple Music's page once the catalog is Apple Music.
+        if source == Sources.APPLE_MUSIC.value or config.music_catalog_source() == Sources.APPLE_MUSIC:
+            return _apple_music().discover(page=page, page_size=page_size, genre=genre)
         return musicbrainz.discover(page=page, page_size=page_size, genre=genre)
 
     msg = f"Discovery is not supported for media_type={media_type!r} and source={source!r}."

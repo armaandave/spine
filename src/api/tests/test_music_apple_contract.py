@@ -35,7 +35,12 @@ from app.models import (
     Status,
 )
 from app.templatetags.app_tags import get_user_poster_image
-from app.tests.providers.test_apple_music import AppleMusicTestCase, apple_item, fixture
+from app.tests.providers.test_apple_music import (
+    AppleMusicTestCase,
+    apple_item,
+    fixture,
+    related_answers,
+)
 
 CONTRACTS = Path(__file__).parents[3] / "docs" / "music" / "contracts"
 ALBUM_CONTRACT = CONTRACTS / "apple-album-detail.example.json"
@@ -158,30 +163,46 @@ class AppleMusicContractTests(AppleMusicTestCase):
             path.write_text(json.dumps(actual, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         self.assertEqual(actual, json.loads(path.read_text(encoding="utf-8")))
 
+    def assert_related_sections(self, sections):
+        self.assertEqual(
+            [(section["id"], section["title"]) for section in sections],
+            [
+                ("other_versions", "Other Versions"),
+                ("more_by_artist", "More by SZA"),
+                ("related_albums", "You Might Also Like"),
+            ],
+        )
+        for section in sections:
+            self.assertLessEqual(len(section["items"]), 10, section["id"])
+            for index, summary in enumerate(section["items"]):
+                path = f"related_sections.{section['id']}[{index}]"
+                self.assert_required(summary, "summary", path)
+                self.assert_required(summary["ref"], "ref", f"{path}.ref")
+
     def test_album_and_song_responses_match_the_contract(self):
-        # The song page is built from the album's cached page: one request in all.
-        fake = self.apple((200, fixture("page_sos.json")))
+        # The song page is built from the album's cached page: the page and its
+        # related sections are four requests in all.
+        fake = self.apple((200, fixture("page_sos.json")), *related_answers())
 
         album = self.client.get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/")
         song = self.client.get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/recordings/{SONG_ID}/")
 
         self.assertEqual((album.status_code, song.status_code), (200, 200))
-        self.assertEqual(len(fake.requests), 1)
+        self.assertEqual(len(fake.requests), 4)
         album, song = album.json(), song.json()
         self.assert_album(album)
         self.assert_song(song)
         self.assertEqual(album["ref"]["item_id"], self.item.id)
         self.assertEqual(album["user_state"]["status"], Status.COMPLETED.value)
-        # Other Versions, More by and You Might Also Like come later; until then
-        # the page has no related sections.
-        self.assertEqual((album["related"], album["related_sections"]), ({}, []))
+        self.assert_related_sections(album["related_sections"])
+        self.assertEqual(sorted(album["related"]), ["more_by_artist", "other_versions", "related_albums"])
         self.assertEqual(song["parent_album"]["ref"], album["ref"])
         self.assertEqual(song["context_release"]["track"]["recording"]["recording_mbid"], SONG_ID)
         self.assert_contract(ALBUM_CONTRACT, album)
         self.assert_contract(SONG_CONTRACT, song)
 
     def test_a_song_not_on_the_album_is_not_found(self):
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
 
         response = self.client.get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/recordings/999/")
 
@@ -195,7 +216,11 @@ class AppleMusicContractTests(AppleMusicTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_re_upload_answers_as_its_listing(self):
-        self.apple((200, fixture("page_lana_38.json")), (200, fixture("page_lana.json")))
+        self.apple(
+            (200, fixture("page_lana_38.json")),
+            (200, fixture("page_lana.json")),
+            *related_answers("lana"),
+        )
 
         response = self.client.get("/api/v1/media/apple_music/music/1786643044/")
 
@@ -277,7 +302,7 @@ class AppleAlbumCoverPickTests(AppleMusicTestCase):
         self.assertEqual(CustomPosterPreference.objects.filter(item=self.apple_album).count(), 2)
 
     def test_the_album_page_shows_apples_cover(self):
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
         client = APIClient()
         client.force_authenticate(self.user)
 
@@ -324,7 +349,7 @@ class AppleAlbumExternalRatingTests(AppleMusicTestCase):
             ["MusicBrainz"],
         )
 
-        self.apple((200, fixture("page_sos.json")))
+        self.apple((200, fixture("page_sos.json")), *related_answers())
         detail = APIClient().get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/").json()
 
         self.assertEqual(detail["external_ratings"], [])

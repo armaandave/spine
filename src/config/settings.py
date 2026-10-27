@@ -720,15 +720,27 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Refresh music genre albums",
         "schedule": crontab(hour=4, minute=30, day_of_week="mon"),  # weekly
     },
+    "fill_apple_album_bridges": {
+        "task": "Fill Apple album bridges",
+        "schedule": 60 * 5,  # every 5 minutes; a run works at most a minute
+        "options": {"expire_seconds": 60 * 4},
+    },
+    "link_genre_albums_to_apple": {
+        "task": "Link genre albums to Apple",
+        "schedule": 60 * 60,  # hourly; a run works at most 10 minutes
+        "options": {"expire_seconds": 60 * 50},
+    },
 }
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
 # on the default queue never delay an award night. The music genre refresh (about
-# an hour of ListenBrainz and Wikipedia requests) runs there too, off the default queue.
+# an hour of ListenBrainz and Wikipedia requests) and the hourly linking of genre
+# albums to Apple Music run there too, off the default queue.
 CELERY_TASK_ROUTES = {
     "Dispatch featured lists": {"queue": "featured"},
     "Sync featured list": {"queue": "featured"},
     "Refresh music genre albums": {"queue": "featured"},
+    "Link genre albums to Apple": {"queue": "featured"},
 }
 
 # Lets the weekly review agent read /api/v1/lists/featured/health/ with the

@@ -1,0 +1,167 @@
+{
+  "id": "b82458a3-7d3a-495f-861f-8698731c4dd0",
+  "title": "SOS",
+  "status": "Official",
+  "barcode": "196589564931",
+  "artist-credit": [],
+  "release-group": {
+    "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+    "title": "SOS",
+    "primary-type": "Album",
+    "first-release-date": "2022-12-09"
+  },
+  "relations": [
+    {
+      "type": "discogs",
+      "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.discogs.com/release/25404283"
+      }
+    },
+    {
+      "type": "discogs",
+      "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.discogs.com/release/25757575"
+      }
+    },
+    {
+      "type": "free streaming",
+      "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+      "target-type": "url",
+      "url": {
+        "resource": "https://music.youtube.com/playlist?list=OLAK5uy_kX7zbOz8GZRFRSIkfs0XH53qAUwVHvrZ8"
+      }
+    },
+    {
+      "type": "free streaming",
+      "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+      "target-type": "url",
+      "url": {
+        "resource": "https://open.spotify.com/album/07w0rG5TETcyihsEIZR3qG"
+      }
+    },
+    {
+      "type": "free streaming",
+      "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.deezer.com/album/383703577"
+      }
+    },
+    {
+      "type": "other databases",
+      "type-id": "c74dee45-3c85-41e9-a804-92ab1c654446",
+      "target-type": "url",
+      "url": {
+        "resource": "https://rateyourmusic.com/release/album/sza/sos/"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.e-onkyo.com/music/album/sme196589564931/"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://mora.jp/package/43000087/G010004913900E/"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://mora.jp/package/43000100/G010004913900E_44/"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://mysound.jp/album/655916/"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://ototoy.jp/_/default/p/1473925"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://ototoy.jp/_/default/p/1473926"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.qobuz.com/gb-en/album/sos-sza/ckyh7bv0dt6tb"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://music.amazon.co.uk/albums/B0BNXZ1TQB"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://music.apple.com/us/album/1657869377"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://open.qobuz.com/album/ckyh7bv0dt6tb"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://play.qobuz.com/album/ckyh7bv0dt6tb"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://tidal.com/album/264617506"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://tidal.com/album/265167148"
+      }
+    }
+  ]
+}

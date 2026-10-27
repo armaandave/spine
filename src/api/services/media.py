@@ -242,17 +242,23 @@ def _cache_candidate(cache_key, data):
 
 
 def _cache_music_data(cache_key, data):
-    # A page built from the saved Item while the provider fails isn't kept, so the
-    # full page comes back once the provider answers.
-    if isinstance(data, dict) and data.get(provider_services.ITEM_FALLBACK):
-        return False
+    """Cache music data; return why it wasn't cached, or None.
+
+    A page built from the saved Item while the provider fails, or one missing a part
+    the provider failed to answer for a moment, isn't kept: the full page comes back
+    once the provider answers, and a stale copy stays meanwhile.
+    """
+    if isinstance(data, dict):
+        for marker in (provider_services.ITEM_FALLBACK, provider_services.PARTIAL_PAGE):
+            if data.get(marker):
+                return marker
     cache.set(cache_key, data, MUSIC_CACHE_STALE_TTL)
     cache.set(
         f"{cache_key}:validation",
         {"validated_at": time.time()},
         MUSIC_CACHE_STALE_TTL,
     )
-    return True
+    return None
 
 
 def _schedule_music_refresh(cache_key, task_name, *args):
@@ -316,12 +322,12 @@ def _refresh_music_cache(cache_key, fresh_ttl, fetch):
                 return {"outcome": "deduplicated"}
             if cache.get(cache_key) is not None and _cache_is_fresh(cache_key, fresh_ttl):
                 return {"outcome": "skipped_fresh"}
-        refreshed = _cache_music_data(cache_key, fetch())
+        skipped = _cache_music_data(cache_key, fetch())
     except Exception as error:  # noqa: BLE001 - keep stale music data on refresh failures
         logger.warning("Music cache refresh failed type=%s", type(error).__name__)
         return {"outcome": "failed", "exception_type": type(error).__name__}
     else:
-        return {"outcome": "refreshed" if refreshed else "item_fallback"}
+        return {"outcome": skipped or "refreshed"}
     finally:
         cache.delete(f"{cache_key}:refresh-scheduled")
         if acquired:
@@ -1016,11 +1022,13 @@ def _detail_cache_key(
 
 
 def _music_detail_metadata(*, source, media_id, include_music_enrichment):
+    # Album pages show an Apple Music album's related sections; other reads skip them.
     return provider_services.get_media_metadata(
         MediaTypes.MUSIC.value,
         media_id,
         source,
         include_music_enrichment=include_music_enrichment,
+        include_music_related=True,
     )
 
 
@@ -1050,6 +1058,22 @@ def _cached_music_detail_metadata(*, source, media_id, include_music_enrichment)
             include_music_enrichment,
         ),
     )
+
+
+def drop_music_detail_cache(source, media_id):
+    """Drop an album's cached detail pages, both stages, for the next read to build."""
+    keys = [
+        _detail_cache_key(
+            source=source,
+            media_type=MediaTypes.MUSIC.value,
+            media_id=media_id,
+            season_number=None,
+            episode_number=None,
+            include_music_enrichment=include_music_enrichment,
+        )
+        for include_music_enrichment in (False, True)
+    ]
+    cache.delete_many([*keys, *(f"{key}:validation" for key in keys)])
 
 
 def _music_page_id(source, media_id, metadata):
@@ -1256,6 +1280,7 @@ def media_detail(
         source=source,
         request=request,
         user=user,
+        metadata=metadata,
     )
     completion = None
     if user and user.is_authenticated and media_type == MediaTypes.TV.value:

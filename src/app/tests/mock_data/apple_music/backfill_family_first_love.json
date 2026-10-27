@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "id": "1440763349",
+      "type": "albums",
+      "attributes": {
+        "name": "First Love (Remastered 2014)",
+        "artistName": "Hikaru Utada",
+        "url": "https://music.apple.com/us/album/first-love-remastered-2014/1440763349",
+        "playParams": {
+          "id": "1440763349",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1999-03-10",
+        "trackCount": 11,
+        "upc": "00600406427052",
+        "genreNames": [
+          "J-Pop",
+          "Music",
+          "Vocal",
+          "Vocal Pop",
+          "Worldwide",
+          "Japanese Pop",
+          "Rock"
+        ],
+        "recordLabel": "Universal Music LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/77/67/00/77670013-e2ed-437a-dc30-e9cb74056cbe/00600406427052.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    }
+  ]
+}

@@ -22,7 +22,7 @@ from app.models import (
     MusicAlbumLink,
     Sources,
 )
-from app.providers import apple_music, services
+from app.providers import apple_music, quota, services
 
 # Recorded by scripts/music/record_apple_fixtures.py.
 FIXTURES = Path(__file__).parents[1] / "mock_data" / "apple_music"
@@ -53,6 +53,19 @@ def page(name, **attributes):
     data = fixture(name)
     data["data"][0]["attributes"].update(attributes)
     return data
+
+
+def related_answers(editions="sos", artist="sza"):
+    """Return the answers to an album page's related-section requests, in order.
+
+    The songs of the album's discs, the batch of albums that share them, and the
+    artist's albums.
+    """
+    return (
+        (200, fixture(f"editions_songs_{editions}.json")),
+        (200, fixture(f"editions_albums_{editions}.json")),
+        (200, fixture(f"artist_albums_{artist}.json")),
+    )
 
 
 def apple_item(media_id, title="SOS", image="https://example.com/cover.jpg", **fields):
@@ -352,6 +365,26 @@ class RequestTests(AppleMusicTestCase):
         self.assertEqual(fake.options[0]["timeout"], settings.REQUEST_TIMEOUT)
         self.sleep.assert_called_once()
         self.assertEqual(user.requests, [])
+
+    def test_featured_syncs_use_the_background_session_and_never_pause_user_calls(self):
+        # Featured syncs run inside a quota scope, and reach Apple through search and
+        # album pages, which don't say they are background work.
+        user = self.apple()
+        fake = self.apple(
+            requests.exceptions.ReadTimeout("read timed out"),
+            (200, fixture("page_sos.json")),
+            background=True,
+        )
+
+        with quota.scope("featured", {}):
+            with self.assertRaises(services.ProviderAPIError):
+                services.search("music", "sos", 1, source="apple_music", preserve_ranking_fields=True)
+            album = services.get_media_metadata("music", "1657869377", "apple_music", include_music_enrichment=False)
+
+        self.assertEqual(album["media_id"], "1657869377")
+        self.assertEqual(len(fake.requests), 2)
+        self.assertEqual(user.requests, [])
+        self.assertFalse(apple_music.is_paused())
 
     def test_errors_become_provider_errors_with_their_status(self):
         cases = (
@@ -852,6 +885,16 @@ class AlbumIdentityTests(AppleMusicTestCase):
 
         self.assertEqual(album["media_id"], "1794644675")
         self.assertEqual(album["music"]["representative_release"]["track_count"], 38)
+        # Apple failed for a moment, so the music caches don't keep this page.
+        self.assertTrue(album[services.PARTIAL_PAGE])
+
+    def test_a_best_member_apple_no_longer_has_isnt_a_failure_to_wait_out(self):
+        self.apple((200, fixture("page_lana_38.json")), (404, fixture("error_404.json")["body"]))
+
+        album = apple_music.music("1786643044")
+
+        self.assertEqual(album["music"]["representative_release"]["track_count"], 38)
+        self.assertNotIn(services.PARTIAL_PAGE, album)
 
     def test_every_family_member_gets_a_row_and_keeps_a_known_barcode(self):
         AppleAlbum.objects.create(apple_album_id="1658650093", canonical_id="1658650093", upc="196589564955")
@@ -959,18 +1002,36 @@ class AlbumGenreAndDateTests(AppleMusicTestCase):
             ["hard rock", "rock", "arena rock", "rock and roll"],
         )
 
-    def test_the_bridge_then_the_item_and_never_fewer_than_the_item(self):
+    def test_the_bridge_then_the_item_then_apples(self):
         self.apple((200, fixture("page_sos.json")))
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b"])
+
         item = apple_item("1657869377")
         genre_facets(item, "contemporary r&b", "alternative r&b")
-
         self.assertEqual(apple_music.music("1657869377")["genres"], ["alternative r&b", "contemporary r&b"])
 
+        # MusicBrainz's genres win once the bridge has them, even when they are fewer.
         self.bridge(genres=["contemporary r&b"])
-        self.assertEqual(apple_music.music("1657869377")["genres"], ["alternative r&b", "contemporary r&b"])
+        self.assertEqual(apple_music.music("1657869377")["genres"], ["contemporary r&b"])
 
         self.bridge(genres=["r&b", "contemporary r&b", "soul"])
         self.assertEqual(apple_music.music("1657869377")["genres"], ["r&b", "contemporary r&b", "soul"])
+
+    def test_an_album_saved_before_its_bridge_moves_to_musicbrainzs_genres(self):
+        self.apple((200, fixture("page_whos_next_deluxe.json")))
+        item = apple_item("1440850317", title="Who's Next (Deluxe Edition)")
+        album = apple_music.music("1440850317")
+        self.assertEqual(album["genres"], ["hard rock", "rock", "arena rock", "rock and roll"])
+        genre_facets(item, *album["genres"])
+
+        AppleAlbum.objects.filter(apple_album_id="1440850317").update(release_group_mbid="rg", genres=["hard rock", "rock"])
+
+        self.assertEqual(apple_music.music("1440850317")["genres"], ["hard rock", "rock"])
+        bridge = AppleAlbum.objects.get(apple_album_id="1440850317")
+        self.assertEqual(
+            apple_music.filter_metadata("1440850317", {}, bridge)["genres"],
+            ["hard rock", "rock"],
+        )
 
     def test_the_release_date_is_musicbrainzs_when_surely_earlier_for_the_same_title(self):
         self.apple((200, fixture("page_sos.json")))

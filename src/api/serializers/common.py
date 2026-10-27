@@ -1,7 +1,8 @@
+import logging
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Count, F, Prefetch, Window, prefetch_related_objects
+from django.db.models import Count, F, Prefetch, Q, Window, prefetch_related_objects
 from django.db.models.functions import RowNumber
 from django.utils.text import slugify
 from rest_framework import serializers
@@ -22,12 +23,15 @@ from app.models import (
     Item,
     MediaLike,
     MediaTypes,
+    Music,
     Season,
     Sources,
     Status,
 )
 from lists.models import CustomList, CustomListItem
 from social.models import ProgressChange
+
+logger = logging.getLogger(__name__)
 
 
 class MediaRefSerializer(serializers.Serializer):
@@ -458,6 +462,30 @@ COMPLETABLE_RELATED_SECTION_IDS = {
     "series",
     "standalone_expansions",
 }
+# An album page's related sections, in the order the app shows them, and their titles.
+MUSIC_RELATED_SECTIONS = (
+    ("other_versions", "Other Versions"),
+    ("more_by_artist", "More by {artist}"),
+    ("related_albums", "You Might Also Like"),
+)
+MUSIC_RELATED_LIMIT = 10
+# The optional fields of the app's MediaSummary, by the type it decodes them as.
+SUMMARY_TEXT_FIELDS = (
+    "relation",
+    "content_rating",
+    "subtitle",
+    "overview",
+    "image_url",
+    "poster_url",
+    "custom_poster_url",
+    "backdrop_url",
+    "custom_backdrop_url",
+    "poster_accent_color",
+    "release_date",
+    "default_source",
+)
+SUMMARY_TEXT_LIST_FIELDS = ("genres", "languages", "roles", "credit_roles")
+POSTER_ORIENTATIONS = (None, "portrait", "landscape", "square", "unknown")
 
 
 def media_summary_from_provider(
@@ -764,11 +792,16 @@ def custom_backdrop_url_for_user(user, ref, request=None, item=None):
     return absolute_url(request, preference.custom_image_url) if preference else None
 
 
-def related_sections_from_payload(related, media_type, source, request=None, user=None):
-    """Normalize provider related media into mobile section cards."""
+def related_sections_from_payload(related, media_type, source, request=None, user=None, metadata=None):  # noqa: C901
+    """Normalize provider related media into mobile section cards.
+
+    ``metadata`` is the page's own; it names the artist of an album's More by section.
+    """
     if not related:
         return []
 
+    if media_type == MediaTypes.MUSIC.value:
+        return _music_related_sections(related, source, metadata=metadata or {}, request=request, user=user)
     if media_type == MediaTypes.BOOK.value:
         series_sections = [
             ("series", key, values)
@@ -893,6 +926,131 @@ def related_sections_from_payload(related, media_type, source, request=None, use
                 "completion": completion,
             })
     return sections
+
+
+def _music_related_sections(related, source, *, metadata, request, user):
+    """Return an album page's Other Versions, More by and You Might Also Like sections.
+
+    At most 10 albums each, under their canonical refs, with their Items found in one
+    query. An album the app couldn't decode is left out: one bad card would break the
+    whole page, which the app decodes strictly.
+    """
+    artist = next(
+        (
+            credit["name"]
+            for credit in (metadata.get("music") or {}).get("artist_credit") or []
+            if isinstance(credit, dict) and credit.get("name")
+        ),
+        None,
+    )
+    candidates = [
+        (key, title.format(artist=artist or "This Artist"), values[:MUSIC_RELATED_LIMIT])
+        for key, title in MUSIC_RELATED_SECTIONS
+        if (values := [value for value in related.get(key) or [] if isinstance(value, dict)])
+    ]
+    music = MediaTypes.MUSIC.value
+    canonical = music_catalog.canonical_music_refs(
+        music_catalog.payload_ref(value, source=source, media_type=music)
+        for _, _, values in candidates
+        for value in values
+    )
+    items = _music_items(set(canonical.values()), user)
+    sections = []
+    for key, title, values in candidates:
+        summaries = []
+        refs = set()
+        for value in values:
+            payload = music_catalog.with_canonical_ref(value, canonical, source=source, media_type=music)
+            ref = music_catalog.payload_ref(payload, source=source, media_type=music)
+            if ref in refs:
+                continue
+            summary = _music_related_summary(payload, ref, items.get(ref), request=request, user=user)
+            if summary is not None:
+                refs.add(ref)
+                summaries.append(summary)
+        if summaries:
+            sections.append({"id": key, "title": title, "items": summaries, "completion": None})
+    return sections
+
+
+def _music_items(refs, user):
+    """Return the Items of these album refs, primed with the viewer's state, by ref."""
+    ids_by_source = {}
+    for source, media_type, media_id in refs:
+        if media_type == MediaTypes.MUSIC.value and source and media_id:
+            ids_by_source.setdefault(source, set()).add(media_id)
+    if not ids_by_source:
+        return {}
+    query = Q(pk__in=[])
+    for source, media_ids in ids_by_source.items():
+        query |= Q(source=source, media_id__in=media_ids)
+    items = list(
+        Item.objects.filter(
+            query,
+            media_type=MediaTypes.MUSIC.value,
+            season_number=None,
+            episode_number=None,
+        ),
+    )
+    media_by_item = (
+        {music.item_id: music for music in Music.objects.filter(user=user, item__in=items).select_related("item")}
+        if items and user and user.is_authenticated
+        else None
+    )
+    prime_collection_items(items, user, media_by_item=media_by_item)
+    return {(item.source, item.media_type, item.media_id): item for item in items}
+
+
+def _music_related_summary(payload, ref, item, *, request, user):
+    """Return a related album's summary, or None when the app couldn't decode it."""
+    if not all(isinstance(part, str) and part for part in ref):
+        return None
+    title = payload.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    try:
+        summary = media_summary_from_provider(payload, ref[1], ref[0], request=request, user=user, item=item)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        logger.warning("Left out a related album that couldn't be read: %s", ref)
+        return None
+    if not _decodable_summary(summary):
+        logger.warning("Left out a related album the app couldn't decode: %s", ref)
+        return None
+    return summary
+
+
+def _decodable_summary(summary):
+    """Return whether the app's strict ``MediaSummary`` decoder accepts a summary."""
+
+    def text(value, *, required=False):
+        return isinstance(value, str) and bool(value) if required else value is None or isinstance(value, str)
+
+    def whole(value):
+        return value is None or (isinstance(value, int) and not isinstance(value, bool))
+
+    ref = summary.get("ref")
+    if not isinstance(ref, dict):
+        return False
+    return (
+        all(text(ref.get(key), required=True) for key in ("source", "media_type", "media_id"))
+        and all(whole(ref.get(key)) for key in ("item_id", "season_number", "episode_number"))
+        and text(summary.get("title"), required=True)
+        and all(text(summary.get(key)) for key in SUMMARY_TEXT_FIELDS)
+        and all(
+            isinstance(summary.get(key) or [], list) and all(isinstance(value, str) for value in summary.get(key) or [])
+            for key in SUMMARY_TEXT_LIST_FIELDS
+        )
+        and all(whole(summary.get(key)) for key in ("poster_width", "poster_height", "position"))
+        and (
+            summary.get("poster_aspect_ratio") is None
+            or (
+                isinstance(summary["poster_aspect_ratio"], int | float)
+                and not isinstance(summary["poster_aspect_ratio"], bool)
+            )
+        )
+        and summary.get("poster_orientation") in POSTER_ORIENTATIONS
+        and (summary.get("user_state") is None or isinstance(summary["user_state"], dict))
+    )
 
 
 def user_state_for_item(user, item):
