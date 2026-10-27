@@ -14,6 +14,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from api.services import stats_v2_activity as activity
+from api.services.item_metadata import store_item_metadata
 from api.services.stats_scope import build_scope
 from api.tests.test_stats_v2_shape import (
     ALL_TIME,
@@ -573,6 +574,19 @@ class TimeTests(ActivityBase):
         all_time = time_row(self.summary(ALL_TIME, tab="game"), "game")
         # Steam's imported lifetime playtime is never added (GM-500).
         self.assertEqual((all_time["value"], all_time["known"], all_time["total"], all_time["approximate"]), (780, 3, 4, False))
+
+    def test_imported_read_books_gain_pages_when_metadata_is_filled(self):
+        novel = self.item(MediaTypes.BOOK.value, "imported-read")
+        self.tracking(Book, novel, completed_manually=True)
+        before = time_row(self.summary(ALL_TIME, tab="book"), "book")
+        self.assertEqual((before["value"], before["known"], before["total"]), (0, 0, 1))
+
+        store_item_metadata(novel, {"title": "Imported book", "max_progress": 412})
+
+        after = time_row(self.summary(ALL_TIME, tab="book"), "book")
+        self.assertEqual((after["value"], after["known"], after["total"]), (412, 1, 1))
+        self.assertFalse(DiaryEntry.objects.filter(item=novel).exists())
+        self.assertIsNone(time_row(self.summary(YEAR_2025, tab="book"), "book"))
 
     def test_book_pages_from_the_snapshot_else_total_pages(self):
         novel = self.item(MediaTypes.BOOK.value, "novel")

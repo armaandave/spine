@@ -487,3 +487,39 @@ class EnsureFilterMetadataTests(MetadataTestCase):
 
         apple.refresh_from_db()
         self.assertEqual(apple.metadata_version, 0)
+
+
+class BookPagesTests(MetadataTestCase):
+    """Goodreads imports left books without a page count; the provider's fills it."""
+
+    def book(self, **fields):
+        return self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, **fields)
+
+    def test_a_blank_page_count_is_filled_from_the_provider(self):
+        for metadata in (
+            {"total_pages": 412},
+            {"max_progress": "412"},
+            {"details": {"number_of_pages": 412}},
+        ):
+            with self.subTest(metadata=metadata):
+                book = self.book()
+                store_item_metadata(book, {"title": "Divergent", **metadata})
+                book.refresh_from_db()
+                self.assertEqual(book.total_pages, 412)
+                self.assertEqual(book.metadata_version, CURRENT_METADATA_VERSION[MediaTypes.BOOK.value])
+
+    def test_a_stored_page_count_is_kept(self):
+        book = self.book(total_pages=300)
+        store_item_metadata(book, {"title": "Divergent", "total_pages": 412})
+        book.refresh_from_db()
+        self.assertEqual(book.total_pages, 300)
+
+    def test_zero_or_missing_pages_leave_it_blank(self):
+        book = self.book()
+        store_item_metadata(book, {"title": "Divergent", "total_pages": 0, "max_progress": None})
+        book.refresh_from_db()
+        self.assertIsNone(book.total_pages)
+
+    def test_books_stamped_before_page_counts_are_pending_again(self):
+        book = self.book(metadata_version=2)
+        self.assertFalse(is_metadata_current(book))

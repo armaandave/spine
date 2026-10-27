@@ -19,6 +19,7 @@ from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 
+from api.services.item_metadata import CURRENT_METADATA_VERSION
 from app import metadata_fill
 from app.models import (
     TV,
@@ -205,6 +206,19 @@ class SelectionAndDryRunTests(FillTestCase):
 
 
 class ApplyTests(FillTestCase):
+    def test_openlibrary_books_with_missing_pages_are_fetched_before_stamping(self):
+        book = self.item(MediaTypes.BOOK.value, Sources.OPENLIBRARY.value, release_year=2004)
+        self.genre(book, "Fantasy")
+        fetch = self.patch_metadata(lambda *args, **kwargs: {"max_progress": 412})
+
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_called_once_with(MediaTypes.BOOK.value, book.media_id, Sources.OPENLIBRARY.value)
+        self.refresh(book)
+        self.assertEqual(book.total_pages, 412)
+        self.assertEqual(totals["filled"], 1)
+        self.assertEqual(totals["stamp_only"], 0)
+
     def test_apply_fills_and_stamps_and_a_rerun_makes_no_calls(self):
         film = self.item()
         fetch = self.patch_metadata(lambda *args, **kwargs: movie_metadata())
@@ -324,7 +338,7 @@ class ApplyTests(FillTestCase):
         found = self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id="101")
         missing = self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id="102")
         batch = self.patch_hardcover(
-            lambda media_ids: {"101": {"release_date": "2004-03-01", "genres": ["Fantasy"]}},
+            lambda media_ids: {"101": {"release_date": "2004-03-01", "genres": ["Fantasy"], "max_progress": 412}},
         )
         self.patch_metadata(AssertionError("books go through the batch"))
 
@@ -333,8 +347,10 @@ class ApplyTests(FillTestCase):
         batch.assert_called_once_with(["101", "102"])
         self.assertEqual((totals["filled"], totals["not_found"]), (1, 1))
         self.refresh(found, missing)
-        self.assertEqual((found.metadata_version, found.release_year), (CURRENT, 2004))
-        self.assertEqual(missing.metadata_version, CURRENT)
+        book_version = CURRENT_METADATA_VERSION[MediaTypes.BOOK.value]
+        self.assertEqual((found.metadata_version, found.release_year), (book_version, 2004))
+        self.assertEqual(found.total_pages, 412)
+        self.assertEqual(missing.metadata_version, book_version)
 
     def test_new_series_members_are_queued_for_ratings_once_on_commit(self):
         film = self.item()
