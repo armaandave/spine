@@ -1,0 +1,972 @@
+{
+  "data": [
+    {
+      "id": "894820464",
+      "type": "artists",
+      "attributes": {
+        "name": "21 Savage",
+        "url": "https://music.apple.com/us/artist/21-savage/894820464",
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Features221/v4/fe/d4/ad/fed4ad0b-4993-9637-fc3a-7ff5213d388d/mzl.hcwxwhyi.jpg/{w}x{h}bb.jpg",
+          "width": 3606,
+          "height": 3606
+        }
+      },
+      "views": {
+        "appears-on-albums": {
+          "attributes": {
+            "title": "Appears On"
+          },
+          "data": [
+            {
+              "id": "1875970760",
+              "type": "albums",
+              "attributes": {
+                "name": "ASAP (Remix) [feat. 21 Savage] - Single",
+                "artistName": "Mýa",
+                "url": "https://music.apple.com/us/album/asap-remix-feat-21-savage-single/1875970760",
+                "playParams": {
+                  "id": "1875970760",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2026-02-27",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "198704997709",
+                "genreNames": [
+                  "Hip-Hop",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "MYA PLANET 9",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a5/85/43/a5854391-5e19-4a83-3227-f4110894a471/198704997709_Cover.jpg/{w}x{h}bb.jpg",
+                  "width": 1400,
+                  "height": 1400
+                }
+              }
+            },
+            {
+              "id": "1819823216",
+              "type": "albums",
+              "attributes": {
+                "name": "30 Deep (feat. 21 Savage) - Single",
+                "artistName": "BabyDrill",
+                "url": "https://music.apple.com/us/album/30-deep-feat-21-savage-single/1819823216",
+                "playParams": {
+                  "id": "1819823216",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-05-21",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "196873284484",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Not specified",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/8c/e7/43/8ce74319-e42c-dfe5-4680-c26e6adc10bb/196873284484.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1731203935",
+              "type": "albums",
+              "attributes": {
+                "name": "Loophole (feat. 21 Savage) [Sped Up & Slowed Down] - Single",
+                "artistName": "Tee Grizzley",
+                "url": "https://music.apple.com/us/album/loophole-feat-21-savage-sped-up-slowed-down-single/1731203935",
+                "playParams": {
+                  "id": "1731203935",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-02-16",
+                "contentRating": "explicit",
+                "trackCount": 2,
+                "upc": "075679654366",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "R&B/Soul"
+                ],
+                "recordLabel": "300 Entertainment",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/43/59/20/43592052-8860-8d5f-db9a-f11c804ca310/075679654366.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1716961318",
+              "type": "albums",
+              "attributes": {
+                "name": "Good Good (Jax Jones Midnight Snacks Remix) [feat. 21 Savage] - Single",
+                "artistName": "USHER & Jax Jones",
+                "url": "https://music.apple.com/us/album/good-good-jax-jones-midnight-snacks-remix-feat-21-savage/1716961318",
+                "playParams": {
+                  "id": "1716961318",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-11-24",
+                "contentRating": "explicit",
+                "trackCount": 2,
+                "upc": "617513889895",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music",
+                  "Pop"
+                ],
+                "recordLabel": "mega/gamma.",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/19/1c/64/191c6425-9480-fd1e-750b-966b6ae08e78/617513889895_cover.jpg/{w}x{h}bb.jpg",
+                  "width": 3200,
+                  "height": 3200
+                }
+              }
+            },
+            {
+              "id": "1707579505",
+              "type": "albums",
+              "attributes": {
+                "name": "Another One of Me (feat. 21 Savage) - Single",
+                "artistName": "Diddy, The Weeknd & French Montana",
+                "url": "https://music.apple.com/us/album/another-one-of-me-feat-21-savage-single/1707579505",
+                "playParams": {
+                  "id": "1707579505",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-15",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "193436356039",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Love Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/b2/29/69/b2296987-8d2e-0c15-a4f9-99ba953a9805/193436356039_ANOTHERONEOFMEJeremyRice.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1693925277",
+              "type": "albums",
+              "attributes": {
+                "name": "Sittin' On Top Of The World (feat. 21 Savage) - Single",
+                "artistName": "Burna Boy",
+                "url": "https://music.apple.com/us/album/sittin-on-top-of-the-world-feat-21-savage-single/1693925277",
+                "playParams": {
+                  "id": "1693925277",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-06-22",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "075679677907",
+                "genreNames": [
+                  "Worldwide",
+                  "Music"
+                ],
+                "recordLabel": "Spaceship/ Bad Habit/Atlantic Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/e3/84/42/e38442df-dbb2-a304-ad18-515b8d358f56/075679677907.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1678567515",
+              "type": "albums",
+              "attributes": {
+                "name": "06 Gucci (feat. DaBaby & 21 Savage) - Single",
+                "artistName": "Gucci Mane",
+                "url": "https://music.apple.com/us/album/06-gucci-feat-dababy-21-savage-single/1678567515",
+                "playParams": {
+                  "id": "1678567515",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-03-31",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "075679699718",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "1017/Atlantic",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/c2/d4/ac/c2d4ac5f-c1f6-896b-e518-2c8c912962ce/075679699718.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1676527877",
+              "type": "albums",
+              "attributes": {
+                "name": "Creepin' (Remix) [feat. 21 Savage] - Single",
+                "artistName": "Metro Boomin, The Weeknd & Diddy",
+                "url": "https://music.apple.com/us/album/creepin-remix-feat-21-savage-single/1676527877",
+                "playParams": {
+                  "id": "1676527877",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-03-17",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00602455492616",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Republic Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/33/69/3d/33693dd2-350f-4b9d-b69b-7868aa18d14b/23UMGIM25960.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3969,
+                  "height": 3969
+                }
+              }
+            },
+            {
+              "id": "1626347712",
+              "type": "albums",
+              "attributes": {
+                "name": "Cash In Cash Out (feat. 21 Savage & Tyler, The Creator) - Single",
+                "artistName": "Pharrell Williams",
+                "url": "https://music.apple.com/us/album/cash-in-cash-out-feat-21-savage-tyler-the-creator-single/1626347712",
+                "playParams": {
+                  "id": "1626347712",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-06-10",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "196589206411",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Columbia",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/58/97/9e/58979e32-7aad-de90-58e4-bbfaa7090118/196589206411.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1613598434",
+              "type": "albums",
+              "attributes": {
+                "name": "Wheelie (feat. 21 Savage) - Single",
+                "artistName": "Latto",
+                "url": "https://music.apple.com/us/album/wheelie-feat-21-savage-single/1613598434",
+                "playParams": {
+                  "id": "1613598434",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-03-11",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "886449876822",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Streamcut/RCA Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/8a/6a/2a/8a6a2ac1-9b89-6b95-2dff-18aadd1c4212/886449876822.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/artists/894820464/view/appears-on-albums?offset=10"
+        },
+        "compilation-albums": {
+          "attributes": {
+            "title": "Compilations"
+          },
+          "data": []
+        },
+        "full-albums": {
+          "attributes": {
+            "title": "Albums"
+          },
+          "data": [
+            {
+              "id": "1859497204",
+              "type": "albums",
+              "attributes": {
+                "name": "WHAT HAPPENED TO THE STREETS?",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/what-happened-to-the-streets/1859497204",
+                "playParams": {
+                  "id": "1859497204",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-12-12",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196873915708",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/04/cf/73/04cf7356-aec2-2569-da3e-0d7ad9a3d40d/196873915708.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1729925845",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream (slowed down)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream-slowed-down/1729925845",
+                "playParams": {
+                  "id": "1729925845",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-13",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196871841481",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/79/69/9b/79699b44-d735-148d-52bf-3d7cd80b0fd8/196871841481.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1724494274",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream/1724494274",
+                "playParams": {
+                  "id": "1724494274",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-11",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196871714549",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/9a/5d/9f9a5d3b-c310-7c44-9506-1f198e390e5f/196871714549.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1729923680",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream (nightcore version)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream-nightcore-version/1729923680",
+                "playParams": {
+                  "id": "1729923680",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-09",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196871841511",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/c1/52/e6/c152e68f-a660-dd3c-2515-d1bdde660fca/196871841511.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1729916799",
+              "type": "albums",
+              "attributes": {
+                "name": "american dream (sped up)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/american-dream-sped-up/1729916799",
+                "playParams": {
+                  "id": "1729916799",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-01-09",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "196871841436",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/57/6b/3e/576b3ea2-3a79-be8d-6000-0953cf79b4d0/196871841436.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1652998965",
+              "type": "albums",
+              "attributes": {
+                "name": "Her Loss",
+                "artistName": "Drake & 21 Savage",
+                "url": "https://music.apple.com/us/album/her-loss/1652998965",
+                "playParams": {
+                  "id": "1652998965",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-11-04",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "00602448926067",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO / Republic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/c7/00/3f/c7003f83-3a43-1201-4aec-41be71ba64c5/22UM1IM29131.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1534209957",
+              "type": "albums",
+              "attributes": {
+                "name": "SAVAGE MODE II",
+                "artistName": "21 Savage & Metro Boomin",
+                "url": "https://music.apple.com/us/album/savage-mode-ii/1534209957",
+                "playParams": {
+                  "id": "1534209957",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-02",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "886448747697",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/03/3d/e5/033de513-4e28-5d06-e42b-4f2d5ba65dce/886448747697.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1447717361",
+              "type": "albums",
+              "attributes": {
+                "name": "i am > i was (Deluxe)",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/i-am-i-was-deluxe/1447717361",
+                "playParams": {
+                  "id": "1447717361",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2018-12-21",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "886447502792",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Dirty South",
+                  "Rap"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/8a/50/1c8a507f-4f04-07e1-8c34-ce656a851625/886447502792.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1303426031",
+              "type": "albums",
+              "attributes": {
+                "name": "Without Warning",
+                "artistName": "21 Savage, Offset & Metro Boomin",
+                "url": "https://music.apple.com/us/album/without-warning/1303426031",
+                "playParams": {
+                  "id": "1303426031",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-10-31",
+                "contentRating": "explicit",
+                "trackCount": 10,
+                "upc": "886446838526",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic/Quality Control Music/Motown/Capitol/Boominati Worldwide/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/24/25/f6/2425f66c-acda-ef4f-5682-ad543e088507/886446838526.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1254351754",
+              "type": "albums",
+              "attributes": {
+                "name": "Issa Album",
+                "artistName": "21 Savage",
+                "url": "https://music.apple.com/us/album/issa-album/1254351754",
+                "playParams": {
+                  "id": "1254351754",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2017-07-07",
+                "contentRating": "explicit",
+                "trackCount": 14,
+                "upc": "886446575674",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap",
+                  "Dirty South"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a8/f9/7e/a8f97eb8-d58c-b3d8-c4a3-359a53cd2b38/886446575674.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/artists/894820464/view/full-albums?offset=10"
+        },
+        "live-albums": {
+          "attributes": {
+            "title": "Live Albums"
+          },
+          "data": []
+        },
+        "singles": {
+          "attributes": {
+            "title": "Singles & EPs"
+          },
+          "data": [
+            {
+              "id": "6779378647",
+              "type": "albums",
+              "attributes": {
+                "name": "WTF GOIN - Single",
+                "artistName": "Belly Gang Kushington & 21 Savage",
+                "url": "https://music.apple.com/us/album/wtf-goin-single/6779378647",
+                "playParams": {
+                  "id": "6779378647",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2026-06-19",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "820233646390",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "2026 LVRN Records (Love Renaissance)/Belly Gang Kushington",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/14/d5/7b/14d57b74-7680-e414-2424-f03f1173da3a/820233646390.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "6774785682",
+              "type": "albums",
+              "attributes": {
+                "name": "Hostage - Single",
+                "artistName": "Latto & 21 Savage",
+                "url": "https://music.apple.com/us/album/hostage-single/6774785682",
+                "playParams": {
+                  "id": "6774785682",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2026-05-27",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "196874450949",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Streamcut/RCA Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/6d/67/dd/6d67dd14-9be7-34ac-5533-a4b2a0467706/196874450949.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1852653258",
+              "type": "albums",
+              "attributes": {
+                "name": "Get Yo Boy - Single",
+                "artistName": "Summer Walker & 21 Savage",
+                "url": "https://music.apple.com/us/album/get-yo-boy-single/1852653258",
+                "playParams": {
+                  "id": "1852653258",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2025-11-14",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00199957009737",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "LVRN/Interscope Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e1/db/fd/e1dbfda5-95d4-2482-7dd0-fb98d6e395b2/25UM1IM55562.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1822638048",
+              "type": "albums",
+              "attributes": {
+                "name": "Nookie (Pu$$y) [feat. Sexyy Red] - Single",
+                "artistName": "21 Lil Harold & 21 Savage",
+                "url": "https://music.apple.com/us/album/nookie-pu%24%24y-feat-sexyy-red-single/1822638048",
+                "playParams": {
+                  "id": "1822638048",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-06-26",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "196873128207",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Slaughter Gang, LLC/Epic Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/93/a5/e8/93a5e8ef-7a1d-6ba2-09ea-3891c70e88ff/196873128207.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1786697261",
+              "type": "albums",
+              "attributes": {
+                "name": "Outfit - Single",
+                "artistName": "Lil Baby & 21 Savage",
+                "url": "https://music.apple.com/us/album/outfit-single/1786697261",
+                "playParams": {
+                  "id": "1786697261",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-01-02",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00602475797166",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Quality Control Music/Motown Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/45/86/41/458641c6-b1c0-ed78-67ec-57cc8a4c424d/24UM1IM32309.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1697411120",
+              "type": "albums",
+              "attributes": {
+                "name": "Good Good - Single",
+                "artistName": "USHER, Summer Walker & 21 Savage",
+                "url": "https://music.apple.com/us/album/good-good-single/1697411120",
+                "playParams": {
+                  "id": "1697411120",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-08-04",
+                "contentRating": "explicit",
+                "trackCount": 2,
+                "upc": "617513684414",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music",
+                  "Pop"
+                ],
+                "recordLabel": "mega/gamma.",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/5d/4e/12/5d4e123d-e242-ab40-963a-c3f3be051168/617513684414_cover.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1657051517",
+              "type": "albums",
+              "attributes": {
+                "name": "One Mic, One Gun - Single",
+                "artistName": "Nas & 21 Savage",
+                "url": "https://music.apple.com/us/album/one-mic-one-gun-single/1657051517",
+                "playParams": {
+                  "id": "1657051517",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-11-29",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "197187569830",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "Mass Appeal",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/42/b6/f1/42b6f1bb-b745-2f6a-12cd-b203aa8ea945/197187569830.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1636051541",
+              "type": "albums",
+              "attributes": {
+                "name": "Slide (Remix) - Single",
+                "artistName": "Madmarcc & 21 Savage",
+                "url": "https://music.apple.com/us/album/slide-remix-single/1636051541",
+                "playParams": {
+                  "id": "1636051541",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-08-03",
+                "contentRating": "explicit",
+                "trackCount": 2,
+                "upc": "00842812166174",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Wolf Pack Global Music",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/fe/9d/f3/fe9df34a-0f26-26f6-d54d-035364c2701a/22UMGIM82012.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1633525701",
+              "type": "albums",
+              "attributes": {
+                "name": "New Money - Single",
+                "artistName": "Calvin Harris & 21 Savage",
+                "url": "https://music.apple.com/us/album/new-money-single/1633525701",
+                "playParams": {
+                  "id": "1633525701",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-07-01",
+                "contentRating": "clean",
+                "trackCount": 1,
+                "upc": "196589281203",
+                "genreNames": [
+                  "Dance",
+                  "Music",
+                  "Pop"
+                ],
+                "recordLabel": "Columbia",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/85/a3/e4/85a3e4d4-565b-d90a-4c89-8e891cb56345/196589281203.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1630295102",
+              "type": "albums",
+              "attributes": {
+                "name": "Run (feat. BIA) - Single",
+                "artistName": "YG, Tyga & 21 Savage",
+                "url": "https://music.apple.com/us/album/run-feat-bia-single/1630295102",
+                "playParams": {
+                  "id": "1630295102",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-06-24",
+                "contentRating": "explicit",
+                "trackCount": 1,
+                "upc": "00602448160805",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "YG PS/ Def Jam",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/da/19/b5/da19b59e-bf37-fe0f-103e-e1d923b78472/22UMGIM66485.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/artists/894820464/view/singles?offset=10"
+        }
+      }
+    }
+  ]
+}

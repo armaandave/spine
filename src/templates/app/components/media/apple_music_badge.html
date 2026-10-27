@@ -1,0 +1,16 @@
+{% load static %}
+
+{# Apple Music albums: Apple's badge, unaltered and linked to the album, and the credit #}
+<div class="flex items-center gap-4">
+  {% if media.source_url %}
+    <a href="{{ media.source_url }}"
+       target="_blank"
+       rel="noopener"
+       class="inline-block p-1">
+      <img src="{% static 'img/listen-on-apple-music.svg' %}"
+           alt="Listen on Apple Music"
+           style="height: 40px; width: auto;">
+    </a>
+  {% endif %}
+  <p class="text-xs text-gray-400">Data from Apple Music</p>
+</div>

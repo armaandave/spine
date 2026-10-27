@@ -1,0 +1,73 @@
+{
+  "data": [
+    {
+      "id": "1657869377",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos/1657869377",
+        "playParams": {
+          "id": "1657869377",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-12-09",
+        "contentRating": "explicit",
+        "trackCount": 23,
+        "upc": "196589564931",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1658650093",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos/1658650093",
+                "playParams": {
+                  "id": "1658650093",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-12-09",
+                "contentRating": "clean",
+                "trackCount": 23,
+                "upc": "196589564955",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/62/93/13/6293132e-20ff-67ab-3d1f-96bb6797a6ba/196589564955.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

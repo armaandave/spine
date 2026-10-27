@@ -10,6 +10,7 @@ nonisolated struct PersonRef: Codable, Hashable, Identifiable {
         case "hardcover": "Hardcover"
         case "openlibrary": "Open Library"
         case "musicbrainz": "MusicBrainz"
+        case "apple_music": "Apple Music"
         case "mal": "MyAnimeList"
         case "mangaupdates": "MangaUpdates"
         case "anilist": "AniList"

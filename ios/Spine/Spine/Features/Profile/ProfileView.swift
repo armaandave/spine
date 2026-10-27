@@ -17,9 +17,6 @@ final class ProfileViewModel {
     var hofErrorMessage: String?
     var savingHallOfFameSlots: Set<String> = []
 
-    /// Continue Watching's touch-and-hold menu on the user's own profile (TV-100, TV-701).
-    let continueWatching: ContinueWatchingTicks
-
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
@@ -39,12 +36,6 @@ final class ProfileViewModel {
         self.activityRepository = activityRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
-        continueWatching = ContinueWatchingTicks(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
-        // A write from the menu updates its card where it is; the rail re-sorts when it next loads (TV-701).
-        continueWatching.onUpdate = { [weak self] id, tracking in
-            guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingTracking(tracking, id: id, in: inProgressItems)
-        }
     }
 
     /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
@@ -101,17 +92,6 @@ final class ProfileViewModel {
 
     func reload() async {
         await load()
-    }
-
-    /// A write changed a title. Continue Watching's own tick or untick keeps its card where it is (TV-701) but still
-    /// reloads Recent Activity, where the tick is the day's progress (activity contract AC-4); any other write reloads
-    /// the profile.
-    func mediaStateDidChange(origin: UUID?) async {
-        if origin == continueWatching.changeOrigin {
-            await loadRecentActivity(generation: requestGeneration)
-        } else {
-            await reload()
-        }
     }
 
     func isSavingHallOfFameSlot(_ mediaType: String) -> Bool {
@@ -173,7 +153,6 @@ final class ProfileViewModel {
             guard generation == requestGeneration else { return }
             inProgressItems = items
             inProgressErrorMessage = nil
-            continueWatching.railDidLoad(items)
         } catch is CancellationError {
             return
         } catch {
@@ -661,21 +640,8 @@ struct ProfileView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                Swift.Task<Void, Never> {
-                    await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID)
-                }
-            }
-            .continueWatchingPresentations(
-                viewModel.continueWatching,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                onUnauthorized: onUnauthorized
-            )
-            .onChange(of: selectedRef) { _, ref in
-                // A page opening over the cards ends their undo (TV-701).
-                if ref != nil { viewModel.continueWatching.cardsLeftScreen() }
+            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
+                Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
                 MediaDetailView(
@@ -1295,14 +1261,7 @@ struct ProfileView: View {
                 } else if viewModel.inProgressItems.isEmpty {
                     EmptyProfileCard(title: "Nothing in progress yet", systemName: "play.circle")
                 } else {
-                    InProgressRail(
-                        items: viewModel.inProgressItems,
-                        pendingTick: { viewModel.continueWatching.pendingTicks[$0.id] },
-                        menu: { viewModel.continueWatching.menu(for: $0) },
-                        onCommand: { command, item in
-                            viewModel.continueWatching.perform(command, on: item) { selectedRef = $0 }
-                        }
-                    ) { item in
+                    InProgressRail(items: viewModel.inProgressItems) { item in
                         selectedRef = item.media.ref
                     }
                 }
@@ -2023,14 +1982,10 @@ private struct RecentActivityRail: View {
     }
 }
 
+/// The own profile's In progress rail: three to five posters that fit the width, each opening its title's page. Home's
+/// cards are where progress is updated (TV-701).
 private struct InProgressRail: View {
-    /// The height of the up-next line under a show (TV-701).
-    private static let upNextLineHeight: CGFloat = 18
-
     let items: [LibraryItem]
-    var pendingTick: (LibraryItem) -> TVEpisodeCoordinate? = { _ in nil }
-    var menu: (LibraryItem) -> [ContinueWatchingMenuItem] = { _ in [] }
-    var onCommand: (ContinueWatchingMenuItem.Command, LibraryItem) -> Void = { _, _ in }
     let action: (LibraryItem) -> Void
 
     var body: some View {
@@ -2040,12 +1995,7 @@ private struct InProgressRail: View {
             let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
             HStack(alignment: .top, spacing: spacing) {
                 ForEach(Array(items.prefix(visibleCount))) { item in
-                    InProgressPoster(
-                        item: item,
-                        pendingTick: pendingTick(item),
-                        menu: menu(item),
-                        onCommand: { onCommand($0, item) }
-                    ) {
+                    InProgressPoster(item: item) {
                         action(item)
                     }
                     .frame(width: itemWidth)
@@ -2053,51 +2003,26 @@ private struct InProgressRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: PosterSlot.profileRail.size.height + (showsUpNextLines ? Self.upNextLineHeight : 0))
-    }
-
-    private var showsUpNextLines: Bool {
-        items.contains { ContinueWatchingTicks.state(of: $0) != nil }
+        .frame(height: PosterSlot.profileRail.size.height)
     }
 }
 
 private struct InProgressPoster: View {
     let item: LibraryItem
-    /// A show's tick on its way from the card's menu.
-    var pendingTick: TVEpisodeCoordinate?
-    var menu: [ContinueWatchingMenuItem] = []
-    var onCommand: (ContinueWatchingMenuItem.Command) -> Void = { _ in }
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                MediaArtwork(
-                    url: item.media.displayPosterURL,
-                    title: item.media.title,
-                    slot: .profileRail,
-                    mediaType: item.media.ref.mediaType,
-                    orientation: item.media.posterOrientation
-                )
-
-                // A show in Continue Watching: its up next (TV-701), ticked from the card's menu.
-                if let tv = continueWatching {
-                    ContinueWatchingLine(tv: tv, pendingTick: pendingTick)
-                }
-            }
+            MediaArtwork(
+                url: item.media.displayPosterURL,
+                title: item.media.title,
+                slot: .profileRail,
+                mediaType: item.media.ref.mediaType,
+                orientation: item.media.posterOrientation
+            )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .continueWatchingMenu(media: item.media, tv: continueWatching, items: menu, perform: onCommand)
-    }
-
-    private var continueWatching: TVShowState? {
-        ContinueWatchingTicks.state(of: item)
-    }
-
-    private var accessibilityLabel: String {
-        guard let continueWatching else { return "View \(item.media.title)" }
-        return TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.title, tv: continueWatching)
+        .accessibilityLabel("View \(item.media.title)")
     }
 }
 
@@ -3324,6 +3249,12 @@ private struct SettingsAboutView: View {
                         SettingsCard {
                             VStack(spacing: 0) {
                                 SettingsCreditLink(
+                                    title: "Apple Music",
+                                    detail: "Music metadata and album artwork",
+                                    url: URL(string: "https://music.apple.com/")!
+                                )
+                                SettingsDivider()
+                                SettingsCreditLink(
                                     title: "MusicBrainz",
                                     detail: "Music metadata",
                                     url: URL(string: "https://musicbrainz.org/")!
@@ -3356,9 +3287,12 @@ private struct SettingsAboutView: View {
                         }
                     }
 
-                    Text("©2026 Valve Corporation. Steam and the Steam logo are trademarks or registered trademarks of Valve Corporation.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.38))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Apple and Apple Music are trademarks of Apple Inc., registered in the U.S. and other countries.")
+                        Text("©2026 Valve Corporation. Steam and the Steam logo are trademarks or registered trademarks of Valve Corporation.")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.38))
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)

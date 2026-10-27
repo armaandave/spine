@@ -14,7 +14,7 @@ from redis import Redis
 from requests.adapters import HTTPAdapter
 from requests_ratelimiter import LimiterAdapter, LimiterSession
 
-from app import request_timing
+from app import config, music_catalog, request_timing
 from app.models import MediaTypes, Sources
 from app.providers import (
     comicvine,
@@ -41,12 +41,19 @@ SUPPORTED_PERSON_SOURCES = (
     Sources.HARDCOVER.value,
     Sources.OPENLIBRARY.value,
     Sources.MUSICBRAINZ.value,
+    Sources.APPLE_MUSIC.value,
     Sources.MAL.value,
     Sources.MANGAUPDATES.value,
     "anilist",
 )
+# Music artists come from one of these, whichever the music catalog is.
+MUSIC_PERSON_SOURCES = (Sources.MUSICBRAINZ.value, Sources.APPLE_MUSIC.value)
 # Marks search results from a fallback provider while the usual one is rate limited.
 RATE_LIMIT_FALLBACK = "rate_limit_fallback"
+# Marks a detail page built from the saved Item while its provider fails.
+ITEM_FALLBACK = "item_fallback"
+# Marks a detail page missing a part its provider failed to answer for a moment.
+PARTIAL_PAGE = "partial_page"
 PERSON_SEARCH_CACHE_VERSION = "v1"
 PERSON_SEARCH_TTL = 60 * 60
 
@@ -397,8 +404,13 @@ def get_media_metadata(
     episode_number=None,
     *,
     include_music_enrichment=True,
+    include_music_related=False,
 ):
-    """Return the metadata for the selected media."""
+    """Return the metadata for the selected media.
+
+    ``include_music_related`` also fills an Apple Music album page's related sections,
+    which only album pages show.
+    """
     if source == Sources.MANUAL.value:
         if media_type == MediaTypes.SEASON.value:
             return manual.season(media_id, season_numbers[0])
@@ -439,13 +451,57 @@ def get_media_metadata(
             else openlibrary.book(media_id)
         ),
         MediaTypes.COMIC.value: lambda: comicvine.comic(media_id),
-        MediaTypes.MUSIC.value: lambda: (
-            musicbrainz.music(media_id)
-            if include_music_enrichment
-            else musicbrainz.music(media_id, include_enrichment=False)
+        MediaTypes.MUSIC.value: lambda: _music_album(
+            source,
+            media_id,
+            include_music_enrichment=include_music_enrichment,
+            include_related=include_music_related,
         ),
     }
     return metadata_retrievers[media_type]()
+
+
+def _music_album(source, album_id, *, include_music_enrichment, include_related=False):
+    """Return an album from the catalog it is stored under now.
+
+    An old MusicBrainz ref of an album that moved gets its Apple Music page, and the
+    payload names the canonical ``source`` and ``media_id``.
+    """
+    source, _, album_id = music_catalog.canonical_music_ref(
+        source,
+        MediaTypes.MUSIC.value,
+        album_id,
+    )
+    if source == Sources.APPLE_MUSIC.value:
+        return _apple_music_album(album_id, related=include_related)
+    if include_music_enrichment:
+        return musicbrainz.music(album_id)
+    return musicbrainz.music(album_id, include_enrichment=False)
+
+
+def _apple_music():
+    # Imported when used: apple_music's errors build on this module's, so importing it
+    # at the top would be circular.
+    from app.providers import apple_music  # noqa: PLC0415
+
+    return apple_music
+
+
+def _apple_music_album(album_id, *, related=False):
+    """Return an Apple Music album, or its saved Item's basic page while Apple fails.
+
+    Any Apple error counts (a bad key, no key, a takedown, a 429 or the pause after
+    one), so album pages, logging, tracking and the calendar keep working.
+    """
+    apple_music = _apple_music()
+    try:
+        return apple_music.music(album_id, related=related)
+    except ProviderAPIError as error:
+        saved = apple_music.saved_album(album_id)
+        if saved is None:
+            raise
+        logger.warning("Apple Music album %s opened from its Item: %s", album_id, error)
+        return saved
 
 
 def search(
@@ -528,10 +584,19 @@ def search(
             page,
             **search_options,
         ),
-        MediaTypes.MUSIC.value: lambda: musicbrainz.search(
-            query,
-            page,
-            **search_options,
+        # Apple Music's requests keep their own 10-second limit, so no timeout is passed.
+        MediaTypes.MUSIC.value: lambda: (
+            _apple_music().search_albums(
+                query,
+                page,
+                preserve_ranking_fields=preserve_ranking_fields,
+            )
+            if source == Sources.APPLE_MUSIC.value
+            else musicbrainz.search(
+                query,
+                page,
+                **search_options,
+            )
         ),
     }
     return search_handlers[media_type]()
@@ -598,7 +663,10 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
             return openlibrary.discover(page=page, page_size=page_size, genre=genre, year=year)
         return hardcover.discover(page=page, page_size=page_size, genre=genre, year=year)
 
-    if source == Sources.MUSICBRAINZ.value and media_type == MediaTypes.MUSIC.value:
+    if (
+        source in (Sources.MUSICBRAINZ.value, Sources.APPLE_MUSIC.value)
+        and media_type == MediaTypes.MUSIC.value
+    ):
         if year:
             msg = "year discovery is not supported for music."
             raise ValueError(msg)
@@ -608,6 +676,14 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
         if not str(genre or "").strip():
             msg = "genre is required for MusicBrainz discovery."
             raise ValueError(msg)
+        # Genre pages follow the catalog, so a genre chip on an older MusicBrainz
+        # album opens Apple Music's page once the catalog is Apple Music.
+        if source == Sources.APPLE_MUSIC.value or config.music_catalog_source() == Sources.APPLE_MUSIC:
+            data = _apple_music().discover(page=page, page_size=page_size, genre=genre)
+            if data.get("total_results"):
+                return data
+            # No album of the genre is linked to Apple Music yet, so the page shows
+            # MusicBrainz's genre page; the API puts its albums under their canonical refs.
         return musicbrainz.discover(page=page, page_size=page_size, genre=genre)
 
     msg = f"Discovery is not supported for media_type={media_type!r} and source={source!r}."
@@ -624,6 +700,8 @@ def get_person_page(source, person_id, *, page=None):
         return openlibrary.person_page(person_id)
     if source == Sources.MUSICBRAINZ.value:
         return musicbrainz.person_page(person_id)
+    if source == Sources.APPLE_MUSIC.value:
+        return _apple_music().person_page(person_id)
     if source == Sources.MAL.value:
         return mal.person_page(person_id)
     if source == Sources.MANGAUPDATES.value:
@@ -637,6 +715,19 @@ def get_person_page(source, person_id, *, page=None):
             else anilist.person_page(person_id)
         )
     raise_not_found_error(source, person_id, "person")
+
+
+def person_search_sources():
+    """Return the sources people search asks: all of them, with the catalog's artists only.
+
+    Read at call time, like the music catalog setting.
+    """
+    catalog = config.music_catalog_source().value
+    return tuple(
+        source
+        for source in SUPPORTED_PERSON_SOURCES
+        if source not in MUSIC_PERSON_SOURCES or source == catalog
+    )
 
 
 def search_people(source, query, *, limit=10, timeout=3):
@@ -659,6 +750,9 @@ def search_people(source, query, *, limit=10, timeout=3):
         from app.providers import anilist  # noqa: PLC0415
 
         results = anilist.search_people(query, limit=limit, timeout=timeout)
+    elif source == Sources.APPLE_MUSIC.value:
+        # Apple Music's requests keep their own 10-second limit.
+        results = _apple_music().search_people(query, limit=limit)
     else:
         handlers = {
             Sources.TMDB.value: tmdb.search_people,

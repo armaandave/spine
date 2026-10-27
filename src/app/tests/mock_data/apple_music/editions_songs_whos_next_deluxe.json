@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "id": "1440815872",
+      "type": "songs",
+      "attributes": {
+        "name": "Baba O'Riley",
+        "albumName": "Who's Next (Bonus Track Version)",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "GBUM71405411"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1440815866",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1440850320",
+      "type": "songs",
+      "attributes": {
+        "name": "Baba O'Riley",
+        "albumName": "Who's Next (Deluxe Edition)",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "GBUM71405411"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1440850317",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

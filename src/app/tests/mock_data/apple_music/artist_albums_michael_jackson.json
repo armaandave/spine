@@ -1,0 +1,488 @@
+{
+  "data": [
+    {
+      "id": "1883769984",
+      "type": "albums",
+      "attributes": {
+        "name": "Michael: Songs From The Motion Picture",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/michael-songs-from-the-motion-picture/1883769984",
+        "playParams": {
+          "id": "1883769984",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-04-24",
+        "trackCount": 13,
+        "upc": "196874193211",
+        "genreNames": [
+          "Soundtrack",
+          "Music"
+        ],
+        "recordLabel": "Legacy Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/54/f2/ef/54f2ef79-c668-8d6f-28cd-ae48c45009b7/196874193211.jpg/{w}x{h}bb.jpg",
+          "width": 3600,
+          "height": 3600
+        }
+      }
+    },
+    {
+      "id": "1641780996",
+      "type": "albums",
+      "attributes": {
+        "name": "Thriller 40",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/thriller-40/1641780996",
+        "playParams": {
+          "id": "1641780996",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-11-18",
+        "trackCount": 34,
+        "upc": "196589412409",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/73/8c/e1/738ce1db-60bd-eb25-0059-18778c1ca9b3/196589412409.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "850697616",
+      "type": "albums",
+      "attributes": {
+        "name": "XSCAPE (Deluxe)",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/xscape-deluxe/850697616",
+        "playParams": {
+          "id": "850697616",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2014-05-13",
+        "trackCount": 19,
+        "upc": "886444533171",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "R&B/Soul"
+        ],
+        "recordLabel": "Epic/MJJ",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/83/15/cc/8315ccdd-5a8d-8344-fa15-72e4cb64145e/886444533171.jpg/{w}x{h}bb.jpg",
+          "width": 5000,
+          "height": 5000
+        }
+      }
+    },
+    {
+      "id": "1443813805",
+      "type": "albums",
+      "attributes": {
+        "name": "The Complete Remix Suite",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/the-complete-remix-suite/1443813805",
+        "playParams": {
+          "id": "1443813805",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2013-01-01",
+        "trackCount": 20,
+        "upc": "00602537409730",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "UNI/MOTOWN",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/0a/9e/e4/0a9ee407-20e9-f351-0efa-4037a6db51e6/00602537409730.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1631592477",
+      "type": "albums",
+      "attributes": {
+        "name": "Michael",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/michael/1631592477",
+        "playParams": {
+          "id": "1631592477",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2010-12-10",
+        "trackCount": 7,
+        "upc": "196589271624",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/2f/3a/ed/2f3aed36-237b-22ec-752e-2a877ad06069/196589271624.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "215738269",
+      "type": "albums",
+      "attributes": {
+        "name": "Invincible",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/invincible/215738269",
+        "playParams": {
+          "id": "215738269",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2001-10-30",
+        "trackCount": 16,
+        "upc": "074646940020",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/dc/02/ef/dc02eff2-027c-a468-7d7b-aa9404e74f1a/mzi.mgytcnob.jpg/{w}x{h}bb.jpg",
+          "width": 600,
+          "height": 600
+        }
+      }
+    },
+    {
+      "id": "1894092998",
+      "type": "albums",
+      "attributes": {
+        "name": "HIStory Continues",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/history-continues/1894092998",
+        "playParams": {
+          "id": "1894092998",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "1995-06-20",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "196874287149",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/22/5a/fc/225afc09-e31f-89d6-af4a-01d0351384a5/196874287149.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "322847038",
+      "type": "albums",
+      "attributes": {
+        "name": "Dangerous",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/dangerous/322847038",
+        "playParams": {
+          "id": "322847038",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1991-11-26",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "884977307832",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/cf/68/f9/cf68f9d4-e395-9ced-3e50-8cf7f1f9d3e0/884977307832.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "559334659",
+      "type": "albums",
+      "attributes": {
+        "name": "Bad",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/bad/559334659",
+        "playParams": {
+          "id": "559334659",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1987-08-31",
+        "trackCount": 11,
+        "upc": "886443546264",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d5/5f/28/d55f28f4-610c-ee81-dc16-a01cda46bbc4/886443546264.jpg/{w}x{h}bb.jpg",
+          "width": 3698,
+          "height": 3698
+        }
+      }
+    },
+    {
+      "id": "551515699",
+      "type": "albums",
+      "attributes": {
+        "name": "Bad 25th Anniversary",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/bad-25th-anniversary/551515699",
+        "playParams": {
+          "id": "551515699",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1987-08-31",
+        "trackCount": 24,
+        "upc": "886443546240",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Features124/v4/0b/fb/b5/0bfbb592-e2ce-065a-a098-09f55cee22db/dj.iziroksp.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "269572838",
+      "type": "albums",
+      "attributes": {
+        "name": "Thriller",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/thriller/269572838",
+        "playParams": {
+          "id": "269572838",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1982-11-29",
+        "trackCount": 9,
+        "upc": "074643811224",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/32/4f/fd/324ffda2-9e51-8f6a-0c2d-c6fd2b41ac55/074643811224.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "186166282",
+      "type": "albums",
+      "attributes": {
+        "name": "Off the Wall",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/off-the-wall/186166282",
+        "playParams": {
+          "id": "186166282",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1979-08-10",
+        "trackCount": 10,
+        "upc": "074643574525",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "R&B/Soul",
+          "Disco"
+        ],
+        "recordLabel": "Epic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/0c/fe/a3/0cfea324-57c1-d530-5248-9bb591bbd7bf/074643574525.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1444039101",
+      "type": "albums",
+      "attributes": {
+        "name": "Forever, Michael",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/forever-michael/1444039101",
+        "playParams": {
+          "id": "1444039101",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1975-01-16",
+        "trackCount": 10,
+        "upc": "00602527297538",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "R&B/Soul",
+          "Motown",
+          "Soul",
+          "Rock",
+          "Pop/Rock"
+        ],
+        "recordLabel": "Motown",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/ce/48/1a/ce481ab5-54b1-a42e-9a04-9d15fe2b8a08/00602527297538.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1443284801",
+      "type": "albums",
+      "attributes": {
+        "name": "Music & Me",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/music-me/1443284801",
+        "playParams": {
+          "id": "1443284801",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1973-01-01",
+        "trackCount": 10,
+        "upc": "00602557120134",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "Rock",
+          "R&B/Soul",
+          "Soul",
+          "Pop/Rock",
+          "Soft Rock",
+          "Motown"
+        ],
+        "recordLabel": "UNI/MOTOWN",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/45/c2/df/45c2df73-4211-1cc8-195f-64dadcf47462/16UMGIM57131.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1442259586",
+      "type": "albums",
+      "attributes": {
+        "name": "Got to Be There (2013 Remaster)",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/got-to-be-there-2013-remaster/1442259586",
+        "playParams": {
+          "id": "1442259586",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1972-01-24",
+        "trackCount": 10,
+        "upc": "00602537386796",
+        "genreNames": [
+          "Motown",
+          "Music",
+          "R&B/Soul",
+          "Pop",
+          "Teen Pop",
+          "Soul"
+        ],
+        "recordLabel": "UNI/MOTOWN",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/6c/3c/86/6c3c860b-0e0a-f016-1adc-44d8e3ff0144/00602537386796.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1423,
+          "height": 1411
+        }
+      }
+    },
+    {
+      "id": "1443228603",
+      "type": "albums",
+      "attributes": {
+        "name": "Ben",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/ben/1443228603",
+        "playParams": {
+          "id": "1443228603",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1972-01-01",
+        "trackCount": 10,
+        "upc": "00602537386840",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "UNI/MOTOWN",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/8c/45/7d/8c457ddb-685c-ea0a-9d39-190a5e7e0e03/00602537386840.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1423,
+          "height": 1411
+        }
+      }
+    }
+  ]
+}

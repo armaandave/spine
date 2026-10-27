@@ -96,6 +96,10 @@ Wire-format rules:
 
 ## Representative release policy
 
+> This policy applies to MusicBrainz albums only. An Apple Music album
+> (`source: apple_music`) takes its tracklist from the Apple Music album itself; see
+> [apple-music-catalog.md](apple-music-catalog.md).
+
 Representative release selection supplies a stable, useful tracklist for the release-group-backed album page. It never changes the album's Spine identity.
 
 ### Eligibility and selection tiers

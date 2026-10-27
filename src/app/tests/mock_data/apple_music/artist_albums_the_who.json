@@ -1,0 +1,514 @@
+{
+  "data": [
+    {
+      "id": "6806207137",
+      "type": "albums",
+      "attributes": {
+        "name": "The Who By Numbers (Super Deluxe)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/the-who-by-numbers-super-deluxe/6806207137",
+        "playParams": {
+          "id": "6806207137",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2026-10-30",
+        "contentRating": "explicit",
+        "trackCount": 74,
+        "upc": "00881061069720",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/4e/d5/9b/4ed59b6d-3604-bba7-a2ad-ad019b7b1761/26UMGIM75135.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1837776033",
+      "type": "albums",
+      "attributes": {
+        "name": "Who Are You (Super Deluxe Edition)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/who-are-you-super-deluxe-edition/1837776033",
+        "playParams": {
+          "id": "1837776033",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-10-31",
+        "contentRating": "explicit",
+        "trackCount": 89,
+        "upc": "00602465820119",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/53/59/9e/53599e6f-7d65-b5a6-89f0-f5bff5e1969a/25UMGIM56685.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1533281257",
+      "type": "albums",
+      "attributes": {
+        "name": "WHO (Deluxe & Live at Kingston)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/who-deluxe-live-at-kingston/1533281257",
+        "playParams": {
+          "id": "1533281257",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-10-30",
+        "contentRating": "explicit",
+        "trackCount": 23,
+        "upc": "00602435129266",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "Polydor Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/70/58/95/70589507-b04a-f740-09b3-aeaecf3bb839/20UMGIM70813.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1442446196",
+      "type": "albums",
+      "attributes": {
+        "name": "Endless Wire (Deluxe Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/endless-wire-deluxe-version/1442446196",
+        "playParams": {
+          "id": "1442446196",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2006-01-01",
+        "contentRating": "explicit",
+        "trackCount": 28,
+        "upc": "00602517095205",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Pop",
+          "Pop/Rock",
+          "Hard Rock",
+          "Arena Rock",
+          "Prog-Rock/Art Rock"
+        ],
+        "recordLabel": "Polydor Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c3/9c/68/c39c6885-6d67-f037-a719-df211f2165ec/06UMGIM39213.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3777,
+          "height": 3777
+        }
+      }
+    },
+    {
+      "id": "1440853411",
+      "type": "albums",
+      "attributes": {
+        "name": "It's Hard",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/its-hard/1440853411",
+        "playParams": {
+          "id": "1440853411",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1982-01-01",
+        "trackCount": 16,
+        "upc": "00602537945665",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7e/de/d1/7eded170-9703-ae08-90c0-dd7c19c2bcac/00602537945665.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1443232083",
+      "type": "albums",
+      "attributes": {
+        "name": "Face Dances (Bonus Track Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/face-dances-bonus-track-version/1443232083",
+        "playParams": {
+          "id": "1443232083",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1981-03-16",
+        "contentRating": "explicit",
+        "trackCount": 13,
+        "upc": "00602537945627",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Pop",
+          "Pop/Rock",
+          "Rock & Roll",
+          "Arena Rock",
+          "Hard Rock"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/7f/30/51/7f3051c5-476a-9b94-fe1d-881139f6bd66/00602537945627.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1440856046",
+      "type": "albums",
+      "attributes": {
+        "name": "The Who By Numbers (Bonus Track Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/the-who-by-numbers-bonus-track-version/1440856046",
+        "playParams": {
+          "id": "1440856046",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1975-10-03",
+        "contentRating": "explicit",
+        "trackCount": 13,
+        "upc": "00602537945986",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Rock & Roll",
+          "Hard Rock",
+          "Pop",
+          "Pop/Rock",
+          "Arena Rock"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/08/a8/7a/08a87a4a-17bf-cbba-b3a3-36b27ad840a0/14UMGIM33739.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1440824353",
+      "type": "albums",
+      "attributes": {
+        "name": "Quadrophenia (2013 Remaster)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/quadrophenia-2013-remaster/1440824353",
+        "playParams": {
+          "id": "1440824353",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1973-10-26",
+        "contentRating": "explicit",
+        "trackCount": 17,
+        "upc": "00602537420490",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "British Invasion",
+          "Arena Rock",
+          "Prog-Rock/Art Rock",
+          "Hard Rock",
+          "Soundtrack",
+          "Soundtrack",
+          "Rock & Roll",
+          "Pop",
+          "Pop/Rock",
+          "Soft Rock"
+        ],
+        "recordLabel": "Polydor Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/cc/86/10/cc861044-0537-0de4-4389-dceec0c13b96/06UMGIM44799.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1698563957",
+      "type": "albums",
+      "attributes": {
+        "name": "Who’s Next : Life House (Super Deluxe)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/whos-next-life-house-super-deluxe/1698563957",
+        "playParams": {
+          "id": "1698563957",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1971-08-14",
+        "trackCount": 109,
+        "upc": "00602458323559",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/9c/01/10/9c01101e-8775-111e-a090-d6aa76ff1850/22UMGIM57055.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1706357665",
+      "type": "albums",
+      "attributes": {
+        "name": "Who's Next (Remastered 2022)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/whos-next-remastered-2022/1706357665",
+        "playParams": {
+          "id": "1706357665",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1971-08-14",
+        "trackCount": 9,
+        "upc": "00602458480429",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Arena Rock",
+          "Hard Rock"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/a5/e7/70/a5e7703c-4e30-da7a-a319-2d3caef42c0e/23UM1IM04872.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1461210985",
+      "type": "albums",
+      "attributes": {
+        "name": "Tommy",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/tommy/1461210985",
+        "playParams": {
+          "id": "1461210985",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1969-05-23",
+        "trackCount": 24,
+        "upc": "00602567803034",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/f3/22/7f/f3227fd3-758e-2728-7db2-25b29373c8ae/18UMGIM35635.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1550182151",
+      "type": "albums",
+      "attributes": {
+        "name": "The Who Sell Out (Super Deluxe)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/the-who-sell-out-super-deluxe/1550182151",
+        "playParams": {
+          "id": "1550182151",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1967-12-15",
+        "trackCount": 114,
+        "upc": "00602435471389",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/4e/bf/f8/4ebff81f-68fa-4cda-2f4d-5fdd4c211529/20UM1IM17971.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1442211308",
+      "type": "albums",
+      "attributes": {
+        "name": "A Quick One (Bonus Track Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/a-quick-one-bonus-track-version/1442211308",
+        "playParams": {
+          "id": "1442211308",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1966-12-09",
+        "trackCount": 18,
+        "upc": "00602537944156",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Hard Rock",
+          "British Invasion",
+          "Rock & Roll",
+          "Arena Rock",
+          "Pop",
+          "Pop/Rock"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/b9/2a/71/b92a71ba-9950-aa5b-cd65-a2dab1d647fc/00602537944156.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1443225834",
+      "type": "albums",
+      "attributes": {
+        "name": "A Quick One (Mono Version) [Bonus Track Version]",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/a-quick-one-mono-version-bonus-track-version/1443225834",
+        "playParams": {
+          "id": "1443225834",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1966-01-01",
+        "trackCount": 20,
+        "upc": "00602537945788",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/a8/35/80/a835805d-16f0-b294-23f0-fbaac54ebc20/00602537945788.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1443807171",
+      "type": "albums",
+      "attributes": {
+        "name": "The Who Sings My Generation (U.S. Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/the-who-sings-my-generation-u-s-version/1443807171",
+        "playParams": {
+          "id": "1443807171",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1965-04-25",
+        "trackCount": 12,
+        "upc": "00076743133022",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Arena Rock",
+          "Hard Rock",
+          "Pop",
+          "Pop/Rock",
+          "British Invasion",
+          "Rock & Roll"
+        ],
+        "recordLabel": "Geffen*",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/7b/40/de/7b40de18-d72a-8157-4a04-1f5d91b2f586/06UMGIM12606.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1443123252",
+      "type": "albums",
+      "attributes": {
+        "name": "My Generation (Stereo Version) [Deluxe Version]",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/my-generation-stereo-version-deluxe-version/1443123252",
+        "playParams": {
+          "id": "1443123252",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1965-01-01",
+        "trackCount": 30,
+        "upc": "00602537945863",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/29/04/54/29045471-99d1-4b95-052e-412ef4cbb6d9/00602537945863.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1772,
+          "height": 1772
+        }
+      }
+    }
+  ]
+}

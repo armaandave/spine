@@ -1,0 +1,767 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1704861945",
+          "type": "albums",
+          "attributes": {
+            "name": "Garth Brooks Hits - A Tribute Album",
+            "artistName": "Garth Brooks Tribute",
+            "url": "https://music.apple.com/us/album/garth-brooks-hits-a-tribute-album/1704861945",
+            "playParams": {
+              "id": "1704861945",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-08-29",
+            "trackCount": 8,
+            "upc": "055120922367",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Garth Brooks Tribute",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b2/47/20/b24720e4-e805-c3dd-b90f-a06be88e6357/055120922367.png/{w}x{h}bb.jpg",
+              "width": 1550,
+              "height": 1550
+            }
+          }
+        },
+        {
+          "id": "1759901222",
+          "type": "albums",
+          "attributes": {
+            "name": "Tribute To Garth Brooks: Greatest Hits, Vol. 2",
+            "artistName": "Country Music Ensemble",
+            "url": "https://music.apple.com/us/album/tribute-to-garth-brooks-greatest-hits-vol-2/1759901222",
+            "playParams": {
+              "id": "1759901222",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2024-07-30",
+            "trackCount": 10,
+            "upc": "9358782997874",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Country Recordings Inc.",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b8/44/c5/b844c593-0012-6825-d7f4-3a96777bcc60/MOBX0771.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "258642334",
+          "type": "albums",
+          "attributes": {
+            "name": "The Greatest Hits Collection",
+            "artistName": "Brooks & Dunn",
+            "url": "https://music.apple.com/us/album/the-greatest-hits-collection/258642334",
+            "playParams": {
+              "id": "258642334",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1997-09-16",
+            "trackCount": 19,
+            "upc": "078221885225",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Honky Tonk",
+              "Contemporary Country",
+              "Urban Cowboy"
+            ],
+            "recordLabel": "Arista Nashville",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a4/db/c5/a4dbc5c7-bc69-931a-0e46-c6e11e86e003/078221885225.jpg/{w}x{h}bb.jpg",
+              "width": 2400,
+              "height": 2400
+            }
+          }
+        },
+        {
+          "id": "1725757445",
+          "type": "albums",
+          "attributes": {
+            "name": "Tribute to Garth Brooks: Greatest Hits, Vol. 1",
+            "artistName": "Country Music Ensemble",
+            "url": "https://music.apple.com/us/album/tribute-to-garth-brooks-greatest-hits-vol-1/1725757445",
+            "playParams": {
+              "id": "1725757445",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2024-01-12",
+            "trackCount": 10,
+            "upc": "9358782787932",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Country Recordings Inc.",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/5e/90/be/5e90bed5-a686-35e0-22e5-a5a628a030e7/MBXP2193.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1452801021",
+          "type": "albums",
+          "attributes": {
+            "name": "35 Biggest Hits",
+            "artistName": "Toby Keith",
+            "url": "https://music.apple.com/us/album/35-biggest-hits/1452801021",
+            "playParams": {
+              "id": "1452801021",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2008-05-06",
+            "trackCount": 35,
+            "upc": "00602517524224",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Urban Cowboy",
+              "Contemporary Country"
+            ],
+            "recordLabel": "Show Dog Nashville",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/e8/1b/44/e81b44cc-9a2f-9960-1a99-e6eb4389a113/08UMGIM03456.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 1414,
+              "height": 1414
+            }
+          }
+        },
+        {
+          "id": "1490955157",
+          "type": "albums",
+          "attributes": {
+            "name": "Tribute to Garth Brooks: Greatest Hits, Vol. 3",
+            "artistName": "Country Music Ensemble",
+            "url": "https://music.apple.com/us/album/tribute-to-garth-brooks-greatest-hits-vol-3/1490955157",
+            "playParams": {
+              "id": "1490955157",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2019-12-09",
+            "trackCount": 14,
+            "upc": "9355974061177",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Country Recordings Inc.",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/e0/8c/f2/e08cf2e4-456d-17b9-f564-1c9d22effc7f/XELMOB20329.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "80605058",
+          "type": "albums",
+          "attributes": {
+            "name": "Greatest Hits",
+            "artistName": "Tim McGraw",
+            "url": "https://music.apple.com/us/album/greatest-hits/80605058",
+            "playParams": {
+              "id": "80605058",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2000-11-21",
+            "trackCount": 15,
+            "upc": "715187797826",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Rock",
+              "Contemporary Country",
+              "Honky Tonk",
+              "Pop",
+              "Adult Contemporary",
+              "Urban Cowboy"
+            ],
+            "recordLabel": "Curb Records",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/20/fc/a7/20fca733-8677-ba96-05bf-7f3bc2b805de/mzi.ckseeycn.tif/{w}x{h}bb.jpg",
+              "width": 1600,
+              "height": 1596
+            }
+          }
+        },
+        {
+          "id": "1440879556",
+          "type": "albums",
+          "attributes": {
+            "name": "Greatest Hits",
+            "artistName": "Bob Seger & The Silver Bullet Band",
+            "url": "https://music.apple.com/us/album/greatest-hits/1440879556",
+            "playParams": {
+              "id": "1440879556",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1994-10-25",
+            "trackCount": 14,
+            "upc": "00602557747065",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Arena Rock",
+              "Rock & Roll",
+              "Hard Rock"
+            ],
+            "recordLabel": "Bob Seger",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/84/45/e9/8445e9f8-e151-82e3-de80-89fe96356103/17UM1IM03512.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1720643868",
+          "type": "albums",
+          "attributes": {
+            "name": "Garth Brooks Hits 2 - A Tribute Album",
+            "artistName": "Garth Brooks Tribute",
+            "url": "https://music.apple.com/us/album/garth-brooks-hits-2-a-tribute-album/1720643868",
+            "playParams": {
+              "id": "1720643868",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-12-10",
+            "trackCount": 8,
+            "upc": "064837284798",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Garth Brooks Tribute",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1f/27/d0/1f27d0dc-4d43-e084-4ec0-0febaef10bdd/064837284798.png/{w}x{h}bb.jpg",
+              "width": 1551,
+              "height": 1551
+            }
+          }
+        },
+        {
+          "id": "304937050",
+          "type": "albums",
+          "attributes": {
+            "name": "The Dance (Live)",
+            "artistName": "Fleetwood Mac",
+            "url": "https://music.apple.com/us/album/the-dance-live/304937050",
+            "playParams": {
+              "id": "304937050",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1997-08-19",
+            "trackCount": 17,
+            "upc": "093624670261",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Soft Rock",
+              "Arena Rock",
+              "Pop/Rock"
+            ],
+            "recordLabel": "Warner Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/0c/73/fc/0c73fcc7-0d61-d994-af89-2909a39ea097/mzi.bfzyhzca.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "724385566",
+          "type": "albums",
+          "attributes": {
+            "name": "Chris LeDoux: The Ultimate Collection",
+            "artistName": "Chris LeDoux",
+            "url": "https://music.apple.com/us/album/chris-ledoux-the-ultimate-collection/724385566",
+            "playParams": {
+              "id": "724385566",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2006-01-01",
+            "trackCount": 26,
+            "upc": "00094638289753",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Urban Cowboy",
+              "Contemporary Country"
+            ],
+            "recordLabel": "Capitol Nashville",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/34/f0/5f/34f05fc6-c570-6ffc-59ad-3284f01ed704/13UABIM59320.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1650332795",
+          "type": "albums",
+          "attributes": {
+            "name": "Garth Brooks - Single",
+            "artistName": "Tennessee Jet",
+            "url": "https://music.apple.com/us/album/garth-brooks-single/1650332795",
+            "playParams": {
+              "id": "1650332795",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-11-11",
+            "trackCount": 1,
+            "upc": "197273013001",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Singer/Songwriter"
+            ],
+            "recordLabel": "Tennessee Jet Music",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/0f/cd/44/0fcd445d-c568-5c04-cee1-be3982ce9f13/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "967300729",
+          "type": "albums",
+          "attributes": {
+            "name": "Playin' garth Brooks",
+            "artistName": "JJS Allstars",
+            "url": "https://music.apple.com/us/album/playin-garth-brooks/967300729",
+            "playParams": {
+              "id": "967300729",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2015-03-03",
+            "trackCount": 9,
+            "upc": "859714231657",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Singer/Songwriter"
+            ],
+            "recordLabel": "Boxov Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/28/99/f3/2899f371-faba-32ee-e0b2-f87100453d82/859714231657_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1836051401",
+          "type": "albums",
+          "attributes": {
+            "name": "Shallow - Single",
+            "artistName": "Trisha Yearwood & Garth Brooks",
+            "url": "https://music.apple.com/us/album/shallow-single/1836051401",
+            "playParams": {
+              "id": "1836051401",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-02-05",
+            "trackCount": 1,
+            "upc": "850001590136",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Gwendolyn Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/15/c9/8d/15c98d43-047a-46d4-9c01-6e04e0a69001/850001590136_Cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1769097607",
+          "type": "albums",
+          "attributes": {
+            "name": "Apple Music Nashville Sessions",
+            "artistName": "Koe Wetzel",
+            "url": "https://music.apple.com/us/album/apple-music-nashville-sessions/1769097607",
+            "playParams": {
+              "id": "1769097607",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-10-01",
+            "trackCount": 3,
+            "upc": "196872465945",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/cd/07/62/cd076232-20f8-354b-2b04-2d84ea6f5176/196872465945.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "422876728",
+          "type": "albums",
+          "attributes": {
+            "name": "Live At Shea Stadium",
+            "artistName": "Billy Joel",
+            "url": "https://music.apple.com/us/album/live-at-shea-stadium/422876728",
+            "playParams": {
+              "id": "422876728",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2011-03-11",
+            "trackCount": 25,
+            "upc": "884977882858",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Pop/Rock"
+            ],
+            "recordLabel": "Columbia/Legacy",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/a1/4b/f7/a14bf746-bf45-d729-f6dc-740f00d67b27/dj.mxtqktim.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1576456929",
+          "type": "albums",
+          "attributes": {
+            "name": "Friends in Low Places (feat. Robert Ray, Clay Hollis & Jerry DeLeon & Southbound) - Single",
+            "artistName": "La Energía Norteña",
+            "url": "https://music.apple.com/us/album/friends-in-low-places-feat-robert-ray-clay-hollis-jerry/1576456929",
+            "playParams": {
+              "id": "1576456929",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-07-30",
+            "trackCount": 1,
+            "upc": "196292136388",
+            "genreNames": [
+              "Música Mexicana",
+              "Music",
+              "Latin"
+            ],
+            "recordLabel": "Azteca Records, LLC",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b9/1b/60/b91b6031-a7d9-63d5-62bc-7b6d09c8e311/196292136388.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "544556268",
+          "type": "albums",
+          "attributes": {
+            "name": "Garth Brook's 10 #1's Tribute",
+            "artistName": "The Mick Lloyd Connection",
+            "url": "https://music.apple.com/us/album/garth-brooks-10-1s-tribute/544556268",
+            "playParams": {
+              "id": "544556268",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2012-07-04",
+            "trackCount": 10,
+            "upc": "8718444828006",
+            "genreNames": [
+              "Tribute",
+              "Music",
+              "Pop",
+              "Country"
+            ],
+            "recordLabel": "Mick Lloyd Productions",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/28/b4/12/28b4126f-efba-aa8b-a357-985aefc2ce44/Cover.jpg/{w}x{h}bb.jpg",
+              "width": 620,
+              "height": 620
+            }
+          }
+        },
+        {
+          "id": "567769498",
+          "type": "albums",
+          "attributes": {
+            "name": "Robert Mizzell Sings Garth Brooks",
+            "artistName": "Robert Mizzell",
+            "url": "https://music.apple.com/us/album/robert-mizzell-sings-garth-brooks/567769498",
+            "playParams": {
+              "id": "567769498",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2012-09-21",
+            "trackCount": 10,
+            "upc": "5055610753063",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Cajun Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/90/7d/51/907d515a-9f01-5fa9-183c-6454b522d1b4/cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1179159943",
+          "type": "albums",
+          "attributes": {
+            "name": "The Dance - Single",
+            "artistName": "Struggle Jennings",
+            "url": "https://music.apple.com/us/album/the-dance-single/1179159943",
+            "playParams": {
+              "id": "1179159943",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2016-11-20",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "859718881117",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Country"
+            ],
+            "recordLabel": "Massbaum Entertainment LLC",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/00/f3/3e/00f33e23-0cad-152a-4294-4063731ee13a/859718881117_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1819828130",
+          "type": "albums",
+          "attributes": {
+            "name": "Anything Goes (Expanded Edition)",
+            "artistName": "Florida Georgia Line",
+            "url": "https://music.apple.com/us/album/anything-goes-expanded-edition/1819828130",
+            "playParams": {
+              "id": "1819828130",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2014-10-14",
+            "trackCount": 27,
+            "upc": "00843930135929",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "BMX",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/fe/2a/a0/fe2aa078-70cc-3845-c348-4529a24f8c6b/25BMR0006716.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1816937810",
+          "type": "albums",
+          "attributes": {
+            "name": "The River - EP",
+            "artistName": "Friends in Low Places",
+            "url": "https://music.apple.com/us/album/the-river-ep/1816937810",
+            "playParams": {
+              "id": "1816937810",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-03-05",
+            "trackCount": 6,
+            "upc": "5057801992336",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Dance"
+            ],
+            "recordLabel": "Ostereo",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/06/b9/6d/06b96d7a-93e2-6c35-2f43-da4e0e4a15f8/5057801992336.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "991351324",
+          "type": "albums",
+          "attributes": {
+            "name": "Pickin' on Garth Brooks - A Tribute",
+            "artistName": "Pickin' On Series",
+            "url": "https://music.apple.com/us/album/pickin-on-garth-brooks-a-tribute/991351324",
+            "playParams": {
+              "id": "991351324",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2000-01-25",
+            "trackCount": 16,
+            "upc": "027297851924",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Rock",
+              "Contemporary Country",
+              "Bluegrass"
+            ],
+            "recordLabel": "CMH Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/43/f4/ef/43f4ef76-3c7d-6af2-f345-aadce8b92e73/8519_300dpi.jpg/{w}x{h}bb.jpg",
+              "width": 1399,
+              "height": 1399
+            }
+          }
+        },
+        {
+          "id": "155736570",
+          "type": "albums",
+          "attributes": {
+            "name": "New Friends In Low Places: A Tribute to Garth Brooks",
+            "artistName": "Various Artists",
+            "url": "https://music.apple.com/us/album/new-friends-in-low-places-a-tribute-to-garth-brooks/155736570",
+            "playParams": {
+              "id": "155736570",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1999",
+            "trackCount": 12,
+            "upc": "803680099957",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Purple Pyramid",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/87/a8/7b/mzi.eshpntur.jpg/{w}x{h}bb.jpg",
+              "width": 648,
+              "height": 648
+            }
+          }
+        },
+        {
+          "id": "1436740094",
+          "type": "albums",
+          "attributes": {
+            "name": "Acoustic Tribute to Garth Brooks (Instrumental)",
+            "artistName": "Guitar Tribute Players",
+            "url": "https://music.apple.com/us/album/acoustic-tribute-to-garth-brooks-instrumental/1436740094",
+            "playParams": {
+              "id": "1436740094",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-10-19",
+            "trackCount": 13,
+            "upc": "707541088237",
+            "genreNames": [
+              "Instrumental",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "CC Entertainment",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/38/77/21/38772137-93b2-0519-5908-d9b98532fab3/707541088237.jpg/{w}x{h}bb.jpg",
+              "width": 1448,
+              "height": 1448
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=Garth+Brooks+No+Fences&types=albums"
+    }
+  }
+}

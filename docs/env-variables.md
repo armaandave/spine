@@ -29,6 +29,7 @@ This page outlines the environment variables used in the YamTrack project.
 | `APPLE_MUSIC_TEAM_ID` | Apple Developer Team ID that owns the Apple Music (MusicKit) key. The server signs its own short-lived Apple Music API developer tokens with the key; nothing calls Apple Music while any of the three key settings is empty. |
 | `APPLE_MUSIC_KEY_ID` | Key ID of the Apple Music (MusicKit) private key. |
 | `APPLE_MUSIC_PRIVATE_KEY` | The Apple Music private key: the `.p8` file's contents, base64-encoded on one line (`base64 < AuthKey_<KEY_ID>.p8 \| tr -d '\n'`). Server-side only; keep it out of the iOS app, logs and Git. The storefront comes from `MUSIC_DEFAULT_MARKET`. |
+| `MUSIC_CATALOG_SOURCE` | Where new music albums come from: `apple_music`, or anything else for MusicBrainz. Defaults to `musicbrainz`. MusicBrainz albums already in Spine keep working either way. Must match in web and worker processes. |
 
 ## Media Import
 

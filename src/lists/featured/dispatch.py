@@ -12,6 +12,8 @@ from celery import shared_task
 from django.db.models import Q
 from django.utils import timezone
 
+from app.models import MediaTypes
+from app.providers import apple_music, services
 from lists.featured import engine, order, ratings, registry
 from lists.models import CustomList, FeaturedListSync
 
@@ -27,6 +29,30 @@ BACKOFF_BASE = timedelta(minutes=5)
 BACKOFF_MAX = timedelta(hours=24)
 LEASE_GRACE = timedelta(seconds=120)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+# While the music data move runs (manage.py music_catalog apply), music lists aren't
+# synced, so no sync makes an Item for an album that is moving. The flag lives in
+# Redis and ends on its own, in case a run is killed.
+MUSIC_PAUSE_KEY = "featured:music_paused"
+MUSIC_PAUSE = timedelta(hours=6)
+
+
+def pause_music_lists(duration=MUSIC_PAUSE):
+    """Stop dispatching music lists for ``duration``, or until ``resume_music_lists``."""
+    services.redis_db.set(apple_music.redis_key(MUSIC_PAUSE_KEY), 1, ex=int(duration.total_seconds()))
+
+
+def resume_music_lists():
+    """Dispatch music lists again."""
+    services.redis_db.delete(apple_music.redis_key(MUSIC_PAUSE_KEY))
+
+
+def music_lists_paused():
+    """Return whether music lists are paused."""
+    return bool(services.redis_db.exists(apple_music.redis_key(MUSIC_PAUSE_KEY)))
+
+
+def _is_music(definition):
+    return MediaTypes.MUSIC.value in definition.media_types
 
 
 @dataclass(frozen=True)
@@ -158,7 +184,7 @@ def retire_orphans(definitions):
 
 def dispatch(now=None):
     """Retire orphaned lists, trickle new Items' ratings, then lease and queue every
-    due definition; return the queued keys.
+    due definition; return the queued keys. Music lists wait while they are paused.
     """
     now = now or timezone.now()
     definitions = registry.all_definitions()
@@ -166,8 +192,10 @@ def dispatch(now=None):
     ratings.drain()
     syncs = {sync.key: sync for sync in FeaturedListSync.objects.defer(*engine.LARGE_FIELDS)}
     hashes = {definition.key: engine.compute_hash(definition) for definition in definitions}
+    paused = music_lists_paused()
+    runnable = [definition for definition in definitions if not (paused and _is_music(definition))]
     queued = []
-    for definition in plan(definitions, syncs, now, hashes=hashes):
+    for definition in plan(runnable, syncs, now, hashes=hashes):
         lease = lease_for(definition)
         sync = syncs.get(definition.key) or FeaturedListSync.objects.get_or_create(key=definition.key)[0]
         acquired = (
@@ -212,6 +240,11 @@ def sync_featured_list(key, dispatched_at=None, lease_until=None):
     if definition is None:
         FeaturedListSync.objects.filter(key=key).update(lease_until=None)
         return {"key": key, "status": "unknown"}
+    if _is_music(definition) and music_lists_paused():
+        # Queued before the pause: give its lease back for a sync after it.
+        leased = {"lease_until": datetime.fromisoformat(lease_until)} if lease_until else {}
+        FeaturedListSync.objects.filter(key=key, **leased).update(lease_until=None)
+        return {"key": key, "status": "paused", "message": "Music lists are paused while albums move."}
     sync = FeaturedListSync.objects.filter(key=key).first()
     if dispatched_at and sync is not None and sync.last_attempt_at:
         if sync.last_attempt_at > datetime.fromisoformat(dispatched_at):

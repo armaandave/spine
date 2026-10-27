@@ -824,8 +824,8 @@ struct SearchResultRow: View {
                     MediaTypeChip(mediaType: result.ref.mediaType)
                 }
 
-                if let subtitle = result.searchResultSubtitle {
-                    Text(subtitle)
+                if let subtitle {
+                    subtitle
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -849,6 +849,14 @@ struct SearchResultRow: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Explicit albums lead their subtitle with Apple Music's "E", as Apple Music's own lists do.
+    private var subtitle: Text? {
+        let text = result.searchResultSubtitle
+        guard MusicContentRating.isExplicit(result.contentRating) else { return text.map { Text($0) } }
+        // VoiceOver pauses after "Explicit" instead of running it into the artist's name.
+        return text.map { Text("\(Text.explicitBadge) \($0)").accessibilityLabel("Explicit, \($0)") } ?? Text.explicitBadge
+    }
+
     @ViewBuilder
     private var accessoryView: some View {
         switch accessory {
@@ -865,6 +873,20 @@ struct SearchResultRow: View {
         }
     }
 
+}
+
+extension Text {
+    /// Apple Music's "E" for explicit albums and songs, set inline with the text beside it.
+    static var explicitBadge: Text {
+        Text(Image(systemName: "e.square.fill")).accessibilityLabel("Explicit")
+    }
+
+    /// A song page's title followed by the "E", in the title's colour. The title is a fixed 33 pt, so
+    /// the badge is a fixed size too and stays in proportion at every text size.
+    static func explicitPageTitle(_ title: String) -> Text {
+        Text("\(title) \(explicitBadge.font(.system(size: 20, weight: .semibold)))")
+            .accessibilityLabel("\(title), Explicit")
+    }
 }
 
 struct MediaTypeChip: View {

@@ -1,0 +1,26 @@
+{
+  "releases": [
+    {
+      "id": "a2451561-f09d-44f5-85d2-7de353ef52b5",
+      "score": 100,
+      "title": "SOS Deluxe: LANA",
+      "status": "Official",
+      "barcode": "196872790276",
+      "artist-credit": [
+        {
+          "name": "SZA",
+          "artist": {
+            "id": "272989c8-5535-492d-a25c-9f58803e027f",
+            "name": "SZA",
+            "sort-name": "SZA"
+          }
+        }
+      ],
+      "release-group": {
+        "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+        "title": "SOS",
+        "primary-type": "Album"
+      }
+    }
+  ]
+}

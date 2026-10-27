@@ -101,6 +101,8 @@ Run from the feature worktree unless a step says otherwise.
    - If the ship carries a one-time data step ("One-time data steps", below), run it
      now. The user's ship request covers it, except a part the step says waits for
      the user's request.
+   - Once music albums have moved to Apple Music, one moved album's page answers 200
+     with `ref.source` `apple_music`.
 9. **Build,** only if the push changed the iOS app; otherwise skip to step 10. If
    `AGENTS.md` ("App Store Connect") has no Spine app ID yet, TestFlight isn't set up:
    skip this step and say so.
@@ -206,6 +208,12 @@ Remove this section once the production fill has finished.
   then verify (Workflow A, step 8). Production now runs older code than `myapp-main`,
   so fix forward on a branch, or `git revert -m 1 <merge sha>` and push, before the
   next push redeploys the bad code.
+- **Music albums moved to Apple Music.** Once `scripts/music-catalog-production.sh apply`
+  has moved any album, a commit without that script (from before the Apple Music
+  catalog's step 2) sends the moved albums' Apple Music IDs to MusicBrainz and breaks
+  their pages. Don't deploy such a commit until the fallback has run
+  (`docs/music/apple-music-catalog.md`, "Falling back to MusicBrainz": the catalog
+  setting back to MusicBrainz, then `revert --all`); otherwise fix forward.
 - **Database.** A rollback doesn't undo migrations. Additive ones are harmless to leave
   in place. Undoing one means `python manage.py migrate <app> <previous>` inside the
   container, if it's reversible, or restoring its

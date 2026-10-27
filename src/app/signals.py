@@ -17,7 +17,7 @@ from app.tasks import enrich_external_ratings, update_daily_statistics
 
 logger = logging.getLogger(__name__)
 # Frequent bookkeeping tasks with ignore_result=True: no PENDING TaskResult rows.
-RESULTLESS_TASKS = frozenset({"Dispatch featured lists", "Fill item metadata"})
+RESULTLESS_TASKS = frozenset({"Dispatch featured lists", "Fill Apple album bridges", "Fill item metadata"})
 
 
 @receiver(post_save, sender=Item)

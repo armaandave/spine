@@ -1,0 +1,1139 @@
+{
+  "data": [
+    {
+      "id": "1794644675",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+        "playParams": {
+          "id": "1794644675",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 42,
+        "upc": "196872790276",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1794644676",
+              "type": "songs",
+              "attributes": {
+                "name": "No More Hiding",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USRC12403823",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru & Serge Andre Georges Bulot",
+                "durationInMillis": 162663,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/no-more-hiding/1794644675?i=1794644676"
+              }
+            },
+            {
+              "id": "1794644678",
+              "type": "songs",
+              "attributes": {
+                "name": "What Do I Do",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USRC12403824",
+                "artistName": "SZA",
+                "composerName": "SZA, Benjamin Levin, Carter Lang, Cody Fayne & Magnus August Høiberg",
+                "durationInMillis": 167448,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/what-do-i-do/1794644675?i=1794644678"
+              }
+            },
+            {
+              "id": "1794644679",
+              "type": "songs",
+              "attributes": {
+                "name": "30 For 30 (with Kendrick Lamar)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USRC12403853",
+                "artistName": "SZA",
+                "composerName": "Kendrick Lamar, SZA, Anthony Jermaine White, Michael Uzowuru, Robert DeBarge & Gregory Williams",
+                "durationInMillis": 278277,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/30-for-30-with-kendrick-lamar/1794644675?i=1794644679"
+              }
+            },
+            {
+              "id": "1794644680",
+              "type": "songs",
+              "attributes": {
+                "name": "Diamond Boy (DTM)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USRC12403825",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru, Carter Lang, Tyran Donaldson, Declan Miers, Jared Solomon & Cody Fayne",
+                "durationInMillis": 217523,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/diamond-boy-dtm/1794644675?i=1794644680"
+              }
+            },
+            {
+              "id": "1794644681",
+              "type": "songs",
+              "attributes": {
+                "name": "BMF",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USRC12403826",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Blake Slatkin, Omer Fedi, Antônio Carlos Jobim & Vinicius De Moraes",
+                "durationInMillis": 180747,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/bmf/1794644675?i=1794644681"
+              }
+            },
+            {
+              "id": "1794644683",
+              "type": "songs",
+              "attributes": {
+                "name": "Scorsese Baby Daddy",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USRC12403827",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru & Tyler Johnson",
+                "durationInMillis": 153912,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/scorsese-baby-daddy/1794644675?i=1794644683"
+              }
+            },
+            {
+              "id": "1794644685",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Me 4 Me",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USRC12403828",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel, Carter Lang & Nick Lee",
+                "durationInMillis": 185749,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/love-me-4-me/1794644675?i=1794644685"
+              }
+            },
+            {
+              "id": "1794644686",
+              "type": "songs",
+              "attributes": {
+                "name": "Chill Baby",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USRC12403829",
+                "artistName": "SZA",
+                "composerName": "SZA, Miles McCollum, Calvin Dickinson, Cade Blodgett, Leonhard Sitz, Jeremiah Raisen & Julian Friedl",
+                "durationInMillis": 140637,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/chill-baby/1794644675?i=1794644686"
+              }
+            },
+            {
+              "id": "1794644688",
+              "type": "songs",
+              "attributes": {
+                "name": "My Turn",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USRC12403830",
+                "artistName": "SZA",
+                "composerName": "SZA, Cody Fayne, Rob Bisel & Dylan Neustadter",
+                "durationInMillis": 177242,
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/my-turn/1794644675?i=1794644688"
+              }
+            },
+            {
+              "id": "1794644993",
+              "type": "songs",
+              "attributes": {
+                "name": "Crybaby",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USRC12403847",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru, Cody Fayne, Carter Lang, Declan Miers, Hannah Wardell & Daniel Abraham Jr.",
+                "durationInMillis": 241948,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/crybaby/1794644675?i=1794644993"
+              }
+            },
+            {
+              "id": "1794644994",
+              "type": "songs",
+              "attributes": {
+                "name": "Kitchen",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USRC12403848",
+                "artistName": "SZA",
+                "composerName": "SZA, Cody Fayne, Christopher Jasper, Ernie Isley, Marvin Isley, O'Kelly Isley, Ronald Isley & Rudolph Isley",
+                "durationInMillis": 172171,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/kitchen/1794644675?i=1794644994"
+              }
+            },
+            {
+              "id": "1794644996",
+              "type": "songs",
+              "attributes": {
+                "name": "Get Behind Me (Interlude)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USRC12403854",
+                "artistName": "SZA",
+                "composerName": "SZA, Johnny May, Michael Uzowuru & Paul Andrew Williams",
+                "durationInMillis": 108095,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/get-behind-me-interlude/1794644675?i=1794644996"
+              }
+            },
+            {
+              "id": "1794644997",
+              "type": "songs",
+              "attributes": {
+                "name": "Drive",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USRC12403822",
+                "artistName": "SZA",
+                "composerName": "SZA, Dallas Tamaira, Cody Fayne, Devin Abrams & William Lemos",
+                "durationInMillis": 185133,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/drive/1794644675?i=1794644997"
+              }
+            },
+            {
+              "id": "1794644999",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Life",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USRC12403849",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru, Dylan Wiggins & Rob Bisel",
+                "durationInMillis": 205215,
+                "contentRating": "explicit",
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/another-life/1794644675?i=1794644999"
+              }
+            },
+            {
+              "id": "1794645003",
+              "type": "songs",
+              "attributes": {
+                "name": "Saturn",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USRC12400216",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Rob Bisel, Jared Solomon, Scott Zhang & Cian Ducrot",
+                "durationInMillis": 186192,
+                "releaseDate": "2024-12-20",
+                "url": "https://music.apple.com/us/album/saturn/1794644675?i=1794645003"
+              }
+            },
+            {
+              "id": "1794645004",
+              "type": "songs",
+              "attributes": {
+                "name": "Joni (feat. Don Toliver)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USRC12403903",
+                "artistName": "SZA",
+                "composerName": "SZA, Caleb Toliver, Rob Bisel & Steven Paul Smith",
+                "durationInMillis": 127600,
+                "contentRating": "explicit",
+                "releaseDate": "2025-02-09",
+                "url": "https://music.apple.com/us/album/joni-feat-don-toliver/1794644675?i=1794645004"
+              }
+            },
+            {
+              "id": "1794645006",
+              "type": "songs",
+              "attributes": {
+                "name": "Take You Down",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USRC12403902",
+                "artistName": "SZA",
+                "composerName": "SZA, Cody Fayne & Dexter Suhn",
+                "durationInMillis": 159760,
+                "contentRating": "explicit",
+                "releaseDate": "2025-02-09",
+                "url": "https://music.apple.com/us/album/take-you-down/1794644675?i=1794645006"
+              }
+            },
+            {
+              "id": "1794645008",
+              "type": "songs",
+              "attributes": {
+                "name": "Open Arms (just SZA)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USRC12500026",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel, Douglas Ford, Michael Uzowuru & Teo Halm",
+                "durationInMillis": 215872,
+                "contentRating": "explicit",
+                "releaseDate": "2025-02-09",
+                "url": "https://music.apple.com/us/album/open-arms-just-sza/1794644675?i=1794645008"
+              }
+            },
+            {
+              "id": "1794645009",
+              "type": "songs",
+              "attributes": {
+                "name": "PSA",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USRC12403901",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel, Carter Lang & Will Miller",
+                "durationInMillis": 99520,
+                "contentRating": "explicit",
+                "releaseDate": "2025-02-09",
+                "url": "https://music.apple.com/us/album/psa/1794644675?i=1794645009"
+              }
+            },
+            {
+              "id": "1794645014",
+              "type": "songs",
+              "attributes": {
+                "name": "SOS",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "USRC12204583",
+                "artistName": "SZA",
+                "composerName": "SZA, Jahlil Gunter, Rob Bisel & Gabriel Samuel Hardeman",
+                "durationInMillis": 117773,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/sos/1794644675?i=1794645014"
+              }
+            },
+            {
+              "id": "1794645015",
+              "type": "songs",
+              "attributes": {
+                "name": "Kill Bill",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "USRC12204584",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel & Carter Lang",
+                "durationInMillis": 153947,
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/kill-bill/1794644675?i=1794645015"
+              }
+            },
+            {
+              "id": "1794645017",
+              "type": "songs",
+              "attributes": {
+                "name": "Seek & Destroy",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "USRC12204585",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel, Carter Lang, Cody Fayne & Tyran Donaldson",
+                "durationInMillis": 203733,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/seek-destroy/1794644675?i=1794645017"
+              }
+            },
+            {
+              "id": "1794645080",
+              "type": "songs",
+              "attributes": {
+                "name": "Low",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "USRC12204586",
+                "artistName": "SZA",
+                "composerName": "SZA, Alessandro Buccellati, Rob Bisel, Joseph Pincus, Jocelyn A. Donald, Fabian Rashad Johnson & Rashad Johnson",
+                "durationInMillis": 181080,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/low/1794644675?i=1794645080"
+              }
+            },
+            {
+              "id": "1794645081",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Language",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 5,
+                "isrc": "USRC12204588",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Cody Fayne, Jakob Rabitsch, Pharrell Williams, Rob Bisel, Chad Hugo, Tyrone Griffin Jr, Anthony Clemons, Jr. & Jazzaé De Waal",
+                "durationInMillis": 183893,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/love-language/1794644675?i=1794645081"
+              }
+            },
+            {
+              "id": "1794645084",
+              "type": "songs",
+              "attributes": {
+                "name": "Blind",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 6,
+                "isrc": "USRC12204589",
+                "artistName": "SZA",
+                "composerName": "SZA, Rob Bisel, Carter Lang, Margaux Alexis Rosalena Whitney & Will Miller",
+                "durationInMillis": 150720,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/blind/1794644675?i=1794645084"
+              }
+            },
+            {
+              "id": "1794645086",
+              "type": "songs",
+              "attributes": {
+                "name": "Used (feat. Don Toliver)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 7,
+                "isrc": "USRC12204590",
+                "artistName": "SZA",
+                "composerName": "SZA, Dacoury Natche, Caleb Toliver & John Hill",
+                "durationInMillis": 146947,
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/used-feat-don-toliver/1794644675?i=1794645086"
+              }
+            },
+            {
+              "id": "1794645087",
+              "type": "songs",
+              "attributes": {
+                "name": "Snooze",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 8,
+                "isrc": "USRC12204591",
+                "artistName": "SZA",
+                "composerName": "SZA, Kenny B. Edmonds, Khris Riddick-Tynes, Leon Thomas & Blair Ferguson",
+                "durationInMillis": 201800,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-08",
+                "url": "https://music.apple.com/us/album/snooze/1794644675?i=1794645087"
+              }
+            },
+            {
+              "id": "1794645090",
+              "type": "songs",
+              "attributes": {
+                "name": "Notice Me",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 9,
+                "isrc": "USRC12204592",
+                "artistName": "SZA",
+                "composerName": "SZA, Michael Uzowuru, Teo Halm, Carter Lang & Cody Fayne",
+                "durationInMillis": 160920,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/notice-me/1794644675?i=1794645090"
+              }
+            },
+            {
+              "id": "1794645094",
+              "type": "songs",
+              "attributes": {
+                "name": "Gone Girl",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 10,
+                "isrc": "USRC12204593",
+                "artistName": "SZA",
+                "composerName": "SZA, Cody Fayne, Carter Lang, Rob Bisel, Jeff Bhasker, Emile Haynie & Gregory Landfair, Jr.",
+                "durationInMillis": 244027,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/gone-girl/1794644675?i=1794645094"
+              }
+            },
+            {
+              "id": "1794645103",
+              "type": "songs",
+              "attributes": {
+                "name": "Smoking on my Ex Pack",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 11,
+                "isrc": "USRC12204594",
+                "artistName": "SZA",
+                "composerName": "SZA, Jahlil Gunter, Skip Scarborough & Raina Taylor",
+                "durationInMillis": 83827,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/smoking-on-my-ex-pack/1794644675?i=1794645103"
+              }
+            },
+            {
+              "id": "1794645106",
+              "type": "songs",
+              "attributes": {
+                "name": "Ghost in the Machine (feat. Phoebe Bridgers)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 12,
+                "isrc": "USRC12204595",
+                "artistName": "SZA",
+                "composerName": "Phoebe Bridgers, SZA, Carter Lang, Rob Bisel, Matt Cohn & Marshall Vore",
+                "durationInMillis": 218587,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/ghost-in-the-machine-feat-phoebe-bridgers/1794644675?i=1794645106"
+              }
+            },
+            {
+              "id": "1794645107",
+              "type": "songs",
+              "attributes": {
+                "name": "F2F",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 13,
+                "isrc": "USRC12204596",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang & Rob Bisel",
+                "durationInMillis": 185040,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/f2f/1794644675?i=1794645107"
+              }
+            },
+            {
+              "id": "1794645199",
+              "type": "songs",
+              "attributes": {
+                "name": "Nobody Gets Me",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 14,
+                "isrc": "USRC12204598",
+                "artistName": "SZA",
+                "composerName": "SZA, Benjamin Levin, Rob Bisel & Carter Lang",
+                "durationInMillis": 180853,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-05",
+                "url": "https://music.apple.com/us/album/nobody-gets-me/1794644675?i=1794645199"
+              }
+            },
+            {
+              "id": "1794645201",
+              "type": "songs",
+              "attributes": {
+                "name": "Conceited",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 15,
+                "isrc": "USRC12204587",
+                "artistName": "SZA",
+                "composerName": "SZA, Cody Fayne & Rob Bisel",
+                "durationInMillis": 151413,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/conceited/1794644675?i=1794645201"
+              }
+            },
+            {
+              "id": "1794645202",
+              "type": "songs",
+              "attributes": {
+                "name": "Special",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 16,
+                "isrc": "USRC12204597",
+                "artistName": "SZA",
+                "composerName": "SZA, Benjamin Levin, Rob Bisel, Shellback, Blake Slatkin & Omer Fedi",
+                "durationInMillis": 158840,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/special/1794644675?i=1794645202"
+              }
+            },
+            {
+              "id": "1794645205",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Late",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 17,
+                "isrc": "USRC12204600",
+                "artistName": "SZA",
+                "composerName": "SZA, Sammy Witte, Rob Bisel, Carter Lang, Cody Fayne & Sven Gamsky",
+                "durationInMillis": 164427,
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/too-late/1794644675?i=1794645205"
+              }
+            },
+            {
+              "id": "1794645209",
+              "type": "songs",
+              "attributes": {
+                "name": "Far",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 18,
+                "isrc": "USRC12204601",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Rob Bisel, Tyran Donaldson, Carlos \"Loshendrix\" Munoz & Eliot Dubock",
+                "durationInMillis": 180680,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/far/1794644675?i=1794645209"
+              }
+            },
+            {
+              "id": "1794645210",
+              "type": "songs",
+              "attributes": {
+                "name": "Shirt",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 19,
+                "isrc": "USRC12203632",
+                "artistName": "SZA",
+                "composerName": "SZA, Rodney Jerkins & Rob Gueringer",
+                "durationInMillis": 181840,
+                "contentRating": "explicit",
+                "releaseDate": "2022-10-28",
+                "url": "https://music.apple.com/us/album/shirt/1794644675?i=1794645210"
+              }
+            },
+            {
+              "id": "1794645213",
+              "type": "songs",
+              "attributes": {
+                "name": "Open Arms (feat. Travis Scott)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 20,
+                "isrc": "USRC12204602",
+                "artistName": "SZA",
+                "composerName": "SZA, Jacques Webster II, Teo Halm, Douglas Ford, Michael Uzowuru & Rob Bisel",
+                "durationInMillis": 239613,
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/open-arms-feat-travis-scott/1794644675?i=1794645213"
+              }
+            },
+            {
+              "id": "1794645215",
+              "type": "songs",
+              "attributes": {
+                "name": "I Hate U",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 21,
+                "isrc": "USRC12103605",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Rob Bisel, Cody Fayne & Dylan Patrice",
+                "durationInMillis": 173907,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-03",
+                "url": "https://music.apple.com/us/album/i-hate-u/1794644675?i=1794645215"
+              }
+            },
+            {
+              "id": "1794645223",
+              "type": "songs",
+              "attributes": {
+                "name": "Good Days",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 22,
+                "isrc": "USRC12004189",
+                "artistName": "SZA",
+                "composerName": "SZA, Carter Lang, Christopher Ruelas, Carlos Munoz & Jacob Collier",
+                "durationInMillis": 278480,
+                "contentRating": "explicit",
+                "releaseDate": "2020-12-25",
+                "url": "https://music.apple.com/us/album/good-days/1794644675?i=1794645223"
+              }
+            },
+            {
+              "id": "1794645225",
+              "type": "songs",
+              "attributes": {
+                "name": "Forgiveless (feat. Ol' Dirty Bastard)",
+                "albumName": "SOS Deluxe: LANA",
+                "discNumber": 2,
+                "trackNumber": 23,
+                "isrc": "USRC12204603",
+                "artistName": "SZA",
+                "composerName": "SZA, Rodney Jerkins, Russell Tyrone Jones, Mark Bell, Guy Sigsworth & Björk Guðmundsdóttir",
+                "durationInMillis": 141960,
+                "contentRating": "explicit",
+                "releaseDate": "2022-12-09",
+                "url": "https://music.apple.com/us/album/forgiveless-feat-ol-dirty-bastard/1794644675?i=1794645225"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "605800394",
+              "type": "artists",
+              "attributes": {
+                "name": "SZA",
+                "url": "https://music.apple.com/us/artist/sza/605800394"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1786643044",
+                "playParams": {
+                  "id": "1786643044",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-12-20",
+                "contentRating": "explicit",
+                "trackCount": 38,
+                "upc": "196871766890",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/97/bd/88/97bd8804-7d3e-e6c8-0532-ff22877b931c/196871766890.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1796270264",
+              "type": "albums",
+              "attributes": {
+                "name": "SOS Deluxe: LANA",
+                "artistName": "SZA",
+                "url": "https://music.apple.com/us/album/sos-deluxe-lana/1796270264",
+                "playParams": {
+                  "id": "1796270264",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-02-08",
+                "contentRating": "clean",
+                "trackCount": 42,
+                "upc": "196871766913",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/50/fa/17/50fa1760-8a36-5cef-93bf-aab5b5257b18/196871766913.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1739234520",
+              "type": "albums",
+              "attributes": {
+                "name": "Scarlet 2 CLAUDE",
+                "artistName": "Doja Cat",
+                "url": "https://music.apple.com/us/album/scarlet-2-claude/1739234520",
+                "playParams": {
+                  "id": "1739234520",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-09-22",
+                "contentRating": "explicit",
+                "trackCount": 24,
+                "upc": "196871921121",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap",
+                  "Pop"
+                ],
+                "recordLabel": "Kemosabe Records/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/48/b8/bf/48b8bfcc-0e48-df59-e4e2-739f45970426/196871921121.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1781806136",
+              "type": "albums",
+              "attributes": {
+                "name": "The Magic Hour Collection",
+                "artistName": "Jhené Aiko",
+                "url": "https://music.apple.com/us/album/the-magic-hour-collection/1781806136",
+                "playParams": {
+                  "id": "1781806136",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-11-22",
+                "contentRating": "explicit",
+                "trackCount": 25,
+                "upc": "00602475679530",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Def Jam Recordings",
+                "isSingle": false,
+                "isCompilation": true,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/94/1d/76/941d76c5-08ce-96ce-fe09-162a01de5712/24UM1IM28377.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1615644274",
+              "type": "albums",
+              "attributes": {
+                "name": "blue water road",
+                "artistName": "Kehlani",
+                "url": "https://music.apple.com/us/album/blue-water-road/1615644274",
+                "playParams": {
+                  "id": "1615644274",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-04-29",
+                "contentRating": "explicit",
+                "trackCount": 13,
+                "upc": "075679779724",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "TSNMI / Atlantic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/66/75/04/667504c5-b502-0d70-e12a-5db22c5541ae/075679779724.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1800579610",
+              "type": "albums",
+              "attributes": {
+                "name": "eternal sunshine deluxe: brighter days ahead",
+                "artistName": "Ariana Grande",
+                "url": "https://music.apple.com/us/album/eternal-sunshine-deluxe-brighter-days-ahead/1800579610",
+                "playParams": {
+                  "id": "1800579610",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2025-03-28",
+                "contentRating": "explicit",
+                "trackCount": 19,
+                "upc": "00602478075247",
+                "genreNames": [
+                  "Pop",
+                  "Music"
+                ],
+                "recordLabel": "Republic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/14/2a/2d/142a2d3e-fb3a-e818-8c7b-6eeb92990084/25UMGIM42095.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1612543079",
+              "type": "albums",
+              "attributes": {
+                "name": "Buckles Laboratories Presents: The Intermission - EP",
+                "artistName": "Mariah the Scientist",
+                "url": "https://music.apple.com/us/album/buckles-laboratories-presents-the-intermission-ep/1612543079",
+                "playParams": {
+                  "id": "1612543079",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-03-11",
+                "trackCount": 4,
+                "upc": "886449948666",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "One Umbrella/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/46/cf/61/46cf610c-c625-8c7a-fa88-25ca2a60caf0/886449948666.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1665311474",
+              "type": "albums",
+              "attributes": {
+                "name": "Red Moon In Venus",
+                "artistName": "Kali Uchis",
+                "url": "https://music.apple.com/us/album/red-moon-in-venus/1665311474",
+                "playParams": {
+                  "id": "1665311474",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-03-03",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "00602455165220",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Geffen Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/90/87/bf/9087bfb6-ba9a-3157-f102-a8829e634e33/23UMGIM03412.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1681322859",
+              "type": "albums",
+              "attributes": {
+                "name": "NEVER ENOUGH (Bonus Version)",
+                "artistName": "Daniel Caesar",
+                "url": "https://music.apple.com/us/album/never-enough-bonus-version/1681322859",
+                "playParams": {
+                  "id": "1681322859",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-04-07",
+                "contentRating": "explicit",
+                "trackCount": 18,
+                "upc": "00602455673800",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Republic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/36/e3/8e/36e38e7e-94ec-dbcd-f23c-0890e1a9518f/22UM1IM44821.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1752024169",
+              "type": "albums",
+              "attributes": {
+                "name": "MEGAN",
+                "artistName": "Megan Thee Stallion",
+                "url": "https://music.apple.com/us/album/megan/1752024169",
+                "playParams": {
+                  "id": "1752024169",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-06-28",
+                "contentRating": "explicit",
+                "trackCount": 18,
+                "upc": "075679642554",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music",
+                  "Rap"
+                ],
+                "recordLabel": "Hot Girl Productions",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/93/1d/8e/931d8ec8-5191-f0df-201b-100731c58cac/075679642554.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1801819552",
+              "type": "albums",
+              "attributes": {
+                "name": "Alligator Bites Never Heal (Extended)",
+                "artistName": "Doechii",
+                "url": "https://music.apple.com/us/album/alligator-bites-never-heal-extended/1801819552",
+                "playParams": {
+                  "id": "1801819552",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2024-08-30",
+                "contentRating": "explicit",
+                "trackCount": 22,
+                "upc": "00602478091223",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Top Dawg Entertainment/Capitol Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/b0/6e/78/b06e7807-f9ef-7f76-faa8-8d1a01d6d877/24UMGIM88643.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1767519770",
+              "type": "albums",
+              "attributes": {
+                "name": "JAGUAR II : Deluxe",
+                "artistName": "Victoria Monét",
+                "url": "https://music.apple.com/us/album/jaguar-ii-deluxe/1767519770",
+                "playParams": {
+                  "id": "1767519770",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-08-24",
+                "contentRating": "explicit",
+                "trackCount": 21,
+                "upc": "196872154832",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Lovett Music/RCA Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0a/af/5e/0aaf5e80-4028-d5e4-a25f-43d76cd97908/196872154832.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/1794644675/view/related-albums?offset=12"
+        }
+      }
+    }
+  ]
+}

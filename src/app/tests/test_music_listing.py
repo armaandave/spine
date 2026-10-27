@@ -258,41 +258,62 @@ class ContentMemberTests(SimpleTestCase):
 
 
 class HiddenTests(SimpleTestCase):
-    def test_a_pre_order_shows_until_its_release_day_passes(self):
+    def test_a_pre_order_shows(self):
         weathered = albums("family_creed_weathered.json")
         listings = music_listing.group_listings(weathered)
         pre_order = next(listing for listing in listings if ids(listing) == ["6803287133"])
 
+        # Incomplete and due 2026-11-20; it can be streamed, so it shows after that too.
         self.assertEqual(len(listings), 2)
-        self.assertFalse(music_listing.is_hidden(pre_order, TODAY))
-        self.assertFalse(music_listing.is_hidden(pre_order, date(2026, 11, 20)))
-        self.assertTrue(music_listing.is_hidden(pre_order, date(2026, 11, 21)))
-        self.assertFalse(music_listing.is_hidden([by_id(weathered, "1440738578")], TODAY))
+        self.assertFalse(music_listing.is_hidden(pre_order))
+        self.assertFalse(music_listing.is_hidden([by_id(weathered, "1440738578")]))
 
     def test_a_listing_no_one_can_stream_is_hidden(self):
         sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
         by_id(sos, "1658650093")["attributes"].pop("playParams")
 
-        self.assertFalse(music_listing.is_hidden(sos, TODAY))
+        self.assertFalse(music_listing.is_hidden(sos))
         by_id(sos, "1657869377")["attributes"].pop("playParams")
-        self.assertTrue(music_listing.is_hidden(sos, TODAY))
+        self.assertTrue(music_listing.is_hidden(sos))
 
-    def test_one_complete_member_keeps_a_listing(self):
+    def test_lemonade_shows_though_both_its_albums_are_incomplete(self):
+        found = albums("search_families_lemonade.json")
+        lemonade = [by_id(found, album_id) for album_id in ("1460430561", "1460432013")]
+        listings = music_listing.group_listings(lemonade)
+
+        # Apple marks the explicit album and its clean twin incomplete, released 2016.
+        self.assertEqual([ids(listing) for listing in listings], [["1460430561", "1460432013"]])
+        self.assertEqual(
+            [(album["attributes"]["isComplete"], album["attributes"]["releaseDate"]) for album in lemonade],
+            [(False, "2016-04-23"), (False, "2016-04-23")],
+        )
+        self.assertFalse(music_listing.is_hidden(listings[0]))
+        self.assertEqual(music_listing.pick_identity(listings[0], today=TODAY), "1460430561")
+
+    def test_completeness_only_ranks_members(self):
         sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
-        by_id(sos, "1658650093")["attributes"]["isComplete"] = False
-
-        self.assertFalse(music_listing.is_hidden(sos, TODAY))
         by_id(sos, "1657869377")["attributes"]["isComplete"] = False
-        self.assertTrue(music_listing.is_hidden(sos, TODAY))
+
+        # The complete clean twin ranks first; with both incomplete, explicit does again.
+        self.assertEqual(music_listing.pick_identity(sos, today=TODAY), "1658650093")
+        self.assertFalse(music_listing.is_hidden(sos))
+        by_id(sos, "1658650093")["attributes"]["isComplete"] = False
+        self.assertEqual(music_listing.pick_identity(sos, today=TODAY), "1657869377")
+        self.assertFalse(music_listing.is_hidden(sos))
 
     def test_partial_dates_count_as_their_last_day(self):
-        promo = copy.deepcopy(albums("albums_sos_lana.json")[0])
-        promo["attributes"]["isComplete"] = False
+        sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
+        explicit = by_id(sos, "1657869377")
+        explicit["attributes"]["isComplete"] = False
         for release_date, last_day in (("2010", date(2010, 12, 31)), ("1994-12", date(1994, 12, 31))):
-            promo["attributes"]["releaseDate"] = release_date
+            explicit["attributes"]["releaseDate"] = release_date
             with self.subTest(release_date=release_date):
-                self.assertFalse(music_listing.is_hidden([promo], last_day))
-                self.assertTrue(music_listing.is_hidden([promo], date(last_day.year + 1, 1, 1)))
+                # Not released yet until its last day, so it ranks as complete until then.
+                self.assertEqual(music_listing.pick_identity(sos, today=last_day), "1657869377")
+                self.assertEqual(
+                    music_listing.pick_identity(sos, today=date(last_day.year + 1, 1, 1)),
+                    "1658650093",
+                )
 
     def test_release_day(self):
         self.assertEqual(music_listing.release_day("2024-02"), date(2024, 2, 29))
@@ -300,3 +321,152 @@ class HiddenTests(SimpleTestCase):
         for value in ("", None, "2022-13", "2022-02-30", "Dec 2022"):
             with self.subTest(value=value):
                 self.assertIsNone(music_listing.release_day(value))
+
+
+SAVAGE_ID = "894820464"
+AMERICAN_DREAM = "1724494274"
+AMERICAN_DREAM_VARIANTS = {
+    "1729925845": AMERICAN_DREAM,  # american dream (slowed down)
+    "1729923680": AMERICAN_DREAM,  # american dream (nightcore version)
+    "1729916799": AMERICAN_DREAM,  # american dream (sped up)
+}
+
+
+def savage_albums():
+    """21 Savage's Albums section on his artist page, both pages, as Apple sends them."""
+    page = json.loads((FIXTURES / "person_21_savage.json").read_text())["data"][0]
+    return [*page["views"]["full-albums"]["data"], *albums("person_21_savage_full-albums_2.json")]
+
+
+def album(album_id, name, artist="21 Savage", *, artist_ids=None, **attributes):
+    resource = {"id": album_id, "attributes": {"name": name, "artistName": artist, **attributes}}
+    if artist_ids is not None:
+        resource["relationships"] = {"artists": {"data": [{"id": value} for value in artist_ids]}}
+    return resource
+
+
+class VariantNameTests(SimpleTestCase):
+    def test_a_marker_from_the_list_at_the_end(self):
+        for name in (
+            "american dream (sped up)",
+            "american dream [Sped Up]",
+            "American Dream (Slowed + Reverb)",
+            "american dream - Super Slowed",
+            "american dream (8D)",
+            "american dream (A Cappella)",
+            "american dream (Acapella)",
+            "american dream (Instrumental)",
+            "american dream (nightcore version)",
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(music_listing.variant_original_name(name), "american dream")
+
+    def test_any_other_name_has_no_original(self):
+        for name in (
+            "american dream",
+            "american dream (Deluxe)",
+            "american dream (Remastered)",
+            "american dream (Live)",
+            "american dream (25th Anniversary Edition)",
+            "american dream (Sped Up Version)",
+            "american dream (Remix)",
+            "american dream (sped up) - Single",
+            "american dream - EP",
+            "SAVAGE MODE II [CHOPPED NOT SLOPPED]",
+            "Thriller 25",
+            "SOS Deluxe: LANA",
+            "Weezer (Teal Album)",
+        ):
+            with self.subTest(name=name):
+                self.assertIsNone(music_listing.variant_original_name(name))
+
+
+class RemixVariantTests(SimpleTestCase):
+    def test_21_savages_albums_fold_their_three_american_dream_variants(self):
+        self.assertEqual(
+            music_listing.remix_variants(savage_albums(), artist_id=SAVAGE_ID),
+            AMERICAN_DREAM_VARIANTS,
+        )
+
+    def test_a_search_folds_by_the_batchs_artist_ids(self):
+        # The family batch names each album's artists; SAVAGE MODE II's chopped not
+        # slopped album has no listed marker, and Drake's single is another artist's.
+        batch = albums("search_families_american_dream.json")
+        self.assertEqual(music_listing.remix_variants(batch), AMERICAN_DREAM_VARIANTS)
+
+    def test_no_artist_ids_never_fold(self):
+        found = json.loads((FIXTURES / "search_albums_american_dream.json").read_text())
+        self.assertEqual(music_listing.remix_variants(found["results"]["albums"]["data"]), {})
+
+    def test_never_without_the_original(self):
+        without = [entry for entry in savage_albums() if entry["id"] != AMERICAN_DREAM]
+        self.assertEqual(music_listing.remix_variants(without, artist_id=SAVAGE_ID), {})
+
+    def test_never_another_artist(self):
+        original = album(AMERICAN_DREAM, "american dream", artist_ids=[SAVAGE_ID])
+        self.assertEqual(
+            music_listing.remix_variants(
+                [
+                    original,
+                    album("1", "american dream (sped up)", artist_ids=["999"]),
+                    album("2", "american dream (slowed)", artist_ids=[SAVAGE_ID, "999"]),
+                    album("3", "american dream (nightcore)", "Nightcore Hits", artist_ids=[SAVAGE_ID]),
+                ],
+            ),
+            {},
+        )
+        # In one artist's section, the section's artist stands in for missing IDs, and
+        # an album's own IDs still count.
+        self.assertEqual(
+            music_listing.remix_variants(
+                [album(AMERICAN_DREAM, "american dream"), album("1", "american dream (sped up)", artist_ids=["999"])],
+                artist_id=SAVAGE_ID,
+            ),
+            {},
+        )
+
+    def test_never_a_partial_title(self):
+        self.assertEqual(
+            music_listing.remix_variants(
+                [
+                    album(AMERICAN_DREAM, "american dream"),
+                    album("1", "american dreams (sped up)"),
+                    album("2", "the american dream (slowed)"),
+                    album("3", "american (sped up)"),
+                    album("4", "american dream (sped up remix)"),
+                ],
+                artist_id=SAVAGE_ID,
+            ),
+            {},
+        )
+
+    def test_never_an_edition_remaster_live_or_anniversary(self):
+        weezer = albums("family_weezer.json")
+        self.assertEqual(music_listing.remix_variants(weezer, artist_id="115234"), {})
+        sos = albums("albums_sos_lana.json")
+        self.assertEqual(music_listing.remix_variants(sos, artist_id="605800394"), {})
+        thriller = [
+            album("269572838", "Thriller", "Michael Jackson"),
+            album("273048762", "Thriller (25th Anniversary) [Deluxe Edition]", "Michael Jackson"),
+            album("2", "Thriller 25", "Michael Jackson"),
+            album("3", "Thriller (Live)", "Michael Jackson"),
+            album("4", "Thriller (Remastered)", "Michael Jackson"),
+        ]
+        self.assertEqual(music_listing.remix_variants(thriller, artist_id="32940"), {})
+
+    def test_never_a_single(self):
+        # An instrumental single beside an unrelated album, and one beside an album of
+        # its name: singles neither fold nor are folded into.
+        self.assertEqual(
+            music_listing.remix_variants(
+                [
+                    album("1", "Interludes"),
+                    album("2", "Interlude (Instrumental)", isSingle=True),
+                    album("3", "Interlude"),
+                    album("4", "Song", isSingle=True),
+                    album("5", "Song (Sped Up)"),
+                ],
+                artist_id=SAVAGE_ID,
+            ),
+            {},
+        )

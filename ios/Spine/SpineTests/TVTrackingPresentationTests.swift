@@ -134,14 +134,12 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new), "S3 E1 · New")
         XCTAssertNil(TVTrackingPresentation.continueWatchingLine(for: show(status: "In progress")))
 
-        // One line: up next, then the count. A card too narrow for the count drops it.
+        // Up next, then the count, for VoiceOver: the card itself reads "Update progress ›".
         let watching = show(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: watching), "S2 E5 next · 4 of 10")
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: watching, includesProgress: false), "S2 E5 next")
         new.watchedCount = 20
         new.airedCount = 21
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new), "S3 E1 · New · 20 of 21")
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: new, includesProgress: false), "S3 E1 · New")
     }
 
     func testTV701ACardATickCaughtUpOrFinishedReadsAsItsLibraryCardUntilHomeReloads() {
@@ -155,43 +153,28 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertEqual(TVTrackingPresentation.continueWatchingLine(for: finished), "10 of 10")
     }
 
-    func testTV701TouchAndHoldMenuBeforeAndAfterATick() {
-        let tv = show(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))
-
-        let before = TVTrackingPresentation.continueWatchingMenu(for: tv)
-        XCTAssertEqual(before.map(\.title), ["Mark S2 E5 Watched", "Log S2 E5…", "Go to Season 2"])
-        XCTAssertEqual(before.map(\.systemImage), ["checkmark.circle", "square.and.pencil", "list.number"])
-        let episode = TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 5)
-        XCTAssertEqual(before.map(\.command), [.markWatched(episode), .log(episode), .openSeason(2)])
-        XCTAssertEqual(before.map(\.accessibilityName), ["Mark S2 E5 watched", "Log S2 E5", "Go to Season 2"])
-
-        // Right after a tick of S2 E4, its undo comes last.
-        let ticked = TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 4)
-        let after = TVTrackingPresentation.continueWatchingMenu(for: tv, undo: ticked)
-        XCTAssertEqual(after.map(\.title), ["Mark S2 E5 Watched", "Log S2 E5…", "Go to Season 2", "Mark S2 E4 Unwatched"])
-        XCTAssertEqual(after.last?.systemImage, "arrow.uturn.backward")
-        XCTAssertEqual(after.last?.command, .markUnwatched(ticked))
-        XCTAssertEqual(after.last?.accessibilityName, "Mark S2 E4 unwatched")
-
-        // Specials go by their name; a card a tick left without up next offers only the undo.
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingMenu(for: show(status: "In progress", upNext: (0, 3)))[2].title,
-                       "Go to Specials")
-        let finished = show(status: "Completed", watched: 10, aired: 10)
-        let lastTicked = TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 10)
-        XCTAssertEqual(TVTrackingPresentation.continueWatchingMenu(for: finished, undo: lastTicked).map(\.title),
-                       ["Mark S1 E10 Unwatched"])
-        XCTAssertTrue(TVTrackingPresentation.continueWatchingMenu(for: finished).isEmpty)
-    }
-
-    func testTV701PreviewCaptionAndVoiceOverLabel() {
-        var upNext = TVEpisodePointer(seasonNumber: 2, episodeNumber: 5, title: "Marionettes")
-        XCTAssertEqual(TVTrackingPresentation.upNextTitle(for: upNext), "S2 E5 · Marionettes")
-        upNext.title = "  "
-        XCTAssertEqual(TVTrackingPresentation.upNextTitle(for: upNext), "S2 E5", "No title, just the code")
-
+    func testTV701TheLineOpensUpNextsSeasonAndSaysSo() {
+        // The title and "Update progress ›" are one button that opens up next's season; VoiceOver reads where the
+        // show stands, which the card no longer shows.
         let tv = show(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))
         XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Crown", tv: tv),
-                       "The Crown, S2 E5 next, 4 of 10")
+                       "The Crown, update progress, S2 E5 next, 4 of 10")
+        var new = show(status: "In progress", watched: 20, aired: 21, upNext: (3, 1))
+        new.upNext?.isNew = true
+        XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Bear", tv: new),
+                       "The Bear, update progress, S3 E1, New, 20 of 21")
+        // A card a tick left without up next opens the show, and reads its count.
+        XCTAssertEqual(TVTrackingPresentation.continueWatchingAccessibilityLabel(show: "The Crown",
+                                                                                  tv: show(status: "Completed", watched: 10, aired: 10)),
+                       "The Crown, update progress, 10 of 10")
+
+        // The sheet is titled with the show and season, by the provider's name for it once it has loaded.
+        XCTAssertEqual(TVTrackingPresentation.episodeSheetTitle(show: "The Crown", seasonNumber: 2), "The Crown · Season 2")
+        XCTAssertEqual(TVTrackingPresentation.episodeSheetTitle(show: "Doctor Who", seasonNumber: 2, seasonName: "Series 2"),
+                       "Doctor Who · Series 2")
+        XCTAssertEqual(TVTrackingPresentation.episodeSheetTitle(show: "The Crown", seasonNumber: 2, seasonName: "  "),
+                       "The Crown · Season 2")
+        XCTAssertEqual(TVTrackingPresentation.episodeSheetTitle(show: "The Crown", seasonNumber: 0), "The Crown · Specials")
     }
 
     // MARK: TV-600 Rewatch lines

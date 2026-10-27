@@ -1,0 +1,1437 @@
+{
+  "data": [
+    {
+      "id": "1806381564",
+      "type": "albums",
+      "attributes": {
+        "name": "The Best Of",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/the-best-of/1806381564",
+        "playParams": {
+          "id": "1806381564",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2025-04-04",
+        "contentRating": "explicit",
+        "trackCount": 24,
+        "upc": "00602475973737",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/f9/38/bb/f938bbc5-d6d5-a77a-31fb-ffadac7807f5/25UMGIM41988.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1806381572",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "GBUM72203480"
+              }
+            },
+            {
+              "id": "1806381577",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "GBUM72203487"
+              }
+            },
+            {
+              "id": "1806381585",
+              "type": "songs",
+              "attributes": {
+                "name": "My Generation (Original Mono Version)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "GBAKW6500004"
+              }
+            },
+            {
+              "id": "1806381586",
+              "type": "songs",
+              "attributes": {
+                "name": "Pinball Wizard",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "GBAKW6900102"
+              }
+            },
+            {
+              "id": "1806382011",
+              "type": "songs",
+              "attributes": {
+                "name": "Who Are You (Edit)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "GBAKW7800119"
+              }
+            },
+            {
+              "id": "1806382016",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "GBUM72203488"
+              }
+            },
+            {
+              "id": "1806382030",
+              "type": "songs",
+              "attributes": {
+                "name": "The Seeker (Unedited Version / Steven Wilson Stereo Mix)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "GBUM72500234"
+              }
+            },
+            {
+              "id": "1806382038",
+              "type": "songs",
+              "attributes": {
+                "name": "Squeeze Box",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "GBUM71405454"
+              }
+            },
+            {
+              "id": "1806382134",
+              "type": "songs",
+              "attributes": {
+                "name": "I Can't Explain (Mono Version)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "GBAKW6500001"
+              }
+            },
+            {
+              "id": "1806382138",
+              "type": "songs",
+              "attributes": {
+                "name": "I Can See For Miles (Mono Version)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "GBUM70818900"
+              }
+            },
+            {
+              "id": "1806382140",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Reign O'er Me (Remastered 1996)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "GBAKW9601044"
+              }
+            },
+            {
+              "id": "1806382148",
+              "type": "songs",
+              "attributes": {
+                "name": "The Real Me",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "GBAKW9601029"
+              }
+            },
+            {
+              "id": "1806382156",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "GBUM72203481"
+              }
+            },
+            {
+              "id": "1806382373",
+              "type": "songs",
+              "attributes": {
+                "name": "Join Together (Unedited Version / Steven Wilson Stereo Mix)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "GBUM72500244"
+              }
+            },
+            {
+              "id": "1806382377",
+              "type": "songs",
+              "attributes": {
+                "name": "5:15 (2011 Mix)",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "GBUM71110269"
+              }
+            },
+            {
+              "id": "1806382380",
+              "type": "songs",
+              "attributes": {
+                "name": "Pictures Of Lily",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "GBAKW6700062"
+              }
+            },
+            {
+              "id": "1806382384",
+              "type": "songs",
+              "attributes": {
+                "name": "Ball and Chain",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "GBUM71904263"
+              }
+            },
+            {
+              "id": "1806382385",
+              "type": "songs",
+              "attributes": {
+                "name": "Zoot Suit",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "GBF086400002"
+              }
+            },
+            {
+              "id": "1806382388",
+              "type": "songs",
+              "attributes": {
+                "name": "Real Good Looking Boy (Live)",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "GBUM72302642"
+              }
+            },
+            {
+              "id": "1806382730",
+              "type": "songs",
+              "attributes": {
+                "name": "Anyway, Anyhow, Anywhere (Mono Version)",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "GBF068890002"
+              }
+            },
+            {
+              "id": "1806382735",
+              "type": "songs",
+              "attributes": {
+                "name": "It's Not Enough",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "GBUM70604383"
+              }
+            },
+            {
+              "id": "1806382738",
+              "type": "songs",
+              "attributes": {
+                "name": "I'm A Boy (Alternate Stereo Version)",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "GBAKW0180334"
+              }
+            },
+            {
+              "id": "1806382747",
+              "type": "songs",
+              "attributes": {
+                "name": "Beads On One String",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "GBUM71904256"
+              }
+            },
+            {
+              "id": "1806382756",
+              "type": "songs",
+              "attributes": {
+                "name": "Be Lucky",
+                "discNumber": 1,
+                "trackNumber": 24,
+                "isrc": "GB2DY1400365"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "61499",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1698563957",
+      "type": "albums",
+      "attributes": {
+        "name": "Who’s Next : Life House (Super Deluxe)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/whos-next-life-house-super-deluxe/1698563957",
+        "playParams": {
+          "id": "1698563957",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1971-08-14",
+        "trackCount": 109,
+        "upc": "00602458323559",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "UMC (Universal Music Catalogue)",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/9c/01/10/9c01101e-8775-111e-a090-d6aa76ff1850/22UMGIM57055.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1698563960",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "GBUM72203480"
+              }
+            },
+            {
+              "id": "1698563964",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "GBUM72203481"
+              }
+            },
+            {
+              "id": "1698563970",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't For Keeping (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "GBUM72203482"
+              }
+            },
+            {
+              "id": "1698563976",
+              "type": "songs",
+              "attributes": {
+                "name": "My Wife (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "GBUM72203483"
+              }
+            },
+            {
+              "id": "1698563980",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "GBUM72203484"
+              }
+            },
+            {
+              "id": "1698563984",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "GBUM72203485"
+              }
+            },
+            {
+              "id": "1698564377",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Mobile (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "GBUM72203486"
+              }
+            },
+            {
+              "id": "1698564380",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "GBUM72203487"
+              }
+            },
+            {
+              "id": "1698564382",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (Remastered 2022)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "GBUM72203488"
+              }
+            },
+            {
+              "id": "1698564397",
+              "type": "songs",
+              "attributes": {
+                "name": "Teenage Wasteland (Lifehouse Chronicles / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "GBUM72203717"
+              }
+            },
+            {
+              "id": "1698564400",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Much (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "GBUM72203718"
+              }
+            },
+            {
+              "id": "1698564526",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Mobile (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "GBUM72203719"
+              }
+            },
+            {
+              "id": "1698564529",
+              "type": "songs",
+              "attributes": {
+                "name": "There's A Fortune In Those Hills (Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "GBUM72203720"
+              }
+            },
+            {
+              "id": "1698564536",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't For Keeping (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 5,
+                "isrc": "GBUM72203721"
+              }
+            },
+            {
+              "id": "1698564541",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 6,
+                "isrc": "GBUM72203722"
+              }
+            },
+            {
+              "id": "1698564544",
+              "type": "songs",
+              "attributes": {
+                "name": "Greyhound Girl (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 7,
+                "isrc": "GBUM72203723"
+              }
+            },
+            {
+              "id": "1698564549",
+              "type": "songs",
+              "attributes": {
+                "name": "Mary (Alternative Mix / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 8,
+                "isrc": "GBUM72203724"
+              }
+            },
+            {
+              "id": "1698564555",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 9,
+                "isrc": "GBUM72203725"
+              }
+            },
+            {
+              "id": "1698564678",
+              "type": "songs",
+              "attributes": {
+                "name": "Time Is Passing (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 10,
+                "isrc": "GBUM72203726"
+              }
+            },
+            {
+              "id": "1698564683",
+              "type": "songs",
+              "attributes": {
+                "name": "Finally Over (Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 11,
+                "isrc": "GBUM72203727"
+              }
+            },
+            {
+              "id": "1698564695",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (Original Demo / Remastered 2022)",
+                "discNumber": 2,
+                "trackNumber": 12,
+                "isrc": "GBUM72203728"
+              }
+            },
+            {
+              "id": "1698564701",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure And Easy (Lifehouse Chronicles / Home Studio Mix / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 1,
+                "isrc": "GBUM72203729"
+              }
+            },
+            {
+              "id": "1698564860",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (Lifehouse Chronicles / Alternative Mix / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 2,
+                "isrc": "GBUM72203730"
+              }
+            },
+            {
+              "id": "1698564864",
+              "type": "songs",
+              "attributes": {
+                "name": "Nothing Is Everything (Let's See Action) [Lifehouse Chronicles / Demo / Remastered 2022]",
+                "discNumber": 3,
+                "trackNumber": 3,
+                "isrc": "GBUM72203731"
+              }
+            },
+            {
+              "id": "1698565096",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 4,
+                "isrc": "GBUM72203732"
+              }
+            },
+            {
+              "id": "1698565104",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 5,
+                "isrc": "GBUM72203733"
+              }
+            },
+            {
+              "id": "1698565110",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over (Lifehouse Chronicles / 2021 Remix / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 6,
+                "isrc": "GBUM72203734"
+              }
+            },
+            {
+              "id": "1698565118",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure And Easy (Olympic Studio Mix / Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 7,
+                "isrc": "GBUM72203735"
+              }
+            },
+            {
+              "id": "1698565124",
+              "type": "songs",
+              "attributes": {
+                "name": "Mary (Lifehouse Chronicles / Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 8,
+                "isrc": "GBUM72203736"
+              }
+            },
+            {
+              "id": "1698565278",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (First Editing Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 9,
+                "isrc": "GBUM72203737"
+              }
+            },
+            {
+              "id": "1698565282",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over (Lifehouse Chronicles / Original Demo / Remastered 2022)",
+                "discNumber": 3,
+                "trackNumber": 10,
+                "isrc": "GBUM72203738"
+              }
+            },
+            {
+              "id": "1698565286",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Don't You Do It (New York Record Plant Sessions / 1971 / Take 2 / Unedited / Remastered 2022)",
+                "discNumber": 4,
+                "trackNumber": 1,
+                "isrc": "GBUM72203548"
+              }
+            },
+            {
+              "id": "1698565291",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (New York Record Plant Sessions / 1971 / Take 13 / Remastered 2022)",
+                "discNumber": 4,
+                "trackNumber": 2,
+                "isrc": "GBUM72203550"
+              }
+            },
+            {
+              "id": "1698565296",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (New York Record Plant Sessions / 1971 / Version 1 / Take 15 / Remastered 2022)",
+                "discNumber": 4,
+                "trackNumber": 3,
+                "isrc": "GBUM72203551"
+              }
+            },
+            {
+              "id": "1698565301",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't For Keeping (New York Record Plant Sessions / 1971 / Take 14 / Remastered 2022)",
+                "discNumber": 4,
+                "trackNumber": 4,
+                "isrc": "GBUM72203553"
+              }
+            },
+            {
+              "id": "1698565610",
+              "type": "songs",
+              "attributes": {
+                "name": "The Note (aka Pure And Easy) [New York Record Plant Sessions / 1971 / Take 21 / Remastered 2022]",
+                "discNumber": 4,
+                "trackNumber": 5,
+                "isrc": "GBUM72203556"
+              }
+            },
+            {
+              "id": "1698565621",
+              "type": "songs",
+              "attributes": {
+                "name": "I’m In Tune (aka Getting In Tune) [New York Record Plant Sessions / 1971 / Take 6 / Remastered 2022]",
+                "discNumber": 4,
+                "trackNumber": 6,
+                "isrc": "GBUM72203557"
+              }
+            },
+            {
+              "id": "1698565628",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (New York Record Plant Sessions / 1971 / Version 2 / Take 10 / Remastered 2022)",
+                "discNumber": 4,
+                "trackNumber": 7,
+                "isrc": "GBUM72203558"
+              }
+            },
+            {
+              "id": "1698565763",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure And Easy (New Unedited Remix)",
+                "discNumber": 5,
+                "trackNumber": 1,
+                "isrc": "GBUM72204777"
+              }
+            },
+            {
+              "id": "1698565771",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don't Even Know Myself (With Count In)",
+                "discNumber": 5,
+                "trackNumber": 2,
+                "isrc": "GBUM72204778"
+              }
+            },
+            {
+              "id": "1698565778",
+              "type": "songs",
+              "attributes": {
+                "name": "Time Is Passing (/ Stereo)",
+                "discNumber": 5,
+                "trackNumber": 3,
+                "isrc": "GBUM72204779"
+              }
+            },
+            {
+              "id": "1698565782",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Much Of Anything (With Count In And Original Vocal)",
+                "discNumber": 5,
+                "trackNumber": 4,
+                "isrc": "GBUM72204780"
+              }
+            },
+            {
+              "id": "1698565967",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Remake Version)",
+                "discNumber": 5,
+                "trackNumber": 5,
+                "isrc": "GBUM72204781"
+              }
+            },
+            {
+              "id": "1698565975",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Early Mix With Single-Tracked Vocal)",
+                "discNumber": 5,
+                "trackNumber": 6,
+                "isrc": "GBUM72204782"
+              }
+            },
+            {
+              "id": "1698565985",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't For Keeping (Unedited Remix)",
+                "discNumber": 5,
+                "trackNumber": 7,
+                "isrc": "GBUM72204783"
+              }
+            },
+            {
+              "id": "1698565990",
+              "type": "songs",
+              "attributes": {
+                "name": "My Wife (Unedited Remix)",
+                "discNumber": 5,
+                "trackNumber": 8,
+                "isrc": "GBUM72204784"
+              }
+            },
+            {
+              "id": "1698566117",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (Warm-Up Jam / Take 1)",
+                "discNumber": 5,
+                "trackNumber": 9,
+                "isrc": "GBUM72204785"
+              }
+            },
+            {
+              "id": "1698566122",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Mobile (Early Alternate Mix)",
+                "discNumber": 5,
+                "trackNumber": 10,
+                "isrc": "GBUM72204786"
+              }
+            },
+            {
+              "id": "1698566125",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over (feat. Nicky Hopkins) [Basic Track]",
+                "discNumber": 5,
+                "trackNumber": 11,
+                "isrc": "GBUM72204788"
+              }
+            },
+            {
+              "id": "1698566128",
+              "type": "songs",
+              "attributes": {
+                "name": "When I Was A Boy (Remix)",
+                "discNumber": 5,
+                "trackNumber": 12,
+                "isrc": "GBUM72204789"
+              }
+            },
+            {
+              "id": "1698566134",
+              "type": "songs",
+              "attributes": {
+                "name": "Let's See Action (Unedited)",
+                "discNumber": 5,
+                "trackNumber": 13,
+                "isrc": "GBUM72204790"
+              }
+            },
+            {
+              "id": "1698566140",
+              "type": "songs",
+              "attributes": {
+                "name": "Relay (Unedited Remix With Alternate Vocal)",
+                "discNumber": 5,
+                "trackNumber": 14,
+                "isrc": "GBUM72204791"
+              }
+            },
+            {
+              "id": "1698566366",
+              "type": "songs",
+              "attributes": {
+                "name": "Put The Money Down (Remix With Alternate Vocal)",
+                "discNumber": 5,
+                "trackNumber": 15,
+                "isrc": "GBUM72204792"
+              }
+            },
+            {
+              "id": "1698566370",
+              "type": "songs",
+              "attributes": {
+                "name": "Join Together (Unedited Remix)",
+                "discNumber": 5,
+                "trackNumber": 16,
+                "isrc": "GBUM72204793"
+              }
+            },
+            {
+              "id": "1698566382",
+              "type": "songs",
+              "attributes": {
+                "name": "The Seeker (Original Single A-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 1,
+                "isrc": "GBUM72204806"
+              }
+            },
+            {
+              "id": "1698566509",
+              "type": "songs",
+              "attributes": {
+                "name": "Here For More (Original Single B-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 2,
+                "isrc": "GBUM72204807"
+              }
+            },
+            {
+              "id": "1698566519",
+              "type": "songs",
+              "attributes": {
+                "name": "Heaven And Hell (Stereo Remix)",
+                "discNumber": 6,
+                "trackNumber": 3,
+                "isrc": "GBUM72204808"
+              }
+            },
+            {
+              "id": "1698566523",
+              "type": "songs",
+              "attributes": {
+                "name": "Water (Unedited Remix / Twickenham Sessions / 1970)",
+                "discNumber": 6,
+                "trackNumber": 4,
+                "isrc": "GBUM72204811"
+              }
+            },
+            {
+              "id": "1698566528",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don't Even Know Myself (Unedited Remix / Twickenham Sessions / 1970)",
+                "discNumber": 6,
+                "trackNumber": 5,
+                "isrc": "GBUM72204813"
+              }
+            },
+            {
+              "id": "1698566530",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Unedited Remix / Twickenham Sessions / 1970)",
+                "discNumber": 6,
+                "trackNumber": 6,
+                "isrc": "GBUM72204814"
+              }
+            },
+            {
+              "id": "1698566717",
+              "type": "songs",
+              "attributes": {
+                "name": "Postcard (/ Twickenham Sessions / 1970)",
+                "discNumber": 6,
+                "trackNumber": 7,
+                "isrc": "GBUM72204815"
+              }
+            },
+            {
+              "id": "1698566727",
+              "type": "songs",
+              "attributes": {
+                "name": "Now I'm A Farmer (New Remix / Twickenham Sessions / 1970)",
+                "discNumber": 6,
+                "trackNumber": 8,
+                "isrc": "GBUM72204816"
+              }
+            },
+            {
+              "id": "1698566738",
+              "type": "songs",
+              "attributes": {
+                "name": "The Seeker (Unedited Version / Full-Length Remix)",
+                "discNumber": 6,
+                "trackNumber": 9,
+                "isrc": "GBUM72204817"
+              }
+            },
+            {
+              "id": "1698566742",
+              "type": "songs",
+              "attributes": {
+                "name": "Water (Re-Make / Take 8)",
+                "discNumber": 6,
+                "trackNumber": 10,
+                "isrc": "GBUM72204819"
+              }
+            },
+            {
+              "id": "1698566902",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don't Even Know Myself (Re-Make / Take 16)",
+                "discNumber": 6,
+                "trackNumber": 11,
+                "isrc": "GBUM72204820"
+              }
+            },
+            {
+              "id": "1698566909",
+              "type": "songs",
+              "attributes": {
+                "name": "Let's See Action (Original Single A-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 12,
+                "isrc": "GBUM72204821"
+              }
+            },
+            {
+              "id": "1698566916",
+              "type": "songs",
+              "attributes": {
+                "name": "When I Was A Boy (Original Single B-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 13,
+                "isrc": "GBUM72204823"
+              }
+            },
+            {
+              "id": "1698566918",
+              "type": "songs",
+              "attributes": {
+                "name": "Join Together (Original Single A-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 14,
+                "isrc": "GBUM72204824"
+              }
+            },
+            {
+              "id": "1698566919",
+              "type": "songs",
+              "attributes": {
+                "name": "Relay (Original Single A-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 15,
+                "isrc": "GBUM72204825"
+              }
+            },
+            {
+              "id": "1698566921",
+              "type": "songs",
+              "attributes": {
+                "name": "Waspman (Original Single B-Side Mix)",
+                "discNumber": 6,
+                "trackNumber": 16,
+                "isrc": "GBUM72204826"
+              }
+            },
+            {
+              "id": "1698567137",
+              "type": "songs",
+              "attributes": {
+                "name": "Long Live Rock (Original Olympic Mix)",
+                "discNumber": 6,
+                "trackNumber": 17,
+                "isrc": "GBUM72204827"
+              }
+            },
+            {
+              "id": "1698567148",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't For Keeping (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 1,
+                "isrc": "GBUM72203489"
+              }
+            },
+            {
+              "id": "1698567151",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure And Easy (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 2,
+                "isrc": "GBUM72203490"
+              }
+            },
+            {
+              "id": "1698567164",
+              "type": "songs",
+              "attributes": {
+                "name": "Young Man Blues (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 3,
+                "isrc": "GBUM72203491"
+              }
+            },
+            {
+              "id": "1698567289",
+              "type": "songs",
+              "attributes": {
+                "name": "Time Is Passing (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 4,
+                "isrc": "GBUM72203492"
+              }
+            },
+            {
+              "id": "1698567306",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 5,
+                "isrc": "GBUM72203493"
+              }
+            },
+            {
+              "id": "1698567310",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don’t Even Know Myself (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 6,
+                "isrc": "GBUM72203494"
+              }
+            },
+            {
+              "id": "1698567312",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Much Of Anything (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 7,
+                "isrc": "GBUM72203495"
+              }
+            },
+            {
+              "id": "1698567617",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 8,
+                "isrc": "GBUM72203496"
+              }
+            },
+            {
+              "id": "1698567624",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 7,
+                "trackNumber": 9,
+                "isrc": "GBUM72203497"
+              }
+            },
+            {
+              "id": "1698567633",
+              "type": "songs",
+              "attributes": {
+                "name": "Pinball Wizard (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 1,
+                "isrc": "GBUM72203498"
+              }
+            },
+            {
+              "id": "1698567634",
+              "type": "songs",
+              "attributes": {
+                "name": "See Me, Feel Me (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 2,
+                "isrc": "GBUM72203499"
+              }
+            },
+            {
+              "id": "1698567637",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Don’t You Do It (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 3,
+                "isrc": "GBUM72203500"
+              }
+            },
+            {
+              "id": "1698567639",
+              "type": "songs",
+              "attributes": {
+                "name": "Water (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 4,
+                "isrc": "GBUM72203501"
+              }
+            },
+            {
+              "id": "1698567922",
+              "type": "songs",
+              "attributes": {
+                "name": "My Generation (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 5,
+                "isrc": "GBUM72203502"
+              }
+            },
+            {
+              "id": "1698567926",
+              "type": "songs",
+              "attributes": {
+                "name": "(I’m A) Road Runner (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 6,
+                "isrc": "GBUM72203503"
+              }
+            },
+            {
+              "id": "1698567930",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 7,
+                "isrc": "GBUM72203504"
+              }
+            },
+            {
+              "id": "1698567932",
+              "type": "songs",
+              "attributes": {
+                "name": "Bony Moronie (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 8,
+                "isrc": "GBUM72203505"
+              }
+            },
+            {
+              "id": "1698567934",
+              "type": "songs",
+              "attributes": {
+                "name": "Won’t Get Fooled Again (Live At Young Vic Theatre, London, UK / 1971 / Remastered 2022)",
+                "discNumber": 8,
+                "trackNumber": 9,
+                "isrc": "GBUM72203506"
+              }
+            },
+            {
+              "id": "1698568188",
+              "type": "songs",
+              "attributes": {
+                "name": "Introduction (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 1,
+                "isrc": "GBUM72203507"
+              }
+            },
+            {
+              "id": "1698568190",
+              "type": "songs",
+              "attributes": {
+                "name": "I Can't Explain (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 2,
+                "isrc": "GBUM72203508"
+              }
+            },
+            {
+              "id": "1698568194",
+              "type": "songs",
+              "attributes": {
+                "name": "Substitute (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 3,
+                "isrc": "GBUM72203509"
+              }
+            },
+            {
+              "id": "1698568197",
+              "type": "songs",
+              "attributes": {
+                "name": "Summertime Blues (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 4,
+                "isrc": "GBUM72203510"
+              }
+            },
+            {
+              "id": "1698568204",
+              "type": "songs",
+              "attributes": {
+                "name": "My Wife (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 5,
+                "isrc": "GBUM72203511"
+              }
+            },
+            {
+              "id": "1698568209",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 6,
+                "isrc": "GBUM72203512"
+              }
+            },
+            {
+              "id": "1698568215",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 7,
+                "isrc": "GBUM72203513"
+              }
+            },
+            {
+              "id": "1698568518",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 8,
+                "isrc": "GBUM72203514"
+              }
+            },
+            {
+              "id": "1698568527",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 9,
+                "isrc": "GBUM72203515"
+              }
+            },
+            {
+              "id": "1698568531",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Don't You Do It (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 10,
+                "isrc": "GBUM72203516"
+              }
+            },
+            {
+              "id": "1698568534",
+              "type": "songs",
+              "attributes": {
+                "name": "Magic Bus (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 9,
+                "trackNumber": 11,
+                "isrc": "GBUM72203517"
+              }
+            },
+            {
+              "id": "1698568816",
+              "type": "songs",
+              "attributes": {
+                "name": "Introduction To Tommy (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 1,
+                "isrc": "GBUM72203518"
+              }
+            },
+            {
+              "id": "1698568823",
+              "type": "songs",
+              "attributes": {
+                "name": "Overture (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 2,
+                "isrc": "GBUM72203519"
+              }
+            },
+            {
+              "id": "1698568827",
+              "type": "songs",
+              "attributes": {
+                "name": "Amazing Journey (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 3,
+                "isrc": "GBUM72203520"
+              }
+            },
+            {
+              "id": "1698568830",
+              "type": "songs",
+              "attributes": {
+                "name": "Sparks (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 4,
+                "isrc": "GBUM72203521"
+              }
+            },
+            {
+              "id": "1698568835",
+              "type": "songs",
+              "attributes": {
+                "name": "Pinball Wizard (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 5,
+                "isrc": "GBUM72203522"
+              }
+            },
+            {
+              "id": "1698568838",
+              "type": "songs",
+              "attributes": {
+                "name": "See Me, Feel Me (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 6,
+                "isrc": "GBUM72203525"
+              }
+            },
+            {
+              "id": "1698569161",
+              "type": "songs",
+              "attributes": {
+                "name": "My Generation (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 7,
+                "isrc": "GBUM72203523"
+              }
+            },
+            {
+              "id": "1698569164",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 8,
+                "isrc": "GBUM72203524"
+              }
+            },
+            {
+              "id": "1698569170",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Down (Live At The The Civic Auditorium, San Francisco, USA / 1971 / Remastered 2022)",
+                "discNumber": 10,
+                "trackNumber": 9,
+                "isrc": "GBUM72203526"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "61499",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

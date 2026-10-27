@@ -75,10 +75,13 @@ final class MediaLogViewModel {
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void,
         tvComposer: TVComposer? = nil,
-        tvPage: MediaRef? = nil
+        tvPage: MediaRef? = nil,
+        mode: MediaLogMode = .finished
     ) {
         self.detail = detail
         self.tvPage = tvPage
+        // Progress only where the composer offers it.
+        self.mode = Self.supportsProgress(mediaType: detail.ref.mediaType) ? mode : .finished
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
         self.completionJourneyId = completionJourneyId
@@ -161,7 +164,12 @@ final class MediaLogViewModel {
     // MARK: Targets
 
     var supportsProgress: Bool {
-        ["manga", "comic", "boardgame"].contains(detail.ref.mediaType)
+        Self.supportsProgress(mediaType: detail.ref.mediaType)
+    }
+
+    /// The media whose log composer has a Progress mode: their page's way to update progress.
+    nonisolated static func supportsProgress(mediaType: String) -> Bool {
+        ["manga", "comic", "boardgame"].contains(mediaType)
     }
 
     /// The server-less fallback for a show log: Whole Show or one of its seasons.
@@ -565,7 +573,8 @@ struct MediaLogView: View {
         onUnauthorized: @escaping () -> Void,
         onSaved: @escaping () -> Void,
         tvComposer: TVComposer? = nil,
-        tvPage: MediaRef? = nil
+        tvPage: MediaRef? = nil,
+        mode: MediaLogMode = .finished
     ) {
         _viewModel = State(initialValue: MediaLogViewModel(
             detail: detail,
@@ -580,7 +589,8 @@ struct MediaLogView: View {
             onUnauthorized: onUnauthorized,
             onSaved: onSaved,
             tvComposer: tvComposer,
-            tvPage: tvPage
+            tvPage: tvPage,
+            mode: mode
         ))
     }
 

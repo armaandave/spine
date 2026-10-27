@@ -8,7 +8,7 @@ from django.utils.dateparse import parse_datetime
 
 import app
 from api.services.item_metadata import store_item_metadata
-from app import config
+from app import config, music_catalog
 from app.models import MediaTypes, Sources
 from app.providers import services
 from app.templatetags import app_tags
@@ -110,6 +110,10 @@ class YamtrackImporter:
             else media_type
         )
 
+        # A MusicBrainz album that moved is imported onto the Item that holds it now,
+        # before the duplicate check, so both modes see the album the person has.
+        moved = self._use_canonical_music_ref(row, media_type)
+
         # Check if we should process this movie based on mode
         if not helpers.should_process_media(
             self.existing_media,
@@ -130,7 +134,13 @@ class YamtrackImporter:
                 episode_number,
             )
 
-        item, _ = app.models.Item.objects.update_or_create(
+        # A moved album keeps its own title and cover, not the old ones in the file.
+        save_item = (
+            app.models.Item.objects.get_or_create
+            if moved
+            else app.models.Item.objects.update_or_create
+        )
+        item, _ = save_item(
             media_id=row["media_id"],
             source=row["source"],
             media_type=media_type,
@@ -186,6 +196,21 @@ class YamtrackImporter:
             error_msg = f"{row['title']} ({media_type}): {form.errors.as_json()}"
             self.warnings.append(error_msg)
             logger.error(error_msg)
+
+    @staticmethod
+    def _use_canonical_music_ref(row, media_type):
+        """Point a music row at its album's canonical ref; return whether it changed."""
+        if media_type != MediaTypes.MUSIC.value or row.get("media_id", "") == "":
+            return False
+        source, _, media_id = music_catalog.canonical_music_ref(
+            row["source"],
+            media_type,
+            row["media_id"],
+        )
+        if (source, media_id) == (row["source"], row["media_id"]):
+            return False
+        row["source"], row["media_id"] = source, media_id
+        return True
 
     def _handle_missing_metadata(self, row, media_type, season_number, episode_number):
         """Fill the row's missing title and image from the provider.

@@ -40,6 +40,7 @@ from api.views.lists import (
 )
 from api.views.media import (
     AniListReviewsView,
+    AppleMusicSongDetailView,
     BookSeriesDetailView,
     CommunityStatsView,
     CompanyAnimeOptionsView,
@@ -186,6 +187,11 @@ urlpatterns = [
         "media/musicbrainz/music/<uuid:release_group_mbid>/recordings/<uuid:recording_mbid>/",
         MusicRecordingDetailView.as_view(),
         name="api-music-recording-detail",
+    ),
+    path(
+        "media/apple_music/music/<str:album_id>/recordings/<str:song_id>/",
+        AppleMusicSongDetailView.as_view(),
+        name="api-apple-music-song-detail",
     ),
     path("media/<str:source>/<str:media_type>/<str:media_id>/", MediaDetailView.as_view(), name="api-media-detail"),
     path("people/search/", PeopleSearchView.as_view(), name="api-people-search"),

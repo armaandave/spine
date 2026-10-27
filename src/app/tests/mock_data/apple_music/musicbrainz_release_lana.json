@@ -1,0 +1,79 @@
+{
+  "id": "a2451561-f09d-44f5-85d2-7de353ef52b5",
+  "title": "SOS Deluxe: LANA",
+  "status": "Official",
+  "barcode": "196872790276",
+  "artist-credit": [],
+  "release-group": {
+    "id": "1646286a-d0ad-4288-bfab-34b0fb7b22c1",
+    "title": "SOS",
+    "primary-type": "Album",
+    "first-release-date": "2022-12-09"
+  },
+  "relations": [
+    {
+      "type": "discography entry",
+      "type-id": "823656dd-0309-4247-b282-b92d287d59c5",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.szasos.com/music"
+      }
+    },
+    {
+      "type": "free streaming",
+      "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+      "target-type": "url",
+      "url": {
+        "resource": "https://open.spotify.com/album/1Q5WON8dw2JFLP5JVQXu1e"
+      }
+    },
+    {
+      "type": "free streaming",
+      "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.deezer.com/album/709622201"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://soundcloud.com/szababy2/sets/sos-deluxe-lana-3"
+      }
+    },
+    {
+      "type": "purchase for download",
+      "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+      "target-type": "url",
+      "url": {
+        "resource": "https://www.qobuz.com/us-en/album/sos-deluxe-lana-sza/usglicfj0kqua"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://music.apple.com/gb/album/1794644675"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://music.apple.com/us/album/1794644675"
+      }
+    },
+    {
+      "type": "streaming",
+      "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+      "target-type": "url",
+      "url": {
+        "resource": "https://tidal.com/album/416515106"
+      }
+    }
+  ]
+}

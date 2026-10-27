@@ -1,0 +1,485 @@
+{
+  "pages": [
+    {
+      "release-count": 14,
+      "release-offset": 0,
+      "releases": [
+        {
+          "id": "01cdf7c5-4640-44ef-9df2-bd9b8fbe6184",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "",
+          "date": "1990-08-27",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B00005176A"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/3535678"
+              }
+            }
+          ]
+        },
+        {
+          "id": "06883963-13a1-4b4a-9919-f7f658d80077",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "077779386628",
+          "date": "1993",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "18a8d2e9-9dca-4871-9388-2af6566bd48b",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "854206001114",
+          "date": "2007-08-21",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B000LVPCP6"
+              }
+            }
+          ]
+        },
+        {
+          "id": "3b20dc91-cd3c-4df4-93fb-af994c1d61b8",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "077779550326",
+          "date": "1990-11-05",
+          "country": "GB",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 14
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/3846969"
+              }
+            }
+          ]
+        },
+        {
+          "id": "47f27cb4-3d5f-4cb8-814f-318d7a9e57b2",
+          "title": "No Fences (Australian)",
+          "status": "Official",
+          "barcode": null,
+          "date": "",
+          "country": "AU",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 20
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "4e451e6e-2a95-4ddf-8d95-b7c14f4b5cbe",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": null,
+          "date": "2019-07",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/14836094"
+              }
+            }
+          ]
+        },
+        {
+          "id": "6d73938c-0df7-3831-9b66-37bacbdf57ba",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": null,
+          "date": "1996",
+          "country": "BR",
+          "media": [
+            {
+              "position": 1,
+              "format": null,
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "856ca7b2-8ece-485e-86c6-5fe88042428d",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "724353011925",
+          "date": "2000",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/1862051"
+              }
+            }
+          ]
+        },
+        {
+          "id": "93370140-5f80-34d1-9a8f-26b45c4dff1e",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "724353011925",
+          "date": "2001-06-01",
+          "country": "DE",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "97ec7079-78b0-48e8-87ce-9d7f94279045",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": null,
+          "date": "2016",
+          "country": "XW",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.amazon.com/albums/B01LYCHD0R"
+              }
+            }
+          ]
+        },
+        {
+          "id": "a28dd6ec-96a1-4ba9-b190-a5f9d8a6ab61",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "196824070000",
+          "date": "2000",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "acec7706-fab1-4cce-9340-96c3c23c332c",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "077779386628",
+          "date": "1990",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B000002UWA"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/4520296"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fe8cf5e6-2386-43bc-add3-11ad426a0966",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "777497872006",
+          "date": "1990",
+          "country": "CA",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/10132746"
+              }
+            }
+          ]
+        },
+        {
+          "id": "feec0669-cf81-4198-af4a-ca4d18bbde16",
+          "title": "No Fences",
+          "status": "Official",
+          "barcode": "0208314115287",
+          "date": "1990",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Garth Brooks",
+              "joinphrase": "",
+              "artist": {
+                "id": "b76645c5-78b0-4e4c-8f95-003f40013a45",
+                "name": "Garth Brooks",
+                "sort-name": "Brooks, Garth"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/1256705"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

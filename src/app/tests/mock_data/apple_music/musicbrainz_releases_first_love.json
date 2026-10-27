@@ -1,0 +1,547 @@
+{
+  "pages": [
+    {
+      "release-count": 12,
+      "release-offset": 0,
+      "releases": [
+        {
+          "id": "22dba9a7-63f9-4b1f-b99a-4e854fc89887",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "4988005809612",
+          "date": "2014-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "SHM-CD",
+              "track-count": 11
+            },
+            {
+              "position": 2,
+              "format": "DVD-Video",
+              "track-count": 10
+            },
+            {
+              "position": 3,
+              "format": "SHM-CD",
+              "track-count": 10
+            },
+            {
+              "position": 4,
+              "format": "CD",
+              "track-count": 15
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B00H4NUWAO"
+              }
+            },
+            {
+              "type": "discography entry",
+              "type-id": "823656dd-0309-4247-b282-b92d287d59c5",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.en.utadahikaru.jp/music/kh5d3jwkd/"
+              }
+            }
+          ]
+        },
+        {
+          "id": "33008545-6eb8-41e4-96e5-43c0114ae0b3",
+          "title": "First Love",
+          "status": "Pseudo-Release",
+          "barcode": null,
+          "date": "1999-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Hikaru Utada",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "4202c672-402d-3629-8078-e51bdaf1b77a",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "4988006158764",
+          "date": "1999-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B00000JAT7"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/1071091"
+              }
+            }
+          ]
+        },
+        {
+          "id": "473a3b32-58e4-4fe5-91dd-473ce25f0f49",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "4988006160590",
+          "date": "1999",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "Vinyl",
+              "track-count": 7
+            },
+            {
+              "position": 2,
+              "format": "Vinyl",
+              "track-count": 6
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B00005L4AM"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/1886167"
+              }
+            }
+          ]
+        },
+        {
+          "id": "52244465-7b81-467f-b16e-946201d24c1c",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "600406427052",
+          "date": "2014-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://itunes.apple.com/jp/album/id1440763349"
+              }
+            }
+          ]
+        },
+        {
+          "id": "6f0d410f-3bcc-4e78-93ad-f5331d68a144",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "724349994225",
+          "date": "2002-10-21",
+          "country": "TW",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B00006L5E1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "8071e901-8e7e-4425-8765-0374aa58d1e9",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "600406392145",
+          "date": "2014-03",
+          "country": "TW",
+          "media": [
+            {
+              "position": 1,
+              "format": "SHM-CD",
+              "track-count": 11
+            },
+            {
+              "position": 2,
+              "format": "DVD-Video",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田光",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "810e6127-8517-409f-b9f0-43f35d490d8b",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "4988031460023",
+          "date": "2022-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 7
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 6
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B09PVGFWX9"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/22429213"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://books.rakuten.co.jp/rb/17010224/"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tower.jp/item/5318186"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.cdjapan.co.jp/product/UPJY-9202"
+              }
+            }
+          ]
+        },
+        {
+          "id": "932c04f9-925a-45fc-847d-0da6a7b4e7a5",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "00602567242154",
+          "date": "2017-12-08",
+          "country": "XW",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Hikaru Utada",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/29U9LtzSF0ftWiLNNw1CP6"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.youtube.com/playlist?list=OLAK5uy_n0BAsHJypmZtVS639yQ25yUpY4ecegCrQ"
+              }
+            }
+          ]
+        },
+        {
+          "id": "a273eb58-7c09-4698-ba9a-701ca91e3edb",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "600406427069",
+          "date": "2014-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "http://www.e-onkyo.com/music/album/uml7069/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mora.jp/package/43000006/00600406427069/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://ototoy.jp/_/default/p/134750"
+              }
+            }
+          ]
+        },
+        {
+          "id": "e48083c2-369d-4f38-9ccc-dea860382167",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "8809102521404",
+          "date": "2004-01",
+          "country": "KR",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "우타다 히카루",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B000JJRYEC"
+              }
+            }
+          ]
+        },
+        {
+          "id": "f09a2d2c-a269-4ab6-8faa-0e00f1c081e1",
+          "title": "First Love",
+          "status": "Official",
+          "barcode": "4988005809629",
+          "date": "2014-03-10",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "SHM-CD",
+              "track-count": 11
+            },
+            {
+              "position": 2,
+              "format": "DVD-Video",
+              "track-count": 10
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "宇多田ヒカル",
+              "joinphrase": "",
+              "artist": {
+                "id": "b539e453-c4fe-47e3-8a07-8517eac74429",
+                "name": "宇多田ヒカル",
+                "sort-name": "Utada, Hikaru"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.co.jp/gp/product/B00H4NWL6M"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.cdjapan.co.jp/product/TYCT-69016"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

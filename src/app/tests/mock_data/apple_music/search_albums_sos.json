@@ -1,0 +1,765 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1657869377",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos/1657869377",
+            "playParams": {
+              "id": "1657869377",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-12-09",
+            "contentRating": "explicit",
+            "trackCount": 23,
+            "upc": "196589564931",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Top Dawg Entertainment/RCA Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1658650093",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "SZA",
+            "url": "https://music.apple.com/us/album/sos/1658650093",
+            "playParams": {
+              "id": "1658650093",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-12-09",
+            "contentRating": "clean",
+            "trackCount": 23,
+            "upc": "196589564955",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Top Dawg Entertainment/RCA Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/62/93/13/6293132e-20ff-67ab-3d1f-96bb6797a6ba/196589564955.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6825451264",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "Jon Connor",
+            "url": "https://music.apple.com/us/album/sos/6825451264",
+            "playParams": {
+              "id": "6825451264",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-04-27",
+            "contentRating": "explicit",
+            "trackCount": 18,
+            "upc": "808391081666",
+            "genreNames": [
+              "Hip-Hop",
+              "Music",
+              "Hip-Hop/Rap"
+            ],
+            "recordLabel": "All Varsity Music",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/52/9b/c3/529bc398-6f0a-99a4-2e05-e28bb829949c/808391081666.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6825838640",
+          "type": "albums",
+          "attributes": {
+            "name": "Frisky - Single",
+            "artistName": "SOS & Obsessions Recordings",
+            "url": "https://music.apple.com/us/album/frisky-single/6825838640",
+            "playParams": {
+              "id": "6825838640",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-03-20",
+            "trackCount": 1,
+            "upc": "808391367029",
+            "genreNames": [
+              "Dance",
+              "Music"
+            ],
+            "recordLabel": "Obsessions Recordings",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/de/a5/7f/dea57f12-81aa-1207-e4f1-70b01e03fefd/808391367029.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1764164128",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Sex on Sight) - Single",
+            "artistName": "Victoria Monét & USHER",
+            "url": "https://music.apple.com/us/album/sos-sex-on-sight-single/1764164128",
+            "playParams": {
+              "id": "1764164128",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-08-29",
+            "contentRating": "clean",
+            "trackCount": 1,
+            "upc": "196872401349",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Lovett Music/RCA Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/9e/cd/83/9ecd83fc-8737-ea11-0684-990dce6bd222/196872401349.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1734347390",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "Eli Sostre",
+            "url": "https://music.apple.com/us/album/sos/1734347390",
+            "playParams": {
+              "id": "1734347390",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-10-28",
+            "contentRating": "explicit",
+            "trackCount": 19,
+            "upc": "7316471263893",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Independent",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/79/68/c1/7968c1fe-1cc2-5e1f-3f5c-c671a95920ed/7316471263893.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1288229918",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos (Smashed on Sight) - Single",
+            "artistName": "Sherwood Marty",
+            "url": "https://music.apple.com/us/album/sos-smashed-on-sight-single/1288229918",
+            "playParams": {
+              "id": "1288229918",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-09-22",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "859723302447",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "SleepOrGrind",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/4f/7e/ad/4f7ead5f-3761-8214-19ac-db28eeb39407/859723302447_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1600,
+              "height": 1600
+            }
+          }
+        },
+        {
+          "id": "1827967880",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Lupe Fiasco",
+            "url": "https://music.apple.com/us/album/sos-single/1827967880",
+            "playParams": {
+              "id": "1827967880",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-07-25",
+            "trackCount": 1,
+            "upc": "199350685163",
+            "genreNames": [
+              "Rap",
+              "Music",
+              "Hip-Hop/Rap"
+            ],
+            "recordLabel": "1st and 15th too",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c8/83/d3/c883d344-aa39-2e6c-b83f-4a089d13c67e/199350685163.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1668899185",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Jay Wheeler",
+            "url": "https://music.apple.com/us/album/sos-single/1668899185",
+            "playParams": {
+              "id": "1668899185",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-02-03",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "197342058018",
+            "genreNames": [
+              "Urbano latino",
+              "Music",
+              "Latin",
+              "Electronic"
+            ],
+            "recordLabel": "Linked Music / Dynamic Records / EMPIRE",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/15/67/b1/1567b10c-063a-fde4-dd06-d4f4846efb07/197342058018_cover.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1764132972",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Sex on Sight) - Single",
+            "artistName": "Victoria Monét & USHER",
+            "url": "https://music.apple.com/us/album/sos-sex-on-sight-single/1764132972",
+            "playParams": {
+              "id": "1764132972",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-08-29",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "196872384475",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Lovett Music/RCA Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e1/a7/88/e1a788db-9de5-88a3-d1a0-177674ec00a4/196872384475.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1457882147",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (feat. Aloe Blacc) - Single",
+            "artistName": "Avicii",
+            "url": "https://music.apple.com/us/album/sos-feat-aloe-blacc-single/1457882147",
+            "playParams": {
+              "id": "1457882147",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2019-03-10",
+            "trackCount": 1,
+            "upc": "00602577655111",
+            "genreNames": [
+              "Dance",
+              "Music"
+            ],
+            "recordLabel": "Pophouse Entertainment Group",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/ce/16/d8/ce16d857-5b8b-b5f1-dd65-6b3f69635f92/19UMGIM27563.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6790866229",
+          "type": "albums",
+          "attributes": {
+            "name": "S.O.S.",
+            "artistName": "Real Boston Richey",
+            "url": "https://music.apple.com/us/album/s-o-s/6790866229",
+            "playParams": {
+              "id": "6790866229",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-07-24",
+            "contentRating": "explicit",
+            "trackCount": 10,
+            "upc": "196874577936",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Freebandz Global/Epic",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/ab/e8/c2/abe8c233-3a29-185d-866b-7ddde615b0b2/196874577936.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1485073558",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos",
+            "artistName": "Millencolin",
+            "url": "https://music.apple.com/us/album/sos/1485073558",
+            "playParams": {
+              "id": "1485073558",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-02-15",
+            "trackCount": 12,
+            "upc": "0045778767106",
+            "genreNames": [
+              "Alternative",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "Epitaph",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/c4/6e/8e/c46e8e0c-a918-b96e-fe1c-baee82045cdc/0045778767106.png/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1568082861",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Acoustic) - Single",
+            "artistName": "Sueco",
+            "url": "https://music.apple.com/us/album/sos-acoustic-single/1568082861",
+            "playParams": {
+              "id": "1568082861",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-05-21",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "075679780676",
+            "genreNames": [
+              "Alternative",
+              "Music"
+            ],
+            "recordLabel": "Atlantic Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ad/c9/1a/adc91aeb-60b8-3d80-9437-932cea968825/075679780676.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "1569461513",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (Acoustic) - Single",
+            "artistName": "Sueco",
+            "url": "https://music.apple.com/us/album/sos-acoustic-single/1569461513",
+            "playParams": {
+              "id": "1569461513",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-05-20",
+            "contentRating": "clean",
+            "trackCount": 1,
+            "upc": "075679780669",
+            "genreNames": [
+              "Hard Rock",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "Atlantic Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/19/c9/93/19c99314-4f74-cb75-894a-7f19fcf9861d/075679780669.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "1653811828",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos! - Single",
+            "artistName": "Rozei",
+            "url": "https://music.apple.com/us/album/sos-single/1653811828",
+            "playParams": {
+              "id": "1653811828",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-11-25",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "197272392534",
+            "genreNames": [
+              "Punk",
+              "Music",
+              "Alternative"
+            ],
+            "recordLabel": "Rozei LLC",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/a5/3c/a3/a53ca368-26a1-7495-377f-b3bc24c22ec7/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1816074862",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Red Leather",
+            "url": "https://music.apple.com/us/album/sos-single/1816074862",
+            "playParams": {
+              "id": "1816074862",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-02-23",
+            "trackCount": 1,
+            "upc": "198083677810",
+            "genreNames": [
+              "Alternative",
+              "Music"
+            ],
+            "recordLabel": "Red Leather / EMPIRE",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/43/1c/34/431c34c7-daa5-fbd0-4a3e-c2799534e103/198083677810_cover.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1837323466",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "ALYSSA",
+            "url": "https://music.apple.com/us/album/sos-single/1837323466",
+            "playParams": {
+              "id": "1837323466",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-09-26",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "795149998331",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Hip-Hop/Rap"
+            ],
+            "recordLabel": "BIORDI",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/7a/0e/ea/7a0eea82-fe8b-6829-0734-243e86a1963b/0.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1507000866",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS",
+            "artistName": "Jon Connor",
+            "url": "https://music.apple.com/us/album/sos/1507000866",
+            "playParams": {
+              "id": "1507000866",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-04-27",
+            "contentRating": "explicit",
+            "trackCount": 18,
+            "upc": "808391081666",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "All Varsity Music",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/e9/40/cb/e940cb94-e103-6488-17da-c21604fe05dc/14696.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1735395794",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos - Single",
+            "artistName": "SOAP",
+            "url": "https://music.apple.com/us/album/sos-single/1735395794",
+            "playParams": {
+              "id": "1735395794",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-03-29",
+            "trackCount": 1,
+            "upc": "5037300069807",
+            "genreNames": [
+              "Pop/Rock",
+              "Music",
+              "Pop",
+              "Alternative",
+              "Indie Pop"
+            ],
+            "recordLabel": "Embassy Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/ca/9f/19/ca9f192c-226e-9bca-d2dc-6c550862d169/5037300069807.jpg/{w}x{h}bb.jpg",
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        },
+        {
+          "id": "1400859083",
+          "type": "albums",
+          "attributes": {
+            "name": "Sos - Single",
+            "artistName": "V. Rose",
+            "url": "https://music.apple.com/us/album/sos-single/1400859083",
+            "playParams": {
+              "id": "1400859083",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-06-28",
+            "trackCount": 1,
+            "upc": "193036017347",
+            "genreNames": [
+              "Christian",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "Independent",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/c5/f1/71/c5f1717e-eca1-f417-3837-9ecad007a96f/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1451028786",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "McClenney",
+            "url": "https://music.apple.com/us/album/sos-single/1451028786",
+            "playParams": {
+              "id": "1451028786",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-02-19",
+            "trackCount": 1,
+            "upc": "193436094559",
+            "genreNames": [
+              "R&B/Soul",
+              "Music"
+            ],
+            "recordLabel": "Haven",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/32/87/e2/3287e213-13e6-6c2c-b06b-0bebfc9d7d6f/193436094559_01_img001.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1623965236",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS - Single",
+            "artistName": "Fire From the Gods",
+            "url": "https://music.apple.com/us/album/sos-single/1623965236",
+            "playParams": {
+              "id": "1623965236",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-06-03",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "846070019906",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "Better Noise Music",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/af/bd/b5/afbdb5f9-1c43-46f1-e844-5da810d88e27/846070019906.png/{w}x{h}bb.jpg",
+              "width": 6000,
+              "height": 6000
+            }
+          }
+        },
+        {
+          "id": "1561054098",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (feat. Travis Barker) - Single",
+            "artistName": "Sueco",
+            "url": "https://music.apple.com/us/album/sos-feat-travis-barker-single/1561054098",
+            "playParams": {
+              "id": "1561054098",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-04-15",
+            "contentRating": "clean",
+            "trackCount": 1,
+            "upc": "075679786975",
+            "genreNames": [
+              "Hard Rock",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "Atlantic Records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7c/d8/43/7cd8435c-13a9-bbbf-b060-0db9e73a5dde/075679786975.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "6780604582",
+          "type": "albums",
+          "attributes": {
+            "name": "SOS (feat. MeatCanyon & Sybyr) - Single",
+            "artistName": "Jasiah",
+            "url": "https://music.apple.com/us/album/sos-feat-meatcanyon-sybyr-single/6780604582",
+            "playParams": {
+              "id": "6780604582",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-06-26",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "712132032551",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Electronic"
+            ],
+            "recordLabel": "Jasiah",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c0/bc/c1/c0bcc102-84ce-e86c-3175-c3f59aed0cc9/712132032551_cover.jpg/{w}x{h}bb.jpg",
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=sos&types=albums"
+    }
+  }
+}

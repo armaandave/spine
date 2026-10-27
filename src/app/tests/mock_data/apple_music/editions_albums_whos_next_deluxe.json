@@ -1,0 +1,284 @@
+{
+  "data": [
+    {
+      "id": "1440815866",
+      "type": "albums",
+      "attributes": {
+        "name": "Who's Next (Bonus Track Version)",
+        "artistName": "The Who",
+        "url": "https://music.apple.com/us/album/whos-next-bonus-track-version/1440815866",
+        "playParams": {
+          "id": "1440815866",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1971-08-14",
+        "trackCount": 16,
+        "upc": "00602547140265",
+        "genreNames": [
+          "Hard Rock",
+          "Music",
+          "Rock",
+          "Arena Rock",
+          "Rock & Roll",
+          "Pop",
+          "Pop/Rock"
+        ],
+        "recordLabel": "Geffen",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/4e/d5/19/4ed519ca-3f8b-65ee-eb21-89d5c6a0b44e/00602547140265.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1706357665",
+              "type": "albums",
+              "attributes": {
+                "name": "Who's Next (Remastered 2022)",
+                "artistName": "The Who",
+                "url": "https://music.apple.com/us/album/whos-next-remastered-2022/1706357665",
+                "playParams": {
+                  "id": "1706357665",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1971-08-14",
+                "trackCount": 9,
+                "upc": "00602458480429",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Arena Rock",
+                  "Hard Rock"
+                ],
+                "recordLabel": "UMC (Universal Music Catalogue)",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/a5/e7/70/a5e7703c-4e30-da7a-a319-2d3caef42c0e/23UM1IM04872.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1440850317",
+              "type": "albums",
+              "attributes": {
+                "name": "Who's Next (Deluxe Edition)",
+                "artistName": "The Who",
+                "url": "https://music.apple.com/us/album/whos-next-deluxe-edition/1440850317",
+                "playParams": {
+                  "id": "1440850317",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1971-08-14",
+                "trackCount": 29,
+                "upc": "00602547269683",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Arena Rock",
+                  "Rock & Roll"
+                ],
+                "recordLabel": "Geffen",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/1c/e8/a4/1ce8a442-eef1-0af2-cf09-30ef0e734731/00602547269683.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1440815872",
+              "type": "songs",
+              "attributes": {
+                "name": "Baba O'Riley",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "GBUM71405411"
+              }
+            },
+            {
+              "id": "1440815876",
+              "type": "songs",
+              "attributes": {
+                "name": "Bargain",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "GBUM71405412"
+              }
+            },
+            {
+              "id": "1440815878",
+              "type": "songs",
+              "attributes": {
+                "name": "Love Ain't for Keeping",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "GBUM71405413"
+              }
+            },
+            {
+              "id": "1440815881",
+              "type": "songs",
+              "attributes": {
+                "name": "My Wife",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "GBUM71405414"
+              }
+            },
+            {
+              "id": "1440815882",
+              "type": "songs",
+              "attributes": {
+                "name": "The Song Is Over",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "GBUM71405415"
+              }
+            },
+            {
+              "id": "1440815885",
+              "type": "songs",
+              "attributes": {
+                "name": "Getting In Tune",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "GBUM71405416"
+              }
+            },
+            {
+              "id": "1440815886",
+              "type": "songs",
+              "attributes": {
+                "name": "Going Mobile",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "GBUM71405417"
+              }
+            },
+            {
+              "id": "1440815888",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "GBUM71405418"
+              }
+            },
+            {
+              "id": "1440816072",
+              "type": "songs",
+              "attributes": {
+                "name": "Won't Get Fooled Again",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "GBUM71405419"
+              }
+            },
+            {
+              "id": "1440816075",
+              "type": "songs",
+              "attributes": {
+                "name": "Pure and Easy (New York Record Plant Session)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "GBUM71405422"
+              }
+            },
+            {
+              "id": "1440816079",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Don't You Do It (New York Record Plant Session)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "GBUM71405420"
+              }
+            },
+            {
+              "id": "1440816082",
+              "type": "songs",
+              "attributes": {
+                "name": "Naked Eye (Live)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "GBUM71405439"
+              }
+            },
+            {
+              "id": "1440816086",
+              "type": "songs",
+              "attributes": {
+                "name": "Water (Live)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "GBUM71405436"
+              }
+            },
+            {
+              "id": "1440816087",
+              "type": "songs",
+              "attributes": {
+                "name": "Too Much of Anything (Live)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "GBUM71405433"
+              }
+            },
+            {
+              "id": "1440816094",
+              "type": "songs",
+              "attributes": {
+                "name": "I Don't Even Know Myself",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "GBUM71406518"
+              }
+            },
+            {
+              "id": "1440816098",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind Blue Eyes (New York Record Plant Session)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "GBUM71405424"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "61499",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

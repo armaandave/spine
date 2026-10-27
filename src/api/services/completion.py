@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
 
+from app import music_catalog
 from app.models import (
     USER_OWNED_MEDIA_TYPES,
     Episode,
@@ -150,6 +151,9 @@ def completion_for_payloads(
         )
         and (payload.get("media_id") or payload.get("id")) is not None
     }
+    # Albums that moved count once, under the ref that holds them now.
+    canonical = music_catalog.canonical_music_refs(identity[:3] for identity in identities)
+    identities = {(*canonical[identity[:3]], *identity[3:]) for identity in identities}
     item_ids = set()
     grouped = {}
     for source, media_type, media_id, season_number, episode_number in identities:

@@ -24,7 +24,10 @@
             <div class="space-y-8">
           {# Title Section #}
           {% include "app/components/media/title_meta.html" %}
-          
+          {% if media.source == Sources.APPLE_MUSIC.value and media.media_type == MediaTypes.MUSIC.value %}
+            {% include "app/components/media/apple_music_badge.html" %}
+          {% endif %}
+
           {# Stats/Ratings #}
           {% if media.media_type == 'movie' or media.media_type == 'tv' or media.media_type == 'season' or media.media_type == 'book' %}
             {% include "app/components/media/ratings_panel.html" %}
@@ -60,6 +63,12 @@
 
         {# Related Films - Full width below the two-column layout #}
         {% include "app/components/media/related_media.html" %}
+
+        {% if media.source == Sources.APPLE_MUSIC.value and media.media_type == MediaTypes.MUSIC.value %}
+          <footer class="border-t border-[#2c3136] pt-4 text-xs text-gray-500">
+            Apple and Apple Music are trademarks of Apple Inc., registered in the U.S. and other countries.
+          </footer>
+        {% endif %}
       </div>
     </main>
   </div>

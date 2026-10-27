@@ -1,0 +1,130 @@
+{
+  "data": [
+    {
+      "id": "273048784",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "Thriller (25th Anniversary) [Deluxe Edition]",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "273048762",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "269572927",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "Thriller",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "269572838",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1641780998",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "Thriller 40",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1641780996",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1883770433",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "Michael: Songs From The Motion Picture",
+        "discNumber": 1,
+        "trackNumber": 10,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1883769984",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "336644163",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "Michael Jackson's This Is It (The Music That Inspired the Movie)",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "336643808",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "655262176",
+      "type": "songs",
+      "attributes": {
+        "name": "Wanna Be Startin' Somethin'",
+        "albumName": "The Indispensable Collection",
+        "discNumber": 2,
+        "trackNumber": 1,
+        "isrc": "USSM19902986"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "655260476",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

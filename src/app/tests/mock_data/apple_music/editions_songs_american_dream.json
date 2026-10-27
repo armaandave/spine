@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "id": "1724494706",
+      "type": "songs",
+      "attributes": {
+        "name": "american dream",
+        "albumName": "american dream",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USSM12304893"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1724494274",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

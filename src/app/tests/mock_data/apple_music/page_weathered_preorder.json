@@ -1,0 +1,635 @@
+{
+  "data": [
+    {
+      "id": "6803287133",
+      "type": "albums",
+      "attributes": {
+        "name": "Weathered (Deluxe Edition / Remastered 2026)",
+        "artistName": "Creed",
+        "url": "https://music.apple.com/us/album/weathered-deluxe-edition-remastered-2026/6803287133",
+        "playParams": {
+          "id": "6803287133",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2026-11-20",
+        "trackCount": 15,
+        "upc": "00888072780521",
+        "genreNames": [
+          "Rock",
+          "Music"
+        ],
+        "recordLabel": "Craft Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c6/17/b2/c617b20b-bacb-2521-2f18-509dd7ed4773/26CRGIM54377.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "6803287134",
+              "type": "songs",
+              "attributes": {
+                "name": "Bullets (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USC4R2669031",
+                "artistName": "Creed",
+                "composerName": "Mark Tremonti & Scott Stapp",
+                "durationInMillis": 229595,
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/bullets-remastered-2026/6803287133?i=6803287134"
+              }
+            },
+            {
+              "id": "6803287136",
+              "type": "songs",
+              "attributes": {
+                "name": "Freedom Fighter (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USC4R2669032",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/freedom-fighter-remastered-2026/6803287133?i=6803287136"
+              }
+            },
+            {
+              "id": "6803287139",
+              "type": "songs",
+              "attributes": {
+                "name": "Who's Got My Back? (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USC4R2669033",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/whos-got-my-back-remastered-2026/6803287133?i=6803287139"
+              }
+            },
+            {
+              "id": "6803287142",
+              "type": "songs",
+              "attributes": {
+                "name": "Signs (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USC4R2669034",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/signs-remastered-2026/6803287133?i=6803287142"
+              }
+            },
+            {
+              "id": "6803287147",
+              "type": "songs",
+              "attributes": {
+                "name": "One Last Breath (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USC4R2669035",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/one-last-breath-remastered-2026/6803287133?i=6803287147"
+              }
+            },
+            {
+              "id": "6803287148",
+              "type": "songs",
+              "attributes": {
+                "name": "My Sacrifice (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USC4R2669036",
+                "artistName": "Creed",
+                "releaseDate": "2001-10-15",
+                "url": "https://music.apple.com/us/album/my-sacrifice-remastered-2026/6803287133?i=6803287148"
+              }
+            },
+            {
+              "id": "6803287150",
+              "type": "songs",
+              "attributes": {
+                "name": "Stand Here With Me (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USC4R2669037",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/stand-here-with-me-remastered-2026/6803287133?i=6803287150"
+              }
+            },
+            {
+              "id": "6803287153",
+              "type": "songs",
+              "attributes": {
+                "name": "Weathered (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USC4R2669038",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/weathered-remastered-2026/6803287133?i=6803287153"
+              }
+            },
+            {
+              "id": "6803287156",
+              "type": "songs",
+              "attributes": {
+                "name": "Hide (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USC4R2669039",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/hide-remastered-2026/6803287133?i=6803287156"
+              }
+            },
+            {
+              "id": "6803287311",
+              "type": "songs",
+              "attributes": {
+                "name": "Don't Stop Dancing (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USC4R2669040",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/dont-stop-dancing-remastered-2026/6803287133?i=6803287311"
+              }
+            },
+            {
+              "id": "6803287328",
+              "type": "songs",
+              "attributes": {
+                "name": "Lullaby (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USC4R2669041",
+                "artistName": "Creed",
+                "releaseDate": "2001-11-20",
+                "url": "https://music.apple.com/us/album/lullaby-remastered-2026/6803287133?i=6803287328"
+              }
+            },
+            {
+              "id": "6803287329",
+              "type": "songs",
+              "attributes": {
+                "name": "Riders On The Storm (Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USC4R2602148",
+                "artistName": "Creed",
+                "composerName": "Jim Morrison, John Densmore, Robby Krieger & Ray Manzarek",
+                "durationInMillis": 378258,
+                "releaseDate": "2015-01-01",
+                "url": "https://music.apple.com/us/album/riders-on-the-storm-remastered-2026/6803287133?i=6803287329"
+              }
+            },
+            {
+              "id": "6803287330",
+              "type": "songs",
+              "attributes": {
+                "name": "My Sacrifice (Radio Edit / Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USC4R2669042",
+                "artistName": "Creed",
+                "composerName": "Mark Tremonti & Scott Stapp",
+                "durationInMillis": 259205,
+                "releaseDate": "2015-01-01",
+                "url": "https://music.apple.com/us/album/my-sacrifice-radio-edit-remastered-2026/6803287133?i=6803287330"
+              }
+            },
+            {
+              "id": "6803287331",
+              "type": "songs",
+              "attributes": {
+                "name": "Weathered (Edit / Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USC4R2669043",
+                "artistName": "Creed",
+                "releaseDate": "2015-01-01",
+                "url": "https://music.apple.com/us/album/weathered-edit-remastered-2026/6803287133?i=6803287331"
+              }
+            },
+            {
+              "id": "6803287332",
+              "type": "songs",
+              "attributes": {
+                "name": "Don't Stop Dancing (Acoustic Version / Remastered 2026)",
+                "albumName": "Weathered (Deluxe Edition / Remastered 2026)",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USC4R2669044",
+                "artistName": "Creed",
+                "releaseDate": "2015-01-01",
+                "url": "https://music.apple.com/us/album/dont-stop-dancing-acoustic-version-remastered-2026/6803287133?i=6803287332"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "2861519",
+              "type": "artists",
+              "attributes": {
+                "name": "Creed",
+                "url": "https://music.apple.com/us/artist/creed/2861519"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1440738578",
+              "type": "albums",
+              "attributes": {
+                "name": "Weathered",
+                "artistName": "Creed",
+                "url": "https://music.apple.com/us/album/weathered/1440738578",
+                "playParams": {
+                  "id": "1440738578",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2001-01-01",
+                "trackCount": 11,
+                "upc": "00601501407529",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Alternative",
+                  "Adult Alternative"
+                ],
+                "recordLabel": "The Bicycle Music Company",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/e0/6a/6a/e06a6a56-71cb-df21-526b-72b33ef3b43f/14CMGIM00789.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1440739556",
+              "type": "albums",
+              "attributes": {
+                "name": "Away from the Sun",
+                "artistName": "3 Doors Down",
+                "url": "https://music.apple.com/us/album/away-from-the-sun/1440739556",
+                "playParams": {
+                  "id": "1440739556",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2002-01-01",
+                "trackCount": 12,
+                "upc": "00044006439624",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Southern Rock",
+                  "Alternative",
+                  "Adult Alternative",
+                  "Hard Rock",
+                  "Metal"
+                ],
+                "recordLabel": "Universal Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/0a/c0/0d/0ac00d65-4327-29b1-6a1e-4f1e2684d758/06UMGIM23627.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1426,
+                  "height": 1414
+                }
+              }
+            },
+            {
+              "id": "1291016",
+              "type": "albums",
+              "attributes": {
+                "name": "14 Shades of Grey",
+                "artistName": "Staind",
+                "url": "https://music.apple.com/us/album/14-shades-of-grey/1291016",
+                "playParams": {
+                  "id": "1291016",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2003-05-20",
+                "contentRating": "explicit",
+                "trackCount": 14,
+                "upc": "075596288262",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Metal",
+                  "Alternative"
+                ],
+                "recordLabel": "Elektra Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2c/ec/15/2cec1534-36df-35bd-8cd5-3c95aafaaea4/075596288262.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1440652544",
+              "type": "albums",
+              "attributes": {
+                "name": "The Great Divide",
+                "artistName": "Scott Stapp",
+                "url": "https://music.apple.com/us/album/the-great-divide/1440652544",
+                "playParams": {
+                  "id": "1440652544",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2005-11-22",
+                "trackCount": 10,
+                "upc": "00601501417528",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Alternative",
+                  "Adult Alternative",
+                  "Hard Rock"
+                ],
+                "recordLabel": "Wind-up Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/1b/7e/d1/1b7ed1ea-aaca-85c6-ec1e-4995c3c54dc0/00601501417528.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "214475427",
+              "type": "albums",
+              "attributes": {
+                "name": "Silver Side Up",
+                "artistName": "Nickelback",
+                "url": "https://music.apple.com/us/album/silver-side-up/214475427",
+                "playParams": {
+                  "id": "214475427",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2001-09-11",
+                "contentRating": "explicit",
+                "trackCount": 10,
+                "upc": "016861848507",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Pop",
+                  "Pop/Rock",
+                  "Alternative",
+                  "Metal",
+                  "Hard Rock"
+                ],
+                "recordLabel": "Roadrunner Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ad/16/b7/ad16b7c9-2779-d2e5-0fca-83aeff09f4b6/mzi.exqcjkkz.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1450664881",
+              "type": "albums",
+              "attributes": {
+                "name": "Come Clean",
+                "artistName": "Puddle of Mudd",
+                "url": "https://music.apple.com/us/album/come-clean/1450664881",
+                "playParams": {
+                  "id": "1450664881",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2001-08-28",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602577027062",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Alternative",
+                  "Adult Alternative"
+                ],
+                "recordLabel": "Flawless Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/41/22/ab/4122ab9a-ad42-b89a-6457-a71df8117840/00602577027062.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1423,
+                  "height": 1412
+                }
+              }
+            },
+            {
+              "id": "1775309673",
+              "type": "albums",
+              "attributes": {
+                "name": "One Day Remains (Deluxe Edition)",
+                "artistName": "Alter Bridge",
+                "url": "https://music.apple.com/us/album/one-day-remains-deluxe-edition/1775309673",
+                "playParams": {
+                  "id": "1775309673",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2004-08-10",
+                "trackCount": 17,
+                "upc": "00888072667792",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "Alternative"
+                ],
+                "recordLabel": "Craft Recordings",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c3/09/a4/c309a4f8-33a0-abcb-83a2-710d63072de9/24CRGIM46412.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "321038193",
+              "type": "albums",
+              "attributes": {
+                "name": "Leave a Whisper (Deluxe Edition)",
+                "artistName": "Shinedown",
+                "url": "https://music.apple.com/us/album/leave-a-whisper-deluxe-edition/321038193",
+                "playParams": {
+                  "id": "321038193",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2003-05-27",
+                "trackCount": 25,
+                "upc": "075679986115",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Alternative"
+                ],
+                "recordLabel": "Atlantic Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/9a/a7/fb/9aa7fb92-2fa3-dcac-3fa5-5841104821d9/mzi.vcbwmgud.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "182932697",
+              "type": "albums",
+              "attributes": {
+                "name": "Falling Away",
+                "artistName": "Crossfade",
+                "url": "https://music.apple.com/us/album/falling-away/182932697",
+                "playParams": {
+                  "id": "182932697",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2006-08-28",
+                "trackCount": 11,
+                "upc": "828768423820",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Alternative"
+                ],
+                "recordLabel": "Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Features124/v4/bf/a2/8f/bfa28f7f-0f3a-cc63-c446-f46693047912/dj.elbmkfti.jpg/{w}x{h}bb.jpg",
+                  "width": 603,
+                  "height": 600
+                }
+              }
+            },
+            {
+              "id": "1440793443",
+              "type": "albums",
+              "attributes": {
+                "name": "Extreme Behavior (Deluxe Edition)",
+                "artistName": "Hinder",
+                "url": "https://music.apple.com/us/album/extreme-behavior-deluxe-edition/1440793443",
+                "playParams": {
+                  "id": "1440793443",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2005-09-27",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00602517481220",
+                "genreNames": [
+                  "Hard Rock",
+                  "Music",
+                  "Rock",
+                  "Alternative"
+                ],
+                "recordLabel": "Universal Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/03/38/a2/0338a2e3-e881-3343-f14b-9dcb2ef7ea9d/07UMGIM13312.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 900,
+                  "height": 892
+                }
+              }
+            },
+            {
+              "id": "45434534",
+              "type": "albums",
+              "attributes": {
+                "name": "Happy Pills",
+                "artistName": "Candlebox",
+                "url": "https://music.apple.com/us/album/happy-pills/45434534",
+                "playParams": {
+                  "id": "45434534",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1998-07-21",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "00093624697565",
+                "genreNames": [
+                  "Rock",
+                  "Music"
+                ],
+                "recordLabel": "Maverick",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/9d/8e/d0/9d8ed059-268d-d62e-4d66-cb411f1f4ad4/093624697527.jpg/{w}x{h}bb.jpg",
+                  "width": 2400,
+                  "height": 2400
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/6803287133/view/related-albums?offset=13"
+        }
+      }
+    }
+  ]
+}

@@ -66,6 +66,11 @@ def scope(name, budgets):
         _active.reset(token)
 
 
+def in_scope():
+    """Return whether this runs inside a ``scope``: background work nobody is waiting on."""
+    return _active.get() is not None
+
+
 def provider_for(provider, url):
     """Return the budget name for a request: by host when known, else ``provider``."""
     return PROVIDER_HOSTS.get(urlparse(url or "").hostname or "", provider)

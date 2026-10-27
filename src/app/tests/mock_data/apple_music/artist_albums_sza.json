@@ -1,0 +1,94 @@
+{
+  "data": [
+    {
+      "id": "1794644675",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS Deluxe: LANA",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos-deluxe-lana/1794644675",
+        "playParams": {
+          "id": "1794644675",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-12-20",
+        "contentRating": "explicit",
+        "trackCount": 42,
+        "upc": "196872790276",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1657869377",
+      "type": "albums",
+      "attributes": {
+        "name": "SOS",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/sos/1657869377",
+        "playParams": {
+          "id": "1657869377",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-12-09",
+        "contentRating": "explicit",
+        "trackCount": 23,
+        "upc": "196589564931",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1628387909",
+      "type": "albums",
+      "attributes": {
+        "name": "Ctrl (Deluxe)",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/ctrl-deluxe/1628387909",
+        "playParams": {
+          "id": "1628387909",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-06-09",
+        "contentRating": "explicit",
+        "trackCount": 21,
+        "upc": "196589231000",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0f/62/05/0f620515-5166-410e-64ae-5c209e7f6609/196589231000.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    }
+  ]
+}

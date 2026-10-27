@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 
 from django.conf import settings
@@ -7,6 +8,7 @@ from django.db.models import (
     Max,
     Min,
     Prefetch,
+    Q,
     Window,
     prefetch_related_objects,
 )
@@ -15,8 +17,13 @@ from django.utils.text import slugify
 from rest_framework import serializers
 
 from api.services import completion as completion_service
-from app import config, single_weight, tv_tracking
-from app.curation import curated_image_url, picked_image_urls, prime_curated_artwork
+from app import config, music_catalog, single_weight, tv_tracking
+from app.curation import (
+    curated_image_url,
+    music_picks_apply,
+    picked_image_urls,
+    prime_curated_artwork,
+)
 from app.models import (
     TV,
     BasicMedia,
@@ -27,12 +34,15 @@ from app.models import (
     Item,
     MediaLike,
     MediaTypes,
+    Music,
     Season,
     Sources,
     Status,
 )
 from lists.models import CustomList, CustomListItem
 from social.models import ProgressChange
+
+logger = logging.getLogger(__name__)
 
 
 class MediaRefSerializer(serializers.Serializer):
@@ -237,7 +247,12 @@ def media_ref_from_item(item):
 
 
 def find_item(ref):
-    """Find an Item for a media ref if it has already been materialized."""
+    """Find an Item for a media ref if it has already been materialized.
+
+    A music album is found under its canonical ref, so an old MusicBrainz ref of an
+    album that moved finds the Item that holds it now.
+    """
+    ref = music_catalog.canonical_media_ref(ref)
     return Item.objects.filter(
         source=ref["source"],
         media_type=ref["media_type"],
@@ -250,10 +265,12 @@ def find_item(ref):
 def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
     """Get or create an Item using provider metadata.
 
-    persist_series=False leaves the metadata's series for the caller to store.
+    A music album is stored under its canonical ref. persist_series=False leaves the
+    metadata's series for the caller to store.
     """
     from api.services.item_metadata import store_item_metadata
 
+    ref = music_catalog.canonical_media_ref(ref)
     defaults = {
         "title": metadata.get("title") or metadata.get("name") or ref["media_id"],
         "image": metadata.get("image") or settings.IMG_NONE,
@@ -457,6 +474,30 @@ COMPLETABLE_RELATED_SECTION_IDS = {
     "series",
     "standalone_expansions",
 }
+# An album page's related sections, in the order the app shows them, and their titles.
+MUSIC_RELATED_SECTIONS = (
+    ("other_versions", "Other Versions"),
+    ("more_by_artist", "More by {artist}"),
+    ("related_albums", "You Might Also Like"),
+)
+MUSIC_RELATED_LIMIT = 10
+# The optional fields of the app's MediaSummary, by the type it decodes them as.
+SUMMARY_TEXT_FIELDS = (
+    "relation",
+    "content_rating",
+    "subtitle",
+    "overview",
+    "image_url",
+    "poster_url",
+    "custom_poster_url",
+    "backdrop_url",
+    "custom_backdrop_url",
+    "poster_accent_color",
+    "release_date",
+    "default_source",
+)
+SUMMARY_TEXT_LIST_FIELDS = ("genres", "languages", "roles", "credit_roles")
+POSTER_ORIENTATIONS = (None, "portrait", "landscape", "square", "unknown")
 
 
 def media_summary_from_provider(
@@ -500,6 +541,12 @@ def media_summary_from_provider(
             else {}
         ),
         **({"relation": payload["relation"]} if payload.get("relation") else {}),
+        # "explicit" or "clean", for Apple Music albums that Apple rates.
+        **(
+            {"content_rating": payload["content_rating"]}
+            if payload.get("content_rating")
+            else {}
+        ),
         "subtitle": payload.get("year") or payload.get("subtitle"),
         "overview": synopsis_from_payload(payload),
         **with_curated_artwork(artwork, item, request=request),
@@ -748,7 +795,7 @@ def custom_poster_url_for_user(user, ref, request=None, item=None):
 
     if item is None:
         item = find_item(ref)
-    if item is None:
+    if item is None or not music_picks_apply(item):
         return None
     prefetched = getattr(item, "viewer_custom_poster_preferences", None)
     preference = prefetched[0] if prefetched else None
@@ -765,7 +812,7 @@ def custom_backdrop_url_for_user(user, ref, request=None, item=None):
 
     if item is None:
         item = find_item(ref)
-    if item is None:
+    if item is None or not music_picks_apply(item):
         return None
     prefetched = getattr(item, "viewer_custom_backdrop_preferences", None)
     preference = prefetched[0] if prefetched else None
@@ -774,11 +821,16 @@ def custom_backdrop_url_for_user(user, ref, request=None, item=None):
     return absolute_url(request, preference.custom_image_url) if preference else None
 
 
-def related_sections_from_payload(related, media_type, source, request=None, user=None):
-    """Normalize provider related media into mobile section cards."""
+def related_sections_from_payload(related, media_type, source, request=None, user=None, metadata=None):  # noqa: C901
+    """Normalize provider related media into mobile section cards.
+
+    ``metadata`` is the page's own; it names the artist of an album's More by section.
+    """
     if not related:
         return []
 
+    if media_type == MediaTypes.MUSIC.value:
+        return _music_related_sections(related, source, metadata=metadata or {}, request=request, user=user)
     if media_type == MediaTypes.BOOK.value:
         series_sections = [
             ("series", key, values)
@@ -848,6 +900,17 @@ def related_sections_from_payload(related, media_type, source, request=None, use
             if key not in {"seasons", "all_related"} and values
         ]
 
+    # One lookup for every section, so albums that moved open under their canonical ref.
+    payloads = [
+        value.get("item", value) if isinstance(value, dict) else value
+        for _, _, values in candidates
+        for value in values
+    ]
+    canonical = music_catalog.canonical_music_refs(
+        music_catalog.payload_ref(payload, source=source, media_type=media_type)
+        for payload in payloads
+        if isinstance(payload, dict)
+    )
     sections = []
     for key, title, values in candidates:
         items = []
@@ -866,6 +929,7 @@ def related_sections_from_payload(related, media_type, source, request=None, use
             payload = value.get("item", value) if isinstance(value, dict) else value
             if not isinstance(payload, dict):
                 continue
+            payload = music_catalog.with_canonical_ref(payload, canonical, source=source, media_type=media_type)
             item_media_type = payload.get("media_type", media_type)
             item_source = payload.get("source", source)
             summary = media_summary_from_provider(
@@ -891,6 +955,145 @@ def related_sections_from_payload(related, media_type, source, request=None, use
                 "completion": completion,
             })
     return sections
+
+
+def _music_related_sections(related, source, *, metadata, request, user):
+    """Return an album page's Other Versions, More by and You Might Also Like sections.
+
+    At most 10 albums each, under their canonical refs, with their Items found in one
+    query. An album the app couldn't decode is left out: one bad card would break the
+    whole page, which the app decodes strictly.
+    """
+    artist = next(
+        (
+            credit["name"]
+            for credit in (metadata.get("music") or {}).get("artist_credit") or []
+            if isinstance(credit, dict) and credit.get("name")
+        ),
+        None,
+    )
+    candidates = [
+        (key, title.format(artist=artist or "This Artist"), values[:MUSIC_RELATED_LIMIT])
+        for key, title in MUSIC_RELATED_SECTIONS
+        if (values := [value for value in related.get(key) or [] if isinstance(value, dict)])
+    ]
+    music = MediaTypes.MUSIC.value
+    canonical = music_catalog.canonical_music_refs(
+        music_catalog.payload_ref(value, source=source, media_type=music)
+        for _, _, values in candidates
+        for value in values
+    )
+    items = _music_items(set(canonical.values()), user)
+    sections = []
+    for key, title, values in candidates:
+        summaries = []
+        refs = set()
+        for value in values:
+            payload = music_catalog.with_canonical_ref(value, canonical, source=source, media_type=music)
+            ref = music_catalog.payload_ref(payload, source=source, media_type=music)
+            if ref in refs:
+                continue
+            summary = _music_related_summary(payload, ref, items.get(ref), request=request, user=user)
+            if summary is not None:
+                refs.add(ref)
+                summaries.append(summary)
+        if summaries:
+            sections.append({"id": key, "title": title, "items": summaries, "completion": None})
+    return sections
+
+
+def _music_items(refs, user):
+    """Return the Items of these album refs, primed with the viewer's state, by ref."""
+    ids_by_source = {}
+    for source, media_type, media_id in refs:
+        if media_type == MediaTypes.MUSIC.value and source and media_id:
+            ids_by_source.setdefault(source, set()).add(media_id)
+    if not ids_by_source:
+        return {}
+    query = Q(pk__in=[])
+    for source, media_ids in ids_by_source.items():
+        query |= Q(source=source, media_id__in=media_ids)
+    items = list(
+        Item.objects.filter(
+            query,
+            media_type=MediaTypes.MUSIC.value,
+            season_number=None,
+            episode_number=None,
+        ),
+    )
+    media_by_item = (
+        {music.item_id: music for music in Music.objects.filter(user=user, item__in=items).select_related("item")}
+        if items and user and user.is_authenticated
+        else None
+    )
+    prime_collection_items(items, user, media_by_item=media_by_item)
+    return {(item.source, item.media_type, item.media_id): item for item in items}
+
+
+def music_summaries_from_provider(payloads, source, request=None, user=None):
+    """Serialize a page of albums with their Items and the viewer's state.
+
+    The same summaries as ``media_summary_from_provider`` one album at a time, read in
+    a fixed number of queries however many albums the page has.
+    """
+    refs = [music_catalog.payload_ref(payload, source=source, media_type=MediaTypes.MUSIC.value) for payload in payloads]
+    items = _music_items(set(refs), user)
+    return [
+        media_summary_from_provider(payload, ref[1], ref[0], request=request, user=user, item=items.get(ref))
+        for payload, ref in zip(payloads, refs, strict=True)
+    ]
+
+
+def _music_related_summary(payload, ref, item, *, request, user):
+    """Return a related album's summary, or None when the app couldn't decode it."""
+    if not all(isinstance(part, str) and part for part in ref):
+        return None
+    title = payload.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return None
+    try:
+        summary = media_summary_from_provider(payload, ref[1], ref[0], request=request, user=user, item=item)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        logger.warning("Left out a related album that couldn't be read: %s", ref)
+        return None
+    if not _decodable_summary(summary):
+        logger.warning("Left out a related album the app couldn't decode: %s", ref)
+        return None
+    return summary
+
+
+def _decodable_summary(summary):
+    """Return whether the app's strict ``MediaSummary`` decoder accepts a summary."""
+
+    def text(value, *, required=False):
+        return isinstance(value, str) and bool(value) if required else value is None or isinstance(value, str)
+
+    def whole(value):
+        return value is None or (isinstance(value, int) and not isinstance(value, bool))
+
+    ref = summary.get("ref")
+    if not isinstance(ref, dict):
+        return False
+    return (
+        all(text(ref.get(key), required=True) for key in ("source", "media_type", "media_id"))
+        and all(whole(ref.get(key)) for key in ("item_id", "season_number", "episode_number"))
+        and text(summary.get("title"), required=True)
+        and all(text(summary.get(key)) for key in SUMMARY_TEXT_FIELDS)
+        and all(
+            isinstance(summary.get(key) or [], list) and all(isinstance(value, str) for value in summary.get(key) or [])
+            for key in SUMMARY_TEXT_LIST_FIELDS
+        )
+        and all(whole(summary.get(key)) for key in ("poster_width", "poster_height", "position"))
+        and (
+            summary.get("poster_aspect_ratio") is None
+            or (
+                isinstance(summary["poster_aspect_ratio"], int | float)
+                and not isinstance(summary["poster_aspect_ratio"], bool)
+            )
+        )
+        and summary.get("poster_orientation") in POSTER_ORIENTATIONS
+        and (summary.get("user_state") is None or isinstance(summary["user_state"], dict))
+    )
 
 
 def user_state_for_item(user, item):

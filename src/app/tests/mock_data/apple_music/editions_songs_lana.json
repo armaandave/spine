@@ -1,0 +1,109 @@
+{
+  "data": [
+    {
+      "id": "1794644676",
+      "type": "songs",
+      "attributes": {
+        "name": "No More Hiding",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USRC12403823"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786643045",
+      "type": "songs",
+      "attributes": {
+        "name": "No More Hiding",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USRC12403823"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1794645014",
+      "type": "songs",
+      "attributes": {
+        "name": "SOS",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 2,
+        "trackNumber": 1,
+        "isrc": "USRC12204583"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1794644675",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1657869385",
+      "type": "songs",
+      "attributes": {
+        "name": "SOS",
+        "albumName": "SOS",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USRC12204583"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1657869377",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1786643242",
+      "type": "songs",
+      "attributes": {
+        "name": "SOS",
+        "albumName": "SOS Deluxe: LANA",
+        "discNumber": 1,
+        "trackNumber": 16,
+        "isrc": "USRC12204583"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1786643044",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

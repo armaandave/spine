@@ -3873,8 +3873,10 @@ final class SpineTests: XCTestCase {
         let decoded = try JSONDecoder.api.decode(TrackingState.self, from: data)
 
         XCTAssertEqual(decoded.latestProgressChange?.id, 77)
-        XCTAssertEqual(decoded.latestProgressChange?.compactDisplayText(preferredMode: nil), "42% → 58%")
-        XCTAssertEqual(decoded.homeProgressText(preferredMode: nil), "42% → 58%")
+        XCTAssertEqual(
+            decoded.latestProgressChange?.compactDisplayParts(preferredMode: nil),
+            ProgressChangeDisplay(previous: "42%", current: "58%")
+        )
     }
 
     func testPercentageProgressDisplayUsesPercentEverywhere() {
@@ -3899,8 +3901,21 @@ final class SpineTests: XCTestCase {
             createdAt: nil
         )
 
-        XCTAssertEqual(change.compactDisplayText(preferredMode: .pages), "120/300 pages → 174/300 pages")
-        XCTAssertEqual(change.compactDisplayText(preferredMode: .percentage), "40% → 58%")
+        XCTAssertEqual(
+            change.compactDisplayParts(preferredMode: .pages),
+            ProgressChangeDisplay(previous: "120/300 pages", current: "174/300 pages")
+        )
+        XCTAssertEqual(
+            change.compactDisplayParts(preferredMode: .percentage),
+            ProgressChangeDisplay(previous: "40%", current: "58%")
+        )
+        let unchanged = ProgressChangeState(
+            id: 2,
+            previous: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
+            current: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
+            createdAt: nil
+        )
+        XCTAssertNil(unchanged.compactDisplayParts(preferredMode: nil), "No change to show")
     }
 
     func testProgressDeltaTextFormatting() {
@@ -4037,40 +4052,6 @@ final class SpineTests: XCTestCase {
         )
     }
 
-    func testHomeProgressFallsBackWhenProgressDeltaIsMissingOrUnchanged() {
-        let unchanged = TrackingState(
-            trackingId: 1,
-            status: "In progress",
-            rating: nil,
-            progress: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-            latestProgressChange: ProgressChangeState(
-                id: 1,
-                previous: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-                current: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-                createdAt: nil
-            ),
-            repeats: nil,
-            startDate: nil,
-            endDate: nil,
-            notes: nil,
-            updatedAt: nil
-        )
-        let missing = TrackingState(
-            trackingId: 2,
-            status: "In progress",
-            rating: nil,
-            progress: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-            repeats: nil,
-            startDate: nil,
-            endDate: nil,
-            notes: nil,
-            updatedAt: nil
-        )
-
-        XCTAssertEqual(unchanged.homeProgressText(preferredMode: nil), "58%")
-        XCTAssertEqual(missing.homeProgressText(preferredMode: nil), "58%")
-    }
-
     func testMinuteProgressDoesNotInventPercentage() {
         let progress = ProgressState(kind: "progress", value: Decimal(58), max: nil, unit: "minutes")
 
@@ -4079,7 +4060,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(progress.detailDisplayText(preferredMode: .percentage), "58 minutes")
     }
 
-    func testZeroProgressDisplaysAsStartedOnHome() {
+    func testZeroProgressHasNoCompactText() {
         let tracking = TrackingState(
             trackingId: 1,
             status: "In progress",
@@ -4094,8 +4075,6 @@ final class SpineTests: XCTestCase {
 
         XCTAssertNil(tracking.progress?.compactDisplayText(preferredMode: .percentage))
         XCTAssertNil(tracking.progress?.compactDisplayText)
-        XCTAssertEqual(tracking.homeProgressText(preferredMode: nil), "Started")
-        XCTAssertEqual(tracking.homeProgressText(preferredMode: .percentage), "Started")
     }
 
     func testUserMediaStateDecodesProgress() throws {

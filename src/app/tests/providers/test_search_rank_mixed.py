@@ -3,7 +3,10 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from app.models import MediaTypes, Sources
+from app.providers import apple_music
 from app.providers.search_rank import rank_mixed_results, rank_results
+from app.tests.providers.test_apple_music import AppleMusicTestCase
+from app.tests.providers.test_apple_music_search import search_answers
 
 
 class MixedSearchRankTests(SimpleTestCase):
@@ -320,3 +323,107 @@ class MixedSearchRankTests(SimpleTestCase):
         ranked = rank_results("the wall", results, MediaTypes.MUSIC.value)
 
         self.assertEqual([item["media_id"] for item in ranked], ["floyd", "kills"])
+
+
+def film(media_id, title, votes):
+    return {
+        "media_id": media_id,
+        "media_type": MediaTypes.MOVIE.value,
+        "source": Sources.TMDB.value,
+        "title": title,
+        "image": f"https://example.com/{media_id}.jpg",
+        "release_date": "2006-03-15",
+        "vote_count": votes,
+    }
+
+
+class AppleMusicSearchRankTests(AppleMusicTestCase):
+    """All media search with Apple Music's albums, which come with no popularity.
+
+    Apple's order stands in for it: the first album gets 30, and each one after it
+    3 less. Tuned with Apple's first page for each query (recorded 2026-10-26).
+    """
+
+    # Apple's first album for each query: Beyoncé's, Michael Jackson's and SZA's.
+    QUERIES = (
+        ("renaissance", "renaissance", "1630005298"),
+        ("thriller", "thriller", "269572838"),
+        ("sos", "sos", "1657869377"),
+    )
+
+    def candidates(self, name, query, *others):
+        self.apple(*search_answers(name))
+        albums = apple_music.search_albums(query, 1, preserve_ranking_fields=True)["results"]
+        return [*enumerate(albums), *((0, other) for other in others)]
+
+    def test_the_boost_falls_by_three_a_place(self):
+        self.assertEqual(
+            [apple_music.rank_boost(position) for position in range(12)],
+            [30, 27, 24, 21, 18, 15, 12, 9, 6, 3, 0, 0],
+        )
+
+    def test_apples_first_album_leads_a_film_with_the_same_title(self):
+        for name, query, first in self.QUERIES:
+            with self.subTest(query=query):
+                candidates = self.candidates(name, query, film("film", query.title(), 300))
+
+                ranked = rank_mixed_results(query, candidates, limit=24)
+                unboosted = rank_mixed_results(
+                    query,
+                    [(rank, {**item, "provider_rank_boost": 0}) for rank, item in candidates],
+                    limit=24,
+                )
+
+                self.assertEqual([item["media_id"] for item in ranked[:2]], [first, "film"])
+                self.assertEqual(unboosted[0]["media_id"], "film")
+                self.assertNotIn("provider_rank_boost", ranked[0])
+
+    def test_a_popular_film_with_the_same_title_still_comes_first(self):
+        for name, query, first in self.QUERIES:
+            with self.subTest(query=query):
+                candidates = self.candidates(name, query, film("film", query.title(), 10_000))
+
+                ranked = rank_mixed_results(query, candidates, limit=24)
+
+                self.assertEqual([item["media_id"] for item in ranked[:2]], ["film", first])
+
+    def test_the_same_title_lower_in_apples_list_ranks_below_its_first(self):
+        candidates = self.candidates("thriller", "thriller")
+
+        ranked = [item["media_id"] for item in rank_mixed_results("thriller", candidates, limit=24)]
+
+        # Michael Jackson's Thriller, then the compilation called Thriller, then
+        # other artists' singles called Thriller, in Apple's order.
+        self.assertEqual(ranked[:4], ["269572838", "6827221246", "1838923953", "1587850086"])
+
+    def test_apples_first_album_never_overwhelms_popular_exact_adaptations(self):
+        album = {
+            "media_id": "album",
+            "media_type": MediaTypes.MUSIC.value,
+            "source": Sources.APPLE_MUSIC.value,
+            "title": "Dune",
+            "image": "https://example.com/album.jpg",
+            "first_release_date": "1995",
+            "provider_rank_boost": apple_music.rank_boost(0),
+        }
+        candidates = [
+            (0, album),
+            (0, {**film("movie", "Dune", 10_000), "release_date": "2021-09-15"}),
+            (
+                0,
+                {
+                    "media_id": "book",
+                    "media_type": MediaTypes.BOOK.value,
+                    "source": Sources.HARDCOVER.value,
+                    "title": "Dune",
+                    "image": "https://example.com/book.jpg",
+                    "first_publish_year": 1965,
+                    "author_name": "Frank Herbert",
+                    "ratings_count": 100_000,
+                },
+            ),
+        ]
+
+        ranked = rank_mixed_results("dune", candidates, limit=24)
+
+        self.assertEqual([item["media_id"] for item in ranked], ["book", "movie", "album"])

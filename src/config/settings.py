@@ -376,6 +376,9 @@ LISTENBRAINZ_TOKEN = config(
 APPLE_MUSIC_TEAM_ID = config("APPLE_MUSIC_TEAM_ID", default="")
 APPLE_MUSIC_KEY_ID = config("APPLE_MUSIC_KEY_ID", default="")
 APPLE_MUSIC_PRIVATE_KEY = config("APPLE_MUSIC_PRIVATE_KEY", default="")  # base64 of the .p8, one line
+# Where new music albums come from: "apple_music", or anything else for MusicBrainz.
+MUSIC_CATALOG_DEFAULT = "musicbrainz"
+MUSIC_CATALOG_SOURCE = config("MUSIC_CATALOG_SOURCE", default=MUSIC_CATALOG_DEFAULT)
 
 ADMIN_ENABLED = config("ADMIN_ENABLED", default=False, cast=bool)
 
@@ -719,6 +722,16 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Refresh music genre albums",
         "schedule": crontab(hour=4, minute=30, day_of_week="mon"),  # weekly
     },
+    "fill_apple_album_bridges": {
+        "task": "Fill Apple album bridges",
+        "schedule": 60 * 5,  # every 5 minutes; a run works at most a minute
+        "options": {"expire_seconds": 60 * 4},
+    },
+    "link_genre_albums_to_apple": {
+        "task": "Link genre albums to Apple",
+        "schedule": 60 * 60,  # hourly; a run works at most 10 minutes
+        "options": {"expire_seconds": 60 * 50},
+    },
     "sweep_item_metadata": {
         "task": "Sweep item metadata",
         # every hour; fills what was tracked or logged lately, resumes the metadata fill
@@ -728,12 +741,14 @@ CELERY_BEAT_SCHEDULE = {
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
 # on the default queue never delay an award night. The music genre refresh (about
-# an hour of ListenBrainz and Wikipedia requests) runs there too, off the default queue,
-# and so does the metadata fill (hours of ~30 s chunks and the hourly sweep).
+# an hour of ListenBrainz and Wikipedia requests), the hourly linking of genre albums to
+# Apple Music and the metadata fill (hours of ~30 s chunks and the hourly sweep) run
+# there too, off the default queue.
 CELERY_TASK_ROUTES = {
     "Dispatch featured lists": {"queue": "featured"},
     "Sync featured list": {"queue": "featured"},
     "Refresh music genre albums": {"queue": "featured"},
+    "Link genre albums to Apple": {"queue": "featured"},
     "Fill item metadata": {"queue": "featured"},
     "Sweep item metadata": {"queue": "featured"},
 }
