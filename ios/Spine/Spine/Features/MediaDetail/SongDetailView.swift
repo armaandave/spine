@@ -52,6 +52,11 @@ enum MusicSongPresentation {
         return "Track \(number) on \(detail.parentAlbum.title)"
     }
 
+    /// The song's own rating, else its track's on the album, which the tracklist showed.
+    static func isExplicit(_ detail: MusicRecordingDetail) -> Bool {
+        MusicContentRating.isExplicit(detail.contentRating ?? detail.contextRelease.track.contentRating)
+    }
+
     static func credit(_ credit: MusicRecordingCredit) -> String? {
         let roles = credit.roles.compactMap { role -> String? in
             switch role.lowercased() {
@@ -289,7 +294,7 @@ struct SongDetailView: View {
             .padding(.bottom, 18)
 
             VStack(alignment: .leading, spacing: 11) {
-                Text(detail.title)
+                (MusicSongPresentation.isExplicit(detail) ? Text.explicitPageTitle(detail.title) : Text(detail.title))
                     .font(.system(size: 33, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -432,11 +437,13 @@ struct SongDetailView: View {
     @ViewBuilder
     private func songArtistByline(_ credits: [MusicArtistCredit]) -> some View {
         if let presentation = MediaCreditPresentation.musicArtists(credits) {
+            let reachesVertically = presentation.heroPeople.count == 1 && presentation.heroMoreCount == 0
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(presentation.heroPeople, id: \.self) { person in
                     if let personRef = person.personRef {
                         Button { presentedPerson = personRef } label: {
                             songArtistText(person.name)
+                                .creditTapArea(reachesVertically: reachesVertically)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(person.name)")

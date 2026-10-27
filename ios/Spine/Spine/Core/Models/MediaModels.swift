@@ -159,6 +159,8 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
     let title: String
     let preferredTitle: String?
     let relation: String?
+    /// Apple Music albums: "explicit" or "clean".
+    let contentRating: String?
     let subtitle: String?
     let overview: String?
     let imageUrl: String?
@@ -208,6 +210,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         case title
         case preferredTitle = "displayTitle"
         case relation
+        case contentRating
         case subtitle
         case overview
         case imageUrl
@@ -240,6 +243,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         title: String,
         preferredTitle: String? = nil,
         relation: String? = nil,
+        contentRating: String? = nil,
         subtitle: String? = nil,
         overview: String? = nil,
         imageUrl: String? = nil,
@@ -270,6 +274,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
         self.title = title
         self.preferredTitle = preferredTitle
         self.relation = relation
+        self.contentRating = contentRating
         self.subtitle = subtitle
         self.overview = overview
         self.imageUrl = imageUrl
@@ -305,6 +310,7 @@ nonisolated struct MediaSummary: Codable, Identifiable, Hashable {
             title: try container.decode(String.self, forKey: .title),
             preferredTitle: try container.decodeIfPresent(String.self, forKey: .preferredTitle),
             relation: try container.decodeIfPresent(String.self, forKey: .relation),
+            contentRating: try container.decodeIfPresent(String.self, forKey: .contentRating),
             subtitle: try container.decodeIfPresent(String.self, forKey: .subtitle),
             overview: try container.decodeIfPresent(String.self, forKey: .overview),
             imageUrl: imageUrl,
@@ -439,6 +445,8 @@ struct MusicDetail: Decodable {
     let firstReleaseDate: String?
     let releaseCount: Int?
     let artistCredit: [MusicArtistCredit]
+    /// Apple Music albums: "explicit" or "clean".
+    let contentRating: String?
     let coverArt: MusicCoverArt
     let representativeRelease: MusicRepresentativeRelease?
 
@@ -451,6 +459,7 @@ struct MusicDetail: Decodable {
         case firstReleaseDate
         case releaseCount
         case artistCredit
+        case contentRating
         case coverArt
         case representativeRelease
     }
@@ -465,6 +474,7 @@ struct MusicDetail: Decodable {
         firstReleaseDate = try container.decodeIfPresent(String.self, forKey: .firstReleaseDate)
         releaseCount = try container.decodeIfPresent(Int.self, forKey: .releaseCount)
         artistCredit = try container.decodeIfPresent([MusicArtistCredit].self, forKey: .artistCredit) ?? []
+        contentRating = try container.decodeIfPresent(String.self, forKey: .contentRating)
         coverArt = try container.decode(MusicCoverArt.self, forKey: .coverArt)
         representativeRelease = try container.decodeIfPresent(
             MusicRepresentativeRelease.self,
@@ -477,6 +487,13 @@ struct MusicCoverArt: Decodable {
     let source: String
     let releaseGroupMbid: String
     let fallbackUsed: Bool
+}
+
+/// Apple Music rates albums and songs "explicit" or "clean". Only explicit ones get the "E" badge, as in Apple Music.
+enum MusicContentRating {
+    static func isExplicit(_ contentRating: String?) -> Bool {
+        contentRating?.lowercased() == "explicit"
+    }
 }
 
 struct MusicRepresentativeRelease: Decodable {
@@ -543,6 +560,8 @@ struct MusicLabel: Decodable {
 struct MusicStreamingLink: Decodable {
     let service: String
     let url: String
+    /// "album", or "search" when the link opens the service's search for the album instead.
+    var kind: String?
 }
 
 struct MusicMedium: Decodable {
@@ -581,6 +600,8 @@ struct MusicTrack: Decodable, Identifiable {
     let title: String
     let lengthMs: Int?
     let artistCredit: [MusicArtistCredit]
+    /// Apple Music songs: "explicit" or "clean".
+    let contentRating: String?
     let recording: MusicRecording
 
     var id: String { trackMbid }
@@ -593,6 +614,7 @@ struct MusicTrack: Decodable, Identifiable {
         case title
         case lengthMs
         case artistCredit
+        case contentRating
         case recording
     }
 
@@ -605,6 +627,7 @@ struct MusicTrack: Decodable, Identifiable {
         title = try container.decode(String.self, forKey: .title)
         lengthMs = try container.decodeIfPresent(Int.self, forKey: .lengthMs)
         artistCredit = try container.decodeIfPresent([MusicArtistCredit].self, forKey: .artistCredit) ?? []
+        contentRating = try container.decodeIfPresent(String.self, forKey: .contentRating)
         recording = try container.decode(MusicRecording.self, forKey: .recording)
     }
 }
@@ -658,12 +681,12 @@ struct MusicArtistCredit: Decodable {
     let artistMbid: String?
     let name: String
     let joinPhrase: String
+    /// Apple Music credits name their artist's source and ID; MusicBrainz ones send only `artistMbid`.
+    let artistSource: String?
+    let artistId: String?
 
     var personRef: PersonRef? {
-        guard let artistMbid = artistMbid?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !artistMbid.isEmpty
-        else { return nil }
-        return PersonRef(source: "musicbrainz", id: artistMbid)
+        PersonRef.musicArtist(source: artistSource, id: artistId, mbid: artistMbid)
     }
 }
 
@@ -671,18 +694,19 @@ struct MusicRecordingCredit: Decodable {
     let artistMbid: String?
     let name: String
     let roles: [String]
+    let artistSource: String?
+    let artistId: String?
 
     var personRef: PersonRef? {
-        guard let artistMbid = artistMbid?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !artistMbid.isEmpty
-        else { return nil }
-        return PersonRef(source: "musicbrainz", id: artistMbid)
+        PersonRef.musicArtist(source: artistSource, id: artistId, mbid: artistMbid)
     }
 
     enum CodingKeys: String, CodingKey {
         case artistMbid
         case name
         case roles
+        case artistSource
+        case artistId
     }
 
     init(from decoder: Decoder) throws {
@@ -690,6 +714,22 @@ struct MusicRecordingCredit: Decodable {
         artistMbid = try container.decodeIfPresent(String.self, forKey: .artistMbid)
         name = try container.decode(String.self, forKey: .name)
         roles = try container.decodeIfPresent([String].self, forKey: .roles) ?? []
+        artistSource = try container.decodeIfPresent(String.self, forKey: .artistSource)
+        artistId = try container.decodeIfPresent(String.self, forKey: .artistId)
+    }
+}
+
+private extension PersonRef {
+    /// The credit's own source and ID when it names both, else its MusicBrainz artist.
+    static func musicArtist(source: String?, id: String?, mbid: String?) -> PersonRef? {
+        func value(_ text: String?) -> String? {
+            let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let source = value(source), let id = value(id) {
+            return PersonRef(source: source, id: id)
+        }
+        return value(mbid).map { PersonRef(source: "musicbrainz", id: $0) }
     }
 }
 
@@ -783,6 +823,8 @@ struct MusicRecordingDetail: Decodable {
     let disambiguation: String?
     let firstReleaseDate: String?
     let isVideo: Bool
+    /// Apple Music songs: "explicit" or "clean".
+    let contentRating: String?
     let genres: [String]
     let rating: MusicRecordingRating?
     let annotation: String?
@@ -806,6 +848,7 @@ struct MusicRecordingDetail: Decodable {
         case disambiguation
         case firstReleaseDate
         case isVideo
+        case contentRating
         case genres
         case rating
         case annotation
@@ -831,6 +874,7 @@ struct MusicRecordingDetail: Decodable {
         disambiguation = try container.decodeIfPresent(String.self, forKey: .disambiguation)
         firstReleaseDate = try container.decodeIfPresent(String.self, forKey: .firstReleaseDate)
         isVideo = try container.decode(Bool.self, forKey: .isVideo)
+        contentRating = try container.decodeIfPresent(String.self, forKey: .contentRating)
         genres = try container.decodeIfPresent([String].self, forKey: .genres) ?? []
         rating = try container.decodeIfPresent(MusicRecordingRating.self, forKey: .rating)
         annotation = try container.decodeIfPresent(String.self, forKey: .annotation)

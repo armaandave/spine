@@ -30,6 +30,7 @@ final class MediaDetailViewModel {
     let changeOrigin = UUID()
     let writeRefreshDelay: Duration
     let externalRefreshDelay: Duration
+    let bareAlbumRetryDelay: Duration
     private(set) var pending: [PendingWrite] = []
     private(set) var pendingWriteCount = 0
     private var eyeWritesInFlight = 0
@@ -42,7 +43,8 @@ final class MediaDetailViewModel {
     @ObservationIgnored private var refreshIsWaiting = false
     @ObservationIgnored private var scheduledNeed = RefreshNeed.none
 
-    private let ref: MediaRef
+    /// The opening ref until a music page loads, then the ref the album answered with (MusicBrainz → Apple Music).
+    private(set) var ref: MediaRef
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
     private let diaryRepository: DiaryRepository
@@ -59,7 +61,8 @@ final class MediaDetailViewModel {
         externalRatingPollInterval: Duration? = nil,
         externalRatingMaxPollAttempts: Int = 30,
         writeRefreshDelay: Duration = .milliseconds(500),
-        externalRefreshDelay: Duration = .milliseconds(300)
+        externalRefreshDelay: Duration = .milliseconds(300),
+        bareAlbumRetryDelay: Duration = .seconds(2)
     ) {
         self.ref = ref
         self.mediaRepository = mediaRepository
@@ -70,6 +73,7 @@ final class MediaDetailViewModel {
         self.externalRatingMaxPollAttempts = externalRatingMaxPollAttempts
         self.writeRefreshDelay = writeRefreshDelay
         self.externalRefreshDelay = externalRefreshDelay
+        self.bareAlbumRetryDelay = bareAlbumRetryDelay
     }
 
     /// The page's one tracking state: the confirmed `detail.userState` with pending writes applied in tap order.
@@ -109,8 +113,16 @@ final class MediaDetailViewModel {
 
         do {
             let loaded = try await mediaRepository.detail(ref: ref)
+            // An album that moved to Apple Music answers its old MusicBrainz ref with its Apple page. Reloads, reviews
+            // and other screens' changes then use the ref its writes post.
+            if loaded.ref.mediaType == "music" { ref = loaded.ref }
             detail = loaded
             isLoading = false
+            // While Apple Music fails for a moment, the server opens a saved album from its Item: no tracks, buttons
+            // or related albums. One quiet retry fills the page in.
+            if refreshBringsWholeMusicPage, loaded.music == nil {
+                scheduleRefresh(.full, after: bareAlbumRetryDelay)
+            }
             async let enrichment: Void = loadMusicEnrichmentIfNeeded(for: loaded)
             async let tracking: Void = mergeTrackingIfNeeded(for: loaded)
             async let reviewLoad: Void = loadReviews()
@@ -125,8 +137,9 @@ final class MediaDetailViewModel {
         }
     }
 
+    /// Only MusicBrainz albums load in two stages; an Apple Music album's first payload is the whole page.
     private func loadMusicEnrichmentIfNeeded(for loaded: MediaDetail) async {
-        guard loaded.ref.mediaType == "music" else {
+        guard loaded.ref.mediaType == "music", ref.source == "musicbrainz" else {
             musicEnrichmentState = .idle
             return
         }
@@ -241,6 +254,17 @@ final class MediaDetailViewModel {
         ["tv", "season", "episode"].contains(ref.mediaType)
     }
 
+    /// An Apple Music album has no second stage, so a full refresh brings its whole page.
+    private var refreshBringsWholeMusicPage: Bool {
+        ref.mediaType == "music" && ref.source != "musicbrainz"
+    }
+
+    /// An Apple Music album's refresh replaces the page, which fills in one that opened bare or partial while Apple
+    /// Music failed. The bare page built from the Item never replaces one that has its music.
+    private func refreshReplacesMusicPage(with loaded: MediaDetail) -> Bool {
+        refreshBringsWholeMusicPage && (loaded.music != nil || detail?.music == nil)
+    }
+
     /// Coalesces refreshes: one waits at a time, keeping the strongest need, and runs after the write queue settles.
     func scheduleRefresh(_ need: RefreshNeed, after delay: Duration) {
         guard need > .none else { return }
@@ -320,12 +344,12 @@ final class MediaDetailViewModel {
                 userState = (userState ?? .untracked).applying(tracking)
             }
             let lostRace = generation != stateGeneration || hasPendingWrites
-            if refreshesWholeDetail || detail == nil {
+            if refreshesWholeDetail || detail == nil || refreshReplacesMusicPage(with: loaded) {
                 var next = loaded
                 next.userState = lostRace ? detail?.userState : userState
                 detail = next
             } else {
-                // Patch only what can change, so music enrichment and other loaded extras stay.
+                // Patch only what can change, so MusicBrainz enrichment and other loaded extras stay.
                 if !lostRace, detail?.userState != userState { detail?.userState = userState }
                 if detail?.community != loaded.community { detail?.community = loaded.community }
                 if detail?.completion != loaded.completion { detail?.completion = loaded.completion }
@@ -942,7 +966,7 @@ struct MediaCreditPresentation: Hashable {
     }
 
     static func make(for detail: MediaDetail) -> MediaCreditPresentation? {
-        if detail.ref.source == "musicbrainz", detail.ref.mediaType == "music" {
+        if detail.ref.mediaType == "music" {
             return musicArtists(detail.music?.artistCredit ?? [])
         }
         if detail.ref.mediaType == "manga" {
@@ -1157,8 +1181,20 @@ enum MangaYearPresentation {
 struct MusicStreamingDestination: Hashable, Identifiable {
     let label: String
     let url: URL
+    var kind: String?
 
     var id: String { url.absoluteString }
+
+    /// A Spotify link the server couldn't match to the album opens Spotify's search for it.
+    var opensSearch: Bool { kind?.lowercased() == "search" }
+
+    var actionTitle: String {
+        switch label {
+        case "Apple Music": "Listen on Apple Music"
+        case "Spotify": opensSearch ? "Search on Spotify" : "Open in Spotify"
+        default: "Open in \(label)"
+        }
+    }
 }
 
 enum MusicAlbumPresentation {
@@ -1234,6 +1270,9 @@ enum MusicAlbumPresentation {
 
     static func trackAccessibilityLabel(track: MusicTrack, albumCredits: [MusicArtistCredit]) -> String {
         var values = ["Disc \(track.discNumber), track \(track.number)", track.title]
+        if MusicContentRating.isExplicit(track.contentRating) {
+            values.append("Explicit")
+        }
         if let artist = artistCreditText(track.artistCredit) ?? artistCreditText(albumCredits) {
             values.append("by \(artist)")
         }
@@ -1246,6 +1285,45 @@ enum MusicAlbumPresentation {
     static func streamingDestinations(_ links: [MusicStreamingLink]) -> [MusicStreamingDestination] {
         var seen = Set<String>()
         return links.compactMap { streamingDestination($0) }.filter { seen.insert($0.id).inserted }
+    }
+
+    /// The album page's buttons: Apple Music always first, as Apple asks, then Spotify on its own row.
+    ///
+    /// A MusicBrainz release can link the album in several Apple Music storefronts, sorted by URL, so `/gb/` comes
+    /// before `/us/`. The badge opens the listener's own storefront when it's there (a link without one opens it
+    /// too), then the US one, then the first.
+    static func listeningDestinations(
+        _ links: [MusicStreamingLink],
+        region: String? = Locale.current.region?.identifier
+    ) -> [MusicStreamingDestination] {
+        let destinations = streamingDestinations(links)
+        let region = region?.lowercased()
+        func storefrontRank(_ destination: MusicStreamingDestination) -> Int {
+            let storefront = appleMusicStorefront(destination.url)
+            if storefront == nil || storefront == region { return 0 }
+            return storefront == "us" ? 1 : 2
+        }
+        let apple = destinations
+            .filter { $0.label == "Apple Music" }
+            .min { storefrontRank($0) < storefrontRank($1) }
+        let spotify = destinations.first { $0.label == "Spotify" }
+        return [apple, spotify].compactMap { $0 }
+    }
+
+    /// `gb` for `https://music.apple.com/gb/album/…`, nil for a link without a storefront.
+    private static func appleMusicStorefront(_ url: URL) -> String? {
+        guard let first = url.pathComponents.first(where: { $0 != "/" }), first.count == 2 else { return nil }
+        return first.lowercased()
+    }
+
+    static func providerAttribution(_ detail: MediaDetail) -> String {
+        if detail.ref.source == "apple_music" {
+            return "Data from Apple Music"
+        }
+        guard let music = detail.music, !music.coverArt.fallbackUsed else {
+            return "Metadata by MusicBrainz"
+        }
+        return "Metadata by MusicBrainz · Cover art by Cover Art Archive"
     }
 
     static func musicBrainzURL(releaseGroupMbid: String) -> URL {
@@ -1273,7 +1351,7 @@ enum MusicAlbumPresentation {
         } else {
             return nil
         }
-        return MusicStreamingDestination(label: label, url: url)
+        return MusicStreamingDestination(label: label, url: url, kind: link.kind)
     }
 }
 
@@ -2629,7 +2707,8 @@ private struct MediaDetailPageView: View {
                         font: .system(size: 33, weight: .heavy),
                         lineLimit: nil,
                         minimumScaleFactor: 0.66,
-                        maxLogoHeight: 48
+                        maxLogoHeight: 48,
+                        isExplicit: MusicContentRating.isExplicit(detail.music?.contentRating)
                     )
 
                     if let credits = MediaCreditPresentation.make(for: detail) {
@@ -2716,13 +2795,6 @@ private struct MediaDetailPageView: View {
         return MusicAlbumPresentation.artistCreditText(music.artistCredit)
             ?? detail.subtitle?.nilIfEmpty
             ?? detailString(detail, "artist")
-    }
-
-    private func musicProviderAttribution(_ detail: MediaDetail) -> String {
-        guard let music = detail.music, !music.coverArt.fallbackUsed else {
-            return "Metadata by MusicBrainz"
-        }
-        return "Metadata by MusicBrainz · Cover art by Cover Art Archive"
     }
 
     @ViewBuilder
@@ -2901,7 +2973,8 @@ private struct MediaDetailPageView: View {
         font: Font,
         lineLimit: Int?,
         minimumScaleFactor: CGFloat,
-        maxLogoHeight: CGFloat
+        maxLogoHeight: CGFloat,
+        isExplicit: Bool = false
     ) -> some View {
         MediaTitleDisplay(
             detail: detail,
@@ -2911,6 +2984,7 @@ private struct MediaDetailPageView: View {
             lineLimit: lineLimit,
             minimumScaleFactor: minimumScaleFactor,
             maxLogoHeight: maxLogoHeight,
+            isExplicit: isExplicit,
             onTap: parentTVRef(detail).map { ref in
                 { presentedRef = ref }
             },
@@ -3080,9 +3154,11 @@ private struct MediaDetailPageView: View {
         let textAlignment = textAlignment ?? (showsTitleLogo ? .center : .leading)
         let alignment: Alignment = textAlignment == .center ? .center : .leading
 
+        let reachesVertically = credits.heroPeople.count == 1 && credits.heroMoreCount == 0
+
         return VStack(alignment: textAlignment == .center ? .center : .leading, spacing: 2) {
             ForEach(credits.heroPeople, id: \.self) { person in
-                personCreditText(person, alignment: textAlignment)
+                personCreditText(person, alignment: textAlignment, reachesVertically: reachesVertically)
             }
             if credits.heroMoreCount > 0 {
                 Text("+\(credits.heroMoreCount) more")
@@ -3095,12 +3171,17 @@ private struct MediaDetailPageView: View {
     }
 
     @ViewBuilder
-    private func personCreditText(_ person: MediaPersonCredit, alignment: TextAlignment) -> some View {
+    private func personCreditText(
+        _ person: MediaPersonCredit,
+        alignment: TextAlignment,
+        reachesVertically: Bool = false
+    ) -> some View {
         if let personRef = person.personRef {
             Button {
                 presentedPerson = personRef
             } label: {
                 bylineText(person.name, lineLimit: 1, alignment: alignment)
+                    .creditTapArea(reachesVertically: reachesVertically)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("View \(person.name)")
@@ -3282,6 +3363,10 @@ private struct MediaDetailPageView: View {
                     )
                 }
             )
+            // Other Versions, More by and You Might Also Like follow the tracklist, as in Apple Music.
+            RecommendationsSection(sections: relatedSections(detail)) { item in
+                presentedRef = item.ref
+            }
             MediaFactsSection(
                 rows: detailRows(detail),
                 onPersonSelected: { person in
@@ -3291,10 +3376,7 @@ private struct MediaDetailPageView: View {
                     presentedCompany = company
                 }
             )
-            RecommendationsSection(sections: relatedSections(detail)) { item in
-                presentedRef = item.ref
-            }
-            Text(musicProviderAttribution(detail))
+            Text(MusicAlbumPresentation.providerAttribution(detail))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.46))
                 .multilineTextAlignment(.center)
@@ -4151,7 +4233,6 @@ private enum MediaDetailLayout {
     static let ratingPillVerticalPadding: CGFloat = 6
     static var ratingPillHeight: CGFloat { ratingBadgeSize + ratingPillVerticalPadding * 2 }
     static let recommendationPosterSize = CGSize(width: 100, height: 150)
-    static let recommendationCardHeight: CGFloat = 190
     static let seasonPosterSize = CGSize(width: 90, height: 135)
 }
 
@@ -6245,7 +6326,7 @@ private struct MusicAlbumTrackRow: View {
         Button(action: onSelect) {
             MusicAlbumTrackRowLayout(number: track.number) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(track.title)
+                    title
                         .font(.body)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
@@ -6273,34 +6354,26 @@ private struct MusicAlbumTrackRow: View {
         .accessibilityHint("Opens song details")
         .accessibilityIdentifier("music.track.\(track.recording.recordingMbid)")
     }
+
+    private var title: Text {
+        guard MusicContentRating.isExplicit(track.contentRating) else { return Text(track.title) }
+        return Text("\(track.title) \(Text.explicitBadge.font(.footnote).foregroundStyle(.white.opacity(0.5)))")
+    }
 }
 
+/// Apple's "Listen on Apple Music" badge first, then Spotify on its own row, for every album.
 private struct MusicStreamingButtons: View {
     let links: [MusicStreamingLink]
 
-    private var destinations: [MusicStreamingDestination] {
-        var seen = Set<String>()
-        return MusicAlbumPresentation.streamingDestinations(links).filter {
-            ($0.label == "Apple Music" || $0.label == "Spotify")
-                && seen.insert($0.label).inserted
-        }
-    }
-
     var body: some View {
+        let destinations = MusicAlbumPresentation.listeningDestinations(links)
         if !destinations.isEmpty {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(destinations) { destination in
-                        MusicStreamingButton(destination: destination)
-                    }
-                }
-                .fixedSize(horizontal: true, vertical: false)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(destinations) { destination in
-                            MusicStreamingButton(destination: destination)
-                        }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(destinations) { destination in
+                    if destination.label == "Apple Music" {
+                        AppleMusicBadgeLink(url: destination.url)
+                    } else {
+                        SpotifyLinkButton(destination: destination)
                     }
                 }
             }
@@ -6308,61 +6381,44 @@ private struct MusicStreamingButtons: View {
     }
 }
 
-private struct MusicStreamingButton: View {
+/// Apple's badge artwork, unaltered and linked straight to the album. Apple asks for at least 30 pt of height and
+/// clear space of a tenth of it, which the surrounding spacing gives.
+private struct AppleMusicBadgeLink: View {
+    let url: URL
+
+    var body: some View {
+        Link(destination: url) {
+            Image("ListenOnAppleMusicBadge")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 40)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Listen on Apple Music")
+        .accessibilityHint("Opens the album in Apple Music")
+    }
+}
+
+private struct SpotifyLinkButton: View {
     let destination: MusicStreamingDestination
 
     var body: some View {
         Link(destination: destination.url) {
-            HStack(spacing: 8) {
-                serviceLogo
-
-                Image(systemName: "play.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(accentColor)
+            Label {
+                Text(destination.actionTitle)
+            } icon: {
+                Image("SpotifyIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
             }
-            .padding(.horizontal, 12)
-            .frame(height: 40)
-            .background(.white.opacity(0.07), in: Capsule())
-            .glassEffect(
-                .regular.tint(accentColor.opacity(0.08)).interactive(),
-                in: .rect(cornerRadius: 20)
-            )
-            .overlay {
-                Capsule().stroke(.white.opacity(0.14), lineWidth: 0.75)
-            }
-            .shadow(color: accentColor.opacity(0.15), radius: 7, y: 2)
-            .contentShape(Capsule())
+            .font(.subheadline.weight(.semibold))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Listen on \(destination.label)")
-        .accessibilityHint("Opens using the system URL behavior")
-    }
-
-    private var accentColor: Color {
-        destination.label == "Spotify" ? Color(red: 0.12, green: 0.84, blue: 0.38) : .pink
-    }
-
-    @ViewBuilder
-    private var serviceLogo: some View {
-        switch destination.label {
-        case "Apple Music":
-            Image("AppleMusicIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        case "Spotify":
-            Image("SpotifyIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24, height: 24)
-                .clipShape(Circle())
-        default:
-            Image(systemName: "music.note")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.9))
-                .frame(width: 24, height: 24)
-        }
+        .buttonStyle(.glass)
+        // About the badge's 40 pt, so the second service never outweighs Apple Music above it.
+        .controlSize(.regular)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityHint(destination.opensSearch ? "Searches Spotify for this album" : "Opens the album in Spotify")
     }
 }
 
@@ -7930,6 +7986,40 @@ private struct EpisodeCardStill: View {
     }
 }
 
+extension View {
+    /// A short credit name ("SZA" is 26 × 16 pt) is a small target. The tap area reaches past the text, and the
+    /// negative padding keeps the layout where it was. Only a lone name reaches up and down: stacked names would
+    /// overlap.
+    func creditTapArea(reachesVertically: Bool) -> some View {
+        let vertical: CGFloat = reachesVertically ? 12 : 0
+        return padding(.horizontal, 10)
+            .padding(.vertical, vertical)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -10)
+            .padding(.vertical, -vertical)
+    }
+}
+
+/// A related card is its artwork, a gap and two lines of title. Square album covers make shorter cards than 2:3
+/// posters, so each row is as tall as its tallest artwork.
+enum RelatedCardLayout {
+    static let spacing: CGFloat = 8
+    static let titleHeight: CGFloat = 32
+
+    static func height(for items: [MediaSummary]) -> CGFloat {
+        let artwork = items
+            .map { PosterSlot.carousel.artworkSize(mediaType: $0.ref.mediaType, orientation: $0.posterOrientation).height }
+            .max() ?? PosterSlot.carousel.size.height
+        return artwork + spacing + titleHeight
+    }
+
+    /// The card's badge ("Deluxe", "Original album") tells same-titled versions apart, so VoiceOver reads it too.
+    static func accessibilityLabel(_ item: MediaSummary) -> String {
+        guard let relation = item.relation?.nilIfEmpty else { return "Open \(item.displayTitle)" }
+        return "Open \(item.displayTitle), \(relation)"
+    }
+}
+
 private struct RecommendationsSection: View {
     let sections: [RelatedMediaSection]
     let onSelectSection: ((RelatedMediaSection) -> Void)?
@@ -7976,7 +8066,7 @@ private struct RecommendationsSection: View {
                             Button {
                                 onSelect(item)
                             } label: {
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: RelatedCardLayout.spacing) {
                                     MediaArtwork(
                                         url: item.displayPosterURL,
                                         title: item.displayTitle,
@@ -8000,16 +8090,16 @@ private struct RecommendationsSection: View {
                                         .font(.system(size: 12, weight: .heavy))
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
-                                        .frame(height: 32, alignment: .topLeading)
+                                        .frame(height: RelatedCardLayout.titleHeight, alignment: .topLeading)
                                 }
                                 .frame(
                                     width: MediaDetailLayout.recommendationPosterSize.width,
-                                    height: MediaDetailLayout.recommendationCardHeight,
+                                    height: RelatedCardLayout.height(for: section.items),
                                     alignment: .topLeading
                                 )
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Open \(item.displayTitle)")
+                            .accessibilityLabel(RelatedCardLayout.accessibilityLabel(item))
                         }
                     }
                 }
@@ -8106,6 +8196,8 @@ struct MediaTitleDisplay: View {
     let minimumScaleFactor: CGFloat
     let maxLogoHeight: CGFloat
     let alignment: Alignment
+    /// Explicit albums end their title with Apple Music's "E".
+    let isExplicit: Bool
     let onTap: (() -> Void)?
     let onLongPress: (() -> Void)?
 
@@ -8118,6 +8210,7 @@ struct MediaTitleDisplay: View {
         minimumScaleFactor: CGFloat,
         maxLogoHeight: CGFloat,
         alignment: Alignment = .center,
+        isExplicit: Bool = false,
         onTap: (() -> Void)?,
         onLongPress: (() -> Void)?
     ) {
@@ -8129,6 +8222,7 @@ struct MediaTitleDisplay: View {
         self.minimumScaleFactor = minimumScaleFactor
         self.maxLogoHeight = maxLogoHeight
         self.alignment = alignment
+        self.isExplicit = isExplicit
         self.onTap = onTap
         self.onLongPress = onLongPress
     }
@@ -8179,17 +8273,23 @@ struct MediaTitleDisplay: View {
             guard canToggle, showsLogo else { return }
             onLongPress?()
         }
-        .accessibilityLabel(title)
+        .accessibilityLabel(isExplicit ? "\(title), Explicit" : title)
         .accessibilityHint(onTap != nil ? "Open media" : canToggle ? "Double tap to switch between logo and text title" : "")
         .accessibilityAddTraits(isInteractive ? .isButton : [])
     }
 
     private var titleText: some View {
-        Text(title)
-            .font(font)
-            .foregroundStyle(.white)
-            .lineLimit(lineLimit)
-            .minimumScaleFactor(minimumScaleFactor)
+        Group {
+            if isExplicit {
+                Text.explicitPageTitle(title)
+            } else {
+                Text(title)
+            }
+        }
+        .font(font)
+        .foregroundStyle(.white)
+        .lineLimit(lineLimit)
+        .minimumScaleFactor(minimumScaleFactor)
     }
 
     private var aspectRatio: CGFloat? {

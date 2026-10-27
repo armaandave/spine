@@ -29,6 +29,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from redis.exceptions import RedisError
+from urllib3.exceptions import ProtocolError
 
 from app import helpers, music_catalog, music_listing
 from app.models import (
@@ -1613,6 +1614,8 @@ def _get(path, params=None, *, background=False):
     no 429 retries; a 429, 5xx or timeout pauses them for a minute. ``background``
     requests use the slower bucket and the usual retries, and ignore the pause. So does
     every request inside a ``quota.scope`` (featured list syncs), whatever its caller.
+    Any request whose connection Apple dropped is tried once more (see
+    ``_dropped_connection``).
     """
     background = background or quota.in_scope()
     url = _url(path)
@@ -1624,37 +1627,56 @@ def _get(path, params=None, *, background=False):
         request_session, timeout = services.apple_music_background_session, None
     else:
         request_session, timeout = services.apple_music_session, USER_TIMEOUT
-    try:
-        return services.api_request(
-            Sources.APPLE_MUSIC.value,
-            "GET",
-            url,
-            params=params,
-            headers=headers,
-            request_session=request_session,
-            timeout=timeout,
-            retry_rate_limits=background,
-        )
-    except requests.exceptions.JSONDecodeError as error:
-        raise services.ProviderAPIError(
-            Sources.APPLE_MUSIC.value,
-            error,
-            "invalid JSON response",
-        ) from error
-    except requests.exceptions.HTTPError as error:
-        status_code = getattr(error.response, "status_code", None) or 0
-        if not background and (
-            status_code == requests.codes.too_many_requests
-            or status_code >= requests.codes.internal_server_error
-        ):
-            _back_off()
-        raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
-    except requests.exceptions.Timeout as error:
-        if not background:
-            _back_off()
-        raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
-    except requests.RequestException as error:
-        raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
+    for attempt in range(2):
+        try:
+            return services.api_request(
+                Sources.APPLE_MUSIC.value,
+                "GET",
+                url,
+                params=params,
+                headers=headers,
+                request_session=request_session,
+                timeout=timeout,
+                retry_rate_limits=background,
+            )
+        except requests.exceptions.JSONDecodeError as error:
+            raise services.ProviderAPIError(
+                Sources.APPLE_MUSIC.value,
+                error,
+                "invalid JSON response",
+            ) from error
+        except requests.exceptions.HTTPError as error:
+            status_code = getattr(error.response, "status_code", None) or 0
+            if not background and (
+                status_code == requests.codes.too_many_requests
+                or status_code >= requests.codes.internal_server_error
+            ):
+                _back_off()
+            raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
+        except requests.exceptions.Timeout as error:
+            if not background:
+                _back_off()
+            raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
+        except requests.RequestException as error:
+            if attempt == 0 and _dropped_connection(error):
+                logger.info("Apple Music dropped the connection; trying %s once more", path)
+                continue
+            raise services.ProviderAPIError(Sources.APPLE_MUSIC.value, error) from error
+    msg = "Unreachable Apple Music retry state"
+    raise RuntimeError(msg)
+
+
+def _dropped_connection(error):
+    """Return whether Apple closed the connection before answering.
+
+    Apple closes idle keep-alive connections, so the first request after a quiet spell
+    can find its pooled connection gone ("Connection aborted", RemoteDisconnected).
+    A second try on a fresh connection answers it. A refused connection or a timeout
+    isn't one of these: it would fail the same way, and a timeout pauses user calls.
+    """
+    return isinstance(error, requests.exceptions.ConnectionError) and any(
+        isinstance(arg, ProtocolError) for arg in error.args
+    )
 
 
 def is_paused():
