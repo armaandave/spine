@@ -641,9 +641,11 @@ def match_album(title, artist):
     version families, so the listing rule folds clean twins and re-uploads. A hit
     counts when it isn't a single, has the same artist, and has the same title, or the
     same once " - EP" and trailing bracketed tags are left out of Apple's ("Abbey Road
-    (Remastered)"). The match is the one listing that counts best: the exact title,
-    then no edition words the MusicBrainz title lacks ("(Deluxe)"; a remaster or mix
-    is neutral). A tie is no match.
+    (Remastered)"). The match is the listing that counts best: the exact title, then
+    no edition words the MusicBrainz title lacks ("(Deluxe)"; a remaster or mix is
+    neutral). Of listings that count the same, the one Apple's search lists first
+    wins, as Apple Music shows it first: Abbey Road's "(2019 Mix)" before its
+    "(Remastered)" and "(Remastered 2009)".
 
     Returns ``{"media_id", "title", "image"}``: the listing's identity, and its best
     member's title and 600x600 cover.
@@ -662,16 +664,17 @@ def match_album(title, artist):
     today = timezone.localdate()
     hits = [album for album in found if str(album.get("id") or "") in ranks]
     listings = _listings_with_families(hits, today=today, background=True)
+    # Listings in Apple's order, each where its first hit is.
     best = {}
     for album_id, rank in ranks.items():
         identity, members = listings[album_id]
-        if not music_listing.is_hidden(members, today):
+        if not music_listing.is_hidden(members):
             best[identity] = (min(rank, best[identity][0]) if identity in best else rank, members)
-    top = min((rank for rank, _ in best.values()), default=None)
-    winners = [identity for identity, (rank, _) in best.items() if rank == top]
-    if len(winners) != 1:
+    if not best:
         return None
-    return _match(winners[0], best[winners[0]][1], today=today)
+    # min keeps the first of equal ranks.
+    winner = min(best, key=lambda identity: best[identity][0])
+    return _match(winner, best[winner][1], today=today)
 
 
 def match_album_ids(candidates):
@@ -705,7 +708,7 @@ def match_album_ids(candidates):
             continue
         rank = _album_rank(album.get("attributes"), title, artist)
         identity, members = listings[str(album["id"])]
-        if rank is None or rank[1] or music_listing.is_hidden(members, today):
+        if rank is None or rank[1] or music_listing.is_hidden(members):
             continue
         matches[mbid] = _match(identity, members, today=today)
     return matches
@@ -822,7 +825,7 @@ def _search_page(term, previous):
     rows = []
     for album in found_albums:
         identity, members = listings[str(album["id"])]
-        if identity in shown or music_listing.is_hidden(members, today):
+        if identity in shown or music_listing.is_hidden(members):
             continue
         shown.add(identity)
         rows.append(_search_row(identity, members, position=len(seen) + len(rows), today=today))
@@ -903,7 +906,7 @@ def _person_page(artist_id):
     for view, entries in sections:
         for entry in entries:
             identity, members = listings[str(entry["id"])]
-            if music_listing.is_hidden(members, today):
+            if music_listing.is_hidden(members):
                 continue
             role = ARTIST_VIEW_ROLES.get(view) or (
                 "EPs" if album_title(entry.get("attributes"))[1] == "EP" else "Singles"
@@ -1004,7 +1007,7 @@ def _other_versions(own_ids, family, album, *, today):
     shown = set(own_ids)
     for identity, members in [*family, *edition_listings]:
         member_ids = _member_ids(members)
-        if member_ids & shown or music_listing.is_hidden(members, today):
+        if member_ids & shown or music_listing.is_hidden(members):
             continue
         shown |= member_ids
         row = _related_row(identity, members, today=today)
@@ -1105,7 +1108,7 @@ def _more_by_artist(album, own_ids, *, today):
     return [
         _related_row(music_listing.url_album_id(entry), [entry], today=today)
         for entry in _artist_albums(artists[0])
-        if not _member_ids([entry]) & own_ids and not music_listing.is_hidden([entry], today)
+        if not _member_ids([entry]) & own_ids and not music_listing.is_hidden([entry])
     ]
 
 
@@ -1131,7 +1134,7 @@ def _similar_albums(album, own_ids, *, today):
         for entry in view.get("data") or []
         if entry.get("id")
         and not _member_ids([entry]) & own_ids
-        and not music_listing.is_hidden([entry], today)
+        and not music_listing.is_hidden([entry])
     ]
 
 

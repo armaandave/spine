@@ -1001,6 +1001,20 @@ def _music_items(refs, user):
     return {(item.source, item.media_type, item.media_id): item for item in items}
 
 
+def music_summaries_from_provider(payloads, source, request=None, user=None):
+    """Serialize a page of albums with their Items and the viewer's state.
+
+    The same summaries as ``media_summary_from_provider`` one album at a time, read in
+    a fixed number of queries however many albums the page has.
+    """
+    refs = [music_catalog.payload_ref(payload, source=source, media_type=MediaTypes.MUSIC.value) for payload in payloads]
+    items = _music_items(set(refs), user)
+    return [
+        media_summary_from_provider(payload, ref[1], ref[0], request=request, user=user, item=items.get(ref))
+        for payload, ref in zip(payloads, refs, strict=True)
+    ]
+
+
 def _music_related_summary(payload, ref, item, *, request, user):
     """Return a related album's summary, or None when the app couldn't decode it."""
     if not all(isinstance(part, str) and part for part in ref):

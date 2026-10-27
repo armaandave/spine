@@ -258,41 +258,62 @@ class ContentMemberTests(SimpleTestCase):
 
 
 class HiddenTests(SimpleTestCase):
-    def test_a_pre_order_shows_until_its_release_day_passes(self):
+    def test_a_pre_order_shows(self):
         weathered = albums("family_creed_weathered.json")
         listings = music_listing.group_listings(weathered)
         pre_order = next(listing for listing in listings if ids(listing) == ["6803287133"])
 
+        # Incomplete and due 2026-11-20; it can be streamed, so it shows after that too.
         self.assertEqual(len(listings), 2)
-        self.assertFalse(music_listing.is_hidden(pre_order, TODAY))
-        self.assertFalse(music_listing.is_hidden(pre_order, date(2026, 11, 20)))
-        self.assertTrue(music_listing.is_hidden(pre_order, date(2026, 11, 21)))
-        self.assertFalse(music_listing.is_hidden([by_id(weathered, "1440738578")], TODAY))
+        self.assertFalse(music_listing.is_hidden(pre_order))
+        self.assertFalse(music_listing.is_hidden([by_id(weathered, "1440738578")]))
 
     def test_a_listing_no_one_can_stream_is_hidden(self):
         sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
         by_id(sos, "1658650093")["attributes"].pop("playParams")
 
-        self.assertFalse(music_listing.is_hidden(sos, TODAY))
+        self.assertFalse(music_listing.is_hidden(sos))
         by_id(sos, "1657869377")["attributes"].pop("playParams")
-        self.assertTrue(music_listing.is_hidden(sos, TODAY))
+        self.assertTrue(music_listing.is_hidden(sos))
 
-    def test_one_complete_member_keeps_a_listing(self):
+    def test_lemonade_shows_though_both_its_albums_are_incomplete(self):
+        found = albums("search_families_lemonade.json")
+        lemonade = [by_id(found, album_id) for album_id in ("1460430561", "1460432013")]
+        listings = music_listing.group_listings(lemonade)
+
+        # Apple marks the explicit album and its clean twin incomplete, released 2016.
+        self.assertEqual([ids(listing) for listing in listings], [["1460430561", "1460432013"]])
+        self.assertEqual(
+            [(album["attributes"]["isComplete"], album["attributes"]["releaseDate"]) for album in lemonade],
+            [(False, "2016-04-23"), (False, "2016-04-23")],
+        )
+        self.assertFalse(music_listing.is_hidden(listings[0]))
+        self.assertEqual(music_listing.pick_identity(listings[0], today=TODAY), "1460430561")
+
+    def test_completeness_only_ranks_members(self):
         sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
-        by_id(sos, "1658650093")["attributes"]["isComplete"] = False
-
-        self.assertFalse(music_listing.is_hidden(sos, TODAY))
         by_id(sos, "1657869377")["attributes"]["isComplete"] = False
-        self.assertTrue(music_listing.is_hidden(sos, TODAY))
+
+        # The complete clean twin ranks first; with both incomplete, explicit does again.
+        self.assertEqual(music_listing.pick_identity(sos, today=TODAY), "1658650093")
+        self.assertFalse(music_listing.is_hidden(sos))
+        by_id(sos, "1658650093")["attributes"]["isComplete"] = False
+        self.assertEqual(music_listing.pick_identity(sos, today=TODAY), "1657869377")
+        self.assertFalse(music_listing.is_hidden(sos))
 
     def test_partial_dates_count_as_their_last_day(self):
-        promo = copy.deepcopy(albums("albums_sos_lana.json")[0])
-        promo["attributes"]["isComplete"] = False
+        sos = copy.deepcopy(music_listing.group_listings(albums("albums_sos_lana.json"))[0])
+        explicit = by_id(sos, "1657869377")
+        explicit["attributes"]["isComplete"] = False
         for release_date, last_day in (("2010", date(2010, 12, 31)), ("1994-12", date(1994, 12, 31))):
-            promo["attributes"]["releaseDate"] = release_date
+            explicit["attributes"]["releaseDate"] = release_date
             with self.subTest(release_date=release_date):
-                self.assertFalse(music_listing.is_hidden([promo], last_day))
-                self.assertTrue(music_listing.is_hidden([promo], date(last_day.year + 1, 1, 1)))
+                # Not released yet until its last day, so it ranks as complete until then.
+                self.assertEqual(music_listing.pick_identity(sos, today=last_day), "1657869377")
+                self.assertEqual(
+                    music_listing.pick_identity(sos, today=date(last_day.year + 1, 1, 1)),
+                    "1658650093",
+                )
 
     def test_release_day(self):
         self.assertEqual(music_listing.release_day("2024-02"), date(2024, 2, 29))

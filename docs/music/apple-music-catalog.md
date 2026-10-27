@@ -71,8 +71,9 @@ group as one **listing**.
   5. the most tracks
   6. the lowest ID
 - **Hidden listings** are left out of search, artist pages and other versions. A listing
-  is hidden when no member can be streamed, or when every member is incomplete with a
-  release date that has passed. Its IDs still open.
+  is hidden only when no member can be streamed. Its IDs still open. Being incomplete
+  never hides a listing, since Apple Music shows albums it marks incomplete (Lemonade);
+  it only puts a complete member first (rule 3 above).
 
 ## Canonical refs (`src/app/music_catalog.py`)
 
@@ -362,7 +363,8 @@ pages read it for their genres, date and Spotify button (see Album pages).
   ID once, however often the page is read. No task is queued per page view.
 - **"Fill Apple album bridges"** (`app.music_links.fill_bridges`) runs every 5 minutes
   on the default queue:
-  - at most a minute a run; an album isn't started without time for its requests
+  - at most a minute a run; an album isn't started without time for five requests,
+    the most it can take
   - MusicBrainz requests 3 seconds apart, on the shared MusicBrainz session, and at
     most 1,500 a day (a Redis counter per day), so the requests people are waiting on
     keep most of MusicBrainz's one a second
@@ -377,12 +379,19 @@ pages read it for their genres, date and Spotify button (see Album pages).
     group, genres and Spotify link with no MusicBrainz request, when the row has genres
     and the genre table has the album's title and date; otherwise one request for the
     release group.
-  - Otherwise the album's barcode, in up to three requests:
+  - Otherwise the album's barcode, in three to five requests:
     1. `release?query=barcode:(<12 digits> OR <13 digits>)`, keeping a release whose
        artist matches and whose title, or its group's, matches the album's; Apple's
        barcodes carry padding zeros, which are dropped
     2. `release/<id>?inc=url-rels+release-groups`, for the Spotify album link
     3. `release-group/<id>?inc=genres`, for the genres, title and first release date
+    4. only when that release has no Spotify link: the group's release browse, its
+       first two pages of 100 (one request for most albums, two for one with more
+       than 100 releases). It is the browse `map` and album pages read, cached for a
+       day, and a cached page costs no request. The link comes from it by `map`'s
+       rule (see Matching): a release with the album's barcode, else one with its
+       title and track count that isn't a clean or explicit copy of the other kind.
+       Without one, the album keeps Spotify's search.
   - An album with no barcode, or one MusicBrainz doesn't know, is only marked as
     checked, so it isn't queued again for a month.
 - **`same_title`** is set when Apple's title, without " - EP" / " - Single", is the
@@ -427,10 +436,11 @@ release group, and its weekly refresh is unchanged apart from one addition.
   search for "artist title" and one batch of the hits' version families. A hit counts
   when it isn't a single, has the same artist and the same title, or the same once
   " - EP" and trailing bracketed tags ("(Remastered)") are left out of Apple's title.
-  Names match without case, accents or punctuation. The match is the one listing that
+  Names match without case, accents or punctuation. The match is the listing that
   counts best: the exact title first, then no edition words such as "(Deluxe)" that the
-  MusicBrainz title lacks (a remaster or mix is neutral). A tie, such as two equal
-  "Stratosphere" listings, is no match.
+  MusicBrainz title lacks (a remaster or mix is neutral). Of listings that count the
+  same, the one Apple's search lists first wins, as Apple Music shows it first: Abbey
+  Road's "(2019 Mix)" before its "(Remastered)" and "(Remastered 2009)".
 - **Apple genre pages** (`apple_music.discover`), for a request with the `apple_music`
   source, or any music genre request once the catalog is Apple Music (installed builds
   send an older album's MusicBrainz source with its genre chip):
@@ -441,6 +451,9 @@ release group, and its weekly refresh is unchanged apart from one addition.
   - an album two rows name is shown once
   - the link row's title and cover, else the Item's, with MusicBrainz's artist and year
   - no MusicBrainz top-up and no request at all when a page opens: six queries
+  - serving it, the API reads every album's Item and the viewer's state together
+    (`music_summaries_from_provider`), so a page takes the same number of queries
+    however many albums it has; MusicBrainz genre pages are served the same way
 
 ## Featured lists
 
@@ -571,13 +584,21 @@ For a group-1 album:
    listing does and it has the same title and artist and a track count within one.
 5. **Search** last (`apple_music.match_album`).
 
-The exact Spotify link comes from the release with the pick's barcode, or one with the
-same title and track count, in the same release browse. MusicBrainz requests go out 3
-seconds apart, one request a try (the MusicBrainz client's own quick retries are off),
-and wait 30 seconds, then 60, while MusicBrainz is busy (503). An album MusicBrainz no
-longer has (a 404 or 400) is `unmatched`, with its check time, and the run carries
-on; any other failed request stops the run, naming the album it was on. Run `map` at
-night.
+The exact Spotify link is for the album the page shows (the listing's best member, as
+on album pages), which isn't always the pick: when MusicBrainz has only the clean
+twin's barcode, the pick is the clean twin and the page shows the explicit album. The
+link comes from the release with that album's barcode, or one with the same title and
+track count, in the same release browse. That one is never a clean or explicit copy
+when the album is the other: MusicBrainz names them in the release's disambiguation
+("clean", "explicit", "Dolby Atmos mix, clean"), and Apple in its content rating. A
+release whose note names the album's rating comes first; one with no such note counts
+too. The album bridge takes its link by the same rule.
+
+MusicBrainz requests go out 3 seconds apart, one request a try (the MusicBrainz
+client's own quick retries are off), and wait 30 seconds, then 60, while MusicBrainz
+is busy (503). An album MusicBrainz no longer has (a 404 or 400) is `unmatched`, with
+its check time, and the run carries on; any other failed request stops the run,
+naming the album it was on. Run `map` at night.
 
 | Tier | When | Row |
 |---|---|---|
@@ -768,13 +789,17 @@ Recorded responses live in `src/app/tests/mock_data/apple_music/`.
   Dogs, Scary Hours Edition and Who's Next (Remastered 2022) pages. `--only bridge`
   records the MusicBrainz answers the bridge reads for the SOS and LANA pages
   (`musicbrainz_barcode_*.json`, `musicbrainz_release_*.json`,
-  `musicbrainz_release_group_*.json`); it needs no token and keeps MusicBrainz
+  `musicbrainz_release_group_*.json`), and Short n' Sweet's release browse
+  (`musicbrainz_releases_short_n_sweet.json`), whose clean and explicit copies have
+  the same title and track count; it needs no token and keeps MusicBrainz
   requests 3.5 seconds apart. `--only backfill` records what the data move's matcher
   reads for SOS, First Love (credited in Japanese on MusicBrainz) and No Fences (not on
   Apple Music): each release browse (`musicbrainz_releases_*.json`), Apple Music's
   answer to its barcodes (`backfill_upc_*.json`) and the matched album's family
   (`backfill_family_*.json`), and for No Fences one release's ISRCs, Apple Music's songs
-  for them and a search.
+  for them and a search. `--only match` records the album matcher's searches for
+  Lemonade and Abbey Road with their families (`search_albums_lemonade.json`,
+  `search_albums_abbey_road.json` and their `search_families_*.json`).
 - The script trims each response to the fields the code reads. It refuses to write a
   file containing anything that looks like a token.
 - The tests sign with a throwaway key, and they fail on any request that would reach the

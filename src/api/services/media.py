@@ -40,6 +40,7 @@ from api.serializers.common import (
     find_item,
     get_or_create_item_from_metadata,
     media_summary_from_provider,
+    music_summaries_from_provider,
     prime_collection_items,
     related_sections_from_payload,
     saved_poster_url,
@@ -961,10 +962,11 @@ def discover_media(
         source=source,
         media_type=media_type,
     )
-    return {
-        "count": data.get("total_results", len(raw_results)),
-        "page_size": data.get("per_page") or page_size or len(raw_results),
-        "results": [
+    if media_type == MediaTypes.MUSIC.value:
+        # A genre page's Items and the viewer's state in a fixed number of queries.
+        results = music_summaries_from_provider(raw_results, source, request=request, user=user)
+    else:
+        results = [
             media_summary_from_provider(
                 item,
                 media_type=item.get("media_type", media_type),
@@ -973,7 +975,11 @@ def discover_media(
                 user=user,
             )
             for item in raw_results
-        ],
+        ]
+    return {
+        "count": data.get("total_results", len(raw_results)),
+        "page_size": data.get("per_page") or page_size or len(raw_results),
+        "results": results,
     }
 
 

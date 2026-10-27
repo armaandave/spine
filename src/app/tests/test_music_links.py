@@ -13,6 +13,7 @@ from app import music_links
 from app.models import AppleAlbum, Item, MediaTypes, MusicAlbumLink, MusicGenreAlbum, Sources
 from app.music_catalog import store_wikidata_apple_ids
 from app.providers import apple_music, services
+from app.providers.musicbrainz import browse_releases
 from app.signals import create_task_result_on_publish
 from app.tasks import fill_apple_album_bridges, link_genre_albums_to_apple
 from app.tests.providers.test_apple_music import (
@@ -36,6 +37,9 @@ THRILLER_GROUP = "f32fab67-77dd-3937-addc-9062e28e4c37"
 SOS_GENRES = ["contemporary r&b", "pop", "r&b", "soul"]
 SOS_SPOTIFY = "https://open.spotify.com/album/07w0rG5TETcyihsEIZR3qG"
 LANA_SPOTIFY = "https://open.spotify.com/album/1Q5WON8dw2JFLP5JVQXu1e"
+SOS_BARCODE = "196589564931"
+# SOS's "cover 2" edition: SOS's barcode, 25 tracks and no Spotify link.
+SOS_COVER_2 = "b6e42e04-1600-4276-a71f-38e16e6dff14"
 
 
 class FakeClock:
@@ -89,6 +93,37 @@ def lana_answers():
         (200, fixture("musicbrainz_release_lana.json")),
         (200, fixture("musicbrainz_release_group_lana.json")),
     )
+
+
+def cover_2_answers():
+    """MusicBrainz's answers for SOS when its search lists the "cover 2" edition first.
+
+    Both releases with SOS's barcode score the same, so either can come first. The
+    edition has no Spotify link, so the bridge goes on to the release browse.
+    """
+    search = fixture("musicbrainz_barcode_sos.json")
+    search["releases"].reverse()
+    edition = {**fixture("musicbrainz_release_sos.json"), "id": SOS_COVER_2, "relations": []}
+    return (
+        (200, search),
+        (200, edition),
+        (200, fixture("musicbrainz_release_group_sos.json")),
+    )
+
+
+def sos_browse():
+    """Return SOS's recorded release browse: one page of 21 releases."""
+    return fixture("musicbrainz_releases_sos.json")["pages"][0]
+
+
+def without_spotify(release):
+    """Return a release without its Spotify album link."""
+    relations = [
+        relation
+        for relation in release.get("relations") or []
+        if urlsplit(relation["url"]["resource"]).hostname != music_links.SPOTIFY_HOST
+    ]
+    return {**release, "relations": relations}
 
 
 def genre_album(mbid, title, artist, *genres, page_views=0):
@@ -208,6 +243,93 @@ class FillBridgesTests(MusicLinksTestCase):
         self.assertEqual((result["filled"], result["requests"]), (2, 6))
         gaps = [later - earlier for earlier, later in zip(musicbrainz.times, musicbrainz.times[1:], strict=False)]
         self.assertEqual(len(gaps), 5)
+        self.assertTrue(all(gap >= music_links.BRIDGE_REQUEST_SPACING for gap in gaps), gaps)
+
+    def test_a_release_without_a_spotify_link_takes_one_from_the_release_browse(self):
+        # The browse's other release with SOS's barcode, SOS itself, has the link.
+        apple_album(SOS, upc=SOS_BARCODE)
+        queue(SOS)
+        self.apple((200, album_batch("page_sos.json")), background=True)
+        musicbrainz = self.musicbrainz(*cover_2_answers(), (200, sos_browse()))
+
+        result = self.fill()
+
+        self.assertEqual(result, {"filled": 1, "requests": 4, "queued": 0, "stopped": ""})
+        row = AppleAlbum.objects.get(apple_album_id=SOS)
+        self.assertEqual((row.release_group_mbid, row.genres), (SOS_GROUP, SOS_GENRES))
+        self.assertEqual((row.spotify_url, row.spotify_exact), (SOS_SPOTIFY, True))
+        self.assertEqual(
+            [urlsplit(request.url).path for request in musicbrainz.requests],
+            ["/ws/2/release", f"/ws/2/release/{SOS_COVER_2}", f"/ws/2/release-group/{SOS_GROUP}", "/ws/2/release"],
+        )
+        # The browse map and album pages read, so they share its cached pages.
+        browse = query(musicbrainz.requests[3])
+        self.assertEqual(
+            (browse["release-group"], browse["inc"], browse["limit"], browse["offset"]),
+            (SOS_GROUP, "artist-credits+labels+media+url-rels", "100", "0"),
+        )
+        self.assertEqual(int(services.redis_db.get(daily_key())), 4)
+
+    def test_an_explicit_album_never_takes_its_clean_twins_spotify_link(self):
+        # Were SOS's own release without its link, the first release with SOS's title
+        # and track count that has one would be the clean twin, which MusicBrainz marks
+        # "clean". The album keeps Spotify's search instead.
+        apple_album(SOS, upc=SOS_BARCODE)
+        queue(SOS)
+        self.apple((200, album_batch("page_sos.json")), background=True)
+        browse = sos_browse()
+        browse["releases"] = [
+            without_spotify(release) if release["barcode"] == SOS_BARCODE else release for release in browse["releases"]
+        ]
+        self.musicbrainz(
+            (200, fixture("musicbrainz_barcode_sos.json")),
+            (200, without_spotify(fixture("musicbrainz_release_sos.json"))),
+            (200, fixture("musicbrainz_release_group_sos.json")),
+            (200, browse),
+        )
+
+        result = self.fill()
+
+        self.assertEqual((result["filled"], result["requests"]), (1, 4))
+        row = AppleAlbum.objects.get(apple_album_id=SOS)
+        self.assertEqual((row.release_group_mbid, row.spotify_url, row.spotify_exact), (SOS_GROUP, "", False))
+
+    def test_a_release_browse_read_today_costs_no_request(self):
+        apple_album(SOS, upc=SOS_BARCODE)
+        queue(SOS)
+        self.apple((200, album_batch("page_sos.json")), background=True)
+        musicbrainz = self.musicbrainz((200, sos_browse()), *cover_2_answers())
+        browse_releases(SOS_GROUP)  # as map or an album page reads it
+
+        result = self.fill()
+
+        self.assertEqual((result["requests"], len(musicbrainz.requests)), (3, 4))
+        self.assertEqual(int(services.redis_db.get(daily_key())), 3)
+        self.assertEqual(AppleAlbum.objects.get(apple_album_id=SOS).spotify_url, SOS_SPOTIFY)
+
+    def test_a_big_release_group_is_read_two_pages_at_most_three_seconds_apart(self):
+        apple_album(SOS, upc=SOS_BARCODE)
+        queue(SOS)
+        self.apple((200, album_batch("page_sos.json")), background=True)
+        releases = {release["id"]: release for release in sos_browse()["releases"]}
+        sos = releases["b82458a3-7d3a-495f-861f-8698731c4dd0"]
+        cd = releases["1683708c-e718-4df9-b600-467879ec2ff6"]  # SOS on CD: no Spotify link
+        others = [{**cd, "id": f"other-{number}"} for number in range(199)]
+        # 300 releases, SOS's own the 200th: a third page is never asked for.
+        pages = [
+            {"release-count": 300, "release-offset": 0, "releases": others[:100]},
+            {"release-count": 300, "release-offset": 100, "releases": [*others[100:], sos]},
+        ]
+        clock = FakeClock()
+        musicbrainz = self.musicbrainz(*cover_2_answers(), *((200, page) for page in pages), clock=clock)
+
+        result = self.fill(clock)
+
+        self.assertEqual(result, {"filled": 1, "requests": 5, "queued": 0, "stopped": ""})
+        self.assertEqual(AppleAlbum.objects.get(apple_album_id=SOS).spotify_url, SOS_SPOTIFY)
+        self.assertEqual([query(request)["offset"] for request in musicbrainz.requests[3:]], ["0", "100"])
+        gaps = [later - earlier for earlier, later in zip(musicbrainz.times, musicbrainz.times[1:], strict=False)]
+        self.assertEqual(len(gaps), 4)
         self.assertTrue(all(gap >= music_links.BRIDGE_REQUEST_SPACING for gap in gaps), gaps)
 
     def test_a_deluxe_gets_its_release_groups_genres_but_not_its_date(self):
@@ -371,6 +493,33 @@ class FillBridgesTests(MusicLinksTestCase):
         self.assertEqual((result["filled"], result["stopped"]), (1, "out of time"))
         self.assertEqual(queued(), {LANA})
 
+    def test_an_album_isnt_started_without_time_for_five_requests(self):
+        apple_album(SOS, upc=SOS_BARCODE)
+        apple_album(LANA, upc="196872790276")
+        queue(SOS, LANA)
+        self.apple((200, album_batch("page_sos.json", "page_lana.json")), background=True)
+        clock = FakeClock(step=16)  # SOS's three requests end 48 seconds in: 12 are left
+        musicbrainz = self.musicbrainz(*sos_answers(), clock=clock)
+
+        result = self.fill(clock)
+
+        self.assertEqual((result["filled"], result["requests"], result["stopped"]), (1, 3, "out of time"))
+        self.assertEqual(len(musicbrainz.requests), 3)
+        self.assertEqual(queued(), {LANA})
+
+    def test_running_out_of_time_before_the_browse_keeps_the_album_queued(self):
+        apple_album(SOS, upc=SOS_BARCODE)
+        queue(SOS)
+        self.apple((200, album_batch("page_sos.json")), background=True)
+        clock = FakeClock(step=21)  # the browse would go out 63 seconds in
+        self.musicbrainz(*cover_2_answers(), clock=clock)
+
+        result = self.fill(clock)
+
+        self.assertEqual((result["requests"], result["stopped"]), (3, "out of time"))
+        self.assertEqual(queued(), {SOS})
+        self.assertIsNone(AppleAlbum.objects.get(apple_album_id=SOS).bridge_checked_at)
+
     def test_a_musicbrainz_failure_ends_the_run_and_keeps_the_album_queued(self):
         apple_album(SOS, upc="196589564931")
         queue(SOS)
@@ -486,7 +635,22 @@ class MatchAlbumTests(AppleMusicTestCase):
         self.assertIsNone(apple_music.match_album("Thriller (Live)", "Michael Jackson"))
         self.assertEqual(apple_music.match_album("Thriller", "Michael Jackson")["media_id"], THRILLER)
 
-    def test_two_equal_albums_are_no_match(self):
+    def test_a_tie_goes_to_the_listing_apple_lists_first(self):
+        apple = self.apple(
+            (200, fixture("search_albums_abbey_road.json")),
+            (200, fixture("search_families_abbey_road.json")),
+            background=True,
+        )
+
+        match = apple_music.match_album("Abbey Road", "The Beatles")
+
+        # "(2019 Mix)", "(Remastered)" and "(Remastered 2009)" count the same, in that
+        # order; the Super Deluxe Edition counts lower, and the rest don't count.
+        self.assertEqual((match["media_id"], match["title"]), ("1474815798", "Abbey Road (2019 Mix)"))
+        self.assertEqual(query(apple.requests[0])["term"], "The Beatles Abbey Road")
+        self.assertEqual(query(apple.requests[1])["ids"], "1474815798,1441164426,6818128121,1474833332")
+
+    def test_two_equal_albums_go_to_the_first_in_apples_order(self):
         def album(album_id):
             return {
                 "id": album_id,
@@ -501,9 +665,23 @@ class MatchAlbumTests(AppleMusicTestCase):
             }
 
         hits = [album("1388806946"), album("1734297746")]
-        self.apple((200, {"results": {"albums": {"data": hits}}}), (200, {"data": hits}), background=True)
+        for order in (hits, hits[::-1]):
+            with self.subTest(first=order[0]["id"]):
+                self.apple((200, {"results": {"albums": {"data": order}}}), (200, {"data": order}), background=True)
 
-        self.assertIsNone(apple_music.match_album("Stratosphere", "Duster"))
+                self.assertEqual(apple_music.match_album("Stratosphere", "Duster")["media_id"], order[0]["id"])
+
+    def test_an_album_apple_marks_incomplete_still_matches(self):
+        self.apple(
+            (200, fixture("search_albums_lemonade.json")),
+            (200, fixture("search_families_lemonade.json")),
+            background=True,
+        )
+
+        # Both albums are incomplete with a past date, and both can be streamed.
+        match = apple_music.match_album("Lemonade", "Beyoncé")
+
+        self.assertEqual((match["media_id"], match["title"]), ("1460430561", "Lemonade"))
 
     def test_singles_and_other_artists_never_count(self):
         apple = self.apple(

@@ -22,6 +22,7 @@ LANA = "1794644675"
 LANA_38 = "1786643044"
 LANA_CLEAN = "1796270264"
 THRILLER = "269572838"
+INVINCIBLE = "215738269"
 WHOS_NEXT_DELUXE = "1440850317"
 WHOS_NEXT_2022 = "1706357665"
 FATD = "1710685602"
@@ -184,16 +185,25 @@ class RelatedSectionTests(AppleMusicTestCase):
         )
 
     def test_more_by_is_the_artists_albums_without_this_one_or_hidden_ones(self, _today):
-        thriller, _ = self.album(THRILLER)
+        artist_albums = fixture("artist_albums_michael_jackson.json")
+        apple_order = [album["id"] for album in artist_albums["data"]]
+        del artist_albums["data"][apple_order.index(INVINCIBLE)]["attributes"]["playParams"]
+        thriller, _ = self.album(
+            THRILLER,
+            (200, fixture("editions_songs_thriller.json")),
+            (200, fixture("editions_albums_thriller.json")),
+            (200, artist_albums),
+        )
         sos, _ = self.album(SOS)
 
         more_by = thriller["related"]["more_by_artist"]
         self.assertEqual(len(more_by), 10)
         self.assertNotIn(THRILLER, ids(more_by))
-        # HIStory Continues is among Apple's first ten, but incomplete with a past date.
-        apple_order = [album["id"] for album in fixture("artist_albums_michael_jackson.json")["data"]]
-        self.assertLess(apple_order.index("1894092998"), 10)
-        self.assertNotIn("1894092998", ids(more_by))
+        # Invincible, which here no one can stream, is hidden. HIStory Continues shows
+        # though Apple marks it incomplete with a past date.
+        self.assertLess(apple_order.index(INVINCIBLE), 10)
+        self.assertNotIn(INVINCIBLE, ids(more_by))
+        self.assertIn("1894092998", ids(more_by))
         self.assertEqual(
             [(row["media_id"], row["title"], row["subtitle"]) for row in sos["related"]["more_by_artist"]],
             [(LANA, "SOS Deluxe: LANA", "SZA · 2024 · Album"), ("1628387909", "Ctrl (Deluxe)", "SZA · 2017 · Album")],

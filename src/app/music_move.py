@@ -73,6 +73,10 @@ BARCODE_DIGITS = 13
 MIN_BARCODE_DIGITS = 12
 # Tier 1 and tier 2 need a track count within one of MusicBrainz's usual count.
 TRACK_SLACK = 1
+# MusicBrainz names a clean or explicit copy in its disambiguation ("clean", "explicit
+# version"); Apple's content ratings are "clean" and "explicit".
+_CLEAN_NOTE = re.compile(r"\b(clean|edited|censored)\b", re.IGNORECASE)
+_EXPLICIT_NOTE = re.compile(r"\bexplicit\b", re.IGNORECASE)
 # ISRCs looked up when no barcode finds the album, and albums checked for them.
 ISRC_LOOKUP = 25
 ISRC_CANDIDATES = 10
@@ -434,13 +438,16 @@ def match_release_group(release_group_mbid, title, *, pacer, today):
         found = (match, Method.SEARCH, 3, None) if match else None
     if found is None:
         return _row_fields(None, method=Method.SEARCH, tier=None)
-    match, method, tier, album = found
+    match, method, tier, members = found
+    # The Spotify album is the one the page shows, not the pick: a clean twin's barcode
+    # can find an explicit album's listing.
+    album = music_listing.pick_content_member(members, today=today) if members else None
     spotify = _spotify_link(releases, album) if album is not None else ""
     return _row_fields(match, method=method, tier=tier, spotify_url=spotify)
 
 
 def _match_barcodes(barcodes, title, names, standard, *, today):
-    """Return ``(match, method, tier, album)`` for the album the barcodes find, or None."""
+    """Return ``(match, method, tier, members)`` for the listing the barcodes find, or None."""
     if not barcodes:
         return None
     candidates = {}
@@ -475,11 +482,11 @@ def _match_barcodes(barcodes, title, names, standard, *, today):
     else:
         tier = 3
     method = Method.UPC_EXACT if entry["exact"] else Method.UPC_FAMILY
-    return apple_music._match(identity, members, today=today), method, tier, album
+    return apple_music._match(identity, members, today=today), method, tier, members
 
 
 def _match_songs(releases, title, names, standard, *, pacer, today):
-    """Return ``(match, "isrc", 3, album)`` for the album that has a release's songs."""
+    """Return ``(match, "isrc", 3, members)`` for the listing that has a release's songs."""
     release = min(
         releases,
         key=lambda release: (
@@ -542,7 +549,7 @@ def _match_songs(releases, title, names, standard, *, pacer, today):
     if len(identities) != 1:
         return None
     identity, members = listings[str(best[0]["id"])]
-    return apple_music._match(identity, members, today=today), Method.ISRC, 3, best[0]
+    return apple_music._match(identity, members, today=today), Method.ISRC, 3, members
 
 
 def _match_listed(item, *, today):  # noqa: ARG001
@@ -729,23 +736,38 @@ def _digital(release):
 def _spotify_link(releases, album):
     """Return the exact Spotify album: the release with the album's barcode, else one alike.
 
-    Alike is the same title and track count. From the release browse, which has every
-    release's links.
+    Alike is the same title and track count, and not a clean or explicit copy when the
+    album is the other; one with the album's own rating comes first. From a release
+    browse, which has every release's links. The album bridge uses it too.
     """
     attributes = album.get("attributes") or {}
     upc = barcode13(attributes.get("upc"))
     tracks = _int(attributes.get("trackCount"))
+    rating = attributes.get("contentRating") or None
     same_barcode = [release for release in releases if upc and barcode13(release.get("barcode")) == upc]
     alike = [
         release
         for release in releases
-        if _same_title(attributes, release.get("title")) and _release_track_count(release) == tracks
+        if _same_title(attributes, release.get("title"))
+        and _release_track_count(release) == tracks
+        and not (rating and _content_rating(release) not in {None, rating})
     ]
+    alike.sort(key=lambda release: _content_rating(release) != rating)
     for release in [*same_barcode, *alike]:
         link = music_links._spotify_album(release.get("relations"))
         if link:
             return link
     return ""
+
+
+def _content_rating(release):
+    """Return "clean" or "explicit" when a release's disambiguation says so, else None."""
+    note = str(release.get("disambiguation") or "")
+    if _CLEAN_NOTE.search(note):
+        return "clean"
+    if _EXPLICIT_NOTE.search(note):
+        return "explicit"
+    return None
 
 
 # ---------------------------------------------------------------------------

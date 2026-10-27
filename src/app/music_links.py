@@ -38,8 +38,10 @@ BRIDGE_RUN_SECONDS = 60
 BRIDGE_REQUEST_SPACING = 3
 BRIDGE_DAILY_REQUESTS = 1500
 BRIDGE_DAILY_KEY = "apple_music:bridge_requests:{day}"
-# An album takes up to three requests, and isn't started without time for them.
-BRIDGE_REQUESTS_PER_ALBUM = 3
+# An album takes up to five requests, and isn't started without time for them.
+BRIDGE_REQUESTS_PER_ALBUM = 5
+# Release browse pages read for a Spotify link: the first 200 releases.
+BRIDGE_BROWSE_PAGES = 2
 # Albums taken from the queue per run: more than a minute's worth.
 BRIDGE_BATCH = 25
 SPOTIFY_HOST = "open.spotify.com"
@@ -65,7 +67,7 @@ class _MusicBrainzPacer:
         self.last = None
         self.requests = 0
 
-    def call(self, fetch, *args):
+    def call(self, fetch, *args, **kwargs):
         wait = 0 if self.last is None else BRIDGE_REQUEST_SPACING - (self.clock() - self.last)
         if self.clock() + max(wait, 0) > self.deadline:
             raise _Stop("out of time")
@@ -75,7 +77,7 @@ class _MusicBrainzPacer:
             self.sleep(wait)
         self.last = self.clock()
         self.requests += 1
-        return fetch(*args)
+        return fetch(*args, **kwargs)
 
 
 def fill_bridges(*, clock=None, sleep=None):
@@ -87,10 +89,12 @@ def fill_bridges(*, clock=None, sleep=None):
 
     - from a matched or applied link row that names one of the album's IDs, with no
       MusicBrainz request when the row has genres and the genre table has the album;
-    - else from its barcode, in up to three requests: the releases with that barcode
+    - else from its barcode, in three to five requests: the releases with that barcode
       (as 12 and 13 digits), keeping one whose artist and title match; that release's
-      links and group; the group's genres, title and first release date. An album
-      with no barcode is skipped.
+      links and group; the group's genres, title and first release date; and, when
+      that release has no Spotify link, the group's release browse (its first 200
+      releases, cached for a day; a cached page costs no request), for the data move's
+      Spotify rule (``music_move._spotify_link``). An album with no barcode is skipped.
 
     Then an Item that holds the album gets its genre and date filters again, with the
     bridge's genres, and the album's cached detail pages are dropped. An album
@@ -238,7 +242,30 @@ def _group_from_barcode(upc, attributes, pacer):
     if not group_id:
         return None, ""
     group = _group(pacer.call(musicbrainz.lookup_release_group_genres, group_id))
-    return group, _spotify_album(details.get("relations"))
+    spotify = _spotify_album(details.get("relations"))
+    return group, spotify or _spotify_from_browse(group_id, {**attributes, "upc": upc}, pacer)
+
+
+def _spotify_from_browse(group_id, attributes, pacer):
+    """Return the data move's Spotify link from the group's first 200 releases, or ""."""
+    from app import music_move  # noqa: PLC0415
+
+    releases = []
+    for offset in range(0, BRIDGE_BROWSE_PAGES * music_move.RELEASE_PAGE, music_move.RELEASE_PAGE):
+        page = musicbrainz.cached_releases(group_id, limit=music_move.RELEASE_PAGE, offset=offset)
+        if page is None:
+            page = pacer.call(
+                musicbrainz.browse_releases,
+                group_id,
+                limit=music_move.RELEASE_PAGE,
+                offset=offset,
+                max_attempts=1,
+            )
+        batch = page.get("releases") or []
+        releases += batch
+        if not batch or len(releases) >= _int(page.get("release-count", page.get("count"))):
+            break
+    return music_move._spotify_link(releases, {"attributes": attributes})
 
 
 def _pick_release(releases, attributes):

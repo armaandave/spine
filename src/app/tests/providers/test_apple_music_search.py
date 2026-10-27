@@ -53,7 +53,10 @@ def ids(results):
 
 class AlbumSearchTests(AppleMusicTestCase):
     def test_apples_order_with_each_listing_once(self):
-        fake = self.apple(*search_answers("sza_sos_1"))
+        answers = search_answers("sza_sos_1")
+        blaze = next(album for album in answers[1][1]["data"] if album["id"] == "1649413469")
+        del blaze["attributes"]["playParams"]
+        fake = self.apple(*answers)
 
         data = apple_music.search_albums("sza sos", 1)
 
@@ -64,10 +67,11 @@ class AlbumSearchTests(AppleMusicTestCase):
             query(fake.requests[1]),
             {"ids": ",".join(searched), "views": "other-versions"},
         )
-        # Clean twins and LANA's 38-track upload fold into their listings; Avicii's
-        # incomplete single and BLAZE 2.0's are hidden.
+        # Clean twins and LANA's 38-track upload fold into their listings. Avicii's
+        # single shows though Apple marks it incomplete; BLAZE 2.0's, which here no
+        # one can stream, is hidden.
         self.assertEqual(
-            ids(data["results"])[:8],
+            ids(data["results"])[:9],
             [
                 "1657869377",
                 "1794644675",
@@ -76,13 +80,14 @@ class AlbumSearchTests(AppleMusicTestCase):
                 "1546390050",
                 "1598221271",
                 "1689825179",
+                "1457882147",
                 "1764132972",
             ],
         )
-        for left_out in ("1658650093", "1796270264", "1786643044", "1457882147", "1649413469", "1569461513"):
+        for left_out in ("1658650093", "1796270264", "1786643044", "1649413469", "1569461513"):
             self.assertNotIn(left_out, ids(data["results"]))
         self.assertEqual(len(ids(data["results"])), len(set(ids(data["results"]))))
-        self.assertEqual((data["page"], data["total_pages"], data["total_results"]), (1, 2, 19))
+        self.assertEqual((data["page"], data["total_pages"], data["total_results"]), (1, 2, 20))
 
     def test_each_row_shows_its_listing(self):
         self.apple(*search_answers("sza_sos_1"))
@@ -142,7 +147,7 @@ class AlbumSearchTests(AppleMusicTestCase):
         # The clean Finally Rich opens as its explicit album, which wasn't searched.
         self.assertIn("1440853396", ids(second["results"]))
         self.assertNotIn("1444005836", ids(second["results"]))
-        self.assertEqual((second["total_pages"], second["total_results"]), (3, 40))
+        self.assertEqual((second["total_pages"], second["total_results"]), (3, 43))
 
     def test_a_later_page_alone_reads_the_pages_before_it(self):
         fake = self.apple(*search_answers("sza_sos_1", "sza_sos_2"))
@@ -326,7 +331,10 @@ class ArtistPageTests(AppleMusicTestCase):
         return groups
 
     def test_apples_sections_fill_the_music_credit_groups(self):
-        fake = self.apple(*person_answers())
+        answers = person_answers()
+        consideration = next(album for album in answers[3][1]["data"] if album["id"] == "1445029775")
+        del consideration["attributes"]["playParams"]
+        fake = self.apple(*answers)
 
         page = apple_music.person_page(SZA_ID)
 
@@ -348,11 +356,12 @@ class ArtistPageTests(AppleMusicTestCase):
         self.assertEqual(groups["Albums"], ["1794644675", "1657869377", "1628387909"])
         self.assertEqual(groups["EPs"], ["852343474"])
         self.assertEqual(groups["Live releases"], ["1728151465"])
-        self.assertEqual(len(groups["Singles"]), 22)
+        self.assertEqual(len(groups["Singles"]), 23)
         self.assertEqual(groups["Singles"][:2], ["6819802963", "1894091581"])
-        # Kill Bill's incomplete single and Rihanna's incomplete EP are hidden, and
-        # Black Panther's clean copy folds into the explicit one.
-        self.assertNotIn("1664548283", groups["Singles"])
+        # Kill Bill's single shows though Apple marks it incomplete. Rihanna's EP,
+        # which here no one can stream, is hidden, and Black Panther's clean copy folds
+        # into the explicit one.
+        self.assertIn("1664548283", groups["Singles"])
         self.assertNotIn("1445029775", groups["Appears on"])
         self.assertIn("1440906927", groups["Appears on"])
         self.assertNotIn("1440903005", groups["Appears on"])

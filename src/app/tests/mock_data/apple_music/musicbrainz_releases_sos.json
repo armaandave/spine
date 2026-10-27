@@ -7,6 +7,7 @@
         {
           "id": "07fc4a4b-28c7-45c6-a62b-5bfb1494ffaf",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": null,
           "date": "2024-12-20",
@@ -34,6 +35,7 @@
         {
           "id": "1683708c-e718-4df9-b600-467879ec2ff6",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196587792121",
           "date": "2023-05-19",
@@ -70,6 +72,7 @@
         {
           "id": "1d39bb1e-c342-4eb3-a686-7b12cb84c1ff",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "198028920124",
           "date": "2024-12-20",
@@ -111,6 +114,7 @@
         {
           "id": "3be5ecae-9196-43a7-b308-33283be6d0b7",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": null,
           "date": "2024-12-25",
@@ -152,6 +156,7 @@
         {
           "id": "4e41fd97-eb16-455e-bcc3-8b867b7b84f0",
           "title": "SOS",
+          "disambiguation": "clean",
           "status": "Official",
           "barcode": "196589564955",
           "date": "2022-12-09",
@@ -220,6 +225,7 @@
         {
           "id": "4fe782ec-2737-46bf-8744-f089891a8bf3",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196871766890",
           "date": "2024-12-20",
@@ -288,6 +294,7 @@
         {
           "id": "578536db-0438-4d45-a427-4149e55f4bb8",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196587792114",
           "date": "2023-05-19",
@@ -329,6 +336,7 @@
         {
           "id": "6b1d5b1a-e915-4451-9b4e-5229d8a7b418",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196587792121",
           "date": "2023-05-19",
@@ -365,6 +373,7 @@
         {
           "id": "79a7b5e6-7edb-489d-9481-63387f7bc197",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196587792114",
           "date": "2023-05-19",
@@ -406,6 +415,7 @@
         {
           "id": "81510594-e076-4fd0-a8fd-0a1eed48be3b",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "4547366616026",
           "date": "2023-05-24",
@@ -442,6 +452,7 @@
         {
           "id": "85f15747-0b28-4103-ad89-e1db9c8e35e5",
           "title": "SOS Deluxe: Lana",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "198028920124",
           "date": "2025-06",
@@ -483,6 +494,7 @@
         {
           "id": "8a8bf60c-c5e7-4bbb-940d-8d6ab4c7df85",
           "title": "SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": null,
           "date": "2024",
@@ -524,6 +536,7 @@
         {
           "id": "9d414b64-cb31-4cdf-a0f5-e3913e16c36a",
           "title": "愛情警報 SOS",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "196587792121",
           "date": "2023",
@@ -560,6 +573,7 @@
         {
           "id": "a19ce8d3-f749-4327-bdeb-6670ec707c9e",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "clean",
           "status": "Official",
           "barcode": "196871766913",
           "date": "2025-02-09",
@@ -625,6 +639,7 @@
         {
           "id": "a2451561-f09d-44f5-85d2-7de353ef52b5",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "explicit",
           "status": "Official",
           "barcode": "196872790276",
           "date": "2025-02-09",
@@ -722,6 +737,7 @@
         {
           "id": "a38f8a03-faf9-4f09-849e-e6596c16ae5c",
           "title": "SOS",
+          "disambiguation": "360 Reality Audio mix, explicit",
           "status": "Official",
           "barcode": "196589657299",
           "date": "2022-12-09",
@@ -758,6 +774,7 @@
         {
           "id": "b6e42e04-1600-4276-a71f-38e16e6dff14",
           "title": "SOS",
+          "disambiguation": "cover 2",
           "status": "Official",
           "barcode": "196589564931",
           "date": "2023-01-05",
@@ -794,6 +811,7 @@
         {
           "id": "b82458a3-7d3a-495f-861f-8698731c4dd0",
           "title": "SOS",
+          "disambiguation": "explicit",
           "status": "Official",
           "barcode": "196589564931",
           "date": "2022-12-09",
@@ -974,6 +992,7 @@
         {
           "id": "c86680d8-7c26-4501-88ed-675ceac59574",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "198028963220",
           "date": "2024-12-20",
@@ -1015,6 +1034,7 @@
         {
           "id": "d75783c9-83ca-4c1e-8044-4b70e2945261",
           "title": "SOS",
+          "disambiguation": "cover 1",
           "status": "Official",
           "barcode": "196589803368",
           "date": "2023-01-05",
@@ -1051,6 +1071,7 @@
         {
           "id": "f3140800-8765-4802-bfbb-3516c80fd5db",
           "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
           "status": "Official",
           "barcode": "198028920117",
           "date": "2025-06",

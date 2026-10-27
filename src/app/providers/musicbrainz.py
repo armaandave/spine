@@ -898,6 +898,12 @@ def browse_releases(release_group_mbid, *, limit=100, offset=0, max_attempts=MAX
     )
 
 
+def cached_releases(release_group_mbid, *, limit=100, offset=0):
+    """Return ``browse_releases``' page if it is cached, else None; no request."""
+    data = cache.get(f"musicbrainz_{CACHE_VERSION}_releases_{_path_value(release_group_mbid)}_{limit}_{offset}")
+    return data if isinstance(data, dict) else None
+
+
 def lookup_release(release_mbid, *, max_attempts=MAX_ATTEMPTS):
     """Look up a release with its media and recordings.
 

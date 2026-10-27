@@ -19,7 +19,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import CommandError, call_command
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -51,7 +51,7 @@ from app.tests.providers.test_apple_music import (
     genre_facets,
     query,
 )
-from app.tests.test_music_links import FakeClock, genre_album
+from app.tests.test_music_links import FakeClock, genre_album, without_spotify
 from lists.featured import dispatch
 from lists.models import CustomList, CustomListItem
 from social.models import Activity, ProgressChange
@@ -88,6 +88,16 @@ def family(name):
 def sos_map_answers():
     """Apple Music's answers when map matches SOS: its barcodes, then its family."""
     return (*barcodes("sos"), family("sos"))
+
+
+def sos_clean_twin_family():
+    """Apple Music's family answer for SOS's clean twin: SOS's, turned round.
+
+    Apple's version family is symmetric (``apple_music._family``).
+    """
+    explicit = fixture("backfill_family_sos.json")["data"][0]
+    clean = explicit.pop("views")["other-versions"]["data"][0]
+    return (200, {"data": [{**clean, "views": {"other-versions": {"data": [explicit]}}}]})
 
 
 def without_digital(pages):
@@ -211,6 +221,40 @@ class BarcodeTests(BackfillTestCase):
         self.assertEqual(music_move.barcode13(None), "")
 
 
+class SpotifyLinkTests(SimpleTestCase):
+    """The exact Spotify link map and the album bridge take, on Short n' Sweet's releases.
+
+    Apple's explicit album's own release has no Spotify link. A clean and an explicit
+    copy with its title and track count have one, the clean one first.
+    """
+
+    def releases(self):
+        return fixture("musicbrainz_releases_short_n_sweet.json")["pages"][0]["releases"]
+
+    def album(self, **attributes):
+        return {
+            "attributes": {
+                "name": "Short n' Sweet",
+                "upc": "00602465891386",
+                "trackCount": 12,
+                "contentRating": "explicit",
+                **attributes,
+            },
+        }
+
+    def test_an_explicit_album_takes_the_explicit_copys_link(self):
+        self.assertEqual(
+            music_move._spotify_link(self.releases(), self.album()),
+            "https://open.spotify.com/album/3iPSVi54hsacKKl1xIR2eH",
+        )
+
+    def test_a_clean_album_takes_the_clean_copys_link(self):
+        self.assertEqual(
+            music_move._spotify_link(self.releases(), self.album(upc="", contentRating="clean")),
+            "https://open.spotify.com/album/4B4Elma4nNDUyl6D5PvQkj",
+        )
+
+
 class MapAlbumsWithUserDataTests(BackfillTestCase):
     def test_sos_matches_tier_one_by_its_own_barcode(self):
         item = self.sos_item()
@@ -239,6 +283,45 @@ class MapAlbumsWithUserDataTests(BackfillTestCase):
         self.assertEqual(self.user_rows(), rows_before)
         item.refresh_from_db()
         self.assertEqual((item.source, item.media_id), ("musicbrainz", SOS_MBID))
+
+    def test_spotify_never_comes_from_a_clean_twin(self):
+        # Were SOS's own release without its link, the first release with SOS's title
+        # and track count that has one would be the clean twin, which MusicBrainz marks
+        # "clean".
+        self.track(self.sos_item())
+        pages = browse("sos")
+        for _, page in pages:
+            page["releases"] = [
+                without_spotify(release) if release["barcode"] == "196589564931" else release
+                for release in page["releases"]
+            ]
+        self.musicbrainz(*pages)
+        self.apple(*sos_map_answers(), background=True)
+
+        self.map()
+
+        link = MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID)
+        self.assertEqual((link.tier, link.apple_album_id, link.spotify_url), (1, SOS, ""))
+
+    def test_spotify_is_the_album_the_page_shows_when_only_its_twin_has_a_barcode(self):
+        # Were SOS's explicit releases without their barcode, the barcode pick would be
+        # the clean twin, while the listing's identity and page are the explicit album.
+        # The link is the explicit release's, not the clean twin's barcode's.
+        self.track(self.sos_item())
+        pages = browse("sos")
+        for _, page in pages:
+            for release in page["releases"]:
+                if release["barcode"] == "196589564931":
+                    release["barcode"] = None
+        self.musicbrainz(*pages)
+        apple = self.apple(*barcodes("sos"), sos_clean_twin_family(), background=True)
+
+        self.map()
+
+        self.assertNotIn("0196589564931", query(apple.requests[0])["filter[upc]"])
+        self.assertEqual(query(apple.requests[1])["ids"], SOS_CLEAN)
+        link = MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID)
+        self.assertEqual((link.tier, link.apple_album_id, link.spotify_url), (1, SOS, SOS_SPOTIFY))
 
     def test_a_second_map_writes_the_same_row(self):
         self.track(self.sos_item())

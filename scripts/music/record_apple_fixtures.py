@@ -19,7 +19,8 @@ Other Versions and More by sections (it reads the recorded album pages, so recor
 (it reads the recorded album pages too, makes no Apple requests and needs no token,
 and keeps MusicBrainz requests 3.5 seconds apart), ``backfill`` for what the data
 move's matcher reads (MusicBrainz release browses, also 3.5 seconds apart, and Apple
-Music's answers to their barcodes, songs and a search).
+Music's answers to their barcodes, songs and a search), ``match`` for the searches the
+album matcher makes (``apple_music.match_album``).
 
 Apple's catalog changes, so re-recording can move IDs and counts that the tests
 assert. Re-record only when the tests need new data, and review the diff.
@@ -55,6 +56,13 @@ SEARCHES = {
     "donda": "kanye west donda",
 }
 TWO_PAGE_SEARCH = ("sza_sos", "sza sos")
+# The album matcher's searches, by fixture name: "artist title", as it asks. Both of
+# Lemonade's albums are incomplete with a past date, and three Abbey Road listings
+# count the same.
+MATCH_SEARCHES = {
+    "lemonade": "Beyoncé Lemonade",
+    "abbey_road": "The Beatles Abbey Road",
+}
 ARTIST_VIEWS = "full-albums,singles,live-albums,compilation-albums,appears-on-albums"
 # A view's next page asks for up to this many albums.
 ARTIST_VIEW_LIMIT = 100
@@ -138,6 +146,10 @@ MUSICBRAINZ_URL = "https://musicbrainz.org/ws/2"
 MUSICBRAINZ_INTERVAL = 3.5
 MUSICBRAINZ_USER_AGENT = "Spine/1.0 fixture recorder (+https://github.com/armaandave/spine)"
 BRIDGE_PAGES = {"sos": "page_sos.json", "lana": "page_lana.json"}
+# The release browse the bridge reads for a Spotify link when the album's own release
+# has none, by fixture name: Short n' Sweet's clean and explicit copies have the same
+# title and track count, and the clean one comes first.
+BRIDGE_BROWSES = {"short_n_sweet": "c8bea388-c195-4177-bf9b-7469f6e695a1"}
 MB_CREDIT_FIELDS = ("name", "joinphrase")
 MB_ARTIST_FIELDS = ("id", "name", "sort-name")
 MB_GROUP_FIELDS = ("id", "title", "primary-type", "first-release-date")
@@ -153,7 +165,15 @@ BACKFILL_GROUPS = {
 NO_FENCES_SEARCH = "Garth Brooks No Fences"
 MB_BROWSE_INC = "artist-credits+labels+media+url-rels"
 MB_BROWSE_LIMIT = 100
-MB_RELEASE_FIELDS = ("id", "title", "status", "barcode", "date", "country")
+MB_RELEASE_FIELDS = (
+    "id",
+    "title",
+    "disambiguation",
+    "status",
+    "barcode",
+    "date",
+    "country",
+)
 MB_MEDIUM_FIELDS = ("position", "format", "track-count")
 UPC_BATCH = 25
 ISRC_BATCH = 25
@@ -539,6 +559,13 @@ def record_search(recorder):
         record_families(recorder, f"person_sza_families_{number}.json", batch)
 
 
+def record_match(recorder):
+    """Record the album matcher's searches, each with its albums' version families."""
+    for name, term in MATCH_SEARCHES.items():
+        params = {"term": term, "types": "albums", "limit": 25}
+        record_search_page(recorder, name, recorder.catalog("search", params))
+
+
 def disc_opening_isrcs(album):
     """Return the ISRC of the first track on each disc, as album pages look them up."""
     first = {}
@@ -636,7 +663,8 @@ def record_bridge(recorder):
     """Record the MusicBrainz answers the bridge reads for the recorded album pages.
 
     For each: the release search by the album's barcode, the release the bridge would
-    pick (with its URL links and release group), and that group's genres.
+    pick (with its URL links and release group), and that group's genres. Then the
+    release browses in ``BRIDGE_BROWSES``.
     """
     for name, page_name in BRIDGE_PAGES.items():
         page = json.loads((recorder.out / page_name).read_text(encoding="utf-8"))
@@ -672,6 +700,8 @@ def record_bridge(recorder):
             f"musicbrainz_release_group_{name}.json",
             {**_pick(group, MB_GROUP_FIELDS), "genres": genres},
         )
+    for name, mbid in BRIDGE_BROWSES.items():
+        record_release_browse(recorder, name, mbid)
 
 
 def barcode13(value):
@@ -886,6 +916,7 @@ GROUPS = {
     "related": record_related,
     "bridge": record_bridge,
     "backfill": record_backfill,
+    "match": record_match,
 }
 # Groups that make no Apple Music requests, so they need no token.
 MUSICBRAINZ_GROUPS = {"bridge"}
