@@ -63,7 +63,7 @@ final class StatsSectionsChartTests: XCTestCase {
 
         let decade = StatsReleaseYearsChartData.decadeSeries(rows, currentYear: 2005)[0]
 
-        XCTAssertEqual(decade.averageText, "3.65")
+        XCTAssertEqual(decade.averageText, "3.7")
     }
 
     func testLongSpansFoldOlderYearsIntoOneBeforeBar() {
@@ -332,7 +332,7 @@ final class StatsSectionsChartTests: XCTestCase {
 
     func testRatingsSummary() {
         let ratings = StatsRatings(averageStars: StatsDecimal("3.65"), rated: 140, distribution: [])
-        XCTAssertEqual(StatsRatingsChartData.summary(ratings), "3.65 average · 140 ratings")
+        XCTAssertEqual(StatsRatingsChartData.summary(ratings), "3.7 average · 140 ratings")
         XCTAssertEqual(
             StatsRatingsChartData.summary(StatsRatings(averageStars: nil, rated: 0, distribution: [])),
             "0 ratings"
@@ -559,7 +559,7 @@ final class StatsSectionsChartTests: XCTestCase {
     func testRankedRowAccessibilityLabel() {
         XCTAssertEqual(
             StatsRankedRowsData.accessibilityLabel(ranked("Drama", titles: 5, rated: 4, average: "3.75")),
-            "Drama, 5 titles, 3.75 average from 4 ratings"
+            "Drama, 5 titles, 3.8 average from 4 ratings"
         )
         XCTAssertEqual(StatsRankedRowsData.accessibilityLabel(ranked("Drama", titles: 1)), "Drama, 1 title")
     }

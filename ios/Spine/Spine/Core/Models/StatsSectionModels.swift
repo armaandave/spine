@@ -197,6 +197,17 @@ nonisolated struct StatsDecimal: Decodable, Hashable, CustomStringConvertible {
 
     var description: String { text }
 
+    /// An average with one decimal, so a list never mixes "4.4" and "4.21": 4.21 → "4.2".
+    var averageText: String { Self.average(value) }
+
+    /// One decimal, half up from the two-decimal value the server sends: 3.65 → "3.7".
+    static func average(_ value: Double) -> String {
+        var hundredths = Decimal(string: String(format: "%.2f", value)) ?? Decimal(value)
+        var tenths = Decimal()
+        NSDecimalRound(&tenths, &hundredths, 1, .plain)
+        return String(format: "%.1f", NSDecimalNumber(decimal: tenths).doubleValue)
+    }
+
     /// Two decimals at most, trailing zeros dropped down to one: 4 → "4.0", 3.65 → "3.65".
     static func format(_ value: Double) -> String {
         var text = String(format: "%.2f", value)

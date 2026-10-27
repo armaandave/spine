@@ -267,7 +267,7 @@ enum StatsReleaseYearsChartData {
         if rows.count == 1, let row = rows.first {
             return StatsReleasePoint(
                 start: start, end: end, titles: row.titles, logs: row.logs, rated: row.rated,
-                averageStars: row.averageStars?.value, averageText: row.averageStars?.text, byType: row.byType
+                averageStars: row.averageStars?.value, averageText: row.averageStars?.averageText, byType: row.byType
             )
         }
         var byType: [String: Int] = [:]
@@ -288,7 +288,7 @@ enum StatsReleaseYearsChartData {
             logs: rows.map(\.logs).reduce(0, +),
             rated: rows.map(\.rated).reduce(0, +),
             averageStars: average,
-            averageText: average.map(StatsDecimal.format),
+            averageText: average.map(StatsDecimal.average),
             byType: byType
         )
     }

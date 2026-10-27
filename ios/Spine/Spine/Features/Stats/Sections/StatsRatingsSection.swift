@@ -91,7 +91,7 @@ enum StatsRatingsChartData {
     static func summary(_ ratings: StatsRatings) -> String {
         let count = StatsChartCopy.count(ratings.rated, "rating", "ratings")
         guard let average = ratings.averageStars else { return count }
-        return "\(average.text) average · \(count)"
+        return "\(average.averageText) average · \(count)"
     }
 }
 
@@ -179,7 +179,7 @@ private struct StatsRatingsChartCard: View {
     private var headline: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if let average = ratings.averageStars {
-                Text(average.text)
+                Text(average.averageText)
                     .font(.title2.bold())
                     .foregroundStyle(.white)
                     .monospacedDigit()

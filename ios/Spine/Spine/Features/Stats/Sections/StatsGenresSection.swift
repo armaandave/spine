@@ -159,7 +159,7 @@ enum StatsRankedRowsData {
     static func accessibilityLabel(_ row: StatsRankedRow) -> String {
         var parts = [row.name, StatsChartCopy.count(row.titles, "title", "titles")]
         if row.rated > 0, let average = row.averageStars {
-            parts.append("\(average.text) average from \(StatsChartCopy.count(row.rated, "rating", "ratings"))")
+            parts.append("\(average.averageText) average from \(StatsChartCopy.count(row.rated, "rating", "ratings"))")
         }
         return parts.joined(separator: ", ")
     }
@@ -350,7 +350,7 @@ private struct StatsRankedBarRow: View {
     private var value: some View {
         if sort == .highestRated, let average = row.averageStars {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(average.text)
+                Text(average.averageText)
                     .monospacedDigit()
                 Image(systemName: "star.fill")
                     .font(.caption.weight(.bold))
