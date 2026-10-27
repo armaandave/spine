@@ -6,6 +6,7 @@ import requests
 from django.conf import settings
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app.models import MediaTypes, Sources, Status
 from app.providers import services
 from app.providers.igdb import ExternalGameSource, external_game
@@ -214,6 +215,7 @@ class SteamImporter:
                     "image": igdb_game["image"],
                 },
             )
+            store_item_metadata(item, igdb_game.get("metadata"))
 
             # Create game object
             game = app.models.Game(
@@ -290,4 +292,5 @@ class SteamImporter:
             "media_type": MediaTypes.GAME.value,
             "title": game_details.get("title", game_name),
             "image": game_details["image"],
+            "metadata": game_details,
         }

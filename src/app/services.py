@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 from django.db import transaction
 
+from api.services import stats_cache
 from app.models import DiaryEntry, Item, Media, MediaLike, MediaTypes, Status
 from app.tasks import update_daily_statistics
 
@@ -88,6 +89,7 @@ def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True
 
     if sync_diary:
         DiaryEntry.objects.filter(user=user, item=item).exclude(liked=liked).update(liked=liked)
+        stats_cache.bump_user(user)
 
     if audit and created:
         from social.models import SocialAuditLog

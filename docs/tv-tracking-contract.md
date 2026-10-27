@@ -261,6 +261,7 @@ A tracked season or episode the provider no longer lists keeps its viewings, log
 Such a season is shown after Specials under its stored number, and such an episode last in its season.
 
 Spine keeps a stored copy of each season's listed episode numbers and air dates, updated whenever it fetches them, and uses it when the provider can't be reached.
+The copy also keeps each episode's length, for statistics; no TV rule reads it.
 A write that needs a season Spine has no copy of is rejected with a retryable "TV details are unavailable right now" error and changes nothing.
 Surfaces show no count for such a season rather than an invented 0.
 
@@ -497,7 +498,7 @@ A fill is an undated viewing a log or mark adds for an aired episode that isn't 
 Each fill belongs to the log or mark that made it.
 
 Fills count as watched for progress, up next and finishing, like any viewing.
-They have no date, so they never move a last-watched date and never count in date-based statistics (SW-004).
+They have no date, so they never move a last-watched date (SW-004). Stats count a log's fills on that log's day and a mark's fills only in All Time (STAT-104).
 A mark's fill is unlogged; unticking can remove it (TV-102).
 A log's fill goes only when that log is deleted (TV-406).
 A mark ends when its last fill is removed; an ended mark counts for nothing under TV-003, TV-006, TV-205, TV-208 and the Started term.

@@ -134,6 +134,12 @@ class Item(CalendarTriggerMixin, models.Model):
         decimal_places=2,
     )
     filter_metadata_updated_at = models.DateTimeField(null=True, blank=True)
+    # The metadata rules (api.services.item_metadata.CURRENT_METADATA_VERSION) this
+    # Item was last filled under; 0 means never filled completely. The database default
+    # keeps code from before 0088 (a rollback) inserting Items.
+    metadata_version = models.PositiveSmallIntegerField(default=0, db_default=0)
+    # The last fill attempt that failed for a temporary reason; null when none did.
+    metadata_attempted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         """Meta options for the model."""
@@ -263,6 +269,9 @@ class Item(CalendarTriggerMixin, models.Model):
                     title=tv_metadata["title"],
                     image=tv_metadata["image"],
                 )
+                from api.services.item_metadata import store_item_metadata  # noqa: PLC0415
+
+                store_item_metadata(tv_item, tv_metadata)
                 logger.info("Created TV item %s for season %s", tv_item, self)
 
             # Process the TV item instead of the season
@@ -410,6 +419,9 @@ class ItemFilterFacet(models.Model):
     class FacetType(models.TextChoices):
         GENRE = "genre", "Genre"
         LANGUAGE = "language", "Language"
+        THEME = "theme", "Theme"
+        # The title's original language as an English name, once per title.
+        ORIGINAL_LANGUAGE = "original_language", "Original language"
 
     item = models.ForeignKey(
         Item,

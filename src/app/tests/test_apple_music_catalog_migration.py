@@ -32,6 +32,11 @@ class AppleMusicCatalogMigrationTests(TransactionTestCase):
 
     def test_forward_accepts_apple_music_and_reverse_keeps_existing_items(self):
         executor = MigrationExecutor(connection)
+        # Reverse the metadata-version branch first: on SQLite, reversing 0086 rebuilds
+        # the Item table from a state without metadata_version, so 0088_item_metadata_version
+        # would then have no column left to drop.
+        executor.migrate([("app", "0087_merge_tv_tracking_and_music_search")])
+        executor = MigrationExecutor(connection)
         executor.migrate(self.migrate_from)
         old_apps = executor.loader.project_state(self.migrate_from).apps
         OldItem = old_apps.get_model("app", "Item")

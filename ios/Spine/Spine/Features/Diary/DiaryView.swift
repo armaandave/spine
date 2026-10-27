@@ -57,6 +57,19 @@ final class DiaryViewModel {
         self.onUnauthorized = onUnauthorized
     }
 
+    /// A diary narrowed by a full filter, such as a stats drill-down (`FilteredDiaryView`).
+    init(
+        diaryRepository: DiaryRepository,
+        mediaFilter: MediaFilterState,
+        filterOptionsRepository: FilterOptionsRepository? = nil,
+        onUnauthorized: @escaping () -> Void
+    ) {
+        self.diaryRepository = diaryRepository
+        self.filterOptionsRepository = filterOptionsRepository ?? APIFilterOptionsRepository(client: AppEnvironment.apiClient)
+        filter = mediaFilter
+        self.onUnauthorized = onUnauthorized
+    }
+
     func loadIfNeeded(loadsFilterOptions: Bool = false) async {
         guard !didLoad, !isInitialLoadInFlight else { return }
         isInitialLoadInFlight = true
@@ -824,7 +837,7 @@ struct DiaryView: View {
 /// Blurs whatever scrolls under the status bar, fading out by the bottom of it, so the page's
 /// backdrop shows through instead of a solid band. It ends where month headers pin, so it
 /// never hazes a pinned header's title.
-private struct DiaryTopSoftScrim: View {
+struct DiaryTopSoftScrim: View {
     private static let fade: CGFloat = 14
 
     var body: some View {

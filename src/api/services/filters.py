@@ -1,6 +1,10 @@
 import logging
-from datetime import date
+import re
+from collections import defaultdict
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import reduce
+from operator import or_
 
 from django.apps import apps
 from django.conf import settings
@@ -8,6 +12,7 @@ from django.db import models
 from django.db.models import (
     Avg,
     Case,
+    DateField,
     F,
     FilteredRelation,
     OuterRef,
@@ -16,15 +21,29 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Lower
+from django.db.models.functions import (
+    ExtractHour,
+    ExtractMinute,
+    ExtractSecond,
+    Lower,
+    TruncDate,
+)
+from django.db.models.lookups import Exact
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from requests import RequestException
 from rest_framework.exceptions import ValidationError
 
-from app import exposure
+from app import exposure, user_calendar
 from app.external_ratings import RATING_SOURCES, rating_source_is_exposed
-from app.models import ExternalRating, Item, ItemFilterFacet, MediaTypes, Status
+from app.models import (
+    ExternalRating,
+    Item,
+    ItemFilterFacet,
+    MediaTypes,
+    Sources,
+    Status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +74,12 @@ DESC_SORTS = {
 
 METADATA_SORTS = {"release_date"}
 SHORT_FILM_MINUTES = 40
+FACET_VALUE_MAX_LENGTH = 100
+RUNTIME_HOURS = re.compile(r"(\d+(?:\.\d+)?)\s*h")
+RUNTIME_MINUTES = re.compile(r"(\d+(?:\.\d+)?)\s*m")
+TEXT_YEAR = re.compile(r"(?<!\d)(\d{4})(?!\d)")
+MIN_YEAR = 1000
+MAX_YEAR = 9999
 
 
 def values(params, key):
@@ -104,32 +129,40 @@ def date_param(params, key):
 
 
 def update_item_filter_metadata(item, metadata):
-    """Cache provider fields needed for fast collection filtering."""
-    if not item or not metadata:
-        return
+    """Cache provider fields needed for fast collection filtering.
 
-    release_date = _release_date(metadata)
-    release_year = _release_year(metadata, release_date)
+    A provider value fills or replaces the stored one; a missing value (None, or an
+    empty facet list) never erases what is stored. Nothing is written when nothing
+    changed and the Item was cached before. Returns whether anything was written.
+    The metadata keys read are listed in api.services.item_metadata.
+    """
+    if not item or not metadata:
+        return False
+
+    release_date = _release_date(metadata, item.media_type)
+    # A year without a date never replaces the year of a stored date, so the two agree.
+    if release_date is None and item.release_date is not None:
+        release_year = item.release_date.year
+    else:
+        release_year = _release_year(metadata, release_date, item.media_type)
     updates = {
         "release_date": release_date,
         "release_year": release_year,
         "runtime_minutes": _runtime_minutes(metadata),
-        "filter_metadata_updated_at": timezone.now(),
     }
     changed = []
     for field, value in updates.items():
-        if getattr(item, field) != value:
+        if value is not None and getattr(item, field) != value:
             setattr(item, field, value)
             changed.append(field)
-    if changed:
-        item.save(update_fields=changed)
 
-    _replace_facets(item, ItemFilterFacet.FacetType.GENRE, _metadata_list(metadata, "genres"))
-    _replace_facets(
-        item,
-        ItemFilterFacet.FacetType.LANGUAGE,
-        _metadata_list(metadata, "languages"),
-    )
+    facets_changed = _replace_facets(item, _metadata_facets(metadata))
+    if changed or facets_changed or item.filter_metadata_updated_at is None:
+        item.filter_metadata_updated_at = timezone.now()
+        item.save(update_fields=[*changed, "filter_metadata_updated_at"])
+        return True
+    return False
+
 
 def apply_item_filters(queryset, params, *, item_path="item__"):
     """Apply shared Item-backed filters to a queryset."""
@@ -173,7 +206,11 @@ def apply_item_filters(queryset, params, *, item_path="item__"):
 
 
 def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False, limit=1000):
-    """Populate missing Item filter metadata before DB filtering/sorting."""
+    """Populate missing Item filter metadata before DB filtering/sorting.
+
+    An Item filled under the current metadata rules is skipped even when a value is
+    missing: its provider has nothing more, so asking again would only repeat the call.
+    """
     needed_facets = set()
     needs_year = force or bool(values(params, "year")) or params.get("year_min") or params.get("year_max")
     needs_release_date = (
@@ -189,11 +226,20 @@ def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False,
     if not (needs_year or needs_release_date or needs_runtime or needed_facets):
         return
 
+    from api.services.item_metadata import is_metadata_current, store_item_metadata
     from app.providers import services as provider_services
 
     item_ids = queryset.values_list(f"{item_path}id", flat=True)
-    candidates = Item.objects.filter(id__in=item_ids).prefetch_related("filter_facets")[:limit]
+    # Apple Music albums are filled by the paced metadata fill (app.metadata_fill), on
+    # Apple's background session; here they would fall through to MusicBrainz.
+    candidates = (
+        Item.objects.filter(id__in=item_ids)
+        .exclude(source=Sources.APPLE_MUSIC.value)
+        .prefetch_related("filter_facets")[:limit]
+    )
     for item in candidates:
+        if is_metadata_current(item):
+            continue
         facets = {facet.facet_type for facet in item.filter_facets.all()}
         has_needed_values = (
             (not needs_year or item.release_year is not None)
@@ -203,6 +249,9 @@ def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False,
         )
         if has_needed_values:
             continue
+        # Album length needs the track enrichment (several MusicBrainz calls); filters
+        # need only the album itself, so music is stored without being stamped.
+        is_music = item.media_type == MediaTypes.MUSIC.value
         try:
             metadata = provider_services.get_media_metadata(
                 item.media_type,
@@ -210,6 +259,7 @@ def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False,
                 item.source,
                 season_numbers=[item.season_number] if item.season_number else None,
                 episode_number=item.episode_number,
+                include_music_enrichment=not is_music,
             )
         except (
             provider_services.ProviderAPIError,
@@ -224,7 +274,7 @@ def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False,
                 error,
             )
             continue
-        update_item_filter_metadata(item, metadata)
+        store_item_metadata(item, metadata, complete=not is_music)
 
 
 def apply_rating_range(queryset, params, field):
@@ -235,6 +285,184 @@ def apply_rating_range(queryset, params, field):
     rating_max = decimal_param(params, "rating_max")
     if rating_max is not None:
         queryset = queryset.filter(**{f"{field}__lte": rating_max})
+    return queryset
+
+
+def log_is_date_carrier(field="consumed_at"):
+    """Match logs stored at exactly 00:00:00 UTC: a calendar-date carrier, not a moment.
+
+    Single-weight, TV and MAL-export logs store their calendar day this way.
+    """
+    return Q(
+        Exact(ExtractHour(field, tzinfo=UTC), 0),
+        Exact(ExtractMinute(field, tzinfo=UTC), 0),
+        Exact(ExtractSecond(field, tzinfo=UTC), 0),
+    )
+
+
+def log_day_expression(owner, field="consumed_at"):
+    """Return a log's calendar day, decided per row.
+
+    A carrier keeps its UTC date; any other time is a moment, read on the owner's
+    calendar (app.user_calendar), so every viewer gets the same day.
+    """
+    return Case(
+        When(log_is_date_carrier(field), then=TruncDate(field, tzinfo=UTC)),
+        default=TruncDate(field, tzinfo=user_calendar.calendar_tz(owner)),
+        output_field=DateField(),
+    )
+
+
+def log_day_range_q(owner, start_date=None, end_date=None, field="consumed_at"):
+    """Match logs whose calendar day (log_day_expression) is within the inclusive dates.
+
+    Carriers get UTC bounds and other rows bounds on the owner's calendar. The upper
+    bound is "before the next day", so no time on the last day falls outside.
+    """
+    if start_date is None and end_date is None:
+        return Q()
+    zone = user_calendar.calendar_tz(owner)
+    utc_bounds = Q()
+    owner_bounds = Q()
+    if start_date is not None:
+        utc_bounds &= Q(**{f"{field}__gte": datetime.combine(start_date, time.min, tzinfo=UTC)})
+        owner_bounds &= Q(**{f"{field}__gte": datetime.combine(start_date, time.min, tzinfo=zone)})
+    if end_date is not None:
+        next_day = end_date + timedelta(days=1)
+        utc_bounds &= Q(**{f"{field}__lt": datetime.combine(next_day, time.min, tzinfo=UTC)})
+        owner_bounds &= Q(**{f"{field}__lt": datetime.combine(next_day, time.min, tzinfo=zone)})
+    carrier = log_is_date_carrier(field)
+    return (carrier & utc_bounds) | (~carrier & owner_bounds)
+
+
+def apply_diary_date_range(queryset, params, *, owner, field="consumed_at"):
+    """Apply watched_from/watched_to to diary logs by their calendar day."""
+    watched_from = date_param(params, "watched_from")
+    watched_to = date_param(params, "watched_to")
+    if watched_from is None and watched_to is None:
+        return queryset
+    return queryset.filter(log_day_range_q(owner, watched_from, watched_to, field))
+
+
+# Item filters that tv_rollup matches through the log's title (STAT-400).
+TITLE_MATCHED_PARAMS = ("year", "year_min", "year_max", "genre")
+SHOW_PART_TYPES = (MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
+
+
+def diary_item_q(item_id, *, tv_rollup=False):
+    """Match logs of one Item; with tv_rollup a show brings its seasons and episodes.
+
+    Any other Item, a season included, stays exact (STAT-400).
+    """
+    exact = Q(item_id=item_id)
+    if not tv_rollup or not str(item_id).isdigit():
+        return exact
+    show = Item.objects.filter(
+        id=item_id,
+        media_type=MediaTypes.TV.value,
+        season_number__isnull=True,
+        episode_number__isnull=True,
+    )
+    return exact | Q(
+        item__media_type__in=SHOW_PART_TYPES,
+        item__source=Subquery(show.values("source")[:1]),
+        item__media_id=Subquery(show.values("media_id")[:1]),
+    )
+
+
+def item_filter_params(params):
+    """Return the params apply_item_filters should read for a diary request.
+
+    With tv_rollup, the title-matched filters move to apply_diary_drilldown_filters.
+    """
+    if not bool_param(params, "tv_rollup"):
+        return params
+    remaining = params.copy()
+    for key in TITLE_MATCHED_PARAMS:
+        remaining.pop(key, None)
+    return remaining
+
+
+def apply_diary_drilldown_filters(queryset, params, *, owner):
+    """Apply the stats drill-down filters to the owner's diary logs (STAT-400).
+
+    - ``genre_group`` (repeatable): a genre or theme value in a shared group, from
+      the owner's own stored spellings, each matched on its own media type. Music
+      never matches; an unknown key matches nothing.
+    - ``original_language`` (repeatable): the title's original language, exactly.
+    - ``tv_rollup=true``: these and ``year``, ``year_min``, ``year_max`` and
+      ``genre`` match a season or episode log through its show's Item (STAT-102),
+      or its own Item when the show Item doesn't exist.
+
+    Stored values only: nothing here calls a provider.
+    """
+    from api.services import genre_groups
+    from api.services.stats_scope import StatsScope
+
+    target = "item_id"
+    if bool_param(params, "tv_rollup"):
+        queryset = queryset.annotate(drilldown_title_id=StatsScope.title_id())
+        target = "drilldown_title_id"
+        queryset = _apply_title_item_filters(queryset, params, target)
+
+    group_keys = values(params, "genre_group")
+    if group_keys:
+        pairs = set()
+        for key in dict.fromkeys(group_keys):
+            pairs.update(genre_groups.raw_values_for(owner, key))
+        if not pairs:
+            return queryset.none()
+        by_type = defaultdict(set)
+        for value, media_type in pairs:
+            by_type[media_type].add(value)
+        matching = ItemFilterFacet.objects.filter(
+            facet_type__in=genre_groups.GENRE_FACET_TYPES,
+        ).filter(
+            reduce(
+                or_,
+                (
+                    Q(item__media_type=media_type, value__in=sorted(type_values))
+                    for media_type, type_values in sorted(by_type.items())
+                ),
+            ),
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+
+    languages = values(params, "original_language")
+    if languages:
+        matching = ItemFilterFacet.objects.filter(
+            facet_type=ItemFilterFacet.FacetType.ORIGINAL_LANGUAGE,
+            value__in=languages,
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+    return queryset
+
+
+def _apply_title_item_filters(queryset, params, target):
+    """Apply year, year_min, year_max and genre to each log's title Item."""
+    title_items = Item.objects.all()
+    filtered = False
+    year_values = [year for year in (_year_value(value) for value in values(params, "year")) if year]
+    if values(params, "year"):
+        title_items = title_items.filter(release_year__in=year_values)
+        filtered = True
+    year_min = int_param(params, "year_min")
+    if year_min is not None:
+        title_items = title_items.filter(release_year__gte=year_min)
+        filtered = True
+    year_max = int_param(params, "year_max")
+    if year_max is not None:
+        title_items = title_items.filter(release_year__lte=year_max)
+        filtered = True
+    if filtered:
+        queryset = queryset.filter(**{f"{target}__in": title_items.values("id")})
+    genres = values(params, "genre")
+    if genres:
+        matching = ItemFilterFacet.objects.filter(
+            facet_type=ItemFilterFacet.FacetType.GENRE,
+            value__in=genres,
+        )
+        queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
     return queryset
 
 
@@ -681,24 +909,59 @@ def _credit_rating_matches(credit, rating_min, rating_max):
     return rating_max is None or (rating is not None and rating <= rating_max)
 
 
-def _replace_facets(item, facet_type, facet_values):
-    wanted = {value.strip() for value in facet_values if value and value.strip()}
-    existing = set(
-        ItemFilterFacet.objects.filter(item=item, facet_type=facet_type).values_list(
-            "value",
-            flat=True,
+def _replace_facets(item, facet_lists):
+    """Replace each facet type that has new values; return whether any row changed.
+
+    Values are trimmed, cut to the column length and deduplicated before comparing,
+    so a long value matches the row it was stored as. A type with no new values keeps
+    its stored rows.
+    """
+    wanted = {}
+    for facet_type, facet_values in facet_lists.items():
+        values_set = {
+            value.strip()[:FACET_VALUE_MAX_LENGTH].strip()
+            for value in facet_values
+            if value and value.strip()
+        }
+        if values_set:
+            wanted[facet_type] = values_set
+    if not wanted:
+        return False
+
+    existing = defaultdict(set)
+    for facet_type, value in ItemFilterFacet.objects.filter(
+        item=item,
+        facet_type__in=wanted,
+    ).values_list("facet_type", "value"):
+        existing[facet_type].add(value)
+
+    changed = False
+    for facet_type, values_set in wanted.items():
+        if existing[facet_type] == values_set:
+            continue
+        ItemFilterFacet.objects.filter(item=item, facet_type=facet_type).delete()
+        ItemFilterFacet.objects.bulk_create(
+            [
+                ItemFilterFacet(item=item, facet_type=facet_type, value=value)
+                for value in sorted(values_set)
+            ],
+            ignore_conflicts=True,
+        )
+        changed = True
+    return changed
+
+
+def _metadata_facets(metadata):
+    """Return the facet values metadata carries, by facet type."""
+    original_language = metadata.get("original_language")
+    return {
+        ItemFilterFacet.FacetType.GENRE: _metadata_list(metadata, "genres"),
+        ItemFilterFacet.FacetType.LANGUAGE: _metadata_list(metadata, "languages"),
+        ItemFilterFacet.FacetType.THEME: _metadata_list(metadata, "themes"),
+        ItemFilterFacet.FacetType.ORIGINAL_LANGUAGE: (
+            [original_language] if isinstance(original_language, str) else []
         ),
-    )
-    if existing == wanted:
-        return
-    ItemFilterFacet.objects.filter(item=item, facet_type=facet_type).delete()
-    ItemFilterFacet.objects.bulk_create(
-        [
-            ItemFilterFacet(item=item, facet_type=facet_type, value=value)
-            for value in sorted(wanted)
-        ],
-        ignore_conflicts=True,
-    )
+    }
 
 
 def _metadata_list(metadata, key):
@@ -714,42 +977,92 @@ def _metadata_list(metadata, key):
     return normalized
 
 
-def _release_date(metadata):
+def _release_date_values(metadata, media_type=None):
+    """Return the date values metadata may carry, most trusted first."""
     details = metadata.get("details") or {}
-    value = (
-        metadata.get("release_date")
-        or metadata.get("first_air_date")
-        or metadata.get("start_date")
-        or metadata.get("end_date")
-        or metadata.get("first_release_date")
-        or details.get("release_date")
-        or details.get("first_release_date")
-        or details.get("first_air_date")
-        or details.get("publish_date")
-        or details.get("published_date")
-    )
+    first = []
+    if media_type == MediaTypes.BOOK.value:
+        # A book's year is its first publication, not the edition's (Hardcover).
+        first = [metadata.get("original_release_date"), details.get("original_release_date")]
+    return [
+        *first,
+        metadata.get("release_date"),
+        metadata.get("first_air_date"),
+        metadata.get("start_date"),
+        metadata.get("end_date"),
+        metadata.get("first_release_date"),
+        details.get("release_date"),
+        details.get("first_release_date"),
+        details.get("first_air_date"),
+        details.get("start_date"),
+        details.get("publish_date"),
+        details.get("published_date"),
+    ]
+
+
+def _release_date(metadata, media_type=None):
+    for value in _release_date_values(metadata, media_type):
+        release_date = _date_value(value)
+        if release_date is not None:
+            return release_date
+    return None
+
+
+def _date_value(value):
+    """Return a date from a date, a year, "YYYY-MM" or an ISO date; None otherwise.
+
+    Other integers (IGDB's Unix timestamps) are not dates.
+    """
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
-    if not value:
+    text = value.strip() if isinstance(value, str) else ""
+    year = None
+    if isinstance(value, int) and not isinstance(value, bool):
+        year = value
+    elif len(text) == 4 and text.isdigit():
+        year = int(text)
+    if year is not None:
+        return date(year, 1, 1) if MIN_YEAR <= year <= MAX_YEAR else None
+    if len(text) == 7:
+        text = f"{text}-01"
+    try:
+        return parse_date(text) if text else None
+    except ValueError:
         return None
-    value = str(value)
-    if len(value) == 4 and value.isdigit():
-        return date(int(value), 1, 1)
-    if len(value) == 7:
-        value = f"{value}-01"
-    return parse_date(value)
 
 
-def _release_year(metadata, release_date):
+def _release_year(metadata, release_date, media_type=None):
     if release_date:
         return release_date.year
-    for value in (metadata.get("year"), (metadata.get("details") or {}).get("year")):
-        if value:
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return None
+    details = metadata.get("details") or {}
+    for value in (
+        metadata.get("year"),
+        details.get("year"),
+        metadata.get("first_publish_year"),
+        details.get("first_publish_year"),
+    ):
+        year = _year_value(value)
+        if year is not None:
+            return year
+    # Last resort: a year inside a text date, such as "March 2004".
+    for value in _release_date_values(metadata, media_type):
+        if isinstance(value, str):
+            match = TEXT_YEAR.search(value)
+            if match and MIN_YEAR <= int(match.group(1)) <= MAX_YEAR:
+                return int(match.group(1))
     return None
+
+
+def _year_value(value):
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        year = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return year if MIN_YEAR <= year <= MAX_YEAR else None
 
 
 def _runtime_minutes(metadata):
@@ -758,25 +1071,20 @@ def _runtime_minutes(metadata):
 
 
 def _runtime_value_minutes(value):
-    if value in (None, ""):
+    """Return minutes from a number or text: "24 min", "1h 30m", "1.5 hours"."""
+    if value in (None, "") or isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return int(value) or None
+        return round(value) or None
     text = str(value).strip().lower()
-    total = 0
-    for part in text.split():
-        number = part[:-1]
-        if not number.isdigit():
-            continue
-        if part.endswith("h"):
-            total += int(number) * 60
-        elif part.endswith("m"):
-            total += int(number)
-    if total:
-        return total
+    hours = RUNTIME_HOURS.search(text)
+    minutes = RUNTIME_MINUTES.search(text)
+    if hours or minutes:
+        total = (float(hours.group(1)) * 60 if hours else 0) + (float(minutes.group(1)) if minutes else 0)
+        return round(total) or None
     try:
-        return int(text)
-    except ValueError:
+        return round(float(text)) or None
+    except (OverflowError, ValueError):
         return None
 
 
@@ -797,13 +1105,10 @@ def _apply_facet_exclude(queryset, params, item_path, facet_type):
     facet_values = values(params, f"exclude_{facet_type}")
     if not facet_values:
         return queryset
-    path = f"{item_path}filter_facets__"
-    return queryset.exclude(
-        **{
-            f"{path}facet_type": facet_type,
-            f"{path}value__in": facet_values,
-        },
-    ).distinct()
+    # One subquery, so the type and the value must match on the same facet row (a game's
+    # "Horror" theme doesn't hide it from exclude_genre=Horror).
+    matching = ItemFilterFacet.objects.filter(facet_type=facet_type, value__in=facet_values)
+    return queryset.exclude(**{f"{item_path}id__in": matching.values("item_id")})
 
 
 def _order_by_field(queryset, field, descending, item_path, tiebreak=()):

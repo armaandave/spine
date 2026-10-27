@@ -16,8 +16,8 @@ from app.providers.search_rank import rank_results
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.themoviedb.org/3"
-DETAIL_CACHE_VERSION = "v3"
-MOVIE_DETAIL_CACHE_VERSION = "v4"
+DETAIL_CACHE_VERSION = "v4"
+MOVIE_DETAIL_CACHE_VERSION = "v5"
 COLLECTION_CACHE_VERSION = "v1"
 base_params = {
     "api_key": settings.TMDB_API,
@@ -559,6 +559,10 @@ def movie(media_id):
             "score_count": response["vote_count"],
             "revenue": response.get("revenue"),
             "popularity": response.get("popularity"),
+            "original_language": get_original_language(
+                response.get("original_language"),
+                response.get("spoken_languages"),
+            ),
             "details": {
                 "format": "Movie",
                 "release_date": get_start_date(response["release_date"]),
@@ -782,6 +786,10 @@ def process_tv(response):
         "score_count": response["vote_count"],
         "revenue": None,
         "popularity": response.get("popularity"),
+        "original_language": get_original_language(
+            response.get("original_language"),
+            response.get("spoken_languages"),
+        ),
         "details": {
             "format": "TV",
             "first_air_date": get_start_date(response["first_air_date"]),
@@ -1008,6 +1016,48 @@ def get_country(countries):
     if countries:
         return countries[0]["name"]
     return None
+
+
+# English names for the ISO 639-1 codes TMDB uses most as an original language, for
+# titles whose spoken_languages don't name it. "cn" is TMDB's code for Cantonese.
+ORIGINAL_LANGUAGE_NAMES = {
+    "af": "Afrikaans", "am": "Amharic", "ar": "Arabic", "bg": "Bulgarian",
+    "bn": "Bengali", "bo": "Tibetan", "bs": "Bosnian", "ca": "Catalan",
+    "cn": "Cantonese", "cs": "Czech", "cy": "Welsh", "da": "Danish", "de": "German",
+    "el": "Greek", "en": "English", "es": "Spanish", "et": "Estonian", "eu": "Basque",
+    "fa": "Persian", "fi": "Finnish", "fr": "French", "ga": "Irish", "gl": "Galician",
+    "gu": "Gujarati", "he": "Hebrew", "hi": "Hindi", "hr": "Croatian",
+    "hu": "Hungarian", "hy": "Armenian", "id": "Indonesian", "is": "Icelandic",
+    "it": "Italian", "ja": "Japanese", "ka": "Georgian", "kk": "Kazakh", "km": "Khmer",
+    "kn": "Kannada", "ko": "Korean", "ku": "Kurdish", "la": "Latin",
+    "lb": "Luxembourgish", "lt": "Lithuanian", "lv": "Latvian", "mk": "Macedonian",
+    "ml": "Malayalam", "mn": "Mongolian", "mr": "Marathi", "ms": "Malay",
+    "my": "Burmese", "nb": "Norwegian Bokmål", "ne": "Nepali", "nl": "Dutch",
+    "no": "Norwegian", "pa": "Punjabi", "pl": "Polish", "ps": "Pashto",
+    "pt": "Portuguese", "ro": "Romanian", "ru": "Russian", "si": "Sinhala",
+    "sk": "Slovak", "sl": "Slovenian", "sq": "Albanian", "sr": "Serbian",
+    "sv": "Swedish", "sw": "Swahili", "ta": "Tamil", "te": "Telugu", "th": "Thai",
+    "tl": "Tagalog", "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu",
+    "uz": "Uzbek", "vi": "Vietnamese", "wo": "Wolof", "xh": "Xhosa", "yo": "Yoruba",
+    "zh": "Mandarin", "zu": "Zulu",
+}
+# TMDB's code for a title with no spoken language (silent films and the like).
+NO_LANGUAGE_CODE = "xx"
+
+
+def get_original_language(code, spoken_languages):
+    """Return the title's original language as an English name, or None.
+
+    The title's own spoken_languages name it first, then ORIGINAL_LANGUAGE_NAMES,
+    then the code itself.
+    """
+    code = (code or "").strip().lower()
+    if not code or code == NO_LANGUAGE_CODE:
+        return None
+    for language in spoken_languages or []:
+        if (language.get("iso_639_1") or "").lower() == code and language.get("english_name"):
+            return language["english_name"]
+    return ORIGINAL_LANGUAGE_NAMES.get(code, code)
 
 
 def get_languages(languages):

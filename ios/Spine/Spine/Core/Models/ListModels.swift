@@ -312,6 +312,8 @@ struct CustomListWriteRequest: Encodable {
     var visibility: String?
     var isRanked: Bool?
     var listType: CustomListType? = nil
+    /// Only the list's owner sends tags (STAT-402); nil leaves them out, so they stay as they are.
+    var tags: [String]? = nil
 }
 
 struct ListItemWriteRequest: Encodable {

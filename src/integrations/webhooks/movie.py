@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app import single_weight
 from app.models import MediaTypes, Sources, Status
 
@@ -85,6 +86,7 @@ class MovieWebhookMixin:
                 "image": movie_metadata["image"],
             },
         )
+        store_item_metadata(movie_item, movie_metadata)
 
         current_instance = self._get_current_instance(
             app.models.Movie,

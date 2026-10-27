@@ -262,12 +262,13 @@ def find_item(ref):
     ).first()
 
 
-def get_or_create_item_from_metadata(ref, metadata):
+def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
     """Get or create an Item using provider metadata.
 
-    A music album is stored under its canonical ref.
+    A music album is stored under its canonical ref. persist_series=False leaves the
+    metadata's series for the caller to store.
     """
-    from api.services.filters import update_item_filter_metadata
+    from api.services.item_metadata import store_item_metadata
 
     ref = music_catalog.canonical_media_ref(ref)
     defaults = {
@@ -289,7 +290,7 @@ def get_or_create_item_from_metadata(ref, metadata):
     if defaults.get("total_pages") and item.total_pages != defaults["total_pages"]:
         item.total_pages = defaults["total_pages"]
         item.save(update_fields=["total_pages"])
-    update_item_filter_metadata(item, metadata)
+    store_item_metadata(item, metadata, persist_series=persist_series)
     return item
 
 

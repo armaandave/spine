@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils.text import slugify
 
+from api.services.item_metadata import store_item_metadata
 from app import single_weight
 from app.models import DiaryEntry, Item, MediaLike, MediaTypes, Movie, Sources, Status
 from app.providers import tmdb
@@ -245,7 +246,7 @@ class LetterboxdImporter:
         except Exception as error:
             logger.warning("Could not fetch TMDB movie %s: %s", tmdb_id, error)
             metadata = {}
-        return Item.objects.update_or_create(
+        item = Item.objects.update_or_create(
             media_id=tmdb_id,
             source=Sources.TMDB.value,
             media_type=MediaTypes.MOVIE.value,
@@ -254,6 +255,10 @@ class LetterboxdImporter:
                 "image": metadata.get("image") or settings.IMG_NONE,
             },
         )[0]
+        # A failed fetch leaves metadata empty, so nothing is stored or stamped and
+        # the metadata fill picks the Item up later.
+        store_item_metadata(item, metadata)
+        return item
 
     def _ensure_movie(self, item, status, when=None, rating=None):
         movie, created = Movie.objects.get_or_create(

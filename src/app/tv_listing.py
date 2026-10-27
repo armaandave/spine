@@ -87,6 +87,8 @@ class ListedEpisode:
     air_date: date | None
     title: str
     image: str | None
+    # Minutes, when the provider gives a length. No TV rule reads it; stats do.
+    runtime: int | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +234,36 @@ class ShowListing:
         ):
             return season_number, self.next_episode_to_air[2]
         return season_number, None
+
+    def season_runtime(self, season_number) -> int | None:
+        """Return the average length of the season's listed episodes in minutes, or None."""
+        runtimes = [
+            listed.runtime
+            for listed in self.episodes.get(season_number, ())
+            if listed.runtime is not None
+        ]
+        return round(sum(runtimes) / len(runtimes)) if runtimes else None
+
+    def item_fields(self, media_type, season_number, episode_number=None) -> dict:
+        """Return the Item fields the listing knows for a season or episode Item.
+
+        An episode gets its air date and length; a season its premiere date and the
+        average length of its episodes. Only known values are returned.
+        """
+        if media_type == MediaTypes.EPISODE.value:
+            listed = self.episode(season_number, episode_number)
+            release_date = listed.air_date if listed else None
+            runtime = listed.runtime if listed else None
+        else:
+            release_date = self.season_air_dates.get(season_number)
+            runtime = self.season_runtime(season_number)
+        fields = {}
+        if release_date is not None:
+            fields["release_date"] = release_date
+            fields["release_year"] = release_date.year
+        if runtime is not None:
+            fields["runtime_minutes"] = runtime
+        return fields
 
     def episode_title(self, season_number, episode_number) -> str | None:
         """Return a listed episode's title, or None when it isn't listed or has none."""
@@ -452,6 +484,9 @@ def show_item_for(item):
         **lookup,
         defaults={"title": metadata["title"], "image": metadata["image"]},
     )
+    from api.services.item_metadata import store_item_metadata  # noqa: PLC0415
+
+    store_item_metadata(show, metadata)
     return show
 
 
@@ -568,6 +603,7 @@ class _Copy:
                 _date_string(episode.get("air_date")),
                 episode.get("name") or episode.get("title") or episode.get("episode_title") or "",
                 _episode_image(episode),
+                _runtime(episode.get("runtime")),
             ]
         entry = self.seasons.setdefault(str(number), {})
         entry["episodes"] = [rows[key] for key in sorted(rows)]
@@ -599,6 +635,7 @@ class _Copy:
                         air_date=_parse_date(row[1]),
                         title=row[2] or "",
                         image=row[3] if len(row) > 3 else None,
+                        runtime=row[4] if len(row) > 4 else None,
                     )
                     for row in entry["episodes"]
                 )
@@ -744,6 +781,13 @@ def _episode_image(episode):
     if episode.get("still_path"):
         return f"https://image.tmdb.org/t/p/original{episode['still_path']}"
     return episode.get("image") or None
+
+
+def _runtime(value):
+    """Return an episode's length in minutes from a number or text ("45m"), or None."""
+    from api.services.filters import _runtime_value_minutes  # noqa: PLC0415
+
+    return _runtime_value_minutes(value)
 
 
 def _date_string(value):

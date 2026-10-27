@@ -53,6 +53,9 @@ TV_MEDIA_TYPES = frozenset(
 # books and games fill. TV and Season rows keep it empty, as before, and its position
 # stays where those models put it.
 TV_EMPTY_COLUMNS = frozenset({"like_is_independent"})
+# The metadata fill's bookkeeping on Item. It isn't exported, so the CSV keeps today's
+# columns.
+ITEM_METADATA_FILL_FIELD_NAMES = frozenset({"metadata_version", "metadata_attempted_at"})
 
 
 class Echo:
@@ -70,7 +73,9 @@ def generate_rows(user):
 
     # Get fields
     fields = {
-        "item": get_model_fields(Item),
+        "item": [
+            field for field in get_model_fields(Item) if field not in ITEM_METADATA_FILL_FIELD_NAMES
+        ],
         "track": get_track_fields(),
     }
 

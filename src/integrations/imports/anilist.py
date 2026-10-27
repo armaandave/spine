@@ -146,6 +146,12 @@ class AniListImporter:
                             idMal
                             chapters
                             episodes
+                            startDate {
+                                year
+                                month
+                                day
+                            }
+                            duration
                         }
                         status
                         score(format: POINT_10_DECIMAL)
@@ -178,6 +184,11 @@ class AniListImporter:
                                 large
                             }
                             idMal
+                            startDate {
+                                year
+                                month
+                                day
+                            }
                         }
                         status
                         score(format: POINT_10_DECIMAL)
@@ -258,6 +269,20 @@ class AniListImporter:
                         msg = f"Error processing history entry: {content}"
                         raise MediaImportUnexpectedError(msg) from e
 
+    def _metadata(self, media):
+        """Return the start date and episode length (minutes) AniList gives."""
+        start = media.get("startDate") or {}
+        year, month, day = start.get("year"), start.get("month"), start.get("day")
+        if not year:
+            start_date = None
+        elif not month:
+            start_date = f"{year:04d}"
+        elif not day:
+            start_date = f"{year:04d}-{month:02d}"
+        else:
+            start_date = f"{year:04d}-{month:02d}-{day:02d}"
+        return {"start_date": start_date, "runtime": media.get("duration")}
+
     def _process_entry(self, content, media_type):
         """Process a single entry from AniList."""
         if content["media"]["idMal"] is None:
@@ -290,6 +315,9 @@ class AniListImporter:
                 "image": content["media"]["coverImage"]["large"],
             },
         )
+        # Only the free fields: AniList's genres aren't MAL's, so the metadata fill
+        # completes the Item later.
+        helpers.store_free_metadata(item, self._metadata(content["media"]))
         model = apps.get_model(app_label="app", model_name=media_type)
         updated_at = (
             timezone.now()

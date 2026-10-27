@@ -147,6 +147,27 @@ private struct MediaSearchChrome: ViewModifier {
     }
 }
 
+/// How the fitted lens row lays out its slots.
+enum MediaSearchLensLayout {
+    /// The spacing and slot width that fit every type in one row, or nil when they need to
+    /// scroll. Slots are 44 pt or wider with the usual gap; when that's too wide, compact slots
+    /// close the gap and touch, so each slot is its whole tap area, down to 38 pt. Eight types
+    /// fit on a 402 pt phone (about 43 pt each) instead of scrolling one off screen.
+    static func fittedSlots(available: CGFloat, count: Int, isCompact: Bool) -> (spacing: CGFloat, width: CGFloat)? {
+        let count = max(count, 1)
+        let spacing: CGFloat = isCompact ? 3 : 6
+        let spaced = (available - spacing * CGFloat(count - 1)) / CGFloat(count)
+        if spaced >= 44 {
+            return (spacing, spaced)
+        }
+        let touching = available / CGFloat(count)
+        if isCompact, touching >= 38 {
+            return (0, touching)
+        }
+        return nil
+    }
+}
+
 private struct MediaSearchLensRail: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedType: String
@@ -159,12 +180,16 @@ private struct MediaSearchLensRail: View {
     var body: some View {
         if fitsAllTypes {
             GeometryReader { proxy in
-                let spacing: CGFloat = isCompact ? 3 : 6
-                let width = (proxy.size.width - spacing * CGFloat(max(availableTypes.count - 1, 0)))
-                    / CGFloat(max(availableTypes.count, 1))
+                let fit = MediaSearchLensLayout.fittedSlots(
+                    available: proxy.size.width,
+                    count: availableTypes.count,
+                    isCompact: isCompact
+                )
+                let spacing = fit?.spacing ?? 0
+                let width = fit?.width ?? 0
                 let diameter = min(isCompact ? 34 : 38, width)
 
-                if width >= 44 {
+                if fit != nil {
                     HStack(spacing: spacing) {
                         ForEach(availableTypes, id: \.self) { type in
                             MediaSearchLensOrb(
@@ -172,6 +197,7 @@ private struct MediaSearchLensRail: View {
                                 isSelected: selectedType == type,
                                 diameter: diameter,
                                 itemWidth: width,
+                                minimumItemWidth: minimumFittedWidth,
                                 showsSelectionIndicator: !isCompact,
                                 clearOnReselection: allowsEmptySelection,
                                 onTap: {
@@ -191,6 +217,9 @@ private struct MediaSearchLensRail: View {
             scrollingRail
         }
     }
+
+    /// The narrowest slot the fitted row allows before it scrolls instead.
+    private var minimumFittedWidth: CGFloat { isCompact ? 38 : 44 }
 
     private var scrollingRail: some View {
         ScrollViewReader { proxy in
@@ -221,7 +250,11 @@ private struct MediaSearchLensRail: View {
                 proxy.scrollTo(selectedType, anchor: .center)
             }
             .onChange(of: selectedType) {
-                guard !reduceMotion else { return }
+                // The selected type always scrolls into view; Reduce Motion only drops the spring.
+                guard !reduceMotion else {
+                    proxy.scrollTo(selectedType, anchor: .center)
+                    return
+                }
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) {
                     proxy.scrollTo(selectedType, anchor: .center)
                 }
@@ -246,6 +279,7 @@ private struct MediaSearchLensOrb: View {
     let isSelected: Bool
     var diameter: CGFloat = 48
     var itemWidth: CGFloat = 52
+    var minimumItemWidth: CGFloat = 44
     var showsSelectionIndicator = true
     var clearOnReselection = false
     let onTap: () -> Void
@@ -271,7 +305,7 @@ private struct MediaSearchLensOrb: View {
                         .frame(width: 12, height: 2)
                 }
             }
-            .frame(width: max(44, itemWidth), height: max(44, showsSelectionIndicator ? 58 : diameter))
+            .frame(width: max(minimumItemWidth, itemWidth), height: max(44, showsSelectionIndicator ? 58 : diameter))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

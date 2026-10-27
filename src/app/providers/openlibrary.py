@@ -443,7 +443,8 @@ def book(media_id):
 
 async def async_book(media_id):
     """Asynchronous implementation of book metadata retrieval."""
-    cache_key = f"{Sources.OPENLIBRARY.value}_{MediaTypes.BOOK.value}_{media_id}_v3"
+    # v4: details carry the work's first publication (original_release_date).
+    cache_key = f"{Sources.OPENLIBRARY.value}_{MediaTypes.BOOK.value}_{media_id}_v4"
     data = cache.get(cache_key)
 
     if data is None:
@@ -528,6 +529,9 @@ async def async_book(media_id):
                 "number_of_pages": response_book.get("number_of_pages"),
                 "publish_date": get_publish_date(response_book),
                 "release_date": get_publish_date(response_book),  # Add release_date for details display
+                # The work's first publication, which stats use as the book's year; the
+                # dates above belong to this edition.
+                "original_release_date": get_first_publish_date(response_work),
                 "author": ", ".join(a["name"] for a in authors_result) if authors_result else None,
                 "authors": authors_result,
                 "publishers": publishers,
@@ -603,6 +607,35 @@ def get_publish_date(response):
         # If no format matches, return the original string
         return publish_date
     return None
+
+
+def get_first_publish_date(response_work):
+    """Return the work's first publication as "YYYY-MM-DD", "YYYY-MM" or "YYYY".
+
+    Open Library writes ``first_publish_date`` as free text ("1954", "July 29, 1954",
+    "Sep 1937"). A form with no day keeps only what it says; text that names no
+    month keeps its year. None when the work has no date.
+    """
+    value = response_work.get("first_publish_date") if response_work else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().removeprefix("cop. ")
+    for date_format, output in (
+        ("%Y-%m-%d", "%Y-%m-%d"),
+        ("%B %d, %Y", "%Y-%m-%d"),
+        ("%b %d, %Y", "%Y-%m-%d"),
+        ("%d %B %Y", "%Y-%m-%d"),
+        ("%d %b %Y", "%Y-%m-%d"),
+        ("%B %Y", "%Y-%m"),
+        ("%b %Y", "%Y-%m"),
+        ("%Y-%m", "%Y-%m"),
+    ):
+        try:
+            return datetime.strptime(text, date_format).strftime(output)  # noqa: DTZ007
+        except ValueError:
+            continue
+    year = re.search(r"(?<!\d)(\d{4})(?!\d)", text)
+    return year.group(1) if year else None
 
 
 def _extract_author_key(author):

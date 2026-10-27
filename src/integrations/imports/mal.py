@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app.models import MediaTypes, Sources, Status
 from integrations.imports import helpers
 from integrations.imports.helpers import MediaImportError, MediaImportUnexpectedError
@@ -75,7 +76,7 @@ class MyAnimeListImporter:
         logger.info("Fetching %s from MyAnimeList", media_type)
         params = {
             "fields": (
-                "num_episodes,num_chapters,"
+                "num_episodes,num_chapters,start_date,average_episode_duration,genres,"
                 "list_status{comments,num_times_rewatched,num_times_reread}"
             ),
             "nsfw": "true",
@@ -154,6 +155,9 @@ class MyAnimeListImporter:
                 "image": image_url,
             },
         )
+        # The list carries the fields the details page stores, so this is MAL's full
+        # record for them and the Item is stamped.
+        store_item_metadata(item, self._metadata(content["node"]), persist_series=False)
 
         model = apps.get_model(app_label="app", model_name=media_type)
         updated_at = parse_datetime(list_status.get("updated_at"))
@@ -208,6 +212,16 @@ class MyAnimeListImporter:
         )
         instance._history_date = updated_at
         self.bulk_media[media_type].append(instance)
+
+    def _metadata(self, node):
+        """Return the stored metadata fields of a list entry, as mal.anime() gives them."""
+        duration = node.get("average_episode_duration")
+        return {
+            "start_date": node.get("start_date"),
+            # MAL gives seconds; the details page shows whole minutes.
+            "runtime": int(duration / 60) if duration else None,
+            "genres": [genre["name"] for genre in node.get("genres") or []],
+        }
 
     def _parse_mal_date(self, date_str):
         """Parse MAL date string (YYYY-MM-YY) into datetime object."""

@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app.models import MediaTypes, Sources, Status
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class AnimeWebhookMixin:
                 "image": anime_metadata["image"],
             },
         )
+        store_item_metadata(anime_item, anime_metadata)
 
         current_instance = self._get_current_instance(
             app.models.Anime,

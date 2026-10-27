@@ -10,6 +10,7 @@ from django.utils.dateparse import parse_datetime
 from django_celery_beat.models import PeriodicTask
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app import helpers as app_helpers
 from app import single_weight
 from app.models import MediaTypes, Sources, Status
@@ -195,6 +196,8 @@ class TraktImporter:
         self.media_instances = defaultdict(lambda: defaultdict(list))
         self.single_weight_logs = defaultdict(list)
         self.single_weight_items = {}
+        # Items whose metadata this import already stored.
+        self.stored_item_ids = set()
 
         logger.info(
             "Initialized Trakt importer for user %s with mode %s",
@@ -390,6 +393,9 @@ class TraktImporter:
             **item_kwargs,
             defaults=defaults,
         )
+        if item.id not in self.stored_item_ids:
+            self.stored_item_ids.add(item.id)
+            store_item_metadata(item, metadata)
 
         return item
 
@@ -537,6 +543,7 @@ class TraktImporter:
         episode_metadata = {
             "title": tv_metadata["title"],
             "image": episode_image,
+            **helpers.tmdb_episode_metadata(season_metadata, episode_number),
         }
         episode_item = self._get_or_create_item(
             MediaTypes.EPISODE.value,

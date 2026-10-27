@@ -53,8 +53,8 @@ from api.services import completion as completion_service
 from api.services.filters import (
     apply_person_credit_filters,
     person_rating_source,
-    update_item_filter_metadata,
 )
+from api.services.item_metadata import _persist_detail_series, store_item_metadata
 from app import config, music_catalog, single_weight, tv_listing, tv_tracking
 from app.curation import (
     curated_image_url,
@@ -987,7 +987,8 @@ def discover_media(
 def _external_rating_item(ref, metadata):
     item = find_item(ref)
     if item is not None:
-        update_item_filter_metadata(item, metadata)
+        # The detail view persists the series itself, after the rating payload.
+        store_item_metadata(item, metadata, persist_series=False)
         return item
     candidate = Item(
         source=ref["source"],
@@ -996,7 +997,7 @@ def _external_rating_item(ref, metadata):
     )
     if not eligible_rating_sources(candidate):
         return None
-    return get_or_create_item_from_metadata(ref, metadata)
+    return get_or_create_item_from_metadata(ref, metadata, persist_series=False)
 
 
 def _detail_cache_key(
@@ -1574,42 +1575,6 @@ def _viewer_poster(user, item_id):
         return None
     preference = CustomPosterPreference.objects.filter(user=user, item_id=item_id).select_related("item").first()
     return preference if preference and music_picks_apply(preference.item) else None
-
-
-def _persist_detail_series(metadata, *, source, media_type):
-    """Persist a complete canonical series already present in detail metadata."""
-    details = metadata.get("details") or {}
-    series_id = details.get("series_id")
-    if not series_id:
-        return None
-
-    related = metadata.get("related") or {}
-    if media_type == MediaTypes.ANIME.value:
-        members = related.get("series") or []
-    elif media_type == MediaTypes.GAME.value:
-        members = related.get("collection") or []
-    elif media_type == MediaTypes.BOOK.value:
-        members = related.get(details.get("series_name")) or []
-    elif media_type == MediaTypes.MOVIE.value:
-        members = next(
-            (
-                values
-                for key, values in related.items()
-                if key not in {"recommendations", "similar"} and values
-            ),
-            [],
-        )
-    else:
-        members = []
-
-    return completion_service.persist_complete_series({
-        "series_id": series_id,
-        "source": details.get("series_source") or source,
-        "media_type": details.get("series_media_type") or media_type,
-        "name": details.get("series_name") or "",
-        "item_count": len(members),
-        "items": members,
-    })
 
 
 ANIME_RELATION_ORDER = {

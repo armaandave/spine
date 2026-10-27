@@ -727,7 +727,8 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
 
     No provider call: a new Item takes the show's title, or the stored listing's episode
     title, and the stored listing's season poster or episode still, as tv_tracking does
-    for the Items a write needs. Never the show's poster: pages show the saved image.
+    for the Items a write needs, plus the listing's date and length. Never the show's
+    poster: pages show the saved image.
     """
     if media_type == MediaTypes.TV.value:
         return show_item
@@ -746,6 +747,8 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
     title = show_item.title
     image = None
     listing = tv_listing.stored_listing(show_item)
+    # The listing's dates and lengths come along; genres stay on the show.
+    fields = listing.item_fields(media_type, season_number, episode_number) if listing else {}
     if media_type == MediaTypes.SEASON.value:
         image = listing.season_images.get(season_number) if listing else None
     else:
@@ -754,7 +757,7 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
             title = listed.title or title
             image = listed.image
     image = image or settings.IMG_NONE
-    item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image})
+    item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image, **fields})
     return item
 
 

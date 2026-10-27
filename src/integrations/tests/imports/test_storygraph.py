@@ -174,7 +174,7 @@ class StoryGraphResolverTests(TestCase):
             row = parse_export(file.read())[0]
         calls = []
 
-        def search(_media_type, query, _page, source):
+        def search(_media_type, query, _page, source, **_kwargs):
             calls.append((query, source))
             if source == Sources.OPENLIBRARY.value and query == "9780306406157":
                 return {"results": [{"media_id": "ol-1", "title": "Rich Book", "image": ""}]}

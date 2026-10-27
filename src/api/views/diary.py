@@ -55,18 +55,30 @@ class DiaryListView(APIView):
         tag = request.query_params.get("tag", "").strip().lower()
         has_review = request.query_params.get("has_review") == "true"
         liked = request.query_params.get("liked") == "true"
+        # Stats drill-downs (STAT-400): stored values only, TV matched through the show.
+        skip_backfill = bool(filter_service.bool_param(request.query_params, "skip_backfill"))
+        tv_rollup = bool(filter_service.bool_param(request.query_params, "tv_rollup"))
         if item_id:
-            entries = entries.filter(item_id=item_id)
+            entries = entries.filter(filter_service.diary_item_q(item_id, tv_rollup=tv_rollup))
         if tag:
             entries = entries.filter(tags__name=tag)
         if has_review:
             entries = entries.filter(Q(review__gt="") | Q(review_title__gt=""))
         if liked:
             entries = entries.filter(liked=True)
-        filter_service.ensure_filter_metadata(entries, request.query_params)
-        entries = filter_service.apply_item_filters(entries, request.query_params)
+        if not skip_backfill:
+            filter_service.ensure_filter_metadata(entries, request.query_params)
+        entries = filter_service.apply_item_filters(
+            entries,
+            filter_service.item_filter_params(request.query_params),
+        )
+        entries = filter_service.apply_diary_drilldown_filters(
+            entries,
+            request.query_params,
+            owner=request.user,
+        )
         entries = filter_service.apply_rating_range(entries, request.query_params, "rating")
-        entries = filter_service.apply_watched_range(entries, request.query_params, "consumed_at")
+        entries = filter_service.apply_diary_date_range(entries, request.query_params, owner=request.user)
         entries = filter_service.apply_user_status_filter(
             entries,
             request.user,

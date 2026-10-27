@@ -7,6 +7,7 @@ from django.conf import settings
 from django.utils.dateparse import parse_datetime
 
 import app
+from api.services.item_metadata import store_item_metadata
 from app import config, music_catalog
 from app.models import MediaTypes, Sources
 from app.providers import services
@@ -124,8 +125,9 @@ class YamtrackImporter:
         ):
             return
 
+        metadata, complete = None, False
         if row["title"] == "" or row["image"] == "":
-            self._handle_missing_metadata(
+            metadata, complete = self._handle_missing_metadata(
                 row,
                 media_type,
                 season_number,
@@ -149,6 +151,12 @@ class YamtrackImporter:
                 "image": row["image"],
             },
         )
+        # A provider record fetched for a missing title is stored; a search result
+        # stores only what it carries, and the metadata fill does the rest.
+        if complete:
+            store_item_metadata(item, metadata)
+        else:
+            helpers.store_free_metadata(item, metadata)
 
         model = apps.get_model(app_label="app", model_name=media_type)
         instance = model(item=item)
@@ -205,10 +213,14 @@ class YamtrackImporter:
         return True
 
     def _handle_missing_metadata(self, row, media_type, season_number, episode_number):
-        """Handle missing metadata by fetching from provider."""
+        """Fill the row's missing title and image from the provider.
+
+        Returns (metadata, complete): the provider data fetched, if any, and whether
+        it is the full record.
+        """
         if row["source"] == Sources.MANUAL.value and row["image"] == "":
             row["image"] = settings.IMG_NONE
-            return
+            return None, False
 
         if row.get("media_id", "") != "":
             metadata = services.get_media_metadata(
@@ -220,7 +232,7 @@ class YamtrackImporter:
             )
             row["title"] = metadata["title"]
             row["image"] = metadata["image"]
-            return
+            return metadata, True
 
         if row.get("title", "") != "":
             source = row.get("source", "")
@@ -243,7 +255,9 @@ class YamtrackImporter:
 
             logger.info("Added title from %s: %s", source, row["title"])
             logger.info("Obtained media id: %s", row["media_id"])
-            return
+            # A search result's languages are only the original language; storing them
+            # would replace the title's full list.
+            return {key: value for key, value in first_result.items() if key != "languages"}, False
 
         msg = f"Missing metadata for: {row}"
         raise MediaImportError(msg)

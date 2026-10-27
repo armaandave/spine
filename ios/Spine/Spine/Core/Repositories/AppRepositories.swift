@@ -347,6 +347,8 @@ protocol ProfileRepository {
     func me() async throws -> UserProfile
     func profile(username: String) async throws -> UserProfile
     func statsSummary(username: String?, period: StatsPeriod) async throws -> StatsSummary
+    /// The v2 stats page (`schema=2`) for one period and tab; `mediaType` nil is Global.
+    func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage
     func statsMostLogged(
         username: String?,
         period: StatsPeriod,
@@ -354,6 +356,30 @@ protocol ProfileRepository {
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<StatsMostLoggedItem>
+    /// Most logged's show-all pages, folded to the show (`schema=2`, STAT-310).
+    func statsMostLoggedTitles(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedTitle>
+    /// Highest rated's show-all pages (STAT-310).
+    func statsHighestRated(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsRatedTitle>
+    /// Collections' show-all pages. Collections are lifetime, so there are no dates (STAT-310).
+    func statsCollections(
+        username: String?,
+        mediaType: String,
+        group: StatsCollectionGroup,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<MediaSeriesSummary>
     func likedMedia() async throws -> [MediaSummary]
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile
     func uploadAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> String?
@@ -379,6 +405,11 @@ extension ProfileRepository {
         fatalError("Not implemented")
     }
 
+    /// Repositories that only know the legacy call answer with the legacy fallback page.
+    func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage {
+        StatsPage(legacy: try await statsSummary(username: username, period: period), mediaType: mediaType)
+    }
+
     func statsMostLogged(
         username: String?,
         period: StatsPeriod,
@@ -386,6 +417,36 @@ extension ProfileRepository {
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<StatsMostLoggedItem> {
+        fatalError("Not implemented")
+    }
+
+    func statsMostLoggedTitles(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedTitle> {
+        fatalError("Not implemented")
+    }
+
+    func statsHighestRated(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsRatedTitle> {
+        fatalError("Not implemented")
+    }
+
+    func statsCollections(
+        username: String?,
+        mediaType: String,
+        group: StatsCollectionGroup,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<MediaSeriesSummary> {
         fatalError("Not implemented")
     }
 }
@@ -1269,6 +1330,78 @@ struct APIProfileRepository: ProfileRepository {
             path = "/stats/me/summary/"
         }
         return try await client.get(path, query: period.query, authenticated: true)
+    }
+
+    func statsSummary(username: String?, period: StatsPeriod, mediaType: String?) async throws -> StatsPage {
+        var query = [URLQueryItem(name: "schema", value: "2")] + period.query
+        if let mediaType {
+            query.append(URLQueryItem(name: "media_type", value: mediaType))
+        }
+        let page: StatsPage = try await client.get(Self.statsPath("summary", username: username), query: query, authenticated: true)
+        // An older server ignores `schema=2` and `media_type` (STAT-902).
+        return page.scoped(to: mediaType)
+    }
+
+    func statsMostLoggedTitles(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsMostLoggedTitle> {
+        let query = [URLQueryItem(name: "schema", value: "2")]
+            + Self.statsPageQuery(period: period, mediaType: mediaType, page: page, pageSize: pageSize)
+        return try await client.get(Self.statsPath("most-logged", username: username), query: query, authenticated: true)
+    }
+
+    func statsHighestRated(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String?,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsRatedTitle> {
+        try await client.get(
+            Self.statsPath("highest-rated", username: username),
+            query: Self.statsPageQuery(period: period, mediaType: mediaType, page: page, pageSize: pageSize),
+            authenticated: true
+        )
+    }
+
+    func statsCollections(
+        username: String?,
+        mediaType: String,
+        group: StatsCollectionGroup,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<MediaSeriesSummary> {
+        var query = [
+            URLQueryItem(name: "media_type", value: mediaType),
+            URLQueryItem(name: "group", value: group.rawValue),
+            URLQueryItem(name: "page_size", value: String(pageSize)),
+        ]
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return try await client.get(Self.statsPath("collections", username: username), query: query, authenticated: true)
+    }
+
+    /// `/stats/me/<endpoint>/`, or `/users/<username>/stats/<endpoint>/`.
+    private static func statsPath(_ endpoint: String, username: String?) -> String {
+        guard let username else { return "/stats/me/\(endpoint)/" }
+        let escapedUsername = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        return "/users/\(escapedUsername)/stats/\(endpoint)/"
+    }
+
+    private static func statsPageQuery(period: StatsPeriod, mediaType: String?, page: String?, pageSize: Int) -> [URLQueryItem] {
+        var query = period.query + [URLQueryItem(name: "page_size", value: String(pageSize))]
+        if let mediaType {
+            query.append(URLQueryItem(name: "media_type", value: mediaType))
+        }
+        if let page {
+            query.append(URLQueryItem(name: "page", value: page))
+        }
+        return query
     }
 
     func statsMostLogged(

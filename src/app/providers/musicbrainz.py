@@ -848,6 +848,11 @@ def music(release_group_mbid, *, include_enrichment=True):
         release_group_mbid,
         group.get("title") or "",
     )
+    from api.services.item_metadata import album_runtime_minutes  # noqa: PLC0415
+
+    runtime = album_runtime_minutes(data["music"]["representative_release"])
+    if runtime is not None:
+        data["runtime"] = runtime
     return data
 
 

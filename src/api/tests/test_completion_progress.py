@@ -379,7 +379,7 @@ class CompletionProgressAPITests(TestCase):
         self.assertIsNone(response.data["completion"])
 
     @patch("api.services.media.provider_services.get_book_series")
-    def test_series_persists_and_stats_return_list_and_series_progress(
+    def test_series_persists_and_legacy_stats_send_empty_progress(
         self,
         series_mock,
     ):
@@ -439,14 +439,9 @@ class CompletionProgressAPITests(TestCase):
                 series_id="series-1",
             ).exists(),
         )
-        self.assertEqual(
-            stats_response.data["series_progress"][0]["completion"],
-            expected,
-        )
-        self.assertEqual(
-            stats_response.data["list_progress"][0]["completion"],
-            expected,
-        )
+        # STAT-900: installed builds decode both keys but show neither.
+        self.assertEqual(stats_response.data["series_progress"], [])
+        self.assertEqual(stats_response.data["list_progress"], [])
 
     @patch("api.services.media.provider_services.get_book_series")
     def test_incomplete_series_payload_has_no_completion(

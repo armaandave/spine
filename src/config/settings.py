@@ -732,17 +732,25 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60 * 60,  # hourly; a run works at most 10 minutes
         "options": {"expire_seconds": 60 * 50},
     },
+    "sweep_item_metadata": {
+        "task": "Sweep item metadata",
+        # every hour; fills what was tracked or logged lately, resumes the metadata fill
+        "schedule": 60 * 60,
+    },
 }
 
 # Featured lists run on their own worker ([program:celery-featured]), so long imports
 # on the default queue never delay an award night. The music genre refresh (about
-# an hour of ListenBrainz and Wikipedia requests) and the hourly linking of genre
-# albums to Apple Music run there too, off the default queue.
+# an hour of ListenBrainz and Wikipedia requests), the hourly linking of genre albums to
+# Apple Music and the metadata fill (hours of ~30 s chunks and the hourly sweep) run
+# there too, off the default queue.
 CELERY_TASK_ROUTES = {
     "Dispatch featured lists": {"queue": "featured"},
     "Sync featured list": {"queue": "featured"},
     "Refresh music genre albums": {"queue": "featured"},
     "Link genre albums to Apple": {"queue": "featured"},
+    "Fill item metadata": {"queue": "featured"},
+    "Sweep item metadata": {"queue": "featured"},
 }
 
 # Lets the weekly review agent read /api/v1/lists/featured/health/ with the
