@@ -1,0 +1,1741 @@
+{
+  "pages": [
+    {
+      "release-count": 37,
+      "release-offset": 0,
+      "releases": [
+        {
+          "id": "069128e4-1880-40a3-96a1-aeb4692858fb",
+          "title": "Short n’ Sweet",
+          "disambiguation": "retailers exclusive",
+          "status": "Official",
+          "barcode": "602465930603",
+          "date": "2024",
+          "country": "AR",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31785929"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://articulo.mercadolibre.com.ar/MLA-1918218332-carpenter-sabrina-short-n-sweet-cd-_JM"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://hmv.com/store/music/hmv-exclusive-cd/short-n-sweet-(hmv-exclusive)-jewel-cd-poster"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tower.jp/item/6392329"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.hmv.co.jp/en/artist_Sabrina-Carpenter_000000000578608/item_Short-N-Sweet_15368867"
+              }
+            }
+          ]
+        },
+        {
+          "id": "13738954-c561-4ac2-9016-9b56b0076b80",
+          "title": "Short n’ Sweet(er)",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "",
+          "date": "2024-08-29",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 13
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweeter-digital-album"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweeter-digital-album"
+              }
+            }
+          ]
+        },
+        {
+          "id": "1643a777-2c72-4423-9899-f225498c6daa",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe",
+          "status": "Official",
+          "barcode": "00602475935933",
+          "date": "2025-02-14",
+          "country": "XW",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33136518"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/3WzBIQmn2hrulLeTY9smkk"
+              }
+            }
+          ]
+        },
+        {
+          "id": "17c662b6-cdb9-413c-a4cb-fb259f2c6d57",
+          "title": "Short n’ Sweet",
+          "disambiguation": "clean",
+          "status": "Official",
+          "barcode": "00602465957433",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1752214909"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/382239511"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/us-en/album/short-n-sweet-sabrina-carpenter/hox2m3tslbzhb"
+              }
+            }
+          ]
+        },
+        {
+          "id": "2a5080bb-3da8-4c7a-b853-e60fbea6f886",
+          "title": "Short n’ Sweet",
+          "disambiguation": "alternate cover, bonus track, clear vinyl",
+          "status": "Official",
+          "barcode": "602465839807",
+          "date": "2024-08-23",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 13
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31552573"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-bonus-track-lp"
+              }
+            }
+          ]
+        },
+        {
+          "id": "2bffa269-0155-42b8-b68f-448479a61694",
+          "title": "Short n’ Sweet",
+          "disambiguation": "clean",
+          "status": "Official",
+          "barcode": "0602465957419",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/4B4Elma4nNDUyl6D5PvQkj"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/630119261"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.qobuz.com/album/c9ukrmqp8u14a"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/381627266"
+              }
+            }
+          ]
+        },
+        {
+          "id": "2d3d2879-6c28-405a-934d-d0217a92672b",
+          "title": "Short n’ Sweet",
+          "disambiguation": "UO exclusive, baby blue",
+          "status": "Official",
+          "barcode": "602465869101",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31600516"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.urbanoutfitters.com/shop/hybrid/sabrina-carpenter-short-n-sweet-limited-lp"
+              }
+            }
+          ]
+        },
+        {
+          "id": "3bf96671-bb3f-4d38-9ed9-f22de645270c",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe",
+          "status": "Official",
+          "barcode": "602475956297",
+          "date": "2025-02-14",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/711254351"
+              }
+            }
+          ]
+        },
+        {
+          "id": "446e9d43-c430-4879-8c82-460bb130b339",
+          "title": "Short n’ Sweet(est)",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "602475201724",
+          "date": "2024-08-29",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 13
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweetest-digital-album"
+              }
+            }
+          ]
+        },
+        {
+          "id": "51ce8f75-7b47-49d0-8892-88348154b396",
+          "title": "Short n’ Sweet",
+          "disambiguation": "alternative cover",
+          "status": "Official",
+          "barcode": "602468081876",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31627867"
+              }
+            }
+          ]
+        },
+        {
+          "id": "603995c7-db03-47dd-bb1f-d98a6cf837d1",
+          "title": "Short n' Sweet",
+          "disambiguation": "blue vinyl",
+          "status": "Official",
+          "barcode": "602465869118",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31551319"
+              }
+            }
+          ]
+        },
+        {
+          "id": "70edb3bb-80db-490a-8529-01029b80fad3",
+          "title": "Short n' Sweet",
+          "disambiguation": "Target exclusive, bubblegum marbled vinyl",
+          "status": "Official",
+          "barcode": "602465869095",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31558525"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.target.com/p/-/A-92388611"
+              }
+            }
+          ]
+        },
+        {
+          "id": "73ec6628-e60f-4c8a-ba2a-e12a2d5d9b9b",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe, D2C exclusive, pearl opaque vinyls",
+          "status": "Official",
+          "barcode": "602475686705",
+          "date": "2025-02-14",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 5
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33149796"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-deluxe-d2c-exclusive-2lp"
+              }
+            }
+          ]
+        },
+        {
+          "id": "76a700ac-c205-4040-b2de-f3a26b928e38",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe, hi-res",
+          "status": "Official",
+          "barcode": "602475956303",
+          "date": "2025-02-14",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/nz/album/1795512297"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/us-en/album/short-n-sweet-sabrina-carpenter/a1t3yo87ali2a"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/nz/album/1795512297"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/417222496"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/us-en/album/short-n-sweet-sabrina-carpenter/a1t3yo87ali2a"
+              }
+            }
+          ]
+        },
+        {
+          "id": "7df43cea-0f65-4256-8eba-86f5c431d429",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe",
+          "status": "Official",
+          "barcode": "602475748274",
+          "date": "2025-02-14",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B0DSWNWVMG"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33180777"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-deluxe-cd"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.target.com/p/-/A-94505018"
+              }
+            }
+          ]
+        },
+        {
+          "id": "812eac00-2351-4424-9087-dc38a3497d0e",
+          "title": "Short n’ Sweet",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "602465895278",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Cassette",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31552957"
+              }
+            }
+          ]
+        },
+        {
+          "id": "84190924-8e99-417e-9703-17b7722df4e7",
+          "title": "Short n’ Sweet",
+          "disambiguation": "explicit",
+          "status": "Official",
+          "barcode": "00602465891386",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/album/short-n-sweet-sabrina-carpenter/rbhdzcf01ftdc"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1750307020"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.qobuz.com/album/rbhdzcf01ftdc"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/382239441"
+              }
+            }
+          ]
+        },
+        {
+          "id": "85826f8e-6902-4921-9d6a-e0a82cde0502",
+          "title": "Short n’ Sweet",
+          "disambiguation": "explicit",
+          "status": "Official",
+          "barcode": "00602465924695",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/3iPSVi54hsacKKl1xIR2eH"
+              }
+            }
+          ]
+        },
+        {
+          "id": "8a478577-6901-4ed2-9eaf-268ae3f12098",
+          "title": "Short n’ Sweet",
+          "disambiguation": "Dolby Atmos mix, explicit",
+          "status": "Official",
+          "barcode": "00602465837056",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/382240374"
+              }
+            }
+          ]
+        },
+        {
+          "id": "90b83b3a-1b8d-48d8-96f5-065f77724aea",
+          "title": "Short n’ Sweet",
+          "disambiguation": "bonus track",
+          "status": "Official",
+          "barcode": "",
+          "date": "2024-08-29",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 13
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-bonus-track-digital-album"
+              }
+            }
+          ]
+        },
+        {
+          "id": "987ee505-c671-43ec-b927-143ac4e53dcc",
+          "title": "Short n' Sweet",
+          "disambiguation": "Amazon exclusive, lapis lazuli color vinyl",
+          "status": "Official",
+          "barcode": "0602465869118",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B08WHNTHKY"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31551319"
+              }
+            }
+          ]
+        },
+        {
+          "id": "9a47c140-b360-46af-af60-b878b0bf742c",
+          "title": "Short n' Sweet",
+          "disambiguation": "vintage bottle, alternate cover",
+          "status": "Official",
+          "barcode": "00602465861372",
+          "date": "2024-08-23",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31553068"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-alternate-cover-lp"
+              }
+            }
+          ]
+        },
+        {
+          "id": "9beeed6d-a222-4f84-a760-6999f81ac3ae",
+          "title": "Short n' Sweet",
+          "disambiguation": "Target exclusive",
+          "status": "Official",
+          "barcode": "602465895285",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31582612"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.target.com/p/-/A-92388770"
+              }
+            }
+          ]
+        },
+        {
+          "id": "b82af8a8-c7e9-49de-9627-537da3466f86",
+          "title": "Short n’ Sweet",
+          "disambiguation": "explicit",
+          "status": "Official",
+          "barcode": "0602465891379",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/631839161"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.qobuz.com/album/gcxst2o2z7ujc"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/382239489"
+              }
+            }
+          ]
+        },
+        {
+          "id": "b941a017-7eee-4d85-9d15-e8f9bab9f738",
+          "title": "Short n' Sweet",
+          "disambiguation": "deluxe, Dolby Atmos mix",
+          "status": "Official",
+          "barcode": "00602475958826",
+          "date": "2025-02-14",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/417391539"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ca3c7cf3-fd00-41dd-b7d6-dfc52af7a437",
+          "title": "Short n’ Sweet",
+          "disambiguation": "Dolby Atmos mix, clean",
+          "status": "Official",
+          "barcode": "00602465959581",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/382240404"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cd8b1cef-128d-4d29-b449-77d3e4ea3eed",
+          "title": "Short n’ Sweet",
+          "disambiguation": "deluxe, bright azure vinyl",
+          "status": "Official",
+          "barcode": "602475656999",
+          "date": "2025-02-14",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 5
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33136755"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33149796"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-deluxe-2lp"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.target.com/p/-/A-94585987"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cf3b841e-907c-4384-b9a0-0c0c0103de69",
+          "title": "Short n’ Sweet",
+          "disambiguation": "collector’s anniversary edition LP",
+          "status": "Official",
+          "barcode": "881061388371",
+          "date": "2026-10-09",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "amazon asin",
+              "type-id": "4f2e710d-166c-480c-a293-2e2c8d658d87",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.amazon.com/gp/product/B08WHNTHKY"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31551319"
+              }
+            }
+          ]
+        },
+        {
+          "id": "d3ace3a7-84b5-41dc-86d8-5af91d72fcd3",
+          "title": "Short n’ Sweet",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "602465895261",
+          "date": "2024-08-23",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31552999"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.spotify.com/en-US/artist/74KM79TiuVKeVCqs8QtB0B/product/short-n-sweet-standard-cd"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-standard-cd"
+              }
+            }
+          ]
+        },
+        {
+          "id": "d454e147-afab-46bd-864c-698c40e8a29c",
+          "title": "Short n’ Sweet",
+          "disambiguation": "picture disc",
+          "status": "Official",
+          "barcode": "602465839814",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31553083"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.spotify.com/en-US/artist/74KM79TiuVKeVCqs8QtB0B/product/short-n-sweet-picture-disc"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-picture-disc?variant=41540134240337"
+              }
+            }
+          ]
+        },
+        {
+          "id": "d830ab0d-d5d9-4cb9-878c-e948532526ae",
+          "title": "Short N' Sweet",
+          "disambiguation": "Deluxe",
+          "status": "Official",
+          "barcode": "602475748274",
+          "date": "2025-02-14",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 17
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/33139248"
+              }
+            }
+          ]
+        },
+        {
+          "id": "dbee3df6-f261-4fcc-a92d-82b317aa286e",
+          "title": "Short n’ Sweet",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "602465895278",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Cassette",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31552957"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.spotify.com/en-US/artist/74KM79TiuVKeVCqs8QtB0B/product/short-n-sweet-standard-cassette"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-standard-cassette"
+              }
+            }
+          ]
+        },
+        {
+          "id": "dfc4115b-fb81-4ebc-887d-3d9bba16b723",
+          "title": "Short n’ Sweet",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "602475027799",
+          "date": "2024-08-23",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31554862"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31583725"
+              }
+            }
+          ]
+        },
+        {
+          "id": "f5b340d0-2ea3-4962-87c8-f6f281788bbb",
+          "title": "Short n’ Sweet",
+          "disambiguation": "",
+          "status": "Bootleg",
+          "barcode": "602475027799",
+          "date": "2024-12",
+          "country": "RU",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/32648256"
+              }
+            }
+          ]
+        },
+        {
+          "id": "f8542f6f-051e-4c26-b964-8cc9e79fed62",
+          "title": "Short n’ Sweet",
+          "disambiguation": "limited edition, alt cover",
+          "status": "Official",
+          "barcode": "602468081869",
+          "date": "2024-08-23",
+          "country": "GB",
+          "media": [
+            {
+              "position": 1,
+              "format": "Cassette",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31564087"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fadeb972-22ea-4846-ab23-9ee37ae5c175",
+          "title": "Short n' Sweet",
+          "disambiguation": "blue marbled, light sky",
+          "status": "Official",
+          "barcode": "602465835199",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31543114"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.spotify.com/en-us/artist/74KM79TiuVKeVCqs8QtB0B/product/short-n-sweet-standard-lp"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-standard-lp"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fef8d846-7798-416f-bbc5-febeeecdaf54",
+          "title": "Short n’ Sweet",
+          "disambiguation": "alternate cover, bonus track, clear vinyl",
+          "status": "Official",
+          "barcode": "602465839807",
+          "date": "2024-08-23",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 13
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "Sabrina Carpenter",
+              "joinphrase": "",
+              "artist": {
+                "id": "1882fe91-cdd9-49c9-9956-8e06a3810bd4",
+                "name": "Sabrina Carpenter",
+                "sort-name": "Carpenter, Sabrina"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/31565224"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://store.sabrinacarpenter.com/products/short-n-sweet-bonus-track-lp"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

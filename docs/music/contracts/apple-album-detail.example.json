@@ -1,0 +1,1614 @@
+{
+  "ref": {
+    "item_id": 952,
+    "source": "apple_music",
+    "media_type": "music",
+    "media_id": "1657869377",
+    "season_number": null,
+    "episode_number": null
+  },
+  "title": "SOS",
+  "subtitle": "SZA",
+  "overview": null,
+  "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+  "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+  "backdrop_url": null,
+  "poster_aspect_ratio": 1.0,
+  "poster_width": 600,
+  "poster_height": 600,
+  "poster_orientation": "square",
+  "poster_accent_color": null,
+  "release_date": "2022-12-09",
+  "genres": [
+    "r&b"
+  ],
+  "languages": [],
+  "roles": [],
+  "credit_roles": [],
+  "default_source": "apple_music",
+  "position": null,
+  "custom_poster_url": null,
+  "user_state": {
+    "is_tracked": true,
+    "tracking_id": 953,
+    "status": "Completed",
+    "rating": null,
+    "in_lists": [],
+    "diary_entry_id": null,
+    "diary_count": 0,
+    "diary_rating": null,
+    "diary_consumed_at": null,
+    "has_liked": false,
+    "direct_consumption": false,
+    "rating_source_diary_entry_id": null,
+    "like_source_diary_entry_id": null,
+    "like_is_independent": false
+  },
+  "synopsis": null,
+  "logo_url": null,
+  "logo_width": null,
+  "logo_height": null,
+  "logo_aspect_ratio": null,
+  "custom_logo_url": null,
+  "details": {
+    "artist": "SZA",
+    "artist_credits": [
+      {
+        "artist_mbid": null,
+        "name": "SZA",
+        "join_phrase": "",
+        "artist_source": "apple_music",
+        "artist_id": "605800394"
+      }
+    ],
+    "first_release_date": "2022-12-09",
+    "primary_type": "Album",
+    "secondary_types": [],
+    "disambiguation": null,
+    "release_count": null,
+    "annotation": null,
+    "genres": [
+      "r&b"
+    ]
+  },
+  "music": {
+    "release_group_mbid": "1657869377",
+    "primary_type": "Album",
+    "secondary_types": [],
+    "disambiguation": null,
+    "annotation": null,
+    "first_release_date": "2022-12-09",
+    "release_count": null,
+    "artist_credit": [
+      {
+        "artist_mbid": null,
+        "name": "SZA",
+        "join_phrase": "",
+        "artist_source": "apple_music",
+        "artist_id": "605800394"
+      }
+    ],
+    "content_rating": "explicit",
+    "cover_art": {
+      "source": "apple_music",
+      "release_group_mbid": "1657869377",
+      "fallback_used": true
+    },
+    "representative_release": {
+      "release_mbid": "1657869377",
+      "title": "SOS",
+      "status": "Official",
+      "date": "2022-12-09",
+      "country": "US",
+      "barcode": "196589564931",
+      "selection_basis": "apple_music",
+      "labels": [
+        {
+          "label_mbid": null,
+          "name": "Top Dawg Entertainment/RCA Records",
+          "catalog_number": null
+        }
+      ],
+      "format": "Digital Media",
+      "is_deluxe_or_remastered": false,
+      "streaming_links": [
+        {
+          "service": "music.apple.com",
+          "url": "https://music.apple.com/us/album/sos/1657869377",
+          "kind": "album"
+        },
+        {
+          "service": "open.spotify.com",
+          "url": "https://open.spotify.com/search/SZA%20SOS/albums",
+          "kind": "search"
+        }
+      ],
+      "disc_count": 1,
+      "track_count": 23,
+      "media": [
+        {
+          "medium_mbid": null,
+          "position": 1,
+          "title": null,
+          "format": "Digital Media",
+          "track_count": 23,
+          "tracks": [
+            {
+              "track_mbid": "1657869385",
+              "disc_number": 1,
+              "position": 1,
+              "number": "1",
+              "title": "SOS",
+              "length_ms": 117773,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869385",
+                "title": "SOS",
+                "length_ms": 117773,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204583"
+                ],
+                "composer_name": "SZA, Jahlil Gunter, Rob Bisel & Gabriel Samuel Hardeman",
+                "source_url": "https://music.apple.com/us/album/sos/1657869377?i=1657869385"
+              }
+            },
+            {
+              "track_mbid": "1657869393",
+              "disc_number": 1,
+              "position": 2,
+              "number": "2",
+              "title": "Kill Bill",
+              "length_ms": 153947,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869393",
+                "title": "Kill Bill",
+                "length_ms": 153947,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204584"
+                ],
+                "composer_name": "SZA, Rob Bisel & Carter Lang",
+                "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"
+              }
+            },
+            {
+              "track_mbid": "1657869394",
+              "disc_number": 1,
+              "position": 3,
+              "number": "3",
+              "title": "Seek & Destroy",
+              "length_ms": 203733,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869394",
+                "title": "Seek & Destroy",
+                "length_ms": 203733,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204585"
+                ],
+                "composer_name": "SZA, Rob Bisel, Carter Lang, Cody Fayne & Tyran Donaldson",
+                "source_url": "https://music.apple.com/us/album/seek-destroy/1657869377?i=1657869394"
+              }
+            },
+            {
+              "track_mbid": "1657869395",
+              "disc_number": 1,
+              "position": 4,
+              "number": "4",
+              "title": "Low",
+              "length_ms": 181080,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869395",
+                "title": "Low",
+                "length_ms": 181080,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204586"
+                ],
+                "composer_name": "SZA, Alessandro Buccellati, Rob Bisel, Joseph Pincus, Jocelyn A. Donald, Fabian Rashad Johnson & Rashad Johnson",
+                "source_url": "https://music.apple.com/us/album/low/1657869377?i=1657869395"
+              }
+            },
+            {
+              "track_mbid": "1657869464",
+              "disc_number": 1,
+              "position": 5,
+              "number": "5",
+              "title": "Love Language",
+              "length_ms": 183893,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869464",
+                "title": "Love Language",
+                "length_ms": 183893,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204588"
+                ],
+                "composer_name": "SZA, Carter Lang, Cody Fayne, Jakob Rabitsch, Pharrell Williams, Rob Bisel, Chad Hugo, Tyrone Griffin Jr, Anthony Clemons, Jr. & Jazzaé De Waal",
+                "source_url": "https://music.apple.com/us/album/love-language/1657869377?i=1657869464"
+              }
+            },
+            {
+              "track_mbid": "1657869466",
+              "disc_number": 1,
+              "position": 6,
+              "number": "6",
+              "title": "Blind",
+              "length_ms": 150720,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869466",
+                "title": "Blind",
+                "length_ms": 150720,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204589"
+                ],
+                "composer_name": "SZA, Rob Bisel, Carter Lang, Margaux Alexis Rosalena Whitney & Will Miller",
+                "source_url": "https://music.apple.com/us/album/blind/1657869377?i=1657869466"
+              }
+            },
+            {
+              "track_mbid": "1657869488",
+              "disc_number": 1,
+              "position": 7,
+              "number": "7",
+              "title": "Used (feat. Don Toliver)",
+              "length_ms": 146951,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869488",
+                "title": "Used (feat. Don Toliver)",
+                "length_ms": 146951,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204590"
+                ],
+                "composer_name": "SZA, Dacoury Natche, Caleb Toliver & John Hill",
+                "source_url": "https://music.apple.com/us/album/used-feat-don-toliver/1657869377?i=1657869488"
+              }
+            },
+            {
+              "track_mbid": "1657869492",
+              "disc_number": 1,
+              "position": 8,
+              "number": "8",
+              "title": "Snooze",
+              "length_ms": 201800,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869492",
+                "title": "Snooze",
+                "length_ms": 201800,
+                "disambiguation": null,
+                "first_release_date": "2022-12-08",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204591"
+                ],
+                "composer_name": "SZA, Kenny B. Edmonds, Khris Riddick-Tynes, Leon Thomas & Blair Ferguson",
+                "source_url": "https://music.apple.com/us/album/snooze/1657869377?i=1657869492"
+              }
+            },
+            {
+              "track_mbid": "1657869493",
+              "disc_number": 1,
+              "position": 9,
+              "number": "9",
+              "title": "Notice Me",
+              "length_ms": 160920,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869493",
+                "title": "Notice Me",
+                "length_ms": 160920,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204592"
+                ],
+                "composer_name": "SZA, Michael Uzowuru, Teo Halm, Carter Lang & Cody Fayne",
+                "source_url": "https://music.apple.com/us/album/notice-me/1657869377?i=1657869493"
+              }
+            },
+            {
+              "track_mbid": "1657869494",
+              "disc_number": 1,
+              "position": 10,
+              "number": "10",
+              "title": "Gone Girl",
+              "length_ms": 244027,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869494",
+                "title": "Gone Girl",
+                "length_ms": 244027,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204593"
+                ],
+                "composer_name": "SZA, Cody Fayne, Carter Lang, Rob Bisel, Jeff Bhasker, Emile Haynie & Gregory Landfair, Jr.",
+                "source_url": "https://music.apple.com/us/album/gone-girl/1657869377?i=1657869494"
+              }
+            },
+            {
+              "track_mbid": "1657869495",
+              "disc_number": 1,
+              "position": 11,
+              "number": "11",
+              "title": "Smoking on my Ex Pack",
+              "length_ms": 83827,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869495",
+                "title": "Smoking on my Ex Pack",
+                "length_ms": 83827,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204594"
+                ],
+                "composer_name": "SZA, Jahlil Gunter, Skip Scarborough & Raina Taylor",
+                "source_url": "https://music.apple.com/us/album/smoking-on-my-ex-pack/1657869377?i=1657869495"
+              }
+            },
+            {
+              "track_mbid": "1657869526",
+              "disc_number": 1,
+              "position": 12,
+              "number": "12",
+              "title": "Ghost in the Machine (feat. Phoebe Bridgers)",
+              "length_ms": 218587,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869526",
+                "title": "Ghost in the Machine (feat. Phoebe Bridgers)",
+                "length_ms": 218587,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204595"
+                ],
+                "composer_name": "Phoebe Bridgers, SZA, Carter Lang, Rob Bisel, Matt Cohn & Marshall Vore",
+                "source_url": "https://music.apple.com/us/album/ghost-in-the-machine-feat-phoebe-bridgers/1657869377?i=1657869526"
+              }
+            },
+            {
+              "track_mbid": "1657869529",
+              "disc_number": 1,
+              "position": 13,
+              "number": "13",
+              "title": "F2F",
+              "length_ms": 185040,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869529",
+                "title": "F2F",
+                "length_ms": 185040,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204596"
+                ],
+                "composer_name": "SZA, Carter Lang & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/f2f/1657869377?i=1657869529"
+              }
+            },
+            {
+              "track_mbid": "1657869532",
+              "disc_number": 1,
+              "position": 14,
+              "number": "14",
+              "title": "Nobody Gets Me",
+              "length_ms": 180853,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869532",
+                "title": "Nobody Gets Me",
+                "length_ms": 180853,
+                "disambiguation": null,
+                "first_release_date": "2022-12-05",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204598"
+                ],
+                "composer_name": "SZA, Benjamin Levin, Rob Bisel & Carter Lang",
+                "source_url": "https://music.apple.com/us/album/nobody-gets-me/1657869377?i=1657869532"
+              }
+            },
+            {
+              "track_mbid": "1657869533",
+              "disc_number": 1,
+              "position": 15,
+              "number": "15",
+              "title": "Conceited",
+              "length_ms": 151413,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869533",
+                "title": "Conceited",
+                "length_ms": 151413,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204587"
+                ],
+                "composer_name": "SZA, Cody Fayne & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/conceited/1657869377?i=1657869533"
+              }
+            },
+            {
+              "track_mbid": "1657869534",
+              "disc_number": 1,
+              "position": 16,
+              "number": "16",
+              "title": "Special",
+              "length_ms": 158840,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869534",
+                "title": "Special",
+                "length_ms": 158840,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204597"
+                ],
+                "composer_name": "SZA, Benjamin Levin, Rob Bisel, Shellback, Blake Slatkin & Omer Fedi",
+                "source_url": "https://music.apple.com/us/album/special/1657869377?i=1657869534"
+              }
+            },
+            {
+              "track_mbid": "1657869535",
+              "disc_number": 1,
+              "position": 17,
+              "number": "17",
+              "title": "Too Late",
+              "length_ms": 164427,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869535",
+                "title": "Too Late",
+                "length_ms": 164427,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204600"
+                ],
+                "composer_name": "SZA, Sammy Witte, Rob Bisel, Carter Lang, Cody Fayne & Sven Gamsky",
+                "source_url": "https://music.apple.com/us/album/too-late/1657869377?i=1657869535"
+              }
+            },
+            {
+              "track_mbid": "1657869536",
+              "disc_number": 1,
+              "position": 18,
+              "number": "18",
+              "title": "Far",
+              "length_ms": 180680,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869536",
+                "title": "Far",
+                "length_ms": 180680,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204601"
+                ],
+                "composer_name": "SZA, Carter Lang, Rob Bisel, Tyran Donaldson, Carlos \"Loshendrix\" Munoz & Eliot Dubock",
+                "source_url": "https://music.apple.com/us/album/far/1657869377?i=1657869536"
+              }
+            },
+            {
+              "track_mbid": "1657869537",
+              "disc_number": 1,
+              "position": 19,
+              "number": "19",
+              "title": "Shirt",
+              "length_ms": 181840,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869537",
+                "title": "Shirt",
+                "length_ms": 181840,
+                "disambiguation": null,
+                "first_release_date": "2022-10-28",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12203632"
+                ],
+                "composer_name": "SZA, Rodney Jerkins & Rob Gueringer",
+                "source_url": "https://music.apple.com/us/album/shirt/1657869377?i=1657869537"
+              }
+            },
+            {
+              "track_mbid": "1657869546",
+              "disc_number": 1,
+              "position": 20,
+              "number": "20",
+              "title": "Open Arms (feat. Travis Scott)",
+              "length_ms": 239613,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": null,
+              "recording": {
+                "recording_mbid": "1657869546",
+                "title": "Open Arms (feat. Travis Scott)",
+                "length_ms": 239613,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204602"
+                ],
+                "composer_name": "SZA, Jacques Webster II, Teo Halm, Douglas Ford, Michael Uzowuru & Rob Bisel",
+                "source_url": "https://music.apple.com/us/album/open-arms-feat-travis-scott/1657869377?i=1657869546"
+              }
+            },
+            {
+              "track_mbid": "1657869547",
+              "disc_number": 1,
+              "position": 21,
+              "number": "21",
+              "title": "I Hate U",
+              "length_ms": 173907,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869547",
+                "title": "I Hate U",
+                "length_ms": 173907,
+                "disambiguation": null,
+                "first_release_date": "2021-12-03",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12103605"
+                ],
+                "composer_name": "SZA, Carter Lang, Rob Bisel, Cody Fayne & Dylan Patrice",
+                "source_url": "https://music.apple.com/us/album/i-hate-u/1657869377?i=1657869547"
+              }
+            },
+            {
+              "track_mbid": "1657869723",
+              "disc_number": 1,
+              "position": 22,
+              "number": "22",
+              "title": "Good Days",
+              "length_ms": 278480,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869723",
+                "title": "Good Days",
+                "length_ms": 278480,
+                "disambiguation": null,
+                "first_release_date": "2020-12-25",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12004189"
+                ],
+                "composer_name": "SZA, Carter Lang, Christopher Ruelas, Carlos Munoz & Jacob Collier",
+                "source_url": "https://music.apple.com/us/album/good-days/1657869377?i=1657869723"
+              }
+            },
+            {
+              "track_mbid": "1657869726",
+              "disc_number": 1,
+              "position": 23,
+              "number": "23",
+              "title": "Forgiveless (feat. Ol' Dirty Bastard)",
+              "length_ms": 141960,
+              "artist_credit": [
+                {
+                  "artist_mbid": null,
+                  "name": "SZA",
+                  "join_phrase": "",
+                  "artist_source": "apple_music",
+                  "artist_id": "605800394"
+                }
+              ],
+              "content_rating": "explicit",
+              "recording": {
+                "recording_mbid": "1657869726",
+                "title": "Forgiveless (feat. Ol' Dirty Bastard)",
+                "length_ms": 141960,
+                "disambiguation": null,
+                "first_release_date": "2022-12-09",
+                "is_video": false,
+                "isrcs": [
+                  "USRC12204603"
+                ],
+                "composer_name": "SZA, Rodney Jerkins, Russell Tyrone Jones, Mark Bell, Guy Sigsworth & Björk Guðmundsdóttir",
+                "source_url": "https://music.apple.com/us/album/forgiveless-feat-ol-dirty-bastard/1657869377?i=1657869726"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "parent": null,
+  "external_links": {
+    "Apple Music": "https://music.apple.com/us/album/sos/1657869377"
+  },
+  "cast": [],
+  "crew": [],
+  "seasons": [],
+  "episodes": [],
+  "completion": null,
+  "custom_backdrop_url": null,
+  "related": {
+    "other_versions": [
+      {
+        "media_id": "1794644675",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "SOS Deluxe: LANA",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "SZA",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2024-12-20",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "SZA · 2024 · Album",
+        "relation": "Deluxe"
+      }
+    ],
+    "more_by_artist": [
+      {
+        "media_id": "1794644675",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "SOS Deluxe: LANA",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "SZA",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2024-12-20",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "SZA · 2024 · Album"
+      },
+      {
+        "media_id": "1628387909",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Ctrl (Deluxe)",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "SZA",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2017-06-09",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0f/62/05/0f620515-5166-410e-64ae-5c209e7f6609/196589231000.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "SZA · 2017 · Album"
+      }
+    ],
+    "related_albums": [
+      {
+        "media_id": "1590029262",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Still Over It",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Summer Walker",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2021-11-05",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d1/8f/6c/d18f6ce6-33bf-390a-6bc3-bc67a7bb7287/21UM1IM23130.rgb.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Summer Walker · 2021 · Album"
+      },
+      {
+        "media_id": "1707931783",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Scarlet",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Doja Cat",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2023-09-22",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/8b/02/52/8b02528c-8282-6709-dbb3-953da86c6e37/196871470124.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Doja Cat · 2023 · Album"
+      },
+      {
+        "media_id": "1615644274",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "blue water road",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Kehlani",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2022-04-29",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/66/75/04/667504c5-b502-0d70-e12a-5db22c5541ae/075679779724.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Kehlani · 2022 · Album"
+      },
+      {
+        "media_id": "1781806136",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "The Magic Hour Collection",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Jhené Aiko",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2024-11-22",
+        "primary_type": "Album",
+        "secondary_types": [
+          "Compilation"
+        ],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/94/1d/76/941d76c5-08ce-96ce-fe09-162a01de5712/24UM1IM28377.rgb.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Jhené Aiko · 2024 · Album"
+      },
+      {
+        "media_id": "1612543079",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Buckles Laboratories Presents: The Intermission",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Mariah the Scientist",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2022-03-11",
+        "primary_type": "EP",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": null,
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/46/cf/61/46cf610c-c625-8c7a-fa88-25ca2a60caf0/886449948666.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Mariah the Scientist · 2022 · EP"
+      },
+      {
+        "media_id": "1665311474",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Red Moon In Venus",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Kali Uchis",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2023-03-03",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/90/87/bf/9087bfb6-ba9a-3157-f102-a8829e634e33/23UMGIM03412.rgb.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Kali Uchis · 2023 · Album"
+      },
+      {
+        "media_id": "1771037153",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "eternal sunshine (slightly deluxe and also live)",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Ariana Grande",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2024-03-08",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/6b/30/c0/6b30c0b0-2379-be7c-2bd4-897104419efd/24UM1IM04184.rgb.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Ariana Grande · 2024 · Album"
+      },
+      {
+        "media_id": "1639430350",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Traumazine",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Megan Thee Stallion",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2022-08-12",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/cd/8b/96/cd8b960a-6460-5441-e54e-b3c8028a1e82/075679731203.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Megan Thee Stallion · 2022 · Album"
+      },
+      {
+        "media_id": "1681322859",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "NEVER ENOUGH (Bonus Version)",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "Daniel Caesar",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2023-04-07",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": "explicit",
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/36/e3/8e/36e38e7e-94ec-dbcd-f23c-0890e1a9518f/22UM1IM44821.rgb.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "Daniel Caesar · 2023 · Album"
+      },
+      {
+        "media_id": "1627365840",
+        "source": "apple_music",
+        "media_type": "music",
+        "title": "Give Or Take",
+        "artist_credits": [
+          {
+            "artist_mbid": null,
+            "name": "GIVĒON",
+            "join_phrase": ""
+          }
+        ],
+        "release_date": "2022-06-24",
+        "primary_type": "Album",
+        "secondary_types": [],
+        "disambiguation": null,
+        "content_rating": null,
+        "image": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9a/15/77/9a157761-5d28-9737-1772-56dc04127f15/886449310944.jpg/600x600bb.jpg",
+        "poster_width": 600,
+        "poster_height": 600,
+        "poster_aspect_ratio": 1.0,
+        "subtitle": "GIVĒON · 2022 · Album"
+      }
+    ]
+  },
+  "related_sections": [
+    {
+      "id": "other_versions",
+      "title": "Other Versions",
+      "items": [
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1794644675",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "SOS Deluxe: LANA",
+          "relation": "Deluxe",
+          "content_rating": "explicit",
+          "subtitle": "SZA · 2024 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2024-12-20",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        }
+      ],
+      "completion": null
+    },
+    {
+      "id": "more_by_artist",
+      "title": "More by SZA",
+      "items": [
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1794644675",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "SOS Deluxe: LANA",
+          "content_rating": "explicit",
+          "subtitle": "SZA · 2024 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/73/05/7d/73057d8f-846c-01b8-2760-6d3c3071c48a/196872790276.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2024-12-20",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1628387909",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Ctrl (Deluxe)",
+          "content_rating": "explicit",
+          "subtitle": "SZA · 2017 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0f/62/05/0f620515-5166-410e-64ae-5c209e7f6609/196589231000.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0f/62/05/0f620515-5166-410e-64ae-5c209e7f6609/196589231000.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2017-06-09",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        }
+      ],
+      "completion": null
+    },
+    {
+      "id": "related_albums",
+      "title": "You Might Also Like",
+      "items": [
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1590029262",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Still Over It",
+          "content_rating": "explicit",
+          "subtitle": "Summer Walker · 2021 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d1/8f/6c/d18f6ce6-33bf-390a-6bc3-bc67a7bb7287/21UM1IM23130.rgb.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d1/8f/6c/d18f6ce6-33bf-390a-6bc3-bc67a7bb7287/21UM1IM23130.rgb.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2021-11-05",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1707931783",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Scarlet",
+          "content_rating": "explicit",
+          "subtitle": "Doja Cat · 2023 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/8b/02/52/8b02528c-8282-6709-dbb3-953da86c6e37/196871470124.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/8b/02/52/8b02528c-8282-6709-dbb3-953da86c6e37/196871470124.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2023-09-22",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1615644274",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "blue water road",
+          "content_rating": "explicit",
+          "subtitle": "Kehlani · 2022 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/66/75/04/667504c5-b502-0d70-e12a-5db22c5541ae/075679779724.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/66/75/04/667504c5-b502-0d70-e12a-5db22c5541ae/075679779724.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2022-04-29",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1781806136",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "The Magic Hour Collection",
+          "content_rating": "explicit",
+          "subtitle": "Jhené Aiko · 2024 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/94/1d/76/941d76c5-08ce-96ce-fe09-162a01de5712/24UM1IM28377.rgb.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/94/1d/76/941d76c5-08ce-96ce-fe09-162a01de5712/24UM1IM28377.rgb.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2024-11-22",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1612543079",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Buckles Laboratories Presents: The Intermission",
+          "subtitle": "Mariah the Scientist · 2022 · EP",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/46/cf/61/46cf610c-c625-8c7a-fa88-25ca2a60caf0/886449948666.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/46/cf/61/46cf610c-c625-8c7a-fa88-25ca2a60caf0/886449948666.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2022-03-11",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1665311474",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Red Moon In Venus",
+          "content_rating": "explicit",
+          "subtitle": "Kali Uchis · 2023 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/90/87/bf/9087bfb6-ba9a-3157-f102-a8829e634e33/23UMGIM03412.rgb.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/90/87/bf/9087bfb6-ba9a-3157-f102-a8829e634e33/23UMGIM03412.rgb.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2023-03-03",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1771037153",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "eternal sunshine (slightly deluxe and also live)",
+          "content_rating": "explicit",
+          "subtitle": "Ariana Grande · 2024 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/6b/30/c0/6b30c0b0-2379-be7c-2bd4-897104419efd/24UM1IM04184.rgb.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/6b/30/c0/6b30c0b0-2379-be7c-2bd4-897104419efd/24UM1IM04184.rgb.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2024-03-08",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1639430350",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Traumazine",
+          "content_rating": "explicit",
+          "subtitle": "Megan Thee Stallion · 2022 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/cd/8b/96/cd8b960a-6460-5441-e54e-b3c8028a1e82/075679731203.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/cd/8b/96/cd8b960a-6460-5441-e54e-b3c8028a1e82/075679731203.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2022-08-12",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1681322859",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "NEVER ENOUGH (Bonus Version)",
+          "content_rating": "explicit",
+          "subtitle": "Daniel Caesar · 2023 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/36/e3/8e/36e38e7e-94ec-dbcd-f23c-0890e1a9518f/22UM1IM44821.rgb.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/36/e3/8e/36e38e7e-94ec-dbcd-f23c-0890e1a9518f/22UM1IM44821.rgb.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2023-04-07",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        },
+        {
+          "ref": {
+            "item_id": null,
+            "source": "apple_music",
+            "media_type": "music",
+            "media_id": "1627365840",
+            "season_number": null,
+            "episode_number": null
+          },
+          "title": "Give Or Take",
+          "subtitle": "GIVĒON · 2022 · Album",
+          "overview": null,
+          "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9a/15/77/9a157761-5d28-9737-1772-56dc04127f15/886449310944.jpg/600x600bb.jpg",
+          "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9a/15/77/9a157761-5d28-9737-1772-56dc04127f15/886449310944.jpg/600x600bb.jpg",
+          "backdrop_url": null,
+          "poster_aspect_ratio": 1.0,
+          "poster_width": 600,
+          "poster_height": 600,
+          "poster_orientation": "square",
+          "poster_accent_color": null,
+          "release_date": "2022-06-24",
+          "genres": [],
+          "languages": [],
+          "roles": [],
+          "credit_roles": [],
+          "default_source": "apple_music",
+          "position": null,
+          "custom_poster_url": null,
+          "user_state": null
+        }
+      ],
+      "completion": null
+    }
+  ],
+  "providers": null,
+  "where_to_watch": null,
+  "community": {
+    "average_rating": null,
+    "rating_count": 0,
+    "diary_count": 0,
+    "review_count": 0,
+    "liked_count": 0,
+    "rating_distribution": []
+  },
+  "external_ratings": [],
+  "external_ratings_preparation": {
+    "state": "ready",
+    "retry_after_seconds": 2
+  }
+}

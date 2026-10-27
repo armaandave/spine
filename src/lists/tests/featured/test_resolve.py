@@ -2,17 +2,25 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
-from app.models import Item
+from app.models import AppleAlbum, Item, MusicAlbumLink
 from app.providers import services
-from lists.featured import registry, resolve
+from lists.featured import registry, resolve, types, writer
 from lists.featured.registry import Guards
 from lists.featured.resolve import Resolver, parse_ref, pick_title_match
-from lists.featured.types import Entry, Match
-from lists.models import FeaturedListSnapshot, FeaturedListSync
+from lists.featured.types import Entry, FetchResult, Match
+from lists.models import CustomList, FeaturedListSnapshot, FeaturedListSync
 from lists.tests.featured.helpers import FeaturedTestCase, make_definition
+
+APPLE = "apple_music"
+MUSICBRAINZ = "musicbrainz"
+SOS = "1657869377"
+SOS_CLEAN = "1658650093"
+CTRL = "1239976329"
+SOS_MBID = "1646286a-d0ad-4288-bfab-34b0fb7b22c1"
+CTRL_MBID = "8e9b6e3c-8a1f-4d4b-9bf6-0d58c43c2a7e"
 
 
 def search_response(*results):
@@ -30,7 +38,8 @@ def tmdb_result(media_id, title, release_date):
     }
 
 
-class ResolverTestCase(SimpleTestCase):
+class ResolverTestCase(TestCase):
+    # A database test: music matches are made canonical from the link tables.
     def setUp(self):
         cache.clear()
 
@@ -312,3 +321,238 @@ class PeopleResolutionTests(ResolverTestCase):
         search_people.assert_called_once_with("openlibrary", "Kazuo Ishiguro", limit=10)
         self.assertEqual(resolution.match.ref, "openlibrary:person:OL2632116A")
         self.assertEqual(resolution.match.image, "https://p/1.jpg")
+
+
+def music_definition(**fields):
+    return make_definition(media_types=("music",), position=750, guards=Guards(max_title_searches=0), **fields)
+
+
+def no_network():
+    return patch("app.providers.services.api_request", side_effect=AssertionError("network"))
+
+
+def moved_sos():
+    """Return SOS's Item after the data move: re-keyed to Apple Music, with its applied row."""
+    item = Item.objects.create(source=APPLE, media_type="music", media_id=SOS, title="SOS")
+    MusicAlbumLink.objects.create(release_group_mbid=SOS_MBID, apple_album_id=SOS, status="applied", item=item)
+    return item
+
+
+class AppleAlbumIdTests(ResolverTestCase):
+    def test_apple_album_ids_resolve_directly_and_come_before_mbid_rg(self):
+        resolver = Resolver(music_definition(), overrides={})
+        with no_network():
+            alone = resolver.resolve_one(Entry(1, "SOS", ids={"apple_album": SOS}, image="https://x/sos.jpg"))
+            both = resolver.resolve_one(Entry(2, "SOS", ids={"mbid_rg": SOS_MBID, "apple_album": SOS}))
+        self.assertEqual((alone.match.ref, alone.how, alone.match.image), (f"{APPLE}:music:{SOS}", "id", "https://x/sos.jpg"))
+        self.assertEqual(both.match.ref, f"{APPLE}:music:{SOS}")
+
+    def test_existing_entry_keys_stay_as_they_were(self):
+        self.assertEqual(types.KEY_ID_ORDER[-1], "apple_album")
+        self.assertEqual(Entry(1, "SOS", ids={"mbid_rg": SOS_MBID, "apple_album": SOS}).key, f"mbid_rg:{SOS_MBID}")
+        self.assertEqual(Entry(1, "SOS", ids={"wikidata": "Q115", "apple_album": SOS}).key, "wikidata:Q115")
+        self.assertEqual(Entry(1, "SOS", ids={"apple_album": SOS}).key, f"apple_album:{SOS}")
+
+    def test_music_refs_name_either_source(self):
+        self.assertEqual(parse_ref(f"{APPLE}:music:{SOS}"), (APPLE, "music", SOS))
+        self.assertEqual(parse_ref(f"{MUSICBRAINZ}:music:{SOS_MBID}")[0], MUSICBRAINZ)
+        with self.assertRaises(ValueError):
+            parse_ref(f"{APPLE}:movie:{SOS}")
+
+    def test_an_apple_alias_resolves_to_its_listing(self):
+        AppleAlbum.objects.create(apple_album_id=SOS_CLEAN, canonical_id=SOS)
+        resolution = Resolver(music_definition(), overrides={}).resolve_one(Entry(1, "SOS", ids={"apple_album": SOS_CLEAN}))
+        self.assertEqual(resolution.match.ref, f"{APPLE}:music:{SOS}")
+
+
+class MovedAlbumResolveTests(ResolverTestCase):
+    """Whichever step finds a moved album, it resolves to the Item that holds it."""
+
+    def setUp(self):
+        super().setUp()
+        moved_sos()
+
+    def test_ids_refs_and_overrides(self):
+        entry = Entry(1, "SOS", ids={"mbid_rg": SOS_MBID}, image="https://coverartarchive.org/sos")
+        cases = [
+            ("id", Resolver(music_definition(), overrides={}), entry),
+            ("ref", Resolver(music_definition(), overrides={}), Entry(1, "SOS", ids={"ref": f"{MUSICBRAINZ}:music:{SOS_MBID}"})),
+            ("override", Resolver(music_definition(), overrides={entry.key: f"{MUSICBRAINZ}:music:{SOS_MBID}"}), entry),
+        ]
+        for how, resolver, row in cases:
+            with self.subTest(how), no_network():
+                resolution = resolver.resolve_one(row)
+                self.assertEqual((resolution.match.ref, resolution.how), (f"{APPLE}:music:{SOS}", how))
+                # The MusicBrainz cover isn't the Apple album's.
+                self.assertEqual(resolution.match.image, "")
+
+    def test_a_cached_match_is_served_canonical_and_stays_raw_in_the_cache(self):
+        resolver = Resolver(music_definition(), overrides={})
+        entry = Entry(1, "SOS", creator="SZA", year=2022)
+        cache.set(resolver._cache_key(entry), Match(MUSICBRAINZ, "music", SOS_MBID, "SOS").as_cache())
+
+        with no_network():
+            resolution = resolver.resolve_one(entry)
+
+        self.assertEqual((resolution.match.ref, resolution.how), (f"{APPLE}:music:{SOS}", "cache"))
+        self.assertEqual(cache.get(resolver._cache_key(entry))["source"], MUSICBRAINZ)
+
+    def test_a_snapshots_stray_musicbrainz_item_resolves_to_the_moved_album(self):
+        definition = music_definition()
+        stray = Item.objects.create(source=MUSICBRAINZ, media_type="music", media_id=SOS_MBID, title="SOS")
+        entry = Entry(1, "SOS", creator="SZA")
+        sync = FeaturedListSync.objects.create(key=definition.key)
+        FeaturedListSnapshot.objects.create(sync=sync, taken_on=date(2026, 10, 1), fingerprint="a", entries=[[1, entry.key, stray.pk]])
+
+        with no_network():
+            resolution = Resolver(definition, overrides={}, remember=True).resolve_one(entry)
+
+        self.assertEqual((resolution.match.ref, resolution.how), (f"{APPLE}:music:{SOS}", "snapshot"))
+
+    def test_a_batch_of_entries_takes_two_queries(self):
+        entries = [Entry(rank, "Album", ids={"mbid_rg": f"{rank:08d}-0000-0000-0000-000000000000"}) for rank in range(1, 40)]
+        resolver = Resolver(music_definition(), overrides={})
+        with self.assertNumQueries(2):
+            resolutions = resolver.resolve(entries)
+        self.assertEqual(len(resolutions), 39)
+
+
+class MusicBrainzCatalogResolveTests(ResolverTestCase):
+    def test_todays_matching_is_unchanged(self):
+        # A match only the genre pages and featured lists use, with the catalog on
+        # MusicBrainz: the list keeps its MusicBrainz album, and nothing is searched.
+        MusicAlbumLink.objects.create(release_group_mbid=SOS_MBID, apple_album_id=SOS, status="matched", tier=3, method="search")
+        with no_network(), patch("app.providers.apple_music.match_album") as match_album:
+            resolution = Resolver(music_definition(), overrides={}).resolve_one(Entry(1, "SOS", creator="SZA", ids={"mbid_rg": SOS_MBID}))
+        self.assertEqual(resolution.match.ref, f"{MUSICBRAINZ}:music:{SOS_MBID}")
+        match_album.assert_not_called()
+
+    def test_title_searches_ask_only_the_catalogs_source(self):
+        definition = make_definition(media_types=("music",), position=750, guards=Guards(max_title_searches=5))
+        for catalog in (MUSICBRAINZ, APPLE):
+            with (
+                self.subTest(catalog=catalog),
+                override_settings(MUSIC_CATALOG_SOURCE=catalog),
+                patch("app.providers.services.search", return_value=search_response()) as search,
+            ):
+                cache.clear()
+                Resolver(definition, overrides={}).resolve_one(Entry(1, "SOS", creator="SZA"))
+            search.assert_called_once_with("music", "SOS", 1, source=catalog, preserve_ranking_fields=True)
+
+
+@override_settings(MUSIC_CATALOG_SOURCE=APPLE)
+class AppleCatalogResolveTests(ResolverTestCase):
+    """With the catalog on Apple Music, MusicBrainz albums become their Apple albums."""
+
+    def resolve(self, *entries):
+        return Resolver(music_definition(), overrides={}).resolve(list(entries))
+
+    def sos(self, rank=1, **fields):
+        return Entry(rank, "SOS", creator="SZA", ids={"mbid_rg": SOS_MBID}, image="https://coverartarchive.org/sos", **fields)
+
+    def test_a_matched_row_gives_its_apple_album_with_its_title_and_cover(self):
+        AppleAlbum.objects.create(apple_album_id=SOS_CLEAN, canonical_id=SOS)
+        MusicAlbumLink.objects.create(
+            release_group_mbid=SOS_MBID,
+            apple_album_id=SOS_CLEAN,
+            status="matched",
+            tier=3,
+            method="search",
+            apple_title="SOS",
+            apple_image="https://example.com/sos.jpg",
+        )
+        with no_network():
+            (resolution,) = self.resolve(self.sos())
+        self.assertEqual(resolution.match, Match(APPLE, "music", SOS, "SOS", "https://example.com/sos.jpg"))
+        self.assertEqual(resolution.how, "id")
+
+    def test_an_album_with_its_own_musicbrainz_item_keeps_it(self):
+        Item.objects.create(source=MUSICBRAINZ, media_type="music", media_id=SOS_MBID, title="SOS")
+        MusicAlbumLink.objects.create(release_group_mbid=SOS_MBID, apple_album_id=SOS, status="matched", tier=3)
+        with no_network():
+            (resolution,) = self.resolve(self.sos())
+        self.assertEqual(resolution.match.ref, f"{MUSICBRAINZ}:music:{SOS_MBID}")
+
+    def test_an_album_with_no_row_is_searched_once_and_recorded(self):
+        found = {"media_id": SOS, "title": "SOS", "image": "https://example.com/sos.jpg"}
+        with patch("app.providers.apple_music.match_album", return_value=found) as match_album:
+            (first,) = self.resolve(self.sos())
+            (again,) = self.resolve(self.sos())
+        match_album.assert_called_once_with("SOS", "SZA")
+        self.assertEqual(first.match.ref, f"{APPLE}:music:{SOS}")
+        self.assertEqual(again.match, first.match)
+        link = MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID)
+        self.assertEqual((link.status, link.tier, link.method, link.apple_album_id), ("matched", 3, "search", SOS))
+
+    def test_a_miss_keeps_the_musicbrainz_album(self):
+        with patch("app.providers.apple_music.match_album", return_value=None) as match_album:
+            (first,) = self.resolve(self.sos())
+            (again,) = self.resolve(self.sos())
+        match_album.assert_called_once()
+        self.assertEqual(first.match.ref, f"{MUSICBRAINZ}:music:{SOS_MBID}")
+        self.assertEqual(first.match.image, "https://coverartarchive.org/sos")
+        self.assertEqual(again.match, first.match)
+        self.assertEqual(MusicAlbumLink.objects.get().status, "unmatched")
+
+    def test_an_apple_failure_keeps_musicbrainz_writes_nothing_and_stops_searching(self):
+        error = services.ProviderAPIError(APPLE, Exception("down"))
+        ctrl = Entry(2, "Ctrl", creator="SZA", ids={"mbid_rg": CTRL_MBID})
+        with patch("app.providers.apple_music.match_album", side_effect=error) as match_album:
+            resolutions = self.resolve(self.sos(), ctrl)
+        match_album.assert_called_once()
+        self.assertEqual([resolution.match.source for resolution in resolutions], [MUSICBRAINZ, MUSICBRAINZ])
+        self.assertFalse(MusicAlbumLink.objects.exists())
+
+    def test_searches_are_capped_per_run_and_need_an_artist(self):
+        ctrl = Entry(2, "Ctrl", creator="SZA", ids={"mbid_rg": CTRL_MBID})
+        no_artist = Entry(3, "Untitled", ids={"mbid_rg": "00000000-0000-0000-0000-000000000003"})
+        with (
+            patch.object(resolve, "MAX_APPLE_SEARCHES", 1),
+            patch("app.providers.apple_music.match_album", return_value=None) as match_album,
+        ):
+            self.resolve(self.sos(), ctrl, no_artist)
+        match_album.assert_called_once_with("SOS", "SZA")
+
+
+class MusicListWriteTests(FeaturedTestCase):
+    def test_two_entries_that_are_one_album_make_one_row(self):
+        sos = moved_sos()
+        definition = music_definition()
+        entries = [
+            Entry(1, "SOS", ids={"mbid_rg": SOS_MBID}, image="https://coverartarchive.org/sos"),
+            Entry(2, "SOS", ids={"apple_album": SOS}, image="https://example.com/sos.jpg"),
+            Entry(3, "Ctrl", ids={"apple_album": CTRL}, image="https://example.com/ctrl.jpg"),
+        ]
+
+        with no_network():
+            result = self.run_list(definition, entries)
+
+        self.assertEqual(result.status, "ok")
+        self.assertListRefs(result.custom_list, [f"{APPLE}:music:{SOS}", f"{APPLE}:music:{CTRL}"])
+        self.assertEqual(result.custom_list.customlistitem_set.get(position=1).item, sos)
+        self.assertFalse(Item.objects.filter(source=MUSICBRAINZ).exists())
+
+    def test_an_album_that_moves_before_the_write_lands_on_its_apple_item(self):
+        definition = music_definition()
+        entries = [
+            Entry(1, "SOS", ids={"mbid_rg": SOS_MBID}, image="https://coverartarchive.org/sos"),
+            Entry(2, "Ctrl", ids={"mbid_rg": CTRL_MBID}, image="https://coverartarchive.org/ctrl"),
+        ]
+        resolutions = Resolver(definition, overrides={}).resolve(entries)
+        sos = moved_sos()  # the data move ran meanwhile
+
+        with no_network():
+            writer.commit(
+                definition,
+                self.owner,
+                FetchResult(entries=entries),
+                resolutions,
+                sync=FeaturedListSync.objects.create(key=definition.key),
+                now=timezone.now(),
+                definition_hash="hash",
+            )
+
+        custom_list = CustomList.objects.get(import_source_id=definition.key)
+        self.assertListRefs(custom_list, [f"{APPLE}:music:{SOS}", f"{MUSICBRAINZ}:music:{CTRL_MBID}"])
+        self.assertEqual(custom_list.customlistitem_set.get(position=1).item, sos)
+        self.assertFalse(Item.objects.filter(source=MUSICBRAINZ, media_id=SOS_MBID).exists())

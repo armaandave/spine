@@ -1,0 +1,785 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1460430561",
+          "type": "albums",
+          "attributes": {
+            "name": "Lemonade",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/lemonade/1460430561",
+            "playParams": {
+              "id": "1460430561",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2016-04-23",
+            "contentRating": "explicit",
+            "trackCount": 13,
+            "upc": "886447680711",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/db/25/a1/db25a1c0-8a4a-3b4d-226d-7c7704dc92da/886447680711.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1460432013",
+          "type": "albums",
+          "attributes": {
+            "name": "Lemonade",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/lemonade/1460432013",
+            "playParams": {
+              "id": "1460432013",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2016-04-23",
+            "contentRating": "clean",
+            "trackCount": 13,
+            "upc": "886447691120",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d2/53/65/d2536587-c7f3-9153-4677-f5a2f3e9e5ad/886447691120.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "939775882",
+          "type": "albums",
+          "attributes": {
+            "name": "BEYONCÉ (Platinum Edition)",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/beyonc%C3%A9-platinum-edition/939775882",
+            "playParams": {
+              "id": "939775882",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2013-12-13",
+            "contentRating": "explicit",
+            "trackCount": 48,
+            "upc": "886444935265",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/91/d3/48/91d3485b-29d7-82ee-bd58-300fa1d6605b/886444935265.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1630005298",
+          "type": "albums",
+          "attributes": {
+            "name": "RENAISSANCE",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/renaissance/1630005298",
+            "playParams": {
+              "id": "1630005298",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-07-29",
+            "contentRating": "explicit",
+            "trackCount": 16,
+            "upc": "196589246974",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/05/05/f3/0505f338-9873-feb4-af7f-27a470405e5f/196589246974.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "626204707",
+          "type": "albums",
+          "attributes": {
+            "name": "4 (Expanded Edition)",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/4-expanded-edition/626204707",
+            "playParams": {
+              "id": "626204707",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2011-06-24",
+            "trackCount": 14,
+            "upc": "886443938373",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/c9/6b/3f/c96b3ff3-9cf6-4ce6-05aa-9f11474bd569/886443938373.jpg/{w}x{h}bb.jpg",
+              "width": 1426,
+              "height": 1416
+            }
+          }
+        },
+        {
+          "id": "261707051",
+          "type": "albums",
+          "attributes": {
+            "name": "B'Day Deluxe Edition",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/bday-deluxe-edition/261707051",
+            "playParams": {
+              "id": "261707051",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2006-09-04",
+            "trackCount": 23,
+            "upc": "886971111125",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/47/b2/b2/47b2b26b-5abd-0953-6688-7dfff80508ec/mzi.sozuruch.jpg/{w}x{h}bb.jpg",
+              "width": 600,
+              "height": 600
+            }
+          }
+        },
+        {
+          "id": "1738363766",
+          "type": "albums",
+          "attributes": {
+            "name": "COWBOY CARTER",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/cowboy-carter/1738363766",
+            "playParams": {
+              "id": "1738363766",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-03-29",
+            "contentRating": "explicit",
+            "trackCount": 27,
+            "upc": "196871853729",
+            "genreNames": [
+              "Country",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/bd/f6/83/bdf683a5-28de-08cb-cb91-2940c1e6270b/196871853729.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1510814138",
+          "type": "albums",
+          "attributes": {
+            "name": "Savage Remix (feat. Beyoncé) - Single",
+            "artistName": "Megan Thee Stallion",
+            "url": "https://music.apple.com/us/album/savage-remix-feat-beyonc%C3%A9-single/1510814138",
+            "playParams": {
+              "id": "1510814138",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-04-29",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "810043680929",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "300 Entertainment",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/67/99/4e/67994e58-9284-e5eb-f077-24431a04a8a6/810043680929.jpg/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "1730408497",
+          "type": "albums",
+          "attributes": {
+            "name": "TEXAS HOLD 'EM - Single",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/texas-hold-em-single/1730408497",
+            "playParams": {
+              "id": "1730408497",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-02-11",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "196871850414",
+            "genreNames": [
+              "Country",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/1b/e0/73/1be0738e-c0c8-306b-5fed-9403b8383e06/196871850414.jpg/{w}x{h}bb.jpg",
+              "width": 3600,
+              "height": 3600
+            }
+          }
+        },
+        {
+          "id": "1473486502",
+          "type": "albums",
+          "attributes": {
+            "name": "The Lion King: The Gift",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/the-lion-king-the-gift/1473486502",
+            "playParams": {
+              "id": "1473486502",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-07-19",
+            "trackCount": 27,
+            "upc": "886447863329",
+            "genreNames": [
+              "Soundtrack",
+              "Music",
+              "Soundtrack",
+              "Hip-Hop/Rap",
+              "R&B/Soul",
+              "Contemporary R&B",
+              "Disney",
+              "African",
+              "Afro-Pop"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/aa/20/73/aa207387-444f-b04d-9b7e-7ea6c687c15e/886447863329.jpg/{w}x{h}bb.jpg",
+              "width": 3600,
+              "height": 3600
+            }
+          }
+        },
+        {
+          "id": "1459930448",
+          "type": "albums",
+          "attributes": {
+            "name": "HOMECOMING: THE LIVE ALBUM",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/homecoming-the-live-album/1459930448",
+            "playParams": {
+              "id": "1459930448",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-04-17",
+            "contentRating": "explicit",
+            "trackCount": 40,
+            "upc": "886447687390",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/19/b3/94/19b39451-5b96-25e9-4470-f1e8534caaa2/886447687390.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "296016891",
+          "type": "albums",
+          "attributes": {
+            "name": "I AM...SASHA FIERCE",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/i-am-sasha-fierce/296016891",
+            "playParams": {
+              "id": "296016891",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2008-11-12",
+            "trackCount": 12,
+            "upc": "888880833464",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "R&B/Soul",
+              "Adult Contemporary",
+              "Contemporary R&B",
+              "Rock"
+            ],
+            "recordLabel": "Music World Music/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/35/0f/55/350f55da-2104-162a-5872-cb35fef30410/mzi.morbeoaw.jpg/{w}x{h}bb.jpg",
+              "width": 600,
+              "height": 600
+            }
+          }
+        },
+        {
+          "id": "1711562197",
+          "type": "albums",
+          "attributes": {
+            "name": "Lemonade (feat. NAV) - Single",
+            "artistName": "Internet Money, Gunna & Don Toliver",
+            "url": "https://music.apple.com/us/album/lemonade-feat-nav-single/1711562197",
+            "playParams": {
+              "id": "1711562197",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-08-14",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "842812133572",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Internet Money Records / TenThousand Projects",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/78/bc/ed/78bced7d-4b74-f314-b8ee-58e4109ea214/842812133572.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1830367135",
+          "type": "albums",
+          "attributes": {
+            "name": "LEMONADE - Single",
+            "artistName": "Forrest Frank & The Figs",
+            "url": "https://music.apple.com/us/album/lemonade-single/1830367135",
+            "playParams": {
+              "id": "1830367135",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-08-01",
+            "trackCount": 1,
+            "upc": "199509246061",
+            "genreNames": [
+              "Christian",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "river house records",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/46/b1/23/46b123e4-d60f-22a9-42b1-695f43877990/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1712533183",
+          "type": "albums",
+          "attributes": {
+            "name": "Lemonade (Remix) [Extended Edition] - Single",
+            "artistName": "Internet Money, Don Toliver & Roddy Ricch",
+            "url": "https://music.apple.com/us/album/lemonade-remix-extended-edition-single/1712533183",
+            "playParams": {
+              "id": "1712533183",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-10-20",
+            "contentRating": "explicit",
+            "trackCount": 2,
+            "upc": "842812138782",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "Internet Money Records / TenThousand Projects",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/73/fa/32/73fa32c7-5adb-6680-db8c-d3cf20752e9e/842812138782.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "939783754",
+          "type": "albums",
+          "attributes": {
+            "name": "BEYONCÉ",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/beyonc%C3%A9/939783754",
+            "playParams": {
+              "id": "939783754",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2013-12-13",
+            "contentRating": "explicit",
+            "trackCount": 14,
+            "upc": "886444905404",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "R&B/Soul",
+              "Dance",
+              "Contemporary R&B",
+              "Rock"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/f2/d8/38/f2d83866-8401-d9a0-e29f-642d6c5f06d0/886444905404.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1719203131",
+          "type": "albums",
+          "attributes": {
+            "name": "MY HOUSE - Single",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/my-house-single/1719203131",
+            "playParams": {
+              "id": "1719203131",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-12-01",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "196871691185",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Dance"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/d8/a0/fe/d8a0fe9e-1e01-1155-db4f-04fb32708aeb/196871691185.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1688801938",
+          "type": "albums",
+          "attributes": {
+            "name": "AMERICA HAS A PROBLEM (feat. Kendrick Lamar) - Single",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/america-has-a-problem-feat-kendrick-lamar-single/1688801938",
+            "playParams": {
+              "id": "1688801938",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-05-19",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "196871157186",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/f3/2b/52/f32b5236-214c-ce40-6772-1a138bf7b493/196871157186.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1400124394",
+          "type": "albums",
+          "attributes": {
+            "name": "EVERYTHING IS LOVE",
+            "artistName": "THE CARTERS",
+            "url": "https://music.apple.com/us/album/everything-is-love/1400124394",
+            "playParams": {
+              "id": "1400124394",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-06-16",
+            "contentRating": "explicit",
+            "trackCount": 9,
+            "upc": "00810760033565",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Rap",
+              "R&B/Soul",
+              "Contemporary R&B"
+            ],
+            "recordLabel": "Roc Nation – JAY-Z Duet",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/02/00/b8/0200b8af-d4b9-92fd-deab-ac48e3d446b2/00810760033565.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3840,
+              "height": 3840
+            }
+          }
+        },
+        {
+          "id": "939779719",
+          "type": "albums",
+          "attributes": {
+            "name": "BEYONCÉ (More Only) - EP",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/beyonc%C3%A9-more-only-ep/939779719",
+            "playParams": {
+              "id": "939779719",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2014-11-24",
+            "contentRating": "explicit",
+            "trackCount": 16,
+            "upc": "886444955379",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Parkwood Entertainment/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d1/fa/67/d1fa671c-08cf-01d9-4de8-96aa7c6f06cd/886444955379.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "295783816",
+          "type": "albums",
+          "attributes": {
+            "name": "I AM...SASHA FIERCE (Deluxe Version)",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/i-am-sasha-fierce-deluxe-version/295783816",
+            "playParams": {
+              "id": "295783816",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2008-11-12",
+            "trackCount": 20,
+            "upc": "888880909343",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Adult Contemporary",
+              "R&B/Soul",
+              "Contemporary R&B",
+              "Rock"
+            ],
+            "recordLabel": "Music World Music/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/52/f9/76/52f976b0-016e-a3bf-1897-f69fb5d002d7/mzi.csyboqno.jpg/{w}x{h}bb.jpg",
+              "width": 600,
+              "height": 600
+            }
+          }
+        },
+        {
+          "id": "1690402352",
+          "type": "albums",
+          "attributes": {
+            "name": "HOMECOMING: THE LIVE ALBUM",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/homecoming-the-live-album/1690402352",
+            "playParams": {
+              "id": "1690402352",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-04-16",
+            "contentRating": "clean",
+            "trackCount": 40,
+            "upc": "196871182607",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/13/ea/ef/13eaef4e-c602-0389-9b19-9339e3f27c0f/196871182607.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "399850850",
+          "type": "albums",
+          "attributes": {
+            "name": "I Am... World Tour",
+            "artistName": "Beyoncé",
+            "url": "https://music.apple.com/us/album/i-am-world-tour/399850850",
+            "playParams": {
+              "id": "399850850",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2010-11-26",
+            "trackCount": 25,
+            "upc": "884977809541",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "R&B/Soul",
+              "Contemporary R&B",
+              "Rock"
+            ],
+            "recordLabel": "Music World Music/Columbia",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/35/58/2c/35582ceb-2004-ebed-377e-6773d6ded896/mzi.wvfqdszz.jpg/{w}x{h}bb.jpg",
+              "width": 600,
+              "height": 600
+            }
+          }
+        },
+        {
+          "id": "1440650447",
+          "type": "albums",
+          "attributes": {
+            "name": "Lemonade Mouth (Original TV Movie Soundtrack)",
+            "artistName": "Bridgit Mendler, Chris Brochu, Naomi Scott & Adam Hicks",
+            "url": "https://music.apple.com/us/album/lemonade-mouth-original-tv-movie-soundtrack/1440650447",
+            "playParams": {
+              "id": "1440650447",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2011-04-15",
+            "trackCount": 10,
+            "upc": "00050087238698",
+            "genreNames": [
+              "Soundtrack",
+              "Music",
+              "Soundtrack",
+              "TV Soundtrack",
+              "Disney",
+              "Children's Music",
+              "Pop",
+              "Teen Pop"
+            ],
+            "recordLabel": "Walt Disney Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/d5/12/ee/d512ee59-a017-97db-6530-858c2a7dda36/11DMGIM02227.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1879879930",
+          "type": "albums",
+          "attributes": {
+            "name": "Lullaby Renditions of Beyoncé's Lemonade",
+            "artistName": "Rockabye Baby!",
+            "url": "https://music.apple.com/us/album/lullaby-renditions-of-beyonc%C3%A9s-lemonade/1879879930",
+            "playParams": {
+              "id": "1879879930",
+              "kind": "album"
+            },
+            "isComplete": false,
+            "releaseDate": "2026-03-27",
+            "trackCount": 12,
+            "upc": "027297977655",
+            "genreNames": [
+              "Children's Music",
+              "Music",
+              "Lullabies"
+            ],
+            "recordLabel": "Rockabye Baby Music",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/4b/f9/b2/4bf9b27f-0a7f-7536-afe7-dcb18f5d49e9/1850.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=27&term=Beyonc%C3%A9+Lemonade&types=albums"
+    }
+  }
+}

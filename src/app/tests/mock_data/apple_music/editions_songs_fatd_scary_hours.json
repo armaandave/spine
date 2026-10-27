@@ -1,0 +1,67 @@
+{
+  "data": [
+    {
+      "id": "1716979111",
+      "type": "songs",
+      "attributes": {
+        "name": "Virginia Beach",
+        "albumName": "For All The Dogs Scary Hours Edition",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USUG12306066"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1716979097",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1710685758",
+      "type": "songs",
+      "attributes": {
+        "name": "Virginia Beach",
+        "albumName": "For All The Dogs",
+        "discNumber": 1,
+        "trackNumber": 1,
+        "isrc": "USUG12306066"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1710685602",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1716979404",
+      "type": "songs",
+      "attributes": {
+        "name": "Red Button",
+        "albumName": "For All The Dogs Scary Hours Edition",
+        "discNumber": 2,
+        "trackNumber": 1,
+        "isrc": "USUG12306112"
+      },
+      "relationships": {
+        "albums": {
+          "data": [
+            {
+              "id": "1716979097",
+              "type": "albums"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

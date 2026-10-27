@@ -15,7 +15,7 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from pyrate_limiter import Duration, Rate, RateItem, RedisBucket
 
-from app.models import MediaTypes, MusicGenreAlbum, Sources
+from app.models import MediaTypes, MusicAlbumLink, MusicGenreAlbum, Sources
 from app.providers import musicbrainz, services
 from lists.featured.resolve import pick_title_match
 from lists.featured.types import Entry
@@ -670,6 +670,71 @@ class MusicBrainzTests(TestCase):
             musicbrainz.refresh_genre_albums()
 
         self.assertTrue(MusicGenreAlbum.objects.filter(release_group_mbid="gkmc").exists())
+
+    @override_settings(LISTENBRAINZ_TOKEN="lb-token")
+    @patch("app.providers.musicbrainz.services.api_request")
+    def test_refresh_genre_albums_stores_wikidata_apple_music_ids(self, api_request):
+        MusicAlbumLink.objects.create(
+            release_group_mbid="tpab",
+            apple_album_id="1440828886",
+            status=MusicAlbumLink.Status.MATCHED,
+            method=MusicAlbumLink.Method.UPC_EXACT,
+            tier=1,
+        )
+
+        def respond(provider, method, url, params=None, data=None, headers=None, request_session=None):
+            if url == musicbrainz.LISTENBRAINZ_TOP_ARTISTS_URL:
+                return {"payload": {"artists": [{"artist_mbid": "kendrick"}]}}
+            if url == musicbrainz.WIKIDATA_SPARQL_URL:
+                self.assertIn("OPTIONAL { ?album wdt:P2281 ?apple }", data["query"])
+                rows = [
+                    # The album with the most sitelinks wins, with all its IDs.
+                    ("gkmc", "28", "good kid, m.A.A.d city", "1440818890"),
+                    ("gkmc", "28", "good kid, m.A.A.d city", "1440818588"),
+                    ("gkmc", "3", "good kid, m.A.A.d city (deluxe)", "1440819999"),
+                    ("tpab", "29", "To Pimp a Butterfly", "1440828886"),
+                    ("damn", "20", "Damn (Kendrick Lamar album)", None),
+                    ("damn-collectors", "20", "Damn (Kendrick Lamar album)", "1440881047"),
+                ]
+                return {
+                    "results": {
+                        "bindings": [
+                            {
+                                "rg": {"value": rg},
+                                "links": {"value": links},
+                                "title": {"value": title},
+                                **({"apple": {"value": apple}} if apple else {}),
+                            }
+                            for rg, links, title, apple in rows
+                        ],
+                    },
+                }
+            if url.startswith(musicbrainz.WIKIPEDIA_PAGEVIEWS_URL):
+                return {"items": [{"views": 10}]}
+            albums = [("gkmc", "good kid, m.A.A.d city"), ("tpab", "To Pimp a Butterfly"), ("damn", "DAMN."), ("damn-collectors", "DAMN. COLLECTORS EDITION.")]
+            return [
+                {
+                    "release_group_mbid": mbid,
+                    "release_group": {"name": name, "type": "Album"},
+                    "tag": {"release_group": [{"tag": "hip hop", "count": 9, "genre_mbid": "g"}]},
+                }
+                for mbid, name in albums
+            ]
+
+        api_request.side_effect = respond
+
+        musicbrainz.refresh_genre_albums()
+
+        links = {link.release_group_mbid: link for link in MusicAlbumLink.objects.all()}
+        # Lowest first, waiting for the genre link task's check.
+        self.assertEqual(
+            (links["gkmc"].apple_album_id, links["gkmc"].status, links["gkmc"].method, links["gkmc"].checked_at),
+            ("1440818588", "unmatched", "wikidata", None),
+        )
+        self.assertEqual((links["tpab"].status, links["tpab"].method), ("matched", "upc_exact"))  # the data move's
+        # "DAMN." keeps the shared article, so the collector's edition gets no ID; DAMN. has none.
+        self.assertEqual(set(links), {"gkmc", "tpab"})
+        self.assertEqual(MusicGenreAlbum.objects.count(), 4)
 
     @override_settings(LISTENBRAINZ_TOKEN="")
     @patch("app.providers.musicbrainz.services.api_request")

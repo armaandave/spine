@@ -78,6 +78,7 @@ Rules:
 | `hardcover` | `hardcover:book:<id>` |
 | `olid` | `openlibrary:book:<OL…M>` (editions only; turn works into editions in your adapter) |
 | `mbid_rg` | `musicbrainz:music:<release-group mbid>` |
+| `apple_album` | `apple_music:music:<Apple Music album ID>`; wins over `mbid_rg` when an entry has both |
 | `comicvine` | `comicvine:comic:<id>` |
 | `wikidata`, `goodreads`, `anilist` | identity only (used in the key; not resolvable) |
 | `review` | never resolves: the entry goes to `unresolved` with this text as its reason, unless an override matches its key (award winners that aren't pre-matched nominees) |
@@ -86,7 +87,8 @@ Rules:
 - `isbns`: every ISBN you have, best first. Books try Hardcover, then Open Library, per ISBN.
 - `image`: a poster URL lets the writer create a new Item without a provider call. Without one (or without a title) the writer fetches the provider's metadata once; if that fails, the entry is unresolved instead of getting placeholder art.
 - `note`: free text shown later ("Winner · Best Picture", "▲2", "Inducted 2019"); on all-time award lists, the year alone ("2027").
-- `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it.
+- `entry.key` is the entry's stable identity: the first id in the order `ref, tmdb, imdb, igdb, steam, mal, mangaupdates, anilist, mbid_rg, hardcover, olid, comicvine, wikidata, goodreads, apple_album`, then a `*_person` id, then `isbn:<first>`, else `t:<normalized title>|<year>`. `tmdb` and `mal` keys include the media type (`tmdb:movie:550`). Overrides and the health report use it. New ids go at the end of the order, so an entry that already had a key keeps it, with its snapshots and chart moves.
+- Music matches are made canonical after they resolve (`docs/music/apple-music-catalog.md`, Featured lists), so an `mbid_rg` of an album that moved to Apple Music lands on its Apple Music Item.
 
 Anything without a direct id goes to a strict title search: exact normalized title (or the result's main title before a subtitle), year within ±1, creator when both sides have one, and a unique match when there's no year or creator. When nothing matches that way, the entry's own main title is tried ("Master of the Senate: The Years of Lyndon Johnson" finds "Master of the Senate"), but only when the year or creator agrees and exactly one result qualifies, so adapters no longer need to strip subtitles themselves. No fuzzy matching. Searches are capped per run by `Guards.max_title_searches` (default 50); entries past the cap are deferred and searched on a later run. Results are cached under `featured:resolve:…` (hits 45 days, refreshed on every hit; misses 1 day), so a re-run is cheap.
 

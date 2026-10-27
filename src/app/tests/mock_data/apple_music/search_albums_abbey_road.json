@@ -1,0 +1,824 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "1474815798",
+          "type": "albums",
+          "attributes": {
+            "name": "Abbey Road (2019 Mix)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/abbey-road-2019-mix/1474815798",
+            "playParams": {
+              "id": "1474815798",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1969-09-26",
+            "trackCount": 17,
+            "upc": "00602508145636",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Rock & Roll",
+              "Pop",
+              "Pop/Rock",
+              "Prog-Rock/Art Rock",
+              "Adult Contemporary",
+              "Hard Rock",
+              "Soft Rock",
+              "Psychedelic",
+              "Arena Rock"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/48/53/43/485343e3-dd6a-0034-faec-f4b6403f8108/13UMGIM63890.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1441164426",
+          "type": "albums",
+          "attributes": {
+            "name": "Abbey Road (Remastered)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/abbey-road-remastered/1441164426",
+            "playParams": {
+              "id": "1441164426",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1969-09-26",
+            "trackCount": 18,
+            "upc": "00602567713449",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Arena Rock",
+              "Rock & Roll",
+              "Prog-Rock/Art Rock",
+              "Pop",
+              "Pop/Rock",
+              "Adult Contemporary",
+              "Hard Rock",
+              "Psychedelic",
+              "Soft Rock"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/df/db/61/dfdb615d-47f8-06e9-9533-b96daccc029f/18UMGIM31076.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6818128121",
+          "type": "albums",
+          "attributes": {
+            "name": "Abbey Road (Remastered 2009)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/abbey-road-remastered-2009/6818128121",
+            "playParams": {
+              "id": "6818128121",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1969-09-26",
+            "trackCount": 17,
+            "upc": "00602547670342",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "EMI Catalogue",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/b8/fc/2d/b8fc2d07-d23f-a0ce-4fca-b7b418bb7ce6/13UMGIM63890.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1474833332",
+          "type": "albums",
+          "attributes": {
+            "name": "Abbey Road (Super Deluxe Edition) [2019 Remix & Remaster]",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/abbey-road-super-deluxe-edition-2019-remix-remaster/1474833332",
+            "playParams": {
+              "id": "1474833332",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1969-09-26",
+            "trackCount": 40,
+            "upc": "00602508146084",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Oldies",
+              "Singer/Songwriter",
+              "Pop/Rock",
+              "Adult Contemporary",
+              "Rock & Roll",
+              "Soft Rock",
+              "Psychedelic"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/29/77/1d/29771d4e-a301-6e48-99de-1300b3f63f15/19UMGIM68356.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441163490",
+          "type": "albums",
+          "attributes": {
+            "name": "Magical Mystery Tour",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/magical-mystery-tour/1441163490",
+            "playParams": {
+              "id": "1441163490",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1967-11-27",
+            "trackCount": 12,
+            "upc": "00602567705437",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/43/0e/37/430e3790-75d5-c96a-1380-f9d9803aa700/18UMGIM31245.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441164362",
+          "type": "albums",
+          "attributes": {
+            "name": "With The Beatles",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/with-the-beatles/1441164362",
+            "playParams": {
+              "id": "1441164362",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1963-11-22",
+            "trackCount": 15,
+            "upc": "00602567725619",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Rock & Roll",
+              "Pop",
+              "Pop/Rock",
+              "Soft Rock",
+              "British Invasion"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/03/02/d2/0302d204-77c1-0c87-e03a-698bd31cf038/00602567725619.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "497781952",
+          "type": "albums",
+          "attributes": {
+            "name": "A Valentine's Tribute To The Beatles Abbey Road Dreamers",
+            "artistName": "Abbey Road Dreamers",
+            "url": "https://music.apple.com/us/album/a-valentines-tribute-to-the-beatles-abbey-road-dreamers/497781952",
+            "playParams": {
+              "id": "497781952",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2011-01-23",
+            "trackCount": 12,
+            "upc": "708535501725",
+            "genreNames": [
+              "Tribute",
+              "Music",
+              "Pop",
+              "Rock"
+            ],
+            "recordLabel": "Valentine's Company",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/1b/4f/c6/mzi.bzumvmgq.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "262667664",
+          "type": "albums",
+          "attributes": {
+            "name": "Guitar Tribute to the Beatles' Abbey Road",
+            "artistName": "The Classics",
+            "url": "https://music.apple.com/us/album/guitar-tribute-to-the-beatles-abbey-road/262667664",
+            "playParams": {
+              "id": "262667664",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2005-01-25",
+            "trackCount": 10,
+            "upc": "880046008525",
+            "genreNames": [
+              "Tribute",
+              "Music",
+              "Pop",
+              "Rock"
+            ],
+            "recordLabel": "Tribute Sounds",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/97/1b/4a/971b4af0-73f5-5c38-c4c1-01a13a871749/mzi.vepsvgjm.jpg/{w}x{h}bb.jpg",
+              "width": 600,
+              "height": 600
+            }
+          }
+        },
+        {
+          "id": "1441165005",
+          "type": "albums",
+          "attributes": {
+            "name": "Beatles For Sale",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/beatles-for-sale/1441165005",
+            "playParams": {
+              "id": "1441165005",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1964-12-04",
+            "trackCount": 15,
+            "upc": "00602567725190",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Singer/Songwriter",
+              "Folk-Rock",
+              "Psychedelic",
+              "Rock & Roll",
+              "Pop",
+              "Pop/Rock",
+              "Soft Rock",
+              "British Invasion"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/79/2c/10/792c1019-387f-e819-ac8f-bc989f20a970/00602567725190.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441164604",
+          "type": "albums",
+          "attributes": {
+            "name": "Sgt. Pepper's Lonely Hearts Club Band",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/sgt-peppers-lonely-hearts-club-band/1441164604",
+            "playParams": {
+              "id": "1441164604",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1967-06-01",
+            "trackCount": 14,
+            "upc": "00602567725428",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Soft Rock",
+              "Pop/Rock",
+              "Psychedelic",
+              "Hard Rock",
+              "Rock & Roll"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/6f/79/8d/6f798d84-7475-8525-fc91-f7b51b2b5a9b/00602567725428.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441164525",
+          "type": "albums",
+          "attributes": {
+            "name": "Yellow Submarine",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/yellow-submarine/1441164525",
+            "playParams": {
+              "id": "1441164525",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1969-01-13",
+            "trackCount": 14,
+            "upc": "00602567725640",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Pop/Rock",
+              "Rock & Roll",
+              "Soft Rock",
+              "Psychedelic",
+              "British Invasion"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/b1/94/f3/b194f3c3-3bcf-62f6-a795-093a3d3c0407/00602567725640.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1711219580",
+          "type": "albums",
+          "attributes": {
+            "name": "The Beatles - Piano Covers (feat. The Beatles - Piano Instrumentals)",
+            "artistName": "Piano Covers",
+            "url": "https://music.apple.com/us/album/the-beatles-piano-covers-feat-the-beatles/1711219580",
+            "playParams": {
+              "id": "1711219580",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-10-10",
+            "trackCount": 12,
+            "upc": "8721056002337",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "Soothing Piano",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/7a/ca/0b/7aca0b18-aecc-31f8-2e96-65128f4fa261/8721056002337.png/{w}x{h}bb.jpg",
+              "width": 3072,
+              "height": 3072
+            }
+          }
+        },
+        {
+          "id": "1577803643",
+          "type": "albums",
+          "attributes": {
+            "name": "The Beatles (Instrumental Piano Covers)",
+            "artistName": "Matchstick Piano Man",
+            "url": "https://music.apple.com/us/album/the-beatles-instrumental-piano-covers/1577803643",
+            "playParams": {
+              "id": "1577803643",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-07-20",
+            "trackCount": 20,
+            "upc": "859749203605",
+            "genreNames": [
+              "Instrumental",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "Matchstick Piano Man",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/60/1c/74/601c741d-44f5-c8ac-ab3b-16511c511721/859749203605_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "305381896",
+          "type": "albums",
+          "attributes": {
+            "name": "Abbey Road - A Tribute to the Beatles",
+            "artistName": "Various Artists",
+            "url": "https://music.apple.com/us/album/abbey-road-a-tribute-to-the-beatles/305381896",
+            "playParams": {
+              "id": "305381896",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2009-02-01",
+            "trackCount": 20,
+            "upc": "884385452049",
+            "genreNames": [
+              "Tribute",
+              "Music",
+              "Pop",
+              "Rock"
+            ],
+            "recordLabel": "Cleopatra Records",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/80/45/d0/8045d0bd-07e8-030d-6b68-68323b3d66c1/884385452049.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1772324958",
+          "type": "albums",
+          "attributes": {
+            "name": "Lucinda Williams Sings The Beatles From Abbey Road",
+            "artistName": "Lucinda Williams",
+            "url": "https://music.apple.com/us/album/lucinda-williams-sings-the-beatles-from-abbey-road/1772324958",
+            "playParams": {
+              "id": "1772324958",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1988",
+            "trackCount": 12,
+            "upc": "198588025130",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Singer/Songwriter",
+              "Contemporary Folk",
+              "Alternative Folk",
+              "Country",
+              "Alternative Country",
+              "Americana"
+            ],
+            "recordLabel": "Highway 20 Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/0c/54/5e/0c545e73-cc7e-7c34-d282-5940e0ac59fc/198588025130.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441132606",
+          "type": "albums",
+          "attributes": {
+            "name": "Let It Be... Naked",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/let-it-be-naked/1441132606",
+            "playParams": {
+              "id": "1441132606",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2003-11-17",
+            "trackCount": 11,
+            "upc": "00602567705468",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Pop/Rock",
+              "Rock & Roll",
+              "Singer/Songwriter",
+              "Soft Rock",
+              "Arena Rock"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/41/d7/86/41d786b7-8d0a-ce27-a25a-c0ea71e7df80/00602567705468.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1432149338",
+          "type": "albums",
+          "attributes": {
+            "name": "Bob Baldwin Presents Abbey Road and The Beatles",
+            "artistName": "Bob Baldwin",
+            "url": "https://music.apple.com/us/album/bob-baldwin-presents-abbey-road-and-the-beatles/1432149338",
+            "playParams": {
+              "id": "1432149338",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018-09-21",
+            "trackCount": 12,
+            "upc": "192562759547",
+            "genreNames": [
+              "Smooth Jazz",
+              "Music",
+              "Jazz"
+            ],
+            "recordLabel": "City Sketches Inc",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/fc/e4/98/fce49864-993e-457f-060f-8ba5e17db8c3/192562759547.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1440881011",
+          "type": "albums",
+          "attributes": {
+            "name": "Sgt. Pepper's Lonely Hearts Club Band (Deluxe Edition) [2017 Remix & Remaster]",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/sgt-peppers-lonely-hearts-club-band-deluxe-edition/1440881011",
+            "playParams": {
+              "id": "1440881011",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1967-06-01",
+            "trackCount": 31,
+            "upc": "00602557579086",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Oldies",
+              "Singer/Songwriter",
+              "Psychedelic",
+              "Soft Rock",
+              "Pop/Rock",
+              "Hard Rock",
+              "Rock & Roll"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/74/c2/a5/74c2a5ea-be69-3b9b-6ad9-138240547545/17UMGIM10500.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1643394501",
+          "type": "albums",
+          "attributes": {
+            "name": "Revolver (Super Deluxe)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/revolver-super-deluxe/1643394501",
+            "playParams": {
+              "id": "1643394501",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1966-08-05",
+            "trackCount": 63,
+            "upc": "00602448516633",
+            "genreNames": [
+              "Psychedelic",
+              "Music",
+              "Rock",
+              "British Invasion"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/cd/85/d6/cd85d67f-29c1-f554-bc11-7882d8653e22/22UMGIM95894.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1606897206",
+          "type": "albums",
+          "attributes": {
+            "name": "Get Back: The Rooftop Performance (Live)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/get-back-the-rooftop-performance-live/1606897206",
+            "playParams": {
+              "id": "1606897206",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-01-28",
+            "trackCount": 10,
+            "upc": "00602445496488",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/8f/63/a4/8f63a487-e0ad-968f-9750-5f762e6b462b/21UM1IM56121.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1618893875",
+          "type": "albums",
+          "attributes": {
+            "name": "The Beatles (Acoustic Guitar Collection) [Acoustic Guitar]",
+            "artistName": "Massimo Roberti",
+            "url": "https://music.apple.com/us/album/the-beatles-acoustic-guitar-collection-acoustic-guitar/1618893875",
+            "playParams": {
+              "id": "1618893875",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-04-10",
+            "trackCount": 15,
+            "upc": "196833510349",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "3404964 Records DK",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/27/03/65/27036585-b261-fa4d-d5ce-139cfb434c80/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1713154518",
+          "type": "albums",
+          "attributes": {
+            "name": "The Beatles 1967–1970 (2023 Edition) [The Blue Album]",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/the-beatles-1967-1970-2023-edition-the-blue-album/1713154518",
+            "playParams": {
+              "id": "1713154518",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-11-10",
+            "trackCount": 37,
+            "upc": "00602458682199",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/c1/28/96/c128968a-e1c1-dd77-6548-61c1c3e64815/23UM1IM18072.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1441152311",
+          "type": "albums",
+          "attributes": {
+            "name": "Anthology 1",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/anthology-1/1441152311",
+            "playParams": {
+              "id": "1441152311",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1995-11-20",
+            "trackCount": 60,
+            "upc": "00602567715894",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/7b/0a/93/7b0a9379-07c0-188e-dc3d-c4c8b5c0f653/00602567715894.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "6792047716",
+          "type": "albums",
+          "attributes": {
+            "name": "Rubber Soul (Super Deluxe)",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/rubber-soul-super-deluxe/6792047716",
+            "playParams": {
+              "id": "6792047716",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2026-10-02",
+            "trackCount": 68,
+            "upc": "00881061135678",
+            "genreNames": [
+              "Rock",
+              "Music"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": true,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/71/80/6d/71806dd8-6dd1-d59b-bf94-a229fe1840e6/26UMGIM15219.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1435552131",
+          "type": "albums",
+          "attributes": {
+            "name": "Sgt. Pepper's Lonely Hearts Club Band (Super Deluxe Edition) [2017 Remix & Remaster]",
+            "artistName": "The Beatles",
+            "url": "https://music.apple.com/us/album/sgt-peppers-lonely-hearts-club-band-super-deluxe-edition/1435552131",
+            "playParams": {
+              "id": "1435552131",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1967-05-26",
+            "trackCount": 65,
+            "upc": "00602567971641",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Pop",
+              "Oldies",
+              "Singer/Songwriter",
+              "Hard Rock",
+              "Rock & Roll",
+              "Soft Rock",
+              "Pop/Rock",
+              "Psychedelic"
+            ],
+            "recordLabel": "UMC (Universal Music Catalogue)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/92/e3/a7/92e3a7bf-ec90-ff7b-efbb-8c26cb9b2c5c/18UMGIM49153.rgb.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=The+Beatles+Abbey+Road&types=albums"
+    }
+  }
+}

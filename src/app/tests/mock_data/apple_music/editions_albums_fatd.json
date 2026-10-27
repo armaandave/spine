@@ -1,0 +1,437 @@
+{
+  "data": [
+    {
+      "id": "1716979097",
+      "type": "albums",
+      "attributes": {
+        "name": "For All The Dogs Scary Hours Edition",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716979097",
+        "playParams": {
+          "id": "1716979097",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-10-06",
+        "contentRating": "explicit",
+        "trackCount": 29,
+        "upc": "00602458922769",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/97/1a/a3/971aa332-2c7d-947c-33ed-4635d41115a4/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 6000,
+          "height": 6000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1716986138",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs Scary Hours Edition",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716986138",
+                "playParams": {
+                  "id": "1716986138",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "clean",
+                "trackCount": 29,
+                "upc": "00602458922813",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/68/8b/a9/688ba9aa-4c90-c630-63c3-b6a7a0d945c2/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 6000,
+                  "height": 6000
+                }
+              }
+            },
+            {
+              "id": "1710685602",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs/1710685602",
+                "playParams": {
+                  "id": "1710685602",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "explicit",
+                "trackCount": 23,
+                "upc": "00602458700121",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/21/50/ee/2150ee84-62c3-4190-7dfa-da30abd98ac8/23UM1IM09862.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1710694554",
+              "type": "albums",
+              "attributes": {
+                "name": "For All The Dogs",
+                "artistName": "Drake",
+                "url": "https://music.apple.com/us/album/for-all-the-dogs/1710694554",
+                "playParams": {
+                  "id": "1710694554",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-06",
+                "contentRating": "clean",
+                "trackCount": 23,
+                "upc": "00602458700138",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "OVO/Republic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/fa/9e/e6/fa9ee672-0880-2b5b-a69d-981e8fcb807e/23UM1IM09863.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3600,
+                  "height": 3600
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1716979111",
+              "type": "songs",
+              "attributes": {
+                "name": "Virginia Beach",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USUG12306066"
+              }
+            },
+            {
+              "id": "1716979120",
+              "type": "songs",
+              "attributes": {
+                "name": "Amen (feat. Teezo Touchdown)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USUG12306067"
+              }
+            },
+            {
+              "id": "1716979121",
+              "type": "songs",
+              "attributes": {
+                "name": "Calling For You (feat. 21 Savage)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USUG12306068"
+              }
+            },
+            {
+              "id": "1716979122",
+              "type": "songs",
+              "attributes": {
+                "name": "Fear Of Heights",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USUG12306069"
+              }
+            },
+            {
+              "id": "1716979123",
+              "type": "songs",
+              "attributes": {
+                "name": "Daylight",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USUG12306070"
+              }
+            },
+            {
+              "id": "1716979124",
+              "type": "songs",
+              "attributes": {
+                "name": "First Person Shooter (feat. J. Cole)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USUG12306071"
+              }
+            },
+            {
+              "id": "1716979125",
+              "type": "songs",
+              "attributes": {
+                "name": "IDGAF (feat. Yeat)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USUG12306072"
+              }
+            },
+            {
+              "id": "1716979126",
+              "type": "songs",
+              "attributes": {
+                "name": "7969 Santa",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USUG12306073"
+              }
+            },
+            {
+              "id": "1716979248",
+              "type": "songs",
+              "attributes": {
+                "name": "Slime You Out (feat. SZA)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USUG12306064"
+              }
+            },
+            {
+              "id": "1716979249",
+              "type": "songs",
+              "attributes": {
+                "name": "Bahamas Promises",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USUG12306074"
+              }
+            },
+            {
+              "id": "1716979251",
+              "type": "songs",
+              "attributes": {
+                "name": "Tried Our Best",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USUG12306098"
+              }
+            },
+            {
+              "id": "1716979252",
+              "type": "songs",
+              "attributes": {
+                "name": "Screw The World (Interlude)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USUG12306077"
+              }
+            },
+            {
+              "id": "1716979253",
+              "type": "songs",
+              "attributes": {
+                "name": "Drew A Picasso",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USUG12306078"
+              }
+            },
+            {
+              "id": "1716979254",
+              "type": "songs",
+              "attributes": {
+                "name": "Members Only (feat. PARTYNEXTDOOR)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USUG12306079"
+              }
+            },
+            {
+              "id": "1716979255",
+              "type": "songs",
+              "attributes": {
+                "name": "What Would Pluto Do",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USUG12306080"
+              }
+            },
+            {
+              "id": "1716979256",
+              "type": "songs",
+              "attributes": {
+                "name": "All The Parties (feat. Chief Keef)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USUG12306081"
+              }
+            },
+            {
+              "id": "1716979260",
+              "type": "songs",
+              "attributes": {
+                "name": "8am in Charlotte",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USUG12306082"
+              }
+            },
+            {
+              "id": "1716979262",
+              "type": "songs",
+              "attributes": {
+                "name": "BBL Love (Interlude)",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USUG12306083"
+              }
+            },
+            {
+              "id": "1716979271",
+              "type": "songs",
+              "attributes": {
+                "name": "Gently (feat. Bad Bunny)",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USUG12306084"
+              }
+            },
+            {
+              "id": "1716979276",
+              "type": "songs",
+              "attributes": {
+                "name": "Rich Baby Daddy (feat. Sexyy Red & SZA)",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "USUG12306085"
+              }
+            },
+            {
+              "id": "1716979398",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Late Night (feat. Lil Yachty)",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "USUG12306086"
+              }
+            },
+            {
+              "id": "1716979400",
+              "type": "songs",
+              "attributes": {
+                "name": "Away From Home",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "USUG12306087"
+              }
+            },
+            {
+              "id": "1716979402",
+              "type": "songs",
+              "attributes": {
+                "name": "Polar Opposites",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "USUG12306088"
+              }
+            },
+            {
+              "id": "1716979404",
+              "type": "songs",
+              "attributes": {
+                "name": "Red Button",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "USUG12306112"
+              }
+            },
+            {
+              "id": "1716979406",
+              "type": "songs",
+              "attributes": {
+                "name": "Stories About My Brother",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "USUG12306114"
+              }
+            },
+            {
+              "id": "1716979412",
+              "type": "songs",
+              "attributes": {
+                "name": "The Shoe Fits",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "USUG12306116"
+              }
+            },
+            {
+              "id": "1716979415",
+              "type": "songs",
+              "attributes": {
+                "name": "Wick Man",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "USUG12306118"
+              }
+            },
+            {
+              "id": "1716979416",
+              "type": "songs",
+              "attributes": {
+                "name": "Evil Ways (feat. J. Cole)",
+                "discNumber": 2,
+                "trackNumber": 5,
+                "isrc": "USUG12306120"
+              }
+            },
+            {
+              "id": "1716979421",
+              "type": "songs",
+              "attributes": {
+                "name": "You Broke My Heart",
+                "discNumber": 2,
+                "trackNumber": 6,
+                "isrc": "USUG12309646"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "271256",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

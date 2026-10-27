@@ -1,0 +1,481 @@
+{
+  "data": [
+    {
+      "id": "789755317",
+      "type": "albums",
+      "attributes": {
+        "name": "Blood Bank - EP",
+        "artistName": "Bon Iver",
+        "url": "https://music.apple.com/us/album/blood-bank-ep/789755317",
+        "playParams": {
+          "id": "789755317",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2009-01-20",
+        "contentRating": "explicit",
+        "trackCount": 4,
+        "upc": "656605213460",
+        "genreNames": [
+          "Alternative",
+          "Music",
+          "Indie Rock",
+          "Singer/Songwriter"
+        ],
+        "recordLabel": "Jagjaguwar",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/02/e7/a5/02e7a55e-9513-2801-ea3b-11b444c20a85/cover.jpg/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "789755328",
+              "type": "songs",
+              "attributes": {
+                "name": "Blood Bank",
+                "albumName": "Blood Bank - EP",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "US38Y0913401",
+                "artistName": "Bon Iver",
+                "composerName": "Justin Deyarmond Edison Vernon",
+                "durationInMillis": 285160,
+                "contentRating": "explicit",
+                "releaseDate": "2009-01-20",
+                "url": "https://music.apple.com/us/album/blood-bank/789755317?i=789755328"
+              }
+            },
+            {
+              "id": "789755337",
+              "type": "songs",
+              "attributes": {
+                "name": "Beach Baby",
+                "albumName": "Blood Bank - EP",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "US38Y0913402",
+                "artistName": "Bon Iver",
+                "composerName": "Justin Deyarmond Edison Vernon",
+                "durationInMillis": 160093,
+                "releaseDate": "2009-01-20",
+                "url": "https://music.apple.com/us/album/beach-baby/789755317?i=789755337"
+              }
+            },
+            {
+              "id": "789755338",
+              "type": "songs",
+              "attributes": {
+                "name": "Babys",
+                "albumName": "Blood Bank - EP",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "US38Y0913403",
+                "artistName": "Bon Iver",
+                "composerName": "Justin Deyarmond Edison Vernon",
+                "durationInMillis": 283613,
+                "releaseDate": "2009-01-20",
+                "url": "https://music.apple.com/us/album/babys/789755317?i=789755338"
+              }
+            },
+            {
+              "id": "789755347",
+              "type": "songs",
+              "attributes": {
+                "name": "Woods",
+                "albumName": "Blood Bank - EP",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "US38Y0913404",
+                "artistName": "Bon Iver",
+                "composerName": "Justin Deyarmond Edison Vernon",
+                "durationInMillis": 285440,
+                "releaseDate": "2009-01-20",
+                "url": "https://music.apple.com/us/album/woods/789755317?i=789755347"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "273428126",
+              "type": "artists",
+              "attributes": {
+                "name": "Bon Iver",
+                "url": "https://music.apple.com/us/artist/bon-iver/273428126"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1492123051",
+              "type": "albums",
+              "attributes": {
+                "name": "Blood Bank (10th Anniversary Edition) - EP",
+                "artistName": "Bon Iver",
+                "url": "https://music.apple.com/us/album/blood-bank-10th-anniversary-edition-ep/1492123051",
+                "playParams": {
+                  "id": "1492123051",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2009-01-20",
+                "trackCount": 8,
+                "upc": "656605234366",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Singer/Songwriter"
+                ],
+                "recordLabel": "Jagjaguwar",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/33/80/8f/33808f93-40a8-a746-a130-237bbd015077/656605234366.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "657543493",
+              "type": "albums",
+              "attributes": {
+                "name": "Repave",
+                "artistName": "Volcano Choir",
+                "url": "https://music.apple.com/us/album/repave/657543493",
+                "playParams": {
+                  "id": "657543493",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2013-09-03",
+                "trackCount": 8,
+                "upc": "656605223865",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Rock",
+                  "Prog-Rock/Art Rock",
+                  "Indie Rock"
+                ],
+                "recordLabel": "Jagjaguwar",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8e/e2/84/8ee284e6-1614-731a-76b9-23a70e6b51c1/jag238full.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1773736953",
+              "type": "albums",
+              "attributes": {
+                "name": "I Forget Where We Were (10th Anniversary Deluxe)",
+                "artistName": "Ben Howard",
+                "url": "https://music.apple.com/us/album/i-forget-where-we-were-10th-anniversary-deluxe/1773736953",
+                "playParams": {
+                  "id": "1773736953",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2014-10-20",
+                "trackCount": 16,
+                "upc": "00602475396642",
+                "genreNames": [
+                  "Singer/Songwriter",
+                  "Music",
+                  "Rock"
+                ],
+                "recordLabel": "Universal-Island Records Ltd.",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/cf/4a/32/cf4a328c-7c8e-ee4d-bdae-91b8047472a1/24UMGIM95129.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1688573414",
+              "type": "albums",
+              "attributes": {
+                "name": "Silent Signs",
+                "artistName": "DeYarmond Edison",
+                "url": "https://music.apple.com/us/album/silent-signs/1688573414",
+                "playParams": {
+                  "id": "1688573414",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2005-01-01",
+                "contentRating": "explicit",
+                "trackCount": 12,
+                "upc": "656605239972",
+                "genreNames": [
+                  "Alternative",
+                  "Music"
+                ],
+                "recordLabel": "Jagjaguwar",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/39/6c/1d/396c1da3-ff2a-6e10-f999-de9688d97aa6/39543.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "659613712",
+              "type": "albums",
+              "attributes": {
+                "name": "The Weatherman",
+                "artistName": "Gregory Alan Isakov",
+                "url": "https://music.apple.com/us/album/the-weatherman/659613712",
+                "playParams": {
+                  "id": "659613712",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2013-07-09",
+                "contentRating": "explicit",
+                "trackCount": 13,
+                "upc": "888174014043",
+                "genreNames": [
+                  "Singer/Songwriter",
+                  "Music",
+                  "Alternative",
+                  "Rock",
+                  "Country",
+                  "Americana"
+                ],
+                "recordLabel": "Suitcase Town Music",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/12/00/1c/12001c80-04b7-2b53-0b29-3021749425ba/Weatherman_vinyl_front_cover-ALT-1600px-300_dpi.jpg/{w}x{h}bb.jpg",
+                  "width": 1600,
+                  "height": 1606
+                }
+              }
+            },
+            {
+              "id": "626872826",
+              "type": "albums",
+              "attributes": {
+                "name": "Trouble Will Find Me",
+                "artistName": "The National",
+                "url": "https://music.apple.com/us/album/trouble-will-find-me/626872826",
+                "playParams": {
+                  "id": "626872826",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2013-05-17",
+                "contentRating": "explicit",
+                "trackCount": 13,
+                "upc": "652637331554",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Indie Rock",
+                  "Pop",
+                  "Country",
+                  "Alternative Country",
+                  "Rock",
+                  "Adult Alternative"
+                ],
+                "recordLabel": "4AD",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/63/24/a3/6324a37b-9469-76bc-512c-08c14fc6fdd2/652637331554.png/{w}x{h}bb.jpg",
+                  "width": 4000,
+                  "height": 4000
+                }
+              }
+            },
+            {
+              "id": "1443154745",
+              "type": "albums",
+              "attributes": {
+                "name": "Enough Thunder - EP",
+                "artistName": "James Blake",
+                "url": "https://music.apple.com/us/album/enough-thunder-ep/1443154745",
+                "playParams": {
+                  "id": "1443154745",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2011-10-07",
+                "trackCount": 6,
+                "upc": "00602527857664",
+                "genreNames": [
+                  "Electronic",
+                  "Music",
+                  "Rock"
+                ],
+                "recordLabel": "Polydor Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/57/25/47/57254728-7ea6-9bbc-5d3d-459c36500b38/00602527857664.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            },
+            {
+              "id": "1771708248",
+              "type": "albums",
+              "attributes": {
+                "name": "His Young Heart - EP",
+                "artistName": "Daughter",
+                "url": "https://music.apple.com/us/album/his-young-heart-ep/1771708248",
+                "playParams": {
+                  "id": "1771708248",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2012-01-01",
+                "trackCount": 4,
+                "upc": "0044003160248",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Rock"
+                ],
+                "recordLabel": "Glassnote - VMG",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/ea/43/51/ea43511d-684e-faa6-4072-af0ac0881c79/0044003160248_Cover.jpg/{w}x{h}bb.jpg",
+                  "width": 1400,
+                  "height": 1400
+                }
+              }
+            },
+            {
+              "id": "453832651",
+              "type": "albums",
+              "attributes": {
+                "name": "A Decade With Duke (feat. Justin Vernon)",
+                "artistName": "Eau Claire Memorial Jazz I & Justin Vernon",
+                "url": "https://music.apple.com/us/album/a-decade-with-duke-feat-justin-vernon/453832651",
+                "playParams": {
+                  "id": "453832651",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2009-12-08",
+                "trackCount": 8,
+                "upc": "656605216461",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Jazz"
+                ],
+                "recordLabel": "Jagjaguwar",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/d4/84/32/d484328f-903c-63dc-b807-d84cbf5515b5/cover.jpg/{w}x{h}bb.jpg",
+                  "width": 1400,
+                  "height": 1400
+                }
+              }
+            },
+            {
+              "id": "444298490",
+              "type": "albums",
+              "attributes": {
+                "name": "All We Grow (Bonus Track Version)",
+                "artistName": "S. Carey",
+                "url": "https://music.apple.com/us/album/all-we-grow-bonus-track-version/444298490",
+                "playParams": {
+                  "id": "444298490",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2010-08-23",
+                "trackCount": 10,
+                "upc": "656605218137",
+                "genreNames": [
+                  "Alternative",
+                  "Music",
+                  "Singer/Songwriter"
+                ],
+                "recordLabel": "Jagjaguwar",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/9f/73/0c/mzi.oxgvoaam.tif/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1425
+                }
+              }
+            },
+            {
+              "id": "1445305096",
+              "type": "albums",
+              "attributes": {
+                "name": "Berlin - EP",
+                "artistName": "RY X",
+                "url": "https://music.apple.com/us/album/berlin-ep/1445305096",
+                "playParams": {
+                  "id": "1445305096",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2013-01-01",
+                "trackCount": 4,
+                "upc": "00888072388536",
+                "genreNames": [
+                  "Electronic",
+                  "Music",
+                  "Alternative",
+                  "Indie Rock",
+                  "Rock",
+                  "Adult Alternative"
+                ],
+                "recordLabel": "Loma Vista",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/65/12/89/6512892c-4e4f-75f4-bf12-51bf3d5dd829/00888072388536.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/789755317/view/related-albums?offset=14"
+        }
+      }
+    }
+  ]
+}

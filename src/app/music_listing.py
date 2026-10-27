@@ -142,16 +142,14 @@ def pick_content_member(members, *, today):
     return min(members, key=lambda album: _rank(album, today))
 
 
-def is_hidden(members, today):
+def is_hidden(members):
     """Return whether a listing is left out of search, artist pages and Other Versions.
 
-    Hidden when no member can be streamed, or when every member is incomplete with a
-    release date that has passed (a promo or a partial upload). Its IDs still open.
-    A partial date ("2010", "1994-12") counts as the last day it could mean.
+    Hidden only when no member can be streamed; its IDs still open. Completeness
+    never hides a listing: Apple marks albums it shows normally as incomplete
+    (Lemonade), so it only ranks a complete member first (``pick_identity``).
     """
-    if not any(_streamable(album) for album in members):
-        return True
-    return all(_incomplete_and_past(album, today) for album in members)
+    return not any(_streamable(album) for album in members)
 
 
 def release_day(value):
@@ -200,14 +198,6 @@ def _streamable(album):
 def _upcoming(attributes, today):
     day = release_day(attributes.get("releaseDate"))
     return day is not None and day >= today
-
-
-def _incomplete_and_past(album, today):
-    attributes = album.get("attributes") or {}
-    if attributes.get("isComplete"):
-        return False
-    day = release_day(attributes.get("releaseDate"))
-    return day is not None and day < today
 
 
 def _track_count(attributes):

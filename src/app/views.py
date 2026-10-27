@@ -19,7 +19,7 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from app import config, exposure, game_tracking, helpers, history_processor, single_weight
+from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, single_weight
 from app import statistics as stats
 from app import tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
@@ -298,6 +298,20 @@ def media_search(request):
 def media_details(request, source, media_type, media_id, title):
     """Return the details page for a media item."""
     exposure.require_media_type(media_type)
+    # An old link to an album that moved (/details/musicbrainz/music/<mbid>/...) opens
+    # the album where it is stored now.
+    canonical_source, _, canonical_id = music_catalog.canonical_music_ref(source, media_type, media_id)
+    if (canonical_source, canonical_id) != (source, media_id):
+        url = reverse(
+            "media_details",
+            kwargs={
+                "source": canonical_source,
+                "media_type": media_type,
+                "media_id": canonical_id,
+                "title": title,
+            },
+        )
+        return redirect(f"{url}?{request.GET.urlencode()}" if request.GET else url)
     media_metadata = services.get_media_metadata(media_type, media_id, source)
     
     if not media_metadata:

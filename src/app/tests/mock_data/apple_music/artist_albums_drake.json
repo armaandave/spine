@@ -1,0 +1,596 @@
+{
+  "data": [
+    {
+      "id": "6818209777",
+      "type": "albums",
+      "attributes": {
+        "name": "HABIBTI (FOMO)",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/habibti-fomo/6818209777",
+        "playParams": {
+          "id": "6818209777",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-10-02",
+        "contentRating": "explicit",
+        "trackCount": 24,
+        "upc": "00881061707059",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/bb/45/62/bb4562a3-45a2-539c-b557-a18ea060a476/26UMGIM63616.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 4500,
+          "height": 4500
+        }
+      }
+    },
+    {
+      "id": "6769568449",
+      "type": "albums",
+      "attributes": {
+        "name": "ICEMAN",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/iceman/6769568449",
+        "playParams": {
+          "id": "6769568449",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-05-15",
+        "contentRating": "explicit",
+        "trackCount": 18,
+        "upc": "00600574206930",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/35/b9/06/35b90629-a873-14f8-4789-ffc324960038/26UMGIM63614.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 4500,
+          "height": 4500
+        }
+      }
+    },
+    {
+      "id": "6769556940",
+      "type": "albums",
+      "attributes": {
+        "name": "MAID OF HONOUR",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/maid-of-honour/6769556940",
+        "playParams": {
+          "id": "6769556940",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-05-15",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "00600574207074",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/25/c0/e6/25c0e60b-5e99-58b2-6a52-821602141cce/26UMGIM63615.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 4500,
+          "height": 4500
+        }
+      }
+    },
+    {
+      "id": "6814095592",
+      "type": "albums",
+      "attributes": {
+        "name": "$ome $exy $ongs 4 U",
+        "artistName": "PARTYNEXTDOOR & Drake",
+        "url": "https://music.apple.com/us/album/%24ome-%24exy-%24ongs-4-u/6814095592",
+        "playParams": {
+          "id": "6814095592",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-02-14",
+        "contentRating": "explicit",
+        "trackCount": 21,
+        "upc": "808391285880",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "OVO Sound",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/45/51/6a/45516a8c-3c64-19cc-2503-d25c05bab4ee/808391285880.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1716979097",
+      "type": "albums",
+      "attributes": {
+        "name": "For All The Dogs Scary Hours Edition",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/for-all-the-dogs-scary-hours-edition/1716979097",
+        "playParams": {
+          "id": "1716979097",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-10-06",
+        "contentRating": "explicit",
+        "trackCount": 29,
+        "upc": "00602458922769",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO/Republic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/97/1a/a3/971aa332-2c7d-947c-33ed-4635d41115a4/23UM1IM56239.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 6000,
+          "height": 6000
+        }
+      }
+    },
+    {
+      "id": "1652998965",
+      "type": "albums",
+      "attributes": {
+        "name": "Her Loss",
+        "artistName": "Drake & 21 Savage",
+        "url": "https://music.apple.com/us/album/her-loss/1652998965",
+        "playParams": {
+          "id": "1652998965",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-11-04",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "00602448926067",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO / Republic Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/c7/00/3f/c7003f83-3a43-1201-4aec-41be71ba64c5/22UM1IM29131.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1630230040",
+      "type": "albums",
+      "attributes": {
+        "name": "Honestly, Nevermind",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/honestly-nevermind/1630230040",
+        "playParams": {
+          "id": "1630230040",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-06-17",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "00602448173331",
+        "genreNames": [
+          "Dance",
+          "Music"
+        ],
+        "recordLabel": "OVO",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/84/2c/b4/842cb419-243c-b3f4-4da9-b6b980996062/22UMGIM67371.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1584281467",
+      "type": "albums",
+      "attributes": {
+        "name": "Certified Lover Boy",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/certified-lover-boy/1584281467",
+        "playParams": {
+          "id": "1584281467",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-09-03",
+        "contentRating": "explicit",
+        "trackCount": 21,
+        "upc": "00602438865680",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/11/36/38/1136384a-eebc-697a-c005-d890e41c0854/21UM1IM07518.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1511037323",
+      "type": "albums",
+      "attributes": {
+        "name": "Dark Lane Demo Tapes",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/dark-lane-demo-tapes/1511037323",
+        "playParams": {
+          "id": "1511037323",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-05-01",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "00602507197803",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "OVO",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a7/36/f6/a736f61f-1a51-e955-78b2-9585bd5849cb/20UMGIM34466.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1475177816",
+      "type": "albums",
+      "attributes": {
+        "name": "Care Package",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/care-package/1475177816",
+        "playParams": {
+          "id": "1475177816",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2019-08-02",
+        "contentRating": "explicit",
+        "trackCount": 17,
+        "upc": "00602508182952",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap"
+        ],
+        "recordLabel": "OVO",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/6f/e4/7f/6fe47f12-0fc3-dd2d-d401-f56df61e509c/19UMGIM71793.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1418213110",
+      "type": "albums",
+      "attributes": {
+        "name": "Scorpion",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/scorpion/1418213110",
+        "playParams": {
+          "id": "1418213110",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2018-06-29",
+        "contentRating": "explicit",
+        "trackCount": 25,
+        "upc": "00602567892410",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "R&B/Soul",
+          "Contemporary R&B"
+        ],
+        "recordLabel": "Cash Money/Drake LP6",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/1f/37/43/1f374304-2e04-2be3-53ea-41dd6f0b6fb8/00602567892410.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1440890708",
+      "type": "albums",
+      "attributes": {
+        "name": "More Life",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/more-life/1440890708",
+        "playParams": {
+          "id": "1440890708",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-03-18",
+        "contentRating": "explicit",
+        "trackCount": 22,
+        "upc": "00602557579376",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Cash Money Records/Young Money Ent./Universal Rec.",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/71/97/d0/7197d021-de0f-9548-3f31-40b8294d3242/17UMGIM85032.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 2100,
+          "height": 2100
+        }
+      }
+    },
+    {
+      "id": "1440841363",
+      "type": "albums",
+      "attributes": {
+        "name": "Views",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/views/1440841363",
+        "playParams": {
+          "id": "1440841363",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-04-29",
+        "contentRating": "explicit",
+        "trackCount": 20,
+        "upc": "00602547943491",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Cash Money Records/Young Money Ent./Universal Rec.",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/f2/0d/8b/f20d8bff-a927-ae98-6784-20a1f51cb23e/16UMGIM27642.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1440842320",
+      "type": "albums",
+      "attributes": {
+        "name": "What a Time To Be Alive",
+        "artistName": "Drake & Future",
+        "url": "https://music.apple.com/us/album/what-a-time-to-be-alive/1440842320",
+        "playParams": {
+          "id": "1440842320",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-09-20",
+        "contentRating": "explicit",
+        "trackCount": 11,
+        "upc": "00602547616661",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Hardcore Rap",
+          "Rap"
+        ],
+        "recordLabel": "Cash Money Records Inc.. With Epic Records, a division of Sony Music Entertainment/A1",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/4b/9c/db/4b9cdb40-effb-141c-aa20-9ebeabb1b97f/00602547616661.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1440839718",
+      "type": "albums",
+      "attributes": {
+        "name": "If You're Reading This It's Too Late",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/if-youre-reading-this-its-too-late/1440839718",
+        "playParams": {
+          "id": "1440839718",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2015-02-12",
+        "contentRating": "explicit",
+        "trackCount": 17,
+        "upc": "00602547261892",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "R&B/Soul",
+          "Contemporary R&B",
+          "Hardcore Rap"
+        ],
+        "recordLabel": "Cash Money Records/Young Money Ent./Universal Rec.",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/27/9a/8c/279a8c66-9914-add2-9c7f-912f2946fb8a/15UMGIM08570.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1440829462",
+      "type": "albums",
+      "attributes": {
+        "name": "Nothing Was the Same (Deluxe)",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/nothing-was-the-same-deluxe/1440829462",
+        "playParams": {
+          "id": "1440829462",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2013-09-24",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "00602537542338",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "R&B/Soul",
+          "Contemporary R&B",
+          "Hardcore Rap",
+          "Rap"
+        ],
+        "recordLabel": "Aspire Music Group, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/51/61/f3/5161f3c4-2292-f035-eb68-6f95bbc9edd6/00602537542338.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1440642493",
+      "type": "albums",
+      "attributes": {
+        "name": "Take Care (Deluxe Version)",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/take-care-deluxe-version/1440642493",
+        "playParams": {
+          "id": "1440642493",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2011-11-15",
+        "contentRating": "explicit",
+        "trackCount": 20,
+        "upc": "00602527899107",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Aspire Music Group, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/74/fb/d3/74fbd365-bd52-23b4-604b-7f164407b0a9/00602527899107.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1440762388",
+      "type": "albums",
+      "attributes": {
+        "name": "Thank Me Later",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/thank-me-later/1440762388",
+        "playParams": {
+          "id": "1440762388",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2010-06-15",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "00602527395319",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "Rap",
+          "Hardcore Rap",
+          "R&B/Soul",
+          "Rock",
+          "Contemporary R&B"
+        ],
+        "recordLabel": "Aspire Music Group, LLC",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/63/9d/13/639d1329-da68-6535-bce1-8797eebf6b48/00602527395319.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1416,
+          "height": 1416
+        }
+      }
+    },
+    {
+      "id": "1452017773",
+      "type": "albums",
+      "attributes": {
+        "name": "So Far Gone",
+        "artistName": "Drake",
+        "url": "https://music.apple.com/us/album/so-far-gone/1452017773",
+        "playParams": {
+          "id": "1452017773",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2009-02-13",
+        "contentRating": "explicit",
+        "trackCount": 18,
+        "upc": "00602577524004",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music",
+          "R&B/Soul",
+          "Contemporary R&B",
+          "Hardcore Rap"
+        ],
+        "recordLabel": "Young Money/Cash Money Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/7e/b0/35/7eb0353b-8f25-32dd-5f5e-71d9ed700247/00602577524004.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    }
+  ]
+}

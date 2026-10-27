@@ -88,6 +88,24 @@ def refresh_music_genre_albums():
     return result
 
 
+@shared_task(name="Fill Apple album bridges", ignore_result=True)
+def fill_apple_album_bridges():
+    """Fill the MusicBrainz bridge of the Apple albums album pages queued (every 5 minutes)."""
+    from app import music_links
+
+    return music_links.fill_bridges()
+
+
+@shared_task(name="Link genre albums to Apple")
+def link_genre_albums_to_apple():
+    """Link genre page albums to Apple Music albums (hourly, on the featured worker)."""
+    from app import music_links
+
+    result = music_links.link_genre_albums()
+    logger.info("Genre albums linked to Apple Music counts=%s", result)
+    return result
+
+
 @shared_task(name="Refresh AniList person page", ignore_result=True)
 def refresh_anilist_person_page(person_id, page, marker=None):
     """Refresh one stale AniList filmography page."""

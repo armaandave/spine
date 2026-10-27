@@ -25,10 +25,10 @@ from api.services import filters as filter_service
 from api.services import media as media_service
 from api.throttling import SearchRateThrottle
 from api.views.mixins import MediaExposureMixin
-from app import config, exposure, single_weight
+from app import config, exposure, music_catalog, single_weight
 from app.curation import prime_curated_artwork
 from app.forms import ManualItemForm
-from app.models import BasicMedia, DiaryEntry, MediaTypes, Status
+from app.models import BasicMedia, DiaryEntry, MediaTypes, Sources, Status
 from app.providers import anilist
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem
@@ -404,16 +404,26 @@ class MusicRecordingDetailView(APIView):
 
     permission_classes = [AllowAny]
     throttle_classes = [SearchRateThrottle]
+    # The catalog the path's album ID belongs to.
+    album_source = Sources.MUSICBRAINZ.value
 
     def initial(self, request, *args, **kwargs):
         exposure.require_media_type(MediaTypes.MUSIC.value)
         return super().initial(request, *args, **kwargs)
 
     def get(self, request, release_group_mbid, recording_mbid):
+        # The album is read where it is stored now, so a moved album's songs are
+        # Apple Music songs.
+        source, _, album_id = music_catalog.canonical_music_ref(
+            self.album_source,
+            MediaTypes.MUSIC.value,
+            release_group_mbid,
+        )
         try:
             return Response(
                 media_service.music_recording_detail(
-                    release_group_mbid=release_group_mbid,
+                    source=source,
+                    release_group_mbid=album_id,
                     recording_mbid=recording_mbid,
                     request=request,
                     user=request.user if request.user.is_authenticated else None,
@@ -423,6 +433,15 @@ class MusicRecordingDetailView(APIView):
             if error.status_code == status.HTTP_404_NOT_FOUND:
                 raise Http404 from error
             raise
+
+
+class AppleMusicSongDetailView(MusicRecordingDetailView):
+    """Read-only Apple Music song detail, built from its album's page."""
+
+    album_source = Sources.APPLE_MUSIC.value
+
+    def get(self, request, album_id, song_id):
+        return super().get(request, release_group_mbid=album_id, recording_mbid=song_id)
 
 
 class MusicDetailStageView(APIView):
@@ -437,11 +456,18 @@ class MusicDetailStageView(APIView):
         return super().initial(request, *args, **kwargs)
 
     def get(self, request, release_group_mbid):
+        # An album that moved to Apple Music answers here with its Apple page, with a
+        # 200 rather than a redirect, for installed builds.
+        source, _, media_id = music_catalog.canonical_music_ref(
+            Sources.MUSICBRAINZ.value,
+            MediaTypes.MUSIC.value,
+            release_group_mbid,
+        )
         return Response(
             media_service.media_detail(
-                source="musicbrainz",
+                source=source,
                 media_type=MediaTypes.MUSIC.value,
-                media_id=str(release_group_mbid),
+                media_id=media_id,
                 request=request,
                 user=request.user if request.user.is_authenticated else None,
                 include_music_enrichment=self.include_music_enrichment,

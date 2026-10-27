@@ -1,0 +1,2365 @@
+{
+  "data": [
+    {
+      "id": "273048762",
+      "type": "albums",
+      "attributes": {
+        "name": "Thriller (25th Anniversary) [Deluxe Edition]",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/thriller-25th-anniversary-deluxe-edition/273048762",
+        "playParams": {
+          "id": "273048762",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1982-11-30",
+        "trackCount": 35,
+        "upc": "888880436016",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "Holiday",
+          "Halloween",
+          "Adult Contemporary",
+          "R&B/Soul",
+          "Quiet Storm",
+          "Contemporary R&B",
+          "Rock"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b5/58/d3/b558d32f-24fd-c889-d544-bc4c96f6113e/dj.oinzmlgt.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "269572838",
+              "type": "albums",
+              "attributes": {
+                "name": "Thriller",
+                "artistName": "Michael Jackson",
+                "url": "https://music.apple.com/us/album/thriller/269572838",
+                "playParams": {
+                  "id": "269572838",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "1982-11-29",
+                "trackCount": 9,
+                "upc": "074643811224",
+                "genreNames": [
+                  "Pop",
+                  "Music"
+                ],
+                "recordLabel": "Epic",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/32/4f/fd/324ffda2-9e51-8f6a-0c2d-c6fd2b41ac55/074643811224.jpg/{w}x{h}bb.jpg",
+                  "width": 1500,
+                  "height": 1500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "273048784",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "273048785",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Be Mine",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM19902987"
+              }
+            },
+            {
+              "id": "273048786",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM19902988"
+              }
+            },
+            {
+              "id": "273048787",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "273048788",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "273048789",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "273048790",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "273048791",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM19902993"
+              }
+            },
+            {
+              "id": "273048792",
+              "type": "songs",
+              "attributes": {
+                "name": "The Lady In My Life",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM19902994"
+              }
+            },
+            {
+              "id": "273048793",
+              "type": "songs",
+              "attributes": {
+                "name": "Vincent Price Excerpt from \"Thriller-Voice-Over-Session\"",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM10705937"
+              }
+            },
+            {
+              "id": "273048794",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine 2008 (Thriller 25th Anniversary Remix) [feat. will.i.am]",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USSM10705880"
+              }
+            },
+            {
+              "id": "273048795",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing) 2008 (Thriller 25th Anniversary Remix) [feat. willi.i.am]",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USSM10705928"
+              }
+            },
+            {
+              "id": "273048797",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' 2008 (Thriller 25th Anniversary Remix) [feat. Akon]",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USSM10705929"
+              }
+            },
+            {
+              "id": "273048798",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It 2008 (Thriller 25th Anniversary Remix) [feat. Fergie]",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USSM10705930"
+              }
+            },
+            {
+              "id": "273048799",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean 2008 (Thriller 25th Anniversary Remix) [feat. Kanye West]",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USSM10705931"
+              }
+            },
+            {
+              "id": "273048800",
+              "type": "songs",
+              "attributes": {
+                "name": "For All Time (Outtake from the Original \"Thriller\" Sessions)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USSM10705932"
+              }
+            },
+            {
+              "id": "273048801",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (Long Version)",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USSM10800026"
+              }
+            },
+            {
+              "id": "273048802",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Quincy Jones Interview No. 1",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USSM10107860"
+              }
+            },
+            {
+              "id": "273048803",
+              "type": "songs",
+              "attributes": {
+                "name": "Someone In the Dark",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USMC10400934"
+              }
+            },
+            {
+              "id": "273048804",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Quincy Jones Interview No. 2",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "USSM10107863"
+              }
+            },
+            {
+              "id": "273048805",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (1981 Home Demo)",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "USSM10107865"
+              }
+            },
+            {
+              "id": "273048806",
+              "type": "songs",
+              "attributes": {
+                "name": "Quincy Jones Interview No. 3",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "USSM10107866"
+              }
+            },
+            {
+              "id": "273048807",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Rod Temperton Interview No. 1",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "USSM10107867"
+              }
+            },
+            {
+              "id": "273048808",
+              "type": "songs",
+              "attributes": {
+                "name": "Quincy Jones Interview No. 4",
+                "discNumber": 1,
+                "trackNumber": 24,
+                "isrc": "USSM10107874"
+              }
+            },
+            {
+              "id": "273048809",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Voice-Over Session from \"Thriller-Voice-Over-Session\"",
+                "discNumber": 1,
+                "trackNumber": 25,
+                "isrc": "USSM10110196"
+              }
+            },
+            {
+              "id": "273048810",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Rod Temperton Interview No. 2",
+                "discNumber": 1,
+                "trackNumber": 26,
+                "isrc": "USSM10107869"
+              }
+            },
+            {
+              "id": "273048811",
+              "type": "songs",
+              "attributes": {
+                "name": "Quincy Jones Interview No. 5",
+                "discNumber": 1,
+                "trackNumber": 27,
+                "isrc": "USSM10107871"
+              }
+            },
+            {
+              "id": "273048812",
+              "type": "songs",
+              "attributes": {
+                "name": "Carousel",
+                "discNumber": 1,
+                "trackNumber": 28,
+                "isrc": "USSM10107873"
+              }
+            },
+            {
+              "id": "273048813",
+              "type": "songs",
+              "attributes": {
+                "name": "Voice-Over Intro / Quincy Jones Interview No. 6",
+                "discNumber": 1,
+                "trackNumber": 29,
+                "isrc": "USSM10107872"
+              }
+            },
+            {
+              "id": "273048814",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (Underground Mix)",
+                "discNumber": 1,
+                "trackNumber": 30,
+                "isrc": "USSM10800117"
+              }
+            },
+            {
+              "id": "273048815",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller (Instrumental)",
+                "discNumber": 1,
+                "trackNumber": 31,
+                "isrc": "USSM10309943"
+              }
+            },
+            {
+              "id": "273048816",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Billie Jean",
+                "discNumber": 1,
+                "trackNumber": 32,
+                "isrc": "USSM20301088"
+              }
+            },
+            {
+              "id": "273048821",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Beat It (Restored Version)",
+                "discNumber": 1,
+                "trackNumber": 33,
+                "isrc": "USSM20800056"
+              }
+            },
+            {
+              "id": "273048822",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 34,
+                "isrc": "USSM20301090"
+              }
+            },
+            {
+              "id": "273048848",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Billie Jean (Live from Motown 25: Yesterday, Today and Forever)",
+                "discNumber": 1,
+                "trackNumber": 35,
+                "isrc": "USSM20101083"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "32940",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1641780996",
+      "type": "albums",
+      "attributes": {
+        "name": "Thriller 40",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/thriller-40/1641780996",
+        "playParams": {
+          "id": "1641780996",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-11-18",
+        "trackCount": 34,
+        "upc": "196589412409",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/73/8c/e1/738ce1db-60bd-eb25-0059-18778c1ca9b3/196589412409.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1641780998",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "1641780999",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Be Mine",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM19902987"
+              }
+            },
+            {
+              "id": "1641781001",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine (with Paul McCartney)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM19902988"
+              }
+            },
+            {
+              "id": "1641781002",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "1641781003",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "1641781004",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "1641781005",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "1641781426",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM19902993"
+              }
+            },
+            {
+              "id": "1641781427",
+              "type": "songs",
+              "attributes": {
+                "name": "The Lady in My Life",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM19902994"
+              }
+            },
+            {
+              "id": "1641781428",
+              "type": "songs",
+              "attributes": {
+                "name": "Starlight",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM12208504"
+              }
+            },
+            {
+              "id": "1641781429",
+              "type": "songs",
+              "attributes": {
+                "name": "Got the Hots (Demo)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USSM10705960"
+              }
+            },
+            {
+              "id": "1641781431",
+              "type": "songs",
+              "attributes": {
+                "name": "Who Do You Know (Demo)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USSM12208505"
+              }
+            },
+            {
+              "id": "1641781432",
+              "type": "songs",
+              "attributes": {
+                "name": "Carousel",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USSM10802344"
+              }
+            },
+            {
+              "id": "1641781434",
+              "type": "songs",
+              "attributes": {
+                "name": "Behind The Mask (Mike's Mix (Demo))",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USSM12208508"
+              }
+            },
+            {
+              "id": "1641781436",
+              "type": "songs",
+              "attributes": {
+                "name": "Can't Get Outta The Rain",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USSM10309699"
+              }
+            },
+            {
+              "id": "1641781444",
+              "type": "songs",
+              "attributes": {
+                "name": "The Toy (Demo)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USSM12208507"
+              }
+            },
+            {
+              "id": "1641781518",
+              "type": "songs",
+              "attributes": {
+                "name": "Sunset Driver (Demo)",
+                "discNumber": 1,
+                "trackNumber": 17,
+                "isrc": "USSM10411603"
+              }
+            },
+            {
+              "id": "1641781519",
+              "type": "songs",
+              "attributes": {
+                "name": "What A Lovely Way To Go (Demo)",
+                "discNumber": 1,
+                "trackNumber": 18,
+                "isrc": "USSM12208509"
+              }
+            },
+            {
+              "id": "1641781520",
+              "type": "songs",
+              "attributes": {
+                "name": "She's Trouble (Demo)",
+                "discNumber": 1,
+                "trackNumber": 19,
+                "isrc": "USSM12208506"
+              }
+            },
+            {
+              "id": "1641781523",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (1981 Home Demo)",
+                "discNumber": 1,
+                "trackNumber": 20,
+                "isrc": "USSM10107865"
+              }
+            },
+            {
+              "id": "1641781526",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (Long Version)",
+                "discNumber": 1,
+                "trackNumber": 21,
+                "isrc": "USSM10800026"
+              }
+            },
+            {
+              "id": "1641781527",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (2008 Kanye West Mix) [feat. Kanye West] [Thriller 25th Anniversary Remix]",
+                "discNumber": 1,
+                "trackNumber": 22,
+                "isrc": "USSM10705931"
+              }
+            },
+            {
+              "id": "1641781529",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It (Demo)",
+                "discNumber": 1,
+                "trackNumber": 23,
+                "isrc": "USSM10905366"
+              }
+            },
+            {
+              "id": "1641781530",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It (2008 with Fergie Remix) [Thriller 25th Anniversary Remix]",
+                "discNumber": 1,
+                "trackNumber": 24,
+                "isrc": "USSM10705930"
+              }
+            },
+            {
+              "id": "1641781531",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' (Demo)",
+                "discNumber": 1,
+                "trackNumber": 25,
+                "isrc": "USSM10905365"
+              }
+            },
+            {
+              "id": "1641781534",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' (Tommy D's Main Mix)",
+                "discNumber": 1,
+                "trackNumber": 26,
+                "isrc": "USSM12208500"
+              }
+            },
+            {
+              "id": "1641781535",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' (2008 with Akon) [Thriller 25th Anniversary Remix]",
+                "discNumber": 1,
+                "trackNumber": 27,
+                "isrc": "USSM10705929"
+              }
+            },
+            {
+              "id": "1641781536",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature 7\"",
+                "discNumber": 1,
+                "trackNumber": 28,
+                "isrc": "USSM10501509"
+              }
+            },
+            {
+              "id": "1641781537",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing) [Demo Version]",
+                "discNumber": 1,
+                "trackNumber": 29,
+                "isrc": "USSM10407522"
+              }
+            },
+            {
+              "id": "1641781539",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing) (2008 with will.i.am) [Thriller 25th Anniversary Remix]",
+                "discNumber": 1,
+                "trackNumber": 30,
+                "isrc": "USSM10705928"
+              }
+            },
+            {
+              "id": "1641781790",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine (2008 with will.i.am) [Thriller 25th Anniversary Remix]",
+                "discNumber": 1,
+                "trackNumber": 31,
+                "isrc": "USSM10705880"
+              }
+            },
+            {
+              "id": "1641781867",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller 7\" (Special Edit)",
+                "discNumber": 1,
+                "trackNumber": 32,
+                "isrc": "USSM10800556"
+              }
+            },
+            {
+              "id": "1641781895",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller (Def Thrill Mix)",
+                "discNumber": 1,
+                "trackNumber": 33,
+                "isrc": "USSM10800006"
+              }
+            },
+            {
+              "id": "1641781961",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller (Megamix)",
+                "discNumber": 1,
+                "trackNumber": 34,
+                "isrc": "USSM10802831"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "32940",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1883769984",
+      "type": "albums",
+      "attributes": {
+        "name": "Michael: Songs From The Motion Picture",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/michael-songs-from-the-motion-picture/1883769984",
+        "playParams": {
+          "id": "1883769984",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2026-04-24",
+        "trackCount": 13,
+        "upc": "196874193211",
+        "genreNames": [
+          "Soundtrack",
+          "Music"
+        ],
+        "recordLabel": "Legacy Recordings",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/54/f2/ef/54f2ef79-c668-8d6f-28cd-ae48c45009b7/196874193211.jpg/{w}x{h}bb.jpg",
+          "width": 3600,
+          "height": 3600
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1883770158",
+              "type": "songs",
+              "attributes": {
+                "name": "I'll Be There",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USMO17082635"
+              }
+            },
+            {
+              "id": "1883770159",
+              "type": "songs",
+              "attributes": {
+                "name": "Never Can Say Goodbye (Single Version)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USMO17182631"
+              }
+            },
+            {
+              "id": "1883770161",
+              "type": "songs",
+              "attributes": {
+                "name": "Who's Lovin' You",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USMO16982624"
+              }
+            },
+            {
+              "id": "1883770164",
+              "type": "songs",
+              "attributes": {
+                "name": "Medley: I Want You Back / ABC / The Love You Save (Live from the 1981 U.S. Tour)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM18100889"
+              }
+            },
+            {
+              "id": "1883770170",
+              "type": "songs",
+              "attributes": {
+                "name": "Ben (Live from the 1981 U.S. Tour)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM12600191"
+              }
+            },
+            {
+              "id": "1883770172",
+              "type": "songs",
+              "attributes": {
+                "name": "Don't Stop 'Til You Get Enough",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM17900816"
+              }
+            },
+            {
+              "id": "1883770179",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "1883770429",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "1883770432",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "1883770433",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "1883770443",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "1883770444",
+              "type": "songs",
+              "attributes": {
+                "name": "Workin' Day and Night",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USSM17900818"
+              }
+            },
+            {
+              "id": "1883770448",
+              "type": "songs",
+              "attributes": {
+                "name": "Bad (2012 Remaster)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USSM11204980"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "32940",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "336643808",
+      "type": "albums",
+      "attributes": {
+        "name": "Michael Jackson's This Is It (The Music That Inspired the Movie)",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/michael-jacksons-this-is-it-the-music-that-inspired/336643808",
+        "playParams": {
+          "id": "336643808",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2009-10-26",
+        "trackCount": 20,
+        "upc": "884977396089",
+        "genreNames": [
+          "Soundtrack",
+          "Music",
+          "Rock",
+          "R&B/Soul",
+          "Contemporary R&B",
+          "Pop",
+          "Motown",
+          "Dance",
+          "Soul",
+          "Pop/Rock"
+        ],
+        "recordLabel": "Epic",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Features125/v4/2a/82/a5/2a82a59b-6e79-7c39-761a-c1d3b82e93cb/dj.dzbxcmnk.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1520
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "336644163",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "336644171",
+              "type": "songs",
+              "attributes": {
+                "name": "Jam",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM10905820"
+              }
+            },
+            {
+              "id": "336644173",
+              "type": "songs",
+              "attributes": {
+                "name": "They Don't Care About Us",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM10905821"
+              }
+            },
+            {
+              "id": "336644174",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "336644176",
+              "type": "songs",
+              "attributes": {
+                "name": "Smooth Criminal (Radio Edit)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM10905822"
+              }
+            },
+            {
+              "id": "336644198",
+              "type": "songs",
+              "attributes": {
+                "name": "The Way You Make Me Feel",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM10905823"
+              }
+            },
+            {
+              "id": "336644200",
+              "type": "songs",
+              "attributes": {
+                "name": "Shake Your Body (Down to the Ground) [Single Version]",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM10905824"
+              }
+            },
+            {
+              "id": "336644201",
+              "type": "songs",
+              "attributes": {
+                "name": "I Just Can't Stop Loving You (feat. Siedah Garrett)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM10905825"
+              }
+            },
+            {
+              "id": "336644202",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "336644203",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It (Single Version)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "336644205",
+              "type": "songs",
+              "attributes": {
+                "name": "Black or White",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "USSM10905826"
+              }
+            },
+            {
+              "id": "336644234",
+              "type": "songs",
+              "attributes": {
+                "name": "Earth Song",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "USSM10905827"
+              }
+            },
+            {
+              "id": "336644237",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (Single Version)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "336644238",
+              "type": "songs",
+              "attributes": {
+                "name": "Man In the Mirror",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "USSM10905828"
+              }
+            },
+            {
+              "id": "336644242",
+              "type": "songs",
+              "attributes": {
+                "name": "This Is It",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "USSM10905356"
+              }
+            },
+            {
+              "id": "336644244",
+              "type": "songs",
+              "attributes": {
+                "name": "This Is It (Orchestra Version)",
+                "discNumber": 1,
+                "trackNumber": 16,
+                "isrc": "USSM10905357"
+              }
+            },
+            {
+              "id": "336644245",
+              "type": "songs",
+              "attributes": {
+                "name": "She's Out of My Life (Demo Version)",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "USSM10905364"
+              }
+            },
+            {
+              "id": "336644255",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' (Demo Version)",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "USSM10905365"
+              }
+            },
+            {
+              "id": "336644256",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It (Demo Version)",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "USSM10905366"
+              }
+            },
+            {
+              "id": "336644259",
+              "type": "songs",
+              "attributes": {
+                "name": "Planet Earth (Poem)",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "USSM10905367"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "32940",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "655260476",
+      "type": "albums",
+      "attributes": {
+        "name": "The Indispensable Collection",
+        "artistName": "Michael Jackson",
+        "url": "https://music.apple.com/us/album/the-indispensable-collection/655260476",
+        "playParams": {
+          "id": "655260476",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2013-06-21",
+        "contentRating": "explicit",
+        "trackCount": 104,
+        "upc": "886444022057",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Epic/Legacy",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/fb/73/f1/fb73f182-c0c4-4c9b-6b77-5043420bdf54/886444022057.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "655261375",
+              "type": "songs",
+              "attributes": {
+                "name": "Don't Stop 'Til You Get Enough",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "USSM17900816"
+              }
+            },
+            {
+              "id": "655261377",
+              "type": "songs",
+              "attributes": {
+                "name": "Rock with You",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "USSM17900817"
+              }
+            },
+            {
+              "id": "655261378",
+              "type": "songs",
+              "attributes": {
+                "name": "Workin' Day and Night",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "USSM17900818"
+              }
+            },
+            {
+              "id": "655261379",
+              "type": "songs",
+              "attributes": {
+                "name": "Get on the Floor",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "USSM17900819"
+              }
+            },
+            {
+              "id": "655261919",
+              "type": "songs",
+              "attributes": {
+                "name": "Off the Wall",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "USSM17900820"
+              }
+            },
+            {
+              "id": "655261920",
+              "type": "songs",
+              "attributes": {
+                "name": "Girlfriend",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "USSM17900821"
+              }
+            },
+            {
+              "id": "655261921",
+              "type": "songs",
+              "attributes": {
+                "name": "She's out of My Life",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "USSM17900822"
+              }
+            },
+            {
+              "id": "655261922",
+              "type": "songs",
+              "attributes": {
+                "name": "I Can't Help It",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "USSM17900823"
+              }
+            },
+            {
+              "id": "655261923",
+              "type": "songs",
+              "attributes": {
+                "name": "It's the Falling in Love",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "USSM17900824"
+              }
+            },
+            {
+              "id": "655261924",
+              "type": "songs",
+              "attributes": {
+                "name": "Burn This Disco Out",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "USSM17900825"
+              }
+            },
+            {
+              "id": "655262176",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin'",
+                "discNumber": 2,
+                "trackNumber": 1,
+                "isrc": "USSM19902986"
+              }
+            },
+            {
+              "id": "655262179",
+              "type": "songs",
+              "attributes": {
+                "name": "Baby Be Mine",
+                "discNumber": 2,
+                "trackNumber": 2,
+                "isrc": "USSM19902987"
+              }
+            },
+            {
+              "id": "655262181",
+              "type": "songs",
+              "attributes": {
+                "name": "The Girl Is Mine (feat. Paul McCartney)",
+                "discNumber": 2,
+                "trackNumber": 3,
+                "isrc": "USSM19902988"
+              }
+            },
+            {
+              "id": "655262182",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller",
+                "discNumber": 2,
+                "trackNumber": 4,
+                "isrc": "USSM19902989"
+              }
+            },
+            {
+              "id": "655262183",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It",
+                "discNumber": 2,
+                "trackNumber": 5,
+                "isrc": "USSM19902990"
+              }
+            },
+            {
+              "id": "655262184",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean",
+                "discNumber": 2,
+                "trackNumber": 6,
+                "isrc": "USSM19902991"
+              }
+            },
+            {
+              "id": "655262548",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature",
+                "discNumber": 2,
+                "trackNumber": 7,
+                "isrc": "USSM19902992"
+              }
+            },
+            {
+              "id": "655262569",
+              "type": "songs",
+              "attributes": {
+                "name": "P.Y.T. (Pretty Young Thing)",
+                "discNumber": 2,
+                "trackNumber": 8,
+                "isrc": "USSM19902993"
+              }
+            },
+            {
+              "id": "655262570",
+              "type": "songs",
+              "attributes": {
+                "name": "The Lady in My Life",
+                "discNumber": 2,
+                "trackNumber": 9,
+                "isrc": "USSM19902994"
+              }
+            },
+            {
+              "id": "655262662",
+              "type": "songs",
+              "attributes": {
+                "name": "Bad",
+                "discNumber": 3,
+                "trackNumber": 1,
+                "isrc": "USSM11204980"
+              }
+            },
+            {
+              "id": "655262663",
+              "type": "songs",
+              "attributes": {
+                "name": "The Way You Make Me Feel",
+                "discNumber": 3,
+                "trackNumber": 2,
+                "isrc": "USSM11204981"
+              }
+            },
+            {
+              "id": "655262664",
+              "type": "songs",
+              "attributes": {
+                "name": "Speed Demon",
+                "discNumber": 3,
+                "trackNumber": 3,
+                "isrc": "USSM11204982"
+              }
+            },
+            {
+              "id": "655262735",
+              "type": "songs",
+              "attributes": {
+                "name": "Liberian Girl",
+                "discNumber": 3,
+                "trackNumber": 4,
+                "isrc": "USSM11204983"
+              }
+            },
+            {
+              "id": "655262744",
+              "type": "songs",
+              "attributes": {
+                "name": "Just Good Friends",
+                "discNumber": 3,
+                "trackNumber": 5,
+                "isrc": "USSM11204984"
+              }
+            },
+            {
+              "id": "655262745",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Part of Me",
+                "discNumber": 3,
+                "trackNumber": 6,
+                "isrc": "USSM11204985"
+              }
+            },
+            {
+              "id": "655262748",
+              "type": "songs",
+              "attributes": {
+                "name": "Man in the Mirror",
+                "discNumber": 3,
+                "trackNumber": 7,
+                "isrc": "USSM11204986"
+              }
+            },
+            {
+              "id": "655262793",
+              "type": "songs",
+              "attributes": {
+                "name": "I Just Can't Stop Loving You (feat. Siedah Garrett)",
+                "discNumber": 3,
+                "trackNumber": 8,
+                "isrc": "USSM11204987"
+              }
+            },
+            {
+              "id": "655262795",
+              "type": "songs",
+              "attributes": {
+                "name": "Dirty Diana",
+                "discNumber": 3,
+                "trackNumber": 9,
+                "isrc": "USSM11204988"
+              }
+            },
+            {
+              "id": "655262796",
+              "type": "songs",
+              "attributes": {
+                "name": "Smooth Criminal",
+                "discNumber": 3,
+                "trackNumber": 10,
+                "isrc": "USSM11204989"
+              }
+            },
+            {
+              "id": "655262797",
+              "type": "songs",
+              "attributes": {
+                "name": "Leave Me Alone",
+                "discNumber": 3,
+                "trackNumber": 11,
+                "isrc": "USSM11204990"
+              }
+            },
+            {
+              "id": "655263250",
+              "type": "songs",
+              "attributes": {
+                "name": "Jam",
+                "discNumber": 4,
+                "trackNumber": 1,
+                "isrc": "USSM10407525"
+              }
+            },
+            {
+              "id": "655263315",
+              "type": "songs",
+              "attributes": {
+                "name": "Why You Wanna Trip on Me",
+                "discNumber": 4,
+                "trackNumber": 2,
+                "isrc": "USSM10024732"
+              }
+            },
+            {
+              "id": "655263317",
+              "type": "songs",
+              "attributes": {
+                "name": "In the Closet",
+                "discNumber": 4,
+                "trackNumber": 3,
+                "isrc": "USSM10020718"
+              }
+            },
+            {
+              "id": "655263318",
+              "type": "songs",
+              "attributes": {
+                "name": "She Drives Me Wild",
+                "discNumber": 4,
+                "trackNumber": 4,
+                "isrc": "USSM10025416"
+              }
+            },
+            {
+              "id": "655263467",
+              "type": "songs",
+              "attributes": {
+                "name": "Remember the Time",
+                "discNumber": 4,
+                "trackNumber": 5,
+                "isrc": "USSM10020715"
+              }
+            },
+            {
+              "id": "655263468",
+              "type": "songs",
+              "attributes": {
+                "name": "Can't Let Her Get Away",
+                "discNumber": 4,
+                "trackNumber": 6,
+                "isrc": "USSM10024694"
+              }
+            },
+            {
+              "id": "655263571",
+              "type": "songs",
+              "attributes": {
+                "name": "Heal the World",
+                "discNumber": 4,
+                "trackNumber": 7,
+                "isrc": "USSM10024731"
+              }
+            },
+            {
+              "id": "655263576",
+              "type": "songs",
+              "attributes": {
+                "name": "Black or White",
+                "discNumber": 4,
+                "trackNumber": 8,
+                "isrc": "USSM19000733"
+              }
+            },
+            {
+              "id": "655263795",
+              "type": "songs",
+              "attributes": {
+                "name": "Who Is It",
+                "discNumber": 4,
+                "trackNumber": 9,
+                "isrc": "USSM10020716"
+              }
+            },
+            {
+              "id": "655263977",
+              "type": "songs",
+              "attributes": {
+                "name": "Give in to Me",
+                "discNumber": 4,
+                "trackNumber": 10,
+                "isrc": "USSM10024729"
+              }
+            },
+            {
+              "id": "655264030",
+              "type": "songs",
+              "attributes": {
+                "name": "Will You Be There",
+                "discNumber": 4,
+                "trackNumber": 11,
+                "isrc": "USSM10020712"
+              }
+            },
+            {
+              "id": "655264032",
+              "type": "songs",
+              "attributes": {
+                "name": "Keep the Faith",
+                "discNumber": 4,
+                "trackNumber": 12,
+                "isrc": "USSM10020713"
+              }
+            },
+            {
+              "id": "655264033",
+              "type": "songs",
+              "attributes": {
+                "name": "Gone Too Soon",
+                "discNumber": 4,
+                "trackNumber": 13,
+                "isrc": "USSM10024730"
+              }
+            },
+            {
+              "id": "655264034",
+              "type": "songs",
+              "attributes": {
+                "name": "Dangerous",
+                "discNumber": 4,
+                "trackNumber": 14,
+                "isrc": "USSM10020714"
+              }
+            },
+            {
+              "id": "655264193",
+              "type": "songs",
+              "attributes": {
+                "name": "Scream",
+                "discNumber": 5,
+                "trackNumber": 1,
+                "isrc": "USSM19500006"
+              }
+            },
+            {
+              "id": "655264197",
+              "type": "songs",
+              "attributes": {
+                "name": "They Don't Care About Us",
+                "discNumber": 5,
+                "trackNumber": 2,
+                "isrc": "USSM19500629"
+              }
+            },
+            {
+              "id": "655264406",
+              "type": "songs",
+              "attributes": {
+                "name": "Stranger in Moscow",
+                "discNumber": 5,
+                "trackNumber": 3,
+                "isrc": "USSM19500008"
+              }
+            },
+            {
+              "id": "655264555",
+              "type": "songs",
+              "attributes": {
+                "name": "This Time Around",
+                "discNumber": 5,
+                "trackNumber": 4,
+                "isrc": "USSM19500009"
+              }
+            },
+            {
+              "id": "655264743",
+              "type": "songs",
+              "attributes": {
+                "name": "Earth Song",
+                "discNumber": 5,
+                "trackNumber": 5,
+                "isrc": "USSM19500010"
+              }
+            },
+            {
+              "id": "655264966",
+              "type": "songs",
+              "attributes": {
+                "name": "D.S.",
+                "discNumber": 5,
+                "trackNumber": 6,
+                "isrc": "USSM19500011"
+              }
+            },
+            {
+              "id": "655264968",
+              "type": "songs",
+              "attributes": {
+                "name": "Money",
+                "discNumber": 5,
+                "trackNumber": 7,
+                "isrc": "USSM19500012"
+              }
+            },
+            {
+              "id": "655265151",
+              "type": "songs",
+              "attributes": {
+                "name": "Come Together",
+                "discNumber": 5,
+                "trackNumber": 8,
+                "isrc": "USSM18800001"
+              }
+            },
+            {
+              "id": "655265154",
+              "type": "songs",
+              "attributes": {
+                "name": "You Are Not Alone",
+                "discNumber": 5,
+                "trackNumber": 9,
+                "isrc": "USSM19500002"
+              }
+            },
+            {
+              "id": "655265167",
+              "type": "songs",
+              "attributes": {
+                "name": "Childhood (Theme from \"Free Willy 2\")",
+                "discNumber": 5,
+                "trackNumber": 10,
+                "isrc": "USSM19500003"
+              }
+            },
+            {
+              "id": "655265600",
+              "type": "songs",
+              "attributes": {
+                "name": "Tabloid Junkie",
+                "discNumber": 5,
+                "trackNumber": 11,
+                "isrc": "USSM19500004"
+              }
+            },
+            {
+              "id": "655265811",
+              "type": "songs",
+              "attributes": {
+                "name": "2 Bad",
+                "discNumber": 5,
+                "trackNumber": 12,
+                "isrc": "USSM19500005"
+              }
+            },
+            {
+              "id": "655265826",
+              "type": "songs",
+              "attributes": {
+                "name": "History",
+                "discNumber": 5,
+                "trackNumber": 13,
+                "isrc": "USSM19500630"
+              }
+            },
+            {
+              "id": "655265944",
+              "type": "songs",
+              "attributes": {
+                "name": "Little Susie / Pie Jesu",
+                "discNumber": 5,
+                "trackNumber": 14,
+                "isrc": "USSM10012938"
+              }
+            },
+            {
+              "id": "655266045",
+              "type": "songs",
+              "attributes": {
+                "name": "Smile",
+                "discNumber": 5,
+                "trackNumber": 15,
+                "isrc": "USSM19500015"
+              }
+            },
+            {
+              "id": "655266118",
+              "type": "songs",
+              "attributes": {
+                "name": "Blood on the Dance Floor",
+                "discNumber": 6,
+                "trackNumber": 1,
+                "isrc": "USSM19700290"
+              }
+            },
+            {
+              "id": "655266119",
+              "type": "songs",
+              "attributes": {
+                "name": "Morphine",
+                "discNumber": 6,
+                "trackNumber": 2,
+                "isrc": "USSM19700509"
+              }
+            },
+            {
+              "id": "655266122",
+              "type": "songs",
+              "attributes": {
+                "name": "Superfly Sister",
+                "discNumber": 6,
+                "trackNumber": 3,
+                "isrc": "USSM19700510"
+              }
+            },
+            {
+              "id": "655266125",
+              "type": "songs",
+              "attributes": {
+                "name": "Ghost",
+                "discNumber": 6,
+                "trackNumber": 4,
+                "isrc": "USSM19700513"
+              }
+            },
+            {
+              "id": "655266126",
+              "type": "songs",
+              "attributes": {
+                "name": "Is It Scary",
+                "discNumber": 6,
+                "trackNumber": 5,
+                "isrc": "USSM19700511"
+              }
+            },
+            {
+              "id": "655266127",
+              "type": "songs",
+              "attributes": {
+                "name": "Scream Louder (Flyte Tyme Remix)",
+                "discNumber": 6,
+                "trackNumber": 6,
+                "isrc": "USSM19500815"
+              }
+            },
+            {
+              "id": "655266357",
+              "type": "songs",
+              "attributes": {
+                "name": "Money (Fire Island Radio Edit)",
+                "discNumber": 6,
+                "trackNumber": 7,
+                "isrc": "USSM19503586"
+              }
+            },
+            {
+              "id": "655266359",
+              "type": "songs",
+              "attributes": {
+                "name": "2 Bad (Refugee Camp Mix)",
+                "discNumber": 6,
+                "trackNumber": 8,
+                "isrc": "USSM19503587"
+              }
+            },
+            {
+              "id": "655266366",
+              "type": "songs",
+              "attributes": {
+                "name": "Stranger in Moscow (Tee's In-House Club Mix)",
+                "discNumber": 6,
+                "trackNumber": 9,
+                "isrc": "USSM19400623"
+              }
+            },
+            {
+              "id": "655266672",
+              "type": "songs",
+              "attributes": {
+                "name": "This Time Around (D.M. Radio Mix)",
+                "discNumber": 6,
+                "trackNumber": 10,
+                "isrc": "USSM19501933"
+              }
+            },
+            {
+              "id": "655266722",
+              "type": "songs",
+              "attributes": {
+                "name": "Earth Song (Hani's Extended Radio Experience)",
+                "discNumber": 6,
+                "trackNumber": 11,
+                "isrc": "USSM19502556"
+              }
+            },
+            {
+              "id": "655266726",
+              "type": "songs",
+              "attributes": {
+                "name": "You Are Not Alone (Classic Club Mix)",
+                "discNumber": 6,
+                "trackNumber": 12,
+                "isrc": "USSM19503588"
+              }
+            },
+            {
+              "id": "655266753",
+              "type": "songs",
+              "attributes": {
+                "name": "History (Tony Moran's HIStory Lesson)",
+                "discNumber": 6,
+                "trackNumber": 13,
+                "isrc": "USSM19503589"
+              }
+            },
+            {
+              "id": "655266970",
+              "type": "songs",
+              "attributes": {
+                "name": "Unbreakable",
+                "discNumber": 7,
+                "trackNumber": 1,
+                "isrc": "USSM10110415"
+              }
+            },
+            {
+              "id": "655266984",
+              "type": "songs",
+              "attributes": {
+                "name": "Heartbreaker",
+                "discNumber": 7,
+                "trackNumber": 2,
+                "isrc": "USSM10109825"
+              }
+            },
+            {
+              "id": "655267245",
+              "type": "songs",
+              "attributes": {
+                "name": "Invincible",
+                "discNumber": 7,
+                "trackNumber": 3,
+                "isrc": "USSM10110417"
+              }
+            },
+            {
+              "id": "655267256",
+              "type": "songs",
+              "attributes": {
+                "name": "Break of Dawn",
+                "discNumber": 7,
+                "trackNumber": 4,
+                "isrc": "USSM10110416"
+              }
+            },
+            {
+              "id": "655267320",
+              "type": "songs",
+              "attributes": {
+                "name": "Heaven Can Wait",
+                "discNumber": 7,
+                "trackNumber": 5,
+                "isrc": "USSM10110421"
+              }
+            },
+            {
+              "id": "655267321",
+              "type": "songs",
+              "attributes": {
+                "name": "You Rock My World (With Intro)",
+                "discNumber": 7,
+                "trackNumber": 6,
+                "isrc": "USSM10109858"
+              }
+            },
+            {
+              "id": "655267322",
+              "type": "songs",
+              "attributes": {
+                "name": "Butterflies",
+                "discNumber": 7,
+                "trackNumber": 7,
+                "isrc": "USSM10110474"
+              }
+            },
+            {
+              "id": "655267327",
+              "type": "songs",
+              "attributes": {
+                "name": "Speechless",
+                "discNumber": 7,
+                "trackNumber": 8,
+                "isrc": "USSM10110476"
+              }
+            },
+            {
+              "id": "655267328",
+              "type": "songs",
+              "attributes": {
+                "name": "2000 Watts",
+                "discNumber": 7,
+                "trackNumber": 9,
+                "isrc": "USSM10110477"
+              }
+            },
+            {
+              "id": "655267490",
+              "type": "songs",
+              "attributes": {
+                "name": "You Are My Life",
+                "discNumber": 7,
+                "trackNumber": 10,
+                "isrc": "USSM10111264"
+              }
+            },
+            {
+              "id": "655267504",
+              "type": "songs",
+              "attributes": {
+                "name": "Privacy",
+                "discNumber": 7,
+                "trackNumber": 11,
+                "isrc": "USSM10110418"
+              }
+            },
+            {
+              "id": "655267676",
+              "type": "songs",
+              "attributes": {
+                "name": "Don't Walk Away",
+                "discNumber": 7,
+                "trackNumber": 12,
+                "isrc": "USSM10110479"
+              }
+            },
+            {
+              "id": "655267680",
+              "type": "songs",
+              "attributes": {
+                "name": "Cry",
+                "discNumber": 7,
+                "trackNumber": 13,
+                "isrc": "USSM10110473"
+              }
+            },
+            {
+              "id": "655267944",
+              "type": "songs",
+              "attributes": {
+                "name": "The Lost Children",
+                "discNumber": 7,
+                "trackNumber": 14,
+                "isrc": "USSM10110475"
+              }
+            },
+            {
+              "id": "655268118",
+              "type": "songs",
+              "attributes": {
+                "name": "Whatever Happens",
+                "discNumber": 7,
+                "trackNumber": 15,
+                "isrc": "USSM10110420"
+              }
+            },
+            {
+              "id": "655268330",
+              "type": "songs",
+              "attributes": {
+                "name": "Threatened",
+                "discNumber": 7,
+                "trackNumber": 16,
+                "isrc": "USSM10110419"
+              }
+            },
+            {
+              "id": "655269640",
+              "type": "songs",
+              "attributes": {
+                "name": "Wanna Be Startin' Somethin' (Live)",
+                "discNumber": 8,
+                "trackNumber": 1,
+                "isrc": "USSM11205012"
+              }
+            },
+            {
+              "id": "655270134",
+              "type": "songs",
+              "attributes": {
+                "name": "This Place Hotel (Live)",
+                "discNumber": 8,
+                "trackNumber": 2,
+                "isrc": "USSM11205013"
+              }
+            },
+            {
+              "id": "655270418",
+              "type": "songs",
+              "attributes": {
+                "name": "Another Part of Me (Live)",
+                "discNumber": 8,
+                "trackNumber": 3,
+                "isrc": "USSM11205014"
+              }
+            },
+            {
+              "id": "655270558",
+              "type": "songs",
+              "attributes": {
+                "name": "I Just Can't Stop Loving You (Live)",
+                "discNumber": 8,
+                "trackNumber": 4,
+                "isrc": "USSM11205015"
+              }
+            },
+            {
+              "id": "655271091",
+              "type": "songs",
+              "attributes": {
+                "name": "She's Out of My Life (Live)",
+                "discNumber": 8,
+                "trackNumber": 5,
+                "isrc": "USSM11205016"
+              }
+            },
+            {
+              "id": "655271266",
+              "type": "songs",
+              "attributes": {
+                "name": "I Want You Back / The Love You Save / I'll Be There (Live)",
+                "discNumber": 8,
+                "trackNumber": 6,
+                "isrc": "USSM11205035"
+              }
+            },
+            {
+              "id": "655271582",
+              "type": "songs",
+              "attributes": {
+                "name": "Rock with You (Live)",
+                "discNumber": 8,
+                "trackNumber": 7,
+                "isrc": "USSM11205017"
+              }
+            },
+            {
+              "id": "655271672",
+              "type": "songs",
+              "attributes": {
+                "name": "Human Nature (Live)",
+                "discNumber": 8,
+                "trackNumber": 8,
+                "isrc": "USSM11205018"
+              }
+            },
+            {
+              "id": "655271868",
+              "type": "songs",
+              "attributes": {
+                "name": "Smooth Criminal (Live)",
+                "discNumber": 8,
+                "trackNumber": 9,
+                "isrc": "USSM11205019"
+              }
+            },
+            {
+              "id": "655271997",
+              "type": "songs",
+              "attributes": {
+                "name": "Dirty Diana (Live)",
+                "discNumber": 8,
+                "trackNumber": 10,
+                "isrc": "USSM11205020"
+              }
+            },
+            {
+              "id": "655272199",
+              "type": "songs",
+              "attributes": {
+                "name": "Thriller (Live)",
+                "discNumber": 8,
+                "trackNumber": 11,
+                "isrc": "USSM11205021"
+              }
+            },
+            {
+              "id": "655272215",
+              "type": "songs",
+              "attributes": {
+                "name": "Working Day and Night (Live)",
+                "discNumber": 8,
+                "trackNumber": 12,
+                "isrc": "USSM11205023"
+              }
+            },
+            {
+              "id": "655272221",
+              "type": "songs",
+              "attributes": {
+                "name": "Beat It (Live)",
+                "discNumber": 8,
+                "trackNumber": 13,
+                "isrc": "USSM11205024"
+              }
+            },
+            {
+              "id": "655272226",
+              "type": "songs",
+              "attributes": {
+                "name": "Billie Jean (Live)",
+                "discNumber": 8,
+                "trackNumber": 14,
+                "isrc": "USSM11205025"
+              }
+            },
+            {
+              "id": "655272476",
+              "type": "songs",
+              "attributes": {
+                "name": "Bad (Live)",
+                "discNumber": 8,
+                "trackNumber": 15,
+                "isrc": "USSM11205026"
+              }
+            },
+            {
+              "id": "655272477",
+              "type": "songs",
+              "attributes": {
+                "name": "Man in the Mirror (Live)",
+                "discNumber": 8,
+                "trackNumber": 16,
+                "isrc": "USSM11205028"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "32940",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1134 @@
+{
+  "pages": [
+    {
+      "release-count": 21,
+      "release-offset": 0,
+      "releases": [
+        {
+          "id": "07fc4a4b-28c7-45c6-a62b-5bfb1494ffaf",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": null,
+          "date": "2024-12-20",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 19
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": []
+        },
+        {
+          "id": "1683708c-e718-4df9-b600-467879ec2ff6",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196587792121",
+          "date": "2023-05-19",
+          "country": "XE",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27130224"
+              }
+            }
+          ]
+        },
+        {
+          "id": "1d39bb1e-c342-4eb3-a686-7b12cb84c1ff",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "198028920124",
+          "date": "2024-12-20",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 15
+            },
+            {
+              "position": 2,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.szasos.com/collections/music/products/sos-deluxe-cd"
+              }
+            }
+          ]
+        },
+        {
+          "id": "3be5ecae-9196-43a7-b308-33283be6d0b7",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": null,
+          "date": "2024-12-25",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 15
+            },
+            {
+              "position": 2,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.szasos.com/products/sos-deluxe-cd"
+              }
+            }
+          ]
+        },
+        {
+          "id": "4e41fd97-eb16-455e-bcc3-8b867b7b84f0",
+          "title": "SOS",
+          "disambiguation": "clean",
+          "status": "Official",
+          "barcode": "196589564955",
+          "date": "2022-12-09",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/1nrVofqDRs7cpWXJ49qTnP"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/384460217"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mora.jp/package/43000087/G010004913902A/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mora.jp/package/43000100/G010004913902A_44/"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1658650093"
+              }
+            }
+          ]
+        },
+        {
+          "id": "4fe782ec-2737-46bf-8744-f089891a8bf3",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196871766890",
+          "date": "2024-12-20",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 38
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/3VQkNrG74QPY4rHBPoyZYZ"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/686640951"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.szasos.com/collections/music/products/sos-deluxe-digital-download"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1786643044"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/407108971"
+              }
+            }
+          ]
+        },
+        {
+          "id": "578536db-0438-4d45-a427-4149e55f4bb8",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196587792114",
+          "date": "2023-05-19",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27080568"
+              }
+            }
+          ]
+        },
+        {
+          "id": "6b1d5b1a-e915-4451-9b4e-5229d8a7b418",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196587792121",
+          "date": "2023-05-19",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27130695"
+              }
+            }
+          ]
+        },
+        {
+          "id": "79a7b5e6-7edb-489d-9481-63387f7bc197",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196587792114",
+          "date": "2023-05-19",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27255648"
+              }
+            }
+          ]
+        },
+        {
+          "id": "81510594-e076-4fd0-a8fd-0a1eed48be3b",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "4547366616026",
+          "date": "2023-05-24",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 25
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27307869"
+              }
+            }
+          ]
+        },
+        {
+          "id": "85f15747-0b28-4103-ad89-e1db9c8e35e5",
+          "title": "SOS Deluxe: Lana",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "198028920124",
+          "date": "2025-06",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 19
+            },
+            {
+              "position": 2,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/34294627"
+              }
+            }
+          ]
+        },
+        {
+          "id": "8a8bf60c-c5e7-4bbb-940d-8d6ab4c7df85",
+          "title": "SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": null,
+          "date": "2024",
+          "country": "JP",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/29889577"
+              }
+            }
+          ]
+        },
+        {
+          "id": "9d414b64-cb31-4cdf-a0f5-e3913e16c36a",
+          "title": "愛情警報 SOS",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "196587792121",
+          "date": "2023",
+          "country": "TW",
+          "media": [
+            {
+              "position": 1,
+              "format": "CD",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/27671943"
+              }
+            }
+          ]
+        },
+        {
+          "id": "a19ce8d3-f749-4327-bdeb-6670ec707c9e",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "clean",
+          "status": "Official",
+          "barcode": "196871766913",
+          "date": "2025-02-09",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 19
+            },
+            {
+              "position": 2,
+              "format": "Digital Media",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/0xWgd5MBL46v6Qu2qOwR6G"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/712786241"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/gb/album/1796270264"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/gb/album/1796270264"
+              }
+            }
+          ]
+        },
+        {
+          "id": "a2451561-f09d-44f5-85d2-7de353ef52b5",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "explicit",
+          "status": "Official",
+          "barcode": "196872790276",
+          "date": "2025-02-09",
+          "country": "XW",
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 19
+            },
+            {
+              "position": 2,
+              "format": "Digital Media",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discography entry",
+              "type-id": "823656dd-0309-4247-b282-b92d287d59c5",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.szasos.com/music"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/1Q5WON8dw2JFLP5JVQXu1e"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/709622201"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://soundcloud.com/szababy2/sets/sos-deluxe-lana-3"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/us-en/album/sos-deluxe-lana-sza/usglicfj0kqua"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/gb/album/1794644675"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1794644675"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/416515106"
+              }
+            }
+          ]
+        },
+        {
+          "id": "a38f8a03-faf9-4f09-849e-e6596c16ae5c",
+          "title": "SOS",
+          "disambiguation": "360 Reality Audio mix, explicit",
+          "status": "Official",
+          "barcode": "196589657299",
+          "date": "2022-12-09",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/265167148"
+              }
+            }
+          ]
+        },
+        {
+          "id": "b6e42e04-1600-4276-a71f-38e16e6dff14",
+          "title": "SOS",
+          "disambiguation": "cover 2",
+          "status": "Official",
+          "barcode": "196589564931",
+          "date": "2023-01-05",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 25
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://txdxe.com/products/sos-digital-album-psa-open-arms-cover-2"
+              }
+            }
+          ]
+        },
+        {
+          "id": "b82458a3-7d3a-495f-861f-8698731c4dd0",
+          "title": "SOS",
+          "disambiguation": "explicit",
+          "status": "Official",
+          "barcode": "196589564931",
+          "date": "2022-12-09",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/25404283"
+              }
+            },
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/25757575"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.youtube.com/playlist?list=OLAK5uy_kX7zbOz8GZRFRSIkfs0XH53qAUwVHvrZ8"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.spotify.com/album/07w0rG5TETcyihsEIZR3qG"
+              }
+            },
+            {
+              "type": "free streaming",
+              "type-id": "08445ccf-7b99-4438-9f9a-fb9ac18099ee",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.deezer.com/album/383703577"
+              }
+            },
+            {
+              "type": "other databases",
+              "type-id": "c74dee45-3c85-41e9-a804-92ab1c654446",
+              "target-type": "url",
+              "url": {
+                "resource": "https://rateyourmusic.com/release/album/sza/sos/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.e-onkyo.com/music/album/sme196589564931/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mora.jp/package/43000087/G010004913900E/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mora.jp/package/43000100/G010004913900E_44/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://mysound.jp/album/655916/"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://ototoy.jp/_/default/p/1473925"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://ototoy.jp/_/default/p/1473926"
+              }
+            },
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.qobuz.com/gb-en/album/sos-sza/ckyh7bv0dt6tb"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.amazon.co.uk/albums/B0BNXZ1TQB"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://music.apple.com/us/album/1657869377"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://open.qobuz.com/album/ckyh7bv0dt6tb"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://play.qobuz.com/album/ckyh7bv0dt6tb"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/264617506"
+              }
+            },
+            {
+              "type": "streaming",
+              "type-id": "320adf26-96fa-4183-9045-1f5f32f833cb",
+              "target-type": "url",
+              "url": {
+                "resource": "https://tidal.com/album/265167148"
+              }
+            }
+          ]
+        },
+        {
+          "id": "c86680d8-7c26-4501-88ed-675ceac59574",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "198028963220",
+          "date": "2024-12-20",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "Cassette",
+              "track-count": 15
+            },
+            {
+              "position": 2,
+              "format": "Cassette",
+              "track-count": 23
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.szasos.com/collections/music/products/sos-deluxe-cassette"
+              }
+            }
+          ]
+        },
+        {
+          "id": "d75783c9-83ca-4c1e-8044-4b70e2945261",
+          "title": "SOS",
+          "disambiguation": "cover 1",
+          "status": "Official",
+          "barcode": "196589803368",
+          "date": "2023-01-05",
+          "country": null,
+          "media": [
+            {
+              "position": 1,
+              "format": "Digital Media",
+              "track-count": 25
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "purchase for download",
+              "type-id": "98e08c20-8402-4163-8970-53504bb6a1e4",
+              "target-type": "url",
+              "url": {
+                "resource": "https://txdxe.com/products/sos-digital-album-psa-open-arms-solo-version-cover-1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "f3140800-8765-4802-bfbb-3516c80fd5db",
+          "title": "SOS Deluxe: LANA",
+          "disambiguation": "",
+          "status": "Official",
+          "barcode": "198028920117",
+          "date": "2025-06",
+          "country": "US",
+          "media": [
+            {
+              "position": 1,
+              "format": "12\" Vinyl",
+              "track-count": 10
+            },
+            {
+              "position": 2,
+              "format": "12\" Vinyl",
+              "track-count": 9
+            },
+            {
+              "position": 3,
+              "format": "12\" Vinyl",
+              "track-count": 12
+            },
+            {
+              "position": 4,
+              "format": "12\" Vinyl",
+              "track-count": 11
+            }
+          ],
+          "artist-credit": [
+            {
+              "name": "SZA",
+              "joinphrase": "",
+              "artist": {
+                "id": "272989c8-5535-492d-a25c-9f58803e027f",
+                "name": "SZA",
+                "sort-name": "SZA"
+              }
+            }
+          ],
+          "relations": [
+            {
+              "type": "discogs",
+              "type-id": "4a78823c-1c53-4176-a5f3-58026c76f2bc",
+              "target-type": "url",
+              "url": {
+                "resource": "https://www.discogs.com/release/34285957"
+              }
+            },
+            {
+              "type": "purchase for mail-order",
+              "type-id": "3ee51e05-a06a-415e-b40c-b3f740dedfd7",
+              "target-type": "url",
+              "url": {
+                "resource": "https://shop.szasos.com/collections/music/products/sos-deluxe-4lp-vinyl"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
