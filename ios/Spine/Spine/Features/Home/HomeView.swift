@@ -13,7 +13,7 @@ final class HomeViewModel {
     var inProgressErrorMessage: String?
     var activityErrorMessage: String?
 
-    /// Continue Watching's touch-and-hold menu (TV-100, TV-701).
+    /// Continue Watching's episode sheet (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
 
     private let profileRepository: ProfileRepository
@@ -25,17 +25,25 @@ final class HomeViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
+        mediaRepository: MediaRepository? = nil,
+        diaryRepository: DiaryRepository? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
-        continueWatching = ContinueWatchingTicks(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
-        // A write from the menu updates its card where it is; the rail re-sorts when it next loads (TV-701).
-        continueWatching.onUpdate = { [weak self] id, tracking in
+        // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
+        continueWatching = ContinueWatchingTicks(
+            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository ?? AppRepositories.current().diary,
+            onUnauthorized: onUnauthorized
+        )
+        // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
+        continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingTracking(tracking, id: id, in: inProgressItems)
+            inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
         }
     }
 
@@ -64,8 +72,9 @@ final class HomeViewModel {
         await load()
     }
 
-    /// A write changed a title. Continue Watching's own tick or untick keeps its card where it is (TV-701) but still
-    /// reloads activity, where the tick is the day's progress (activity contract AC-4); any other write reloads Home.
+    /// A write changed a title. A tick or untick in Continue Watching's sheet keeps its card where it is (TV-701) but
+    /// still reloads activity, where the tick is the day's progress (activity contract AC-4); any other write reloads
+    /// Home.
     func mediaStateDidChange(origin: UUID?) async {
         if origin == continueWatching.changeOrigin {
             await loadActivity()
@@ -93,7 +102,7 @@ final class HomeViewModel {
                 trackingRepository: trackingRepository,
                 limit: 10
             )
-            continueWatching.railDidLoad(inProgressItems)
+            continueWatching.railDidLoad()
         } catch is CancellationError {
             return
         } catch {
@@ -135,6 +144,8 @@ struct HomeView: View {
 
     @State private var viewModel: HomeViewModel
     @State private var selectedRef: MediaRef?
+    /// The season's episodes, when Continue Watching's sheet opened one of them: its page pages through them.
+    @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
     @State private var selectedActivityEntry: ActivityEntrySelection?
     @State private var scrollOffset: CGFloat = 0
@@ -177,6 +188,8 @@ struct HomeView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
+            mediaRepository: mediaRepository,
+            diaryRepository: diaryRepository,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -231,11 +244,9 @@ struct HomeView: View {
                 Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
             }
             .onChange(of: selectedTab) { _, tab in
-                // Leaving Home ends the cards' undo (TV-701). Back on Home after a tick from its menu: the rail
-                // re-sorts now, not under the user's finger.
-                if tab != .home {
-                    viewModel.continueWatching.cardsLeftScreen()
-                } else if viewModel.continueWatching.needsReload {
+                // Back on Home after a tick in Continue Watching's sheet: the rail re-sorts now, not under the
+                // user's finger (TV-701).
+                if tab == .home, viewModel.continueWatching.needsReload {
                     Task { await viewModel.loadInProgress() }
                 }
             }
@@ -248,15 +259,17 @@ struct HomeView: View {
                 }
             }
             .onChange(of: selectedRef) { oldValue, newValue in
-                // A page opening over the cards ends their undo (TV-701).
-                if newValue != nil { viewModel.continueWatching.cardsLeftScreen() }
                 if oldValue != nil, newValue == nil {
                     Task { await viewModel.loadInProgress() }
                 }
             }
-            .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
+            .fullScreenCover(item: $selectedRef, onDismiss: {
+                selectedRef = nil
+                selectedEpisodes = nil
+            }) { ref in
                 MediaDetailView(
                     ref: ref,
+                    browsingContext: selectedEpisodes,
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
                     diaryRepository: diaryRepository,
@@ -284,11 +297,13 @@ struct HomeView: View {
             }
             .continueWatchingPresentations(
                 viewModel.continueWatching,
-                mediaRepository: mediaRepository,
                 trackingRepository: trackingRepository,
                 diaryRepository: diaryRepository,
                 onUnauthorized: onUnauthorized
-            )
+            ) { selection in
+                selectedEpisodes = selection.context
+                selectedRef = selection.ref
+            }
             .fullScreenCover(item: $selectedActivityEntry, onDismiss: { selectedActivityEntry = nil }) { selection in
                 DiaryLogDetailNavigationCover(
                     entryId: selection.id,
@@ -376,11 +391,7 @@ struct HomeView: View {
                     SpineRail(items: viewModel.inProgressItems) { item in
                         HomeInProgressPoster(
                             item: item,
-                            pendingTick: viewModel.continueWatching.pendingTicks[item.id],
-                            menu: viewModel.continueWatching.menu(for: item),
-                            onCommand: { command in
-                                viewModel.continueWatching.perform(command, on: item) { selectedRef = $0 }
-                            }
+                            onOpenEpisodes: { viewModel.continueWatching.openEpisodes(for: item) }
                         ) {
                             selectedRef = item.media.ref
                         }
@@ -599,48 +610,82 @@ private struct HomeAvatar: View {
 
 private struct HomeInProgressPoster: View {
     let item: LibraryItem
-    /// A show's tick on its way from the card's menu.
-    var pendingTick: TVEpisodeCoordinate?
-    var menu: [ContinueWatchingMenuItem] = []
-    var onCommand: (ContinueWatchingMenuItem.Command) -> Void = { _ in }
+    /// A show's title and line open its episode sheet (TV-701).
+    var onOpenEpisodes: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                MediaArtwork(
-                    url: item.media.displayPosterURL,
-                    title: item.media.title,
-                    slot: .carousel,
-                    mediaType: item.media.ref.mediaType,
-                    orientation: item.media.posterOrientation
-                )
-                .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
+        Group {
+            if let tv = continueWatching, tv.upNext != nil {
+                // A show in Continue Watching: the poster opens the show; the title and "S2 E5 next ›" open up
+                // next's season, one button with its own pressed state (TV-701).
+                VStack(alignment: .leading, spacing: 0) {
+                    Button(action: action) {
+                        artwork
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View \(item.media.displayTitle)")
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.media.displayTitle)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
+                    Button(action: onOpenEpisodes) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            title
+                            ContinueWatchingLine(tv: tv)
+                        }
+                        .padding(.top, 8)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(ContinueWatchingLineButtonStyle())
+                    .accessibilityLabel(
+                        TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.displayTitle, tv: tv)
+                    )
+                    .accessibilityIdentifier("continue-watching.line")
+                }
+            } else {
+                Button(action: action) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        artwork
 
-                    // A show in Continue Watching: its up next (TV-701), ticked from the card's menu.
-                    if let continueWatching {
-                        ContinueWatchingLine(tv: continueWatching, pendingTick: pendingTick)
-                    } else if let progressDelta {
-                        ProgressDeltaInlineView(delta: progressDelta)
-                    } else {
-                        Text(metadataText)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white.opacity(0.54))
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 3) {
+                            title
+
+                            // A show a tick just caught up or finished stays until Home loads again (TV-701).
+                            if let continueWatching {
+                                ContinueWatchingLine(tv: continueWatching)
+                            } else if let progressDelta {
+                                ProgressDeltaInlineView(delta: progressDelta)
+                            } else {
+                                Text(metadataText)
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white.opacity(0.54))
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel)
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .continueWatchingMenu(media: item.media, tv: continueWatching, items: menu, perform: onCommand)
         .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
+    }
+
+    private var artwork: some View {
+        MediaArtwork(
+            url: item.media.displayPosterURL,
+            title: item.media.title,
+            slot: .carousel,
+            mediaType: item.media.ref.mediaType,
+            orientation: item.media.posterOrientation
+        )
+        .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
+    }
+
+    private var title: some View {
+        Text(item.media.displayTitle)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .lineLimit(2)
     }
 
     private var continueWatching: TVShowState? {

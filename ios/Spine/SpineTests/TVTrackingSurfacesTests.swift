@@ -7,12 +7,51 @@ final class TVTrackingSurfacesTests: XCTestCase {
     private var tracking: SurfacesTrackingRepository!
     private var media: SurfacesMediaRepository!
     private var diary: SurfacesDiaryRepository!
+    private var heldGates: [RefreshGate] = []
 
     override func setUp() async throws {
         try await super.setUp()
         tracking = SurfacesTrackingRepository()
         media = SurfacesMediaRepository()
         diary = SurfacesDiaryRepository()
+    }
+
+    override func tearDown() async throws {
+        for gate in heldGates { await gate.open() }
+        heldGates = []
+        try await super.tearDown()
+    }
+
+    /// Holds the next page loads (a sheet's season, or the refresh after a write) until the gate opens, so a test
+    /// reads a write's own answer rather than the fixture a refresh would reload. Released in tearDown.
+    @discardableResult
+    private func holdDetails() -> RefreshGate {
+        let gate = RefreshGate()
+        media.detailGate = gate
+        heldGates.append(gate)
+        return gate
+    }
+
+    /// Waits for work on other tasks, such as a page load reaching the held gate.
+    private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting", file: file, line: line)
+    }
+
+    /// Opens the card's episode sheet and loads its season, as the sheet does when it appears.
+    private func openLoadedSheet(
+        _ viewModel: HomeViewModel,
+        for item: Spine.LibraryItem,
+        season: MediaDetail
+    ) async throws -> ContinueWatchingEpisodes {
+        media.detailGate = nil
+        media.details[season.ref.id] = season
+        viewModel.continueWatching.openEpisodes(for: item)
+        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
+        await sheet.season.load()
+        return sheet
     }
 
     // MARK: Library (TV-001, TV-002, TV-700)
@@ -187,350 +226,565 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(lines, ["S1 E2 next", "S3 E1 · New"])
     }
 
-    func testTV100HomeTickPostsTickWithAMutationIdAndOpensTheSeasonComposer() async throws {
-        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
-        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [show])
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
-        )
-        await viewModel.load()
+    // MARK: Continue Watching's episode sheet (TV-701, TV-100, TV-102, TV-107, TV-108, TV-403, TV-705)
 
-        var pendingDuringTick: Bool?
-        tracking.onAction = { pendingDuringTick = viewModel.continueWatching.isPending(show) }
-        tracking.actionResponses = [TVActionResponse(
-            tracking: Self.trackingState(status: "In progress", tv: Self.showState(status: "In progress", upNext: (2, 1))),
-            envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))
-        )]
+    func testTV701TheLineOpensUpNextsSeasonWithItsRowAtOnceThenTheWholeSeason() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4)
+        let gate = holdDetails()
 
-        _ = await viewModel.continueWatching.tick(show)
+        viewModel.continueWatching.openEpisodes(for: crown)
 
-        XCTAssertEqual(pendingDuringTick, true, "The tick shows at once")
-        XCTAssertFalse(viewModel.continueWatching.isPending(show))
+        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
+        XCTAssertEqual(sheet.seasonNumber, 2, "Up next's season")
+        XCTAssertEqual(sheet.title, "The Crown · Season 2")
+        XCTAssertEqual(sheet.rows.map(\.id), ["listed-5"], "Up next's row shows at once, from the card")
+        XCTAssertEqual(sheet.rows.first?.title, "Marionettes")
+        XCTAssertEqual(sheet.rows.first?.summary?.imageUrl, "https://img/s2e5.jpg")
+        XCTAssertEqual(sheet.startRowID, "listed-5", "The list opens on up next")
+        XCTAssertFalse(sheet.canLogSeason, "Log Season… waits for the season")
+        XCTAssertEqual(sheet.season.changeOrigin, viewModel.continueWatching.changeOrigin,
+                       "The sheet's writes post as Home's own, so its card stays put")
+
+        // The rest of the season loads with the season page's own request.
+        let load = Task { await sheet.season.load() }
+        await gate.open()
+        await load.value
+        XCTAssertEqual(media.detailRequests, [Self.seasonRef(2)])
+        XCTAssertEqual(sheet.rows.map(\.episodeNumber), Array(1...10), "The whole season")
+        XCTAssertEqual(sheet.startRowID, "listed-5")
+        XCTAssertTrue(sheet.canLogSeason)
+        XCTAssertTrue(tracking.actions.isEmpty, "Opening it sends nothing")
+
+        // A provider that names its seasons gives the sheet that name.
+        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4, name: "Series 2")
+        viewModel.continueWatching.episodes = nil
+        _ = viewModel.continueWatching.sheetDidClose()
+        viewModel.continueWatching.openEpisodes(for: crown)
+        let named = try XCTUnwrap(viewModel.continueWatching.episodes)
+        XCTAssertEqual(named.title, "The Crown · Season 2", "The season's number until it loads")
+        await named.season.load()
+        XCTAssertEqual(named.title, "The Crown · Series 2")
+    }
+
+    func testTV701OnlyAShowWithAnUpNextOpensTheSheet() {
+        let ticks = homeViewModel().continueWatching
+        ticks.openEpisodes(for: Self.showItem("1", "Caught Up", tv: Self.showState(status: "In progress", caughtUp: true)))
+        XCTAssertNil(ticks.episodes, "Without up next the card opens the show")
+        ticks.openEpisodes(for: Self.item("9", "Heat", mediaType: "movie", updatedAt: nil))
+        XCTAssertNil(ticks.episodes, "Other media are unchanged")
+        XCTAssertNil(ContinueWatchingTicks.state(of: Self.item("9", "Heat", mediaType: "movie", updatedAt: nil)))
+    }
+
+    func testTV100ATickInTheSheetIsTheSeasonPagesTickAndUpdatesTheCardWhereItIs() async throws {
+        let severance = Self.showItem("1", "Severance", tv: Self.showState(status: "In progress", watched: 1, aired: 9, upNext: (1, 2)))
+        let heat = Self.item("9", "Heat", mediaType: "movie", updatedAt: nil)
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [severance, heat, crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        holdDetails()
+        let e5 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv))
+        XCTAssertFalse(sheet.season.tvIsWatched(e5))
+        let origin = viewModel.continueWatching.changeOrigin
+        let posted = expectation(forNotification: .mediaStateDidChange, object: nil) { notification in
+            notification.userInfo?["origin"] as? UUID == origin
+        }
+        posted.assertForOverFulfill = false  // the untick below posts the same way
+        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
+
+        sheet.toggle(e5)
+
+        XCTAssertTrue(sheet.season.tvIsWatched(e5), "The tick shows at once")
+        let ticked = await sheet.season.settled()
+        XCTAssertTrue(ticked)
         let sent = try XCTUnwrap(tracking.actions.first)
         XCTAssertEqual(tracking.actions.count, 1)
         XCTAssertEqual(sent.action, .tick)
-        XCTAssertEqual(sent.source, "tmdb")
-        XCTAssertEqual(sent.mediaId, "1396")
-        XCTAssertEqual(sent.request.seasonNumber, 1)
-        XCTAssertEqual(sent.request.episodeNumber, 7)
+        XCTAssertEqual(sent.mediaId, "1396", "Actions go to the show")
+        XCTAssertEqual(sent.request.seasonNumber, 2)
+        XCTAssertEqual(sent.request.episodeNumber, 5)
         XCTAssertNotNil(sent.request.mutationId, "A tick carries a mutation ID (TV-705)")
-        XCTAssertNil(sent.request.expectedVersion)
-        XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The rail doesn't reload: the card updates where it is")
-        XCTAssertEqual(viewModel.inProgressItems.first?.tracking.tv?.upNextCode, "S2 E1")
+        XCTAssertEqual(sent.request.pageSeasonNumber, 2, "It names the season, as the season page does")
+        XCTAssertTrue(sheet.season.tvIsWatched(e5), "The row stays ticked")
 
-        // TV-403: the season the tick finished opens its composer once, through the shared follow-up.
-        let followUp = try XCTUnwrap(viewModel.continueWatching.followUp)
-        XCTAssertEqual(followUp.showRef.mediaType, "tv")
-        XCTAssertEqual(followUp.showRef.mediaId, "1396")
-        let composer = try XCTUnwrap(followUp.composer)
-        XCTAssertEqual(composer.finished.seasonNumber, 1)
-        XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
-        XCTAssertEqual(composer.detail.ref.mediaType, "season")
-        XCTAssertEqual(composer.detail.ref.seasonNumber, 1)
-        XCTAssertEqual(composer.detail.title, "Breaking Bad", "The header comes from the row: nothing is loaded")
-    }
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Severance", "Heat", "The Crown"],
+                       "The show stays where it is")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[2]), "S2 E6 next · 5 of 10", "The card's line changes in place")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S1 E2 next · 1 of 9")
+        XCTAssertTrue(tracking.continueWatchingPages.isEmpty, "Nothing reloads under the user's finger")
+        XCTAssertTrue(viewModel.continueWatching.needsReload, "The rail re-sorts on the next visit")
+        // The tick posts as Home's own write: Home reloads its activity, not its rail.
+        await fulfillment(of: [posted], timeout: 2)
 
-    func testTV403HomeTickOpensTheComposerAsSoonAsTheTickAnswers() async throws {
-        // The composer is up as soon as the tick answers: nothing is loaded for it, and the rail doesn't reload.
-        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
-        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [show])
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
-        )
-        await viewModel.load()
+        // Tapping the filled tick unticks it, by the viewing the tick recorded (TV-102): the old undo.
         tracking.actionResponses = [TVActionResponse(
-            tracking: nil,
-            envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))
+            tracking: Self.trackingState(status: "In progress",
+                                         tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))),
+            envelope: TVWriteEnvelope(episode: TVEpisodeState(seasonNumber: 2, episodeNumber: 5), changed: true)
         )]
-        var railReloads = 0
-        tracking.onContinueWatching = { railReloads += 1 }
+        sheet.toggle(e5)
+        XCTAssertFalse(sheet.season.tvIsWatched(e5), "The untick shows at once")
+        let unticked = await sheet.season.settled()
+        XCTAssertTrue(unticked)
+        let untick = try XCTUnwrap(tracking.actions.last)
+        XCTAssertEqual(untick.action, .untick)
+        XCTAssertEqual(untick.request.episodeNumber, 5)
+        XCTAssertEqual(untick.request.viewingId, 501, "It names the viewing the tick recorded")
+        XCTAssertNotNil(untick.request.mutationId)
+        XCTAssertFalse(sheet.season.tvIsWatched(e5))
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[2]), "S2 E5 next · 4 of 10", "The card is as it was")
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Severance", "Heat", "The Crown"])
 
-        _ = await viewModel.continueWatching.tick(show)
-
-        XCTAssertEqual(viewModel.continueWatching.followUp?.composer?.finished.seasonNumber, 1,
-                       "The composer is up when the tick answers")
-        XCTAssertNil(viewModel.continueWatching.followUp?.loading, "Nothing was loaded for it")
-        XCTAssertEqual(railReloads, 0, "Nothing reloads after it either")
+        // The next visit re-sorts the rail.
+        viewModel.profile = Self.profile(enabled: ["tv"])
+        tracking.continueWatchingResponse = PagedResponse(count: 2, next: nil, previous: nil,
+                                                          results: [viewModel.inProgressItems[2], severance])
+        await viewModel.loadInProgress()
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["The Crown", "Severance"])
+        XCTAssertFalse(viewModel.continueWatching.needsReload)
     }
 
-    func testTV403TicksOnTwoShowsKeepEachShowsComposer() async throws {
-        // Show A's tick finishes its season; show B's ticks answer while A's composer is still open.
-        let showA = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
-        let showB = Self.showItem("1399", "Game of Thrones", tv: Self.showState(status: "In progress", upNext: (2, 10)))
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
+    func testTV701UpNextsRowTicksBeforeTheSeasonHasLoaded() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4)
+        let loadGate = holdDetails()
+        viewModel.continueWatching.openEpisodes(for: crown)
+        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
+        let load = Task { await sheet.season.load() }
+        let upNext = try XCTUnwrap(sheet.rows.first?.tv)
+        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
+
+        sheet.toggle(upNext)
+
+        XCTAssertTrue(sheet.season.tvIsWatched(upNext), "The tick shows while the season loads")
+        let ticked = await sheet.season.settled()
+        XCTAssertTrue(ticked)
+        XCTAssertEqual(tracking.actions.map(\.action), [.tick])
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E6 next · 5 of 10")
+
+        // The season arrives, from before the tick: its row shows the tick all the same (TV-705).
+        await waitUntil { media.detailRequests.count == 1 }
+        holdDetails()
+        await loadGate.open()
+        await load.value
+        let e5 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv))
+        XCTAssertTrue(sheet.season.tvIsWatched(e5))
+        XCTAssertEqual(sheet.season.confirmedTVEpisode(seasonNumber: 2, episodeNumber: 5)?.untickViewingId, 501)
+    }
+
+    func testTV108MarkWatchedUpToHereInTheSheetIsTheSeasonPagesLongPress() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        holdDetails()
+        let e7 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[6].tv))
+        let e6 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[5].tv))
+        tracking.actionResponses = [TVActionResponse(
+            tracking: Self.trackingState(status: "In progress",
+                                         tv: Self.showState(status: "In progress", watched: 7, aired: 10, upNext: (2, 8))),
+            envelope: TVWriteEnvelope(changed: true)
+        )]
+
+        sheet.season.askMarkTVUpTo(e7)
+        let confirmation = try XCTUnwrap(sheet.season.tvConfirmation, "It asks first, naming the range")
+        XCTAssertEqual(confirmation.prompt, "Mark S1 E1–S2 E7 watched?")
+        sheet.confirm(confirmation)
+
+        XCTAssertTrue(sheet.season.tvIsWatched(e6), "The range shows at once")
+        let marked = await sheet.season.settled()
+        XCTAssertTrue(marked)
+        XCTAssertEqual(tracking.actions.map(\.action), [.markUpTo])
+        XCTAssertEqual(tracking.actions.first?.request.seasonNumber, 2)
+        XCTAssertEqual(tracking.actions.first?.request.episodeNumber, 7)
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E8 next · 7 of 10")
+    }
+
+    func testTV403TheSeasonsLastTickOpensLogSeasonAtOnceThenTheSheetMovesToTheNextSeason() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        media.details[Self.seasonRef(3).id] = Self.crownSeason(3)
+        let refreshGate = holdDetails()
+        let e10 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv))
+        tracking.actionResponses = [Self.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510,
+                                                      finished: Self.finished(season: 2))]
+
+        sheet.toggle(e10)
+        let ticked = await sheet.season.settled()
+
+        XCTAssertTrue(ticked)
+        let composer = try XCTUnwrap(sheet.season.tvFollowUp.composer, "Log Season is up as soon as the tick saves")
+        XCTAssertNil(sheet.season.tvFollowUp.loading, "Nothing is loaded first")
+        XCTAssertEqual(composer.finished.seasonNumber, 2)
+        XCTAssertEqual(composer.detail.ref, Self.seasonRef(2), "The season's own page detail")
+        XCTAssertEqual(sheet.seasonNumber, 2, "The sheet waits under the composer")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E1 next · 10 of 10")
+
+        // Not now: up next has moved on to Season 3, which has aired, so the sheet shows it.
+        sheet.season.tvFollowUp.composerDismissed()
+        sheet.composerClosed()
+        XCTAssertEqual(sheet.seasonNumber, 3)
+        XCTAssertEqual(sheet.title, "The Crown · Season 3")
+        XCTAssertEqual(sheet.rows.map(\.id), ["listed-1"], "Season 3 opens on its up next while it loads")
+        XCTAssertNil(sheet.season.detail)
+        XCTAssertEqual(sheet.season.changeOrigin, viewModel.continueWatching.changeOrigin)
+
+        let load = Task { await sheet.season.load() }
+        await waitUntil { media.detailRequests.contains(Self.seasonRef(3)) }  // the season page's request for Season 3
+        holdDetails()
+        await refreshGate.open()
+        await load.value
+        XCTAssertEqual(sheet.rows.map(\.episodeNumber), Array(1...10))
+        XCTAssertEqual(sheet.startRowID, "listed-1")
+
+        // A tick there reaches the card too.
+        tracking.actionResponses = [TVActionResponse(
+            tracking: Self.trackingState(status: "In progress",
+                                         tv: Self.showState(status: "In progress", watched: 11, aired: 20, upNext: (3, 2))),
+            envelope: TVWriteEnvelope(
+                episode: TVEpisodeState(seasonNumber: 3, episodeNumber: 1, watched: true, viewingCount: 1,
+                                        untickViewingId: 520),
+                changed: true
+            )
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[0].tv)))
+        _ = await sheet.season.settled()
+        XCTAssertEqual(tracking.actions.last?.request.seasonNumber, 3)
+        XCTAssertEqual(tracking.actions.last?.request.pageSeasonNumber, 3)
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E2 next · 11 of 20")
+    }
+
+    func testTV403ASeasonThatLeavesTheShowCaughtUpStaysWithEveryTickFilled() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        holdDetails()
+        let e10 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv))
+        let caughtUp = Self.showState(status: "In progress", watched: 10, aired: 10, caughtUp: true,
+                                      nextAiring: TVAiring(seasonNumber: 3, episodeNumber: 1, airDate: "2027-03-12"))
+        tracking.actionResponses = [TVActionResponse(
+            tracking: Self.trackingState(status: "In progress", tv: caughtUp),
+            envelope: TVWriteEnvelope(
+                tv: caughtUp,
+                episode: TVEpisodeState(seasonNumber: 2, episodeNumber: 10, watched: true, viewingCount: 1,
+                                        untickViewingId: 510),
+                changed: true,
+                finished: Self.finished(season: 2)
+            )
+        )]
+
+        sheet.toggle(e10)
+        _ = await sheet.season.settled()
+        XCTAssertNotNil(sheet.season.tvFollowUp.composer)
+        sheet.season.tvFollowUp.composerDismissed()
+        sheet.composerClosed()
+
+        XCTAssertEqual(sheet.seasonNumber, 2, "Nothing has aired after it: the sheet stays")
+        let states = sheet.rows.compactMap { sheet.season.tvEpisodeState($0.tv) }
+        XCTAssertEqual(states.count, 10)
+        XCTAssertTrue(states.allSatisfy { sheet.season.tvIsWatched($0) }, "Every tick filled")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "Caught up · S3 on Mar 12",
+                       "The card reads as its Library card until Home loads again")
+    }
+
+    func testTV107TheSheetsTickAsksTheEarlierEpisodesQuestionFirstAndItsYesReachesTheCard() async throws {
+        let crown = Self.crown(watched: 0, upNext: (3, 1))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [Self.item("9", "Heat", mediaType: "movie", updatedAt: nil), crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(3))
+        holdDetails()
+        let question = TVEarlierUnwatched(
+            from: TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 1),
+            to: TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 10),
+            count: 20,
+            question: "Also mark Seasons 1–2 watched?"
         )
-        viewModel.inProgressItems = [showA, showB]
         tracking.actionResponses = [
-            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))),
-            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true)),
-            TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 2))),
+            Self.tickResponse(upNext: (3, 2), watched: 1, ticked: (3, 1), viewingId: 520, earlierUnwatched: question),
+            TVActionResponse(
+                tracking: Self.trackingState(status: "In progress",
+                                             tv: Self.showState(status: "In progress", watched: 21, aired: 30, upNext: (3, 2))),
+                envelope: TVWriteEnvelope(changed: true)
+            ),
         ]
 
-        let ticks = viewModel.continueWatching
-        _ = await ticks.tick(showA)
-        let followUpA = try XCTUnwrap(ticks.followUp)
-        _ = await ticks.tick(showB)  // finishes nothing
-        XCTAssertTrue(ticks.followUp === followUpA, "A tick with nothing to follow up replaces nothing")
-        _ = await ticks.tick(showB)  // finishes Season 2 while A's composer is still open
-        XCTAssertTrue(ticks.followUp === followUpA, "The first follow-up stays on screen")
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[0].tv)))
+        _ = await sheet.season.settled()
 
-        XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1396")
-        XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 1, "A's composer opens")
-        XCTAssertEqual(ticks.followUp?.composer?.detail.title, "Breaking Bad")
-        followUpA.composerDismissed()
-        XCTAssertEqual(ticks.followUp?.showRef.mediaId, "1399", "Then B's opens")
-        XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 2)
-        XCTAssertEqual(ticks.followUp?.composer?.detail.title, "Game of Thrones", "with B's own header")
-    }
-
-    func testTV107HomeTickAsksTheEarlierEpisodesQuestionFirst() async throws {
-        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (3, 1)))
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
-        )
-        viewModel.inProgressItems = [show]
-        tracking.actionResponses = [TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(
-            changed: true,
-            finished: Self.finished(season: 3),
-            earlierUnwatched: TVEarlierUnwatched(
-                from: TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 1),
-                to: TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 13),
-                count: 20,
-                seasons: [1, 2],
-                question: "Also mark Seasons 1–2 watched?",
-                offerSeasonNumber: 3
-            )
-        ))]
-
-        _ = await viewModel.continueWatching.tick(show)
-
-        let followUp = try XCTUnwrap(viewModel.continueWatching.followUp)
+        let followUp = sheet.season.tvFollowUp
         XCTAssertEqual(followUp.question?.question, "Also mark Seasons 1–2 watched?")
-        XCTAssertNil(followUp.composer, "The question comes before the composer")
+        XCTAssertNil(followUp.composer, "The question comes before any composer")
+        await followUp.answer(yes: true)
+        XCTAssertEqual(tracking.actions.map(\.action), [.tick, .markEarlier])
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Heat", "The Crown"])
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[1]), "S3 E2 next · 21 of 30")
     }
 
-    func testTV705AFailedTickRestoresTheRow() async {
-        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
-        )
-        viewModel.inProgressItems = [show]
+    func testTV705AFailedTickOrUntickInTheSheetRestoresTheRowAndSaysSo() async throws {
+        let crown = Self.crown(watched: 5, upNext: (2, 6))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 5))
+        holdDetails()
+        let e6 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[5].tv))
         tracking.actionError = APIError.httpStatus(
             503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#
         )
 
-        _ = await viewModel.continueWatching.tick(show)
+        sheet.toggle(e6)
+        XCTAssertTrue(sheet.season.tvIsWatched(e6))
+        let ticked = await sheet.season.settled()
 
-        XCTAssertFalse(viewModel.continueWatching.isPending(show), "The pending tick goes")
-        XCTAssertEqual(viewModel.inProgressItems.first?.tracking.tv?.upNextCode, "S1 E7", "The last confirmed state stays")
-        XCTAssertEqual(viewModel.continueWatching.errorTitle, "Could not mark watched")
-        XCTAssertEqual(viewModel.continueWatching.errorMessage, "TV details are unavailable right now")
-        XCTAssertEqual(viewModel.continueWatching.failureCount, 1, "An error haptic plays")
-        XCTAssertEqual(viewModel.continueWatching.successCount, 0)
-        XCTAssertEqual(viewModel.continueWatching.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S1 E7 Watched", "Log S1 E7…", "Go to Season 1"], "The card's menu is as it was: no undo")
-        XCTAssertNil(viewModel.continueWatching.followUp)
+        XCTAssertFalse(ticked)
+        XCTAssertFalse(sheet.season.tvIsWatched(e6), "A failure restores the row")
+        XCTAssertEqual(sheet.failureTitle, "Could not mark watched")
+        XCTAssertEqual(sheet.season.quickActionErrorMessage, "TV details are unavailable right now",
+                       "The short message the sheet's alert shows, with its error haptic")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E6 next · 5 of 10", "The card is unchanged")
+        XCTAssertFalse(viewModel.continueWatching.needsReload)
+        XCTAssertNil(sheet.season.tvFollowUp.composer)
+
+        // An untick the server refuses restores the filled tick, with its reason.
+        sheet.season.quickActionErrorMessage = nil
+        tracking.actionError = APIError.httpStatus(
+            409, #"{"error":{"code":"tv_log_blocks","message":"Delete your Season 2 log first."}}"#
+        )
+        let e5 = try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv))
+        sheet.toggle(e5)
+        XCTAssertFalse(sheet.season.tvIsWatched(e5))
+        let unticked = await sheet.season.settled()
+        XCTAssertFalse(unticked)
+        XCTAssertTrue(sheet.season.tvIsWatched(e5))
+        XCTAssertEqual(sheet.failureTitle, "Could not mark unwatched")
+        XCTAssertEqual(sheet.season.quickActionErrorMessage, "Delete your Season 2 log first.")
+        XCTAssertEqual(tracking.actions.map(\.action), [.tick, .untick])
         XCTAssertTrue(tracking.continueWatchingPages.isEmpty, "Nothing reloads after a failure")
     }
 
-    func testTV100OnlyShowsWithAnUpNextCanBeTicked() async {
-        let viewModel = HomeViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            onUnauthorized: {}
-        )
+    func testTV403ASheetClosedWhileItsTickIsOnItsWayStillOpensLogSeason() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
         let ticks = viewModel.continueWatching
-        _ = await ticks.tick(Self.showItem("1", "Caught Up", tv: Self.showState(status: "In progress", caughtUp: true)))
-        let movie = Self.item("9", "Heat", mediaType: "movie", updatedAt: nil)
-        _ = await ticks.tick(movie)
-        XCTAssertTrue(tracking.actions.isEmpty)
-        XCTAssertTrue(ticks.menu(for: movie).isEmpty, "Other media get no menu")
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionResponses = [Self.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510,
+                                                      finished: Self.finished(season: 2))]
+
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv)))
+        ticks.episodes = nil  // swiped away before the tick answers
+        XCTAssertNil(ticks.sheetDidClose(), "A swipe opens no page")
+        XCTAssertTrue(ticks.closedEpisodes === sheet, "The screen keeps what the tick will ask")
+
+        await answer.open()
+        _ = await sheet.season.settled()
+        XCTAssertEqual(ticks.closedEpisodes?.season.tvFollowUp.composer?.finished.seasonNumber, 2,
+                       "Log Season still opens, over the screen")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E1 next · 10 of 10")
     }
 
-    func testTV701ProfileListsShowsAndTicksThemToo() async throws {
-        let show = Self.showItem("1396", "Breaking Bad", tv: Self.showState(status: "In progress", upNext: (1, 7)))
-        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [show])
+    func testTV701ARowOrOpenShowOpensItsPageOnceTheSheetHasClosed() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        let ticks = viewModel.continueWatching
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+
+        sheet.openEpisode(try XCTUnwrap(sheet.rows[6].summary))
+
+        XCTAssertNil(ticks.episodes, "The sheet closes first")
+        let episode = try XCTUnwrap(ticks.sheetDidClose())
+        XCTAssertEqual(episode.ref, MediaRef(itemId: nil, source: "tmdb", mediaType: "episode", mediaId: "1396",
+                                             seasonNumber: 2, episodeNumber: 7))
+        XCTAssertEqual(episode.context.refs.map(\.episodeNumber), Array(1...10).map { Optional($0) },
+                       "Its page pages through the season's episodes, as from the season page")
+        XCTAssertNil(ticks.closedEpisodes, "Nothing was on its way")
+
+        ticks.openEpisodes(for: crown)
+        ticks.episodes?.openShow()
+        XCTAssertNil(ticks.episodes)
+        XCTAssertEqual(ticks.sheetDidClose()?.ref, crown.media.ref, "Open Show")
+
+        ticks.openEpisodes(for: crown)
+        ticks.episodes = nil
+        XCTAssertNil(ticks.sheetDidClose(), "✕ or a swipe opens nothing")
+        XCTAssertTrue(tracking.actions.isEmpty)
+    }
+
+    func testTV701ARowTappedWhileATickIsOnItsWayOpensOnceTheTickAnswersAndNotWhenItFails() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        let ticks = viewModel.continueWatching
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
+
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv)))
+        sheet.openEpisode(try XCTUnwrap(sheet.rows[6].summary))
+        XCTAssertTrue(ticks.episodes === sheet, "The sheet waits for the tick")
+
+        await answer.open()
+        await ticks.opening?.value
+        XCTAssertNil(ticks.episodes, "The tick asked nothing: the sheet closes for the page")
+        XCTAssertEqual(ticks.sheetDidClose()?.ref.episodeNumber, 7)
+        XCTAssertNil(ticks.closedEpisodes, "Nothing is left to show over the screen")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E6 next · 5 of 10")
+
+        // A tick that fails keeps the sheet, which shows its message.
+        let again = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        holdDetails()
+        let failure = RefreshGate()
+        heldGates.append(failure)
+        tracking.actionGate = failure
+        tracking.actionError = APIError.httpStatus(
+            503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#
+        )
+        again.toggle(try XCTUnwrap(again.season.tvEpisodeState(again.rows[4].tv)))
+        again.openShow()
+        XCTAssertTrue(ticks.episodes === again)
+
+        await failure.open()
+        await ticks.opening?.value
+        XCTAssertTrue(ticks.episodes === again, "The page doesn't open over a failure")
+        XCTAssertEqual(again.season.quickActionErrorMessage, "TV details are unavailable right now")
+        ticks.episodes = nil
+        XCTAssertNil(ticks.sheetDidClose(), "The page isn't opened later")
+    }
+
+    func testTV403APageTappedWhileTheFinalesTickIsOnItsWayLeavesLogSeasonOverTheSheet() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        let ticks = viewModel.continueWatching
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        media.details[Self.seasonRef(3).id] = Self.crownSeason(3)
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionResponses = [Self.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510,
+                                                      finished: Self.finished(season: 2))]
+
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv)))
+        sheet.openShow()
+        XCTAssertTrue(ticks.episodes === sheet)
+
+        await answer.open()
+        await ticks.opening?.value
+        XCTAssertTrue(ticks.episodes === sheet, "Log Season opens over the sheet, not under the show's page")
+        XCTAssertEqual(sheet.season.tvFollowUp.composer?.finished.seasonNumber, 2)
+
+        sheet.season.tvFollowUp.composerDismissed()
+        sheet.composerClosed()
+        XCTAssertTrue(ticks.episodes === sheet, "The show's page doesn't open after the composer")
+        XCTAssertEqual(sheet.seasonNumber, 3)
+        ticks.episodes = nil
+        XCTAssertNil(ticks.sheetDidClose())
+    }
+
+    func testTV705ATickThatFailsAfterTheSheetClosedStillSaysSo() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        let ticks = viewModel.continueWatching
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionError = APIError.httpStatus(
+            503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"TV details are unavailable right now"}}"#
+        )
+
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv)))
+        ticks.episodes = nil  // ✕ before the tick answers
+        XCTAssertNil(ticks.sheetDidClose())
+        XCTAssertTrue(ticks.closedEpisodes === sheet, "The screen keeps the write")
+
+        await answer.open()
+        let ticked = await sheet.season.settled()
+        XCTAssertFalse(ticked)
+        XCTAssertEqual(ticks.closedEpisodes?.failureTitle, "Could not mark watched")
+        XCTAssertEqual(ticks.closedEpisodes?.season.quickActionErrorMessage, "TV details are unavailable right now",
+                       "The message the screen's alert shows, with its error haptic")
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E5 next · 4 of 10", "The card is unchanged")
+    }
+
+    func testTV404LogSeasonInTheSheetsMenuFollowsWhatTheSeasonPageOffers() async throws {
+        let crown = Self.crown()
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        var season = Self.crownSeason(2, watched: 4)
+        season.userState?.tv?.season?.availableActions = ["rate"]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: season)
+        XCTAssertFalse(sheet.canLogSeason, "Not offered when the season's page wouldn't offer it")
+
+        let loggable = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 4))
+        XCTAssertTrue(loggable.canLogSeason)
+
+        // A log saved from it moves the sheet on once its composer closes, as Log Season after a tick does.
+        media.details[Self.seasonRef(3).id] = Self.crownSeason(3)
+        let after = Self.showState(status: "In progress", watched: 10, aired: 10, upNext: (3, 1))
+        loggable.season.applyLogSave(MediaLogSaveResult(
+            ref: Self.seasonRef(2), tracking: nil, diaryEntry: nil,
+            tvEnvelope: TVWriteEnvelope(tv: after, changed: true)
+        ))
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E1 next · 10 of 10", "The card takes the log")
+        loggable.season.releaseDeferredTVFollowUp()
+        loggable.composerClosed()
+        XCTAssertEqual(loggable.seasonNumber, 3)
+    }
+
+    func testTV701ProfileListsShowsAndOpensTheirEpisodesToo() async throws {
+        let crown = Self.crown()
+        tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let viewModel = ProfileViewModel(
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
+            mediaRepository: media,
+            diaryRepository: diary,
             onUnauthorized: {}
         )
 
         await viewModel.load()
         XCTAssertEqual(tracking.continueWatchingPages, [nil])
         XCTAssertTrue(tracking.listRequests.isEmpty, "No season rows are requested")
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Breaking Bad"])
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["The Crown"])
 
-        tracking.actionResponses = [TVActionResponse(
-            tracking: Self.trackingState(status: "In progress", tv: Self.showState(status: "In progress", upNext: (1, 8))),
-            envelope: TVWriteEnvelope(changed: true)
-        )]
-        _ = await viewModel.continueWatching.tick(show)
-        let sent = try XCTUnwrap(tracking.actions.first)
-        XCTAssertEqual(sent.action, .tick)
-        XCTAssertEqual(sent.request.seasonNumber, 1)
-        XCTAssertEqual(sent.request.episodeNumber, 7)
-        XCTAssertNotNil(sent.request.mutationId)
+        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4)
+        viewModel.continueWatching.openEpisodes(for: crown)
+        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
+        await sheet.season.load()
+        holdDetails()
+        XCTAssertEqual(sheet.season.changeOrigin, viewModel.continueWatching.changeOrigin)
+        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv)))
+        _ = await sheet.season.settled()
+
+        XCTAssertEqual(tracking.actions.map(\.action), [.tick])
         XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The card updates where it is")
-        XCTAssertEqual(viewModel.inProgressItems.first?.tracking.tv?.upNextCode, "S1 E8")
-        XCTAssertNotNil(viewModel.continueWatching.followUp)
-        XCTAssertNil(viewModel.continueWatching.followUp?.question)
+        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E6 next · 5 of 10")
     }
 
-    // MARK: Continue Watching's touch-and-hold menu (TV-701, TV-100, TV-102, TV-404)
-
-    func testTV701AHomeTickUpdatesTheCardWhereItIs() async throws {
-        let severance = Self.showItem("1", "Severance", tv: Self.showState(status: "In progress", watched: 1, aired: 9, upNext: (1, 2)))
-        let heat = Self.item("9", "Heat", mediaType: "movie", updatedAt: nil)
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
-        let viewModel = homeViewModel()
-        viewModel.inProgressItems = [severance, heat, crown]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
-
-        _ = await viewModel.continueWatching.tick(crown)
-
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Severance", "Heat", "The Crown"],
-                       "The show stays where it is")
-        let card = viewModel.inProgressItems[2]
-        XCTAssertEqual(card.tracking.tv.flatMap { TVTrackingPresentation.continueWatchingLine(for: $0) }, "S2 E6 next · 5 of 10")
-        XCTAssertTrue(tracking.continueWatchingPages.isEmpty, "Nothing reloads under the user's finger")
-        XCTAssertEqual(viewModel.continueWatching.successCount, 1, "A success haptic plays")
-        XCTAssertEqual(viewModel.continueWatching.menu(for: card).map(\.title),
-                       ["Mark S2 E6 Watched", "Log S2 E6…", "Go to Season 2", "Mark S2 E5 Unwatched"])
-        XCTAssertEqual(viewModel.continueWatching.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S1 E2 Watched", "Log S1 E2…", "Go to Season 1"], "Only the ticked card offers the undo")
-        XCTAssertTrue(viewModel.continueWatching.menu(for: heat).isEmpty, "Other media get no menu")
-
-        // Leaving Home ends the undo, and the next visit re-sorts the rail.
-        XCTAssertTrue(viewModel.continueWatching.needsReload)
-        viewModel.continueWatching.cardsLeftScreen()
-        viewModel.profile = Self.profile(enabled: ["tv"])
-        tracking.continueWatchingResponse = PagedResponse(count: 2, next: nil, previous: nil, results: [card, severance])
-        await viewModel.loadInProgress()
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["The Crown", "Severance"])
-        XCTAssertFalse(viewModel.continueWatching.needsReload)
-        XCTAssertEqual(viewModel.continueWatching.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S2 E6 Watched", "Log S2 E6…", "Go to Season 2"])
-    }
-
-    func testTV102TheMenusUndoUnticksTheViewingItsTickRecorded() async throws {
-        let heat = Self.item("9", "Heat", mediaType: "movie", updatedAt: nil)
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
-        let viewModel = homeViewModel()
-        let ticks = viewModel.continueWatching
-        viewModel.inProgressItems = [heat, crown]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
-        _ = await ticks.tick(crown)
-
-        // A failed untick says why and keeps the card and its undo.
-        tracking.actionError = APIError.httpStatus(
-            409, #"{"error":{"code":"tv_log_blocks","message":"Delete your Season 2 log first."}}"#
-        )
-        _ = await ticks.untick(viewModel.inProgressItems[1])
-        XCTAssertEqual(ticks.errorTitle, "Could not mark unwatched")
-        XCTAssertEqual(ticks.errorMessage, "Delete your Season 2 log first.")
-        XCTAssertEqual(ticks.failureCount, 1, "An error haptic plays")
-        XCTAssertEqual(viewModel.inProgressItems[1].tracking.tv?.upNextCode, "S2 E6")
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[1]).last?.title, "Mark S2 E5 Unwatched")
-
-        tracking.actionError = nil
-        tracking.actionResponses = [TVActionResponse(
-            tracking: Self.trackingState(status: "In progress",
-                                         tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5))),
-            envelope: TVWriteEnvelope(changed: true)
-        )]
-        _ = await ticks.untick(viewModel.inProgressItems[1])
-
-        let unticks = tracking.actions.filter { $0.action == .untick }
-        XCTAssertEqual(unticks.count, 2)
-        let sent = try XCTUnwrap(unticks.last)
-        XCTAssertEqual(sent.mediaId, "1396")
-        XCTAssertEqual(sent.request.seasonNumber, 2)
-        XCTAssertEqual(sent.request.episodeNumber, 5)
-        XCTAssertEqual(sent.request.viewingId, 501, "It names the viewing the tick recorded")
-        XCTAssertNotNil(sent.request.mutationId)
-        XCTAssertEqual(unticks.first?.request.mutationId, sent.request.mutationId, "A retry applies at most once (TV-705)")
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Heat", "The Crown"], "The show stays where it is")
-        XCTAssertEqual(viewModel.inProgressItems[1].tracking.tv?.upNextCode, "S2 E5", "The card is as it was before the tick")
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[1]).map(\.title),
-                       ["Mark S2 E5 Watched", "Log S2 E5…", "Go to Season 2"], "The undo is used up")
-        XCTAssertEqual(ticks.successCount, 2)
-        XCTAssertTrue(tracking.continueWatchingPages.isEmpty)
-    }
-
-    func testTV701TheUndoIsOfferedOnlyRightAfterATickWhileTheCardIsOnScreen() async {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
-        let viewModel = homeViewModel()
-        let ticks = viewModel.continueWatching
-        viewModel.inProgressItems = [crown]
-        XCTAssertNil(ticks.undos[crown.id], "Nothing to undo before a tick")
-
-        // A tick that recorded nothing (TV-101) has nothing to undo.
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 400, changed: false)]
-        _ = await ticks.tick(crown)
-        XCTAssertNil(ticks.undos[crown.id])
-
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 7), watched: 6, ticked: (2, 6), viewingId: 502)]
-        _ = await ticks.tick(viewModel.inProgressItems[0])
-        XCTAssertEqual(ticks.undos[crown.id]?.episode, TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 6))
-
-        // A pull to refresh with the card as the tick left it keeps the undo.
-        ticks.railDidLoad(viewModel.inProgressItems)
-        XCTAssertNotNil(ticks.undos[crown.id])
-        // Up next moved on elsewhere: the undo goes.
-        let movedOn = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 7, aired: 10, upNext: (2, 8)))
-        ticks.railDidLoad([movedOn])
-        XCTAssertNil(ticks.undos[crown.id])
-
-        // A card that leaves the rail loses it too.
-        viewModel.inProgressItems = [movedOn]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 9), watched: 8, ticked: (2, 8), viewingId: 503)]
-        _ = await ticks.tick(movedOn)
-        XCTAssertNotNil(ticks.undos[crown.id])
-        ticks.railDidLoad([])
-        XCTAssertNil(ticks.undos[crown.id])
-
-        // So does the card leaving the screen: another tab, or a page opening over it.
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 10), watched: 9, ticked: (2, 9), viewingId: 504)]
-        _ = await ticks.tick(viewModel.inProgressItems[0])
-        XCTAssertNotNil(ticks.undos[crown.id])
-        ticks.cardsLeftScreen()
-        XCTAssertNil(ticks.undos[crown.id])
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S2 E10 Watched", "Log S2 E10…", "Go to Season 2"])
-
-        // And the Log cover opening over it.
-        let ninth = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 8, aired: 10, upNext: (2, 9)))
-        viewModel.inProgressItems = [ninth]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 10), watched: 9, ticked: (2, 9), viewingId: 505)]
-        _ = await ticks.tick(ninth)
-        XCTAssertNotNil(ticks.undos[crown.id])
-        ticks.perform(.log(TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 10)), on: viewModel.inProgressItems[0]) { _ in }
-        XCTAssertNotNil(ticks.logTarget)
-        XCTAssertNil(ticks.undos[crown.id])
-    }
-
-    func testTV703TheMenusTickReloadsActivityButLeavesTheRail() async {
-        // A tick is the day's progress in activity, so Home and Profile reload their activity after their own menu's
-        // tick or untick (activity contract AC-4), and leave the rail where it is (TV-701).
+    func testTV703TheSheetsTickReloadsActivityButLeavesTheRail() async {
+        // A tick is the day's progress in activity, so Home and Profile reload their activity after a tick or untick
+        // in their own sheet (activity contract AC-4), and leave the rail where it is (TV-701).
         let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
         tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let progress = ActivityItem(
@@ -546,6 +800,8 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: homeActivity,
+            mediaRepository: media,
+            diaryRepository: diary,
             onUnauthorized: {}
         )
         await home.load()
@@ -566,6 +822,8 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
             trackingRepository: tracking,
             activityRepository: profileActivity,
+            mediaRepository: media,
+            diaryRepository: diary,
             onUnauthorized: {}
         )
         await profile.load()
@@ -581,161 +839,17 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(tracking.continueWatchingPages.count, 4)
     }
 
-    func testTV102AnUndoWhoseViewingIsGoneSaysSoAndEndsTheUndo() async throws {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
-        let viewModel = homeViewModel()
-        let ticks = viewModel.continueWatching
-        viewModel.inProgressItems = [crown]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
-        _ = await ticks.tick(crown)
-        XCTAssertEqual(ticks.successCount, 1)
-
-        // S2 E5 was unticked and ticked again elsewhere: viewing 501 is gone, so the server changes nothing.
-        tracking.actionResponses = [TVActionResponse(
-            tracking: Self.trackingState(status: "In progress",
-                                         tv: Self.showState(status: "In progress", watched: 5, aired: 10, upNext: (2, 6))),
-            envelope: TVWriteEnvelope(changed: false)
-        )]
-        let response = await ticks.untick(viewModel.inProgressItems[0])
-
-        XCTAssertNil(response)
-        XCTAssertEqual(tracking.actions.last?.action, .untick)
-        XCTAssertEqual(tracking.actions.last?.request.viewingId, 501)
-        XCTAssertEqual(ticks.errorTitle, "Could not mark unwatched")
-        XCTAssertEqual(ticks.errorMessage, "S2 E5 changed after you marked it. Change it from the show's page.")
-        XCTAssertEqual(ticks.failureCount, 1, "An error haptic plays")
-        XCTAssertEqual(ticks.successCount, 1, "No success haptic")
-        XCTAssertNil(ticks.undos[crown.id], "The undo goes")
-        XCTAssertEqual(viewModel.inProgressItems[0].tracking.tv?.upNextCode, "S2 E6")
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S2 E6 Watched", "Log S2 E6…", "Go to Season 2"])
-        XCTAssertTrue(tracking.continueWatchingPages.isEmpty)
-    }
-
-    func testTV403FinishingASeasonFromTheMenuOpensLogSeasonAndASavedLogEndsTheUndo() async throws {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 9, aired: 20, upNext: (1, 10)))
-        let viewModel = homeViewModel()
-        let ticks = viewModel.continueWatching
-        viewModel.inProgressItems = [crown]
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 1), watched: 10, ticked: (1, 10), viewingId: 510,
-                                                      finished: Self.finished(season: 1))]
-
-        _ = await ticks.tick(crown)
-
-        let followUp = try XCTUnwrap(ticks.followUp)
-        XCTAssertEqual(followUp.composer?.finished.seasonNumber, 1, "Log Season is up as soon as the tick saves")
-        XCTAssertEqual(followUp.composer?.detail.title, "The Crown")
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[0]).last?.title, "Mark S1 E10 Unwatched")
-        // Log Season opening over the cards is the tick's own follow-up: the undo stays.
-        ticks.cardsLeftScreen()
-        XCTAssertNotNil(ticks.undos[crown.id])
-
-        // Its log covers the episode now, so unticking it would only be refused (TV-102).
-        ticks.followUpLogSaved(show: followUp.showRef)
-        XCTAssertNil(ticks.undos[crown.id])
-    }
-
-    func testTV701TheTicksQuestionKeepsTheUndoButLeavingWhileItsAnswerIsOnItsWayEndsIt() async throws {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", upNext: (3, 1)))
-        let viewModel = homeViewModel()
-        let ticks = viewModel.continueWatching
-        viewModel.inProgressItems = [crown]
-        let question = TVEarlierUnwatched(
-            from: TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 1),
-            to: TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 10),
-            count: 20,
-            question: "Also mark Seasons 1–2 watched?"
-        )
-        tracking.actionResponses = [
-            Self.tickResponse(upNext: (3, 2), watched: 1, ticked: (3, 1), viewingId: 520, earlierUnwatched: question),
-            TVActionResponse(
-                tracking: Self.trackingState(status: "In progress",
-                                             tv: Self.showState(status: "In progress", watched: 21, aired: 30, upNext: (3, 2))),
-                envelope: TVWriteEnvelope(changed: true)
-            ),
-        ]
-        _ = await ticks.tick(crown)
-        let followUp = try XCTUnwrap(ticks.followUp)
-        XCTAssertNotNil(followUp.question)
-
-        // The question opening over the cards is the tick's own follow-up: the undo stays.
-        ticks.cardsLeftScreen()
-        XCTAssertNotNil(ticks.undos[crown.id])
-
-        // Once answered, the cards are on screen again: leaving Home while the Yes is on its way ends the undo.
-        var undoWhileSending: ContinueWatchingTicks.Undo?
-        tracking.onAction = {
-            ticks.cardsLeftScreen()
-            undoWhileSending = ticks.undos[crown.id]
+    func testTV701TheCardsHaveNoTouchAndHoldMenu() throws {
+        // The touch-and-hold menu is gone from Continue Watching: the card's title and line open the episode sheet.
+        let features = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features", isDirectory: true)
+        for path in ["Home/ContinueWatching.swift", "Home/HomeView.swift", "Profile/ProfileView.swift"] {
+            let source = try String(contentsOf: features.appendingPathComponent(path), encoding: .utf8)
+            XCTAssertFalse(source.contains(".contextMenu"), "\(path) has a context menu")
+            XCTAssertFalse(source.contains("continueWatchingMenu"), "\(path) still builds the card's menu")
         }
-        await followUp.answer(yes: true)
-        XCTAssertEqual(tracking.actions.map(\.action), [.tick, .markEarlier])
-        XCTAssertNil(undoWhileSending)
-        XCTAssertEqual(ticks.menu(for: viewModel.inProgressItems[0]).map(\.title),
-                       ["Mark S3 E2 Watched", "Log S3 E2…", "Go to Season 3"])
-    }
-
-    func testTV107YesToEarlierEpisodesUpdatesTheCardWhereItIs() async throws {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", upNext: (3, 1)))
-        let viewModel = homeViewModel()
-        viewModel.inProgressItems = [Self.item("9", "Heat", mediaType: "movie", updatedAt: nil), crown]
-        let question = TVEarlierUnwatched(
-            from: TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 1),
-            to: TVEpisodeCoordinate(seasonNumber: 2, episodeNumber: 10),
-            count: 20,
-            question: "Also mark Seasons 1–2 watched?"
-        )
-        tracking.actionResponses = [
-            Self.tickResponse(upNext: (3, 2), watched: 1, ticked: (3, 1), viewingId: 520, earlierUnwatched: question),
-            TVActionResponse(
-                tracking: Self.trackingState(status: "In progress",
-                                             tv: Self.showState(status: "In progress", watched: 21, aired: 30, upNext: (3, 2))),
-                envelope: TVWriteEnvelope(changed: true)
-            ),
-        ]
-        _ = await viewModel.continueWatching.tick(crown)
-
-        await viewModel.continueWatching.followUp?.answer(yes: true)
-
-        XCTAssertEqual(tracking.actions.map(\.action), [.tick, .markEarlier])
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Heat", "The Crown"])
-        XCTAssertEqual(viewModel.inProgressItems[1].tracking.tv.flatMap { TVTrackingPresentation.continueWatchingLine(for: $0) },
-                       "S3 E2 next · 21 of 30")
-    }
-
-    func testTV404LogFromTheMenuOpensTheEpisodeAndWhatItsSaveAsksFollowsOnceItCloses() throws {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", upNext: (1, 10)))
-        let ticks = homeViewModel().continueWatching
-        var opened: [MediaRef] = []
-
-        ticks.perform(.log(TVEpisodeCoordinate(seasonNumber: 1, episodeNumber: 10)), on: crown) { opened.append($0) }
-
-        let target = try XCTUnwrap(ticks.logTarget)
-        XCTAssertEqual(target.episode, MediaRef(itemId: nil, source: "tmdb", mediaType: "episode", mediaId: "1396",
-                                                seasonNumber: 1, episodeNumber: 10))
-        XCTAssertTrue(opened.isEmpty)
-        ticks.logSaved(MediaLogSaveResult(ref: target.episode, tracking: nil, diaryEntry: nil,
-                                          tvEnvelope: TVWriteEnvelope(changed: true, finished: Self.finished(season: 1))),
-                       for: target.item)
-        XCTAssertNil(ticks.followUp, "Nothing opens over the log's own composer")
-        ticks.logTarget = nil
-        ticks.logClosed()
-        XCTAssertEqual(ticks.followUp?.composer?.finished.seasonNumber, 1, "Log Season follows once it has closed")
-        XCTAssertEqual(ticks.followUp?.composer?.detail.title, "The Crown")
-        XCTAssertTrue(tracking.actions.isEmpty, "A log sends no tick")
-    }
-
-    func testTV701GoToSeasonOpensTheSeasonsPage() {
-        let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", upNext: (2, 5)))
-        let ticks = homeViewModel().continueWatching
-        var opened: [MediaRef] = []
-
-        ticks.perform(.openSeason(2), on: crown) { opened.append($0) }
-
-        XCTAssertEqual(opened, [MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1396",
-                                         seasonNumber: 2, episodeNumber: nil)])
-        XCTAssertNil(ticks.logTarget)
-        XCTAssertTrue(tracking.actions.isEmpty)
     }
 
     // MARK: Settings (TV-901)
@@ -1088,8 +1202,57 @@ final class TVTrackingSurfacesTests: XCTestCase {
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
+            mediaRepository: media,
+            diaryRepository: diary,
             onUnauthorized: {}
         )
+    }
+
+    /// The Crown in Continue Watching: S2 E5 up next, `watched` of 10 aired episodes watched, with up next's title and
+    /// still as Continue Watching sends them.
+    static func crown(watched: Int = 4, upNext: (Int, Int)? = (2, 5)) -> Spine.LibraryItem {
+        var tv = showState(status: "In progress", watched: watched, aired: 10, upNext: upNext)
+        tv.upNext?.title = "Marionettes"
+        tv.upNext?.imageUrl = "https://img/s2e5.jpg"
+        return showItem("1396", "The Crown", tv: tv)
+    }
+
+    static func seasonRef(_ number: Int) -> MediaRef {
+        MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1396", seasonNumber: number, episodeNumber: nil)
+    }
+
+    /// A season of The Crown as its page loads it: ten aired episodes, the first `watched` of them ticked.
+    static func crownSeason(_ number: Int, watched: Int = 0, name: String? = nil) -> MediaDetail {
+        let episodes = (1...10).map { episode in
+            let isWatched = episode <= watched
+            let tv = TVEpisodeState(
+                seasonNumber: number,
+                episodeNumber: episode,
+                watched: isWatched,
+                viewingCount: isWatched ? 1 : 0,
+                untickViewingId: isWatched ? 400 + episode : nil,
+                canMarkUpTo: true,
+                markUpToPrompt: "Mark S1 E1–S\(number) E\(episode) watched?"
+            )
+            return EpisodeSummary(episodeNumber: episode, title: "Episode \(episode)", overview: nil, airDate: nil,
+                                  runtime: nil, imageUrl: nil, rating: nil, tv: tv)
+        }
+        var tv = showState(status: "In progress", watched: watched, aired: 10, upNext: (number, watched + 1))
+        tv.season = TVSeasonState(seasonNumber: number, started: watched > 0, status: watched > 0 ? "In progress" : nil,
+                                  state: watched > 0 ? .inProgress : .notStarted, watchedCount: watched, airedCount: 10,
+                                  episodeCount: 10, availableActions: ["log_season", "rate"])
+        return MediaDetail(
+            ref: seasonRef(number),
+            title: "The Crown",
+            userState: UserMediaState(isTracked: watched > 0, tv: tv),
+            details: name.map { ["season_title": .string($0)] },
+            episodes: episodes
+        )
+    }
+
+    /// The card's line under the show: "S2 E5 next · 4 of 10".
+    static func line(_ item: Spine.LibraryItem) -> String? {
+        item.tracking.tv.flatMap { TVTrackingPresentation.continueWatchingLine(for: $0) }
     }
 
     /// A tick's answer: the show's new state (out of 10 aired), and the ticked episode naming the viewing it recorded.
@@ -1183,6 +1346,8 @@ final class SurfacesTrackingRepository: TrackingRepository {
     var actionResponses: [TVActionResponse] = []
     var actionError: Error?
     var onAction: (() -> Void)?
+    /// Holds each action's answer until it opens.
+    var actionGate: RefreshGate?
     var detailRequests: [MediaRef] = []
     var detailResult: Result<TrackingState, Error> = .failure(APIError.httpStatus(404, nil))
 
@@ -1200,6 +1365,7 @@ final class SurfacesTrackingRepository: TrackingRepository {
     func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
         actions.append((source, mediaId, action, request))
         onAction?()
+        await actionGate?.wait()
         if let actionError { throw actionError }
         return actionResponses.isEmpty ? TVActionResponse(tracking: nil, envelope: .empty) : actionResponses.removeFirst()
     }
@@ -1268,10 +1434,19 @@ final class SurfacesDiaryRepository: DiaryRepository {
 
 final class SurfacesMediaRepository: MediaRepository {
     var detailRequests: [MediaRef] = []
+    /// Pages by ref id, as a season page loads them; any other ref answers a bare detail.
+    var details: [String: MediaDetail] = [:]
+    /// Holds detail loads until it opens.
+    var detailGate: RefreshGate?
 
     func detail(ref: MediaRef) async throws -> MediaDetail {
         detailRequests.append(ref)
-        return MediaDetail(ref: ref, title: ref.seasonNumber.map { "Season \($0)" } ?? "Breaking Bad")
+        await detailGate?.wait()
+        return details[ref.id] ?? MediaDetail(ref: ref, title: ref.seasonNumber.map { "Season \($0)" } ?? "Breaking Bad")
+    }
+
+    func reviewPage(ref: MediaRef, page: String?) async throws -> PagedResponse<MediaReview> {
+        PagedResponse(count: 0, next: nil, previous: nil, results: [])
     }
 
     func meta() async throws -> MetaResponse { throw URLError(.notConnectedToInternet) }

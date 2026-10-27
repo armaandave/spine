@@ -17,7 +17,7 @@ final class ProfileViewModel {
     var hofErrorMessage: String?
     var savingHallOfFameSlots: Set<String> = []
 
-    /// Continue Watching's touch-and-hold menu on the user's own profile (TV-100, TV-701).
+    /// Continue Watching's episode sheet on the user's own profile (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
 
     private let profileRepository: ProfileRepository
@@ -31,6 +31,8 @@ final class ProfileViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
+        mediaRepository: MediaRepository? = nil,
+        diaryRepository: DiaryRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -39,11 +41,17 @@ final class ProfileViewModel {
         self.activityRepository = activityRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
-        continueWatching = ContinueWatchingTicks(trackingRepository: trackingRepository, onUnauthorized: onUnauthorized)
-        // A write from the menu updates its card where it is; the rail re-sorts when it next loads (TV-701).
-        continueWatching.onUpdate = { [weak self] id, tracking in
+        // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
+        continueWatching = ContinueWatchingTicks(
+            mediaRepository: mediaRepository ?? AppRepositories.current().media,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository ?? AppRepositories.current().diary,
+            onUnauthorized: onUnauthorized
+        )
+        // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
+        continueWatching.onUpdate = { [weak self] id, tv in
             guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingTracking(tracking, id: id, in: inProgressItems)
+            inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
         }
     }
 
@@ -103,9 +111,9 @@ final class ProfileViewModel {
         await load()
     }
 
-    /// A write changed a title. Continue Watching's own tick or untick keeps its card where it is (TV-701) but still
-    /// reloads Recent Activity, where the tick is the day's progress (activity contract AC-4); any other write reloads
-    /// the profile.
+    /// A write changed a title. A tick or untick in Continue Watching's sheet keeps its card where it is (TV-701) but
+    /// still reloads Recent Activity, where the tick is the day's progress (activity contract AC-4); any other write
+    /// reloads the profile.
     func mediaStateDidChange(origin: UUID?) async {
         if origin == continueWatching.changeOrigin {
             await loadRecentActivity(generation: requestGeneration)
@@ -173,7 +181,7 @@ final class ProfileViewModel {
             guard generation == requestGeneration else { return }
             inProgressItems = items
             inProgressErrorMessage = nil
-            continueWatching.railDidLoad(items)
+            continueWatching.railDidLoad()
         } catch is CancellationError {
             return
         } catch {
@@ -545,6 +553,8 @@ struct ProfileView: View {
 
     @State private var viewModel: ProfileViewModel
     @State private var selectedRef: MediaRef?
+    /// The season's episodes, when Continue Watching's sheet opened one of them: its page pages through them.
+    @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
     @State private var isSettingsPresented = false
     @State private var hofPickerSlot: FavoriteSlot?
@@ -605,6 +615,8 @@ struct ProfileView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
+            mediaRepository: mediaRepository,
+            diaryRepository: diaryRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))
@@ -668,18 +680,20 @@ struct ProfileView: View {
             }
             .continueWatchingPresentations(
                 viewModel.continueWatching,
-                mediaRepository: mediaRepository,
                 trackingRepository: trackingRepository,
                 diaryRepository: diaryRepository,
                 onUnauthorized: onUnauthorized
-            )
-            .onChange(of: selectedRef) { _, ref in
-                // A page opening over the cards ends their undo (TV-701).
-                if ref != nil { viewModel.continueWatching.cardsLeftScreen() }
+            ) { selection in
+                selectedEpisodes = selection.context
+                selectedRef = selection.ref
             }
-            .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
+            .fullScreenCover(item: $selectedRef, onDismiss: {
+                selectedRef = nil
+                selectedEpisodes = nil
+            }) { ref in
                 MediaDetailView(
                     ref: ref,
+                    browsingContext: selectedEpisodes,
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
                     diaryRepository: diaryRepository,
@@ -1297,11 +1311,7 @@ struct ProfileView: View {
                 } else {
                     InProgressRail(
                         items: viewModel.inProgressItems,
-                        pendingTick: { viewModel.continueWatching.pendingTicks[$0.id] },
-                        menu: { viewModel.continueWatching.menu(for: $0) },
-                        onCommand: { command, item in
-                            viewModel.continueWatching.perform(command, on: item) { selectedRef = $0 }
-                        }
+                        onOpenEpisodes: { viewModel.continueWatching.openEpisodes(for: $0) }
                     ) { item in
                         selectedRef = item.media.ref
                     }
@@ -2024,13 +2034,12 @@ private struct RecentActivityRail: View {
 }
 
 private struct InProgressRail: View {
-    /// The height of the up-next line under a show (TV-701).
-    private static let upNextLineHeight: CGFloat = 18
+    /// The room under a show's poster for its title, up to two lines, and its up-next line (TV-701).
+    @ScaledMetric(relativeTo: .caption) private var upNextLineHeight: CGFloat = 52
 
     let items: [LibraryItem]
-    var pendingTick: (LibraryItem) -> TVEpisodeCoordinate? = { _ in nil }
-    var menu: (LibraryItem) -> [ContinueWatchingMenuItem] = { _ in [] }
-    var onCommand: (ContinueWatchingMenuItem.Command, LibraryItem) -> Void = { _, _ in }
+    /// A show's line opens its episode sheet (TV-701).
+    var onOpenEpisodes: (LibraryItem) -> Void = { _ in }
     let action: (LibraryItem) -> Void
 
     var body: some View {
@@ -2040,12 +2049,7 @@ private struct InProgressRail: View {
             let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
             HStack(alignment: .top, spacing: spacing) {
                 ForEach(Array(items.prefix(visibleCount))) { item in
-                    InProgressPoster(
-                        item: item,
-                        pendingTick: pendingTick(item),
-                        menu: menu(item),
-                        onCommand: { onCommand($0, item) }
-                    ) {
+                    InProgressPoster(item: item, onOpenEpisodes: { onOpenEpisodes(item) }) {
                         action(item)
                     }
                     .frame(width: itemWidth)
@@ -2053,7 +2057,7 @@ private struct InProgressRail: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: PosterSlot.profileRail.size.height + (showsUpNextLines ? Self.upNextLineHeight : 0))
+        .frame(height: PosterSlot.profileRail.size.height + (showsUpNextLines ? upNextLineHeight : 0))
     }
 
     private var showsUpNextLines: Bool {
@@ -2063,32 +2067,67 @@ private struct InProgressRail: View {
 
 private struct InProgressPoster: View {
     let item: LibraryItem
-    /// A show's tick on its way from the card's menu.
-    var pendingTick: TVEpisodeCoordinate?
-    var menu: [ContinueWatchingMenuItem] = []
-    var onCommand: (ContinueWatchingMenuItem.Command) -> Void = { _ in }
+    var onOpenEpisodes: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                MediaArtwork(
-                    url: item.media.displayPosterURL,
-                    title: item.media.title,
-                    slot: .profileRail,
-                    mediaType: item.media.ref.mediaType,
-                    orientation: item.media.posterOrientation
-                )
+        if let tv = continueWatching, tv.upNext != nil {
+            // A show in Continue Watching: the poster opens the show; the title and "S2 E5 next ›" open up next's
+            // season, one button with its own pressed state (TV-701).
+            VStack(alignment: .leading, spacing: 0) {
+                Button(action: action) {
+                    artwork
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("View \(item.media.title)")
 
-                // A show in Continue Watching: its up next (TV-701), ticked from the card's menu.
-                if let tv = continueWatching {
-                    ContinueWatchingLine(tv: tv, pendingTick: pendingTick)
+                Button(action: onOpenEpisodes) {
+                    titleAndLine(tv)
+                        .padding(.top, 4)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(ContinueWatchingLineButtonStyle())
+                .accessibilityLabel(
+                    TVTrackingPresentation.continueWatchingAccessibilityLabel(show: item.media.displayTitle, tv: tv)
+                )
+                .accessibilityIdentifier("continue-watching.line")
+            }
+        } else {
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 4) {
+                    artwork
+
+                    // A show a tick just caught up or finished stays until the profile loads again (TV-701).
+                    if let tv = continueWatching {
+                        titleAndLine(tv)
+                    }
                 }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .continueWatchingMenu(media: item.media, tv: continueWatching, items: menu, perform: onCommand)
+    }
+
+    private var artwork: some View {
+        MediaArtwork(
+            url: item.media.displayPosterURL,
+            title: item.media.title,
+            slot: .profileRail,
+            mediaType: item.media.ref.mediaType,
+            orientation: item.media.posterOrientation
+        )
+    }
+
+    /// A show's title, then its up-next line, as on Home (TV-701).
+    private func titleAndLine(_ tv: TVShowState) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.media.displayTitle)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+            ContinueWatchingLine(tv: tv)
+        }
     }
 
     private var continueWatching: TVShowState? {

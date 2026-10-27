@@ -35,7 +35,10 @@ final class MediaDetailViewModel {
     let tvFollowUp: TVWriteFollowUp
 
     /// Tags this page's MediaStateChange posts, so its own observer can skip them.
-    let changeOrigin = UUID()
+    let changeOrigin: UUID
+    /// Each confirmed TV write's show state: a tick, untick or mark, the earlier-episodes Yes, or a saved log.
+    /// Continue Watching's episode sheet puts it on its card (TV-701).
+    @ObservationIgnored var onTVShowChange: ((TVShowState) -> Void)?
     let writeRefreshDelay: Duration
     let externalRefreshDelay: Duration
     private(set) var pending: [PendingWrite] = []
@@ -69,9 +72,11 @@ final class MediaDetailViewModel {
         externalRatingPollInterval: Duration? = nil,
         externalRatingMaxPollAttempts: Int = 30,
         writeRefreshDelay: Duration = .milliseconds(500),
-        externalRefreshDelay: Duration = .milliseconds(300)
+        externalRefreshDelay: Duration = .milliseconds(300),
+        changeOrigin: UUID = UUID()
     ) {
         self.ref = ref
+        self.changeOrigin = changeOrigin
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.diaryRepository = diaryRepository
@@ -725,6 +730,7 @@ final class MediaDetailViewModel {
                 projection?(&projected)
                 tvConfirmed.record(projected: projected.tvPending, envelope: response.envelope)
                 afterSuccess?(response.envelope)
+                if let tv = response.tracking?.tv ?? response.envelope.tv { onTVShowChange?(tv) }
                 tvFollowUp.handle(response.envelope)
             },
             onConflict: onStateChanged.map { handler in
@@ -781,10 +787,21 @@ final class MediaDetailViewModel {
         }
     }
 
+    /// Whether an episode shows as watched, counting pending and confirmed writes (TV-705). Before the page has
+    /// loaded, those writes alone decide: Continue Watching's episode sheet lists up next's row, and ticks it, while
+    /// its season loads (TV-701).
+    func tvIsWatched(_ episode: TVEpisodeState) -> Bool {
+        if let viewer { return viewer.tvIsWatched(episode) }
+        var state = UserMediaState.untracked
+        state.tvPending = tvConfirmed.watches
+        for write in pending { write.project(&state) }
+        return state.tvIsWatched(episode)
+    }
+
     /// An episode tick, from a season's list, the Up next row or the episode page's eye: ticks it, unticks it, or
     /// says why it can't (TV-100, TV-102).
     func toggleTVEpisode(_ episode: TVEpisodeState) {
-        let isWatched = viewer?.tvIsWatched(episode) ?? episode.watched
+        let isWatched = tvIsWatched(episode)
         if isWatched {
             let confirmed = confirmedTVEpisode(seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
             if let confirmed, confirmed.watched, confirmed.untickViewingId == nil {
@@ -1048,6 +1065,7 @@ final class MediaDetailViewModel {
     private func applyTVFollowUpResponse(_ response: TVActionResponse) {
         confirm(.tv(response))
         tvConfirmed.record(projected: TVPendingWatches(), envelope: response.envelope)
+        if let tv = response.tracking?.tv ?? response.envelope.tv { onTVShowChange?(tv) }
         retainedMutationIds.removeAll()
         MediaStateChange.post(ref: ref, origin: changeOrigin)
         scheduleRefresh(.community, after: writeRefreshDelay)
@@ -1235,6 +1253,7 @@ final class MediaDetailViewModel {
             default: break
             }
             tvConfirmed.record(projected: counted, envelope: envelope)
+            if let tv = envelope.tv { onTVShowChange?(tv) }
             if followsUp, envelope.hasFollowUp { deferredTVEnvelope = envelope }
             scheduleRefresh(.communityAndReviews, after: writeRefreshDelay)
             return
@@ -8546,20 +8565,45 @@ private struct EpisodesSection: View {
                 .mediaDetailSurface(cornerRadius: 18)
             } else {
                 LazyVStack(spacing: 16) {
-                    ForEach(rows) { row in
-                        let tv = state(row)
-                        EpisodeCard(
-                            row: row,
-                            trailing: TVEpisodeTrailing.resolve(tv, isWatched: tv.map(isWatched) ?? false),
-                            onTick: { if let tv { onTick(tv) } },
-                            onMarkUpTo: tv.flatMap { tv in
-                                tv.canMarkUpTo && tv.markUpToPrompt != nil ? { onMarkUpTo(tv) } : nil
-                            },
-                            onSelect: row.summary.map { summary in { onSelect(summary) } }
-                        )
-                    }
+                    TVEpisodeRows(
+                        rows: rows,
+                        state: state,
+                        isWatched: isWatched,
+                        onTick: onTick,
+                        onMarkUpTo: onMarkUpTo,
+                        onSelect: onSelect
+                    )
                 }
             }
+        }
+    }
+}
+
+/// A season's episode rows, for a lazy stack: the season page's list, and Continue Watching's episode sheet (TV-701).
+/// Each row ticks and unticks its episode (TV-100, TV-102), opens its page, and offers Mark watched up to here on a
+/// long press (TV-108).
+struct TVEpisodeRows: View {
+    let rows: [TVEpisodeRowModel]
+    /// An episode's current TV state: a confirmed write's answer when the list predates it.
+    let state: (TVEpisodeRowModel) -> TVEpisodeState?
+    /// Whether an episode shows as watched, counting a pending tick (TV-705).
+    let isWatched: (TVEpisodeState) -> Bool
+    let onTick: (TVEpisodeState) -> Void
+    let onMarkUpTo: (TVEpisodeState) -> Void
+    let onSelect: (EpisodeSummary) -> Void
+
+    var body: some View {
+        ForEach(rows) { row in
+            let tv = state(row)
+            EpisodeCard(
+                row: row,
+                trailing: TVEpisodeTrailing.resolve(tv, isWatched: tv.map(isWatched) ?? false),
+                onTick: { if let tv { onTick(tv) } },
+                onMarkUpTo: tv.flatMap { tv in
+                    tv.canMarkUpTo && tv.markUpToPrompt != nil ? { onMarkUpTo(tv) } : nil
+                },
+                onSelect: row.summary.map { summary in { onSelect(summary) } }
+            )
         }
     }
 }

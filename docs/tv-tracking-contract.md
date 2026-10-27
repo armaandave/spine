@@ -209,7 +209,7 @@ A show that is finished returns to Completed instead of Watching.
 
 Ticking an aired episode records one viewing of it, at the moment of the tick.
 A tick stores that moment and its day on the user's calendar.
-Users can tick on the episode page, in the season's episode list, on the show page's Up next row, and from a Continue Watching card's touch-and-hold menu (TV-701).
+Users can tick on the episode page, in the season's episode list, on the show page's Up next row, and in the episode sheet a Continue Watching card opens (TV-701).
 Unaired episodes show their air date in place of a tick, or "TBA" when they have none.
 
 A tick creates no log. Activity shows the day's ticks as progress on the show (TV-703).
@@ -831,25 +831,32 @@ Continue Watching on Home and Profile lists shows, not seasons.
 It lists every show in Watching with an aired up-next episode, most recently watched first.
 That order goes by the latest calendar day of a tick or log under the show, then by when it was recorded; a show with nothing watched goes by when Watching was chosen.
 
-Each card shows the show's poster and title, then one line, for example "S1 E2 next · 4 of 10".
-It reads "S3 E1 · New · 20 of 21" when up next aired after the user's latest viewing of the show.
-Where the count doesn't fit, as on Profile, the line leaves it out.
-The card has no tick of its own.
+Each card shows the show's poster and title, then one line, for example "S1 E2 next · 4 of 10 ›".
+It reads "S3 E1 · New · 20 of 21 ›" when up next aired after the user's latest viewing of the show.
+Where the count doesn't fit, as on Profile's narrower cards, the line leaves it out.
+The card has no tick of its own and no touch-and-hold menu.
 
 Tapping the poster opens the show.
-Touching and holding it opens the standard menu, previewing up next's still, or the show's artwork when there is none, with "S2 E5 · Marionettes" under it.
-The menu offers:
+The title and the line are one button, at least 44 points tall, which dims while pressed. It opens a half-height sheet of up next's season, titled with the show and the season as the season page names it ("The Crown · Season 2").
+VoiceOver reads the button as "The Crown, S2 E5 next, 4 of 10, shows Season 2 episodes".
 
-- Mark S2 E5 Watched, which ticks up next (TV-100), asks the earlier-episodes question (TV-107) and opens the season-finish composer as soon as the tick saves (TV-403);
-- Log S2 E5…, which opens the episode page's composer (TV-404);
-- Go to Season 2, which opens the season's page; and
-- right after a tick from this menu, while the card stays on screen, Mark S2 E4 Unwatched, which unticks the episode it ticked (TV-102).
-  It stays through a pull to refresh and through the tick's own earlier-episodes question and Log Season.
-  It goes when the card leaves the screen (another tab, or a page or the Log screen opening over it), when up next moves on elsewhere, or when the season's log is saved.
-  If the episode changed elsewhere in the meantime, so the untick changes nothing, the card says so, with an error haptic.
+The sheet lists the whole season in the season page's episode rows, opening with up next's row at the top.
+That row shows at once, with up next's title and still from the card, while the rest of the season loads with the season page's request; nothing covers the sheet while it loads.
+In the sheet, as on the season page:
 
-VoiceOver offers the same items as actions on the card, and reads the show and its line.
-After a write from the menu, the card's line changes where it is, with a success haptic; a failed write restores the card, with an error haptic and a short message (TV-705).
+- tapping a tick marks the episode watched (TV-100), and tapping a filled tick unticks it (TV-102);
+- touching and holding a row offers Mark watched up to here (TV-108); and
+- tapping a row's body closes the sheet and opens the episode's page, which pages through the season's episodes.
+
+✕ closes the sheet. Its ··· menu offers Log Season 2…, the season page's composer (TV-404), and Open Show.
+
+A tick that finishes the season opens Log Season over the sheet at once, after the earlier-episodes question when the server asks it (TV-107, TV-403).
+When Log Season closes, saved or not, and up next has moved on to a later season, the sheet shows that season; a show caught up or finished stays on the season it finished, every tick filled.
+A row or Open Show tapped while a write is on its way opens its page once that write answers, and not when the write asks the question, opens Log Season or fails.
+A sheet closed before its write answers leaves that write's question, Log Season or failure message to show over the screen.
+
+After each write in the sheet, the card's line changes where it is, and Home's activity or Profile's Recent Activity reloads (TV-703).
+A failed tick or untick restores its row, with an error haptic and a short message (TV-705).
 The show keeps its place in the row until the screen next loads it: on the next visit or a pull to refresh.
 Continue Watching sends up next's title and still from the stored listing (TV-207).
 
@@ -1138,7 +1145,7 @@ After trying the app on 2026-10-26, the user asked for four changes, now in the 
 - the season-finish composer opens without a wait (TV-403); and
 - Log on the show page starts on Whole show (TV-404).
 
-Then the user chose touch and hold for marking progress from Home: Continue Watching's tick gave way to the card's menu (TV-100, TV-701).
+Then the user chose how to mark progress from Home: a Continue Watching card's title and line open a half-height sheet of up next's season, in the season page's episode rows (TV-100, TV-701). The touch-and-hold menu built first was removed.
 
 Whether ticks post to friends' feeds was first settled by AGENTS.md section 9, whose feed then held logs, ratings and list activity, so ticks didn't post.
 The activity contract (`docs/activity-contract.md`) replaced that on 2026-10-26: a day's ticks are progress on the show, and TV-703 now follows it.
