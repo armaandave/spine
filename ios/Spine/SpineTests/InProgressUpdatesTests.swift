@@ -53,6 +53,108 @@ final class InProgressUpdatesTests: XCTestCase {
                        "Cowboy Bebop, update progress")
     }
 
+    // MARK: The bar on the poster
+
+    func testTheBarFillsToHowFarAlongEachTypeIs() throws {
+        func fraction(_ item: Spine.LibraryItem) -> Double? { InProgressCardPresentation.progressFraction(for: item) }
+
+        // A show: distinct aired regular episodes watched over aired (TV-104), from the row's stored counts.
+        let show = Self.item("tv", "1396", "Breaking Bad", tracking: Self.tracking(
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 8, aired: 62, upNext: (2, 2))
+        ))
+        XCTAssertEqual(try XCTUnwrap(fraction(show)), 8.0 / 62, accuracy: 0.0001)
+        let unknownListing = Self.item("tv", "2", "Unknown", tracking: Self.tracking(
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", upNext: (1, 2))
+        ))
+        XCTAssertNil(fraction(unknownListing), "No stored count, no invented bar")
+
+        // A book: its current journey's pages, or its percent.
+        let pages = Self.item("book", "1", "Pages", tracking: Self.bookTracking(status: "In progress", pages: 119))
+        XCTAssertEqual(try XCTUnwrap(fraction(pages)), 119.0 / 476, accuracy: 0.0001)
+        let percent = Self.item("book", "2", "Percent", tracking: Self.tracking(
+            progress: ProgressState(kind: "percentage", value: 35, max: 100, unit: "percent"),
+            book: BookTrackingState(currentJourney: BookJourneyState(
+                id: 9, status: "In progress", progress: ProgressState(kind: "percentage", value: 35, max: 100, unit: "percent")
+            ))
+        ))
+        XCTAssertEqual(try XCTUnwrap(fraction(percent)), 0.35, accuracy: 0.0001)
+        let pagesOnlyRow = Self.item("book", "3", "List row", tracking: Self.tracking(
+            progress: ProgressState(kind: "pages", value: 238, max: 476, unit: "page")
+        ))
+        XCTAssertEqual(fraction(pagesOnlyRow), 0.5, "A row without the journey uses its progress keys")
+
+        // Manga, comics, anime: the count over the total, when one is known.
+        let manga = Self.item("manga", "2", "Berserk", tracking: Self.tracking(
+            progress: ProgressState(kind: "count", value: 90, max: 360, unit: "chapter")
+        ))
+        XCTAssertEqual(fraction(manga), 0.25)
+        let ongoing = Self.item("manga", "3", "One Piece", tracking: Self.tracking(
+            progress: ProgressState(kind: "count", value: 90, max: nil, unit: "chapter")
+        ))
+        XCTAssertNil(fraction(ongoing), "No total, no bar")
+        let anime = Self.item("anime", "1", "Cowboy Bebop", tracking: Self.tracking(
+            progress: ProgressState(kind: "count", value: 13, max: 26, unit: "episode")
+        ))
+        XCTAssertEqual(fraction(anime), 0.5)
+
+        // A game: its playthrough's percent; hours only, no bar.
+        let percentGame = Self.item("game", "1", "Hades", tracking: Self.tracking(
+            game: Self.game(playthrough: Self.playthrough(minutes: 720, percentage: 58))
+        ))
+        XCTAssertEqual(try XCTUnwrap(fraction(percentGame)), 0.58, accuracy: 0.0001)
+        let hoursOnly = Self.item("game", "2", "Hours", tracking: Self.tracking(
+            progress: ProgressState(kind: "minutes", value: 720, max: nil, unit: "minute"),
+            game: Self.game(playthrough: Self.playthrough(minutes: 720, percentage: nil))
+        ))
+        XCTAssertNil(fraction(hoursOnly))
+
+        // Nothing done yet: no empty track.
+        let unread = Self.item("book", "4", "Unread", tracking: Self.bookTracking(status: "In progress", pages: 0))
+        XCTAssertNil(fraction(unread))
+        let unstarted = Self.item("tv", "3", "Unstarted", tracking: Self.tracking(
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 0, aired: 10, upNext: (1, 1))
+        ))
+        XCTAssertNil(fraction(unstarted))
+        XCTAssertNil(fraction(Self.item("movie", "5", "Movie", tracking: Self.tracking(
+            progress: ProgressState(kind: "binary", value: 0, max: 1, unit: "movie")
+        ))))
+        XCTAssertNil(fraction(Self.item("anime", "6", "No progress")))
+
+        // Past the total (a stale total, or a re-numbered season): full, never more.
+        let over = Self.item("manga", "4", "Over", tracking: Self.tracking(
+            progress: ProgressState(kind: "count", value: 400, max: 360, unit: "chapter")
+        ))
+        XCTAssertEqual(fraction(over), 1)
+    }
+
+    func testTheBarMovesWhereTheCardIsAfterASave() async throws {
+        // A book's page saved from its panel.
+        let book = Self.item("book", "427578", "Project Hail Mary", tracking: Self.bookTracking(status: "In progress", pages: 40))
+        media.details[book.media.ref.id] = Self.bookDetail(book.media.ref, status: "In progress", pages: 40)
+        tracking.bookProgressResult = Self.bookTracking(status: "In progress", pages: 238)
+        let home = homeViewModel(items: [book])
+        XCTAssertEqual(try XCTUnwrap(InProgressCardPresentation.progressFraction(for: home.inProgressItems[0])),
+                       40.0 / 476, accuracy: 0.0001)
+
+        _ = await home.progressUpdates.updateProgress(for: book)
+        let update = try XCTUnwrap(home.progressUpdates.update)
+        let saved = await update.saveBookProgress(ProgressUpdateSaveRequest(mode: .pages, value: 238))
+
+        XCTAssertTrue(saved)
+        XCTAssertEqual(home.inProgressItems.map(\.id), [book.id], "The card stays where it is")
+        XCTAssertEqual(InProgressCardPresentation.progressFraction(for: home.inProgressItems[0]), 0.5)
+
+        // A tick in a show's episode sheet.
+        let show = Self.item("tv", "1396", "Breaking Bad", tracking: Self.tracking(
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 8, aired: 62, upNext: (2, 2))
+        ))
+        let ticked = ContinueWatchingTicks.replacingTV(
+            TVTrackingSurfacesTests.showState(status: "In progress", watched: 31, aired: 62, upNext: (2, 3)),
+            id: show.id, in: [show]
+        )
+        XCTAssertEqual(InProgressCardPresentation.progressFraction(for: ticked[0]), 0.5)
+    }
+
     // MARK: Books: the page's progress panel
 
     func testABooksCardOpensItsPagesPanelAndSavesProgressWithThePagesOneRequest() async throws {
@@ -316,7 +418,8 @@ final class InProgressUpdatesTests: XCTestCase {
         )
         XCTAssertTrue(source.contains("InProgressPoster(item: item)"))
         for code in ["InProgressCard(", "InProgressUpdates", "progressUpdates", "inProgressUpdatePresentations",
-                     "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line"] {
+                     "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line",
+                     "InProgressBar", "progressFraction"] {
             XCTAssertFalse(source.contains(code), "Profile still has \(code)")
         }
     }

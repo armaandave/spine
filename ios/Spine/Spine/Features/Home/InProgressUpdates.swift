@@ -366,10 +366,46 @@ enum InProgressCardPresentation {
             .compactMap { $0 }
             .joined(separator: ", ")
     }
+
+    /// How far along the title is, for the bar on its poster, from stored values only: a show's watched over aired
+    /// regular episodes (TV-104), a book's pages or percent in its current journey, a game playthrough's percent, or
+    /// chapters, issues or episodes over the total. Nil, so no bar, without a known total or with nothing done yet;
+    /// never more than 1.
+    static func progressFraction(for item: LibraryItem) -> Double? {
+        let tracking = item.tracking
+        switch item.media.ref.mediaType {
+        case "tv":
+            if let tv = tracking.tv {
+                return fraction(tv.watchedCount.map(Double.init), of: tv.airedCount.map(Double.init))
+            }
+        case "book":
+            if let journey = tracking.book?.currentJourney?.progress { return fraction(of: journey) }
+        case "game":
+            // A playthrough with hours only has no bar.
+            if let game = tracking.game {
+                return fraction(game.currentPlaythrough?.percentage.map(Double.init), of: 100)
+            }
+        default:
+            break
+        }
+        guard let progress = tracking.progress else { return nil }
+        return fraction(of: progress)
+    }
+
+    private static func fraction(of progress: ProgressState) -> Double? {
+        fraction(progress.value.map { NSDecimalNumber(decimal: $0).doubleValue },
+                 of: progress.max.map { NSDecimalNumber(decimal: $0).doubleValue })
+    }
+
+    private static func fraction(_ value: Double?, of total: Double?) -> Double? {
+        guard let value, let total, value > 0, total > 0 else { return nil }
+        return min(value / total, 1)
+    }
 }
 
 /// A card in Home's In progress rail (TV-701): the poster opens the title's page; the title and "Update progress ›"
 /// are one button, at least 44 points tall, that opens its progress UI over Home. Every media type reads the same.
+/// A thin bar along the poster's bottom fills to how far along the title is, when that is known.
 /// Profile's In progress rail shows posters only.
 struct InProgressCard: View {
     /// Room under the poster for a two-line title and the line, so every card in the rail is the same height and no
@@ -392,6 +428,13 @@ struct InProgressCard: View {
                     mediaType: item.media.ref.mediaType,
                     orientation: item.media.posterOrientation
                 )
+                .overlay(alignment: .bottom) {
+                    if let progressFraction {
+                        InProgressBar(fraction: progressFraction)
+                    }
+                }
+                // A save from the card's progress UI moves the bar where it is.
+                .animation(.smooth(duration: 0.3), value: progressFraction)
                 .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
             }
             .buttonStyle(.plain)
@@ -420,6 +463,31 @@ struct InProgressCard: View {
             .accessibilityIdentifier("in-progress.update")
         }
         .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
+    }
+
+    private var progressFraction: Double? {
+        InProgressCardPresentation.progressFraction(for: item)
+    }
+}
+
+/// The hairline on a card's poster: a translucent dark track inset from the corners, filled with the app's tint to
+/// how far along the title is. VoiceOver skips it; the card's label already reads the progress.
+private struct InProgressBar: View {
+    private static let inset = PosterSlot.carousel.cornerRadius
+    private static let width = PosterSlot.carousel.size.width - 2 * inset
+    private static let height: CGFloat = 3
+
+    let fraction: Double
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(.black.opacity(0.45))
+            // At least a dot, so a first page or episode shows.
+            Capsule().fill(.tint).frame(width: max(Self.height, Self.width * fraction))
+        }
+        .frame(width: Self.width, height: Self.height)
+        .padding(.bottom, Self.inset * 0.75)
+        .accessibilityHidden(true)
     }
 }
 

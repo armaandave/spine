@@ -834,6 +834,7 @@ That order goes by the latest calendar day of a tick or log under the show, then
 On Home, each card shows the show's poster and title, then one line, "Update progress ›", in the app's normal width.
 Profile's In progress row shows posters only, with no title and no line: tapping a poster opens the title's page, and nothing opens over Profile. Progress is updated from Home.
 Every card in the In progress row reads the same, whatever its media type, and shows no counts (see "Update progress on other media" below).
+On Home, a thin bar along each poster's bottom fills, in the app's tint, to how far along the title is (a show's watched over aired regular episodes, TV-104), moves where it is after a save, and doesn't show without a known total or before any progress; VoiceOver skips it and Profile's posters have none.
 The card has no tick of its own and no touch-and-hold menu.
 
 Tapping the poster opens the show.
