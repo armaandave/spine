@@ -58,6 +58,8 @@ class FakeShow:
     # episode's date.
     season_air_dates: dict[int, date | None] = field(default_factory=dict)
     poster_path: str | None = "/poster.jpg"
+    # Season posters TMDB has, by season number; a season missing here has none.
+    season_posters: dict[int, str] = field(default_factory=dict)
 
     def set_season(self, season_number, spec, *, start=None):
         """Replace a season's episodes; spec as in episodes_from_spec."""
@@ -403,7 +405,7 @@ class FakeTVProvider:
                     "name": "Specials" if number == 0 else f"Season {number}",
                     "air_date": self._season_air_date(show, number),
                     "episode_count": len(show.seasons[number]),
-                    "poster_path": None,
+                    "poster_path": show.season_posters.get(number),
                 }
                 for number in sorted(show.seasons)
             ],
@@ -417,7 +419,7 @@ class FakeTVProvider:
         return {
             "name": "Specials" if number == 0 else f"Season {number}",
             "season_number": number,
-            "poster_path": None,
+            "poster_path": show.season_posters.get(number),
             "overview": "",
             "vote_average": 0,
             "air_date": self._season_air_date(show, number),

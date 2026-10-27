@@ -663,11 +663,15 @@ final class PersonDetailTests: XCTestCase {
 
         await viewModel.load()
         await viewModel.loadNextPage()
+        // What's on screen while the reload runs: it never drops back to the first page.
+        var shownDuringReload: [[String]] = []
+        repository.onCreditsPage = { shownDuringReload.append(viewModel.filmography.map(\.title)) }
         await viewModel.reloadLoadedPages()
 
         XCTAssertEqual(repository.creditPages, [1, 2, 1, 2])
         XCTAssertEqual(viewModel.filmography.map(\.title), ["First", "Second"])
         XCTAssertEqual(viewModel.detail?.completion?.countText, "2 of 2")
+        XCTAssertEqual(shownDuringReload, [["First", "Second"], ["First", "Second"]])
     }
 
     @MainActor
@@ -969,6 +973,7 @@ private final class ScriptedPeopleRepository: PeopleRepository {
     var requests: [PersonRef] = []
     var filters: [MediaFilterState] = []
     var creditPages: [Int?] = []
+    var onCreditsPage: (() -> Void)?
 
     init(result: Result<PersonDetail, Error>) {
         self.results = [result]
@@ -998,6 +1003,7 @@ private final class ScriptedPeopleRepository: PeopleRepository {
         creditsPage: Int?
     ) async throws -> PersonDetail {
         creditPages.append(creditsPage)
+        onCreditsPage?()
         return try await detail(ref: ref, filter: filter)
     }
 }

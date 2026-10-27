@@ -150,6 +150,44 @@ final class CompanyDetailViewModel {
         }
     }
 
+    /// After a write elsewhere, reloads the catalog rows already shown for these roles and swaps each role's
+    /// in at once: a reset load keeps only the first page, which would cut a long catalog short under the user.
+    func refreshLoadedCatalogs(for roles: [CompanyCatalogRole]) async {
+        let requestRevision = filterRevision
+        let requestFilter = filter
+        let isCurrent = { [weak self] in
+            requestRevision == self?.filterRevision && requestFilter == self?.filter
+        }
+        for role in roles {
+            guard let shown = mediaByRole[role], isCurrent() else { continue }
+            do {
+                let pages = try await PagedReload.pages(
+                    covering: shown.count,
+                    resultCount: { $0.results.count },
+                    next: { $0.next }
+                ) { page in
+                    guard isCurrent() else { throw CancellationError() }
+                    return try await companyRepository.catalog(ref: ref, role: role, page: page, filter: requestFilter)
+                }
+                guard isCurrent(), let last = pages.last else { return }
+                var seen = Set<String>()
+                let media = pages.flatMap(\.results).filter { seen.insert($0.id).inserted }
+                mediaByRole[role] = media
+                nextPageByRole[role] = APIPageCursor.nextPage(from: last.next)
+                if let completion = last.completion {
+                    completionByRole[role] = completion
+                } else if last.next == nil {
+                    completionByRole[role] = Self.completion(from: media)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // The rows already shown stay; the next refresh tries again.
+                handleUnauthorized(error)
+            }
+        }
+    }
+
     func applyFilter(to roles: Set<CompanyCatalogRole>) async {
         filterRevision += 1
         let applyRevision = filterRevision
@@ -348,13 +386,8 @@ struct CompanyDetailView: View {
                 media.contains(where: { $0.ref.id == changedRef.id }) ? role : nil
             }
             guard !affectedRoles.isEmpty else { return }
-            Task {
-                await viewModel.load()
-                let primaryRole = viewModel.detail?.catalogRoles.first
-                for role in affectedRoles where role != primaryRole {
-                    await viewModel.loadCatalog(for: role, reset: true)
-                }
-            }
+            // In place: a title marked from this page mustn't cut its catalog back to the first page.
+            Task { await viewModel.refreshLoadedCatalogs(for: affectedRoles) }
         }
     }
 

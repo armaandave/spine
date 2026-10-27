@@ -277,14 +277,20 @@ nonisolated enum TVTrackingPresentation {
         }
     }
 
-    /// The show's + menu: Watching (and Resume when Paused), Planning, Pause, Drop, Rewatch or Stop Rewatching,
-    /// Log, and Remove from Library for a show in the library. Base options are always listed; unavailable ones
-    /// carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server sends.
+    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Rewatch or Stop
+    /// Rewatching, Log, and Remove from Library for a show in the library. Base options are always listed;
+    /// unavailable ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever
+    /// the server sends.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
-        items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
-        if let resume = menu.optionalItem("resume", "Resume", "play.fill", .action(.resume)) { items.append(resume) }
+        if tv.status == "Paused" {
+            // One row: Resume continues where the user was, as Watching does (TV-007).
+            items.append(menu.optionalItem("resume", "Resume", "play.fill", .action(.resume))
+                ?? menu.item("watching", "Resume", "play.fill", .action(.watching)))
+        } else {
+            items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
+        }
         items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
         items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
         items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
@@ -301,14 +307,15 @@ nonisolated enum TVTrackingPresentation {
         return items
     }
 
-    /// A season's + menu: Log Season, and Rewatch Season once the season is finished.
+    /// A season's + menu: Log Season, and Rewatch Season once the season is finished. During a rewatch Rewatch
+    /// Season is left out rather than greyed out (TV-600).
     static func seasonMenu(for season: TVSeasonState) -> [TVMenuItem] {
         let menu = MenuSource(available: season.availableActions, reasons: season.actionReasons, selected: nil)
         var items = [menu.item("log_season", "Log Season", "square.and.pencil", .log)]
-        if let rewatch = menu.optionalItem(
-            "rewatch_season", "Rewatch Season", "arrow.counterclockwise", .rewatchSeason(season.seasonNumber)
-        ) {
-            items.append(rewatch)
+        if season.availableActions.contains("rewatch_season") {
+            items.append(menu.item(
+                "rewatch_season", "Rewatch Season", "arrow.counterclockwise", .rewatchSeason(season.seasonNumber)
+            ))
         }
         return items
     }
@@ -339,8 +346,8 @@ nonisolated enum TVTrackingPresentation {
             )
         }
 
-        /// Options listed only in some states (Resume, Rewatch, Stop Rewatching, Rewatch Season): shown when the
-        /// server lists them as available or explains why they aren't.
+        /// Options listed only in some states (Resume, Rewatch, Stop Rewatching): shown when the server lists them
+        /// as available or explains why they aren't.
         func optionalItem(_ key: String, _ title: String, _ systemImage: String, _ command: TVMenuItem.Command) -> TVMenuItem? {
             guard available.contains(key) || reasons[key] != nil || selected == key else { return nil }
             return item(key, title, systemImage, command)

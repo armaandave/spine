@@ -2,6 +2,7 @@ from contextlib import suppress
 from decimal import Decimal
 
 from django.apps import apps
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
@@ -724,9 +725,10 @@ def tv_show_item(source, media_id, *, create=True):
 def tv_family_item(show_item, media_type, season_number=None, episode_number=None):
     """Return a season or episode Item of the show, creating it from the show's copy.
 
-    No provider call: a new Item takes the show's title and image, or the stored
-    listing's episode title, plus the listing's date and length, as tv_tracking does
-    for the Items a write needs.
+    No provider call: a new Item takes the show's title, or the stored listing's episode
+    title, and the stored listing's season poster or episode still, as tv_tracking does
+    for the Items a write needs, plus the listing's date and length. Never the show's
+    poster: pages show the saved image.
     """
     if media_type == MediaTypes.TV.value:
         return show_item
@@ -743,15 +745,18 @@ def tv_family_item(show_item, media_type, season_number=None, episode_number=Non
     if show_item.source == Sources.MANUAL.value:
         raise NotFound
     title = show_item.title
-    image = show_item.image
+    image = None
     listing = tv_listing.stored_listing(show_item)
     # The listing's dates and lengths come along; genres stay on the show.
     fields = listing.item_fields(media_type, season_number, episode_number) if listing else {}
-    if media_type == MediaTypes.EPISODE.value:
+    if media_type == MediaTypes.SEASON.value:
+        image = listing.season_images.get(season_number) if listing else None
+    else:
         listed = listing.episode(season_number, episode_number) if listing else None
         if listed is not None:
             title = listed.title or title
-            image = listed.image or image
+            image = listed.image
+    image = image or settings.IMG_NONE
     item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image, **fields})
     return item
 
