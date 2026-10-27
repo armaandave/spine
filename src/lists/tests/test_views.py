@@ -625,8 +625,13 @@ class ListsModalViewTests(TestCase):
             owner=self.user,
         )
 
-    def test_lists_modal_view(self):
+    @patch("app.providers.services.get_media_metadata")
+    def test_lists_modal_view(self, mock_get_metadata):
         """Test the basic lists_modal view."""
+        mock_get_metadata.return_value = {
+            "title": "Movie",
+            "image": "http://example.com/movie.jpg",
+        }
         response = self.client.get(
             reverse(
                 "lists_modal",

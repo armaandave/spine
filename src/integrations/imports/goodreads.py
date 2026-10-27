@@ -15,6 +15,7 @@ from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.providers import hardcover, openlibrary, services
 from app.providers.search_rank import normalize_search_text
 from app.services import create_diary_entry
+from integrations.imports import helpers
 from integrations.imports.helpers import MediaImportError
 
 logger = logging.getLogger(__name__)
@@ -323,6 +324,12 @@ class GoodReadsImporter:
             update_fields.append("total_pages")
         if update_fields:
             item.save(update_fields=update_fields)
+        # Only the first publication year, which the export or search result carries;
+        # the metadata fill completes the Item later.
+        helpers.store_free_metadata(
+            item,
+            {"first_publish_year": row.original_publication_year or result.get("first_publish_year")},
+        )
         return item
 
     def _create_book(self, item, row):

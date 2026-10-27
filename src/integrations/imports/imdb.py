@@ -188,6 +188,12 @@ class IMDBImporter:
             return
 
         item, _ = self._create_or_update_item(tmdb_data, media_type)
+        # Only the free fields (TMDB's date, the export's runtime); the metadata fill
+        # completes the Item later.
+        helpers.store_free_metadata(
+            item,
+            {"release_date": tmdb_data.get("release_date"), "runtime": row.get("Runtime (mins)")},
+        )
         instance = self._create_media_instance(item, row, media_type)
         self.bulk_media[media_type].append(instance)
 
@@ -239,6 +245,7 @@ class IMDBImporter:
                 "title": movie["title"],
                 "image": app.providers.tmdb.get_image_url(movie["poster_path"]),
                 "media_type": MediaTypes.MOVIE.value,
+                "release_date": movie.get("release_date"),
             }
 
         if media_type == MediaTypes.TV.value and response.get("tv_results"):
@@ -248,6 +255,7 @@ class IMDBImporter:
                 "title": tv_show["name"],
                 "image": app.providers.tmdb.get_image_url(tv_show["poster_path"]),
                 "media_type": MediaTypes.TV.value,
+                "release_date": tv_show.get("first_air_date"),
             }
 
         return None

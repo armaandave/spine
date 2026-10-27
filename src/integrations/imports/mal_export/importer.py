@@ -13,6 +13,7 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
+from api.services.item_metadata import store_item_metadata
 from app import single_weight
 from app.models import (
     Anime,
@@ -233,6 +234,7 @@ class MALExportImporter:
             elif image != settings.IMG_NONE and item.image in ("", settings.IMG_NONE):
                 item.image = image
                 item.save(update_fields=["image"])
+            store_item_metadata(item, data)
 
     def _create_tracking(self, entries, items, metadata):
         bulk_media = defaultdict(list)
@@ -336,13 +338,16 @@ def backfill_metadata(item_ids, fetcher=fetch_mal_metadata):
             )
             failed.append(item.id)
             continue
-        image = data.get("image") if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            continue
+        image = data.get("image")
         if image and image != settings.IMG_NONE:
             # Only the poster changes; Item's post_save hook only acts on creation.
             Item.objects.filter(
                 id=item.id,
                 image__in=("", settings.IMG_NONE),
             ).update(image=image)
+        store_item_metadata(item, data)
     return failed
 
 

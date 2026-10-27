@@ -45,6 +45,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
+from api.services import stats_cache
 from app import single_weight, tv_listing, user_calendar
 from app.models import (
     TV,
@@ -972,6 +973,8 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
     if show_item.source == Sources.MANUAL.value:
         msg = f"Manual show {show_item} has no Item for {missing_seasons or missing_episodes}"
         raise TVInvalid(msg)
+    # The listing's dates and lengths come along (for statistics); genres stay on the
+    # show, which stats and the diary fold to.
     new_items = [
         Item(
             media_id=show_item.media_id,
@@ -980,6 +983,7 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
             season_number=number,
             title=show_item.title,
             image=show_item.image or settings.IMG_NONE,
+            **(listing.item_fields(MediaTypes.SEASON.value, number) if listing else {}),
         )
         for number in missing_seasons
     ]
@@ -994,6 +998,11 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
                 episode_number=episode_number,
                 title=(listed.title if listed and listed.title else show_item.title),
                 image=(listed.image if listed and listed.image else settings.IMG_NONE),
+                **(
+                    listing.item_fields(MediaTypes.EPISODE.value, season_number, episode_number)
+                    if listing
+                    else {}
+                ),
             ),
         )
     Item.objects.bulk_create(new_items, ignore_conflicts=True)
@@ -1447,6 +1456,9 @@ def _run_locked(
         episode_number=outcome.get("episode_number", episode_number),
         listing=listing,
     )
+    if result.changed or ctx.created:
+        # Viewings are bulk-created and raw-deleted, so no receiver sees them (STAT-006).
+        stats_cache.bump_user(user)
     if ctx.tv is not None and ctx.tv.pk is not None and not outcome.get("left_library"):
         if ctx.derived and listing is not None:
             _reconcile(ctx)
@@ -1743,6 +1755,9 @@ def _reconcile(ctx, *, fresh=False):  # noqa: C901, PLR0912, PLR0915
         or ctx.created,
     )
     ctx.flush_tv()
+    if anything:
+        # Show and season states are written with update() and bulk writes (STAT-006).
+        stats_cache.bump_user(ctx.user)
     if anything or tv.reconciled_at is None:
         cache_changes["reconciled_at"] = ctx.now
     if anything:
@@ -4056,6 +4071,8 @@ def reconcile_imported(user, show_items, *, overwritten_show_item_ids=()):
     fills back. A show whose listing is unavailable is left for the hourly job.
     """
     overwritten = {int(value) for value in overwritten_show_item_ids}
+    if show_items:
+        stats_cache.bump_user(user)
     for show_item in show_items:
         try:
             listing = tv_listing.get_listing(show_item)
@@ -4289,6 +4306,7 @@ def on_episode_saved(episode, created):
     """An Episode row saved outside this module: a fact as saved; work the show out."""
     if is_writing():
         return
+    _bump_season_owner(episode.related_season_id)
     _queue(season_id=episode.related_season_id)
 
 
@@ -4303,7 +4321,17 @@ def on_episode_deleted(episode, origin):
     )
     if not is_episode_origin:
         return
+    _bump_season_owner(episode.related_season_id)
     _queue(removed_season_id=episode.related_season_id)
+
+
+def _bump_season_owner(season_id):
+    """Invalidate the cached stats of the user a viewing belongs to (STAT-006)."""
+    if season_id is None or not stats_cache.enabled():
+        return
+    user_id = Season.objects.filter(pk=season_id).values_list("user_id", flat=True).first()
+    if user_id is not None:
+        stats_cache.bump_user(user_id)
 
 
 def on_status_written(media, previous_status):

@@ -7,7 +7,6 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.core.cache import cache
 from django.utils.text import slugify
-from django.utils import timezone
 
 from app import helpers
 from app.models import MediaTypes, Sources
@@ -473,7 +472,7 @@ def discover(*, page=1, page_size=None, genre=None, year=None, platform=None):
 
 def game(media_id):
     """Return the metadata for the selected game from IGDB."""
-    cache_key = f"{Sources.IGDB.value}_{MediaTypes.GAME.value}_{media_id}_v4"
+    cache_key = f"{Sources.IGDB.value}_{MediaTypes.GAME.value}_{media_id}_v5"
     data = cache.get(cache_key)
     if data is None:
         access_token = get_access_token()
@@ -661,9 +660,11 @@ def get_start_date(response):
     # when no release date, first_release_date is not present in the response
     # e.g game: 210710
     try:
-        return timezone.datetime.fromtimestamp(
+        # IGDB release timestamps are UTC midnights; reading them in the server's
+        # zone would put a 1 January release in the previous year.
+        return datetime.fromtimestamp(
             response["first_release_date"],
-            tz=timezone.get_current_timezone(),
+            tz=UTC,
         ).strftime("%Y-%m-%d")
     except KeyError:
         return None

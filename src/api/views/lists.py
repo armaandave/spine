@@ -354,6 +354,14 @@ def _touch_list(custom_list):
     custom_list.save(update_fields=["updated_at"])
 
 
+def _may_write_tags(request, custom_list):
+    """Return False when anyone but the owner sends ``tags`` (STAT-402).
+
+    Such a request saves nothing, even from a collaborator who may edit the rest.
+    """
+    return "tags" not in request.data or custom_list.owner_id == request.user.pk
+
+
 def _can_view_list(user, custom_list):
     if users_blocked(user, custom_list.owner):
         return False
@@ -524,6 +532,7 @@ class ListsView(APIView):
                 visibility=data.get("visibility", CustomList.Visibility.PRIVATE),
                 is_ranked=data.get("is_ranked", False),
                 list_type=data.get("list_type", CustomList.ListType.MEDIA),
+                tags=data.get("tags", []),
             )
         except IntegrityError as error:
             raise ValidationError({
@@ -633,7 +642,7 @@ class ListDetailView(APIView):
 
     def patch(self, request, list_id):
         custom_list = get_object_or_404(CustomList, id=list_id)
-        if not custom_list.user_can_edit(request.user):
+        if not custom_list.user_can_edit(request.user) or not _may_write_tags(request, custom_list):
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = CustomListWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -643,7 +652,7 @@ class ListDetailView(APIView):
             raise ValidationError({
                 "list_type": ["List type cannot be changed."],
             })
-        for field in ["name", "slug", "description", "visibility"]:
+        for field in ["name", "slug", "description", "visibility", "tags"]:
             if field in data:
                 setattr(custom_list, field, data[field])
         if data.get("is_ranked") is True and not custom_list.is_ranked:
@@ -794,6 +803,7 @@ class ListItemsView(APIView):
             defaults=defaults,
         )
         if created:
+            _touch_list(custom_list)
             Activity.objects.create(
                 actor=request.user,
                 verb="list_item_added",
@@ -821,6 +831,8 @@ class ListItemDetailView(APIView):
         deleted, _ = CustomListItem.objects.filter(custom_list=custom_list, item_id=item_id).delete()
         if deleted and custom_list.is_ranked:
             _renumber_list_items(custom_list)
+        if deleted:
+            _touch_list(custom_list)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -850,6 +862,7 @@ class ListItemsReorderView(APIView):
         for index, item_id in enumerate(item_ids, start=1):
             list_items[item_id].position = index
         CustomListItem.objects.bulk_update(list_items.values(), ["position"])
+        _touch_list(custom_list)
         return Response(list_payload(custom_list, request=request, include_items=True))
 
 

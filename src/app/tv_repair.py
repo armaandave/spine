@@ -19,6 +19,7 @@ from django.db import transaction
 from django.db.models import Q
 from simple_history.utils import bulk_update_with_history
 
+from api.services import stats_cache
 from app import tv_listing, tv_tracking, user_calendar
 from app.models import TV, DiaryEntry, Episode, Item, MediaTypes, Season, Status
 
@@ -225,6 +226,9 @@ def fill_empty_stars(user, show_item):
                 default_change_reason=STAR_FILL_REASON,
                 default_date=now,
             )
+    if filled:
+        # bulk_update_with_history sends no signals; Highest rated reads these stars.
+        stats_cache.bump_user(user)
     return [
         {
             "season_number": row.item.season_number if isinstance(row, Season) else None,

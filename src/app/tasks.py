@@ -455,3 +455,19 @@ def cleanup_user_messages():
     logger.info("Deleted %s old shown user messages.", deleted_count)
 
     return deleted_count
+
+
+@shared_task(name="Fill item metadata", ignore_result=True)
+def fill_item_metadata(cursor=0, state=None, token=None):
+    """Run one ~30 s chunk of the paced metadata fill and queue the next (app.metadata_fill)."""
+    from app import metadata_fill  # noqa: PLC0415
+
+    metadata_fill.chain_chunk(cursor=cursor, state=state, token=token)
+
+
+@shared_task(name="Sweep item metadata")
+def sweep_item_metadata():
+    """Fill Items tracked or logged in the last 48 h, then resume the fill's backlog."""
+    from app import metadata_fill  # noqa: PLC0415
+
+    return metadata_fill.sweep()

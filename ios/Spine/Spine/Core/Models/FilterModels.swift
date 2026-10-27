@@ -119,6 +119,15 @@ struct MediaFilterState: Equatable {
     var hasReview = false
     var liked = false
     var service: StreamingFilterService = .any
+    /// Stats drill-downs (STAT-400): filter on stored values only, with no provider call.
+    var skipBackfill = false
+    /// Stats drill-downs (STAT-400): a show's `item_id` also returns its season and episode logs,
+    /// and season and episode logs match genres, languages and years through their show.
+    var tvRollup = false
+    /// STAT-211 genre group keys (`genre_group`).
+    var genreGroups: [String] = []
+    /// Original language names (`original_language`), never the `language` facet.
+    var originalLanguages: [String] = []
 
     var isActive: Bool {
         activeCount > 0
@@ -134,8 +143,8 @@ struct MediaFilterState: Equatable {
         if year != nil || yearMin != nil || yearMax != nil { count += 1 }
         if releaseStatus != nil { count += 1 }
         if length != nil { count += 1 }
-        if !genres.isEmpty || !excludedGenres.isEmpty { count += 1 }
-        if !languages.isEmpty || !excludedLanguages.isEmpty { count += 1 }
+        if !genres.isEmpty || !excludedGenres.isEmpty || !genreGroups.isEmpty { count += 1 }
+        if !languages.isEmpty || !excludedLanguages.isEmpty || !originalLanguages.isEmpty { count += 1 }
         if !platforms.isEmpty || !excludedPlatforms.isEmpty { count += 1 }
         if ratingMin != nil || ratingMax != nil { count += 1 }
         if watchedFrom != nil || watchedTo != nil { count += 1 }
@@ -184,6 +193,14 @@ struct MediaFilterState: Equatable {
             items.append(URLQueryItem(name: "liked", value: "true"))
         }
         items += service.queryItems
+        genreGroups.forEach { append("genre_group", $0, to: &items) }
+        originalLanguages.forEach { append("original_language", $0, to: &items) }
+        if skipBackfill {
+            items.append(URLQueryItem(name: "skip_backfill", value: "true"))
+        }
+        if tvRollup {
+            items.append(URLQueryItem(name: "tv_rollup", value: "true"))
+        }
         if let page {
             items.append(URLQueryItem(name: "page", value: page))
         }
@@ -234,6 +251,12 @@ struct MediaFilterState: Equatable {
 
     private static func dateString(_ date: Date) -> String {
         dateFormatter.string(from: date)
+    }
+
+    /// The date that `watched_from` and `watched_to` send as `day` ("yyyy-MM-dd"). It parses with the
+    /// formatter the query formats with, so the day round-trips exactly in any time zone.
+    static func date(fromDay day: String) -> Date? {
+        dateFormatter.date(from: day)
     }
 
     private static func string(_ decimal: Decimal) -> String {

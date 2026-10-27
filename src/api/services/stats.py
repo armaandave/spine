@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
 
@@ -16,7 +16,6 @@ from django.db.models import (
     Case,
     CharField,
     Count,
-    Exists,
     F,
     Max,
     OuterRef,
@@ -24,30 +23,24 @@ from django.db.models import (
     Subquery,
     Value,
     When,
-    Window,
 )
-from django.db.models.functions import RowNumber, TruncDate
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 
 from api.serializers.common import media_summary_from_item, prime_collection_items
 from api.services import completion as completion_service
-from app import config, exposure
-from app.curation import prime_curated_artwork
+from api.services import filters as filter_service
+from app import config, exposure, user_calendar
 from app.models import (
-    USER_OWNED_MEDIA_TYPES,
     DiaryEntry,
-    Episode,
     Item,
     ItemFilterFacet,
     MediaLike,
-    MediaSeries,
     MediaTypes,
     Status,
 )
 from app.templatetags import app_tags
-from lists.models import CustomList, CustomListItem
 from social.models import Follow, FollowStatus
 
 TV_DIARY_TYPES = [
@@ -76,8 +69,6 @@ MEDIA_TYPE_MEDIA_LIMIT = 6
 MOST_LOGGED_MIN_LOGS = 2
 MOST_LOGGED_TYPE_PREVIEW_LIMIT = 8
 FACET_LIMIT = 10
-PROGRESS_COLLECTION_LIMIT = 25
-LIST_PROGRESS_POSTER_LIMIT = 3
 
 
 def _primary_media_types():
@@ -107,10 +98,23 @@ class StatsRange:
         }
 
 
-def parse_stats_range(params):
-    """Parse API date parameters without ambiguous or server-erroring fallbacks."""
+def parse_stats_range(params, owner=None):
+    """Parse API date parameters without ambiguous or server-erroring fallbacks.
+
+    With an owner, the defaults and the reported timezone are the owner's calendar
+    (STAT-005), whoever asks; without one (the legacy payload) they are the
+    request's current timezone, as before.
+    """
     start_value = params.get("start_date")
     end_value = params.get("end_date")
+    if owner is not None:
+        current_timezone = user_calendar.calendar_tz(owner)
+        timezone_name = current_timezone.key
+        today = user_calendar.today(owner)
+    else:
+        current_timezone = timezone.get_current_timezone()
+        timezone_name = timezone.get_current_timezone_name()
+        today = timezone.localdate()
 
     if start_value == "all" or end_value == "all":
         if start_value != "all" or end_value != "all":
@@ -122,10 +126,9 @@ def parse_stats_range(params):
             end_date=None,
             start_datetime=None,
             end_datetime=None,
-            timezone_name=timezone.get_current_timezone_name(),
+            timezone_name=timezone_name,
         )
 
-    today = timezone.localdate()
     start_date = _parse_date_param("start_date", start_value) if start_value else today - relativedelta(years=1)
     end_date = _parse_date_param("end_date", end_value) if end_value else today
     if start_date > end_date:
@@ -133,18 +136,21 @@ def parse_stats_range(params):
             "date_range": ["start_date must be on or before end_date."],
         })
 
-    current_timezone = timezone.get_current_timezone()
     return StatsRange(
         start_date=start_date,
         end_date=end_date,
         start_datetime=timezone.make_aware(datetime.combine(start_date, time.min), current_timezone),
         end_datetime=timezone.make_aware(datetime.combine(end_date, time.max), current_timezone),
-        timezone_name=timezone.get_current_timezone_name(),
+        timezone_name=timezone_name,
     )
 
 
 def _parse_date_param(field, value):
-    parsed = parse_date(value)
+    try:
+        parsed = parse_date(value)
+    except ValueError:
+        # Well formed but not a real day, such as 2025-13-01.
+        parsed = None
     if parsed is None:
         raise ValidationError({field: ["Use an ISO 8601 date in YYYY-MM-DD format."]})
     return parsed
@@ -163,16 +169,10 @@ def ranged_diary_entries(*, user, viewer, stats_range):
     """Return visible diary entries inside the requested stats range."""
     diary_entries = visible_diary_entries(user=user, viewer=viewer)
     if not stats_range.is_all_time:
-        # These media use UTC midnight as a calendar-date carrier, not an instant.
-        calendar_types = Q(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES)
+        # Each log's day: a UTC-midnight carrier keeps its date, a moment is read on
+        # the owner's calendar, so every viewer counts the same days.
         diary_entries = diary_entries.filter(
-            (calendar_types & Q(
-                consumed_at__gte=datetime.combine(stats_range.start_date, time.min, tzinfo=UTC),
-                consumed_at__lte=datetime.combine(stats_range.end_date, time.max, tzinfo=UTC),
-            )) | (~calendar_types & Q(
-                consumed_at__gte=stats_range.start_datetime,
-                consumed_at__lte=stats_range.end_datetime,
-            )),
+            filter_service.log_day_range_q(user, stats_range.start_date, stats_range.end_date),
         )
     return diary_entries
 
@@ -218,7 +218,7 @@ def build_stats_payload(*, user, viewer, request, stats_range):
         game_completions += Game.objects.filter(user=user, completed_manually=True).count()
     tracking_by_type = _tracking_summaries(user)
     liked_total, likes_by_type = _like_summaries(user)
-    activity = _activity_payload(diary_entries, stats_range)
+    activity = _activity_payload(diary_entries, stats_range, owner=user)
     rating_distribution, ratings_by_type = _rating_distributions(diary_entries)
     top_rated, top_rated_by_type = _top_rated_payloads(diary_entries, request, owner=user)
     most_logged, most_logged_by_type, most_logged_totals = _most_logged_payloads(
@@ -280,8 +280,6 @@ def build_stats_payload(*, user, viewer, request, stats_range):
             media_payload["completion_count"] = game_completions
         media_types.append(media_payload)
 
-    list_progress = _list_progress(user=user, viewer=viewer, request=request)
-    series_progress = _series_progress(user=user, request=request)
     return {
         "schema_version": 1,
         "range": stats_range.payload(),
@@ -296,212 +294,10 @@ def build_stats_payload(*, user, viewer, request, stats_range):
         "top_genres": facets[ItemFilterFacet.FacetType.GENRE],
         "top_languages": facets[ItemFilterFacet.FacetType.LANGUAGE],
         "metadata_coverage": coverage,
-        "list_progress": list_progress,
-        "series_progress": series_progress,
+        # Kept for installed builds, which decode them but show neither (STAT-900).
+        "list_progress": [],
+        "series_progress": [],
     }
-
-
-def _list_progress(*, user, viewer, request):
-    """Return completion for visible owned and featured media lists.
-
-    A featured list counts only once the user has completed at least one of its
-    items; the user's own and collaborated lists show even at 0%.
-
-    Counts and completed members come from the database in a fixed number of
-    queries, so up to a thousand items in each of the featured lists are
-    never loaded; only the shown lists' poster rows are.
-    """
-    if not user or not user.is_authenticated:
-        return []
-    lists = CustomList.objects.filter(list_type=CustomList.ListType.MEDIA).filter(
-        Q(owner=user)
-        | Q(
-            is_featured=True,
-            visibility=CustomList.Visibility.PUBLIC,
-        ),
-    )
-    if viewer != user:
-        lists = lists.exclude(
-            owner=user,
-            visibility=CustomList.Visibility.PRIVATE,
-        ).exclude(
-            owner=user,
-            visibility=CustomList.Visibility.UNLISTED,
-        )
-    rows = lists.annotate(
-        collaborating=Exists(
-            CustomList.collaborators.through.objects.filter(customlist_id=OuterRef("pk"), user_id=user.pk),
-        ),
-    ).order_by("name", "id").values_list("id", "name", "owner_id", "collaborating")
-    names, mine = {}, set()
-    for list_id, name, owner_id, collaborating in rows:
-        names[list_id] = name
-        if owner_id == user.pk or collaborating:
-            mine.add(list_id)
-    if not names:
-        return []
-
-    members = CustomListItem.objects.filter(
-        custom_list_id__in=names,
-        item__media_type__in=exposure.media_types(),
-    ).order_by()
-    # Completion counts distinct items: an award history lists one work once per win.
-    totals = Counter()
-    media_types = defaultdict(set)
-    for list_id, media_type, count in members.values_list(
-        "custom_list_id",
-        "item__media_type",
-    ).annotate(count=Count("item_id", distinct=True)):
-        totals[list_id] += count
-        media_types[list_id].add(media_type)
-
-    # Completed status is the latest tracking row, so the database narrows the
-    # members to items with any completed row and the cached set decides.
-    completed_ids = completion_service.completed_item_ids(user)
-    completed = Counter(
-        list_id
-        for list_id, item_id in set(
-            members.filter(_completed_candidates(user)).values_list(
-                "custom_list_id",
-                "item_id",
-            ),
-        )
-        if item_id in completed_ids
-    )
-
-    progress = [
-        {
-            "id": list_id,
-            "name": name,
-            "media_type": (
-                next(iter(media_types[list_id]))
-                if len(media_types[list_id]) == 1
-                else None
-            ),
-            "completion": completion_service.completion_payload(
-                completed[list_id],
-                totals[list_id],
-            ),
-        }
-        for list_id, name in names.items()
-        if totals[list_id] and (list_id in mine or completed[list_id])
-    ]
-    progress = _sorted_progress(progress)[:PROGRESS_COLLECTION_LIMIT]
-
-    poster_rows = list(
-        members.filter(custom_list_id__in=[value["id"] for value in progress])
-        .select_related("item")
-        .annotate(
-            poster_row=Window(
-                RowNumber(),
-                partition_by=[F("custom_list_id")],
-                order_by=[
-                    F("position").asc(nulls_last=True),
-                    F("date_added").asc(),
-                    F("id").asc(),
-                ],
-            ),
-        )
-        .filter(poster_row__lte=LIST_PROGRESS_POSTER_LIMIT)
-        .order_by("custom_list_id", "poster_row"),
-    )
-    prime_collection_items([row.item for row in poster_rows], user)
-    posters = defaultdict(list)
-    for row in poster_rows:
-        summary = media_summary_from_item(
-            row.item,
-            request=request,
-            user=user,
-            include_user_state=False,
-        )
-        poster = summary.get("custom_poster_url") or summary.get("poster_url")
-        if poster:
-            posters[row.custom_list_id].append(poster)
-    return [
-        {
-            "id": value["id"],
-            "name": value["name"],
-            "media_type": value["media_type"],
-            "poster_urls": posters[value["id"]],
-            "completion": value["completion"],
-        }
-        for value in progress
-    ]
-
-
-def _completed_candidates(user):
-    """Match items with any completed tracking row of the user (a superset)."""
-    condition = Q(
-        item_id__in=Episode.objects.filter(
-            related_season__user=user,
-            item__media_type=MediaTypes.EPISODE.value,
-        ).values("item_id"),
-    )
-    for media_type in USER_OWNED_MEDIA_TYPES:
-        model = apps.get_model("app", media_type)
-        condition |= Q(
-            item_id__in=model.objects.filter(
-                user=user,
-                status=Status.COMPLETED.value,
-            ).values("item_id"),
-        )
-    return condition
-
-
-def _series_progress(*, user, request):
-    """Return completion for persisted series touched by the stats subject."""
-    tracked_ids = completion_service.tracked_item_ids(user)
-    if not tracked_ids:
-        return []
-    series_rows = list(
-        MediaSeries.objects.filter(items__id__in=tracked_ids)
-        .prefetch_related("memberships__item")
-        .distinct(),
-    )
-    prime_curated_artwork(
-        membership.item for series in series_rows for membership in list(series.memberships.all())[:3]
-    )
-    progress = []
-    for series in series_rows:
-        memberships = list(series.memberships.all())
-        items = [membership.item for membership in memberships]
-        completion = completion_service.completion_for_items(user, items)
-        if not completion or completion["total_count"] == 0:
-            continue
-        posters = []
-        for item in items[:3]:
-            summary = media_summary_from_item(
-                item,
-                request=request,
-                user=user,
-                include_user_state=False,
-            )
-            poster = summary.get("custom_poster_url") or summary.get("poster_url")
-            if poster:
-                posters.append(poster)
-        progress.append({
-            "id": series.series_id,
-            "source": series.source,
-            "media_type": series.media_type,
-            "name": series.name,
-            "item_count": completion["total_count"],
-            "poster_urls": posters,
-            "completion": completion,
-        })
-    return _sorted_progress(progress)[:PROGRESS_COLLECTION_LIMIT]
-
-
-def _sorted_progress(progress):
-    return sorted(
-        progress,
-        key=lambda value: (
-            -(
-                value["completion"]["completed_count"]
-                / value["completion"]["total_count"]
-            ),
-            value["name"].casefold(),
-        ),
-    )
 
 
 def legacy_score_distribution(native_payload):
@@ -574,18 +370,9 @@ def _diary_summaries(entries):
         average_rating=Avg("rating"),
         review_count=Count("id", filter=review_filter),
     )
-    rating_values = [
-        wire_rating(rating, media_type)
-        for media_type, rating in entries.exclude(rating__isnull=True).values_list(
-            "item__media_type",
-            "rating",
-        )
-    ]
-    aggregate["average_rating"] = (
-        sum(rating_values, Decimal(0)) / len(rating_values)
-        if rating_values
-        else None
-    )
+    # Every type stores ratings out of 10, so the overall average is in stars.
+    if aggregate["average_rating"] is not None:
+        aggregate["average_rating"] = Decimal(str(aggregate["average_rating"])) / 2
     summary = _normalized_diary_summary(aggregate)
 
     by_type = {media_type: _empty_diary_summary() for media_type in _primary_media_types()}
@@ -666,14 +453,9 @@ def _like_summaries(user):
     return sum(by_type.values()), by_type
 
 
-def _activity_payload(entries, stats_range):
+def _activity_payload(entries, stats_range, *, owner):
     rows = list(
-        entries.annotate(
-            activity_date=Case(
-                When(item__media_type__in=SINGLE_WEIGHT_MEDIA_TYPES, then=TruncDate("consumed_at", tzinfo=UTC)),
-                default=TruncDate("consumed_at", tzinfo=timezone.get_current_timezone()),
-            ),
-        )
+        entries.annotate(activity_date=filter_service.log_day_expression(owner))
         .values("activity_date")
         .annotate(count=Count("id"))
         .order_by("activity_date")
@@ -687,8 +469,8 @@ def _activity_payload(entries, stats_range):
     for activity_date, count in day_counts.items():
         month_counts[activity_date.strftime("%Y-%m")] += count
 
-    reference_date = stats_range.end_date or timezone.localdate()
-    reference_date = min(reference_date, timezone.localdate())
+    today = user_calendar.today(owner)
+    reference_date = min(stats_range.end_date or today, today)
     current_streak, longest_streak = _streaks(set(day_counts), reference_date)
     weekday_counts = Counter(activity_date.weekday() for activity_date in day_counts)
     most_active_weekday = None
@@ -786,21 +568,17 @@ def wire_rating(value, media_type):
 
 
 def _top_rated_payloads(entries, request, *, owner):
+    # Ranked on the stored values, which share one scale; the legacy wire keeps
+    # each type's own scale because installed builds guess it from the value.
     rows = list(
         entries.exclude(rating__isnull=True)
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("item_id", "stats_media_type")
         .annotate(rating=Max("rating"), last_consumed_at=Max("consumed_at"))
+        .order_by("-rating", "-last_consumed_at", "item_id")
     )
     for row in rows:
         row["rating"] = wire_rating(row["rating"], row["stats_media_type"])
-    rows.sort(
-        key=lambda row: (
-            -Decimal(row["rating"]),
-            -row["last_consumed_at"].timestamp(),
-            row["item_id"],
-        ),
-    )
     overall_rows = rows[:TOP_LEVEL_MEDIA_LIMIT]
     type_rows = _limited_rows_by_type(rows, MEDIA_TYPE_MEDIA_LIMIT)
     items = _ranked_items(overall_rows, type_rows, owner)
@@ -920,7 +698,10 @@ def _release_year_payloads(entries):
 def _facet_payloads(entries):
     logged_item_ids = entries.values("item_id")
     facets = (
-        ItemFilterFacet.objects.filter(item_id__in=Subquery(logged_item_ids))
+        ItemFilterFacet.objects.filter(
+            item_id__in=Subquery(logged_item_ids),
+            facet_type__in=[ItemFilterFacet.FacetType.GENRE, ItemFilterFacet.FacetType.LANGUAGE],
+        )
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("stats_media_type", "facet_type", "value")
         .annotate(count=Count("item_id", distinct=True))
@@ -945,8 +726,12 @@ def _facet_payloads(entries):
         if media_type in by_type_counts:
             by_type_counts[media_type][facet_type][row["value"]] += row["count"]
 
+    # The legacy payload counts genre and language rows only (no theme rows and so on).
     coverage_rows = (
-        ItemFilterFacet.objects.filter(item_id__in=Subquery(logged_item_ids))
+        ItemFilterFacet.objects.filter(
+            item_id__in=Subquery(logged_item_ids),
+            facet_type__in=[ItemFilterFacet.FacetType.GENRE, ItemFilterFacet.FacetType.LANGUAGE],
+        )
         .annotate(stats_media_type=_media_type_bucket("item__media_type"))
         .values("stats_media_type", "facet_type")
         .annotate(count=Count("item_id", distinct=True))

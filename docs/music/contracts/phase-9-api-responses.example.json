@@ -1219,20 +1219,7 @@
       }
     ],
     "end_date": "2026-07-16T23:59:59.999999Z",
-    "list_progress": [
-      {
-        "completion": {
-          "completed_count": 1,
-          "total_count": 1
-        },
-        "id": 1,
-        "media_type": "music",
-        "name": "Favorite Albums",
-        "poster_urls": [
-          "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500"
-        ]
-      }
-    ],
+    "list_progress": [],
     "media_count": {
       "anime": 0,
       "book": 0,

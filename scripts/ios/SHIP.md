@@ -154,6 +154,53 @@ covers both (decided 2026-10-26):
 
 Remove this section once the production repair has run.
 
+### The metadata fill, with the ship that adds `src/app/migrations/0088_item_metadata_version.py`
+
+Stats need each tracked or logged title's year, runtime, genres, themes and original
+language. Titles stored before this ship are filled once by a paced fill
+(`src/app/metadata_fill.py`, command `fill_item_metadata`): progress lives in the
+database, and its own pacing keeps MusicBrainz at one call every 3 s. It fills blanks
+and also refreshes stored years, runtimes and genres from the provider (book years move
+to the first publication); Apple Music albums keep their stored dates and genres. Its
+hourly sweep (beat "Sweep item metadata") does nothing until a full fill is started by
+hand below, so a deploy never starts it early. The user's "ship this" covers both runs
+below.
+
+1. **Canary, before the ship (optional).** From the feature worktree:
+   `scripts/ios/test-backend.sh use 4`, then `scripts/ios/test-backend.sh fill-metadata`
+   (a dry run in the checkout being served, with no provider calls). Check its counts,
+   then `scripts/ios/test-backend.sh release`.
+2. **Test backend, with the ship.** After `scripts/ios/test-backend.sh update` (step 6),
+   run `scripts/ios/test-backend.sh fill-metadata`. If it fails, stop and report.
+   Otherwise run `scripts/ios/test-backend.sh fill-metadata --apply`: in-process and
+   paced, minutes for the test accounts. Once it finishes, its beat runs the hourly
+   sweep.
+   Finish this before production's fill starts: both call MusicBrainz from this Mac's IP.
+3. **Production,** after the deploy is verified (step 8):
+   - `docker exec spine python manage.py fill_item_metadata`: the dry run. Read the
+     pending, stamp-only and failed-before counts, the estimated calls and minutes by
+     type and provider, and the rough number of new series members (each is queued for
+     external ratings).
+   - `docker exec spine python manage.py fill_item_metadata --apply --limit 20`, then
+     spot-check years, runtimes and genres on a few of those titles: expect changed
+     values (refreshed from the provider), not only new ones. It can fill more
+     than 20: a TV show fills all its pending seasons and episodes at once.
+   - `docker exec spine python manage.py fill_item_metadata --apply --queue` starts the
+     Celery chain on the featured worker and turns on the hourly sweep, which from then
+     on fills recent titles and restarts the chain whenever titles are pending. Watch it
+     with `docker logs -f spine 2>&1 | grep "metadata fill"`: one line per ~30 s chunk.
+   - **Expect about 2-4 h**; the dry run's figures take precedence. Comics go at 60 an
+     hour and albums run last, about 15 s each.
+   - **A deploy that interrupts it is fine:** progress is in the database, and the
+     hourly sweep starts the chain again. If the dry run says the sweep is off (Redis
+     lost its key), run `--apply --queue` again.
+4. **Finish.** Re-run the dry run until only titles waiting for a retry remain (a
+   provider that was down; they are retried after 7 days), plus any for a provider out
+   of its daily budget (the sweep resumes them once it resets). Report the
+   counts by type. The pre-deploy backup is the way back: the fill replaces stored values, not only blanks.
+
+Remove this section once the production fill has finished.
+
 ## Workflow B: roll back after a bad ship
 
 - **Backend.** Redeploy the last good commit of `myapp-main`:

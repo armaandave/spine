@@ -19,6 +19,7 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from api.services.item_metadata import store_item_metadata
 from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, single_weight
 from app import statistics as stats
 from app import tv_listing, tv_tracking, user_calendar
@@ -661,6 +662,7 @@ def sync_metadata(request, source, media_type, media_id, season_number=None):
                 "image": metadata["image"],
         },
         )
+        store_item_metadata(item, metadata)
         title = metadata["title"]
         if season_number:
             title += f" - Season {season_number}"
@@ -834,6 +836,7 @@ def media_save(request):
                 "image": metadata["image"],
         },
         )
+        store_item_metadata(item, metadata)
         model = apps.get_model(app_label="app", model_name=media_type)
         instance = model(item=item, user=request.user)
 
@@ -1390,6 +1393,7 @@ def toggle_hof(request):
                 "image": metadata["image"],
         },
         )
+        store_item_metadata(item, metadata)
         
         # Toggle the HOF status
         user = request.user
@@ -2059,6 +2063,7 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                     "image": season_metadata["image"],
         },
             )
+            store_item_metadata(item, season_metadata)
         else:
             metadata = services.get_media_metadata(media_type, media_id, source)
             defaults = {
@@ -2073,6 +2078,7 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                 media_type=media_type,
                 defaults=defaults,
             )
+            store_item_metadata(item, metadata)
             if (
                 media_type == MediaTypes.BOOK.value
                 and not created
@@ -2152,6 +2158,7 @@ def mark_movie_watched(request, source, media_id):
             "image": metadata["image"],
         },
     )
+    store_item_metadata(item, metadata)
     
     media_instance = single_weight.mark_consumed(request.user, item)
     
@@ -2238,6 +2245,7 @@ def _game_action_response(request, source, media_id, action):
         media_id=media_id, source=source, media_type=MediaTypes.GAME.value,
         defaults={"title": metadata["title"], "image": metadata["image"]},
     )
+    store_item_metadata(item, metadata)
     try:
         current = action(request.user, item)
     except game_tracking.CompletionRequired:
@@ -2313,6 +2321,7 @@ def _tv_show_item(source, media_id, metadata=None):
         **lookup,
         defaults={"title": metadata["title"], "image": metadata["image"]},
     )
+    store_item_metadata(show_item, metadata)
     return show_item
 
 
@@ -2885,6 +2894,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                     "image": season_metadata["image"],
         },
             )
+            store_item_metadata(item, season_metadata)
             logger.info(f"Season item {'created' if created else 'found'}: {item}")
         else:
             metadata = services.get_media_metadata(media_type, media_id, source)
@@ -2900,6 +2910,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                 media_type=media_type,
                 defaults=defaults,
             )
+            store_item_metadata(item, metadata)
             if (
                 media_type == MediaTypes.BOOK.value
                 and not created
@@ -3300,6 +3311,7 @@ def mark_book_read(request, source, media_id):
                 "total_pages": total_pages,
             },
         )
+        store_item_metadata(item, metadata)
         if not created_item and total_pages and item.total_pages != total_pages:
             item.total_pages = total_pages
             item.save(update_fields=["total_pages"])
@@ -3349,6 +3361,7 @@ def start_reading_book(request, source, media_id):
                 "total_pages": total_pages,
             },
         )
+        store_item_metadata(item, metadata)
         if not created_item and total_pages and item.total_pages != total_pages:
             item.total_pages = total_pages
             item.save(update_fields=["total_pages"])
@@ -3402,6 +3415,7 @@ def log_book_progress(request, source, media_id):
                 "total_pages": total_pages,
             },
         )
+        store_item_metadata(item, metadata)
         if not created_item and total_pages and item.total_pages != total_pages:
             item.total_pages = total_pages
             item.save(update_fields=["total_pages"])
@@ -3460,6 +3474,7 @@ def log_book_completed(request, source, media_id):
                 "total_pages": total_pages,
             },
         )
+        store_item_metadata(item, metadata)
         if not created_item and total_pages and item.total_pages != total_pages:
             item.total_pages = total_pages
             item.save(update_fields=["total_pages"])
@@ -3579,6 +3594,7 @@ def pause_media(request, source, media_type, media_id):
                 "image": metadata["image"],
             },
         )
+        store_item_metadata(item, metadata)
         
         # Get the media model
         model = apps.get_model(app_label="app", model_name=media_type)
