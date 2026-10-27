@@ -324,6 +324,8 @@ class ProgressHistoryTests(TestCase):
 
     @patch("app.providers.services.get_media_metadata")
     def test_the_first_episode_of_a_new_season_counts(self, metadata_mock):
+        # The metadata fake also answers the show request TV's stored episode lists
+        # need (TV-103); the ProgressChange assertion is unchanged.
         show = Item.objects.create(source=Sources.TMDB.value, media_type=MediaTypes.TV.value, media_id="77", title="Show")
         season = Item.objects.create(
             source=Sources.TMDB.value,
@@ -340,6 +342,7 @@ class ProgressHistoryTests(TestCase):
             ],
         }
         metadata_mock.side_effect = lambda media_type, *_args: {
+            "tv": {"related": {"seasons": [{"season_number": 2, "first_air_date": "2020-01-01"}]}},
             "season": {"title": "Show", "image": "", "max_progress": 2, **episodes},
             "tv_with_seasons": {"season/2": episodes},
         }[media_type]

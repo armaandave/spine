@@ -3,20 +3,66 @@ from decimal import Decimal
 
 from django.apps import apps
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 
-from api.exceptions import BookTrackingConflict, DiaryHistoryConflict
+from api.exceptions import (
+    BookTrackingConflict,
+    DiaryHistoryConflict,
+    TVDetailsUnavailableError,
+    TVValidationError,
+    tv_api_error,
+)
 from api.serializers.common import (
     get_or_create_item_from_metadata,
     progress_for_media,
     tracking_state,
 )
-from app import book_tracking, game_tracking, single_weight
-from app.models import BasicMedia, Book, MediaTypes, Status
+from api.serializers.tracking import validate_tv_rating
+from app import book_tracking, game_tracking, single_weight, tv_listing, tv_tracking
+from app.models import TV, BasicMedia, Book, Item, MediaTypes, Season, Sources, Status
 from app.providers import services as provider_services
 from social.models import Activity, ProgressChange
+
+TV_ERRORS = (
+    tv_tracking.TVConflict,
+    tv_tracking.TVInvalid,
+    tv_listing.InvalidEpisode,
+    tv_listing.TVDetailsUnavailable,
+)
+# Every action of POST tracking/{source}/tv/{id}/actions/{action}/ (plan 2.3.7).
+TV_ACTIONS = frozenset(
+    {
+        "watching",
+        "resume",
+        "planning",
+        "pause",
+        "drop",
+        "rewatch",
+        "stop_rewatch",
+        "remove",
+        "mark_watched",
+        "consume",
+        "unmark",
+        "mark_up_to",
+        "mark_earlier",
+        "tick",
+        "untick",
+        "rate",
+    },
+)
+# The actions that existed for every media type before the TV contract; their responses
+# keep the top-level TrackingState installed clients decode (TV-900).
+TV_PRE_CONTRACT_ACTIONS = frozenset({"consume", "pause", "resume", "drop"})
+TV_CHOICE_ACTIONS = {
+    "watching": Status.IN_PROGRESS.value,
+    "resume": Status.IN_PROGRESS.value,
+    "planning": Status.PLANNING.value,
+    "pause": Status.PAUSED.value,
+    "drop": Status.DROPPED.value,
+}
+TV_EPISODE_ACTIONS = frozenset({"tick", "untick", "mark_up_to"})
 
 
 def get_tracking(user, *, source, media_type, media_id, season_number=None, episode_number=None):
@@ -32,7 +78,21 @@ def get_tracking(user, *, source, media_type, media_id, season_number=None, epis
 
 
 def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):
-    """Create or update tracking using existing model behavior."""
+    """Create or update tracking using existing model behavior.
+
+    TV shows and seasons go through tv_tracking.apply_written_state and return its
+    WriteResult (TV-207): a status means its action, stars follow TV-303 and TV-304,
+    and progress or date fields, a season Planning, Paused or Dropped, or a season
+    without season_number are invalid requests.
+    """
+    if tv_tracking.supports(media_type):
+        return write_tv_tracking(
+            user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            data=data,
+        )
     season_number = data.get("season_number")
     media = get_tracking(
         user,
@@ -97,19 +157,49 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
         ):
             setattr(media, model_field, data[api_field])
     media.save()
-    # Resuming something paused isn't starting it.
-    if media.status == Status.IN_PROGRESS.value and previous_status not in {
-        Status.IN_PROGRESS.value,
-        Status.PAUSED.value,
-    }:
-        ProgressChange.record_start(user, media.item)
+    _record_start(user, media, previous_status)
     if previous_progress is not None:
         _record_progress_change(user, media, previous_progress)
     return media
 
 
-def delete_tracking(user, *, source, media_type, media_id, season_number=None):
-    """Delete tracked media if it exists."""
+def _record_start(user, media, previous_status):
+    """Record starting a title set to In progress; resuming isn't starting it."""
+    if media.status == Status.IN_PROGRESS.value and previous_status not in {
+        Status.IN_PROGRESS.value,
+        Status.PAUSED.value,
+    }:
+        ProgressChange.record_start(user, media.item)
+
+
+def delete_tracking(
+    user,
+    *,
+    source,
+    media_type,
+    media_id,
+    season_number=None,
+    episode_number=None,
+    expected_version=None,
+    mutation_id=None,
+):
+    """Delete tracked media if it exists.
+
+    A show's delete is Remove from Library (TV-003, refused while logs exist); a
+    season's removes its viewings and marks (TV-207, refused while logs exist, 400
+    without season_number); an episode's unticks its latest unlogged viewing (TV-102).
+    """
+    if tv_tracking.supports(media_type):
+        return delete_tv_tracking(
+            user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            season_number=season_number,
+            episode_number=episode_number,
+            expected_version=expected_version,
+            mutation_id=mutation_id,
+        )
     media = get_tracking(
         user,
         source=source,
@@ -146,8 +236,46 @@ def _delete_progress_history(user, item):
     changes.delete()
 
 
-def consume_media(user, *, source, media_type, media_id, consumed_at=None):
-    """Mark media consumed/completed."""
+def consume_media(
+    user,
+    *,
+    source,
+    media_type,
+    media_id,
+    consumed_at=None,
+    season_number=None,
+    episode_number=None,
+):
+    """Mark media consumed/completed.
+
+    A TV show or season is marked watched, undated (TV-300; fixes T16); an episode is
+    ticked (TV-100). Both return tv_tracking's WriteResult.
+    """
+    if tv_tracking.supports(media_type):
+        item = resolve_tv_item(
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            season_number=season_number,
+            episode_number=episode_number,
+        )
+        show_item = tv_show_item(source, media_id)
+        if media_type == MediaTypes.EPISODE.value:
+            return _call_tv(
+                tv_tracking.tick,
+                user,
+                show_item,
+                item.season_number,
+                item.episode_number,
+                entry_point=tv_tracking.LEGACY_APP,
+            )
+        return _call_tv(
+            tv_tracking.mark_watched,
+            user,
+            show_item,
+            season_number=item.season_number,
+            entry_point=tv_tracking.LEGACY_APP,
+        )
     media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
     if media is None:
         media = create_or_update_tracking(
@@ -168,98 +296,80 @@ def consume_media(user, *, source, media_type, media_id, consumed_at=None):
     return media
 
 
-def set_status(user, *, source, media_type, media_id, status):
-    """Set status on an existing or new tracked item."""
+def set_status(user, *, source, media_type, media_id, status, season_number=None):
+    """Set status on an existing or new tracked item.
+
+    For TV the status means its action (TV-207): a show's Paused or Dropped is that
+    choice, In progress chooses Watching; a season's Paused or Dropped is a 400.
+    """
+    data = {"status": status}
+    if season_number is not None:
+        data["season_number"] = season_number
     media = create_or_update_tracking(
         user,
         source=source,
         media_type=media_type,
         media_id=media_id,
-        data={"status": status},
+        data=data,
     )
     return media
 
 
 def watch_episode(user, *, source, media_id, season_number, episode_number, watched_at=None):
-    """Watch one TV episode using Season.watch."""
-    with transaction.atomic():
-        season = get_tracking(
-            user,
-            source=source,
-            media_type=MediaTypes.SEASON.value,
-            media_id=media_id,
-            season_number=season_number,
-        )
-        if season is None:
-            season = create_or_update_tracking(
-                user,
-                source=source,
-                media_type=MediaTypes.SEASON.value,
-                media_id=media_id,
-                data={"season_number": season_number, "status": Status.IN_PROGRESS.value},
-            )
-        # Taken after creating a new season, so its first episode counts as progress.
-        previous_progress = _progress_snapshot(season)
-        season.watch(episode_number, watched_at or timezone.now().replace(second=0, microsecond=0))
-        season.refresh_from_db()
-        _record_progress_change(user, season, previous_progress)
-        return season
+    """Tick one TV episode from the installed builds' endpoint (TV-100, TV-101).
+
+    watched_at is accepted and ignored: the server dates the tick. Returns the
+    WriteResult; the response stays the season's TrackingState.
+    """
+    return _call_tv(
+        tv_tracking.tick,
+        user,
+        tv_show_item(source, media_id),
+        season_number,
+        episode_number,
+        entry_point=tv_tracking.LEGACY_APP,
+    )
 
 
 def unwatch_episode(user, *, source, media_id, season_number, episode_number):
-    """Unwatch the latest matching TV episode."""
-    season = get_tracking(
+    """Untick an episode: remove its latest recorded unlogged viewing (TV-102)."""
+    show_item = tv_show_item(source, media_id, create=False)
+    if show_item is None:
+        return None
+    return _call_tv(
+        tv_tracking.untick,
         user,
-        source=source,
-        media_type=MediaTypes.SEASON.value,
-        media_id=media_id,
-        season_number=season_number,
+        show_item,
+        season_number,
+        episode_number,
+        entry_point=tv_tracking.LEGACY_APP,
     )
-    if season is not None:
-        previous_progress = _progress_snapshot(season)
-        season.unwatch(episode_number)
-        season.refresh_from_db()
-        _record_progress_change(user, season, previous_progress)
-    return season
 
 
 def watch_season(user, *, source, media_id, season_number):
-    """Mark a season watched."""
-    season = get_tracking(
+    """Mark a season's aired episodes watched, undated, as one mark (TV-300)."""
+    return _call_tv(
+        tv_tracking.mark_watched,
         user,
-        source=source,
-        media_type=MediaTypes.SEASON.value,
-        media_id=media_id,
+        tv_show_item(source, media_id),
         season_number=season_number,
+        entry_point=tv_tracking.LEGACY_APP,
     )
-    previous_progress = _progress_snapshot(season) if season is not None else None
-    season = create_or_update_tracking(
-        user,
-        source=source,
-        media_type=MediaTypes.SEASON.value,
-        media_id=media_id,
-        data={"season_number": season_number, "status": Status.COMPLETED.value},
-    )
-    _record_progress_change(user, season, previous_progress)
-    return season
 
 
 def unwatch_season(user, *, source, media_id, season_number):
-    """Remove watched episodes for a season and move it in progress."""
-    season = get_tracking(
+    """Undo a season's filled eye under TV-302 (this endpoint was always confirmed)."""
+    show_item = tv_show_item(source, media_id, create=False)
+    if show_item is None:
+        return None
+    return _call_tv(
+        tv_tracking.unmark,
         user,
-        source=source,
-        media_type=MediaTypes.SEASON.value,
-        media_id=media_id,
+        show_item,
         season_number=season_number,
+        confirm=True,
+        entry_point=tv_tracking.LEGACY_APP,
     )
-    if season is not None:
-        previous_progress = _progress_snapshot(season)
-        season.episodes.all().delete()
-        season.status = Status.IN_PROGRESS.value
-        season.save(update_fields=["status"])
-        _record_progress_change(user, season, previous_progress)
-    return season
 
 
 def log_book_progress(
@@ -376,14 +486,19 @@ def delete_book_journey(user, *, source, media_id, journey_id):
     return _call_book(book_tracking.delete_journey, user, book.item, journey_id)
 
 
-def serialize_tracking(media):
-    """Serialize tracking state after annotating max progress when possible."""
+def serialize_tracking(media, *, tv=None, tv_detail=False):
+    """Serialize tracking state after annotating max progress when possible.
+
+    TV shows and seasons read their progress from tv_tracking (TV-104), never from
+    calendar events. tv is a TVShowState to attach; tv_detail computes the detail one.
+    """
     if media is None:
         return None
-    if not hasattr(media, "max_progress"):
+    tv_counted = media.item.media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value)
+    if not tv_counted and not hasattr(media, "max_progress"):
         with suppress(Exception):
             BasicMedia.objects.annotate_max_progress([media], media.item.media_type)
-    return tracking_state(media)
+    return tracking_state(media, tv=tv, tv_detail=tv_detail)
 
 
 def _write_single_weight_tracking(user, media, item, data):
@@ -478,8 +593,12 @@ def _progress_snapshot(media):
 
 
 def _record_progress_change(user, media, previous_progress):
-    """Record a durable progress delta and feed activity."""
-    if media is None or previous_progress is None:
+    """Record a durable progress delta and feed activity.
+
+    Never for TV: tv_tracking records season progress changes without feed activity
+    (TV-703).
+    """
+    if media is None or previous_progress is None or tv_tracking.supports(media.item):
         return None
     current_progress = _progress_snapshot(media)
     if not current_progress or previous_progress == current_progress:
@@ -563,3 +682,308 @@ def _write_game_tracking(user, item, data):
     if "end_date" in data and data["end_date"] is not None:
         raise serializers.ValidationError({"end_date": "Use the completion log or playthrough date editor."})
     return _call_book(game_tracking.apply_tracking_state, user, item, **payload)
+
+
+# ---------------------------------------------------------------------------------
+# TV (docs/tv-tracking-contract.md). Every TV rule lives in app.tv_tracking; this layer
+# resolves Items, calls it and builds responses.
+# ---------------------------------------------------------------------------------
+
+
+def _call_tv(function, *args, **kwargs):
+    """Call a tv_tracking function, translating its errors to API errors."""
+    try:
+        return function(*args, **kwargs)
+    except TV_ERRORS as error:
+        raise tv_api_error(error) from error
+
+
+def tv_show_item(source, media_id, *, create=True):
+    """Return the show's tv Item, creating it from the provider when missing."""
+    lookup = {
+        "source": source,
+        "media_type": MediaTypes.TV.value,
+        "media_id": str(media_id),
+        "season_number": None,
+        "episode_number": None,
+    }
+    item = Item.objects.filter(**lookup).first()
+    if item is not None or not create:
+        return item
+    if source == Sources.MANUAL.value:
+        raise NotFound
+    try:
+        metadata = provider_services.get_media_metadata(MediaTypes.TV.value, media_id, source)
+    except provider_services.ProviderAPIError as error:
+        if error.status_code == 404:
+            raise NotFound from error
+        raise TVDetailsUnavailableError from error
+    return get_or_create_item_from_metadata(lookup, metadata)
+
+
+def tv_family_item(show_item, media_type, season_number=None, episode_number=None):
+    """Return a season or episode Item of the show, creating it from the show's copy.
+
+    No provider call: a new Item takes the show's title and image, or the stored
+    listing's episode title, as tv_tracking does for the Items a write needs.
+    """
+    if media_type == MediaTypes.TV.value:
+        return show_item
+    lookup = {
+        "source": show_item.source,
+        "media_type": media_type,
+        "media_id": show_item.media_id,
+        "season_number": season_number,
+        "episode_number": episode_number if media_type == MediaTypes.EPISODE.value else None,
+    }
+    item = Item.objects.filter(**lookup).first()
+    if item is not None:
+        return item
+    if show_item.source == Sources.MANUAL.value:
+        raise NotFound
+    title = show_item.title
+    image = show_item.image
+    if media_type == MediaTypes.EPISODE.value:
+        listing = tv_listing.stored_listing(show_item)
+        listed = listing.episode(season_number, episode_number) if listing else None
+        if listed is not None:
+            title = listed.title or title
+            image = listed.image or image
+    item, _ = Item.objects.get_or_create(**lookup, defaults={"title": title, "image": image})
+    return item
+
+
+def require_tv_numbers(media_type, season_number, episode_number):
+    """Reject a season write without its number, or an episode's without both."""
+    errors = {}
+    if media_type in (MediaTypes.SEASON.value, MediaTypes.EPISODE.value) and season_number is None:
+        errors["season_number"] = ["This field is required."]
+    if media_type == MediaTypes.EPISODE.value and episode_number is None:
+        errors["episode_number"] = ["This field is required."]
+    if errors:
+        raise TVValidationError(detail=errors)
+
+
+def int_param(value, name):
+    """Return an optional integer request parameter; a malformed one is a 400."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise TVValidationError(detail={name: ["A valid integer is required."]}) from error
+
+
+def resolve_tv_item(*, source, media_type, media_id, season_number=None, episode_number=None):
+    """Return the tv, season or episode Item a TV request names (TV-106)."""
+    season_number = int_param(season_number, "season_number")
+    episode_number = int_param(episode_number, "episode_number")
+    require_tv_numbers(media_type, season_number, episode_number)
+    return tv_family_item(tv_show_item(source, media_id), media_type, season_number, episode_number)
+
+
+def _tv_rating(value):
+    try:
+        return validate_tv_rating(value)
+    except serializers.ValidationError as error:
+        raise TVValidationError(detail={"rating": error.detail}) from error
+
+
+def write_tv_tracking(user, *, source, media_type, media_id, data):
+    """Apply PUT/PATCH of a show's or season's tracking (TV-207).
+
+    Installed builds send these, so the entry point is LEGACY_APP.
+    """
+    item = resolve_tv_item(
+        source=source,
+        media_type=media_type,
+        media_id=media_id,
+        season_number=data.get("season_number"),
+    )
+    payload = {key: value for key, value in data.items() if key not in ("season_number", "mutation_id")}
+    if "rating" in payload:
+        payload["rating"] = _tv_rating(payload["rating"])
+    return _call_tv(
+        tv_tracking.apply_written_state,
+        user,
+        item,
+        payload,
+        entry_point=tv_tracking.LEGACY_APP,
+        mutation_id=data.get("mutation_id"),
+    )
+
+
+def delete_tv_tracking(
+    user,
+    *,
+    source,
+    media_type,
+    media_id,
+    season_number=None,
+    episode_number=None,
+    expected_version=None,
+    mutation_id=None,
+):
+    """DELETE tracking/{source}/{tv|season|episode}/{id}/ (TV-003, TV-207, TV-102)."""
+    season_number = int_param(season_number, "season_number")
+    episode_number = int_param(episode_number, "episode_number")
+    expected_version = int_param(expected_version, "expected_version")
+    require_tv_numbers(media_type, season_number, episode_number)
+    show_item = tv_show_item(source, media_id, create=False)
+    if show_item is None:
+        return None
+    if media_type == MediaTypes.TV.value:
+        return _call_tv(
+            tv_tracking.remove,
+            user,
+            show_item,
+            expected_version=expected_version,
+            mutation_id=mutation_id,
+            entry_point=tv_tracking.LEGACY_APP,
+        )
+    if media_type == MediaTypes.SEASON.value:
+        return _call_tv(
+            tv_tracking.delete_season_tracking,
+            user,
+            show_item,
+            season_number,
+            mutation_id=mutation_id,
+            entry_point=tv_tracking.LEGACY_APP,
+        )
+    return _call_tv(
+        tv_tracking.untick,
+        user,
+        show_item,
+        season_number,
+        episode_number,
+        mutation_id=mutation_id,
+        entry_point=tv_tracking.LEGACY_APP,
+    )
+
+
+def perform_tv_action(user, *, source, media_id, action, data):  # noqa: C901, PLR0911, PLR0912
+    """Apply one action of POST tracking/{source}/tv/{id}/actions/{action}/.
+
+    Returns tv_tracking's WriteResult. The view answers 404 for an unknown action.
+    """
+    if action not in TV_ACTIONS:
+        raise NotFound
+    season_number = data.get("season_number")
+    episode_number = data.get("episode_number")
+    if action in TV_EPISODE_ACTIONS:
+        require_tv_numbers(MediaTypes.EPISODE.value, season_number, episode_number)
+    if action == "rate" and "rating" not in data:
+        raise TVValidationError(detail={"rating": ["Send a rating from 1 to 10, or null to clear it."]})
+    show_item = tv_show_item(source, media_id)
+    common = {"entry_point": tv_tracking.APP, "mutation_id": data.get("mutation_id")}
+    if action in TV_CHOICE_ACTIONS:
+        return _call_tv(tv_tracking.choose, user, show_item, TV_CHOICE_ACTIONS[action], **common)
+    if action == "rewatch":
+        return _call_tv(tv_tracking.start_rewatch, user, show_item, season_number=season_number, **common)
+    if action == "stop_rewatch":
+        return _call_tv(tv_tracking.stop_rewatch, user, show_item, **common)
+    if action == "remove":
+        return _call_tv(
+            tv_tracking.remove,
+            user,
+            show_item,
+            expected_version=data.get("expected_version"),
+            **common,
+        )
+    if action in ("mark_watched", "consume"):
+        return _call_tv(tv_tracking.mark_watched, user, show_item, season_number=season_number, **common)
+    if action == "unmark":
+        return _call_tv(
+            tv_tracking.unmark,
+            user,
+            show_item,
+            season_number=season_number,
+            confirm=bool(data.get("confirm")),
+            expected_version=data.get("expected_version"),
+            **common,
+        )
+    if action == "mark_up_to":
+        return _call_tv(tv_tracking.mark_up_to, user, show_item, season_number, episode_number, **common)
+    if action == "mark_earlier":
+        return _call_tv(
+            tv_tracking.mark_earlier,
+            user,
+            show_item,
+            from_ref=data.get("from"),
+            to_ref=data.get("to"),
+            offer_season_number=data.get("offer_season_number"),
+            **common,
+        )
+    if action == "tick":
+        return _call_tv(tv_tracking.tick, user, show_item, season_number, episode_number, **common)
+    if action == "untick":
+        return _call_tv(
+            tv_tracking.untick,
+            user,
+            show_item,
+            season_number,
+            episode_number,
+            viewing_id=data.get("viewing_id"),
+            **common,
+        )
+    item = show_item
+    if season_number is not None:
+        item = tv_family_item(show_item, MediaTypes.SEASON.value, season_number)
+    return _call_tv(tv_tracking.set_rating, user, item, data["rating"], **common)
+
+
+def tv_envelope(result, item=None, *, page=None):
+    """Return the write envelope (plan 2.3.5) of a TV write; page scopes its `tv`."""
+    return _call_tv(tv_tracking.write_envelope, result, item, page=page)
+
+
+def tv_page_item(show_item, season_number=None, episode_number=None):
+    """Return the season or episode Item of the page a TV write came from, or None.
+
+    The app sends page_season_number (and page_episode_number) from a season or
+    episode page, so the response's `tv` carries that page's state and composer
+    (TV-404, TV-705).
+    None for the show page, or an Item that doesn't exist; nothing is created.
+    """
+    if show_item is None or season_number is None:
+        return None
+    media_type = MediaTypes.SEASON.value if episode_number is None else MediaTypes.EPISODE.value
+    return Item.objects.filter(
+        source=show_item.source,
+        media_id=show_item.media_id,
+        media_type=media_type,
+        season_number=season_number,
+        episode_number=episode_number,
+    ).first()
+
+
+def tv_season_row(result, season_number=None):
+    """Return the user's Season row of a write's season, or None."""
+    number = result.season_number if season_number is None else season_number
+    if result.tv is None or number is None:
+        return None
+    return (
+        Season.objects.filter(related_tv=result.tv, item__season_number=number)
+        .select_related("item", "user")
+        .first()
+    )
+
+
+def tv_tracking_response(result, *, row, item=None):
+    """Return row's TrackingState (or nothing) plus the envelope keys."""
+    envelope = tv_envelope(result, item)
+    state = serialize_tracking(row) if row is not None else {}
+    return {**state, **envelope}
+
+
+def tv_action_response(result, page=None):
+    """Return the actions endpoint's body: the show's TrackingState and the envelope.
+
+    page is the season or episode page the action came from (tv_page_item).
+    """
+    envelope = tv_envelope(result, page=page)
+    tracking = None
+    if result.tv is not None:
+        tv = TV.objects.select_related("item", "user").get(pk=result.tv.pk)
+        tracking = serialize_tracking(tv, tv=envelope["tv"])
+    return {"tracking": tracking, **envelope}

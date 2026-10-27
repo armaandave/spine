@@ -272,10 +272,14 @@ class ManualItemFormTest(TestCase):
         self.assertIsNone(item.episode_number)
 
     def test_valid_episode_creation(self):
-        """Test creating an episode for an existing season."""
+        """Test creating an episode for an existing season.
+
+        TV-205: the parent is the season's Item, since a season gets tracking only once
+        something under it is watched (it used to be the season's tracking row).
+        """
         form_data = {
             "media_type": MediaTypes.EPISODE.value,
-            "parent_season": self.season.id,
+            "parent_season": self.season_item.id,
             "episode_number": 5,
         }
         form = ManualItemForm(data=form_data, user=self.user)
@@ -288,6 +292,34 @@ class ManualItemFormTest(TestCase):
         self.assertEqual(item.title, self.season_item.title)
         self.assertEqual(item.season_number, self.season_item.season_number)
         self.assertEqual(item.episode_number, 5)
+
+    def test_tv_205_a_season_with_no_tracking_can_take_episodes(self):
+        """TV-205: any season Item of a tracked manual show is offered, tracked or not."""
+        untracked = Item.objects.create(
+            media_id="manual_tv_1",
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.SEASON.value,
+            title="Test Manual TV",
+            season_number=2,
+        )
+        other_show_season = Item.objects.create(
+            media_id="manual_tv_9",
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.SEASON.value,
+            title="Someone else's show",
+            season_number=1,
+        )
+        form = ManualItemForm(user=self.user)
+        offered = set(form.fields["parent_season"].queryset)
+        self.assertIn(untracked, offered)
+        self.assertNotIn(other_show_season, offered)
+        form = ManualItemForm(
+            data={"media_type": MediaTypes.EPISODE.value, "parent_season": untracked.id, "episode_number": 1},
+            user=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        item = form.save()
+        self.assertEqual((item.media_id, item.season_number, item.episode_number), ("manual_tv_1", 2, 1))
 
     def test_missing_title_for_standalone(self):
         """Test that title is required for standalone."""

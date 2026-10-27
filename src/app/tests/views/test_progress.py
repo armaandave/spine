@@ -17,23 +17,23 @@ from app.models import (
     UserMessage,
     UserMessageLevel,
 )
+from app.tests.tv_fixtures import FakeTVProvider
+
+
+def fake_friends(test):
+    """Serve Friends (1668) with two aired Season 1 episodes from the fake TMDB.
+
+    TV progress edits tick and untick through app.tv_tracking, which reads the
+    season's listed episodes and air dates (TV-103).
+    """
+    fake = FakeTVProvider().__enter__()
+    test.addCleanup(fake.__exit__, None, None, None)
+    fake.add_show("1668", title="Friends", seasons={1: 2})
+    return fake
 
 
 class ProgressEditSeason(TestCase):
     """Test for editing a season progress through views."""
-
-    season_metadata = {
-        "episodes": [
-            {"episode_number": 1},
-            {"episode_number": 2},
-        ],
-        "season/1": {
-            "episodes": [
-                {"episode_number": 1},
-                {"episode_number": 2},
-            ],
-        },
-    }
 
     def setUp(self):
         """Prepare the database with a season and an episode."""
@@ -87,22 +87,19 @@ class ProgressEditSeason(TestCase):
 
     def test_progress_increase(self):
         """Test the increase of progress for a season."""
-        with patch(
-            "app.models.providers.services.get_media_metadata",
-            return_value=self.season_metadata,
-        ):
-            self.client.post(
-                reverse(
-                    "progress_edit",
-                    kwargs={
-                        "media_type": MediaTypes.SEASON.value,
-                        "instance_id": self.season.id,
-                    },
-                ),
-                {
-                    "operation": "increase",
+        fake_friends(self)
+        self.client.post(
+            reverse(
+                "progress_edit",
+                kwargs={
+                    "media_type": MediaTypes.SEASON.value,
+                    "instance_id": self.season.id,
                 },
-            )
+            ),
+            {
+                "operation": "increase",
+            },
+        )
 
         self.assertEqual(
             Episode.objects.filter(item__media_id="1668").count(),
@@ -118,22 +115,19 @@ class ProgressEditSeason(TestCase):
 
     def test_progress_decrease(self):
         """Test the decrease of progress for a season."""
-        with patch(
-            "app.models.providers.services.get_media_metadata",
-            return_value=self.season_metadata,
-        ):
-            self.client.post(
-                reverse(
-                    "progress_edit",
-                    kwargs={
-                        "media_type": MediaTypes.SEASON.value,
-                        "instance_id": self.season.id,
-                    },
-                ),
-                {
-                    "operation": "decrease",
+        fake_friends(self)
+        self.client.post(
+            reverse(
+                "progress_edit",
+                kwargs={
+                    "media_type": MediaTypes.SEASON.value,
+                    "instance_id": self.season.id,
                 },
-            )
+            ),
+            {
+                "operation": "decrease",
+            },
+        )
 
         self.assertEqual(
             Episode.objects.filter(item__media_id="1668").count(),
@@ -298,27 +292,9 @@ class ProgressEditPersistentMessages(TestCase):
         )
         Episode.save_base(episode)
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_progress_edit_htmx_appends_persistent_messages(
-        self,
-        mock_get_media_metadata,
-    ):
+    def test_progress_edit_htmx_appends_persistent_messages(self):
         """HTMX progress edits should append newly created persistent toasts."""
-        mock_get_media_metadata.return_value = {
-            "episodes": [
-                {"episode_number": 1},
-                {"episode_number": 2},
-            ],
-            "season/1": {
-                "episodes": [
-                    {"episode_number": 1},
-                    {"episode_number": 2},
-                ],
-            },
-            "related": {
-                "seasons": [{"season_number": 1}],
-            },
-        }
+        fake_friends(self)
 
         response = self.client.post(
             reverse(

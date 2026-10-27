@@ -220,8 +220,9 @@ final class DiaryViewModel {
     private var diaryRequestFilter: MediaFilterState {
         var requestFilter = filter
         if filter.mediaType == "tv" {
+            // TV-702: the TV filter lists logs of shows, seasons and episodes.
             requestFilter.mediaType = nil
-            requestFilter.mediaTypes = ["tv", "season"]
+            requestFilter.mediaTypes = ["tv", "season", "episode"]
         }
         return requestFilter
     }

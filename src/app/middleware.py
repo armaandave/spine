@@ -4,11 +4,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.core.exceptions import MiddlewareNotUsed
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.shortcuts import render
 from django.utils import timezone
 
-from app import request_timing
+from app import request_timing, user_calendar
 from app.providers import services
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,12 @@ class ProviderAPIErrorMiddleware:
 
 
 class APICalendarTimezoneMiddleware:
-    """Apply the native client's calendar timezone for one API request."""
+    """Apply the native client's calendar timezone for one API request.
+
+    The zone is also the user's calendar (app.user_calendar): it applies to the
+    requesting user while the request runs, and a changed valid zone is stored on the
+    account afterwards, so webhooks, imports and jobs use it too.
+    """
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -112,5 +117,24 @@ class APICalendarTimezoneMiddleware:
             client_timezone = ZoneInfo(name)
         except (ValueError, ZoneInfoNotFoundError):
             return self.get_response(request)
-        with timezone.override(client_timezone):
-            return self.get_response(request)
+        zone_token = user_calendar.REQUEST_TIMEZONE.set(client_timezone)
+        request_token = user_calendar.REQUEST.set(request)
+        try:
+            with timezone.override(client_timezone):
+                response = self.get_response(request)
+        finally:
+            user_calendar.REQUEST.reset(request_token)
+            user_calendar.REQUEST_TIMEZONE.reset(zone_token)
+        self._remember(request, name)
+        return response
+
+    @staticmethod
+    def _remember(request, name):
+        """Store the zone on the account the request authenticated (DRF sets it)."""
+        user = getattr(request, "user", None)
+        if user is None or not getattr(user, "is_authenticated", False):
+            return
+        try:
+            user_calendar.remember(user, name)
+        except DatabaseError:
+            logger.exception("Could not store the calendar timezone for %s", user.pk)

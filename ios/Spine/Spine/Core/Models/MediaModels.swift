@@ -18,9 +18,10 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         ].joined(separator: ":")
     }
 
+    /// "Show S2" for a season; Season 0 reads "Show Specials" (TV-004).
     func displayTitle(_ title: String) -> String {
         guard mediaType == "season", let seasonNumber else { return title }
-        return "\(title) S\(seasonNumber)"
+        return seasonNumber == 0 ? "\(title) Specials" : "\(title) S\(seasonNumber)"
     }
 
     var isEpisode: Bool {
@@ -37,6 +38,16 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
 
     var usesCalendarConsumptionDate: Bool {
         isSingleWeight || ["book", "game"].contains(mediaType)
+    }
+
+    /// Logs dated by calendar day: the single-weight, book and game types, plus TV logs at every level (TV-407).
+    /// Separate from `usesCalendarConsumptionDate`, which also hides the per-entry visibility picker that TV keeps.
+    var usesCalendarLogDate: Bool {
+        usesCalendarConsumptionDate || isTVFamily
+    }
+
+    var isTVFamily: Bool {
+        ["tv", "season", "episode"].contains(mediaType)
     }
 
     var episodeCode: String? {
@@ -936,6 +947,10 @@ struct MediaDetail: Decodable, Identifiable {
     let customPosterUrl: String?
     let customBackdropUrl: String?
     let customLogoUrl: String?
+    /// Tracked seasons the provider no longer lists, shown after Specials (TV-103). Show pages only.
+    var tvUnlistedSeasons: [TVUnlistedSeason]? = nil
+    /// Tracked episodes the provider no longer lists, shown last (TV-103). Season pages only.
+    var tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil
 
     var id: String { ref.id }
 
@@ -1005,6 +1020,8 @@ struct MediaDetail: Decodable, Identifiable {
         case customPosterUrl
         case customBackdropUrl
         case customLogoUrl
+        case tvUnlistedSeasons
+        case tvUnlistedEpisodes
     }
 
     init(
@@ -1048,7 +1065,9 @@ struct MediaDetail: Decodable, Identifiable {
         completion: CompletionProgress? = nil,
         customPosterUrl: String? = nil,
         customBackdropUrl: String? = nil,
-        customLogoUrl: String? = nil
+        customLogoUrl: String? = nil,
+        tvUnlistedSeasons: [TVUnlistedSeason]? = nil,
+        tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil
     ) {
         self.ref = ref
         self.title = title
@@ -1091,6 +1110,8 @@ struct MediaDetail: Decodable, Identifiable {
         self.customPosterUrl = customPosterUrl
         self.customBackdropUrl = customBackdropUrl
         self.customLogoUrl = customLogoUrl
+        self.tvUnlistedSeasons = tvUnlistedSeasons
+        self.tvUnlistedEpisodes = tvUnlistedEpisodes
     }
 
     init(from decoder: Decoder) throws {
@@ -1141,7 +1162,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: try container.decodeIfPresent(CompletionProgress.self, forKey: .completion),
             customPosterUrl: try container.decodeIfPresent(String.self, forKey: .customPosterUrl),
             customBackdropUrl: try container.decodeIfPresent(String.self, forKey: .customBackdropUrl),
-            customLogoUrl: try container.decodeIfPresent(String.self, forKey: .customLogoUrl)
+            customLogoUrl: try container.decodeIfPresent(String.self, forKey: .customLogoUrl),
+            tvUnlistedSeasons: try container.decodeIfPresent([TVUnlistedSeason].self, forKey: .tvUnlistedSeasons),
+            tvUnlistedEpisodes: try container.decodeIfPresent([TVUnlistedEpisode].self, forKey: .tvUnlistedEpisodes)
         )
     }
 
@@ -1187,7 +1210,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: response.customPosterUrl ?? response.posterUrl,
             customBackdropUrl: customBackdropUrl,
-            customLogoUrl: customLogoUrl
+            customLogoUrl: customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1233,7 +1258,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: customPosterUrl,
             customBackdropUrl: response.customBackdropUrl ?? response.backdropUrl,
-            customLogoUrl: customLogoUrl
+            customLogoUrl: customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1279,7 +1306,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: customPosterUrl,
             customBackdropUrl: customBackdropUrl,
-            customLogoUrl: response.customLogoUrl
+            customLogoUrl: response.customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1325,7 +1354,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: customPosterUrl,
             customBackdropUrl: customBackdropUrl,
-            customLogoUrl: customLogoUrl
+            customLogoUrl: customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1371,7 +1402,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: customPosterUrl,
             customBackdropUrl: customBackdropUrl,
-            customLogoUrl: customLogoUrl
+            customLogoUrl: customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1421,7 +1454,9 @@ struct MediaDetail: Decodable, Identifiable {
             completion: completion,
             customPosterUrl: customPosterUrl,
             customBackdropUrl: customBackdropUrl,
-            customLogoUrl: customLogoUrl
+            customLogoUrl: customLogoUrl,
+            tvUnlistedSeasons: tvUnlistedSeasons,
+            tvUnlistedEpisodes: tvUnlistedEpisodes
         )
     }
 
@@ -1565,6 +1600,11 @@ nonisolated struct UserMediaState: Codable, Hashable {
     var likeIsIndependent: Bool?
     var book: BookTrackingState?
     var game: GameTrackingState?
+    /// TV state of a show, season or episode page (plan section 2.3.1). Nil for other media types.
+    var tv: TVShowState? = nil
+    /// Client-only: ticks and marks the page shows before the server confirms them (TV-705). Projections set it;
+    /// it is never decoded or encoded.
+    var tvPending = TVPendingWatches()
 
     enum CodingKeys: String, CodingKey {
         case isTracked
@@ -1584,6 +1624,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         case likeIsIndependent
         case book
         case game
+        case tv
     }
 
     init(
@@ -1604,7 +1645,8 @@ nonisolated struct UserMediaState: Codable, Hashable {
         likeSourceDiaryEntryId: Int? = nil,
         likeIsIndependent: Bool? = nil,
         book: BookTrackingState? = nil,
-        game: GameTrackingState? = nil
+        game: GameTrackingState? = nil,
+        tv: TVShowState? = nil
     ) {
         self.isTracked = isTracked
         self.trackingId = trackingId
@@ -1624,6 +1666,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         self.likeIsIndependent = likeIsIndependent
         self.book = book
         self.game = game
+        self.tv = tv
     }
 
     init(from decoder: Decoder) throws {
@@ -1645,6 +1688,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         likeIsIndependent = try container.decodeIfPresent(Bool.self, forKey: .likeIsIndependent)
         book = try container.decodeIfPresent(BookTrackingState.self, forKey: .book)
         game = try container.decodeIfPresent(GameTrackingState.self, forKey: .game)
+        tv = try container.decodeIfPresent(TVShowState.self, forKey: .tv)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1666,6 +1710,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         try container.encodeIfPresent(likeIsIndependent, forKey: .likeIsIndependent)
         try container.encodeIfPresent(book, forKey: .book)
         try container.encodeIfPresent(game, forKey: .game)
+        try container.encodeIfPresent(tv, forKey: .tv)
     }
 
     func replacingHasLiked(_ liked: Bool) -> UserMediaState {
@@ -1684,6 +1729,23 @@ nonisolated struct UserMediaState: Codable, Hashable {
 struct MediaLikeResponse: Codable, Equatable {
     let liked: Bool
     let media: MediaSummary?
+    /// TV likes (TV-303, TV-305): the show, season and episode state after the heart, and the earlier-episodes
+    /// question when the heart was the show's first regular watch (TV-107). Like requests carry no mutation ID.
+    var tv: TVShowState? = nil
+    var season: TVSeasonState? = nil
+    var episode: TVEpisodeState? = nil
+    var earlierUnwatched: TVEarlierUnwatched? = nil
+
+    /// The heart's TV keys as a write envelope, for the follow-up coordinator and `applying(tvEnvelope:tracking:)`.
+    var tvEnvelope: TVWriteEnvelope {
+        TVWriteEnvelope(
+            tv: tv ?? media?.userState?.tv,
+            season: season,
+            episode: episode,
+            changed: true,
+            earlierUnwatched: earlierUnwatched
+        )
+    }
 }
 
 struct CommunityStats: Codable, Equatable {
@@ -1879,6 +1941,8 @@ struct EpisodeSummary: Codable, Identifiable, Hashable {
     let runtime: String?
     let imageUrl: String?
     let rating: String?
+    /// The viewer's watched state for this episode (plan section 2.3.3). `rating` stays the provider's vote.
+    var tv: TVEpisodeState? = nil
 
     var id: Int { episodeNumber }
 }
@@ -1890,6 +1954,8 @@ struct SeasonSummary: Codable, Identifiable, Hashable {
     let imageUrl: String?
     let releaseDate: String?
     let completion: CompletionProgress?
+    /// The viewer's season card state (plan section 2.3.3, card variant).
+    var tv: TVSeasonState? = nil
 
     var id: Int { seasonNumber }
 }

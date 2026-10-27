@@ -10,8 +10,9 @@ from api.permissions import can_view_user_profile
 from api.serializers.diary import DiaryEntryWriteSerializer
 from api.services import diary as diary_service
 from api.services import filters as filter_service
+from api.services import tracking as tracking_service
 from api.services.social import set_like
-from app import exposure, single_weight
+from app import exposure, single_weight, tv_tracking
 from app.curation import curated_prefetches
 from app.models import CustomBackdropPreference, CustomPosterPreference, DiaryEntry
 from app.services import delete_diary_entry
@@ -92,6 +93,7 @@ class DiaryListView(APIView):
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(entries, request, view=self))
         diary_service.prime_diary_likes(page, request.user)
+        diary_service.prime_show_titles(page)
         response = paginator.get_paginated_response(
             [
                 diary_service.diary_payload(entry, request=request, viewer=request.user)
@@ -109,11 +111,14 @@ class DiaryListView(APIView):
         if ref:
             exposure.require_media_type(ref["media_type"])
         entry = diary_service.create_entry(request.user, serializer.validated_data)
+        tv_write = getattr(entry, "tv_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
-        return Response(
-            diary_service.diary_payload(entry, request=request, viewer=request.user),
-            status=status.HTTP_201_CREATED,
-        )
+        payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
+        if tv_write is not None:
+            # A TV log's response adds the show's state, the log target's season and
+            # episode, and what the log finished or left unwatched (plan 2.3.7).
+            payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=True))
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class DiaryDetailView(APIView):
@@ -132,7 +137,7 @@ class DiaryDetailView(APIView):
             if not single_weight.uses_half_star_rating(entry.item) and entry.visibility == "private":
                 return Response(status=status.HTTP_404_NOT_FOUND)
         exposure.require_media_type(entry.item.media_type)
-        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user))
+        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True))
 
     def patch(self, request, entry_id):
         entry = get_object_or_404(DiaryEntry, id=entry_id, user=request.user)
@@ -143,12 +148,31 @@ class DiaryDetailView(APIView):
         if ref:
             exposure.require_media_type(ref["media_type"])
         entry = diary_service.update_entry(entry, serializer.validated_data)
+        tv_write = getattr(entry, "tv_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
-        return Response(diary_service.diary_payload(entry, request=request, viewer=request.user))
+        payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
+        if tv_write is not None:
+            payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=False))
+        return Response(payload)
 
     def delete(self, request, entry_id):
         entry = get_object_or_404(DiaryEntry, id=entry_id, user=request.user)
         exposure.require_media_type(entry.item.media_type)
+        if tv_tracking.supports(entry.item):
+            # TV-406: only the log's own viewing and fills go. With the version the
+            # dialog showed, a stale one that would unmark episodes is a 409 (TV-705).
+            tracking_service._call_tv(
+                tv_tracking.delete_log,
+                request.user,
+                entry,
+                expected_version=tracking_service.int_param(
+                    request.query_params.get("expected_version"),
+                    "expected_version",
+                ),
+                mutation_id=request.query_params.get("mutation_id") or None,
+                entry_point=tv_tracking.APP,
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
         delete_diary_entry(request.user, entry)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

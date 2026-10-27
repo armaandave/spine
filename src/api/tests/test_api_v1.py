@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from importlib import import_module
 from unittest.mock import MagicMock, patch
 
@@ -1792,6 +1792,13 @@ class ApiV1FoundationTests(TestCase):
 
     @patch("app.models.providers.services.get_media_metadata")
     def test_episode_watch_records_season_progress_change(self, metadata_mock):
+        """An installed build's episode watch records the season's progress change.
+
+        Rewritten fixture (TV-205, TV-703): the old cascade left an empty In progress
+        season before the first watch, which Spine no longer creates, so the season now
+        comes from the tick itself; the metadata fake also answers the show request the
+        stored episode lists need (TV-103). The ProgressChange assertions are unchanged.
+        """
         user = get_user_model().objects.create_user(username="season-progress-change", password="strong-password-123")
         tv_item = Item.objects.create(
             source=Sources.TMDB.value,
@@ -1806,9 +1813,9 @@ class ApiV1FoundationTests(TestCase):
             season_number=1,
             title="Season Progress Change",
         )
-        tv = TV.objects.create(user=user, item=tv_item, status=Status.IN_PROGRESS.value)
-        Season.objects.create(user=user, item=season_item, related_tv=tv, status=Status.IN_PROGRESS.value)
+        TV.objects.create(user=user, item=tv_item, status=Status.IN_PROGRESS.value)
         metadata_mock.side_effect = lambda media_type, *_args: {
+            "tv": {"related": {"seasons": [{"season_number": 1, "first_air_date": "2020-01-01"}]}},
             "season": {
                 "episodes": [
                     {"episode_number": 1, "air_date": "2020-01-01"},
@@ -1837,6 +1844,58 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(change.previous_progress["value"], 0)
         self.assertEqual(change.current_progress["value"], 1)
         self.assertEqual(response.data["latest_progress_change"]["current"]["value"], 1)
+
+    @patch("app.models.providers.services.get_media_metadata")
+    def test_watched_episode_tracking_detail_loads(self, metadata_mock):
+        user = get_user_model().objects.create_user(username="episode-detail", password="strong-password-123")
+        tv_item = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.TV.value,
+            media_id="episode-detail",
+            title="Episode Detail",
+        )
+        season_item = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.SEASON.value,
+            media_id="episode-detail",
+            season_number=1,
+            title="Episode Detail",
+        )
+        episode_item = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.EPISODE.value,
+            media_id="episode-detail",
+            season_number=1,
+            episode_number=1,
+            title="Episode Detail",
+        )
+        metadata_mock.return_value = {
+            "season/1": {
+                "episodes": [
+                    {"episode_number": 1, "air_date": "2020-01-01"},
+                    {"episode_number": 2, "air_date": "2020-01-08"},
+                ]
+            },
+        }
+        tv = TV.objects.create(user=user, item=tv_item, status=Status.IN_PROGRESS.value)
+        season = Season.objects.create(user=user, item=season_item, related_tv=tv, status=Status.IN_PROGRESS.value)
+        episode = Episode.objects.create(item=episode_item, related_season=season, end_date=timezone.now())
+        change = ProgressChange.objects.create(
+            actor=user,
+            item=episode_item,
+            previous_progress={"kind": "count", "value": 0, "max": None, "unit": "episode"},
+            current_progress={"kind": "count", "value": 1, "max": None, "unit": "episode"},
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.get(
+            "/api/v1/tracking/tmdb/episode/episode-detail/",
+            {"season_number": 1, "episode_number": 1},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["tracking_id"], episode.id)
+        self.assertEqual(response.data["latest_progress_change"]["id"], change.id)
 
     def test_user_activity_ignores_stored_activity_rows(self):
         user = get_user_model().objects.create_user(username="progress-activity", password="strong-password-123")
@@ -2142,6 +2201,13 @@ class ApiV1FoundationTests(TestCase):
         metadata_mock,
         _fetch_releases_mock,
     ):
+        """Two logs of one episode, the second a rewatch, keep two viewings (TV-402).
+
+        Rewritten date expectations (TV-407): a TV log's date is a calendar date, so
+        each log's own viewing is on the log's calendar day (an installed build's
+        datetime is converted to it) rather than at the datetime sent. The metadata
+        fake also answers the show request the stored episode lists need (TV-103).
+        """
         user = get_user_model().objects.create_user(
             username="diary-episode",
             password="strong-password-123",
@@ -2184,6 +2250,12 @@ class ApiV1FoundationTests(TestCase):
                 }
             if media_type == "tv_with_seasons":
                 return {"season/1": {"episodes": season_episodes}}
+            if media_type == MediaTypes.TV.value:
+                return {
+                    "title": "Example Show",
+                    "image": "https://example.com/show.jpg",
+                    "related": {"seasons": [{"season_number": 1, "first_air_date": "2025-01-01"}]},
+                }
             message = f"Unexpected metadata request: {media_type}"
             raise AssertionError(message)
 
@@ -2235,14 +2307,11 @@ class ApiV1FoundationTests(TestCase):
         watched = Episode.objects.filter(
             related_season=season,
             item=episode_item,
-        ).order_by("end_date")
+        ).order_by("watched_on")
         self.assertEqual(watched.count(), 2)
         self.assertEqual(
-            list(watched.values_list("end_date", flat=True)),
-            [
-                datetime(2025, 4, 5, 12, 34, 56, tzinfo=UTC),
-                datetime(2025, 4, 6, 1, 2, 3, tzinfo=UTC),
-            ],
+            list(watched.values_list("watched_on", flat=True)),
+            [date(2025, 4, 5), date(2025, 4, 6)],
         )
         season.refresh_from_db()
         self.assertEqual(season.status, Status.IN_PROGRESS.value)
@@ -5675,6 +5744,47 @@ class ApiV1FoundationTests(TestCase):
         )
         self.assertEqual(response.data["results"][0]["review"], "Sharp and strange.")
         self.assertEqual(response.data["results"][0]["like_count"], 1)
+
+    def test_media_reviews_endpoint_returns_season_reviews_for_tv_with_season_number(self):
+        user = get_user_model().objects.create_user(username="season-reviewer", password="strong-password-123")
+        show = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.TV.value,
+            media_id="1396",
+            title="Breaking Bad",
+        )
+        season = Item.objects.create(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.SEASON.value,
+            media_id="1396",
+            season_number=2,
+            title="Breaking Bad",
+        )
+        DiaryEntry.objects.create(
+            user=user,
+            item=show,
+            consumed_at=timezone.now(),
+            review="The whole show.",
+            visibility="public",
+        )
+        DiaryEntry.objects.create(
+            user=user,
+            item=season,
+            consumed_at=timezone.now(),
+            review="Season two.",
+            visibility="public",
+        )
+
+        # Installed iOS builds send a season ref as tv + season_number.
+        as_tv = self.client.get("/api/v1/media/tmdb/tv/1396/reviews/", {"season_number": 2})
+        as_season = self.client.get("/api/v1/media/tmdb/season/1396/reviews/", {"season_number": 2})
+        show_only = self.client.get("/api/v1/media/tmdb/tv/1396/reviews/")
+
+        for response in (as_tv, as_season):
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual([entry["review"] for entry in response.data["results"]], ["Season two."])
+        self.assertEqual(show_only.status_code, status.HTTP_200_OK)
+        self.assertEqual([entry["review"] for entry in show_only.data["results"]], ["The whole show."])
 
     def test_diary_media_embed_includes_artwork_fields(self):
         user = get_user_model().objects.create_user(username="diary-art", password="strong-password-123")

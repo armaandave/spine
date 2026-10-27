@@ -19,7 +19,10 @@ class PeopleListsMigrationTests(TransactionTestCase):
     ]
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate(self.migrate_to)
+        # Restore every app's latest migration, so later tests in this process don't
+        # run against a partly migrated database (the pinned state predates users 0060).
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_forward_and_reverse_preserve_existing_media_lists(self):

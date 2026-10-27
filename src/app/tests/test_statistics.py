@@ -503,10 +503,12 @@ class StatisticsTests(TestCase):
             media_type=MediaTypes.TV.value,
             title="Test TV Show",
         )
+        # The show has two viewings below, so its worked-out status is Watching
+        # (TV-207). This used to come from the Season.save cascade, which is gone.
         self.tv = TV.objects.create(
             user=self.user,
             item=self.tv_item,
-            status=Status.PLANNING.value,
+            status=Status.IN_PROGRESS.value,
         )
 
         # Create season item

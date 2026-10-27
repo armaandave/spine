@@ -43,6 +43,27 @@ final class ActivityPeopleTests: XCTestCase {
         XCTAssertEqual(ActivityFeedPresentation.destinationHint(for: activity), "Opens person details")
     }
 
+    func testDirectStarsReadAsARating() throws {
+        // Stars set straight on a show or season post rating activity (SW-401, TV-703); it isn't "shared activity".
+        func activity(mediaType: String, seasonNumber: Int? = nil) throws -> ActivityItem {
+            let season = seasonNumber.map { #","season_number":\#($0)"# } ?? ""
+            return try JSONDecoder.api.decode(ActivityItem.self, from: Data("""
+            {"id":7,"type":"rating_updated","created_at":"2026-10-26T14:00:00Z",
+             "actor":{"id":1,"username":"claude","display_name":"Claude","avatar_url":null},
+             "media":{"ref":{"source":"tmdb","media_type":"\(mediaType)","media_id":"19885"\(season)},"title":"Sherlock"},
+             "object":{"type":"tracking","id":1,"rating":"8.0"}}
+            """.utf8))
+        }
+
+        let show = try activity(mediaType: "tv")
+        XCTAssertEqual(ActivityFeedPresentation.actionText(for: show), "rated a TV show")
+        XCTAssertEqual(ActivityFeedPresentation.rating(for: show), "8.0")
+        XCTAssertEqual(ActivityFeedPresentation.destinationHint(for: show), "Opens media details")
+        XCTAssertEqual(ActivityFeedPresentation.actionText(for: try activity(mediaType: "season", seasonNumber: 1)), "rated a season")
+        XCTAssertEqual(ActivityFeedPresentation.actionText(for: try activity(mediaType: "movie")), "rated a movie")
+        XCTAssertEqual(ActivityFeedPresentation.actionText(for: try activity(mediaType: "music")), "rated an album")
+    }
+
     func testDestinationPrecedenceIsDiaryThenPersonThenMediaThenNone() {
         let person = ActivityPersonSnapshot(
             source: "tmdb",

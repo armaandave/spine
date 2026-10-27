@@ -743,12 +743,18 @@ class MediaReviewsView(MediaExposureMixin, APIView):
     def get(self, request, source, media_type, media_id):
         from app.models import DiaryEntry, Item
 
+        season_number = request.query_params.get("season_number")
+        episode_number = request.query_params.get("episode_number")
+        # Installed iOS builds ask for a season's reviews as tv + season_number.
+        # A TV Item never has a season number, so read that as the season.
+        if media_type == MediaTypes.TV.value and season_number is not None and episode_number is None:
+            media_type = MediaTypes.SEASON.value
         item = Item.objects.filter(
             source=source,
             media_type=media_type,
             media_id=media_id,
-            season_number=request.query_params.get("season_number"),
-            episode_number=request.query_params.get("episode_number"),
+            season_number=season_number,
+            episode_number=episode_number,
         ).first()
         if item is None:
             return Response({"count": 0, "next": None, "previous": None, "results": []})
@@ -799,9 +805,10 @@ class MediaReviewsView(MediaExposureMixin, APIView):
             ).order_by("-review_like_count", "-created_at", "-id")
 
         paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(entries, request, view=self)
+        page = list(paginator.paginate_queryset(entries, request, view=self))
         viewer = request.user if request.user.is_authenticated else None
         diary_service.prime_diary_likes(page, viewer)
+        diary_service.prime_show_titles(page)
         prime_curated_artwork(entry.item for entry in page)
         return paginator.get_paginated_response(
             [diary_service.diary_payload(entry, request=request, viewer=viewer) for entry in page],

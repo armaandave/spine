@@ -73,6 +73,8 @@ Run from the feature worktree unless a step says otherwise.
    - what ships, in plain English
    - the backend changes and the compatibility verdict
    - each migration (it runs during the deploy)
+   - any one-time data step the ship carries ("One-time data steps", below), which
+     runs after the deploy, or waits for the user's request where the step says so
    - that the push deploys production once CI passes, and makes TestFlight build ~N if
      the iOS app changed, which you'll add to "Me"
 
@@ -96,6 +98,9 @@ Run from the feature worktree unless a step says otherwise.
    - `https://api.spine-api.com/api/v1/health/` answers 200, and one changed endpoint
      answers as expected (an unauthenticated request to a new route gets 401, not 404).
    - `docker logs --since 10m spine 2>&1 | grep -iE 'error|traceback'` shows nothing new.
+   - If the ship carries a one-time data step ("One-time data steps", below), run it
+     now. The user's ship request covers it, except a part the step says waits for
+     the user's request.
    - Once music albums have moved to Apple Music, one moved album's page answers 200
      with `ref.source` `apple_music`.
 9. **Build,** only if the push changed the iOS app; otherwise skip to step 10. If
@@ -120,6 +125,34 @@ Run from the feature worktree unless a step says otherwise.
     this Mac's nearly full disk. Report any it skips.
 11. **Report** the deploy (or why it was skipped), the CI result, migrations, the build
     number and whether it's in "Me", and anything left to do.
+
+## One-time data steps
+
+Some ships carry a data step that has to run once, right after their deploy is verified
+(Workflow A, step 8). Each one says which ship carries it.
+
+### The TV repair, with the ship that adds `src/app/migrations/0085_tv_tracking_state.py`
+
+TV shows stored before the TV tracking contract stay unworked until this repair runs
+(`docs/tv-tracking-contract.md`, TV-801). Until then the new build's Continue Watching on
+Home and Profile leaves them out, shows and seasons that only have logs stay out of the
+Library, and Library rows count their episodes without the number aired. It runs on the
+test backend first, then on production right after the deploy. The user's "ship this"
+covers both (decided 2026-10-26):
+
+1. With the ship, after `scripts/ios/test-backend.sh update` (step 6), run
+   `scripts/ios/test-backend.sh repair-tv`, a dry run that lists every status it would
+   change. If its summary shows errors, stop and report. Otherwise run
+   `scripts/ios/test-backend.sh repair-tv --apply`.
+2. On production, after the deploy is verified (step 8), run the dry run:
+   `docker exec spine python manage.py reconcile_tv`. Read its summary; if any show
+   can't be repaired, stop and report. Otherwise run
+   `docker exec spine python manage.py reconcile_tv --apply`. It is safe to run again: a
+   show already worked out reports nothing. The pre-deploy backup is the way back.
+3. Report each run's counts (shows checked and changed, newly in the Library, status
+   changes).
+
+Remove this section once the production repair has run.
 
 ## Workflow B: roll back after a bad ship
 

@@ -12,7 +12,10 @@ class ExternalRatingMigrationTests(TransactionTestCase):
     migrate_to = [("app", "0074_migrate_legacy_external_ratings")]
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate(self.migrate_to)
+        # Restore every app's latest migration, so the next migration test starts
+        # from the leaf (a partial state can force a mixed forwards and backwards plan).
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def _old_models(self):

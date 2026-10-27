@@ -4,13 +4,15 @@
 
 This document explains the comprehensive implementation of seamless season vs show logging and tracking in Yamtrack. The system ensures users are never confused about what actions affect which levels (TV show, season, or episode).
 
+It describes the web's TV pages. What each action does to tracking is defined by `docs/tv-tracking-contract.md`, which every entry point follows through `src/app/tv_tracking.py`; where this document and the contract differ, the contract wins.
+
 ## Key Principles
 
 1. **Clear Hierarchy**: TV Show → Seasons → Episodes
 2. **Explicit Actions**: Every button clearly states what it affects
 3. **Visual Feedback**: Status indicators show current state at all levels
 4. **Contextual Help**: Tooltips and explanations guide users
-5. **Bidirectional Propagation**: Status changes flow both up and down the hierarchy
+5. **Worked-Out Status**: Season and show statuses are worked out from what's watched; nothing cascades (TV-207)
 
 ## Components Implemented
 
@@ -111,35 +113,35 @@ Enhanced views to send notification headers:
 ### `mark_tv_watched`
 
 ```python
-response["X-Notification-Message"] = f"Entire show marked as watched (all {season_count} seasons and episodes)"
+response["X-Notification-Message"] = "Marked every aired episode watched"
 response["X-Notification-Type"] = "success"
 ```
 
 ### `unmark_tv_watched`
 
 ```python
-response["X-Notification-Message"] = f"Show unmarked - all {season_count} seasons and episodes removed"
+response["X-Notification-Message"] = "Marked the show's episodes unwatched"
 response["X-Notification-Type"] = "info"
 ```
 
 ### `start_tracking_tv`
 
 ```python
-response["X-Notification-Message"] = "Started watching - Season 1 is now in progress"
+response["X-Notification-Message"] = "Started watching"
 response["X-Notification-Type"] = "success"
 ```
 
 ### `mark_season_watched`
 
 ```python
-response["X-Notification-Message"] = f"Season {season_number} marked as watched ({episode_count} episodes)"
+response["X-Notification-Message"] = f"Marked {tv_listing.season_label(season_number)} watched"
 response["X-Notification-Type"] = "success"
 ```
 
 ### `unmark_season_watched`
 
 ```python
-response["X-Notification-Message"] = f"Season {season_number} unmarked - all episodes removed"
+response["X-Notification-Message"] = f"Marked {tv_listing.season_label(season_number)} unwatched"
 response["X-Notification-Type"] = "info"
 ```
 
@@ -148,9 +150,9 @@ response["X-Notification-Type"] = "info"
 ### Flow 1: Starting a New Show
 
 1. User clicks "Start Watching" on TV show page
-2. Toast notification: "Started watching - Season 1 is now in progress"
+2. Toast notification: "Started watching"
 3. Action button changes to "Watching" with helper text
-4. Season progress panel appears showing Season 1 in progress
+4. The show is in Watching with S1 E1 up next; no season tracking is created until something is watched (TV-005, TV-205)
 5. User can click Season 1 to see episodes and track progress
 
 ### Flow 2: Completing Individual Seasons
@@ -167,9 +169,9 @@ response["X-Notification-Type"] = "info"
 
 1. User clicks "Watched" on TV show page
 2. Tooltip on hover explains: "Mark all seasons and episodes as watched"
-3. After clicking, toast: "Entire show marked as watched (all 5 seasons and episodes)"
-4. All seasons and episodes are created and marked complete
-5. TV show status changes to "Completed"
+3. After clicking, toast: "Marked every aired episode watched"
+4. Every aired regular episode not yet watched is marked watched, undated, as one mark; specials are left alone (TV-300)
+5. TV show status changes to "Completed", or stays "Watching" as caught up while a season is still airing
 
 ### Flow 4: Logging vs Tracking
 
@@ -181,28 +183,23 @@ response["X-Notification-Type"] = "info"
 4. Helper text clarifies the difference
 5. User makes informed choice
 
-### Flow 5: Season Independence
+### Flow 5: Pausing or Dropping
 
-1. User watching Season 3 decides to drop it
-2. Views season page - sees parent show card
-3. Marks Season 3 as dropped
-4. Parent show status updates to "Dropped" (per propagation rules)
-5. Seasons 1-2 remain "Completed"
-6. Helper text confirms: "Only this season will be affected"
+1. User watching Season 3 decides to stop
+2. Seasons have no Pause or Drop of their own; the season page's Pause, Resume and Drop change nothing and answer "Pause or drop the show instead." (TV-204)
+3. User drops the show from the show page
+4. The show is "Dropped" and keeps every viewing, log and mark (TV-007)
+5. Seasons 1-2 stay "Watched"; started, unfinished Season 3 shows "Dropped"
 
-## Status Propagation Rules
+## Status Rules
 
-### Season → TV Show (Upward)
+Statuses are worked out from what's watched, never cascaded (`docs/tv-tracking-contract.md`):
 
-- Season marked "In Progress" → TV show becomes "In Progress"
-- Season marked "Dropped" → TV show becomes "Dropped"
-- Last season completed → TV show becomes "Completed"
-
-### TV Show → Season (Downward)
-
-- TV show marked "Completed" → All seasons become "Completed"
-- TV show marked "Dropped" → All in-progress seasons become "Dropped"
-- TV show marked "In Progress" → Start next available season
+- A season is "Completed" when every listed episode has aired and is watched (TV-200).
+- The show is "Completed" when every season that has started airing is finished (TV-201), unless the user has chosen Paused or Dropped since.
+- Planning, Paused and Dropped are choices about the show; started, unfinished seasons show the show's Paused or Dropped (TV-204).
+- A written show "Completed" means marking every aired regular episode watched; a written "In Progress" means choosing Watching (TV-207).
+- A newly aired episode reopens a finished season and moves a Completed show back to Watching (TV-206).
 
 ## Visual Design Principles
 
@@ -230,13 +227,13 @@ response["X-Notification-Type"] = "info"
 
 ### Critical Paths to Test
 
-1. [ ] Start watching a new show → Check Season 1 created as "In Progress"
+1. [ ] Start watching a new show → Check the show is Watching with S1 E1 up next and no season tracking
 2. [ ] Complete a season → Verify only that season marked complete
 3. [ ] Complete entire show → Verify all seasons and episodes created
 4. [ ] Unwatch a season → Verify episodes removed, other seasons intact
 5. [ ] Unwatch entire show → Verify all data removed
 6. [ ] Log season vs log show → Verify diary entries separate
-7. [ ] Drop a season → Verify show status updates correctly
+7. [ ] Drop the show → Verify started, unfinished seasons show Dropped and nothing is unwatched
 8. [ ] Complete last season → Verify show becomes complete
 
 ### UI/UX to Verify

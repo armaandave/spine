@@ -16,7 +16,10 @@ class MusicMigrationTests(TransactionTestCase):
     ]
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate(self.migrate_to)
+        # Restore every app's latest migration, so the next migration test starts
+        # from the leaf (a partial state can force a mixed forwards and backwards plan).
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_forward_defaults_and_reverse_preserve_existing_media(self):

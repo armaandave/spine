@@ -1,9 +1,11 @@
 import logging
 
-from django.utils import timezone
+from django.conf import settings
 
 import app
-from app.models import MediaTypes, Sources, Status
+from app import tv_listing, tv_tracking, user_calendar
+from app.models import MediaTypes, Sources
+from app.providers import services
 from app.providers import tvdb as tvdb_provider
 
 from . import anime_mappings
@@ -162,153 +164,81 @@ class TVWebhookMixin:
         payload,
         user,
     ):
-        """Handle TV episode playback event."""
+        """Apply a TV episode event the way the app would (TV-802).
+
+        A watch ticks the episode at the event time, an unplayed event unticks it, and
+        any other play counts as choosing Watching. Nothing else is created: no season
+        tracking and no status of its own. A rejected event is logged and acknowledged.
+        """
         if self._is_unplayed(payload):
-            self._delete_tv_episode(media_id, season_number, episode_number, user)
-            return
-
-        tv_metadata = app.providers.tmdb.tv_with_seasons(media_id, [season_number])
-        season_metadata = tv_metadata[f"season/{season_number}"]
-
-        tv_item, _ = app.models.Item.objects.get_or_create(
-            media_id=media_id,
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.TV.value,
-            defaults={
-                "title": tv_metadata["title"],
-                "image": tv_metadata["image"],
-            },
-        )
-
-        tv_instance, tv_created = app.models.TV.objects.get_or_create(
-            item=tv_item,
-            user=user,
-            defaults={"status": Status.IN_PROGRESS.value},
-        )
-
-        if tv_created:
-            logger.info("Created new TV instance: %s", tv_metadata["title"])
-        elif tv_instance.status != Status.IN_PROGRESS.value:
-            tv_instance.status = Status.IN_PROGRESS.value
-            tv_instance.save()
-            logger.info(
-                "Updated TV instance status to %s: %s",
-                Status.IN_PROGRESS.value,
-                tv_metadata["title"],
-            )
-
-        season_item, _ = app.models.Item.objects.get_or_create(
-            media_id=media_id,
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            season_number=season_number,
-            defaults={
-                "title": tv_metadata["title"],
-                "image": season_metadata["image"],
-            },
-        )
-
-        season_instance, season_created = app.models.Season.objects.get_or_create(
-            item=season_item,
-            user=user,
-            related_tv=tv_instance,
-            defaults={"status": Status.IN_PROGRESS.value},
-        )
-
-        if season_created:
-            logger.info(
-                "Created new season instance: %s S%02d",
-                tv_metadata["title"],
-                season_number,
-            )
-        elif season_instance.status != Status.IN_PROGRESS.value:
-            season_instance.status = Status.IN_PROGRESS.value
-            season_instance.save()
-            logger.info(
-                "Updated season instance status to %s: %s S%02d",
-                Status.IN_PROGRESS.value,
-                tv_metadata["title"],
-                season_number,
-            )
-
-        episode_item = season_instance.get_episode_item(episode_number, season_metadata)
-
-        if self._is_played(payload):
-            now = timezone.now().replace(second=0, microsecond=0)
-            latest_episode = (
-                app.models.Episode.objects.filter(
-                    item=episode_item,
-                    related_season=season_instance,
-                )
-                .order_by("-end_date")
-                .first()
-            )
-
-            should_create = True
-            # check for duplicate episode records,
-            # sometimes webhooks are triggered multiple times #689
-            if latest_episode and latest_episode.end_date:
-                time_diff = abs((now - latest_episode.end_date).total_seconds())
-                threshold = 5
-                if time_diff < threshold:
-                    should_create = False
-                    logger.debug(
-                        "Skipping duplicate episode record "
-                        "(time difference: %d seconds): %s S%02dE%02d",
-                        time_diff,
-                        tv_metadata["title"],
-                        season_number,
-                        episode_number,
-                    )
-
-            if should_create:
-                app.models.Episode.objects.create(
-                    item=episode_item,
-                    related_season=season_instance,
-                    end_date=now,
-                )
-                logger.info(
-                    "Marked episode as played: %s S%02dE%02d",
-                    tv_metadata["title"],
-                    season_number,
-                    episode_number,
-                )
+            event = "unplayed"
+        elif self._is_played(payload):
+            event = "watched"
         else:
-            logger.debug(
-                "Episode not marked as played: %s S%02dE%02d",
-                tv_metadata["title"],
-                season_number,
-                episode_number,
-            )
+            event = "play"
 
-    def _delete_tv_episode(self, media_id, season_number, episode_number, user):
-        """Delete the latest tracked episode instance for an unplayed event."""
-        episode = (
-            app.models.Episode.objects.filter(
-                related_season__user=user,
-                item__media_id=media_id,
-                item__source=Sources.TMDB.value,
-                item__media_type=MediaTypes.EPISODE.value,
-                item__season_number=season_number,
-                item__episode_number=episode_number,
-            )
-            .order_by("-end_date", "-created_at")
-            .first()
-        )
-
-        if not episode:
+        show_item = self._get_tv_show_item(media_id, create=event != "unplayed")
+        if show_item is None:
             logger.debug(
-                "Episode marked as unplayed but no instance exists: %s S%02dE%02d",
+                "Ignoring TV %s event for a show that isn't tracked: %s S%02dE%02d",
+                event,
                 media_id,
                 season_number,
                 episode_number,
             )
             return
 
-        episode.delete()
-        logger.info(
-            "Marked episode as unplayed: %s S%02dE%02d",
-            media_id,
+        result = tv_tracking.webhook_event(
+            user,
+            show_item,
             season_number,
             episode_number,
+            event=event,
+            at=user_calendar.now(),
         )
+        if result is not None and result.changed:
+            logger.info(
+                "Applied TV %s event: %s S%02dE%02d",
+                event,
+                show_item.title,
+                season_number,
+                episode_number,
+            )
+        else:
+            logger.debug(
+                "TV %s event changed nothing: %s S%02dE%02d",
+                event,
+                show_item.title,
+                season_number,
+                episode_number,
+            )
+
+    def _get_tv_show_item(self, media_id, *, create=True):
+        """Return the TMDB show's tv Item, creating it from its metadata when needed."""
+        lookup = {
+            "media_id": str(media_id),
+            "source": Sources.TMDB.value,
+            "media_type": MediaTypes.TV.value,
+            "season_number": None,
+            "episode_number": None,
+        }
+        show_item = app.models.Item.objects.filter(**lookup).first()
+        if show_item is not None or not create:
+            return show_item
+        try:
+            metadata = services.get_media_metadata(
+                MediaTypes.TV.value,
+                str(media_id),
+                Sources.TMDB.value,
+            )
+        except tv_listing.PROVIDER_FAILURES:
+            logger.warning("Could not fetch TV details for TMDB ID %s", media_id)
+            return None
+        show_item, _ = app.models.Item.objects.get_or_create(
+            **lookup,
+            defaults={
+                "title": metadata.get("title") or "",
+                "image": metadata.get("image") or settings.IMG_NONE,
+            },
+        )
+        return show_item

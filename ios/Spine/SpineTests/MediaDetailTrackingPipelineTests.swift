@@ -913,6 +913,8 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertEqual(model.quickActionErrorMessage, "Delete your logs before marking this as unwatched.")
     }
 
+    /// TV-705: the episode tick now goes through the same write queue as the heart (it used to bypass it), so a
+    /// heart tapped while the tick is sent shows at once, is sent after it, and both stay.
     func testEpisodeWatchKeepsAHeartThatConfirmedWhileItWasSent() async {
         let episode = Self.episodeDetail
         let media = CountingMediaRepository(detail: episode)
@@ -923,15 +925,19 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         let gate = RefreshGate()
         tracking.gate = gate
 
-        let watch = Task { await model.watchEpisode(episode) }
-        await Self.waitUntil { tracking.calls == ["episode.watch"] }
-        let liked = await model.toggleMediaLike(for: episode).value
+        let watch = model.tickTVEpisode(seasonNumber: 3, episodeNumber: 2)
+        await Self.waitUntil { tracking.calls == ["tv.tick"] }
+        let like = model.toggleMediaLike(for: episode)
+        XCTAssertEqual(model.viewer?.hasLiked, true, "The heart shows while the tick is sent.")
+        XCTAssertEqual(model.viewer?.isTracked, true)
         await gate.open()
         let watched = await watch.value
+        let liked = await like.value
         await model.refreshFinished()
 
         XCTAssertTrue(liked)
         XCTAssertTrue(watched)
+        XCTAssertEqual(tracking.calls, ["tv.tick"], "The heart goes through the likes endpoint after the tick.")
         XCTAssertEqual(model.detail?.userState?.isTracked, true)
         XCTAssertEqual(model.detail?.userState?.hasLiked, true, "The watch doesn't restore the state from before the heart.")
     }
@@ -1042,15 +1048,23 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertEqual(media.enrichmentCount, 0)
     }
 
+    /// TV-504: season stars go through the TV `rate` action, in whole steps on the 0-10 wire with the season number
+    /// (they used to PATCH the season's tracking with no season number). Season pages still refresh the whole detail.
     func testSeasonPageWritesRefreshTheWholeDetail() async throws {
         let season = Self.seasonDetail(title: "Season 3")
         let media = CountingMediaRepository(detail: Self.seasonDetail(title: "Season 3, refreshed"))
-        let model = Self.model(ref: season.ref, media: media, tracking: ScriptedTrackingRepository())
+        let tracking = ScriptedTrackingRepository()
+        let model = Self.model(ref: season.ref, media: media, tracking: tracking)
         model.detail = season
 
         _ = await model.setCurrentRating(for: season, halfSteps: 8).value
         await model.refreshFinished()
 
+        XCTAssertEqual(tracking.calls, ["tv.rate"])
+        XCTAssertEqual(tracking.tvRequests.first?.rating, 8)
+        XCTAssertEqual(tracking.tvRequests.first?.seasonNumber, 3)
+        XCTAssertEqual(tracking.tvRequests.first?.includesRating, true)
+        XCTAssertTrue(tracking.updates.isEmpty)
         XCTAssertEqual(media.detailCount, 1)
         XCTAssertEqual(media.communityCount, 0)
         XCTAssertEqual(model.detail?.title, "Season 3, refreshed", "Season pages replace the whole detail.")
@@ -1272,6 +1286,7 @@ private final class ScriptedTrackingRepository: TrackingRepository {
     private(set) var actions: [BookActionRequest] = []
     private(set) var updates: [TrackingWriteRequest] = []
     private(set) var playthroughIds: [Int] = []
+    private(set) var tvRequests: [TVActionRequest] = []
 
     private static let fallback = TrackingState(
         trackingId: 1, status: "In progress", rating: nil, progress: nil, repeats: nil,
@@ -1316,6 +1331,19 @@ private final class ScriptedTrackingRepository: TrackingRepository {
 
     func watchEpisode(source: String, mediaId: String, seasonNumber: Int, episodeNumber: Int, watchedAt: Date?) async throws -> TrackingState {
         try await respond("episode.watch") ?? Self.fallback
+    }
+
+    /// A TV action answers with the state of the episode it names, ticked or not.
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        tvRequests.append(request)
+        _ = try await respond("tv.\(action.rawValue)")
+        let episode = request.episodeNumber.flatMap { number in
+            request.seasonNumber.map {
+                TVEpisodeState(seasonNumber: $0, episodeNumber: number, watched: action == .tick,
+                               viewingCount: action == .tick ? 1 : 0, untickViewingId: action == .tick ? 1 : nil)
+            }
+        }
+        return TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(episode: episode, changed: true))
     }
 
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState {

@@ -2,13 +2,22 @@ import logging
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Count, F, Prefetch, Q, Window, prefetch_related_objects
+from django.db.models import (
+    Count,
+    F,
+    Max,
+    Min,
+    Prefetch,
+    Q,
+    Window,
+    prefetch_related_objects,
+)
 from django.db.models.functions import RowNumber
 from django.utils.text import slugify
 from rest_framework import serializers
 
 from api.services import completion as completion_service
-from app import config, music_catalog, single_weight
+from app import config, music_catalog, single_weight, tv_tracking
 from app.curation import (
     curated_image_url,
     music_picks_apply,
@@ -16,10 +25,12 @@ from app.curation import (
     prime_curated_artwork,
 )
 from app.models import (
+    TV,
     BasicMedia,
     CustomBackdropPreference,
     CustomPosterPreference,
     DiaryEntry,
+    Episode,
     Item,
     MediaLike,
     MediaTypes,
@@ -624,11 +635,19 @@ def crew_from_metadata(metadata, request=None):
     ]
 
 
-def seasons_from_metadata(metadata, request=None, user=None):
-    """Normalize TV seasons into the native season summary shape."""
+def seasons_from_metadata(metadata, request=None, user=None, *, tv_seasons=None):
+    """Normalize TV seasons into the native season summary shape.
+
+    Specials are listed last (TV-004). tv_seasons maps season numbers to the viewer's
+    card TVSeasonState (tv_tracking.season_card_states): each season then carries it as
+    `tv`, and its completion is watched over aired episodes (TV-104), or null when the
+    season's episode list isn't known.
+    """
     seasons = (metadata.get("related") or {}).get("seasons") or []
+    seasons = [season for season in seasons if isinstance(season, dict)]
+    seasons = sorted(seasons, key=lambda season: season.get("season_number") == 0)
     tracked = {}
-    if user and user.is_authenticated:
+    if user and user.is_authenticated and tv_seasons is None:
         tracked = {
             season.item.season_number: season
             for season in Season.objects.filter(
@@ -661,39 +680,43 @@ def seasons_from_metadata(metadata, request=None, user=None):
         },
         **picked_images_by_number(season_items, CustomPosterPreference, user, "season_number"),
     }
-    return [
-        {
-            "season_number": season.get("season_number"),
+    summaries = []
+    for season in seasons:
+        number = season.get("season_number")
+        if tv_seasons is not None:
+            completion = _tv_card_completion(tv_seasons.get(number))
+        elif user and user.is_authenticated:
+            completion = completion_service.completion_payload(
+                len({episode.item.episode_number for episode in tracked[number].episodes.all()})
+                if number in tracked
+                else 0,
+                _season_episode_count(season),
+            )
+        else:
+            completion = None
+        summary = {
+            "season_number": number,
             "title": season.get("season_title") or season.get("title") or season.get("name") or "",
             "episode_count": _season_episode_count(season),
-            "image_url": absolute_url(request, season_posters[season.get("season_number")])
-            if season.get("season_number") in season_posters
+            "image_url": absolute_url(request, season_posters[number])
+            if number in season_posters
             else image_url(request, season.get("image") or season.get("poster_path"))
             if (season.get("image") or season.get("poster_path"))
             else None,
             "release_date": season.get("first_air_date") or season.get("air_date") or season.get("release_date"),
-            "completion": (
-                completion_service.completion_payload(
-                    len({
-                        episode.item.episode_number
-                        for episode in tracked[season.get("season_number")].episodes.all()
-                    }),
-                    _season_episode_count(season),
-                )
-                if user
-                and user.is_authenticated
-                and season.get("season_number") in tracked
-                else completion_service.completion_payload(
-                    0,
-                    _season_episode_count(season),
-                )
-                if user and user.is_authenticated
-                else None
-            ),
+            "completion": completion,
         }
-        for season in seasons
-        if isinstance(season, dict)
-    ]
+        if tv_seasons is not None:
+            summary["tv"] = tv_seasons.get(number)
+        summaries.append(summary)
+    return summaries
+
+
+def _tv_card_completion(card):
+    """Return a season card's completion: watched over aired episodes (TV-104)."""
+    if not card or card.get("watched_count") is None or card.get("aired_count") is None:
+        return None
+    return completion_service.completion_payload(card["watched_count"], card["aired_count"])
 
 
 def picked_images_by_number(items, model, user, number_field):
@@ -734,8 +757,12 @@ def _season_episode_count(season):
         return 0
 
 
-def episodes_from_metadata(metadata, request=None, picked_stills=None):
-    """Normalize season episodes into the native episode summary shape."""
+def episodes_from_metadata(metadata, request=None, picked_stills=None, *, tv_episodes=None):
+    """Normalize season episodes into the native episode summary shape.
+
+    tv_episodes maps episode numbers to the viewer's TVEpisodeState
+    (tv_tracking.episode_states); each episode then carries it as `tv`.
+    """
     episodes = metadata.get("episodes") or []
     picked_stills = picked_stills or {}
     return [
@@ -752,6 +779,7 @@ def episodes_from_metadata(metadata, request=None, picked_stills=None):
             else None,
             "image_role": "still",
             "rating": str(episode.get("vote_average")) if episode.get("vote_average") is not None else episode.get("rating"),
+            **({"tv": tv_episodes.get(episode.get("episode_number"))} if tv_episodes is not None else {}),
         }
         for episode in episodes
         if isinstance(episode, dict)
@@ -1115,7 +1143,20 @@ def user_state_for_item(user, item):
         "has_liked": has_liked,
     }
     if media is None:
-        return {"is_tracked": False, "status": None, "rating": None, "in_lists": list_ids, **diary_state}
+        state = {"is_tracked": False, "status": None, "rating": None, "in_lists": list_ids, **diary_state}
+        if media_type == MediaTypes.TV.value:
+            state["tv"] = tv_tracking.list_payload(None)
+        return state
+    if media_type == MediaTypes.SEASON.value and not tv_season_started(media):
+        # A season that isn't started is untracked whatever it stores; its stars and
+        # heart still show (TV-205, TV-900).
+        return {
+            "is_tracked": False,
+            "status": None,
+            "rating": decimal_string(media.score),
+            "in_lists": list_ids,
+            **diary_state,
+        }
     state = {
         "is_tracked": True,
         "tracking_id": media.id,
@@ -1145,7 +1186,27 @@ def user_state_for_item(user, item):
         from app import game_tracking
 
         state["game"] = game_tracking.state_payload(media)
+    if media_type == MediaTypes.TV.value:
+        # The list variant, from the TV row's stored values only (plan 2.3.1). Detail
+        # pages and TV like responses replace it with the detail variant.
+        state["tv"] = tv_tracking.list_payload(media)
     return state
+
+
+def tv_season_started(season):
+    """Return whether a Season row is started: it has a viewing, log or mark (TV-205).
+
+    A worked-out row stores it in is_started. A row not yet worked out counts as started
+    when it has a viewing, or is stored Completed (the legacy rule's mark, TV-801).
+    """
+    if season.is_started is not None:
+        return season.is_started
+    if season.status == Status.COMPLETED.value:
+        return True
+    prefetched = getattr(season, "_prefetched_objects_cache", {})
+    if "episodes" in prefetched:
+        return bool(prefetched["episodes"])
+    return season.episodes.exists()
 
 
 def decimal_string(value):
@@ -1160,6 +1221,10 @@ def decimal_string(value):
 def progress_for_media(media):  # noqa: PLR0911 - media kinds are intentionally explicit
     """Return typed progress for a media instance."""
     media_type = media.item.media_type
+    if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
+        # Watched over aired regular episodes in the current pass (TV-104, TV-900).
+        # Checked first: TV's progress properties load every episode (A-47).
+        return tv_tracking.progress_payload(media)
     max_progress = getattr(media, "max_progress", None)
     value = getattr(media, "progress", 0)
     if media_type in (MediaTypes.MOVIE.value, MediaTypes.MUSIC.value):
@@ -1170,8 +1235,6 @@ def progress_for_media(media):  # noqa: PLR0911 - media kinds are intentionally 
             "max": 1,
             "unit": "album" if media_type == MediaTypes.MUSIC.value else "movie",
         }
-    if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
-        return {"kind": "episodes", "value": value, "max": max_progress, "unit": "episode"}
     if media_type == MediaTypes.GAME.value:
         session = media.current_session
         if session and session.percentage is not None:
@@ -1222,17 +1285,62 @@ def latest_progress_change_for(media):
     """Return the newest recorded progress delta for this user and item."""
     if hasattr(media, "viewer_latest_progress_change"):
         return media.viewer_latest_progress_change
+    # Episodes have no user of their own; they belong to the season's user.
+    user = media.related_season.user if media.item.media_type == MediaTypes.EPISODE.value else media.user
     return (
-        ProgressChange.objects.filter(actor=media.user, item=media.item)
+        ProgressChange.objects.filter(actor=user, item=media.item)
         .exclude(current_progress__kind=ProgressChange.START)
         .order_by("-created_at", "-id")
         .first()
     )
 
 
-def tracking_state(media):
-    """Serialize any tracked media model into TrackingState."""
+def _tv_updated_at(media):
+    """Return a TV row's updated_at: its last activity (TV-701), else the fallbacks."""
+    return (
+        getattr(media, "last_activity_at", None)
+        or getattr(media, "progressed_at", None)
+        or getattr(media, "created_at", None)
+    )
+
+
+def _tv_viewing_dates(media):
+    """Return a TV or Season row's (start_date, end_date) in one query (A-47).
+
+    The same values as the models' properties, which read every season's episodes;
+    rows whose seasons or episodes are prefetched read the prefetch instead, and the TV
+    list's rows read its two annotations.
+    """
+    prefetched = getattr(media, "_prefetched_objects_cache", {})
+    if isinstance(media, TV):
+        if hasattr(media, "tv_first_viewing_end"):
+            # The TV list annotates both (api.views.tracking._tv_viewing_dates).
+            return media.tv_first_viewing_end, media.tv_last_viewing_end
+        if "seasons" in prefetched:
+            return media.start_date, media.end_date
+        viewings = Episode.objects.filter(related_season__related_tv=media).exclude(
+            related_season__item__season_number=0,
+        )
+    else:
+        if "episodes" in prefetched:
+            return media.start_date, media.end_date
+        viewings = Episode.objects.filter(related_season=media)
+    dates = viewings.filter(end_date__isnull=False).aggregate(start=Min("end_date"), end=Max("end_date"))
+    return dates["start"], dates["end"]
+
+
+def tracking_state(media, *, tv=None, tv_detail=False):
+    """Serialize any tracked media model into TrackingState.
+
+    TV shows, seasons and episodes add `tv`: the given TVShowState, the detail variant
+    for that page (tv_detail), or a show row's list variant.
+    """
     uses_half_star = single_weight.uses_half_star_rating(media.item)
+    if isinstance(media, (TV, Season)):
+        start_date, end_date = _tv_viewing_dates(media)
+    else:
+        start_date = getattr(media, "start_date", None)
+        end_date = getattr(media, "end_date", None)
     state = {
         "tracking_id": media.id,
         "status": getattr(media, "status", None),
@@ -1243,16 +1351,30 @@ def tracking_state(media):
         ),
         "progress": progress_for_media(media),
         "repeats": getattr(media, "repeats", 1),
-        "start_date": getattr(media, "start_date", None),
+        "start_date": start_date,
         "end_date": (
-            single_weight.calendar_date(media.end_date).isoformat()
-            if uses_half_star and media.end_date
-            else getattr(media, "end_date", None)
+            single_weight.calendar_date(end_date).isoformat()
+            if uses_half_star and end_date
+            else end_date
         ),
         "notes": getattr(media, "notes", ""),
-        "updated_at": getattr(media, "progressed_at", None) or getattr(media, "created_at", None),
+        "updated_at": (
+            _tv_updated_at(media)
+            if isinstance(media, TV)
+            else getattr(media, "progressed_at", None) or getattr(media, "created_at", None)
+        ),
         "latest_progress_change": progress_change_payload(latest_progress_change_for(media)),
     }
+    if tv_tracking.supports(media.item):
+        if isinstance(media, Season) and not tv_season_started(media):
+            state["status"] = None
+        if tv is not None:
+            state["tv"] = tv
+        elif tv_detail:
+            owner = media.related_season.user if media.item.media_type == MediaTypes.EPISODE.value else media.user
+            state["tv"] = tv_tracking.state_payload(owner, media.item)
+        elif isinstance(media, TV):
+            state["tv"] = tv_tracking.list_payload(media)
     if uses_half_star:
         primed = hasattr(media.item, "viewer_has_liked")
         state.update(

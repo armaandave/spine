@@ -1,9 +1,19 @@
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.middleware import AuthenticationMiddleware
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from app.middleware import AutoLoginMiddleware
+from app import user_calendar
+from app.middleware import APICalendarTimezoneMiddleware, AutoLoginMiddleware
+from app.tests.tv_fixtures import patch_now
 
 UserModel = get_user_model()
 
@@ -73,3 +83,77 @@ class AutoLoginMiddlewareTest(TestCase):
         self.run_middleware(request)
 
         self.assertFalse(request.user.is_authenticated)
+
+
+@override_settings(TIME_ZONE="America/New_York")
+class APICalendarTimezoneMiddlewareTest(TestCase):
+    """The app's X-Spine-Timezone is the user's calendar (Terms; A-60)."""
+
+    def setUp(self):
+        """Create an account with no stored calendar yet."""
+        self.factory = RequestFactory()
+        self.user = UserModel.objects.create_user(username="calendar-user")
+
+    def run_middleware(self, path, zone, user):
+        """Run the middleware and record the calendar the request saw."""
+        seen = {}
+
+        def view(request):
+            seen["zone"] = user_calendar.calendar_tz(self.user)
+            seen["other"] = user_calendar.calendar_tz(self.other)
+            seen["local"] = timezone.get_current_timezone_name()
+            return HttpResponse()
+
+        self.other = UserModel.objects.create_user(
+            username=f"other-{UserModel.objects.count()}",
+            calendar_timezone="Europe/Paris",
+        )
+        headers = {"X-Spine-Timezone": zone} if zone else {}
+        request = self.factory.get(path, headers=headers)
+        request.user = user
+        APICalendarTimezoneMiddleware(view)(request)
+        self.user.refresh_from_db()
+        return seen
+
+    def test_a60_the_header_is_the_requesting_users_calendar_and_is_stored(self):
+        seen = self.run_middleware("/api/v1/me/", "America/Los_Angeles", self.user)
+
+        self.assertEqual(seen["zone"], ZoneInfo("America/Los_Angeles"))
+        self.assertEqual(seen["other"], ZoneInfo("Europe/Paris"))
+        self.assertEqual(seen["local"], "America/Los_Angeles")
+        self.assertEqual(self.user.calendar_timezone, "America/Los_Angeles")
+        # Outside the request the stored zone applies.
+        self.assertIsNone(user_calendar.REQUEST_TIMEZONE.get())
+        self.assertEqual(user_calendar.calendar_tz(self.user), ZoneInfo("America/Los_Angeles"))
+
+    def test_an_invalid_zone_is_ignored(self):
+        seen = self.run_middleware("/api/v1/me/", "not/a/timezone", self.user)
+        self.assertEqual(seen["zone"], ZoneInfo("America/New_York"))
+        self.assertEqual(self.user.calendar_timezone, "")
+
+    def test_without_a_header_or_stored_zone_the_server_zone_is_used(self):
+        seen = self.run_middleware("/api/v1/me/", None, self.user)
+        self.assertEqual(seen["zone"], ZoneInfo("America/New_York"))
+        self.assertEqual(self.user.calendar_timezone, "")
+
+    def test_anonymous_and_non_api_requests_store_nothing(self):
+        seen = self.run_middleware("/api/v1/me/", "Asia/Tokyo", AnonymousUser())
+        self.assertEqual(seen["zone"], ZoneInfo("America/New_York"))
+        self.run_middleware("/settings/", "Asia/Tokyo", self.user)
+        self.assertEqual(self.user.calendar_timezone, "")
+
+    def test_a60_an_authenticated_api_request_stores_the_zone(self):
+        client = APIClient()
+        token = RefreshToken.for_user(self.user).access_token
+        client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+            HTTP_X_SPINE_TIMEZONE="America/Los_Angeles",
+        )
+
+        response = client.get("/api/v1/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.calendar_timezone, "America/Los_Angeles")
+        with patch_now(datetime(2026, 10, 25, 21, 0), tz="America/Los_Angeles"):
+            self.assertEqual(user_calendar.today(self.user), date(2026, 10, 25))

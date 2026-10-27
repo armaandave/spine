@@ -20,6 +20,8 @@
 #   use [hours]     serve this checkout's backend there for [hours] (default 4, at most 12)
 #   release [--any] go back to myapp-main now (only from the checkout being served, unless --any)
 #   update          move it to origin/myapp-main, after a ship
+#   repair-tv [--apply]  run the TV repair (reconcile_tv) on its lasting test database: a dry run,
+#                   or --apply; for the ship that brings the TV tracking contract (SHIP.md)
 #   install [ref]   create its checkout (at origin/myapp-main, or ref) and launchd job; once
 #   uninstall       stop it and remove the launchd job; the checkout and database stay
 #   serve           what launchd runs; not for direct use
@@ -232,6 +234,22 @@ EOF
   status
 }
 
+# The TV tracking repair (docs/tv-tracking-contract.md, TV-801) on the lasting test database, which
+# it runs on before production. Only SQLite, and Redis DB 5 under the test backend's own prefix.
+repair_tv() {
+  local apply=${1:-}
+  case "$apply" in ""|--apply) ;; *) die "usage: scripts/ios/test-backend.sh repair-tv [--apply]" ;; esac
+  installed
+  [ -z "${DB_HOST:-}" ] || die "DB_HOST is set, which would point the repair at Postgres. Unset it."
+  cd "$test_checkout/src"
+  export REDIS_URL=redis://localhost:6379/5 CELERY_REDIS_URL=redis://localhost:6379/5
+  export REDIS_PREFIX="local-$(basename "$test_checkout"):"
+  local vendor
+  vendor=$(uv run --locked python manage.py shell -c 'from django.db import connection; print(connection.vendor)' 2>/dev/null | tail -n 1)
+  [ "$vendor" = sqlite ] || die "the settings use '$vendor', not the test backend's SQLite database"
+  uv run --locked python manage.py reconcile_tv ${apply:+"$apply"}
+}
+
 uninstall() {
   launchctl bootout "$domain/$label" 2>/dev/null || true
   rm -f "$plist" "$state"
@@ -244,9 +262,10 @@ case "${1:-}" in
   use) use "${2:-}" ;;
   release) release "${2:-}" ;;
   update) update ;;
+  repair-tv) repair_tv "${2:-}" ;;
   install) install "${2:-}" ;;
   uninstall) uninstall ;;
   serve) serve ;;
-  -h|--help|"") sed -n '2,20p' "$0" ;;
+  -h|--help|"") sed -n '2,27p' "$0" ;;
   *) echo "Unknown command: $1" >&2; exit 2 ;;
 esac

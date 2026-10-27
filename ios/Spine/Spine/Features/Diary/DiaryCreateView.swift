@@ -21,17 +21,54 @@ final class DiaryCreateViewModel {
     var isSaving = false
     var errorMessage: String?
     var unavailableMediaTypes: [String] = []
+    /// A TV log's Rewatch default came from the server's composer (TV-404).
+    private(set) var hasServerRewatchDefault = false
+    /// The user changed the Rewatch toggle.
+    private(set) var isRewatchEdited = false
+    /// What happens after a TV log: the earlier-episodes question, then the season-finish composer (TV-107, TV-403).
+    private(set) var tvFollowUp: TVWriteFollowUp?
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
+    private let trackingRepository: TrackingRepository?
     private let onUnauthorized: () -> Void
     private let mutationId = UUID()
     private var searchID = 0
+    private var selectionID = 0
 
-    init(diaryRepository: DiaryRepository, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
+    init(
+        diaryRepository: DiaryRepository,
+        mediaRepository: MediaRepository,
+        trackingRepository: TrackingRepository? = nil,
+        onUnauthorized: @escaping () -> Void
+    ) {
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
+        self.trackingRepository = trackingRepository
         self.onUnauthorized = onUnauthorized
+    }
+
+    /// The latest date the picker allows: today for calendar-dated logs, TV included (TV-407).
+    var latestConsumedDate: Date {
+        DiaryLogDateLimit.latest(for: selectedMedia?.ref)
+    }
+
+    /// TV logs and the calendar-dated types pick a day, not a time (TV-407).
+    var usesCalendarDate: Bool {
+        selectedMedia?.ref.usesCalendarLogDate == true
+    }
+
+    /// The user turned Rewatch on or off: from now on the toggle is what saves.
+    func setRewatch(_ value: Bool) {
+        isRewatch = value
+        isRewatchEdited = true
+    }
+
+    /// The Rewatch value a log saves with. Nil for a TV log whose server default (TV-404) hasn't loaded while the
+    /// toggle is untouched: the request then leaves `is_rewatch` out and the server's default applies.
+    var isRewatchForRequest: Bool? {
+        guard selectedMedia?.ref.isTVFamily == true, !hasServerRewatchDefault, !isRewatchEdited else { return isRewatch }
+        return nil
     }
 
     func loadMeta() async {
@@ -100,21 +137,22 @@ final class DiaryCreateViewModel {
         defer { isSaving = false }
 
         do {
-            if selectedMedia.ref.usesCalendarConsumptionDate, CalendarDateCodec.isFuture(consumedAt) {
+            if selectedMedia.ref.usesCalendarLogDate, CalendarDateCodec.isFuture(consumedAt) {
                 throw DiaryCreateError.futureDate
             }
+            let isTV = selectedMedia.ref.isTVFamily
             let tags = tagsText
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
-            let request = DiaryEntryWriteRequest(
+            var request = DiaryEntryWriteRequest(
                 ref: selectedMedia.ref,
                 consumedAt: consumedAt,
                 rating: Decimal(string: ratingText),
                 review: review,
                 reviewTitle: reviewTitle,
                 liked: liked,
-                isRewatch: isRewatch,
+                isRewatch: isRewatchForRequest ?? isRewatch,
                 autoMarkConsumed: true,
                 containsSpoilers: containsSpoilers,
                 visibility: selectedMedia.ref.isSingleWeight ? "public" : visibility,
@@ -122,9 +160,25 @@ final class DiaryCreateViewModel {
                 journeyId: selectedMedia.ref.mediaType == "book"
                     ? selectedMedia.userState?.book?.currentJourney?.id
                     : nil,
-                mutationId: selectedMedia.ref.mediaType == "book" ? mutationId : nil
+                // A TV log from this build applies at most once (TV-705).
+                mutationId: selectedMedia.ref.mediaType == "book" || isTV ? mutationId : nil
             )
-            _ = try await diaryRepository.create(request)
+            if isTV {
+                request.includesIsRewatch = isRewatchForRequest != nil
+                let (_, envelope) = try await diaryRepository.createTV(request)
+                if envelope.hasFollowUp {
+                    let followUp = TVWriteFollowUp(
+                        showRef: selectedMedia.ref,
+                        trackingRepository: trackingRepository ?? AppRepositories.current().tracking
+                    )
+                    let context = TVWriteFollowUp.context(show: selectedMedia)
+                    followUp.context = { context }
+                    followUp.handle(envelope)
+                    tvFollowUp = followUp
+                }
+            } else {
+                _ = try await diaryRepository.create(request)
+            }
             MediaStateChange.post(ref: selectedMedia.ref)
             return true
         } catch {
@@ -140,7 +194,13 @@ final class DiaryCreateViewModel {
         selectedMedia = media
         ratingText = media.userState?.rating ?? ""
         liked = media.userState?.hasLiked ?? false
-        if media.ref.isSingleWeight {
+        selectionID += 1
+        hasServerRewatchDefault = false
+        isRewatchEdited = false
+        if media.ref.isTVFamily {
+            // Until the server's default loads, nothing is guessed (TV-404).
+            isRewatch = false
+        } else if media.ref.isSingleWeight {
             let state = media.userState
             isRewatch = state?.directConsumption == true
                 || (state?.diaryCount ?? 0) > 0
@@ -151,6 +211,43 @@ final class DiaryCreateViewModel {
             isRewatch = media.userState?.book?.isRereading ?? false
         } else {
             isRewatch = (media.userState?.diaryCount ?? 0) > 0
+        }
+    }
+
+    /// Loads a TV target's Rewatch default from the server's composer (`GET tracking/{source}/{type}/{id}/`,
+    /// TV-404). A show that isn't tracked yet, or a failed load, leaves the default to the server when saving.
+    func loadRewatchDefault() async {
+        guard let media = selectedMedia, media.ref.isTVFamily, let trackingRepository else { return }
+        let selection = selectionID
+        do {
+            let tracking = try await trackingRepository.detail(ref: media.ref)
+            guard selection == selectionID, !isRewatchEdited,
+                  let composer = tracking.tv?.composer,
+                  let target = Self.composerTarget(for: media.ref, in: composer)
+            else { return }
+            isRewatch = target.isRewatch
+            hasServerRewatchDefault = true
+        } catch {
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+        }
+    }
+
+    /// The composer target a log of `ref` saves against: the show, a season or an episode.
+    static func composerTarget(for ref: MediaRef, in composer: TVComposer) -> TVComposerTarget? {
+        composer.targets.first { target in
+            switch ref.mediaType {
+            case "tv":
+                target.level == .show
+            case "season":
+                target.level == .season && target.seasonNumber == ref.seasonNumber
+            case "episode":
+                target.level == .episode && target.seasonNumber == ref.seasonNumber
+                    && target.episodeNumber == ref.episodeNumber
+            default:
+                false
+            }
         }
     }
 }
@@ -175,13 +272,26 @@ struct DiaryCreateView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: DiaryCreateViewModel
     let onCreated: () -> Void
+    private let diaryRepository: DiaryRepository
+    private let trackingRepository: TrackingRepository
+    private let onUnauthorized: () -> Void
 
-    init(diaryRepository: DiaryRepository, mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void = {}, onCreated: @escaping () -> Void) {
+    init(
+        diaryRepository: DiaryRepository,
+        mediaRepository: MediaRepository,
+        trackingRepository: TrackingRepository = AppRepositories.current().tracking,
+        onUnauthorized: @escaping () -> Void = {},
+        onCreated: @escaping () -> Void
+    ) {
         _viewModel = State(initialValue: DiaryCreateViewModel(
             diaryRepository: diaryRepository,
             mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
             onUnauthorized: onUnauthorized
         ))
+        self.diaryRepository = diaryRepository
+        self.trackingRepository = trackingRepository
+        self.onUnauthorized = onUnauthorized
         self.onCreated = onCreated
     }
 
@@ -208,7 +318,10 @@ struct DiaryCreateView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
                         Task {
-                            if await viewModel.create() {
+                            guard await viewModel.create() else { return }
+                            if let followUp = viewModel.tvFollowUp {
+                                finishWhenSettled(followUp)
+                            } else {
                                 onCreated()
                             }
                         }
@@ -229,6 +342,29 @@ struct DiaryCreateView: View {
             .task {
                 await viewModel.loadMeta()
             }
+            .task(id: viewModel.selectedMedia?.ref) {
+                await viewModel.loadRewatchDefault()
+            }
+            .background {
+                // After a TV log: the earlier-episodes question, then the season-finish composer. The entry is
+                // saved; this screen closes once nothing is left to show.
+                if let followUp = viewModel.tvFollowUp {
+                    Color.clear
+                        .tvWriteFollowUp(followUp) { item in
+                            MediaLogView(
+                                detail: item.detail,
+                                trackingRepository: trackingRepository,
+                                diaryRepository: diaryRepository,
+                                onUnauthorized: onUnauthorized,
+                                onSaved: {},
+                                tvComposer: item.finished.composer
+                            )
+                        }
+                        .onChange(of: followUp.question == nil && followUp.composer == nil) { _, isIdle in
+                            if isIdle { finishWhenSettled(followUp) }
+                        }
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
                 guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
                 let previousMediaType = viewModel.mediaType
@@ -236,6 +372,16 @@ struct DiaryCreateView: View {
                 if viewModel.mediaType == previousMediaType {
                     Task { await viewModel.search() }
                 }
+            }
+        }
+    }
+
+    /// Closes once the follow-up has nothing left to show: the question answered and any composer closed.
+    private func finishWhenSettled(_ followUp: TVWriteFollowUp) {
+        Task {
+            await followUp.loading?.value
+            if followUp.question == nil, followUp.composer == nil {
+                onCreated()
             }
         }
     }
@@ -323,10 +469,8 @@ struct DiaryCreateView: View {
             DatePicker(
                 viewModel.selectedMedia?.ref.mediaType == "music" ? "Date listened" : "Consumed",
                 selection: $viewModel.consumedAt,
-                in: Date.distantPast...(viewModel.selectedMedia?.ref.usesCalendarConsumptionDate == true ? Date() : Date.distantFuture),
-                displayedComponents: viewModel.selectedMedia?.ref.usesCalendarConsumptionDate == true
-                    ? [.date]
-                    : [.date, .hourAndMinute]
+                in: Date.distantPast...viewModel.latestConsumedDate,
+                displayedComponents: viewModel.usesCalendarDate ? [.date] : [.date, .hourAndMinute]
             )
             TextField(
                 viewModel.selectedMedia?.ref.usesFiveStarRatingScale == true ? "Rating 0.5-5" : "Rating 0-10",
@@ -346,7 +490,10 @@ struct DiaryCreateView: View {
             }
             Toggle("Liked", isOn: $viewModel.liked)
             Toggle("Contains spoilers", isOn: $viewModel.containsSpoilers)
-            Toggle(viewModel.selectedMedia?.ref.repeatLabel ?? "Rewatch", isOn: $viewModel.isRewatch)
+            Toggle(viewModel.selectedMedia?.ref.repeatLabel ?? "Rewatch", isOn: Binding(
+                get: { viewModel.isRewatch },
+                set: { viewModel.setRewatch($0) }
+            ))
         }
     }
 }

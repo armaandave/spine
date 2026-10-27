@@ -205,6 +205,26 @@ final class ProfileViewModel {
     }
 }
 
+/// The rows of Settings › Logging. Quick log date is gone (TV-901): it only ever dated TV fills, which stay undated
+/// (TV-301). Its stored value is kept and saved back unchanged.
+enum LoggingSettingsRow: String, CaseIterable, Identifiable {
+    case weekStarts
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .weekStarts: "Week starts"
+        }
+    }
+
+    var systemName: String {
+        switch self {
+        case .weekStarts: "calendar"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class ProfileSettingsViewModel {
@@ -1836,14 +1856,15 @@ struct ProfileRecentActivityRailItem: Identifiable {
 }
 
 enum ProfileRecentActivityRailModel {
-    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail.
+    /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail. A show's
+    /// season and episode logs count as the show (activity contract AC-1).
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
         var seenTitles = Set<String>()
         return activities.compactMap { activity in
             if let person = activity.person {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .person(person))
             }
-            if let media = activity.media, seenTitles.insert(media.ref.id).inserted {
+            if let media = activity.media, seenTitles.insert((media.ref.parentTVRef ?? media.ref).id).inserted {
                 return ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
             }
             return nil
@@ -1961,6 +1982,8 @@ private struct RecentActivityRail: View {
     }
 }
 
+/// The own profile's In progress rail: three to five posters that fit the width, each opening its title's page. Home's
+/// cards are where progress is updated (TV-701).
 private struct InProgressRail: View {
     let items: [LibraryItem]
     let action: (LibraryItem) -> Void
@@ -3108,19 +3131,17 @@ private struct SettingsPreferencesView: View {
     private var loggingSection: some View {
         SettingsGroup(title: "Logging") {
             SettingsCard {
-                SettingsChoicePicker(
-                    title: "Week starts",
-                    systemName: "calendar",
-                    selection: $viewModel.weekStartDay,
-                    choices: viewModel.settingsOptions.weekStartDays
-                )
-                SettingsDivider()
-                SettingsChoicePicker(
-                    title: "Quick log date",
-                    systemName: "bolt",
-                    selection: $viewModel.quickWatchDate,
-                    choices: viewModel.settingsOptions.quickWatchDates
-                )
+                ForEach(LoggingSettingsRow.allCases) { row in
+                    switch row {
+                    case .weekStarts:
+                        SettingsChoicePicker(
+                            title: row.title,
+                            systemName: row.systemName,
+                            selection: $viewModel.weekStartDay,
+                            choices: viewModel.settingsOptions.weekStartDays
+                        )
+                    }
+                }
             }
         }
     }

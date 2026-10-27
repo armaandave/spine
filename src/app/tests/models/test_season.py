@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from app import tv_listing, tv_tracking
 from app.models import (
     TV,
     Episode,
@@ -15,8 +16,8 @@ from app.models import (
     Sources,
     Status,
     UserMessage,
-    UserMessageLevel,
 )
+from app.tests.tv_fixtures import FakeTVProvider
 from users.models import QuickWatchDateChoices
 
 mock_path = Path(__file__).resolve().parent.parent / "mock_data"
@@ -237,11 +238,26 @@ class SeasonModel(TestCase):
         )
 
     def test_season_save(self):
-        """Test the custom save method of the Season model."""
-        self.season.status = Status.COMPLETED.value
-        self.season.save(update_fields=["status"])
+        """TV-207: a season saved as Completed means mark that season watched (hook).
+
+        The two ticked episodes keep their viewings and the other 22 aired episodes
+        are filled, undated (TV-301).
+        """
+        with FakeTVProvider() as fake:
+            fake.add_show(
+                "1668",
+                title="Friends",
+                seasons={1: [date(2023, 1, number) for number in range(1, 25)]},
+            )
+            tv_listing.get_listing(self.tv.item)
+            self.season.status = Status.COMPLETED.value
+            with patch("app.models.Item.fetch_releases"), self.captureOnCommitCallbacks(execute=True):
+                self.season.save(update_fields=["status"])
 
         self.assertEqual(self.season.episodes.count(), 24)
+        self.assertEqual(self.season.episodes.filter(end_date__isnull=True).count(), 22)
+        self.season.refresh_from_db()
+        self.assertEqual(self.season.status, Status.COMPLETED.value)
 
     @patch("app.models.Season.get_episode_item")
     def test_watch_method(self, mock_get_episode_item):
@@ -349,17 +365,31 @@ class SeasonModel(TestCase):
             )
 
     def test_delete_episode_updates_completed_parent_statuses(self):
-        """Test deleting progress reopens completed Season and TV parents."""
-        self.season.status = Status.COMPLETED.value
-        Season.save_base(self.season)
-        self.tv.status = Status.COMPLETED.value
-        TV.save_base(self.tv)
+        """TV-102: deleting a viewing reopens a finished season and show (model hook).
 
-        episode = Episode.objects.get(
-            related_season=self.season,
-            item__episode_number=2,
-        )
-        episode.delete()
+        The season and show are finished by their viewings, not by stored statuses:
+        a status saved directly is an action under TV-207.
+        """
+        with FakeTVProvider() as fake:
+            fake.add_show(
+                "1668",
+                title="Friends",
+                seasons={1: [date(2023, 1, 1), date(2023, 1, 2)]},
+            )
+            listing = tv_listing.get_listing(self.tv.item)
+            with self.captureOnCommitCallbacks(execute=True):
+                tv_tracking.reconcile_show(self.tv, entry_point=tv_tracking.JOB, listing=listing)
+            self.season.refresh_from_db()
+            self.tv.refresh_from_db()
+            self.assertEqual(self.season.status, Status.COMPLETED.value)
+            self.assertEqual(self.tv.status, Status.COMPLETED.value)
+
+            episode = Episode.objects.get(
+                related_season=self.season,
+                item__episode_number=2,
+            )
+            with self.captureOnCommitCallbacks(execute=True):
+                episode.delete()
 
         self.season.refresh_from_db()
         self.tv.refresh_from_db()
@@ -423,10 +453,23 @@ class SeasonModel(TestCase):
 
 
 class SeasonStatusTests(TestCase):
-    """Test Season model status change behaviors."""
+    """A season status written through the model means its action (TV-207).
+
+    Rewritten for the TV tracking contract: the old tests pinned the Season.save
+    cascades (dated fills after the highest watched episode, the next season starting,
+    the show following a season's Dropped), which TV-200, TV-201, TV-202, TV-204,
+    TV-205 and TV-301 replace. The model hook in app.tv_signals applies the action on
+    commit from the stored episode lists.
+    """
 
     def setUp(self):
         """Create test data."""
+        self.fake = FakeTVProvider().__enter__()
+        self.addCleanup(self.fake.__exit__, None, None, None)
+        patcher = patch("app.models.Item.fetch_releases")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.provider = self.fake.add_show("123", title="Test Show", seasons={})
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_user(**self.credentials)
 
@@ -460,264 +503,128 @@ class SeasonStatusTests(TestCase):
             status=Status.PLANNING.value,
         )
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_completed_status_creates_remaining_episodes(self, mock_get_metadata):
-        """Test setting status to COMPLETED creates remaining episodes."""
-        mock_metadata = {
-            "episodes": [
-                {
-                    "episode_number": 1,
-                    "image": "img1.jpg",
-                    "air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                },
-                {
-                    "episode_number": 2,
-                    "image": "img2.jpg",
-                    "air_date": datetime(2020, 1, 2, tzinfo=UTC),
-                },
-                {
-                    "episode_number": 3,
-                    "image": "img3.jpg",
-                    "air_date": datetime(2020, 1, 3, tzinfo=UTC),
-                },
-            ],
-            "image": "season_img.jpg",
-        }
-        mock_get_metadata.return_value = mock_metadata
+    def listing(self, seasons):
+        for number, spec in seasons.items():
+            self.provider.set_season(number, spec)
+        tv_listing.get_listing(self.tv_item, max_age=timedelta(0))
 
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+    def write_status(self, status, season=None):
+        season = season or self.season
+        season.status = status
+        with self.captureOnCommitCallbacks(execute=True):
+            season.save()
+        season.refresh_from_db()
+        self.tv.refresh_from_db()
+
+    def next_season(self):
+        next_season_item = Item.objects.create(
+            media_id="123",
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.SEASON.value,
+            title="Test Show",
+            image="http://example.com/image2.jpg",
+            season_number=2,
+        )
+        return Season.objects.create(
+            item=next_season_item,
+            user=self.user,
+            related_tv=self.tv,
+            status=Status.PLANNING.value,
+        )
+
+    def test_completed_status_creates_remaining_episodes(self):
+        """TV-207, TV-301: Completed fills every aired episode, undated."""
+        self.listing({1: [date(2020, 1, 1), date(2020, 1, 2), date(2020, 1, 3)]})
+
+        self.write_status(Status.COMPLETED.value)
 
         self.assertEqual(self.season.episodes.count(), 3)
         episode_numbers = set(
             self.season.episodes.values_list("item__episode_number", flat=True),
         )
         self.assertEqual(episode_numbers, {1, 2, 3})
+        self.assertFalse(self.season.episodes.filter(end_date__isnull=False).exists())
+        self.assertEqual(self.season.status, Status.COMPLETED.value)
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_completed_status_starts_next_season(self, mock_get_metadata):
-        """Test completing a season starts the next season automatically."""
-        next_season_item = Item.objects.create(
-            media_id="123",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            title="Test Show",
-            image="http://example.com/image2.jpg",
-            season_number=2,
-        )
-        next_season = Season.objects.create(
-            item=next_season_item,
-            user=self.user,
-            related_tv=self.tv,
-            status=Status.PLANNING.value,
-        )
+    def test_completed_status_starts_next_season(self):
+        """TV-205: completing Season 1 starts nothing for Season 2.
 
-        mock_get_metadata.side_effect = [
-            {
-                "episodes": [
-                    {
-                        "episode_number": 1,
-                        "image": "img1.jpg",
-                        "air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                    },
-                ],
-                "image": "season_img.jpg",
-            },
-            {
-                "related": {
-                    "seasons": [
-                        {
-                            "season_number": 1,
-                            "image": "season_img.jpg",
-                            "first_air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                        },
-                        {
-                            "season_number": 2,
-                            "image": "season_img2.jpg",
-                            "first_air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                        },
-                    ],
-                },
-            },
-        ]
+        The show is Watching with S2 E1 up next; Season 2's empty row stays as stored.
+        """
+        next_season = self.next_season()
+        self.listing({1: [date(2020, 1, 1)], 2: [date(2020, 1, 1)]})
 
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        self.write_status(Status.COMPLETED.value)
 
         next_season.refresh_from_db()
-        self.assertEqual(next_season.status, Status.IN_PROGRESS.value)
-
-        self.tv.refresh_from_db()
+        self.assertEqual(next_season.status, Status.PLANNING.value)
+        self.assertFalse(next_season.is_started)
         self.assertEqual(self.tv.status, Status.IN_PROGRESS.value)
+        self.assertEqual((self.tv.up_next_season, self.tv.up_next_episode), (2, 1))
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_completed_last_season_completes_tv_show(self, mock_get_metadata):
-        """Test completing the last season completes the TV show."""
-        mock_get_metadata.side_effect = [
-            {
-                "episodes": [
-                    {
-                        "episode_number": 1,
-                        "image": "img1.jpg",
-                        "air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                    },
-                ],
-                "image": "season_img.jpg",
-            },
-            {
-                "related": {
-                    "seasons": [
-                        {
-                            "season_number": 1,
-                            "image": "season_img.jpg",
-                            "first_air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                        },
-                    ],
-                },
-            },
-        ]
+    def test_completed_last_season_completes_tv_show(self):
+        """TV-201: completing the only season finishes the show."""
+        self.listing({1: [date(2020, 1, 1)]})
 
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        self.write_status(Status.COMPLETED.value)
 
-        self.tv.refresh_from_db()
         self.assertEqual(self.tv.status, Status.COMPLETED.value)
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_completed_status_with_unaired_episodes_leaves_season_in_progress(
-        self,
-        mock_get_metadata,
-    ):
-        """Completing a season should only watch episodes that have aired."""
-        mock_get_metadata.return_value = {
-            "episodes": [
-                {
-                    "episode_number": 1,
-                    "image": "img1.jpg",
-                    "air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                },
-                {
-                    "episode_number": 2,
-                    "image": "img2.jpg",
-                    "air_date": datetime(2999, 1, 1, tzinfo=UTC),
-                },
-                {
-                    "episode_number": 3,
-                    "image": "img3.jpg",
-                    "air_date": None,
-                },
-            ],
-            "image": "season_img.jpg",
-        }
+    def test_completed_status_with_unaired_episodes_leaves_season_in_progress(self):
+        """TV-200, TV-103: only aired episodes are filled; the season reads Airing.
 
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        E2 airs in the future and E3 has no date with nothing later aired, so neither
+        counts as aired; no automatic messages are written.
+        """
+        future = timezone.localdate() + timedelta(days=400)
+        self.listing({1: [date(2020, 1, 1), future, None]})
 
-        self.season.refresh_from_db()
-        self.tv.refresh_from_db()
+        self.write_status(Status.COMPLETED.value)
 
         self.assertEqual(self.season.status, Status.IN_PROGRESS.value)
         self.assertEqual(self.tv.status, Status.IN_PROGRESS.value)
+        self.assertTrue(self.tv.caught_up)
         self.assertEqual(self.season.episodes.count(), 1)
-        self.assertEqual(self.season.progress, 1)
-        self.assertTrue(
-            UserMessage.objects.filter(
-                user=self.user,
-                level=UserMessageLevel.WARNING,
-                message=f"{self.season} was left in progress because unreleased "
-                "episodes remain.",
-            ).exists(),
-        )
-        self.assertTrue(
-            UserMessage.objects.filter(
-                user=self.user,
-                level=UserMessageLevel.INFO,
-                message=f"{self.season} had 1 released episode marked as watched "
-                "automatically.",
-            ).exists(),
-        )
+        self.assertEqual((self.season.watched_count, self.season.aired_count), (1, 1))
+        self.assertFalse(UserMessage.objects.filter(user=self.user).exists())
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_completed_status_with_future_next_season_keeps_tv_in_progress(
-        self,
-        mock_get_metadata,
-    ):
-        """Completing a season should not auto-start a future season."""
-        next_season_item = Item.objects.create(
-            media_id="123",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            title="Test Show",
-            image="http://example.com/image2.jpg",
-            season_number=2,
-        )
-        next_season = Season.objects.create(
-            item=next_season_item,
-            user=self.user,
-            related_tv=self.tv,
-            status=Status.PLANNING.value,
-        )
+    def test_completed_status_with_future_next_season_keeps_tv_in_progress(self):
+        """TV-202: with the next season not aired yet, the show is Completed, caught up.
 
-        mock_get_metadata.side_effect = [
-            {
-                "episodes": [
-                    {
-                        "episode_number": 1,
-                        "image": "img1.jpg",
-                        "air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                    },
-                ],
-                "image": "season_img.jpg",
-            },
-            {
-                "related": {
-                    "seasons": [
-                        {
-                            "season_number": 1,
-                            "image": "season_img.jpg",
-                            "first_air_date": datetime(2020, 1, 1, tzinfo=UTC),
-                        },
-                        {
-                            "season_number": 2,
-                            "image": "season_img2.jpg",
-                            "first_air_date": datetime(2999, 1, 1, tzinfo=UTC),
-                        },
-                    ],
-                },
-            },
-        ]
+        The approved design (D2) waits in Completed until the next regular episode airs
+        (TV-206); Season 2's empty row stays as stored (TV-205).
+        """
+        next_season = self.next_season()
+        future = timezone.localdate() + timedelta(days=400)
+        self.listing({1: [date(2020, 1, 1)], 2: [future]})
 
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        self.write_status(Status.COMPLETED.value)
 
         next_season.refresh_from_db()
-        self.tv.refresh_from_db()
         self.assertEqual(next_season.status, Status.PLANNING.value)
-        self.assertEqual(self.tv.status, Status.IN_PROGRESS.value)
-        self.assertTrue(
-            UserMessage.objects.filter(
-                user=self.user,
-                level=UserMessageLevel.INFO,
-                message=f"{self.tv} remains in progress because another season "
-                "is still pending or has not aired yet.",
-            ).exists(),
-        )
+        self.assertEqual(self.tv.status, Status.COMPLETED.value)
+        self.assertTrue(self.tv.caught_up)
+        self.assertEqual((self.tv.next_air_season, self.tv.next_air_date), (2, future))
 
     def test_dropped_status_updates_tv_status(self):
-        """Test setting status to DROPPED updates TV status."""
-        self.season.status = Status.DROPPED.value
-        self.season.save()
-
+        """TV-204, TV-207: a season's Dropped isn't an action; the show is unchanged."""
+        self.listing({1: [date(2020, 1, 1), date(2020, 1, 8)]})
+        tv_tracking.tick(self.user, self.tv_item, 1, 1)
         self.tv.refresh_from_db()
-        self.assertEqual(self.tv.status, Status.DROPPED.value)
+
+        self.write_status(Status.DROPPED.value)
+
+        self.assertEqual((self.tv.status, self.tv.choice), (Status.IN_PROGRESS.value, ""))
+        self.assertEqual(self.season.status, Status.IN_PROGRESS.value)
 
     def test_in_progress_status_updates_tv_status(self):
-        """Test setting status to IN_PROGRESS updates TV status."""
-        self.season.status = Status.IN_PROGRESS.value
-        self.season.save()
+        """TV-207: a season's In progress means choose Watching for the show."""
+        self.listing({1: [date(2020, 1, 1)]})
 
-        self.tv.refresh_from_db()
-        self.assertEqual(self.tv.status, Status.IN_PROGRESS.value)
+        self.write_status(Status.IN_PROGRESS.value)
+
+        self.assertEqual((self.tv.status, self.tv.choice), (Status.IN_PROGRESS.value, "In progress"))
+        self.assertEqual(Episode.objects.count(), 0)
 
     def test_status_change_does_not_affect_tv_if_already_same_status(self):
         """Test status change doesn't update TV if already same status."""
@@ -932,54 +839,42 @@ class SeasonGetRemainingEpsQuickWatchDateTests(TestCase):
         self.assertEqual(episodes[0].end_date, datetime(1994, 9, 29, tzinfo=UTC))
         self.assertEqual(episodes[1].end_date, datetime(1994, 9, 22, tzinfo=UTC))
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_season_completion_with_no_date(self, mock_get_metadata):
-        """Integration test: completing a season with NO_DATE preference."""
+    def complete_season(self, seasons):
+        with FakeTVProvider() as fake:
+            fake.add_show("1668", title="Friends", seasons=seasons)
+            tv_listing.get_listing(self.tv.item)
+            self.season.status = Status.COMPLETED.value
+            with patch("app.models.Item.fetch_releases"), self.captureOnCommitCallbacks(execute=True):
+                self.season.save()
+
+    def test_season_completion_with_no_date(self):
+        """TV-103: TMDB episodes with no air date and nothing later aired aren't aired.
+
+        Completing the season fills nothing, whatever the preference.
+        """
         self.user.quick_watch_date = self.QuickWatchDateChoices.NO_DATE
         self.user.save()
 
-        mock_get_metadata.return_value = {
-            "episodes": [
-                {"episode_number": 1, "image": "img1.jpg", "air_date": None},
-                {"episode_number": 2, "image": "img2.jpg", "air_date": None},
-            ],
-            "image": "season_img.jpg",
-        }
-
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        self.complete_season({1: [None, None]})
 
         episodes = Episode.objects.filter(related_season=self.season)
         self.assertEqual(episodes.count(), 0)
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_season_completion_with_release_date(self, mock_get_metadata):
-        """Integration test: completing a season with RELEASE_DATE preference."""
+    def test_season_completion_with_release_date(self):
+        """TV-301: fills are undated; the Quick log date preference no longer applies.
+
+        Completing the season fills both aired episodes with no date, although the
+        preference says to use the release date (SW-004, TV-901).
+        """
         self.user.quick_watch_date = self.QuickWatchDateChoices.RELEASE_DATE
         self.user.save()
 
-        mock_get_metadata.return_value = {
-            "episodes": [
-                {
-                    "episode_number": 1,
-                    "image": "img1.jpg",
-                    "air_date": datetime(1994, 9, 22, tzinfo=UTC),
-                },
-                {
-                    "episode_number": 2,
-                    "image": "img2.jpg",
-                    "air_date": datetime(1994, 9, 29, tzinfo=UTC),
-                },
-            ],
-            "image": "season_img.jpg",
-        }
-
-        self.season.status = Status.COMPLETED.value
-        self.season.save()
+        self.complete_season({1: [date(1994, 9, 22), date(1994, 9, 29)]})
 
         episodes = Episode.objects.filter(related_season=self.season).order_by(
             "item__episode_number",
         )
         self.assertEqual(episodes.count(), 2)
-        self.assertEqual(episodes[0].end_date, datetime(1994, 9, 22, tzinfo=UTC))
-        self.assertEqual(episodes[1].end_date, datetime(1994, 9, 29, tzinfo=UTC))
+        self.assertIsNone(episodes[0].end_date)
+        self.assertIsNone(episodes[1].end_date)
+        self.assertEqual(episodes[0].kind, Episode.Kind.FILL)

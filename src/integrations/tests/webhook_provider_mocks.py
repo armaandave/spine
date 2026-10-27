@@ -1,5 +1,6 @@
 """Deterministic provider doubles shared by webhook unit tests."""
 
+from datetime import date
 from unittest.mock import patch
 
 from app.models import MediaTypes
@@ -58,6 +59,25 @@ class WebhookProviderMocksMixin:
         self.mock_tmdb_movie.side_effect = self._mock_tmdb_movie
         self.mock_mal_anime.side_effect = self._mock_mal_anime
         self.mock_get_media_metadata.side_effect = self._mock_media_metadata
+        self.patch_tv_provider()
+
+    def patch_tv_provider(self):
+        """Serve TMDB TV shows from the shared fake TV provider.
+
+        TV events go through app.tv_tracking, which reads the show's episode lists
+        with air dates (TV-103); Friends (1668) lists two aired Season 1 episodes.
+        Other media types pass through to the mocks above.
+        """
+        from app.tests.tv_fixtures import FakeTVProvider  # noqa: PLC0415
+
+        self.fake_tv = FakeTVProvider().__enter__()
+        self.addCleanup(self.fake_tv.__exit__, None, None, None)
+        self.fake_tv.add_show(
+            "1668",
+            title="Friends",
+            seasons={1: [date(1994, 9, 22), date(1994, 9, 29)]},
+        )
+        return self.fake_tv
 
     @staticmethod
     def _mock_tvdb_episode(episode_id):

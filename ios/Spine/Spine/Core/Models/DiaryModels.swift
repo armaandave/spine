@@ -23,6 +23,16 @@ struct DiaryEntry: Codable, Identifiable {
     let viewerHasLiked: Bool
     let createdAt: String?
     let updatedAt: String?
+    /// The owner's view of a TV log: its level, coverage and what deleting it unmarks (TV-406). Nil for others.
+    var tvLog: TVLogInfo? = nil
+    /// A TV log's create and update responses add the write envelope keys (plan section 2.3.7): `tv` scoped to the
+    /// page the log was saved from, and the log target's own `season` and `episode`.
+    var tv: TVShowState? = nil
+    var season: TVSeasonState? = nil
+    var episode: TVEpisodeState? = nil
+    var seasonEpisodes: [TVEpisodeState]? = nil
+    var finished: TVFinished? = nil
+    var earlierUnwatched: TVEarlierUnwatched? = nil
 }
 
 struct DiaryMedia: Codable {
@@ -32,6 +42,10 @@ struct DiaryMedia: Codable {
     let posterUrl: String?
     let customPosterUrl: String?
     let posterOrientation: PosterOrientation?
+    /// The show's title for season and episode logs (TV-702).
+    var showTitle: String? = nil
+    /// An episode log's episode title from the stored listing; nil when unknown (TV-702).
+    var episodeTitle: String? = nil
 
     var displayPosterURL: String? {
         customPosterUrl ?? posterUrl ?? imageUrl
@@ -48,6 +62,8 @@ struct DiaryMedia: Codable {
         case posterUrl
         case customPosterUrl
         case posterOrientation
+        case showTitle
+        case episodeTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -59,6 +75,8 @@ struct DiaryMedia: Codable {
         posterUrl = try container.decodeIfPresent(String.self, forKey: .posterUrl) ?? imageUrl
         customPosterUrl = try container.decodeIfPresent(String.self, forKey: .customPosterUrl)
         posterOrientation = try container.decodeIfPresent(PosterOrientation.self, forKey: .posterOrientation)
+        showTitle = try container.decodeIfPresent(String.self, forKey: .showTitle)
+        episodeTitle = try container.decodeIfPresent(String.self, forKey: .episodeTitle)
     }
 }
 
@@ -76,6 +94,12 @@ struct DiaryEntryWriteRequest: Encodable {
     let tags: [String]
     let journeyId: Int?
     let mutationId: UUID?
+    /// False leaves `is_rewatch` out, so the server's TV-404 default applies (a TV log whose default hasn't loaded).
+    var includesIsRewatch = true
+    /// A TV log saved from a season or episode page names that page, so the response's `tv` carries the page's
+    /// state and composer (TV-404, TV-705).
+    var pageSeasonNumber: Int?
+    var pageEpisodeNumber: Int?
 
     init(
         ref: MediaRef,
@@ -121,13 +145,16 @@ struct DiaryEntryWriteRequest: Encodable {
         case tags
         case journeyId
         case mutationId
+        case pageSeasonNumber
+        case pageEpisodeNumber
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(ref, forKey: .ref)
         if let consumedAt {
-            if ref.usesCalendarConsumptionDate {
+            // TV logs are calendar dates too (TV-407); installed builds' datetimes are converted by the server.
+            if ref.usesCalendarLogDate {
                 try container.encode(CalendarDateCodec.string(from: consumedAt), forKey: .consumedAt)
             } else {
                 try container.encode(consumedAt, forKey: .consumedAt)
@@ -137,13 +164,17 @@ struct DiaryEntryWriteRequest: Encodable {
         try container.encode(review, forKey: .review)
         try container.encode(reviewTitle, forKey: .reviewTitle)
         try container.encode(liked, forKey: .liked)
-        try container.encode(isRewatch, forKey: .isRewatch)
+        if includesIsRewatch {
+            try container.encode(isRewatch, forKey: .isRewatch)
+        }
         try container.encode(autoMarkConsumed, forKey: .autoMarkConsumed)
         try container.encode(containsSpoilers, forKey: .containsSpoilers)
         try container.encode(visibility, forKey: .visibility)
         try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(journeyId, forKey: .journeyId)
         try container.encodeIfPresent(mutationId, forKey: .mutationId)
+        try container.encodeIfPresent(pageSeasonNumber, forKey: .pageSeasonNumber)
+        try container.encodeIfPresent(pageEpisodeNumber, forKey: .pageEpisodeNumber)
     }
 }
 

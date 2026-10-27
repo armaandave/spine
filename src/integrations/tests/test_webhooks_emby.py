@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -6,6 +7,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from app.models import TV, Anime, Episode, Item, MediaTypes, Movie, Season, Status
+from app.tests.tv_fixtures import FakeTVProvider
 from integrations.webhooks.emby import EmbyWebhookProcessor
 
 
@@ -60,6 +62,15 @@ class EmbyWebhookTests(TestCase):
         ) = [patcher.start() for patcher in patches]
         for patcher in patches:
             self.addCleanup(patcher.stop)
+        # TV events go through app.tv_tracking, which reads the show's episode lists
+        # with air dates (TV-103); other media types pass through to the mocks.
+        self.fake_tv = FakeTVProvider().__enter__()
+        self.addCleanup(self.fake_tv.__exit__, None, None, None)
+        self.fake_tv.add_show(
+            "1668",
+            title="Friends",
+            seasons={1: [date(1994, 9, 22), date(1994, 9, 29)]},
+        )
 
         self.mock_tvdb_episode.side_effect = self._mock_tvdb_episode
         self.mock_series_tmdb_id.return_value = "1668"

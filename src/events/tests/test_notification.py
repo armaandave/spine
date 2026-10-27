@@ -442,7 +442,12 @@ class NotificationTests(TestCase):
         self.assertIn(season1_key, tracking_data)
 
     def test_get_tv_tracking_data(self):
-        """Test the get_tv_tracking_data function."""
+        """The show's status alone decides which seasons are tracked (TV-704).
+
+        Rewritten for TV-704 and TV-204: user2's stored Dropped Season 2 used to cut
+        off Seasons 2 and 3. Seasons have no Drop of their own, so every season of a
+        show in Watching is tracked; a Dropped show gets none (the test below).
+        """
         users = [self.user1, self.user2]
         season_items = [self.season1_item, self.season2_item, self.season3_item]
 
@@ -467,14 +472,14 @@ class NotificationTests(TestCase):
         self.assertTrue(tracking_data[user1_season2_key])
         self.assertTrue(tracking_data[user1_season3_key])
 
-        # User2 should be tracking season 1 but not seasons 2 and 3 (dropped season 2)
+        # User2's show is in Watching, so a season-level Dropped value changes nothing
         user2_season1_key = (self.user2.id, self.season1_item.id)
         user2_season2_key = (self.user2.id, self.season2_item.id)
         user2_season3_key = (self.user2.id, self.season3_item.id)
 
         self.assertTrue(tracking_data[user2_season1_key])
-        self.assertFalse(tracking_data[user2_season2_key])
-        self.assertFalse(tracking_data[user2_season3_key])
+        self.assertTrue(tracking_data[user2_season2_key])
+        self.assertTrue(tracking_data[user2_season3_key])
 
     def test_get_tv_tracking_data_with_inactive_tv_show(self):
         """Test get_tv_tracking_data when TV show is inactive."""
@@ -553,7 +558,12 @@ class NotificationTests(TestCase):
         self.assertEqual(tracking_data, {})
 
     def test_get_user_releases(self):
-        """Test the get_user_releases function."""
+        """Test the get_user_releases function.
+
+        Rewritten for TV-704: user2's Watching show gets its Season 2 release even
+        though a season-level Dropped value is stored, because seasons have no Drop of
+        their own; the paused manga stays out.
+        """
         # Get users with notifications
         users_with_notifications = (
             get_user_model()
@@ -606,8 +616,8 @@ class NotificationTests(TestCase):
         self.assertFalse(manga_event_found)
         self.assertTrue(season1_event_found)
 
-        # User2 should have anime and season1 events
-        # manga is paused, season2 is dropped
+        # User2 should have anime, season1 and season2 events
+        # manga is paused; the show's status alone decides for seasons
         user2_events = user_releases[self.user2.id]
         anime_event_found = any(
             event.id == self.anime_event.id for event in user2_events
@@ -625,7 +635,7 @@ class NotificationTests(TestCase):
         self.assertTrue(anime_event_found)
         self.assertFalse(manga_event_found)
         self.assertTrue(season1_event_found)
-        self.assertFalse(season2_event_found)
+        self.assertTrue(season2_event_found)
 
     def test_is_user_tracking_item(self):
         """Test the is_user_tracking_item function."""
