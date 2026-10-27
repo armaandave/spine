@@ -15,7 +15,8 @@ struct StatsDrillDownContext: Hashable {
 /// applies anyway, so it can be left nil there.
 enum StatsDrillDown: Hashable {
     /// A type tab's genre, with every stored spelling of it (`values`).
-    case genre(name: String, values: [String])
+    /// A genre by its spellings; `mediaType` narrows it to one type on Global (music genres).
+    case genre(name: String, values: [String], mediaType: String? = nil)
     /// A Global genre group (STAT-211).
     case genreGroup(key: String, name: String, mediaType: String? = nil)
     case language(name: String, mediaType: String? = nil)
@@ -26,6 +27,8 @@ enum StatsDrillDown: Hashable {
     case rating(StatsRatingsBucket, mediaType: String? = nil)
     /// An activity month, "YYYY-MM".
     case month(String, mediaType: String? = nil)
+    /// The busiest day, "YYYY-MM-DD".
+    case day(String)
     /// A title in Top, Highest rated, Rated higher than most or Most logged. `within` is the
     /// section's titles, for swiping between title pages.
     case title(MediaSummary, within: [MediaRef] = [])
@@ -64,7 +67,7 @@ enum StatsDrillDown: Hashable {
                 return .log(entryId: entryId)
             }
             return .title(MediaBrowsingSelection(ref: milestone.media.ref, within: [milestone.media.ref]))
-        case .genre, .genreGroup, .language, .releaseYear, .releaseDecade, .rating, .month, .liked, .tag:
+        case .genre, .genreGroup, .language, .releaseYear, .releaseDecade, .rating, .month, .day, .liked, .tag:
             return context.isOwnStats ? .diary(self, context) : nil
         }
     }
@@ -82,7 +85,7 @@ enum StatsDrillDown: Hashable {
         filter.mediaTypes = Self.diaryMediaTypes(for: partMediaType ?? context.mediaType)
 
         switch self {
-        case let .genre(_, values):
+        case let .genre(_, values, _):
             filter.genres = values
         case let .genreGroup(key, _, _):
             filter.genreGroups = [key]
@@ -100,6 +103,11 @@ enum StatsDrillDown: Hashable {
             if let range = Self.dayRange(forMonth: month) {
                 filter.watchedFrom = MediaFilterState.date(fromDay: range.from)
                 filter.watchedTo = MediaFilterState.date(fromDay: range.to)
+            }
+        case let .day(day):
+            if let date = MediaFilterState.date(fromDay: day) {
+                filter.watchedFrom = date
+                filter.watchedTo = date
             }
         case let .title(media, _):
             filter.itemId = media.ref.itemId
@@ -120,9 +128,10 @@ enum StatsDrillDown: Hashable {
         if context.mediaType == nil, let partMediaType {
             parts.append(MediaTypeTheme.theme(for: partMediaType).displayName)
         }
-        if case .month = self {
-            // The month already names its year.
-        } else {
+        switch self {
+        case .month, .day:
+            break // The month or day already names its year.
+        default:
             parts.append(context.period.title)
         }
         return parts.joined(separator: " · ")
@@ -130,7 +139,7 @@ enum StatsDrillDown: Hashable {
 
     private var label: String {
         switch self {
-        case let .genre(name, _), let .genreGroup(_, name, _), let .language(name, _):
+        case let .genre(name, _, _), let .genreGroup(_, name, _), let .language(name, _):
             return name
         case let .releaseYear(year, _):
             return "Released in \(year)"
@@ -140,6 +149,8 @@ enum StatsDrillDown: Hashable {
             return Self.starsLabel(bucket.stars)
         case let .month(month, _):
             return Self.monthTitle(month) ?? month
+        case let .day(day):
+            return StatsTitleFormat.day(day) ?? day
         case let .title(media, _):
             return media.displayTitle
         case .liked:
@@ -155,7 +166,8 @@ enum StatsDrillDown: Hashable {
 
     private var partMediaType: String? {
         switch self {
-        case let .genreGroup(_, _, mediaType), let .language(_, mediaType), let .releaseYear(_, mediaType),
+        case let .genre(_, _, mediaType), let .genreGroup(_, _, mediaType), let .language(_, mediaType),
+             let .releaseYear(_, mediaType),
              let .releaseDecade(_, mediaType), let .rating(_, mediaType), let .month(_, mediaType):
             mediaType
         default:

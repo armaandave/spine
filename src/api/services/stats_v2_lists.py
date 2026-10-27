@@ -187,9 +187,29 @@ def title_ratings(scope, items):
     return ratings.title_ratings(scope, item_ids)
 
 
+def _top_from_list(scope):
+    """Return (the winning Top list, its first 10 exposed Items), cached on the scope.
+
+    ``(None, [])`` when no list fits (STAT-208).
+    """
+    cached = scope.__dict__.get("_top_from_list")
+    if cached is None:
+        winner = top_list(scope)
+        rows = featured.preview_items([winner.id], TOP_LIMIT).get(winner.id, []) if winner else []
+        cached = (winner, [row.item for row in rows])
+        scope.__dict__["_top_from_list"] = cached
+    return cached
+
+
+def top_item_ids(scope):
+    """Return the IDs of the Items Top shows from a list, for Highest rated to skip."""
+    _winner, items = _top_from_list(scope)
+    return [item.id for item in items]
+
+
 def build_top(scope):
     """Build Top: the newest ranked tagged list, else Highest rated (STAT-206-208)."""
-    winner = top_list(scope)
+    winner, items = _top_from_list(scope)
     if winner is None:
         # The first rows of Highest rated, from the preview it already loads.
         fallback = ratings.highest_rated_items(scope)[:TOP_LIMIT]
@@ -204,8 +224,6 @@ def build_top(scope):
                 for rank, row in enumerate(fallback, start=1)
             ],
         }
-    rows = featured.preview_items([winner.id], TOP_LIMIT).get(winner.id, [])
-    items = [row.item for row in rows]
     rated = title_ratings(scope, items)
     summaries = scope.media_summaries([item.id for item in items])
     return {

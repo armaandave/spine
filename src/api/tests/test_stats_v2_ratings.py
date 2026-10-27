@@ -364,7 +364,7 @@ class RatedVsEveryoneTests(RatingsBase):
         tv_tab = self.stats(self.owner, {**YEAR_2025, "media_type": "tv"})["rated_vs_everyone"]
         self.assertEqual([row["source"] for row in tv_tab["sources"]], ["tmdb"])
 
-    def test_five_each_way_sorted_by_size_and_zero_in_neither(self):
+    def test_five_each_way_sorted_by_size_and_ties_in_neither(self):
         made = {}
         for index in range(7):
             up = self.item(MediaTypes.MOVIE.value, f"up{index}")
@@ -383,6 +383,28 @@ class RatedVsEveryoneTests(RatingsBase):
         self.assertEqual(data["higher"][0]["difference"], "4.0")
         self.assertEqual(data["lower"][0]["difference"], "-3.5")
         self.assertNotIn(even.id, self.ids(data["higher"]) + self.ids(data["lower"]))
+
+    def test_gaps_under_half_a_star_from_the_shown_everyone_are_left_out(self):
+        rows = {
+            "tie": "4.45",  # everyone shows "4.5": a tie, not "0.1 higher"
+            "small": "4.1",  # 0.4 apart
+            "rounded_down": "4.06",  # shows "4.1": 0.4 apart, though 0.44 unrounded
+            "rounded_up": "4.04",  # shows "4.0": 0.5 apart, though 0.46 unrounded
+        }
+        made = {}
+        for name, everyone in rows.items():
+            made[name] = self.item(MediaTypes.MOVIE.value, name)
+            self.log(made[name], rating=Decimal("9.0"))
+            self.community(made[name], "letterboxd", everyone, 5, votes=100)
+        data = self.stats(self.owner, YEAR_2025)["rated_vs_everyone"]
+        self.assertEqual(
+            [
+                (row["media"]["ref"]["item_id"], row["stars"], row["everyone_stars"], row["difference"])
+                for row in data["higher"]
+            ],
+            [(made["rounded_up"].id, "4.5", "4.0", "0.5")],
+        )
+        self.assertEqual(data["lower"], [])
 
     def test_the_current_rating_is_compared_in_all_time(self):
         film = self.item(MediaTypes.MOVIE.value, "film")

@@ -27,7 +27,8 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from functools import cached_property
+from functools import cached_property, reduce
+from operator import or_
 
 from django.apps import apps
 from django.db.models import (
@@ -36,20 +37,24 @@ from django.db.models import (
     DateField,
     Exists,
     F,
+    FloatField,
     OuterRef,
     Q,
     Subquery,
+    Sum,
     Value,
     When,
 )
-from django.db.models.functions import Coalesce, TruncDate
+from django.db.models.fields.json import KT
+from django.db.models.functions import Cast, Coalesce, TruncDate
 
 from api.serializers.common import media_summary_from_item, prime_collection_items
+from api.services import activity as activity_service
 from api.services import filters as filter_service
 from api.services import stats as stats_service
 from app import exposure, user_calendar
 from app.models import DiaryEntry, Episode, Item, MediaTypes, Status
-from social.models import Follow, FollowStatus
+from social.models import Follow, FollowStatus, ProgressChange
 
 AUDIENCE_OWNER = "owner"
 AUDIENCE_FOLLOWER = "follower"
@@ -301,7 +306,10 @@ class StatsScope:
         """Visible logs of this tab with a log day in the range (STAT-101, STAT-103)."""
         if self.is_all_time:
             return self.all_entries
-        return self.all_entries.filter(self.range_q())
+        # The range is matched once, in a subquery: inline, a correlated subquery
+        # (Highest rated, release ages) re-ran the per-row log-day test for every
+        # log of the range on each outer row.
+        return self.all_entries.filter(id__in=self.all_entries.filter(self.range_q()).values("id"))
 
     def log_day(self, field="consumed_at"):
         """Return a log's day, decided per row (STAT-100)."""
@@ -479,16 +487,50 @@ class StatsScope:
             .order_by()
         )
 
+    def progress_events(self):
+        """(day, title ID, type bucket) of each day's progress and starts (STAT-106).
+
+        As in the activity feed (docs/activity-contract.md, AC-1, AC-2): a title's
+        recorded progress changes on one local day, kept when any unit, a start
+        included, moved forward on net. TV counts only its starts: its ticks already
+        are events, as dated viewings on the day watched.
+        """
+        changes = ProgressChange.objects.filter(actor=self.owner, item__media_type__in=self.item_types).exclude(
+            Q(item__media_type__in=TV_ITEM_TYPES) & ~Q(current_progress__unit=ProgressChange.START),
+        )
+        if not self.is_all_time:
+            changes = changes.filter(
+                created_at__gte=datetime.combine(self.start_date, time.min, tzinfo=self.zone),
+                created_at__lt=datetime.combine(self.end_date + timedelta(days=1), time.min, tzinfo=self.zone),
+            )
+        units = activity_service.UNITS
+        rows = (
+            changes.annotate(
+                event_day=TruncDate("created_at", tzinfo=self.zone),
+                event_title=self.title_id(),
+                event_bucket=media_type_bucket("item__media_type"),
+                delta=Cast(KT("current_progress__value"), FloatField())
+                - Cast(KT("previous_progress__value"), FloatField()),
+            )
+            .values("event_day", "event_title", "event_bucket")
+            .annotate(**{f"net_{unit}": Sum("delta", filter=Q(current_progress__unit=unit)) for unit in units})
+            .filter(reduce(or_, (Q(**{f"net_{unit}__gt": 0}) for unit in units)))
+            .values_list("event_day", "event_title", "event_bucket")
+            .order_by()
+        )
+        return set(rows)
+
     @cached_property
     def events(self):
-        """Distinct (day, title ID, type bucket) events, from one query (STAT-106).
+        """Distinct (day, title ID, type bucket) events (STAT-106).
 
-        Fills and undated completions are never events. Sorted by day, then title.
+        Logs, dated viewings, and each day's progress and starts. Fills and undated
+        completions are never events. Sorted by day, then title.
         """
         events = self.log_events().distinct()
         if self.counts_tv:
             events = self.log_events().union(self.viewing_events())
-        return sorted(events)
+        return sorted(set(events) | self.progress_events())
 
     # Posters
 

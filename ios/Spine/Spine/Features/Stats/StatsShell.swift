@@ -46,6 +46,9 @@ struct StatsShell<Content: View>: View {
         .refreshable {
             await viewModel.refresh()
         }
+        // A dark page whatever the phone's appearance, as the other dark screens are, so
+        // segmented controls and the refresh spinner draw for a dark background.
+        .preferredColorScheme(.dark)
         .background {
             LogBackdrop(url: URL(string: viewModel.page?.featuredMedia?.displayPosterURL ?? ""))
         }

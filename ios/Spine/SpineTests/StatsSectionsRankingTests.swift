@@ -79,6 +79,26 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual([firstIsFirst, firstIsLast, lastIsFirst, lastIsLast], [true, false, false, true])
     }
 
+    func testZeroCurrentStreaksAreLeftOut() {
+        let detail = { (key: String, value: Int, unit: String?) in
+            StatsHeaderDetail(key: key, label: key, value: value, unit: unit, approximate: false)
+        }
+        let header = StatsHeader(titles: 3, logs: 4, activeDays: 2, longestDailyStreak: 1, details: [
+            detail("current_daily_streak", 0, "day"),
+            detail("longest_weekly_streak", 0, "week"),
+            detail("current_weekly_streak", 2, "week"),
+            detail("rewatches", 0, nil),
+        ])
+        XCTAssertEqual(
+            StatsHeaderSection.shownDetails(header).map(\.key),
+            ["longest_weekly_streak", "current_weekly_streak", "rewatches"]
+        )
+        guard case let .detail(_, isFirst, _) = StatsHeaderSection.rows(for: header)[1] else {
+            return XCTFail("Expected a detail row")
+        }
+        XCTAssertTrue(isFirst, "The first shown row rounds the card's top")
+    }
+
     func testHeaderWithoutDetailsIsOnlyTheCounts() {
         let header = StatsHeader(titles: 3, logs: 4, activeDays: 2, longestDailyStreak: 1, details: [])
         XCTAssertEqual(StatsHeaderSection.rows(for: header).map(\.id), ["header.counts"])

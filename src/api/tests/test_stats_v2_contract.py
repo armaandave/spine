@@ -357,7 +357,7 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         self.assertTrue(data["rated_vs_everyone"]["lower"])
         self.assertTrue(data["release_years"]["rows"])
         self.assertTrue(data["genres"]["rows"])
-        self.assertEqual(data["genres"]["music"], [{"name": "shoegaze", "titles": 1}])
+        self.assertEqual(data["genres"]["music"], [{"name": "shoegaze", "values": ["shoegaze"], "titles": 1}])
         self.assertTrue(data["languages"]["rows"])
         self.assertEqual([ring["id"] for ring in data["list_rings"]], [self.ring.id])
         self.assertTrue(data["most_logged"]["items"])
@@ -376,10 +376,15 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         for params in (ALL_TIME, YEAR_2025):
             for tab in [None, *PRIMARY]:
                 owner = self.payload(self.owner, params, tab)
+                skipped = {"audience", "top"}
+                if owner["top"]["hint_private"]:
+                    # Only the owner's Top comes from the private list, so only the
+                    # owner's Highest rated leaves its titles out (STAT-205).
+                    skipped.add("highest_rated")
                 for viewer, audience in self.viewers()[1:]:
                     with self.subTest(range=params["start_date"], tab=tab, audience=audience):
                         other = self.payload(viewer, params, tab)
-                        for key in set(owner) - {"audience", "top"}:
+                        for key in set(owner) - skipped:
                             self.assertEqual(other[key], owner[key], key)
                         self.assertIsNone(other["top"]["tag_hint"])
                         self.assert_false(other["top"]["hint_private"])
@@ -653,7 +658,7 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         if tab is None:
             self.assertLessEqual(len(genres["music"]), 5)
             for row in genres["music"]:
-                self.check_keys(row, {"name", "titles"}, "genres.music[]")
+                self.check_keys(row, {"name", "values", "titles"}, "genres.music[]")
         else:
             self.assertEqual(genres["music"], [])
 

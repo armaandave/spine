@@ -42,6 +42,7 @@ from app.models import (
     Season,
     Status,
 )
+from social.models import ProgressChange
 
 YEAR_2026 = {"schema": "2", "start_date": "2026-01-01", "end_date": "2026-12-31"}
 
@@ -684,6 +685,47 @@ class ActivityChartTests(ActivityBase):
         empty = self.summary({"schema": "2", "start_date": "2023-02-01", "end_date": "2023-05-01"})["activity"]
         self.assertEqual((empty["months"], empty["busiest_day"], empty["busiest_month"]), ([], None, None))
         self.assertEqual(empty["weekdays"], [0] * 7)
+
+    def change(self, item, before, after, when, unit="episode"):
+        """Record one progress change, as tracking does, at a chosen time."""
+        row = ProgressChange.objects.create(
+            actor=self.owner,
+            item=item,
+            previous_progress={"value": before, "unit": unit},
+            current_progress={"value": after, "unit": unit},
+        )
+        ProgressChange.objects.filter(pk=row.pk).update(created_at=when)
+
+    def test_each_days_progress_and_starts_are_events(self):
+        series = self.item(MediaTypes.ANIME.value, "series")
+        # Two changes on one day are one event, on the owner's (New York) day.
+        self.change(series, 0, 2, datetime(2025, 3, 2, 15, tzinfo=UTC))
+        self.change(series, 2, 4, datetime(2025, 3, 3, 3, tzinfo=UTC))
+        # A day that went back on net isn't; a day in another year is outside 2025.
+        self.change(series, 4, 5, datetime(2025, 3, 9, 15, tzinfo=UTC))
+        self.change(series, 5, 3, datetime(2025, 3, 9, 16, tzinfo=UTC))
+        self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC))
+        # Starting a title is activity, as in the feed.
+        self.change(self.item(MediaTypes.ANIME.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
+        # A book's pages count. TV ticks don't (its viewings are its events), but a TV
+        # start does.
+        self.change(self.item(MediaTypes.BOOK.value, "novel"), 10, 40, datetime(2025, 3, 2, 18, tzinfo=UTC), "page")
+        show = self.item(MediaTypes.TV.value, "show")
+        self.change(show, 0, 3, datetime(2025, 5, 5, 15, tzinfo=UTC))
+        self.change(show, 0, 1, datetime(2025, 5, 6, 15, tzinfo=UTC), "start")
+
+        data = self.summary(YEAR_2025)
+        self.assertEqual(data["header"]["active_days"], 3)
+        self.assertEqual(data["activity"]["busiest_day"], {"date": "2025-03-02", "count": 2})
+        self.assertEqual(data["activity"]["months"][2]["by_type"], {"anime": 1, "book": 1})
+        self.assertEqual(data["activity"]["months"][4]["by_type"], {"tv": 1})
+        anime = self.summary(YEAR_2025, tab="anime")
+        self.assertEqual(anime["header"]["active_days"], 2)
+        # The day's two changes are one event, tied with the start: the later day wins.
+        self.assertEqual(anime["activity"]["busiest_day"], {"date": "2025-04-01", "count": 1})
+        self.assertEqual(self.summary(ALL_TIME, tab="anime")["header"]["active_days"], 3)
+        # Progress is visible to anyone who can see the profile (AC-5).
+        self.assertEqual(self.summary(YEAR_2025, viewer=self.stranger)["header"]["active_days"], 3)
 
     def test_tv_fills_and_undated_completions_are_never_events(self):
         _show, _season_item, _tv, season = self.tv_show()

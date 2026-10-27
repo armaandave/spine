@@ -256,7 +256,7 @@ def _global_genres(scope):
     music_rows = []
     if music in scope.primary_types:
         music_rows = [
-            {"name": row["name"], "titles": row["titles"]}
+            {"name": row["name"], "values": row["values"], "titles": row["titles"]}
             for row in _native_rows(scope.titles.filter(media_type=music), GENRE)[:MAX_MUSIC_ROWS]
         ]
     return {

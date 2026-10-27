@@ -149,7 +149,7 @@ class GlobalGenreTests(TasteBase):
         self.assertEqual([row["key"] for row in genres["rows"]], ["scifi_fantasy", "action_adventure"])
         self.assertEqual(genres["total"], 2)
         self.assertNotIn("drama", [row["key"] for row in genres["rows"]])
-        self.assertEqual(genres["music"], [{"name": "drama", "titles": 1}])
+        self.assertEqual(genres["music"], [{"name": "drama", "values": ["drama"], "titles": 1}])
         # Coverage leaves music out.
         self.assertEqual(genres["coverage"], {"known": 4, "total": 4})
 
@@ -191,7 +191,7 @@ class GlobalGenreTests(TasteBase):
 
         self.assertEqual(genres["rows"], [])
         self.assertEqual(len(genres["music"]), 5)
-        self.assertEqual(genres["music"][0], {"name": "shoegaze", "titles": 3})
+        self.assertEqual(genres["music"][0], {"name": "shoegaze", "values": ["shoegaze", "Shoegaze"], "titles": 3})
         self.assertEqual([row["name"] for row in genres["music"][1:]], ["folk", "jazz", "metal", "pop"])
 
     def test_music_tab_lists_its_genres_in_rows(self):

@@ -76,6 +76,22 @@ enum StatsRankedRowsData {
         }
     }
 
+    /// Global's music genres (STAT-211), shown with their capitals; each opens that genre's
+    /// music logs.
+    static func rows(music: [StatsMusicGenre]) -> [StatsRankedRow] {
+        music.map { genre in
+            StatsRankedRow(
+                id: "music.\(genre.id)",
+                name: genre.name.capitalized(with: .current),
+                titles: genre.titles,
+                rated: 0,
+                averageStars: nil,
+                byType: ["music": genre.titles],
+                drillDown: .genre(name: genre.name.capitalized(with: .current), values: genre.values ?? [genre.name], mediaType: "music")
+            )
+        }
+    }
+
     /// Most logged: by titles, most first, then name (the server's order). Highest rated: only
     /// rows with at least 3 rated logs, by average stars, then titles, then name.
     static func sorted(_ rows: [StatsRankedRow], by sort: StatsRankSort) -> [StatsRankedRow] {
@@ -107,14 +123,36 @@ enum StatsRankedRowsData {
         showsAll ? rows : Array(rows.prefix(collapsedCount))
     }
 
-    /// A bar's share of the card's width: titles against the most titles, or stars out of 5.
-    static func fraction(_ row: StatsRankedRow, sort: StatsRankSort, maximumTitles: Int) -> Double {
+    /// A bar's share of the card's width: titles against the most titles, or stars. Stars run
+    /// across `starRange` (the ranked rows' lowest and highest), not 0 to 5, so 3.7 and 4.0 look
+    /// different; without one they're out of 5.
+    static func fraction(
+        _ row: StatsRankedRow,
+        sort: StatsRankSort,
+        maximumTitles: Int,
+        starRange: ClosedRange<Double>? = nil
+    ) -> Double {
         switch sort {
         case .mostLogged:
             return maximumTitles > 0 ? Double(row.titles) / Double(maximumTitles) : 0
         case .highestRated:
-            return min(max((row.averageStars?.value ?? 0) / 5, 0), 1)
+            let stars = row.averageStars?.value ?? 0
+            guard let starRange, starRange.upperBound > starRange.lowerBound else {
+                return min(max(stars / 5, 0), 1)
+            }
+            return min(max((stars - starRange.lowerBound) / (starRange.upperBound - starRange.lowerBound), 0), 1)
         }
+    }
+
+    /// The span Highest rated bars run across: from half a star below the lowest average,
+    /// rounded down to a half star, to the highest. Nil when nothing is ranked by rating.
+    static func starRange(_ rows: [StatsRankedRow]) -> ClosedRange<Double>? {
+        let averages = rows
+            .filter { $0.rated >= minimumRated }
+            .compactMap { $0.averageStars?.value }
+        guard let lowest = averages.min(), let highest = averages.max() else { return nil }
+        let floor = max(((lowest - 0.5) * 2).rounded(.down) / 2, 0)
+        return floor ... max(highest, floor + 0.5)
     }
 
     /// "Sci-Fi & Fantasy, 41 titles, 3.8 average from 33 ratings".
@@ -148,8 +186,22 @@ struct StatsGenresSection: View {
         }
 
         if mediaType == nil, !genres.music.isEmpty {
+            // Each row opens the diary's music logs with that genre, as a Music tab genre does.
+            let rows = StatsRankedRowsData.rows(music: genres.music)
+            let maximum = rows.map(\.titles).max() ?? 0
             StatsSectionTitle("Music genres")
-            StatsMusicGenresCard(genres: genres.music)
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                StatsRankedBarRow(
+                    row: row,
+                    sort: .mostLogged,
+                    fraction: StatsRankedRowsData.fraction(row, sort: .mostLogged, maximumTitles: maximum),
+                    stacked: false,
+                    tint: StatsChartStyle.color(for: "music"),
+                    isFirst: index == 0,
+                    isLast: index == rows.count - 1,
+                    action: onDrillDown.map { onDrillDown in { onDrillDown(row.drillDown) } }
+                )
+            }
             StatsSectionEnd()
         }
     }
@@ -177,6 +229,7 @@ struct StatsRankedBarsRows: View {
         let visible = StatsRankedRowsData.visible(sorted, showsAll: showsAll)
         let hasMore = sorted.count > StatsRankedRowsData.collapsedCount
         let maximumTitles = rows.map(\.titles).max() ?? 0
+        let starRange = StatsRankedRowsData.starRange(rows)
         let legendTypes = mediaType == nil && activeSort == .mostLogged
             ? StatsChartStyle.types(in: rows.map(\.byType))
             : []
@@ -198,7 +251,12 @@ struct StatsRankedBarsRows: View {
             StatsRankedBarRow(
                 row: row,
                 sort: activeSort,
-                fraction: StatsRankedRowsData.fraction(row, sort: activeSort, maximumTitles: maximumTitles),
+                fraction: StatsRankedRowsData.fraction(
+                    row,
+                    sort: activeSort,
+                    maximumTitles: maximumTitles,
+                    starRange: starRange
+                ),
                 stacked: mediaType == nil,
                 tint: StatsChartStyle.color(for: mediaType),
                 isFirst: index == 0,
@@ -306,39 +364,5 @@ private struct StatsRankedBarRow: View {
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.7))
         }
-    }
-}
-
-/// Global's top music genres, which never join the shared groups (STAT-211).
-private struct StatsMusicGenresCard: View {
-    let genres: [StatsMusicGenre]
-
-    var body: some View {
-        let maximum = genres.map(\.titles).max() ?? 0
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(genres) { genre in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(genre.name.capitalized(with: .current))
-                            .font(.body)
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        Spacer(minLength: 10)
-                        Text(genre.titles.formatted())
-                            .font(.body)
-                            .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    StatsStackedBar(
-                        parts: [],
-                        fraction: maximum > 0 ? Double(genre.titles) / Double(maximum) : 0,
-                        tint: StatsChartStyle.color(for: "music")
-                    )
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(genre.name), \(StatsChartCopy.count(genre.titles, "album", "albums"))")
-            }
-        }
-        .statsChartCard()
     }
 }

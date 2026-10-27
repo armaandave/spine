@@ -185,9 +185,12 @@ enum StatsReleaseYearsChartData {
     }
 
     /// The bar with the most in a mode, a tie going to the most recent. Nil when nothing has any.
+    /// Ratings counts only bars with at least 3 rated logs, as Genres' Highest rated does, so one
+    /// 5-star log can't make its year the highest rated.
     static func peak(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles) -> StatsReleasePoint? {
         points
             .filter { ($0.value(for: mode) ?? 0) > 0 }
+            .filter { mode != .ratings || $0.rated >= StatsRankedRowsData.minimumRated }
             .max { ($0.value(for: mode) ?? 0, $0.start) < ($1.value(for: mode) ?? 0, $1.start) }
     }
 
@@ -203,12 +206,17 @@ enum StatsReleaseYearsChartData {
         return parts.joined(separator: " · ")
     }
 
-    /// The line over the chart when nothing is picked: "Most titles from 2024".
+    /// The line over the chart when nothing is picked: "Most titles from 2024", "Most logs from
+    /// the 2010s". Ratings with bars but none rated 3 times says what the chart shows instead.
     static func summaryTitle(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles) -> String? {
-        guard let peak = peak(points, mode: mode) else { return nil }
+        guard let peak = peak(points, mode: mode) else {
+            let hasRatings = mode == .ratings && points.contains { $0.value(for: .ratings) != nil }
+            return hasRatings ? "Average stars by release year" : nil
+        }
+        let label = peak.isDecade ? "the \(peak.label)" : peak.label
         switch mode {
-        case .titles: return "Most titles from \(peak.label)"
-        case .logs: return "Most logs from \(peak.label)"
+        case .titles: return "Most titles from \(label)"
+        case .logs: return "Most logs from \(label)"
         case .ratings: return "Highest rated: \(peak.label)"
         }
     }

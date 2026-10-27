@@ -1,8 +1,8 @@
 import Charts
 import SwiftUI
 
-// Activity (STAT-203): events by month and by weekday, then the busiest day and month. No
-// heatmap. Each chart is one fixed-height row of the page's lazy stack.
+// Activity (STAT-203): events by month and by weekday, then the busiest day and month (each
+// opens its logs on your own stats). No heatmap. Each chart is one fixed-height row of the page's lazy stack.
 
 /// The Activity section's rows. `onDrillDown` is nil on someone else's stats, where charts
 /// aren't tappable (STAT-401). A month bar opens that month's logs; on Global, a tap on one
@@ -35,7 +35,9 @@ struct StatsActivityChartSection: View {
                 value: StatsActivityChartData.busiestDayText(day),
                 roundsTop: true,
                 roundsBottom: activity.busiestMonth == nil,
-                action: nil
+                action: onDrillDown.map { onDrillDown in
+                    { onDrillDown(.day(day.date)) }
+                }
             )
         }
 
@@ -142,6 +144,14 @@ enum StatsActivityChartData {
         return max(1, Int((Double(years) / 6).rounded(.up)))
     }
 
+    /// Whether a year mark's label fits before the chart's end. A year label starts at its mark
+    /// and runs right, so the last one needs about half a stride of months after it, or it's cut
+    /// to "2…"; its grid line stays either way.
+    static func yearLabelFits(_ mark: Date, end: Date, stride: Int, calendar: Calendar = .current) -> Bool {
+        let months = calendar.dateComponents([.month], from: mark, to: end).month ?? 0
+        return months >= stride * 6
+    }
+
     private static func yearMonth(_ month: String) -> (Int, Int)? {
         let parts = month.split(separator: "-")
         guard parts.count == 2, let year = Int(parts[0]), let number = Int(parts[1]), (1 ... 12).contains(number) else {
@@ -242,10 +252,14 @@ private struct StatsMonthsChartCard: View {
     @AxisContentBuilder
     private var xAxis: some AxisContent {
         if let stride = StatsActivityChartData.yearStride(monthCount: months.count) {
-            AxisMarks(values: .stride(by: .year, count: stride)) { _ in
+            let end = xDomain.upperBound
+            AxisMarks(values: .stride(by: .year, count: stride)) { value in
                 AxisGridLine().foregroundStyle(StatsChartStyle.gridLine)
-                AxisValueLabel(format: .dateTime.year())
-                    .foregroundStyle(StatsChartStyle.axisLabel)
+                if let mark = value.as(Date.self),
+                   StatsActivityChartData.yearLabelFits(mark, end: end, stride: stride) {
+                    AxisValueLabel(format: .dateTime.year())
+                        .foregroundStyle(StatsChartStyle.axisLabel)
+                }
             }
         } else {
             AxisMarks(values: .stride(by: .month)) { _ in

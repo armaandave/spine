@@ -202,7 +202,12 @@ def highest_rated_response(user, request):
         lambda page, page_size: stats_cache.cached(
             scope,
             "highest_rated",
-            lambda: stats_v2_ratings.highest_rated_page(scope, page, page_size),
+            lambda: stats_v2_ratings.highest_rated_page(
+                scope,
+                page,
+                page_size,
+                exclude_ids=stats_v2_lists.top_item_ids(scope),
+            ),
             page,
             page_size,
         ),

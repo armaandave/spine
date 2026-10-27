@@ -135,6 +135,14 @@ final class StatsDrillDownTests: XCTestCase {
         XCTAssertNil(StatsDrillDown.dayRange(forMonth: "2025-13"))
     }
 
+    func testBusiestDayOpensThatDaysLogs() {
+        let day = StatsDrillDown.day("2024-02-29")
+        let query = pairs(day.diaryFilter(in: ownGlobal2025))
+        XCTAssertEqual(values("watched_from", in: query), ["2024-02-29"])
+        XCTAssertEqual(values("watched_to", in: query), ["2024-02-29"])
+        XCTAssertFalse(day.diaryTitle(in: ownGlobal2025).contains("2025"), "The day names its own year")
+    }
+
     func testTagAndLiked() {
         let tag = pairs(StatsDrillDown.tag("comfort").diaryFilter(in: ownGlobal2025))
         XCTAssertEqual(values("tag", in: tag), ["comfort"])

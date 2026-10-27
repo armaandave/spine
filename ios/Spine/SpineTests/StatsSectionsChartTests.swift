@@ -136,8 +136,8 @@ final class StatsSectionsChartTests: XCTestCase {
     func testEachModeNamesItsOwnPeak() {
         let points = StatsReleaseYearsChartData.yearSeries(
             [
-                year(2010, titles: 5, logs: 5, rated: 2, average: "3.0"),
-                year(2015, titles: 2, logs: 9, rated: 1, average: "4.5"),
+                year(2010, titles: 5, logs: 5, rated: 4, average: "3.0"),
+                year(2015, titles: 2, logs: 9, rated: 3, average: "4.5"),
                 year(2018, titles: 1, logs: 1),
             ],
             currentYear: 2018
@@ -147,11 +147,42 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .logs), "Most logs from 2015")
         XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .ratings), "Highest rated: 2015")
 
+        let decades = StatsReleaseYearsChartData.decadeSeries(
+            [year(2012, titles: 2, logs: 9), year(1995, titles: 4, logs: 4)],
+            currentYear: 2018
+        )
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(decades, mode: .logs), "Most logs from the 2010s")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(decades, mode: .titles), "Most titles from the 1990s")
+
         let unrated = StatsReleaseYearsChartData.yearSeries([year(2018, titles: 2)], currentYear: 2018)
         XCTAssertNil(StatsReleaseYearsChartData.summaryTitle(unrated, mode: .ratings))
         XCTAssertEqual(StatsReleaseYearsChartData.emptyTitle(mode: .ratings), "Nothing rated yet")
         XCTAssertEqual(StatsReleaseYearsChartData.emptyTitle(mode: .titles), "No release years yet")
         XCTAssertEqual(StatsReleaseMode.allCases.map(\.title), ["Titles", "Ratings", "Logs"])
+    }
+
+    func testHighestRatedYearNeedsThreeRatings() {
+        // One 5-star log of a 1942 film doesn't make 1942 the highest rated year.
+        let points = StatsReleaseYearsChartData.yearSeries(
+            [
+                year(1942, titles: 1, logs: 1, rated: 1, average: "5.0"),
+                year(2001, titles: 3, logs: 3, rated: 3, average: "3.5"),
+                year(2010, titles: 4, logs: 4, rated: 4, average: "4.0"),
+            ],
+            currentYear: 2010
+        )
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .ratings), "Highest rated: 2010")
+
+        let fewRatings = StatsReleaseYearsChartData.yearSeries(
+            [year(1942, titles: 1, rated: 1, average: "5.0"), year(2001, titles: 2, rated: 2, average: "3.5")],
+            currentYear: 2010
+        )
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(fewRatings, mode: .ratings), "Average stars by release year")
+        XCTAssertEqual(
+            StatsReleaseYearsChartData.parts(fewRatings, mode: .ratings, stacked: false).map(\.label),
+            ["1942", "2001"],
+            "Every rated year still gets its bar"
+        )
     }
 
     func testAxisLabelsStepOnRoundYears() {
@@ -404,6 +435,18 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertNil(StatsActivityChartData.yearStride(monthCount: 12))
         XCTAssertEqual(StatsActivityChartData.yearStride(monthCount: 36), 1)
         XCTAssertEqual(StatsActivityChartData.yearStride(monthCount: 150), 3)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let end = calendar.date(from: DateComponents(year: 2026, month: 11, day: 1))!
+        let lastMark = calendar.date(from: DateComponents(year: 2026, month: 1, day: 1))!
+        let earlierMark = calendar.date(from: DateComponents(year: 2023, month: 1, day: 1))!
+        XCTAssertFalse(
+            StatsActivityChartData.yearLabelFits(lastMark, end: end, stride: 3, calendar: calendar),
+            "Ten months is too little room for a label every three years"
+        )
+        XCTAssertTrue(StatsActivityChartData.yearLabelFits(earlierMark, end: end, stride: 3, calendar: calendar))
+        XCTAssertTrue(StatsActivityChartData.yearLabelFits(lastMark, end: end, stride: 1, calendar: calendar))
     }
 
     // MARK: - Genres and languages (STAT-210 to STAT-212)
@@ -448,6 +491,23 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsRankedRowsData.fraction(row, sort: .mostLogged, maximumTitles: 10), 0.5)
         XCTAssertEqual(StatsRankedRowsData.fraction(row, sort: .highestRated, maximumTitles: 10), 0.8)
         XCTAssertEqual(StatsRankedRowsData.fraction(row, sort: .mostLogged, maximumTitles: 0), 0)
+    }
+
+    func testHighestRatedBarsSpreadAcrossTheRankedAverages() {
+        let rows = [
+            ranked("Drama", titles: 5, rated: 4, average: "4.0"),
+            ranked("Comedy", titles: 5, rated: 3, average: "3.7"),
+            ranked("Horror", titles: 5, rated: 1, average: "1.0"), // too few ratings to rank
+        ]
+        let range = StatsRankedRowsData.starRange(rows)
+        XCTAssertEqual(range, 3.0 ... 4.0)
+        let drama = StatsRankedRowsData.fraction(rows[0], sort: .highestRated, maximumTitles: 5, starRange: range)
+        let comedy = StatsRankedRowsData.fraction(rows[1], sort: .highestRated, maximumTitles: 5, starRange: range)
+        XCTAssertEqual(drama, 1)
+        XCTAssertEqual(comedy, 0.7, accuracy: 0.001, "3.7 against 4.0 reads as a clear difference, not 74% against 80%")
+
+        XCTAssertEqual(StatsRankedRowsData.starRange([rows[0]]), 3.5 ... 4.0, "One average still gets a bar")
+        XCTAssertNil(StatsRankedRowsData.starRange([rows[2]]))
     }
 
     func testGenreRowsDrillDownByGroupOnGlobalAndBySpellingsOnATypeTab() {

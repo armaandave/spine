@@ -235,6 +235,30 @@ class TopTests(ListsBase):
         self.assertEqual(top["list"], {"id": custom_list.id, "name": "With music", "total": 2})
         self.assertEqual(len(top["items"]), 2)
 
+    def test_highest_rated_leaves_out_what_top_shows_from_a_list(self):
+        films = self.movies(12)
+        for index, film in enumerate(films):
+            self.log(film, datetime(2025, 3, 1, tzinfo=UTC), rating=Decimal("10.0") - Decimal(index) / 2)
+        # Top shows the list's first 10; the 11th list item isn't in Top, so it stays.
+        self.make_list("Best", films[:11])
+        response = self.get(self.owner, {**YEAR_2025, "media_type": "movie"})
+        self.assertEqual(response.data["top"]["source"], "list")
+        highest = response.data["highest_rated"]
+        self.assertEqual([row["media"]["ref"]["item_id"] for row in highest["items"]], [films[10].id, films[11].id])
+        self.assertEqual(highest["total"], 2)
+        page = self.get(
+            self.owner,
+            {**YEAR_2025, "media_type": "movie"},
+            path="/api/v1/stats/me/highest-rated/",
+        ).data
+        self.assertEqual(page["count"], 2)
+        self.assertEqual([row["media"]["ref"]["item_id"] for row in page["results"]], [films[10].id, films[11].id])
+        # Without a list, Highest rated keeps every title (and Top is its first 10).
+        CustomList.objects.all().delete()
+        cache.clear()
+        response = self.get(self.owner, {**YEAR_2025, "media_type": "movie"})
+        self.assertEqual(response.data["highest_rated"]["total"], 12)
+
     def test_fallback_ranks_highest_rated_rows(self):
         rows = [{"media": {"title": f"T{index}"}, "stars": "4.0", "day": None} for index in range(12)]
         with patch.object(stats_v2_lists.ratings, "highest_rated_items", return_value=rows):

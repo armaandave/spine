@@ -157,8 +157,10 @@ A title counts once however many of these it has.
 
 ### STAT-106: An event is one title on one day
 
-Events are the distinct (day, title) pairs from visible logs and from dated viewings that aren't hidden.
-Three episodes of one show watched on one day are one event.
+Events are the distinct (day, title) pairs from visible logs, from dated viewings that aren't hidden, and from each day's progress and starts, as the activity feed counts them (docs/activity-contract.md, AC-1, AC-2).
+A day's progress is the owner's recorded progress changes on a title in one local day, kept when it moved forward on net; starting a title counts the same way.
+TV counts only its starts this way: its ticks already are events, as dated viewings on the day watched.
+Three episodes of one show watched on one day are one event, and so are a manga's chapters read and logged on one day.
 Fills and undated completions are never events.
 Events drive active days, streaks, "Days with 2+ titles", the activity charts and the busiest day and month.
 
@@ -222,6 +224,8 @@ The details list has these rows, in this order, when they apply:
 | `completions` | Completions | game | STAT-107. |
 | `abandoned` | Abandoned | game | Playthroughs (`GameSession`) that ended Dropped with an end date in the range; every one in All Time. |
 
+The app leaves out a current streak row (daily or weekly) whose value is 0.
+
 The longest daily streak is the most days in a row with an event inside the range.
 A detail whose value doesn't apply (a current streak in a range that doesn't include today) is left out of the list. A zero is sent as zero.
 
@@ -283,7 +287,7 @@ Highest rated holds every Item in the scope with a title rating (STAT-109), one 
 
 Rows are sorted by stars, highest first, then by the rating's log day, newest first, with current-rating rows after logged rows of the same stars, then by Item ID.
 The section sends the first 12 rows and the total; the show-all endpoint pages through the rest (STAT-310).
-The app shows the Highest rated section only when Top comes from a list, on Global and type tabs alike, so the two never repeat each other.
+The app shows the Highest rated section only when Top comes from a list, on Global and type tabs alike. Then Highest rated leaves out the Items Top shows (its 12 rows, its total and the show-all endpoint alike), so the two never repeat each other.
 
 ### STAT-206: Top reads one tag from the owner's ranked lists
 
@@ -336,7 +340,7 @@ On a type tab, genres are the `genre` facet values of the scope's titles, in the
 - Each row counts its titles, the rated visible logs of those titles in the range, and their average stars.
 
 Rows are sorted by titles, most first, then by name. At most 50 are sent; `total` is how many there are.
-The app's "Most watched / Highest rated" control sorts these rows itself; "Highest rated" ranks rows with at least 3 rated logs by average stars, then by titles.
+The app's order control sorts these rows itself: its first segment is named for the tab ("Most watched" for movies, TV and anime, "Most read" for books, manga and comics, "Most played" for games, "Most listened" for music, "Most titles" on Global), the second is "Highest rated"; "Highest rated" ranks rows with at least 3 rated logs by average stars, then by titles.
 
 ### STAT-211: Global genres use 15 shared groups, with music kept apart
 
@@ -380,7 +384,7 @@ It never reads the `language` facet, which the library and diary filters keep us
 
 Each row counts its titles, split per type bucket, and the rated visible logs of those titles with their average stars.
 Rows are sorted by titles, then name; at most 50 are sent, and `total` is how many there are.
-The card has the same "Most watched / Highest rated" control as genres (STAT-210).
+The card has the same order control as genres, with the same labels: "Most watched" on the movie and TV tabs, "Most titles" on Global (STAT-210).
 
 ### STAT-213: List progress rings use Spine's own lasting featured lists
 
@@ -450,9 +454,10 @@ Each is compared with one community rating from `ExternalRating`:
 
 - **Usable.** `status` is available, `value` and `max_value` are set, `max_value` is above 0, and `vote_count` is at least 50 when it is stored.
 - **Everyone's stars.** `value / max_value × 5`.
-- **Difference.** Your stars minus everyone's stars.
+- **Difference.** Your stars minus everyone's stars as sent (rounded to one decimal, STAT-303), so a row never shows a tie such as "4.5" against "4.5".
+- **Big enough to count.** A title is higher or lower than most only when the difference is at least 0.5 stars. Ties and smaller gaps are in neither list.
 
-`higher` lists the 5 largest positive differences and `lower` the 5 largest negative ones, each sorted by the size of the difference, then by Item ID. A difference of zero is in neither.
+`higher` lists the 5 largest positive differences and `lower` the 5 largest negative ones, each sorted by the size of the difference, then by Item ID.
 Each row shows the poster, the title, your stars, then "Everyone 3.4".
 The section is titled "Rated higher than most", with a segmented Higher / Lower control.
 
@@ -783,7 +788,7 @@ Global:
   ],
   "total": 13,
   "coverage": { "known": 380, "total": 412 },
-  "music": [ { "name": "shoegaze", "titles": 7 } ]
+  "music": [ { "name": "shoegaze", "values": ["shoegaze", "Shoegaze"], "titles": 7 } ]
 }
 ```
 
@@ -811,7 +816,7 @@ A type tab:
 | `rows[].by_type` | object | Titles per type bucket. |
 | `total` | int | Rows there are before the 50-row cap. |
 | `coverage` | object | `known` titles that reach a row, out of `total` titles. On Global both leave out music. |
-| `music` | array | Global only, top 5 music genres `{name, titles}`; empty on every type tab, including music, whose genres are in `rows`. |
+| `music` | array | Global only, top 5 music genres `{name, values, titles}` (`values` are the stored spellings, as on a type tab, for the drill-down); empty on every type tab, including music, whose genres are in `rows`. |
 
 #### `languages`
 
@@ -947,6 +952,7 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | Row | Adds |
 | --- | --- |
 | Genre on a type tab | `genre=<each of values>` |
+| Music genre on Global | `genre=<each of values>&media_type=music` |
 | Genre group on Global, or one type's part of its bar | `genre_group=<key>`, plus that part's media types |
 | Language | `original_language=<name>`, plus the part's media types on Global |
 | Release year, or decade | `year=1999`, or `year_min=1990&year_max=1999` |
@@ -954,6 +960,7 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | A title in Top, Highest rated, Rated higher than most or Most logged | `item_id=<id>`; a show also returns its season and episode logs through `tv_rollup`, and a season row stays exact |
 | Likes | `liked=true` |
 | An activity month | that month's first and last day as `watched_from` and `watched_to` |
+| The busiest day | that day as both `watched_from` and `watched_to` |
 | Milestone | Opens the log (`entry_id`). |
 | List ring, collection | Opens the list or the series page, not the diary. |
 | Most logged "Show all", Highest rated "Show all", Collections "Show all" | The show-all endpoints (STAT-310). |

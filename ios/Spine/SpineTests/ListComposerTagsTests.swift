@@ -65,6 +65,35 @@ final class ListComposerTagsTests: XCTestCase {
         XCTAssertEqual(viewModel.tagDraft.suggestions.first { $0.name == "comfort" }?.usageCount, 2)
     }
 
+    func testTopTagMatchesTheServersSpellings() {
+        XCTAssertEqual(ListTagRules.topTag(for: "TOP all time"), "topalltime")
+        XCTAssertEqual(ListTagRules.topTag(for: " Top 2025 "), "top2025")
+        XCTAssertEqual(ListTagRules.topTag(for: "top_2025"), "top2025")
+        XCTAssertEqual(ListTagRules.topTag(for: "top-all-time"), "topalltime")
+        XCTAssertNil(ListTagRules.topTag(for: "top movies"))
+        XCTAssertNil(ListTagRules.topTag(for: "top20255"))
+    }
+
+    func testTopTagsInOtherSpellingsArentSuggestedTwice() async {
+        // "Top 2025" on another list is top2025: one suggestion, with its count.
+        let repository = TagsListRepository(lists: [
+            summary(id: 1, tags: ["Top 2025", "comfort"], owner: owner),
+            summary(id: 2, tags: ["top2025"], owner: owner),
+        ])
+        let viewModel = makeViewModel(mode: .create(.media), repository: repository)
+        viewModel.draft.isRanked = true
+        await viewModel.loadTagLibrary()
+
+        XCTAssertEqual(viewModel.tagSuggestions.map(\.name), ["top2026", "top2025", "topalltime", "comfort"])
+        XCTAssertEqual(viewModel.tagSuggestions.first { $0.name == "top2025" }?.usageCount, 2)
+        XCTAssertTrue(viewModel.showsTopTagHint)
+
+        // The list already has "TOP all time": topalltime isn't offered and the hint goes.
+        viewModel.tagDraft.pick("TOP all time")
+        XCTAssertEqual(viewModel.tagSuggestions.map(\.name), ["top2026", "top2025", "comfort"])
+        XCTAssertFalse(viewModel.showsTopTagHint)
+    }
+
     func testUnrankedListWithoutPositionsSuggestsOnlyItsOwnTags() async {
         let repository = TagsListRepository(lists: [summary(id: 1, tags: ["comfort"], owner: owner)])
         let viewModel = makeViewModel(mode: .create(.media), repository: repository)

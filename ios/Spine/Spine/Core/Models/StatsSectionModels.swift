@@ -503,6 +503,8 @@ struct StatsGenreRow: Decodable, Hashable, Identifiable {
 
 struct StatsMusicGenre: Decodable, Hashable, Identifiable {
     let name: String
+    /// Every stored spelling, for the drill-down; older servers don't send it.
+    var values: [String]?
     let titles: Int
 
     var id: String { name }

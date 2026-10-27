@@ -23,6 +23,21 @@ final class StatsPageLayoutTests: XCTestCase {
         ])
     }
 
+    func testTheMediaPickerFitsAllEightTypesOnAPhone() throws {
+        // A 402 pt phone less the page's 16 pt edges and the capsule's 14 pt insets.
+        let eight = try XCTUnwrap(MediaSearchLensLayout.fittedSlots(available: 402 - 32 - 28, count: 8, isCompact: true))
+        XCTAssertEqual(eight.spacing, 0, "Too narrow for gaps, the slots touch")
+        XCTAssertEqual(eight.width, 42.75, accuracy: 0.01)
+
+        // Seven types keep the usual gap and 44 pt slots, as the Diary has them.
+        let seven = try XCTUnwrap(MediaSearchLensLayout.fittedSlots(available: 342, count: 7, isCompact: true))
+        XCTAssertEqual(seven.spacing, 3)
+        XCTAssertGreaterThanOrEqual(seven.width, 44)
+
+        XCTAssertNil(MediaSearchLensLayout.fittedSlots(available: 280, count: 8, isCompact: true), "Too narrow: it scrolls")
+        XCTAssertNil(MediaSearchLensLayout.fittedSlots(available: 342, count: 8, isCompact: false))
+    }
+
     func testCollectionsNeverShowOnGlobal() throws {
         let page = try decode(Self.pageJSON(mediaType: nil, collections: Self.collectionsJSON))
 

@@ -70,7 +70,11 @@ struct StatsCollectionsSection: View {
         if !groups.isEmpty {
             StatsSectionTitle("Collections")
 
-            ForEach(groups) { entry in
+            // Each group is a card: its name, then its tile rows, each row its own lazy item.
+            ForEach(Array(groups.enumerated()), id: \.element.id) { index, entry in
+                let gapAfter = index == groups.count - 1 ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap
+                let rows = StatsPosterGridLayout.rows(entry.series, idPrefix: "collections.\(entry.group.rawValue)")
+
                 HStack(alignment: .center, spacing: 12) {
                     Text(StatsCollectionsData.groupTitle(entry.group, count: entry.count))
                         .font(.subheadline.weight(.semibold))
@@ -85,23 +89,28 @@ struct StatsCollectionsSection: View {
                         Color.clear.frame(width: 1, height: 44)
                     }
                 }
-                .padding(.leading, 4)
+                .padding(.leading, Self.cardInset)
+                .padding(.trailing, 8)
+                .padding(.top, 4)
+                .statsCardSlice(isFirst: true, isLast: rows.isEmpty, gapAfter: gapAfter)
 
-                ForEach(StatsPosterGridLayout.rows(entry.series, idPrefix: "collections.\(entry.group.rawValue)")) { row in
+                ForEach(rows) { row in
+                    let isLast = row.index == rows.count - 1
                     StatsPosterGridRowView(row: row) { series in
                         StatsCollectionTile(series: series) {
                             onOpen(.collection(series))
                         }
                     }
-                    .padding(.bottom, StatsPosterGridLayout.rowSpacing)
+                    .padding(.horizontal, Self.cardInset)
+                    .padding(.bottom, isLast ? Self.cardInset : StatsPosterGridLayout.rowSpacing)
+                    .statsCardSlice(isFirst: false, isLast: isLast, gapAfter: gapAfter)
                 }
             }
-
-            Color.clear
-                .frame(height: max(StatsChartStyle.sectionSpacing - StatsPosterGridLayout.rowSpacing, 0))
-                .accessibilityHidden(true)
         }
     }
+
+    /// The card's inner margin: four 80 pt cells still fit a 402 pt phone.
+    static let cardInset: CGFloat = 14
 }
 
 /// A series tile: up to three posters fanned in a fixed cell, the name, then "N of M".
@@ -115,15 +124,18 @@ struct StatsCollectionTile: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
+                // The fan is as tall as its posters, so no empty band sits above it.
                 fan
-                    .frame(width: Self.cell.width, height: Self.cell.height, alignment: .bottom)
+                    .frame(width: Self.cell.width, height: Self.posterSlot.size.height, alignment: .bottom)
 
+                // Two lines, always reserved, so long names read and every tile's caption lines up.
                 Text(series.name)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
-                    .frame(width: Self.cell.width, height: 30, alignment: .topLeading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: Self.cell.width, alignment: .topLeading)
 
                 if let caption = StatsCollectionsData.caption(series) {
                     StatsPosterCaption(text: caption)

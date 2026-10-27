@@ -266,9 +266,10 @@ struct ListComposerView: View {
                     }
             }
 
-            if focusedField == .tags, !tagDraft.isFull, !tagDraft.suggestions.isEmpty {
+            let suggestions = viewModel.tagSuggestions
+            if focusedField == .tags, !tagDraft.isFull, !suggestions.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(tagDraft.suggestions, id: \.name) { suggestion in
+                    ForEach(suggestions, id: \.name) { suggestion in
                         Divider().overlay(.white.opacity(0.1))
                         Button {
                             tagDraft.pick(suggestion.name)
@@ -296,7 +297,7 @@ struct ListComposerView: View {
                 }
             }
 
-            if viewModel.suggestsTopTags {
+            if viewModel.showsTopTagHint {
                 Text("Tag it \(viewModel.topTags[0]) or topalltime to show it as your Top in Stats.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.5))

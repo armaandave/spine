@@ -29,7 +29,8 @@ def build_stats_v2(scope):
         "header": activity.build_header(scope),
         "time": activity.build_time(scope),
         "top": lists.build_top(scope),
-        "highest_rated": ratings.build_highest_rated(scope),
+        # Leaves out what Top already shows from a list (STAT-205).
+        "highest_rated": ratings.build_highest_rated(scope, exclude_ids=lists.top_item_ids(scope)),
         "activity": activity.build_activity(scope),
         "ratings": ratings.build_ratings(scope),
         "rated_vs_everyone": ratings.build_rated_vs_everyone(scope),

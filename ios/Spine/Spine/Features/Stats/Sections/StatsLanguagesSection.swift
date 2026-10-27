@@ -1,8 +1,9 @@
 import SwiftUI
 
 // Languages (STAT-212): each movie and show once, by its original language, with the same
-// "Most watched / Highest rated" control and "Show all" as Genres. On Global the note says which
-// types it's counted from ("From movies and TV"). A row opens the diary for that language.
+// order control ("Most watched", or "Most titles" on Global, / "Highest rated") and "Show all" as
+// Genres. On Global the note says which types it's counted from ("From movies and TV"). A row
+// opens the diary for that language.
 
 /// The Languages section's rows. `onDrillDown` is nil on someone else's stats.
 struct StatsLanguagesSection: View {
@@ -17,8 +18,8 @@ struct StatsLanguagesSection: View {
                 title: "Languages",
                 rows: StatsRankedRowsData.rows(languages),
                 mediaType: mediaType,
-                // Only movies and TV have languages.
-                mostTitle: "Most watched",
+                // "Most watched" on the movie and TV tabs, "Most titles" on Global, as Genres.
+                mostTitle: StatsRankSort.mostTitle(for: mediaType),
                 footnote: StatsLanguagesSection.footnote(languages, mediaType: mediaType),
                 onDrillDown: onDrillDown
             )

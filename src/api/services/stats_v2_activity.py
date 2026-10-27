@@ -107,17 +107,13 @@ def _detail(key, label, value, unit=None, *, approximate=False):
 
 
 def _log_counts(scope):
-    """Count logs, reviews and rewatches in the range in one query (STAT-103, 108)."""
-    entries, rewatch = rewatch_entries(scope)
-    # The rewatch test is annotated first: as an aggregate's filter, Django resolves
-    # its OuterRefs against the wrong query and counts every log.
-    return entries.annotate(
-        stats_rewatch=ExpressionWrapper(rewatch, output_field=BooleanField()),
-    ).aggregate(
+    """Count logs, reviews and rewatches in the range (STAT-103, 108)."""
+    counts = scope.entries.aggregate(
         logs=Count("id"),
         reviews=Count("id", filter=Q(review__gt="") | Q(review_title__gt="")),
-        rewatches=Count("id", filter=Q(stats_rewatch=True)),
     )
+    counts["rewatches"] = len(rewatch_ids(scope))
+    return counts
 
 
 def liked_titles(scope):
@@ -193,35 +189,58 @@ def _dropped_playthroughs(scope):
 # Rewatches, STAT-108.
 
 
-def rewatch_entries(scope):
-    """Return (the scope's logs, annotated, and a Q matching the rewatches among them).
+def rewatch_ids(scope):
+    """Return the IDs of the rewatch logs in the scope (STAT-108).
 
     A log is a rewatch when its target has an earlier visible log (by log day, then
     ID), or, as its first visible log, when an undated fact came first under its
     type's rule. The target is the logged Item: an episode, season or show for TV.
+    The first visible log per target is found here rather than in SQL: as a
+    correlated subquery on the per-row log day, Global All Time took over 10 s.
     """
+    first_by_target = {}
+    rows = (
+        scope.visible_entries.filter(item_id__in=scope.entries.values("item_id"))
+        .annotate(stats_day=scope.log_day())
+        .values_list("item_id", "stats_day", "id")
+    )
+    for item_id, day, entry_id in rows:
+        current = first_by_target.get(item_id)
+        if current is None or (day, entry_id) < current:
+            first_by_target[item_id] = (day, entry_id)
+    first_ids = {entry_id for _day, entry_id in first_by_target.values()}
+    in_range = set(scope.entries.values_list("id", flat=True))
+    rewatches = in_range - first_ids
+
+    entries, undated_fact = _undated_fact_rule(scope)
+    if undated_fact is not None:
+        # Annotated first: as a filter, Django resolves the OuterRefs against the
+        # wrong query.
+        matched = (
+            entries.annotate(stats_rewatch=ExpressionWrapper(undated_fact, output_field=BooleanField()))
+            .filter(stats_rewatch=True)
+            .values_list("id", flat=True)
+        )
+        rewatches |= first_ids.intersection(matched)
+    return rewatches
+
+
+def _undated_fact_rule(scope):
+    """Return (the scope's logs, annotated, and a Q for STAT-108 rule 2, or None)."""
     owner = scope.owner
     types = set(scope.item_types)
-    entries = scope.entries.annotate(stats_day=scope.log_day())
-    earlier = (
-        scope.visible_entries.filter(item_id=OuterRef("item_id"))
-        .annotate(stats_earlier_day=scope.log_day())
-        .filter(
-            Q(stats_earlier_day__lt=OuterRef("stats_day"))
-            | Q(stats_earlier_day=OuterRef("stats_day"), id__lt=OuterRef("id")),
-        )
-    )
-    rewatch = Q(Exists(earlier))
+    entries = scope.entries
+    rules = []
 
     for media_type, model in ((MediaTypes.BOOK.value, Book), (MediaTypes.GAME.value, Game)):
         if media_type in types:
             manual = stats_time.manual_completions(scope, model).filter(item_id=OuterRef("item_id"))
-            rewatch |= Q(item__media_type=media_type) & Q(Exists(manual))
+            rules.append(Q(item__media_type=media_type) & Q(Exists(manual)))
 
     for media_type, model in ((MediaTypes.MOVIE.value, Movie), (MediaTypes.MUSIC.value, Music)):
         if media_type in types:
             marker = model.objects.filter(user=owner, item_id=OuterRef("item_id"), direct_consumption=True)
-            rewatch |= Q(item__media_type=media_type, is_rewatch=True) & Q(Exists(marker))
+            rules.append(Q(item__media_type=media_type, is_rewatch=True) & Q(Exists(marker)))
 
     if MediaTypes.TV.value in types:
         mark_fills = Episode.objects.filter(
@@ -232,8 +251,8 @@ def rewatch_entries(scope):
         )
         season_fills = mark_fills.filter(related_season__item_id=OuterRef("item_id"))
         show_fills = mark_fills.filter(related_season__related_tv__item_id=OuterRef("item_id"))
-        rewatch |= Q(item__media_type=MediaTypes.SEASON.value, is_rewatch=True) & Q(Exists(season_fills))
-        rewatch |= Q(item__media_type=MediaTypes.TV.value, is_rewatch=True) & Q(Exists(show_fills))
+        rules.append(Q(item__media_type=MediaTypes.SEASON.value, is_rewatch=True) & Q(Exists(season_fills)))
+        rules.append(Q(item__media_type=MediaTypes.TV.value, is_rewatch=True) & Q(Exists(show_fills)))
 
         own_viewing = Episode.objects.filter(
             diary_entry_id=OuterRef("id"),
@@ -254,8 +273,14 @@ def rewatch_entries(scope):
             earlier_viewing = earlier_viewing.filter(
                 Q(diary_entry__isnull=True) | Q(diary_entry_id__in=scope.visible_entries.values("id")),
             )
-        rewatch |= Q(item__media_type=MediaTypes.EPISODE.value) & Q(Exists(earlier_viewing))
-    return entries, rewatch
+        rules.append(Q(item__media_type=MediaTypes.EPISODE.value) & Q(Exists(earlier_viewing)))
+
+    if not rules:
+        return entries, None
+    undated_fact = rules[0]
+    for rule in rules[1:]:
+        undated_fact |= rule
+    return entries, undated_fact
 
 
 # Streaks, STAT-200.

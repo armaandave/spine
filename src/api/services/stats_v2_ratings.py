@@ -9,7 +9,7 @@ Everything is ranked and counted in SQL on the stored 0-10 scale; Python only fo
 the rows a response sends.
 """
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
 
 from django.apps import apps
@@ -89,10 +89,15 @@ COMMUNITY_SOURCES = {
 }
 
 STORED_RATING = DecimalField(max_digits=3, decimal_places=1)
-# A difference that rounds to "0.0" is a difference of zero (STAT-217, STAT-303).
-_ZERO_DIFFERENCE = Decimal("0.05")
-# The SQL filter sits just inside the exact threshold, which Python then applies.
-_SQL_DIFFERENCE_FLOOR = 0.049
+# Everyone's stars are sent to one decimal, and the difference is taken from that
+# shown value, so a row never reads as a tie (STAT-217, STAT-303).
+_TENTH = Decimal("0.1")
+# A title is higher or lower than most only by at least half a star.
+MIN_DIFFERENCE = Decimal("0.5")
+# The SQL filter compares the unrounded difference, which rounding everyone's stars
+# moves by at most 0.05, so it sits just inside; Python applies the exact rule.
+_SQL_DIFFERENCE_FLOOR = 0.449
+_VS_FETCHED = VS_EVERYONE_LIMIT * 2
 
 
 # Ratings chart, STAT-204.
@@ -232,8 +237,14 @@ def title_ratings(scope, item_ids):
     )
 
 
-def _highest_rated_rows(scope, offset, limit):
-    rows = highest_rated_queryset(scope).values_list("id", "title_rating", "rating_day")[offset : offset + limit]
+def _ranked(scope, exclude_ids):
+    """Highest rated, less the given Items (Top's, when it comes from a list)."""
+    queryset = highest_rated_queryset(scope)
+    return queryset.exclude(id__in=list(exclude_ids)) if exclude_ids else queryset
+
+
+def _highest_rated_rows(scope, offset, limit, exclude_ids=()):
+    rows = _ranked(scope, exclude_ids).values_list("id", "title_rating", "rating_day")[offset : offset + limit]
     return list(rows)
 
 
@@ -246,38 +257,46 @@ def _serialize_highest_rated(scope, rows):
     ]
 
 
-def highest_rated_preview(scope):
+def highest_rated_preview(scope, exclude_ids=()):
     """Return the first 12 Highest rated rows and the total, cached on the scope.
 
     ``{"total": int, "rows": [(item_id, stored rating, day or None), ...]}``. Top's
     fallback (STAT-208) reads its first 10 rows from here, so both share one query.
     """
-    cached = scope.__dict__.get("_highest_rated_preview")
-    if cached is None:
-        rows = _highest_rated_rows(scope, 0, PREVIEW_LIMIT)
-        cached = {"total": highest_rated_queryset(scope).count(), "rows": rows}
-        scope.__dict__["_highest_rated_preview"] = cached
-    return cached
+    previews = scope.__dict__.setdefault("_highest_rated_previews", {})
+    key = tuple(sorted(exclude_ids))
+    if key not in previews:
+        previews[key] = {
+            "total": _ranked(scope, key).count(),
+            "rows": _highest_rated_rows(scope, 0, PREVIEW_LIMIT, key),
+        }
+    return previews[key]
 
 
-def highest_rated_items(scope):
+def highest_rated_items(scope, exclude_ids=()):
     """Return the first 12 Highest rated rows as ``{media, stars, day}`` (STAT-205).
 
     Top's fallback (STAT-208) takes its first 10 from here.
     """
-    return _serialize_highest_rated(scope, highest_rated_preview(scope)["rows"])
+    return _serialize_highest_rated(scope, highest_rated_preview(scope, exclude_ids)["rows"])
 
 
-def build_highest_rated(scope):
-    """Build the first 12 Items by title rating, and the total (STAT-205)."""
-    return {"total": highest_rated_preview(scope)["total"], "items": highest_rated_items(scope)}
+def build_highest_rated(scope, exclude_ids=()):
+    """Build the first 12 Items by title rating, and the total (STAT-205).
 
-
-def highest_rated_page(scope, page, page_size):
-    """Return one page of Highest rated, ``{media, stars, day}`` (STAT-205, 310)."""
-    rows = _highest_rated_rows(scope, (page - 1) * page_size, page_size)
+    ``exclude_ids`` are the Items Top shows from a list, which Highest rated leaves out.
+    """
     return {
-        "count": highest_rated_queryset(scope).count(),
+        "total": highest_rated_preview(scope, exclude_ids)["total"],
+        "items": highest_rated_items(scope, exclude_ids),
+    }
+
+
+def highest_rated_page(scope, page, page_size, exclude_ids=()):
+    """Return one page of Highest rated, ``{media, stars, day}`` (STAT-205, 310)."""
+    rows = _highest_rated_rows(scope, (page - 1) * page_size, page_size, exclude_ids)
+    return {
+        "count": _ranked(scope, exclude_ids).count(),
         "results": _serialize_highest_rated(scope, rows),
     }
 
@@ -348,15 +367,21 @@ def _compared_rows(scope, candidates, chosen):
 
 
 def _vs_rows(scope, rows):
-    """Format compared rows, dropping any whose difference rounds to zero."""
+    """Format the 5 compared rows with the largest gap from the shown everyone.
+
+    Rows less than half a star from it are dropped; ``rows`` come in SQL order with
+    a few spare, since rounding can drop or reorder rows near the threshold.
+    """
     result = []
     for item_id, rating, value, max_value, source in rows:
         yours = Decimal(str(rating)) / 2
-        everyone = Decimal(str(value)) / Decimal(str(max_value)) * 5
+        everyone = (Decimal(str(value)) / Decimal(str(max_value)) * 5).quantize(_TENTH, rounding=ROUND_HALF_UP)
         difference = yours - everyone
-        if abs(difference) < _ZERO_DIFFERENCE:
+        if abs(difference) < MIN_DIFFERENCE:
             continue
         result.append((item_id, rating, everyone, difference, source))
+    result.sort(key=lambda row: (-abs(row[3]), row[0]))
+    result = result[:VS_EVERYONE_LIMIT]
     summaries = scope.media_summaries([row[0] for row in result])
     return [
         {
@@ -376,7 +401,7 @@ def build_rated_vs_everyone(scope):
 
     The candidates are every Highest rated row of the scope, with the same title
     ratings. Each type bucket uses one community source; candidates without a usable
-    rating from it are left out. A difference that rounds to zero is in neither list.
+    rating from it are left out. A gap under half a star is in neither list.
     """
     candidates = highest_rated_queryset(scope)
     chosen = _chosen_sources(scope, candidates)
@@ -387,12 +412,12 @@ def build_rated_vs_everyone(scope):
     higher = (
         compared.filter(stats_difference__gt=_SQL_DIFFERENCE_FLOOR)
         .order_by(F("stats_difference").desc(), "id")
-        .values_list(*fields)[:VS_EVERYONE_LIMIT]
+        .values_list(*fields)[:_VS_FETCHED]
     )
     lower = (
         compared.filter(stats_difference__lt=-_SQL_DIFFERENCE_FLOOR)
         .order_by(F("stats_difference").asc(), "id")
-        .values_list(*fields)[:VS_EVERYONE_LIMIT]
+        .values_list(*fields)[:_VS_FETCHED]
     )
     return {
         "sources": [

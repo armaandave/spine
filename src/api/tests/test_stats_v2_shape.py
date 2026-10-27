@@ -731,7 +731,7 @@ class StatsV2ShowAllTests(StatsV2Base):
     def test_pages_carry_next_and_previous_links(self):
         rows = [{"media": None, "stars": "5.0", "day": None}] * 10
 
-        def page_of(_scope, page, page_size):
+        def page_of(_scope, page, page_size, exclude_ids=()):
             return {"count": 60, "results": rows[:page_size]}
 
         with patch("api.services.stats_v2_ratings.highest_rated_page", side_effect=page_of) as fetch:

@@ -35,7 +35,7 @@ struct StatsHeaderSection: View {
             switch row {
             case .counts:
                 countsCard
-                    .padding(.bottom, header.details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
+                    .padding(.bottom, Self.shownDetails(header).isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
             case let .detail(detail, isFirst, isLast):
                 if let onOpenLikes, Self.opensLikes(detail) {
                     Button(action: onOpenLikes) {
@@ -105,8 +105,16 @@ struct StatsHeaderSection: View {
 
     // MARK: - Data shaping
 
+    /// Current streaks that are 0 say nothing ("0 days"), so they're left out; a streak that's
+    /// running shows.
+    static let hiddenWhenZero: Set<String> = ["current_daily_streak", "current_weekly_streak"]
+
+    static func shownDetails(_ header: StatsHeader) -> [StatsHeaderDetail] {
+        header.details.filter { !(hiddenWhenZero.contains($0.key) && $0.value == 0) }
+    }
+
     static func rows(for header: StatsHeader) -> [Row] {
-        let details = header.details
+        let details = shownDetails(header)
         return [.counts] + details.enumerated().map { index, detail in
             .detail(detail, isFirst: index == 0, isLast: index == details.count - 1)
         }

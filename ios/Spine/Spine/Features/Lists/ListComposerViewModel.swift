@@ -210,6 +210,20 @@ final class ListComposerViewModel {
         refreshTagSuggestions()
     }
 
+    /// The suggestions to show: the draft's, less any Top tag the list already has in another
+    /// spelling ("TOP all time" already is topalltime).
+    var tagSuggestions: [DiaryTagSuggestion] {
+        let present = Set(tagDraft.tags.compactMap(ListTagRules.topTag(for:)))
+        return tagDraft.suggestions.filter { suggestion in
+            ListTagRules.topTag(for: suggestion.name).map { !present.contains($0) } ?? true
+        }
+    }
+
+    /// The "Tag it top2026 or topalltime" hint, until the list has a Top tag.
+    var showsTopTagHint: Bool {
+        suggestsTopTags && !tagDraft.tags.contains { ListTagRules.topTag(for: $0) != nil }
+    }
+
     /// Call when Ranked changes, so the Top tags come and go with it.
     func refreshTagSuggestions() {
         guard canEditTags else { return }
@@ -686,6 +700,14 @@ enum ListTagRules {
         ["top\(year)", "top\(year - 1)", "topalltime"]
     }
 
+    /// The Top tag a list tag names, as the server reads it (`top_tag_for`): "Top 2025" and
+    /// "top_2025" are top2025, "TOP all time" is topalltime. Nil for any other tag.
+    static func topTag(for tag: String) -> String? {
+        let text = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let match = text.wholeMatch(of: #/top[\s_-]*(?:(\d{4})|all[\s_-]*time)/#) else { return nil }
+        return match.1.map { "top\($0)" } ?? "topalltime"
+    }
+
     /// How often each tag is used across the user's lists, most used first. With an owner, only
     /// that owner's lists count.
     static func counted(_ lists: [CustomListSummary], ownerId: Int?) -> [DiaryTagSuggestion] {
@@ -701,11 +723,19 @@ enum ListTagRules {
             .map { DiaryTagSuggestion(name: $0.name, usageCount: $0.count) }
     }
 
-    /// The Top tags first, in order, then the user's other list tags.
+    /// The Top tags first, in order, then the user's other list tags. A list tag that names one of
+    /// those Top tags in another spelling ("Top 2025") adds to its count instead of repeating it.
     static func library(listTags: [DiaryTagSuggestion], topTags: [String]) -> [DiaryTagSuggestion] {
-        let usage = Dictionary(listTags.map { ($0.name.lowercased(), $0.usageCount) }, uniquingKeysWith: { first, _ in first })
-        let top = topTags.map { DiaryTagSuggestion(name: $0, usageCount: usage[$0.lowercased()] ?? 0) }
-        let topKeys = Set(topTags.map { $0.lowercased() })
-        return top + listTags.filter { !topKeys.contains($0.name.lowercased()) }
+        let topKeys = Set(topTags)
+        var usage: [String: Int] = [:]
+        for tag in listTags {
+            if let key = topTag(for: tag.name), topKeys.contains(key) {
+                usage[key, default: 0] += tag.usageCount
+            }
+        }
+        let top = topTags.map { DiaryTagSuggestion(name: $0, usageCount: usage[$0] ?? 0) }
+        return top + listTags.filter { tag in
+            topTag(for: tag.name).map { !topKeys.contains($0) } ?? true
+        }
     }
 }
