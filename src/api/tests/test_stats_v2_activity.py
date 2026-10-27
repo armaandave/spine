@@ -487,6 +487,26 @@ class TimeTests(ActivityBase):
         self.assertEqual(all_time["value"], 80)
         self.assertTrue(self.summary(ALL_TIME)["time"]["hours_total"]["approximate"])
 
+    def test_a_season_logs_fills_count_on_the_logs_day(self):
+        # STAT-104: logging a season puts its filled episodes on the log's day.
+        _show, season_item, _tv, season = self.tv_show()
+        first = self.item(MediaTypes.EPISODE.value, "show", season=1, episode=1)
+        second = self.item(MediaTypes.EPISODE.value, "show", season=1, episode=2)
+        marked = self.item(MediaTypes.EPISODE.value, "show", season=1, episode=3)
+        for episode in (first, second, marked):
+            self.set_item(episode, runtime_minutes=40)
+        season_log = self.log(season_item, utc_day(2025, 4, 3))
+        self.viewing(season, first, kind="fill", entry=season_log)
+        self.viewing(season, second, kind="fill", entry=season_log)
+        # A mark's fill still has no day.
+        self.viewing(season, marked, kind="fill")
+
+        year = time_row(self.summary(YEAR_2025, tab="tv"), "tv")
+        self.assertEqual((year["value"], year["total"]), (80, 2))
+        self.assertIsNone(time_row(self.summary(YEAR_2024, tab="tv"), "tv"))
+        self.assertEqual(time_row(self.summary(ALL_TIME, tab="tv"), "tv")["value"], 120)
+        self.assertEqual(self.summary(YEAR_2025, tab="tv")["header"]["active_days"], 1)
+
     def test_tv_time_leaves_out_viewings_of_hidden_logs(self):
         _show, _season_item, _tv, season = self.tv_show()
         episode = self.item(MediaTypes.EPISODE.value, "show", season=1, episode=1)

@@ -135,10 +135,11 @@ Highest rated and Rated higher than most use Items instead: a season is its own 
 `logs` counts visible logs whose log day is in the range, including every TV episode, season and show log (TV-702).
 A log counts once whatever its target.
 
-### STAT-104: TV viewings count with their day, fills only in All Time
+### STAT-104: TV viewings count with their day; a log's fills count on the log's day
 
 Dated viewings count in the range that holds their day.
-Fills never count in a dated range, and count in All Time (TV-301).
+A fill a log made (TV-301) counts on that log's day (STAT-100): logging a season on 3 April puts its filled episodes, and their hours, on 3 April.
+A mark's fills have no day: they never count in a dated range, and count in All Time.
 Viewings of specials count like any other viewing; TV-004 keeps specials out of progress, not out of Stats.
 Hidden viewings never count (STAT-003).
 
