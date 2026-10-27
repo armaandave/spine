@@ -6,7 +6,8 @@ Order, first hit wins:
    an entry with a ``review`` id (its reason) is otherwise always unresolved;
 2. the entry's ``ref``;
 3. a direct provider ID (``tmdb``, ``igdb``, ``mal``, ``mangaupdates``, ``hardcover``,
-   ``olid`` editions, ``mbid_rg``, ``comicvine``; people: ``<source>_person``), no network;
+   ``olid`` editions, ``apple_album`` before ``mbid_rg``, ``comicvine``; people:
+   ``<source>_person``), no network;
    then, with ``remember=True`` (the engine's resolver), the Item this list's latest
    snapshot holds for the entry's key, if it still exists: the database outlives the
    cache, which every deploy clears;
@@ -24,18 +25,25 @@ an exhausted budget are never cached. An entry whose lookup hit a provider's dai
 budget or rate limit (``app.providers.quota``), or that the run's title-search cap
 cut off, is *deferred*: unresolved, uncached, and left out of the resolve rate until
 the next run.
+
+Music matches, whichever step found them, are then made canonical in one batch
+(``canonical_resolutions``), so an album that moved to Apple Music, or an Apple alias,
+is the Item that holds it; the cache keeps the raw matches. With the music catalog on
+Apple Music, a MusicBrainz album that no MusicBrainz Item holds then becomes its Apple
+album (``Resolver._apple_albums``).
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 import requests
 from django.core.cache import cache
 from django.utils import timezone
 
-from app.models import PRIMARY_MEDIA_TYPES, Item, MediaTypes, Sources
-from app.providers import hardcover, igdb, openlibrary, quota, services, tmdb
+from app import config, music_catalog
+from app.models import PRIMARY_MEDIA_TYPES, Item, MediaTypes, MusicAlbumLink, Sources
+from app.providers import apple_music, hardcover, igdb, openlibrary, quota, services, tmdb
 from lists.featured import overrides as overrides_module
 from lists.featured.helpers import sanitize
 from lists.featured.text import (
@@ -66,8 +74,13 @@ ITEM_SOURCES = {
     MediaTypes.GAME.value: (Sources.IGDB.value,),
     MediaTypes.BOOK.value: (Sources.HARDCOVER.value, Sources.OPENLIBRARY.value),
     MediaTypes.COMIC.value: (Sources.COMICVINE.value,),
-    MediaTypes.MUSIC.value: (Sources.MUSICBRAINZ.value,),
+    MediaTypes.MUSIC.value: (Sources.APPLE_MUSIC.value, Sources.MUSICBRAINZ.value),
 }
+# With the catalog on Apple Music, Apple searches a run may make for MusicBrainz albums
+# with no link row yet (two requests each). The rest keep their MusicBrainz album until
+# a later run, so a long list never shrinks or runs out of time.
+MAX_APPLE_SEARCHES = 50
+_LINKED = (MusicAlbumLink.Status.MATCHED, MusicAlbumLink.Status.APPLIED)
 PERSON_SOURCES = ("tmdb", "hardcover", "openlibrary", "musicbrainz", "mal", "mangaupdates", "anilist")
 PROVIDER_ERRORS = (
     services.ProviderAPIError,
@@ -188,6 +201,37 @@ def deferred_resolution(entry, error):
     return Resolution(entry, None, "deferred", str(error), retry_at=error.until)
 
 
+def canonical_resolutions(resolutions):
+    """Return resolutions with every music match under its canonical ref, in one lookup.
+
+    ``app.music_catalog.canonical_music_refs`` reads the database only. A match that
+    moves to another source keeps its title but not its cover, which is the old
+    source's: ``writer.prepare`` fetches the new one when the Item is new.
+    """
+    refs = [_ref(resolution.match) for resolution in resolutions if _is_music(resolution.match)]
+    if not refs:
+        return list(resolutions)
+    canonical = music_catalog.canonical_music_refs(refs)
+    moved = []
+    for resolution in resolutions:
+        match = resolution.match
+        new = canonical.get(_ref(match)) if _is_music(match) else None
+        if new is None or new == _ref(match):
+            moved.append(resolution)
+            continue
+        image = match.image if new[0] == match.source else ""
+        moved.append(replace(resolution, match=replace(match, source=new[0], media_id=new[2], image=image)))
+    return moved
+
+
+def _is_music(match):
+    return match is not None and match.media_type == MediaTypes.MUSIC.value
+
+
+def _ref(match):
+    return (match.source, match.media_type, str(match.media_id))
+
+
 class _Uncacheable(Exception):  # noqa: N818
     """The answer depends on a transient condition (a provider error)."""
 
@@ -224,15 +268,27 @@ class Resolver:
         self.people = definition.list_type == "people"
         self.remember = remember and not self.people  # people lists' snapshots hold no Items
         self.remembered = None  # loaded on first use
+        self.apple_searches = 0
+        self.apple_failed = False
 
     # Public API -----------------------------------------------------------------
 
     def resolve(self, entries):
-        """Return a ``Resolution`` for every entry, in order."""
-        return [self.resolve_one(entry) for entry in entries]
+        """Return a ``Resolution`` for every entry, in order.
+
+        Music matches are made canonical in one batch, and with the catalog on Apple
+        Music the remaining MusicBrainz albums get their Apple albums.
+        """
+        resolutions = canonical_resolutions([self._resolve_one(entry) for entry in entries])
+        if config.music_catalog_source() == Sources.APPLE_MUSIC:
+            resolutions = self._apple_albums(resolutions)
+        return resolutions
 
     def resolve_one(self, entry):
         """Resolve one entry."""
+        return self.resolve([entry])[0]
+
+    def _resolve_one(self, entry):
         override = self.overrides.get(entry.key)
         if override == overrides_module.SKIP:
             return Resolution(entry, None, "skip")
@@ -291,6 +347,7 @@ class Resolver:
             ("igdb", Sources.IGDB.value, MediaTypes.GAME.value),
             ("mangaupdates", Sources.MANGAUPDATES.value, MediaTypes.MANGA.value),
             ("hardcover", Sources.HARDCOVER.value, MediaTypes.BOOK.value),
+            ("apple_album", Sources.APPLE_MUSIC.value, MediaTypes.MUSIC.value),
             ("mbid_rg", Sources.MUSICBRAINZ.value, MediaTypes.MUSIC.value),
             ("comicvine", Sources.COMICVINE.value, MediaTypes.COMIC.value),
         )
@@ -301,6 +358,82 @@ class Resolver:
         if olid.upper().endswith("M") and MediaTypes.BOOK.value in self._allowed(entry):
             return build(Sources.OPENLIBRARY.value, MediaTypes.BOOK.value, olid.upper())
         return None
+
+    def _apple_albums(self, resolutions):
+        """Give each MusicBrainz album no MusicBrainz Item holds its Apple Music album.
+
+        An album with an Item of its own keeps it, so data on an album that hasn't
+        moved stays together. Otherwise the album of its matched or applied link row
+        (any tier); with no row, Apple search through
+        ``apple_music.ref_for_release_group``, up to ``MAX_APPLE_SEARCHES`` a run and
+        only while Apple answers. A miss keeps the MusicBrainz match, so lists don't
+        shrink. The Apple albums are then made canonical in one more batch.
+        """
+        mbids = {
+            str(resolution.match.media_id)
+            for resolution in resolutions
+            if _is_music(resolution.match) and resolution.match.source == Sources.MUSICBRAINZ.value
+        }
+        if not mbids:
+            return resolutions
+        held = set(
+            Item.objects.filter(
+                source=Sources.MUSICBRAINZ.value,
+                media_type=MediaTypes.MUSIC.value,
+                media_id__in=mbids,
+            ).values_list("media_id", flat=True),
+        )
+        links = {
+            link.release_group_mbid: link
+            for link in MusicAlbumLink.objects.filter(release_group_mbid__in=mbids - held)
+        }
+        albums = {}
+        for resolution in resolutions:
+            match = resolution.match
+            mbid = str(match.media_id) if _is_music(match) else ""
+            if mbid not in mbids or mbid in held or mbid in albums:
+                continue
+            link = links.get(mbid)
+            if link is not None:
+                if link.status in _LINKED and link.apple_album_id:
+                    albums[mbid] = {"media_id": link.apple_album_id, "title": link.apple_title, "image": link.apple_image}
+                continue
+            album = self._search_apple(mbid, match.title or resolution.entry.title, resolution.entry.creator)
+            if album is not None:
+                albums[mbid] = album
+        if not albums:
+            return resolutions
+        canonical = music_catalog.canonical_music_refs(
+            [(Sources.APPLE_MUSIC.value, MediaTypes.MUSIC.value, album["media_id"]) for album in albums.values()],
+        )
+        found = []
+        for resolution in resolutions:
+            album = albums.get(str(resolution.match.media_id)) if _is_music(resolution.match) else None
+            if album is None or resolution.match.source != Sources.MUSICBRAINZ.value:
+                found.append(resolution)
+                continue
+            source, _, media_id = canonical[(Sources.APPLE_MUSIC.value, MediaTypes.MUSIC.value, album["media_id"])]
+            match = replace(
+                resolution.match,
+                source=source,
+                media_id=media_id,
+                title=album["title"] or resolution.match.title,
+                image=album["image"] or "",
+            )
+            found.append(replace(resolution, match=match))
+        return found
+
+    def _search_apple(self, mbid, title, artist):
+        """Return a MusicBrainz album's Apple album from Apple search, or None."""
+        if not artist or self.apple_failed or self.apple_searches >= MAX_APPLE_SEARCHES:
+            return None
+        self.apple_searches += 1
+        try:
+            return apple_music.ref_for_release_group(mbid, title, artist)
+        except PROVIDER_ERRORS as error:
+            logger.warning("Featured Apple Music match failed for %s: %s", mbid, sanitize(error))
+            self.apple_failed = True
+            return None
 
     def _from_snapshot(self, entry):
         """Return a match for the Item this list's latest snapshot holds for the entry.
@@ -425,7 +558,7 @@ class Resolver:
         if self.people:
             return self._person_from_name(entry)
         for media_type in self._allowed(entry):
-            for source in ITEM_SOURCES.get(media_type, ()):
+            for source in _title_search_sources(media_type):
                 self._spend_search()
                 response = services.search(media_type, entry.title, 1, source=source, preserve_ranking_fields=True)
                 result = pick_title_match(entry, response.get("results") or [])
@@ -462,6 +595,13 @@ class Resolver:
             image=person.get("profile_url") or entry.image,
             known_for_department=person.get("known_for_department") or "",
         )
+
+
+def _title_search_sources(media_type):
+    """Return the sources a title search asks: for music, only the catalog's."""
+    if media_type == MediaTypes.MUSIC.value:
+        return (config.music_catalog_source().value,)
+    return ITEM_SOURCES.get(media_type, ())
 
 
 def _result_year(result):

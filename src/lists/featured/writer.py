@@ -26,7 +26,7 @@ from app.models import Item, MediaTypes
 from app.providers import quota, services
 from lists.featured import ratings
 from lists.featured.helpers import sanitize
-from lists.featured.resolve import PROVIDER_ERRORS, Resolution, deferred_resolution
+from lists.featured.resolve import PROVIDER_ERRORS, Resolution, canonical_resolutions, deferred_resolution
 from lists.featured.types import GuardError
 from lists.models import (
     CustomList,
@@ -530,7 +530,13 @@ def _save_list(definition, owner, fetch, now):
 
 
 def commit(definition, owner, fetch, resolutions, *, sync, now, definition_hash):
-    """Write the list, its sync state and today's snapshot in one transaction."""
+    """Write the list, its sync state and today's snapshot in one transaction.
+
+    Music matches are made canonical again first: an album may have moved to Apple
+    Music since it was resolved. So ``ensure_items`` makes no Item for a moved album,
+    and two entries that are now one album make one row.
+    """
+    resolutions = canonical_resolutions(resolutions)
     rows = ordered_matches(definition, resolutions)
     new_fingerprint = fingerprint(rows)
     people = definition.list_type == "people"

@@ -1,0 +1,193 @@
+{
+  "recording_mbid": "1657869393",
+  "title": "Kill Bill",
+  "artist_credit": [
+    {
+      "artist_mbid": null,
+      "name": "SZA",
+      "join_phrase": "",
+      "artist_source": "apple_music",
+      "artist_id": "605800394"
+    }
+  ],
+  "length_ms": 153947,
+  "isrcs": [
+    "USRC12204584"
+  ],
+  "disambiguation": null,
+  "first_release_date": "2022-12-09",
+  "is_video": false,
+  "content_rating": null,
+  "genres": [
+    "r&b"
+  ],
+  "rating": null,
+  "annotation": null,
+  "credits": [
+    {
+      "artist_mbid": null,
+      "name": "SZA, Rob Bisel & Carter Lang",
+      "roles": [
+        "composer"
+      ]
+    }
+  ],
+  "works": [],
+  "alternative_recordings": [],
+  "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393",
+  "external_links": {
+    "Apple Music": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"
+  },
+  "releases": [
+    {
+      "release_mbid": "1657869377",
+      "title": "SOS",
+      "status": "Official",
+      "date": "2022-12-09",
+      "country": "US",
+      "barcode": "196589564931",
+      "release_group_mbid": "1657869377"
+    }
+  ],
+  "context_release": {
+    "release_mbid": "1657869377",
+    "medium_mbid": null,
+    "track": {
+      "track_mbid": "1657869393",
+      "disc_number": 1,
+      "position": 2,
+      "number": "2",
+      "title": "Kill Bill",
+      "length_ms": 153947,
+      "artist_credit": [
+        {
+          "artist_mbid": null,
+          "name": "SZA",
+          "join_phrase": "",
+          "artist_source": "apple_music",
+          "artist_id": "605800394"
+        }
+      ],
+      "content_rating": null,
+      "recording": {
+        "recording_mbid": "1657869393",
+        "title": "Kill Bill",
+        "length_ms": 153947,
+        "disambiguation": null,
+        "first_release_date": "2022-12-09",
+        "is_video": false,
+        "isrcs": [
+          "USRC12204584"
+        ],
+        "composer_name": "SZA, Rob Bisel & Carter Lang",
+        "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393"
+      }
+    }
+  },
+  "parent_album": {
+    "ref": {
+      "item_id": 952,
+      "source": "apple_music",
+      "media_type": "music",
+      "media_id": "1657869377",
+      "season_number": null,
+      "episode_number": null
+    },
+    "title": "SOS",
+    "subtitle": "SZA",
+    "overview": null,
+    "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+    "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+    "backdrop_url": null,
+    "poster_aspect_ratio": 1.0,
+    "poster_width": 600,
+    "poster_height": 600,
+    "poster_orientation": "square",
+    "poster_accent_color": null,
+    "release_date": "2022-12-09",
+    "genres": [
+      "r&b"
+    ],
+    "languages": [],
+    "roles": [],
+    "credit_roles": [],
+    "default_source": "apple_music",
+    "position": null,
+    "custom_poster_url": null,
+    "user_state": {
+      "is_tracked": true,
+      "tracking_id": 953,
+      "status": "Completed",
+      "rating": null,
+      "in_lists": [],
+      "diary_entry_id": null,
+      "diary_count": 0,
+      "diary_rating": null,
+      "diary_consumed_at": null,
+      "has_liked": false,
+      "direct_consumption": false,
+      "rating_source_diary_entry_id": null,
+      "like_source_diary_entry_id": null,
+      "like_is_independent": false
+    }
+  },
+  "albums": [
+    {
+      "ref": {
+        "item_id": 952,
+        "source": "apple_music",
+        "media_type": "music",
+        "media_id": "1657869377",
+        "season_number": null,
+        "episode_number": null
+      },
+      "title": "SOS",
+      "subtitle": "SZA",
+      "overview": null,
+      "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+      "poster_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+      "backdrop_url": null,
+      "poster_aspect_ratio": 1.0,
+      "poster_width": 600,
+      "poster_height": 600,
+      "poster_orientation": "square",
+      "poster_accent_color": null,
+      "release_date": "2022-12-09",
+      "genres": [
+        "r&b"
+      ],
+      "languages": [],
+      "roles": [],
+      "credit_roles": [],
+      "default_source": "apple_music",
+      "position": null,
+      "custom_poster_url": null,
+      "user_state": {
+        "is_tracked": true,
+        "tracking_id": 953,
+        "status": "Completed",
+        "rating": null,
+        "in_lists": [],
+        "diary_entry_id": null,
+        "diary_count": 0,
+        "diary_rating": null,
+        "diary_consumed_at": null,
+        "has_liked": false,
+        "direct_consumption": false,
+        "rating_source_diary_entry_id": null,
+        "like_source_diary_entry_id": null,
+        "like_is_independent": false
+      }
+    }
+  ],
+  "image_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+  "capabilities": {
+    "trackable": false,
+    "rateable": false,
+    "reviewable": false,
+    "diary_loggable": false,
+    "likeable": false,
+    "listable": false,
+    "library_addable": false
+  }
+}

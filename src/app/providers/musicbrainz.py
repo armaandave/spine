@@ -13,7 +13,7 @@ from django.db import transaction
 from django.db.models import Q
 from redis.exceptions import LockError, RedisError
 
-from app import helpers
+from app import helpers, music_catalog
 from app.models import MediaTypes, MusicGenreAlbum, Sources
 from app.providers import services
 from app.providers.search_rank import normalize_search_text, rank_results
@@ -37,9 +37,11 @@ WIKIPEDIA_PAGEVIEWS_URL = (
 )
 PAGEVIEWS_START = "20150701"  # the first month Wikimedia counts
 # Each release group's English Wikipedia article, through Wikidata. Only album
-# items count: a film can carry its soundtrack's release group ID.
+# items count: a film can carry its soundtrack's release group ID. The album's Apple
+# Music ID (P2281) comes along when Wikidata has one, for linking genre albums to
+# Apple Music; OPTIONAL keeps every album that has none.
 WIKIPEDIA_ARTICLES_QUERY = """
-SELECT ?rg ?links ?title WHERE {
+SELECT ?rg ?links ?title ?apple WHERE {
   VALUES ?rg { %s }
   ?album wdt:P436 ?rg ;
          wdt:P31/wdt:P279* wd:Q482994 ;
@@ -47,8 +49,10 @@ SELECT ?rg ?links ?title WHERE {
   ?article schema:about ?album ;
            schema:isPartOf <https://en.wikipedia.org/> ;
            schema:name ?title .
+  OPTIONAL { ?album wdt:P2281 ?apple }
 }
 """
+_APPLE_ALBUM_ID = re.compile(r"\d{1,36}")
 COVER_ART_URL = "https://coverartarchive.org"
 COVER_ART_PROVIDER = "cover art archive"
 CACHE_VERSION = "v2"
@@ -184,7 +188,7 @@ def _with_popular_albums(query, candidates):
         credits = [{"artist_mbid": None, "name": album.artist, "join_phrase": ""}] if album.artist else []
         candidates.append(
             {
-                **_genre_album_result(album),
+                **genre_album_result(album),
                 **counts,
                 "artist_credits": credits,
                 "primary_type": "Album",
@@ -255,12 +259,12 @@ def discover(*, page=1, page_size=None, genre=None):
     total_results = albums.count()
     if total_results >= SEARCH_CANDIDATE_LIMIT:
         results = [
-            _genre_album_result(album) for album in albums[start : start + per_page]
+            genre_album_result(album) for album in albums[start : start + per_page]
         ]
     else:
         # Too few known popular albums: list them first, then fill in from a
         # MusicBrainz genre search.
-        ranked = [_genre_album_result(album) for album in albums]
+        ranked = [genre_album_result(album) for album in albums]
         known = {result["media_id"] for result in ranked}
         ranked += [
             result for result in _search_genre(genre) if result["media_id"] not in known
@@ -281,7 +285,8 @@ def _genre_key(value):
     return " ".join(str(value or "").split()).casefold()
 
 
-def _genre_album_result(album):
+def genre_album_result(album):
+    """Return a ``MusicGenreAlbum`` as a genre page row."""
     subtitle = " · ".join(
         part for part in (album.artist, album.release_date[:4], "Album") if part
     )
@@ -458,7 +463,7 @@ def refresh_genre_albums():
         msg = "ListenBrainz returned no albums."
         raise RuntimeError(msg)
 
-    page_views = _wikipedia_page_views(
+    page_views, apple_album_ids = _wikipedia_page_views(
         {
             release_group_mbid: (row.get("release_group") or {}).get("name") or ""
             for release_group_mbid, row in albums.items()
@@ -487,6 +492,7 @@ def refresh_genre_albums():
     with transaction.atomic():
         MusicGenreAlbum.objects.all().delete()
         MusicGenreAlbum.objects.bulk_create(entries, batch_size=1000)
+    music_catalog.store_wikidata_apple_ids(apple_album_ids)
     return {
         "artists": len(artist_mbids),
         "failed_artists": failed,
@@ -504,9 +510,13 @@ def _wikipedia_page_views(album_titles):
     Wikipedias cover wins. When several release groups share one article
     (BLACKPINK's "THE ALBUM" and "THE ALBUM -JP ver.-"), the one titled like the
     article keeps it.
+
+    Also returns ``{release group: [Apple Music album IDs]}``: the winning album's
+    Wikidata P2281 values, lowest first, for the release groups that keep an article.
     """
     release_group_mbids = list(album_titles)
     articles = {}
+    apple_ids = {}
     for start in range(0, len(release_group_mbids), WIKIDATA_BATCH):
         batch = release_group_mbids[start : start + WIKIDATA_BATCH]
         data = services.api_request(
@@ -521,11 +531,18 @@ def _wikipedia_page_views(album_titles):
             request_session=services.genre_refresh_session,
         )
         best = {}
+        found = {}
         for row in data["results"]["bindings"]:
             # Most sitelinks wins; the title breaks ties so every week picks the same.
             candidate = (_positive_int(row["links"]["value"]), row["title"]["value"])
             best[row["rg"]["value"]] = max(candidate, best.get(row["rg"]["value"], candidate))
+            apple = str((row.get("apple") or {}).get("value") or "").strip()
+            if _APPLE_ALBUM_ID.fullmatch(apple):
+                found.setdefault((row["rg"]["value"], candidate), set()).add(apple)
         articles.update({mbid: title for mbid, (_, title) in best.items()})
+        for mbid, candidate in best.items():
+            if (mbid, candidate) in found:
+                apple_ids[mbid] = sorted(found[mbid, candidate], key=int)
     sharing = {}
     for release_group_mbid in release_group_mbids:
         if release_group_mbid in articles:
@@ -567,7 +584,7 @@ def _wikipedia_page_views(album_titles):
     if failed * 10 > len(articles):
         msg = f"Wikipedia reads failed for {failed} of {len(articles)} albums."
         raise RuntimeError(msg)
-    return page_views
+    return page_views, {mbid: ids for mbid, ids in apple_ids.items() if mbid in articles}
 
 
 def _top_artist_mbids(token):
@@ -646,8 +663,11 @@ def _listenbrainz_get(url, token, params=None):
     )
 
 
-def lookup_release_group(release_group_mbid):
-    """Look up one MusicBrainz release group."""
+def lookup_release_group(release_group_mbid, *, max_attempts=MAX_ATTEMPTS):
+    """Look up one MusicBrainz release group.
+
+    ``max_attempts=1`` sends one request, for callers that pace their own retries.
+    """
     mbid = _path_value(release_group_mbid)
     return _cached(
         f"musicbrainz_{CACHE_VERSION}_release_group_{mbid}",
@@ -659,8 +679,15 @@ def lookup_release_group(release_group_mbid):
                     "artist-credits+releases+genres+ratings+annotation+url-rels"
                 ),
             },
+            max_attempts=max_attempts,
         ),
     )
+
+
+def cached_release_group(release_group_mbid):
+    """Return ``lookup_release_group``'s answer if it is cached, else None; no request."""
+    data = cache.get(f"musicbrainz_{CACHE_VERSION}_release_group_{_path_value(release_group_mbid)}")
+    return data if isinstance(data, dict) else None
 
 
 def lookup_artist(artist_mbid):
@@ -849,8 +876,11 @@ def _music_enrichment(release_group_mbid, title):
     return representative_release
 
 
-def browse_releases(release_group_mbid, *, limit=100, offset=0):
-    """Browse one page of releases belonging to a release group."""
+def browse_releases(release_group_mbid, *, limit=100, offset=0, max_attempts=MAX_ATTEMPTS):
+    """Browse one page of releases belonging to a release group.
+
+    ``max_attempts=1`` sends one request, for callers that pace their own retries.
+    """
     mbid = _path_value(release_group_mbid)
     return _cached(
         f"musicbrainz_{CACHE_VERSION}_releases_{mbid}_{limit}_{offset}",
@@ -863,12 +893,22 @@ def browse_releases(release_group_mbid, *, limit=100, offset=0):
                 "limit": limit,
                 "offset": offset,
             },
+            max_attempts=max_attempts,
         ),
     )
 
 
-def lookup_release(release_mbid):
-    """Look up a release with its media and recordings."""
+def cached_releases(release_group_mbid, *, limit=100, offset=0):
+    """Return ``browse_releases``' page if it is cached, else None; no request."""
+    data = cache.get(f"musicbrainz_{CACHE_VERSION}_releases_{_path_value(release_group_mbid)}_{limit}_{offset}")
+    return data if isinstance(data, dict) else None
+
+
+def lookup_release(release_mbid, *, max_attempts=MAX_ATTEMPTS):
+    """Look up a release with its media and recordings.
+
+    ``max_attempts=1`` sends one request, for callers that pace their own retries.
+    """
     mbid = _path_value(release_mbid)
     return _cached(
         f"musicbrainz_{CACHE_VERSION}_release_{mbid}",
@@ -880,7 +920,36 @@ def lookup_release(release_mbid):
                     "artist-credits+labels+media+recordings+isrcs+url-rels"
                 ),
             },
+            max_attempts=max_attempts,
         ),
+    )
+
+
+def search_releases_by_barcode(barcodes):
+    """Search releases by any of ``barcodes``; one uncached request, with no retry.
+
+    For the Apple Music album bridge, which paces its own requests and stops at the
+    first failure.
+    """
+    query = f"barcode:({' OR '.join(escape_lucene(barcode) for barcode in barcodes)})"
+    return _musicbrainz_request("release", {"query": query, "limit": 25}, max_attempts=1)
+
+
+def lookup_release_links(release_mbid):
+    """Look up a release's URL links and release group; one uncached request, no retry."""
+    return _musicbrainz_request(
+        f"release/{_path_value(release_mbid)}",
+        {"inc": "url-rels+release-groups"},
+        max_attempts=1,
+    )
+
+
+def lookup_release_group_genres(release_group_mbid):
+    """Look up a release group with its genres; one uncached request, no retry."""
+    return _musicbrainz_request(
+        f"release-group/{_path_value(release_group_mbid)}",
+        {"inc": "genres"},
+        max_attempts=1,
     )
 
 

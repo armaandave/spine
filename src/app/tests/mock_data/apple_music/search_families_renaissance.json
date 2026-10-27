@@ -1,0 +1,1118 @@
+{
+  "data": [
+    {
+      "id": "1630005298",
+      "type": "albums",
+      "attributes": {
+        "name": "RENAISSANCE",
+        "artistName": "Beyoncé",
+        "url": "https://music.apple.com/us/album/renaissance/1630005298",
+        "playParams": {
+          "id": "1630005298",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-07-29",
+        "contentRating": "explicit",
+        "trackCount": 16,
+        "upc": "196589246974",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Parkwood Entertainment/Columbia",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/05/05/f3/0505f338-9873-feb4-af7f-27a470405e5f/196589246974.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1636789969",
+              "type": "albums",
+              "attributes": {
+                "name": "RENAISSANCE",
+                "artistName": "Beyoncé",
+                "url": "https://music.apple.com/us/album/renaissance/1636789969",
+                "playParams": {
+                  "id": "1636789969",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-07-29",
+                "contentRating": "clean",
+                "trackCount": 16,
+                "upc": "196589344267",
+                "genreNames": [
+                  "Pop",
+                  "Music"
+                ],
+                "recordLabel": "Parkwood Entertainment/Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/fe/ba/43/feba43be-99e8-ad8c-9fad-1bfdea7a4e98/196589344267.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1636789969",
+      "type": "albums",
+      "attributes": {
+        "name": "RENAISSANCE",
+        "artistName": "Beyoncé",
+        "url": "https://music.apple.com/us/album/renaissance/1636789969",
+        "playParams": {
+          "id": "1636789969",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-07-29",
+        "contentRating": "clean",
+        "trackCount": 16,
+        "upc": "196589344267",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Parkwood Entertainment/Columbia",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/fe/ba/43/feba43be-99e8-ad8c-9fad-1bfdea7a4e98/196589344267.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1630005298",
+              "type": "albums",
+              "attributes": {
+                "name": "RENAISSANCE",
+                "artistName": "Beyoncé",
+                "url": "https://music.apple.com/us/album/renaissance/1630005298",
+                "playParams": {
+                  "id": "1630005298",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-07-29",
+                "contentRating": "explicit",
+                "trackCount": 16,
+                "upc": "196589246974",
+                "genreNames": [
+                  "Pop",
+                  "Music"
+                ],
+                "recordLabel": "Parkwood Entertainment/Columbia",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/05/05/f3/0505f338-9873-feb4-af7f-27a470405e5f/196589246974.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1164439995",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (From \"Medici: Masters of Florence\") - Single",
+        "artistName": "Paolo Buonvino & Skin",
+        "url": "https://music.apple.com/us/album/renaissance-from-medici-masters-of-florence-single/1164439995",
+        "playParams": {
+          "id": "1164439995",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2016-10-14",
+        "trackCount": 1,
+        "upc": "3614971592166",
+        "genreNames": [
+          "TV Soundtrack",
+          "Music",
+          "Soundtrack"
+        ],
+        "recordLabel": "Lux Vide e CAM",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/43/32/b2/4332b2fc-cbee-db7f-df5a-cbeaf0b9d297/cover.jpg/{w}x{h}bb.jpg",
+          "width": 1440,
+          "height": 1440
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1672151448",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (The White Lotus) [Tiësto Remix] - Single",
+        "artistName": "Tiësto & Cristobal Tapia De Veer",
+        "url": "https://music.apple.com/us/album/renaissance-the-white-lotus-ti%C3%ABsto-remix-single/1672151448",
+        "playParams": {
+          "id": "1672151448",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-02-17",
+        "trackCount": 1,
+        "upc": "075679696250",
+        "genreNames": [
+          "Dance",
+          "Music"
+        ],
+        "recordLabel": "Atlantic Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/06/29/bf/0629bf44-c2bb-56d1-499a-56b8c446e242/075679696250.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1504929677",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Apashe",
+        "url": "https://music.apple.com/us/album/renaissance/1504929677",
+        "playParams": {
+          "id": "1504929677",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-04-07",
+        "contentRating": "explicit",
+        "trackCount": 13,
+        "upc": "735119415598",
+        "genreNames": [
+          "Dance",
+          "Music",
+          "Electronic",
+          "Bass"
+        ],
+        "recordLabel": "Kannibalen Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/f1/b4/51/f1b451b2-58ad-7453-31a8-a5772ddc502b/cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1103027166",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Polyphia",
+        "url": "https://music.apple.com/us/album/renaissance/1103027166",
+        "playParams": {
+          "id": "1103027166",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2016-03-11",
+        "trackCount": 12,
+        "upc": "886445801552",
+        "genreNames": [
+          "Alternative",
+          "Music",
+          "Rock"
+        ],
+        "recordLabel": "Equal Vision Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/6b/54/8d/6b548df1-e3eb-eab3-bf54-7b5ea4da65e1/886445801552.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1788286944",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Shani Diluka",
+        "url": "https://music.apple.com/us/album/renaissance/1788286944",
+        "playParams": {
+          "id": "1788286944",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-09-26",
+        "trackCount": 28,
+        "upc": "5021732526106",
+        "genreNames": [
+          "Classical",
+          "Music",
+          "Piano"
+        ],
+        "recordLabel": "Warner Classics",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8d/8c/3a/8d8c3ad0-ef1f-05ed-b983-581528379ac9/5021732526106.jpg/{w}x{h}bb.jpg",
+          "width": 1600,
+          "height": 1600
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1220285947",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "The Underachievers",
+        "url": "https://music.apple.com/us/album/renaissance/1220285947",
+        "playParams": {
+          "id": "1220285947",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-05-19",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "191515303486",
+        "genreNames": [
+          "Hip-Hop",
+          "Music",
+          "Hip-Hop/Rap",
+          "Rap"
+        ],
+        "recordLabel": "Seeker Music",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/3c/2e/6f/3c2e6f07-46ef-dbd1-9def-9d2f677c7dae/191515303486_Cover.jpg/{w}x{h}bb.jpg",
+          "width": 1400,
+          "height": 1400
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1750143198",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance - Single",
+        "artistName": "nobigdyl.",
+        "url": "https://music.apple.com/us/album/renaissance-single/1750143198",
+        "playParams": {
+          "id": "1750143198",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2024-06-14",
+        "trackCount": 1,
+        "upc": "198676223653",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "indie tribe.",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a5/16/ba/a516baac-5c05-0426-26ed-75f995fbbddc/artwork.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1195613266",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Jordi Savall, Charles Ravier, Philippe Herreweghe, Hespèrion XXI, Ensemble Polyphonique de France, Collegium Vocale Gent & Hanover Boys Choir",
+        "url": "https://music.apple.com/us/album/renaissance/1195613266",
+        "playParams": {
+          "id": "1195613266",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1996-01-01",
+        "trackCount": 55,
+        "upc": "3298490086087",
+        "genreNames": [
+          "Renaissance",
+          "Music",
+          "Classical"
+        ],
+        "recordLabel": "naïve classique",
+        "isSingle": false,
+        "isCompilation": true,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music111/v4/b1/f8/53/b1f85326-75cd-fd32-4dd3-3c4481c71d93/cover.jpg/{w}x{h}bb.jpg",
+          "width": 1440,
+          "height": 1440
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1080507927",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (feat. Clarity) - Single",
+        "artistName": "Steve James",
+        "url": "https://music.apple.com/us/album/renaissance-feat-clarity-single/1080507927",
+        "playParams": {
+          "id": "1080507927",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-02-01",
+        "trackCount": 1,
+        "upc": "0617465684159",
+        "genreNames": [
+          "Dance",
+          "Music",
+          "Rock"
+        ],
+        "recordLabel": "Ultra Records, LLC",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music49/v4/63/89/d7/6389d756-f02e-1702-b32a-2efdd159939c/0617465684159.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "204722841",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (Remastered)",
+        "artistName": "Vanilla Fudge",
+        "url": "https://music.apple.com/us/album/renaissance-remastered/204722841",
+        "playParams": {
+          "id": "204722841",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1968",
+        "trackCount": 10,
+        "upc": "603497208265",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "Psychedelic",
+          "Hard Rock"
+        ],
+        "recordLabel": "Rhino Atlantic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/2b/af/98/mzi.jxtdizbm.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1522795234",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Aluna",
+        "url": "https://music.apple.com/us/album/renaissance/1522795234",
+        "playParams": {
+          "id": "1522795234",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-08-28",
+        "contentRating": "explicit",
+        "trackCount": 14,
+        "upc": "819478028474",
+        "genreNames": [
+          "Dance",
+          "Music",
+          "Pop"
+        ],
+        "recordLabel": "Mad Decent",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1e/2a/26/1e2a261b-9602-631d-23ac-288322258a01/1145.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1443651240",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "The Miracles",
+        "url": "https://music.apple.com/us/album/renaissance/1443651240",
+        "playParams": {
+          "id": "1443651240",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1973-01-01",
+        "trackCount": 9,
+        "upc": "00602547037671",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "UNI/MOTOWN",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/16/a0/23/16a023eb-4941-64a7-e6cb-80abe64a6629/00602547037671.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1446710066",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "DJ Arafat",
+        "url": "https://music.apple.com/us/album/renaissance/1446710066",
+        "playParams": {
+          "id": "1446710066",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2018-12-28",
+        "contentRating": "explicit",
+        "trackCount": 13,
+        "upc": "00602577391347",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Universal Music Africa",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/5d/32/3f/5d323f37-afdd-a16c-cf40-e61309372677/00602577391347.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "129194084",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "OperaBabes",
+        "url": "https://music.apple.com/us/album/renaissance/129194084",
+        "playParams": {
+          "id": "129194084",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2006-03-27",
+        "trackCount": 12,
+        "upc": "5037454772271",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "Classical",
+          "Opera",
+          "Classical Crossover"
+        ],
+        "recordLabel": "Instant Karma Classics",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/d1/73/ac/d173ac76-2c39-e9c8-64a1-e7dfcc25fe83/mzi.lblbkgam.jpg/{w}x{h}bb.jpg",
+          "width": 600,
+          "height": 600
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1444042528",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Lionel Richie",
+        "url": "https://music.apple.com/us/album/renaissance/1444042528",
+        "playParams": {
+          "id": "1444042528",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2000-01-01",
+        "trackCount": 12,
+        "upc": "00731454808521",
+        "genreNames": [
+          "Rock",
+          "Music",
+          "R&B/Soul",
+          "Quiet Storm",
+          "Pop",
+          "Adult Contemporary"
+        ],
+        "recordLabel": "Island Mercury",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/43/a8/2f/43a82fcb-f1df-8501-d477-e666b2c0d9f2/00731454808521.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1416
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1590233702",
+              "type": "albums",
+              "attributes": {
+                "name": "Renaissance (Deluxe Edition)",
+                "artistName": "Lionel Richie",
+                "url": "https://music.apple.com/us/album/renaissance-deluxe-edition/1590233702",
+                "playParams": {
+                  "id": "1590233702",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2021-10-29",
+                "trackCount": 35,
+                "upc": "00602438918065",
+                "genreNames": [
+                  "R&B/Soul",
+                  "Music"
+                ],
+                "recordLabel": "Island Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ed/ec/8d/edec8d7f-ec81-a1f7-724f-904f4d8ebca1/21UMGIM60206.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1820922002",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance - EP",
+        "artistName": "Raf-Saperra & Ikky",
+        "url": "https://music.apple.com/us/album/renaissance-ep/1820922002",
+        "playParams": {
+          "id": "1820922002",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2025-07-11",
+        "trackCount": 5,
+        "upc": "00602478611964",
+        "genreNames": [
+          "Indian Pop",
+          "Music",
+          "Indian"
+        ],
+        "recordLabel": "Polydor Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f6/a7/34/f6a734cb-23ac-b688-a057-e19f6c6310c7/25UMGIM83121.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1590233702",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (Deluxe Edition)",
+        "artistName": "Lionel Richie",
+        "url": "https://music.apple.com/us/album/renaissance-deluxe-edition/1590233702",
+        "playParams": {
+          "id": "1590233702",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-10-29",
+        "trackCount": 35,
+        "upc": "00602438918065",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Island Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/ed/ec/8d/edec8d7f-ec81-a1f7-724f-904f4d8ebca1/21UMGIM60206.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1444042528",
+              "type": "albums",
+              "attributes": {
+                "name": "Renaissance",
+                "artistName": "Lionel Richie",
+                "url": "https://music.apple.com/us/album/renaissance/1444042528",
+                "playParams": {
+                  "id": "1444042528",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2000-01-01",
+                "trackCount": 12,
+                "upc": "00731454808521",
+                "genreNames": [
+                  "Rock",
+                  "Music",
+                  "R&B/Soul",
+                  "Quiet Storm",
+                  "Pop",
+                  "Adult Contemporary"
+                ],
+                "recordLabel": "Island Mercury",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music118/v4/43/a8/2f/43a82fcb-f1df-8501-d477-e666b2c0d9f2/00731454808521.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 1425,
+                  "height": 1416
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1507851579",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance - Single",
+        "artistName": "Lola Young",
+        "url": "https://music.apple.com/us/album/renaissance-single/1507851579",
+        "playParams": {
+          "id": "1507851579",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-04-28",
+        "contentRating": "explicit",
+        "trackCount": 3,
+        "upc": "00602508864124",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Universal-Island Records Ltd.",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/02/f5/d8/02f5d874-88df-8823-eb16-78995dffe921/20UMGIM14197.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "319227143",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance",
+        "artistName": "Chieli Minucci",
+        "url": "https://music.apple.com/us/album/renaissance/319227143",
+        "playParams": {
+          "id": "319227143",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "1996-01-01",
+        "trackCount": 14,
+        "upc": "884502114249",
+        "genreNames": [
+          "Jazz",
+          "Music",
+          "Crossover Jazz",
+          "Smooth Jazz"
+        ],
+        "recordLabel": "ChieliMusic",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/67/97/5c/mzi.txkoqojn.jpg/{w}x{h}bb.jpg",
+          "width": 600,
+          "height": 600
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1457866214",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (Edit) - Single",
+        "artistName": "Culture Shock",
+        "url": "https://music.apple.com/us/album/renaissance-edit-single/1457866214",
+        "playParams": {
+          "id": "1457866214",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2019-04-19",
+        "trackCount": 1,
+        "upc": "4050538500523",
+        "genreNames": [
+          "Electronic",
+          "Music"
+        ],
+        "recordLabel": "RAM Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/1e/da/a8/1edaa89b-fa85-b74d-ab75-833461e7ade3/4050538500523.jpg/{w}x{h}bb.jpg",
+          "width": 4000,
+          "height": 4000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1712532737",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance - EP",
+        "artistName": "BUNT.",
+        "url": "https://music.apple.com/us/album/renaissance-ep/1712532737",
+        "playParams": {
+          "id": "1712532737",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-10-27",
+        "contentRating": "explicit",
+        "trackCount": 5,
+        "upc": "196871559966",
+        "genreNames": [
+          "Dance",
+          "Music"
+        ],
+        "recordLabel": "Arista Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/36/f3/c6/36f3c684-7d83-abf2-5da0-ab138c54269d/196871559966.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1714533716",
+              "type": "albums",
+              "attributes": {
+                "name": "Renaissance - Single",
+                "artistName": "BUNT. & VisionV",
+                "url": "https://music.apple.com/us/album/renaissance-single/1714533716",
+                "playParams": {
+                  "id": "1714533716",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2023-10-26",
+                "trackCount": 1,
+                "upc": "196871557450",
+                "genreNames": [
+                  "Dance",
+                  "Music"
+                ],
+                "recordLabel": "Arista Records",
+                "isSingle": true,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/f1/c2/2d/f1c22dcf-153d-577d-560e-82e86d91861f/196871557450.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1549348055",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (Remixes)",
+        "artistName": "Apashe",
+        "url": "https://music.apple.com/us/album/renaissance-remixes/1549348055",
+        "playParams": {
+          "id": "1549348055",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-02-05",
+        "contentRating": "explicit",
+        "trackCount": 28,
+        "upc": "735119791036",
+        "genreNames": [
+          "Dance",
+          "Music",
+          "House"
+        ],
+        "recordLabel": "Kannibalen Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/53/d6/39/53d6398a-7277-ee18-a6c7-5d8342977099/cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "1548027038",
+      "type": "albums",
+      "attributes": {
+        "name": "Renaissance (Remixes)",
+        "artistName": "Aluna",
+        "url": "https://music.apple.com/us/album/renaissance-remixes/1548027038",
+        "playParams": {
+          "id": "1548027038",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-01-27",
+        "trackCount": 10,
+        "upc": "810072040145",
+        "genreNames": [
+          "Dance",
+          "Music",
+          "Pop"
+        ],
+        "recordLabel": "Mad Decent",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f4/49/52/f44952ca-be7d-5f3f-6682-1c4c5a1c08df/1309.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": []
+        }
+      }
+    }
+  ]
+}

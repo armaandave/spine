@@ -79,7 +79,7 @@ class PeopleSearchAPITests(TestCase):
             "results": [],
             "completed_sources": [],
             "unavailable_sources": list(
-                provider_services.SUPPORTED_PERSON_SOURCES,
+                provider_services.person_search_sources(),
             ),
         }
 
@@ -104,7 +104,7 @@ class PeopleSearchServiceTests(TestCase):
         provider_search,
     ):
         barrier = threading.Barrier(
-            len(provider_services.SUPPORTED_PERSON_SOURCES),
+            len(provider_services.person_search_sources()),
         )
 
         def search(source, _query, **_kwargs):
@@ -130,12 +130,12 @@ class PeopleSearchServiceTests(TestCase):
 
         self.assertEqual(
             set(payload["completed_sources"]),
-            set(provider_services.SUPPORTED_PERSON_SOURCES),
+            set(provider_services.person_search_sources()),
         )
         self.assertEqual(payload["unavailable_sources"], [])
         self.assertEqual(
             {result["ref"]["source"] for result in payload["results"]},
-            set(provider_services.SUPPORTED_PERSON_SOURCES),
+            set(provider_services.person_search_sources()),
         )
         self.assertTrue(
             all(
@@ -170,7 +170,7 @@ class PeopleSearchServiceTests(TestCase):
         self.assertNotIn("openlibrary", payload["completed_sources"])
         self.assertEqual(
             len(payload["results"]),
-            len(provider_services.SUPPORTED_PERSON_SOURCES) - 1,
+            len(provider_services.person_search_sources()) - 1,
         )
 
     @patch("api.services.media.provider_services.search_people")

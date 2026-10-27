@@ -1,0 +1,772 @@
+{
+  "results": {
+    "albums": {
+      "data": [
+        {
+          "id": "269572838",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller",
+            "artistName": "Michael Jackson",
+            "url": "https://music.apple.com/us/album/thriller/269572838",
+            "playParams": {
+              "id": "269572838",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1982-11-29",
+            "trackCount": 9,
+            "upc": "074643811224",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Epic",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/32/4f/fd/324ffda2-9e51-8f6a-0c2d-c6fd2b41ac55/074643811224.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "6827221246",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller",
+            "artistName": "Various Artists",
+            "url": "https://music.apple.com/us/album/thriller/6827221246",
+            "playParams": {
+              "id": "6827221246",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2018",
+            "trackCount": 16,
+            "upc": "8720356776566",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Melodie Music Pty Ltd",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5e/5e/44/5e5e4442-96a1-a2a6-e638-8ebb0d37b199/10465.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1290290904",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (Steve Aoki Midnight Hour Remix) - Single",
+            "artistName": "Michael Jackson",
+            "url": "https://music.apple.com/us/album/thriller-steve-aoki-midnight-hour-remix-single/1290290904",
+            "playParams": {
+              "id": "1290290904",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2017-09-29",
+            "trackCount": 1,
+            "upc": "886446777474",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Epic/Legacy",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/c0/58/ee/c058ee4d-1305-6ea7-ed41-8f5a97ec1785/886446777474.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1838923953",
+          "type": "albums",
+          "attributes": {
+            "name": "THRILLER - Single",
+            "artistName": "BADVILLAIN",
+            "url": "https://music.apple.com/us/album/thriller-single/1838923953",
+            "playParams": {
+              "id": "1838923953",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-09-15",
+            "trackCount": 1,
+            "upc": "8800331139354",
+            "genreNames": [
+              "K-Pop",
+              "Music",
+              "Pop",
+              "Dance"
+            ],
+            "recordLabel": "BIGPLANETMADE",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/eb/36/87/eb36873e-7269-1f31-1f67-55fc336fec46/8800331139354_cover.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1587850086",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "Meredith Bull & LukHash",
+            "url": "https://music.apple.com/us/album/thriller-single/1587850086",
+            "playParams": {
+              "id": "1587850086",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-10-08",
+            "trackCount": 1,
+            "upc": "196399776784",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Dance"
+            ],
+            "recordLabel": "Starseeds and Earthlings",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/e3/60/65/e36065f5-fd3d-f983-3bcc-1d8efc554d6d/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1589904212",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "The Moonies",
+            "url": "https://music.apple.com/us/album/thriller-single/1589904212",
+            "playParams": {
+              "id": "1589904212",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2021-10-23",
+            "trackCount": 1,
+            "upc": "859750921789",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "Sunnyside",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/df/95/10/df9510fe-922d-0f4b-b6cf-6e2cbb761aab/859750921789_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1600,
+              "height": 1600
+            }
+          }
+        },
+        {
+          "id": "1812352044",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (feat. Ayo Maff) - Single",
+            "artistName": "Rezi",
+            "url": "https://music.apple.com/us/album/thriller-feat-ayo-maff-single/1812352044",
+            "playParams": {
+              "id": "1812352044",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-01-29",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "3617385715022",
+            "genreNames": [
+              "Afrobeats",
+              "Music",
+              "African",
+              "Afro-Pop"
+            ],
+            "recordLabel": "CiDAR Distro",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/10/7c/fb/107cfb5e-1f42-fe81-0685-9fde079b136f/0.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1485070039",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller",
+            "artistName": "New End Original",
+            "url": "https://music.apple.com/us/album/thriller/1485070039",
+            "playParams": {
+              "id": "1485070039",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2001-10-02",
+            "trackCount": 11,
+            "upc": "792258106268",
+            "genreNames": [
+              "Alternative",
+              "Music"
+            ],
+            "recordLabel": "Epitaph",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/51/d0/29/51d02993-07ff-734f-d410-4735ea388d1b/792258106268.png/{w}x{h}bb.jpg",
+              "width": 1425,
+              "height": 1425
+            }
+          }
+        },
+        {
+          "id": "934239074",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (Metal Cover) - Single",
+            "artistName": "Massive Metal Covers",
+            "url": "https://music.apple.com/us/album/thriller-metal-cover-single/934239074",
+            "playParams": {
+              "id": "934239074",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2014-10-28",
+            "trackCount": 1,
+            "upc": "840218161977",
+            "genreNames": [
+              "Metal",
+              "Music",
+              "Rock",
+              "Pop"
+            ],
+            "recordLabel": "Massive Metal Covers",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music49/v4/48/99/06/48990671-eb67-a09d-88bd-393de5114a78/dj.cqilmeua.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1451864363",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (Metal Version) [feat. C.J. Pierce] - Single",
+            "artistName": "Leo",
+            "url": "https://music.apple.com/us/album/thriller-metal-version-feat-c-j-pierce-single/1451864363",
+            "playParams": {
+              "id": "1451864363",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2019-02-07",
+            "trackCount": 1,
+            "upc": "1827850060898",
+            "genreNames": [
+              "Metal",
+              "Music",
+              "Rock",
+              "Hard Rock"
+            ],
+            "recordLabel": "Leo",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/99/6b/5b/996b5b3a-7c61-46bc-ad2a-19869ae66388/d7d9b198-5b09-4472-8811-6fb6f9b9b0ad.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1775539618",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "Tori Kelly, Taron Egerton, Scarlett Johansson & Nick Kroll",
+            "url": "https://music.apple.com/us/album/thriller-single/1775539618",
+            "playParams": {
+              "id": "1775539618",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-10-25",
+            "trackCount": 1,
+            "upc": "660251143378",
+            "genreNames": [
+              "Pop/Rock",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "Back Lot Music",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c9/d1/ea/c9d1eae5-370f-bc5a-ca22-0a46f27f1aa6/836.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "273048762",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (25th Anniversary) [Deluxe Edition]",
+            "artistName": "Michael Jackson",
+            "url": "https://music.apple.com/us/album/thriller-25th-anniversary-deluxe-edition/273048762",
+            "playParams": {
+              "id": "273048762",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1982-11-30",
+            "trackCount": 35,
+            "upc": "888880436016",
+            "genreNames": [
+              "Pop",
+              "Music",
+              "Holiday",
+              "Halloween",
+              "Adult Contemporary",
+              "R&B/Soul",
+              "Quiet Storm",
+              "Contemporary R&B",
+              "Rock"
+            ],
+            "recordLabel": "Epic/Legacy",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b5/58/d3/b558d32f-24fd-c889-d544-bc4c96f6113e/dj.oinzmlgt.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1709916666",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "No Resolve & From Ashes to New",
+            "url": "https://music.apple.com/us/album/thriller-single/1709916666",
+            "playParams": {
+              "id": "1709916666",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-10-13",
+            "trackCount": 1,
+            "upc": "872132002524",
+            "genreNames": [
+              "Hard Rock",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "Noise Machine",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/01/8e/7e/018e7e08-51ed-e483-022f-2c1ed82dd721/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1886554487",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "The Fun Squad",
+            "url": "https://music.apple.com/us/album/thriller-single/1886554487",
+            "playParams": {
+              "id": "1886554487",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-10-21",
+            "trackCount": 1,
+            "upc": "198090402061",
+            "genreNames": [
+              "Holiday",
+              "Music",
+              "Pop"
+            ],
+            "recordLabel": "TFS Music Studios LLC",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/80/b9/65/80b9658a-4bba-6c13-d834-e2a1f32f0a99/0.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1642391815",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "Duwap Kaine",
+            "url": "https://music.apple.com/us/album/thriller-single/1642391815",
+            "playParams": {
+              "id": "1642391815",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-10-30",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "0195756901654",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music",
+              "Electronic",
+              "Electronica"
+            ],
+            "recordLabel": "Duwap Kaine",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/d5/01/05/d5010588-bc52-2fc7-b2a5-f55c766842bd/cover.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "771007806",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - EP",
+            "artistName": "Getter",
+            "url": "https://music.apple.com/us/album/thriller-ep/771007806",
+            "playParams": {
+              "id": "771007806",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2013-12-17",
+            "contentRating": "explicit",
+            "trackCount": 6,
+            "upc": "816769018824",
+            "genreNames": [
+              "Dance",
+              "Music",
+              "Electronic"
+            ],
+            "recordLabel": "Firepower Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music4/v4/c5/25/db/c525dbe2-29e8-4449-0abd-b99d79caeb89/getter_thriller_ep_art_fc_1400px.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1679910528",
+          "type": "albums",
+          "attributes": {
+            "name": "THRILLER - Single",
+            "artistName": "DREAMDNVR & Clara Mae",
+            "url": "https://music.apple.com/us/album/thriller-single/1679910528",
+            "playParams": {
+              "id": "1679910528",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2023-04-21",
+            "trackCount": 1,
+            "upc": "196922427114",
+            "genreNames": [
+              "Singer/Songwriter",
+              "Music"
+            ],
+            "recordLabel": "DREAMLAND",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/03/8e/55/038e558f-5831-6267-6eeb-58afbc138ab2/196922427114_Cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "78969538",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller!",
+            "artistName": "Cold Blood",
+            "url": "https://music.apple.com/us/album/thriller/78969538",
+            "playParams": {
+              "id": "78969538",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1973",
+            "trackCount": 7,
+            "upc": "081227637064",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "R&B/Soul",
+              "Funk",
+              "Southern Rock",
+              "Soul"
+            ],
+            "recordLabel": "Rhino/Warner Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c0/3d/86/c03d86f1-58ea-5e09-332c-475e4cee65cf/mzi.ppahtrrm.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "6766873856",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller (feat. J.None) - Single",
+            "artistName": "VoicePlay",
+            "url": "https://music.apple.com/us/album/thriller-feat-j-none-single/6766873856",
+            "playParams": {
+              "id": "6766873856",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2024-10-11",
+            "trackCount": 1,
+            "upc": "693887114955",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "VoicePlay",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/48/5a/bf/485abff1-2668-7cef-ec81-01f95ceda8cf/693887114955_cover.jpg/{w}x{h}bb.jpg",
+              "width": 1400,
+              "height": 1400
+            }
+          }
+        },
+        {
+          "id": "1344566929",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - EP",
+            "artistName": "BTOB",
+            "url": "https://music.apple.com/us/album/thriller-ep/1344566929",
+            "playParams": {
+              "id": "1344566929",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2013-09-09",
+            "trackCount": 6,
+            "upc": "602537567195",
+            "genreNames": [
+              "K-Pop",
+              "Music",
+              "Pop",
+              "Dance",
+              "Worldwide",
+              "Asia",
+              "Rock"
+            ],
+            "recordLabel": "큐브엔터테인먼트(CUBE ENTERTAINMENT)",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/c7/5a/e3/c75ae3dc-89c3-052b-a28a-ac19676841ba/cover-.jpg/{w}x{h}bb.jpg",
+              "width": 1500,
+              "height": 1500
+            }
+          }
+        },
+        {
+          "id": "1535684322",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "The Animal In Me",
+            "url": "https://music.apple.com/us/album/thriller-single/1535684322",
+            "playParams": {
+              "id": "1535684322",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2020-10-22",
+            "trackCount": 1,
+            "upc": "194152636610",
+            "genreNames": [
+              "Hard Rock",
+              "Music",
+              "Rock"
+            ],
+            "recordLabel": "The Animal In Me",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/ee/4c/93/ee4c93b8-4081-14f4-180b-9efe0fda0d2a/194152636610.png/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1839077252",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller",
+            "artistName": "Lambchop",
+            "url": "https://music.apple.com/us/album/thriller/1839077252",
+            "playParams": {
+              "id": "1839077252",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "1997-09-23",
+            "trackCount": 8,
+            "upc": "617308087895",
+            "genreNames": [
+              "Rock",
+              "Music",
+              "Alternative"
+            ],
+            "recordLabel": "Merge Records",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/11/44/96/11449652-5c03-68b0-51c1-625acd677d2a/56626.jpg/{w}x{h}bb.jpg",
+              "width": 1448,
+              "height": 1448
+            }
+          }
+        },
+        {
+          "id": "1634953548",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "Demxntia & ITSOKTOCRY",
+            "url": "https://music.apple.com/us/album/thriller-single/1634953548",
+            "playParams": {
+              "id": "1634953548",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-07-29",
+            "contentRating": "explicit",
+            "trackCount": 1,
+            "upc": "7316215915842",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "demxntia",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/c0/4b/6f/c04b6fdc-ea1e-6239-1b73-8bf41ced641b/7c48a49a-6988-43e3-9a22-9acbd2db23c0.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1641780996",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller 40",
+            "artistName": "Michael Jackson",
+            "url": "https://music.apple.com/us/album/thriller-40/1641780996",
+            "playParams": {
+              "id": "1641780996",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2022-11-18",
+            "trackCount": 34,
+            "upc": "196589412409",
+            "genreNames": [
+              "Pop",
+              "Music"
+            ],
+            "recordLabel": "Epic/Legacy",
+            "isSingle": false,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/73/8c/e1/738ce1db-60bd-eb25-0059-18778c1ca9b3/196589412409.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        },
+        {
+          "id": "1792671887",
+          "type": "albums",
+          "attributes": {
+            "name": "Thriller - Single",
+            "artistName": "Bruh",
+            "url": "https://music.apple.com/us/album/thriller-single/1792671887",
+            "playParams": {
+              "id": "1792671887",
+              "kind": "album"
+            },
+            "isComplete": true,
+            "releaseDate": "2025-01-24",
+            "trackCount": 1,
+            "upc": "199087002974",
+            "genreNames": [
+              "Hip-Hop/Rap",
+              "Music"
+            ],
+            "recordLabel": "5741376 Records DK",
+            "isSingle": true,
+            "isCompilation": false,
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/cf/61/9fcf61a4-958d-b899-a193-cd9e2b1bb997/artwork.jpg/{w}x{h}bb.jpg",
+              "width": 3000,
+              "height": 3000
+            }
+          }
+        }
+      ],
+      "next": "/v1/catalog/us/search?offset=25&term=thriller&types=albums"
+    }
+  }
+}

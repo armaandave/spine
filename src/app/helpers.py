@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.utils.encoding import iri_to_uri
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from app import music_catalog
 from app.models import BasicMedia, Item, MediaTypes, Status
 
 YEAR_ONLY_PARTS = 1
@@ -182,6 +183,10 @@ def enrich_items_with_user_data(request, items, section_name):
     if not items:
         return []
 
+    # Cards act on the ref that holds an album now, so a moved album's track and list
+    # buttons reach its Item.
+    items = music_catalog.canonical_music_payloads(items)
+
     # All items are the same media type
     media_type = items[0]["media_type"]
     media_lookup = _build_user_media_lookup(request.user, items, media_type)
@@ -217,14 +222,13 @@ def enrich_items_with_user_data(request, items, section_name):
 
 def _build_user_media_lookup(user, items, media_type):
     """Fetch the user's media for ``items`` and return a {key: media} lookup."""
-    source = items[0]["source"]
-
     q_objects = Q()
     for item in items:
         filter_params = {
             "item__media_id": item["media_id"],
             "item__media_type": media_type,
-            "item__source": source,
+            # Per item: a moved album's source differs from the rest of the page's.
+            "item__source": item["source"],
         }
         if media_type == MediaTypes.SEASON.value:
             filter_params["item__season_number"] = item.get("season_number")

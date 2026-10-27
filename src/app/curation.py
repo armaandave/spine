@@ -2,13 +2,24 @@
 
 from django.db.models import Prefetch, Q, prefetch_related_objects
 
-from app.models import CustomBackdropPreference, CustomPosterPreference
+from app.models import CustomBackdropPreference, CustomPosterPreference, MediaTypes, Sources
 
 # Item relation and attribute that hold prefetched admin picks, per kind of artwork.
 _PREFETCHED = {
     CustomPosterPreference: ("customposterpreference_set", "curated_poster_preferences"),
     CustomBackdropPreference: ("custombackdroppreference_set", "curated_backdrop_preferences"),
 }
+
+
+def music_picks_apply(item):
+    """Return whether saved artwork picks apply to an Item: all but Apple Music albums.
+
+    An Apple Music album always shows Apple's cover. Picks made while it was a
+    MusicBrainz album stay saved, and apply again if it goes back to MusicBrainz.
+    """
+    return item is None or not (
+        item.source == Sources.APPLE_MUSIC.value and item.media_type == MediaTypes.MUSIC.value
+    )
 
 
 def is_curator(user):
@@ -38,7 +49,7 @@ def prime_curated_artwork(items):
 
 def curated_image_url(model, item):
     """Return the newest admin pick of this kind for an Item, or None."""
-    if item is None or item.pk is None:
+    if item is None or item.pk is None or not music_picks_apply(item):
         return None
     to_attr = _PREFETCHED.get(model, (None, None))[1]
     prefetched = getattr(item, to_attr, None) if to_attr else None
@@ -51,7 +62,7 @@ def curated_image_url(model, item):
 
 def picked_image_urls(items, model, user):
     """Map Item ids to the pick each viewer sees: their own, else an admin's."""
-    item_ids = [item.pk for item in items]
+    item_ids = [item.pk for item in items if music_picks_apply(item)]
     if not item_ids:
         return {}
     viewer_id = user.pk if user is not None and user.is_authenticated else None

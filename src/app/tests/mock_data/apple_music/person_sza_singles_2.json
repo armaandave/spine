@@ -1,0 +1,422 @@
+{
+  "data": [
+    {
+      "id": "1667650945",
+      "type": "albums",
+      "attributes": {
+        "name": "Kill Bill (Acoustic) - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/kill-bill-acoustic-single/1667650945",
+        "playParams": {
+          "id": "1667650945",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2023-01-24",
+        "trackCount": 1,
+        "upc": "196589852540",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/f5/5a/7e/f55a7eac-7991-7169-4d95-f8bc8f32bdfc/196589852540.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1664548283",
+      "type": "albums",
+      "attributes": {
+        "name": "Kill Bill - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/kill-bill-single/1664548283",
+        "playParams": {
+          "id": "1664548283",
+          "kind": "album"
+        },
+        "isComplete": false,
+        "releaseDate": "2023-01-13",
+        "trackCount": 5,
+        "upc": "196589809599",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/eb/ac/2a/ebac2ae4-db4f-0973-037e-7a563acab8cf/196589809599.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1648735510",
+      "type": "albums",
+      "attributes": {
+        "name": "Shirt - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/shirt-single/1648735510",
+        "playParams": {
+          "id": "1648735510",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-10-28",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "196589552242",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/83/86/b4/8386b45a-4c4d-4fe7-90cc-d006df085de4/196589552242.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1634334253",
+      "type": "albums",
+      "attributes": {
+        "name": "Persuasive - Single",
+        "artistName": "Doechii & SZA",
+        "url": "https://music.apple.com/us/album/persuasive-single/1634334253",
+        "playParams": {
+          "id": "1634334253",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-07-22",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602448246554",
+        "genreNames": [
+          "Hip-Hop/Rap",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/Capitol Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/77/e9/e6/77e9e683-824d-1c8a-931e-ea724182e0c3/22UMGIM73278.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1615477870",
+      "type": "albums",
+      "attributes": {
+        "name": "No Love (Extended Version) - Single",
+        "artistName": "Summer Walker, SZA & Cardi B",
+        "url": "https://music.apple.com/us/album/no-love-extended-version-single/1615477870",
+        "playParams": {
+          "id": "1615477870",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-03-25",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602445730063",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "LVRN/Interscope Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/91/a7/d8/91a7d82d-5416-2d72-014f-c62ed8a1e89c/22UMGIM27509.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1598221271",
+      "type": "albums",
+      "attributes": {
+        "name": "I Hate U - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/i-hate-u-single/1598221271",
+        "playParams": {
+          "id": "1598221271",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-12-03",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886449787043",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/f6/4f/19/f64f19b7-3ab4-ad2d-5a67-ca196d278b44/886449787043.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1587314213",
+      "type": "albums",
+      "attributes": {
+        "name": "fue mejor - Single",
+        "artistName": "Kali Uchis & SZA",
+        "url": "https://music.apple.com/us/album/fue-mejor-single/1587314213",
+        "playParams": {
+          "id": "1587314213",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2021-09-29",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "00602438529407",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "EMI / Interscope",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/33/60/7f/33607f4d-f535-1ca8-8cea-e5f841c53a4a/21UMGIM57735.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1546390050",
+      "type": "albums",
+      "attributes": {
+        "name": "Good Days - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/good-days-single/1546390050",
+        "playParams": {
+          "id": "1546390050",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-12-25",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886449006717",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/ef/09/cf/ef09cf1f-a057-6039-00d3-7b5d14c7eba1/886449006717.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1530112355",
+      "type": "albums",
+      "attributes": {
+        "name": "Hit Different (feat. Ty Dolla $ign) - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/hit-different-feat-ty-dolla-%24ign-single/1530112355",
+        "playParams": {
+          "id": "1530112355",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-09-04",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "886448745594",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/d1/03/97/d10397d5-8de0-2d58-cd77-fc4fd6ac7d0b/886448745594.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1507781909",
+      "type": "albums",
+      "attributes": {
+        "name": "The Other Side (From \"Trolls World Tour\") [Ovy On the Drums Remix] - Single",
+        "artistName": "SZA, Justin Timberlake & Ovy On the Drums",
+        "url": "https://music.apple.com/us/album/the-other-side-from-trolls-world-tour-ovy-on-the/1507781909",
+        "playParams": {
+          "id": "1507781909",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-04-20",
+        "trackCount": 1,
+        "upc": "886448389170",
+        "genreNames": [
+          "Dance",
+          "Music"
+        ],
+        "recordLabel": "RCA Records Label",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/ce/f1/ef/cef1ef41-2b47-50f6-3aa2-8fd6fbd8621d/886448389170.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1506236470",
+      "type": "albums",
+      "attributes": {
+        "name": "The Other Side (From \"Trolls World Tour\") [Oliver Heldens Remix] - Single",
+        "artistName": "SZA, Justin Timberlake & Oliver Heldens",
+        "url": "https://music.apple.com/us/album/the-other-side-from-trolls-world-tour-oliver-heldens/1506236470",
+        "playParams": {
+          "id": "1506236470",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2020-04-10",
+        "trackCount": 1,
+        "upc": "886448389132",
+        "genreNames": [
+          "Soundtrack",
+          "Music"
+        ],
+        "recordLabel": "RCA Records Label",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/9a/df/cd/9adfcd51-93f9-5bdf-2614-dd8dd3d7d6d0/886448389132.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1324746772",
+      "type": "albums",
+      "attributes": {
+        "name": "The Weekend (Funk Wav Remix) - Single",
+        "artistName": "SZA & Calvin Harris",
+        "url": "https://music.apple.com/us/album/the-weekend-funk-wav-remix-single/1324746772",
+        "playParams": {
+          "id": "1324746772",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-12-15",
+        "trackCount": 1,
+        "upc": "886446852157",
+        "genreNames": [
+          "R&B/Soul",
+          "Music"
+        ],
+        "recordLabel": "Top Dawg Entertainment/RCA Records",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/75/73/39/75733929-5ce0-234e-6861-0e3932fa342a/886446852157.jpg/{w}x{h}bb.jpg",
+          "width": 1500,
+          "height": 1500
+        }
+      }
+    },
+    {
+      "id": "1194815827",
+      "type": "albums",
+      "attributes": {
+        "name": "Drew Barrymore - Single",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/drew-barrymore-single/1194815827",
+        "playParams": {
+          "id": "1194815827",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-01-13",
+        "contentRating": "explicit",
+        "trackCount": 1,
+        "upc": "859719400126",
+        "genreNames": [
+          "Pop",
+          "Music",
+          "Alternative"
+        ],
+        "recordLabel": "Top Dawg Entertainment",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/5f/55/c4/5f55c419-288f-6ab7-eb10-d9023c32a7a3/859719400126_cover.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "852343474",
+      "type": "albums",
+      "attributes": {
+        "name": "Z - EP",
+        "artistName": "SZA",
+        "url": "https://music.apple.com/us/album/z-ep/852343474",
+        "playParams": {
+          "id": "852343474",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2014-04-08",
+        "contentRating": "explicit",
+        "trackCount": 10,
+        "upc": "859712300362",
+        "genreNames": [
+          "R&B/Soul",
+          "Music",
+          "Contemporary R&B",
+          "Alternative"
+        ],
+        "recordLabel": "Top Dawg Entertainment",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/d8/86/70/d8867099-c280-065b-8617-53096e63fd55/859712300362_cover.jpg/{w}x{h}bb.jpg",
+          "width": 1600,
+          "height": 1600
+        }
+      }
+    }
+  ]
+}

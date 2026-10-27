@@ -1,0 +1,631 @@
+{
+  "data": [
+    {
+      "id": "1621698801",
+      "type": "albums",
+      "attributes": {
+        "name": "Multitude (Video Album)",
+        "artistName": "Stromae",
+        "url": "https://music.apple.com/us/album/multitude-video-album/1621698801",
+        "playParams": {
+          "id": "1621698801",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2022-03-04",
+        "contentRating": "explicit",
+        "trackCount": 15,
+        "upc": "00602445868438",
+        "genreNames": [
+          "French Pop",
+          "Music"
+        ],
+        "recordLabel": "Universal Music Division Polydor France",
+        "isSingle": false,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/f8/3c/ee/f83cee3a-1e0c-d5f2-739b-ba28b16bf736/21UM1IM50758.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      },
+      "relationships": {
+        "tracks": {
+          "data": [
+            {
+              "id": "1621698807",
+              "type": "songs",
+              "attributes": {
+                "name": "Invaincu",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 1,
+                "isrc": "BET672100002",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 125707,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/invaincu/1621698801?i=1621698807"
+              }
+            },
+            {
+              "id": "1621698809",
+              "type": "songs",
+              "attributes": {
+                "name": "Santé",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 2,
+                "isrc": "BET672100001",
+                "artistName": "Stromae",
+                "composerName": "Stromae, Moon Willis & Juanpaio Toch",
+                "durationInMillis": 191000,
+                "releaseDate": "2021-10-15",
+                "url": "https://music.apple.com/us/album/sant%C3%A9/1621698801?i=1621698809"
+              }
+            },
+            {
+              "id": "1621698810",
+              "type": "songs",
+              "attributes": {
+                "name": "La solassitude",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 3,
+                "isrc": "BET672100003",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 182160,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/la-solassitude/1621698801?i=1621698810"
+              }
+            },
+            {
+              "id": "1621698812",
+              "type": "songs",
+              "attributes": {
+                "name": "Fils de joie",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 4,
+                "isrc": "BET672100004",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 195440,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/fils-de-joie/1621698801?i=1621698812"
+              }
+            },
+            {
+              "id": "1621698814",
+              "type": "songs",
+              "attributes": {
+                "name": "L’enfer",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 5,
+                "isrc": "BET672100005",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 189720,
+                "releaseDate": "2022-01-09",
+                "url": "https://music.apple.com/us/album/lenfer/1621698801?i=1621698814"
+              }
+            },
+            {
+              "id": "1621699086",
+              "type": "songs",
+              "attributes": {
+                "name": "C’est que du bonheur",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 6,
+                "isrc": "BET672100006",
+                "artistName": "Stromae",
+                "composerName": "Stromae & Moon Willis",
+                "durationInMillis": 162227,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/cest-que-du-bonheur/1621698801?i=1621699086"
+              }
+            },
+            {
+              "id": "1621699089",
+              "type": "songs",
+              "attributes": {
+                "name": "Pas vraiment",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 7,
+                "isrc": "BET672100007",
+                "artistName": "Stromae",
+                "composerName": "Stromae & Selman Faris",
+                "durationInMillis": 162627,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/pas-vraiment/1621698801?i=1621699089"
+              }
+            },
+            {
+              "id": "1621699090",
+              "type": "songs",
+              "attributes": {
+                "name": "Riez",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 8,
+                "isrc": "BET672100008",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 201160,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/riez/1621698801?i=1621699090"
+              }
+            },
+            {
+              "id": "1621699092",
+              "type": "songs",
+              "attributes": {
+                "name": "Mon amour",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 9,
+                "isrc": "BET672100009",
+                "artistName": "Stromae",
+                "composerName": "Stromae & Luc Van Haver",
+                "durationInMillis": 172107,
+                "contentRating": "explicit",
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/mon-amour/1621698801?i=1621699092"
+              }
+            },
+            {
+              "id": "1621699094",
+              "type": "songs",
+              "attributes": {
+                "name": "Déclaration",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 10,
+                "isrc": "BET672100010",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 184720,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/d%C3%A9claration/1621698801?i=1621699094"
+              }
+            },
+            {
+              "id": "1621699095",
+              "type": "songs",
+              "attributes": {
+                "name": "Mauvaise journée",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 11,
+                "isrc": "BET672100011",
+                "artistName": "Stromae",
+                "composerName": "Stromae",
+                "durationInMillis": 187680,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/mauvaise-journ%C3%A9e/1621698801?i=1621699095"
+              }
+            },
+            {
+              "id": "1621699099",
+              "type": "songs",
+              "attributes": {
+                "name": "Bonne journée",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 12,
+                "isrc": "BET672100012",
+                "artistName": "Stromae",
+                "composerName": "Stromae & Luc Van Haver",
+                "durationInMillis": 192040,
+                "releaseDate": "2022-03-04",
+                "url": "https://music.apple.com/us/album/bonne-journ%C3%A9e/1621698801?i=1621699099"
+              }
+            },
+            {
+              "id": "1621699101",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Santé (Official Music Video)",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 13,
+                "isrc": "BET672180001",
+                "artistName": "Stromae",
+                "durationInMillis": 204710,
+                "releaseDate": "2022-03-02",
+                "url": "https://music.apple.com/us/music-video/sant%C3%A9-official-music-video/1621699101"
+              }
+            },
+            {
+              "id": "1621699102",
+              "type": "music-videos",
+              "attributes": {
+                "name": "L’enfer",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 14,
+                "isrc": "BET672180002",
+                "artistName": "Stromae",
+                "durationInMillis": 194510,
+                "releaseDate": "2022-03-02",
+                "url": "https://music.apple.com/us/music-video/lenfer/1621699102"
+              }
+            },
+            {
+              "id": "1621699105",
+              "type": "music-videos",
+              "attributes": {
+                "name": "Fils de joie",
+                "albumName": "Multitude (Video Album)",
+                "discNumber": 1,
+                "trackNumber": 15,
+                "isrc": "BET672280048",
+                "artistName": "Stromae",
+                "durationInMillis": 236150,
+                "releaseDate": "2022-03-02",
+                "url": "https://music.apple.com/us/music-video/fils-de-joie/1621699105"
+              }
+            }
+          ]
+        },
+        "artists": {
+          "data": [
+            {
+              "id": "270954369",
+              "type": "artists",
+              "attributes": {
+                "name": "Stromae",
+                "url": "https://music.apple.com/us/artist/stromae/270954369"
+              }
+            }
+          ]
+        }
+      },
+      "views": {
+        "other-versions": {
+          "attributes": {
+            "title": "Other Versions"
+          },
+          "data": [
+            {
+              "id": "1636510436",
+              "type": "albums",
+              "attributes": {
+                "name": "Multitude",
+                "artistName": "Stromae",
+                "url": "https://music.apple.com/us/album/multitude/1636510436",
+                "playParams": {
+                  "id": "1636510436",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-07-27",
+                "contentRating": "explicit",
+                "trackCount": 13,
+                "upc": "00602448372062",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Universal Music Division Polydor France",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/95/74/37/957437d8-7024-2640-9318-7077c484e5cb/21UM1IM50758.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ]
+        },
+        "related-albums": {
+          "attributes": {
+            "title": "Related Albums"
+          },
+          "data": [
+            {
+              "id": "1788305915",
+              "type": "albums",
+              "attributes": {
+                "name": "Civilisation Édition Ultime",
+                "artistName": "Orelsan",
+                "url": "https://music.apple.com/us/album/civilisation-%C3%A9dition-ultime/1788305915",
+                "playParams": {
+                  "id": "1788305915",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-10-28",
+                "trackCount": 25,
+                "upc": "3596974281424",
+                "genreNames": [
+                  "Rap",
+                  "Music",
+                  "Hip-Hop/Rap"
+                ],
+                "recordLabel": "7TH Magnitude / Strong Ninja",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/43/a4/78/43a47870-f087-4e4e-e7b8-b1ca7d04a5dc/3596974281424.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1671606871",
+              "type": "albums",
+              "attributes": {
+                "name": "Nonante-Cinq La Suite (Deluxe)",
+                "artistName": "Angèle",
+                "url": "https://music.apple.com/us/album/nonante-cinq-la-suite-deluxe/1671606871",
+                "playParams": {
+                  "id": "1671606871",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-02-18",
+                "trackCount": 19,
+                "upc": "00602455429117",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Angèle VL Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/93/42/61/93426106-35e9-3033-f41a-35da08bcba05/22UM1IM25306.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1633041539",
+              "type": "albums",
+              "attributes": {
+                "name": "Les autres c’est nous",
+                "artistName": "Bigflo & Oli",
+                "url": "https://music.apple.com/us/album/les-autres-cest-nous/1633041539",
+                "playParams": {
+                  "id": "1633041539",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2022-07-11",
+                "contentRating": "explicit",
+                "trackCount": 22,
+                "upc": "00602448255471",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Universal Music Distributed Deals",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/ac/7a/c7/ac7ac794-a1b2-0522-1da4-cc75b027a078/22UMGIM60019.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1599582870",
+              "type": "albums",
+              "attributes": {
+                "name": "Lundi Méchant",
+                "artistName": "Gaël Faye",
+                "url": "https://music.apple.com/us/album/lundi-m%C3%A9chant/1599582870",
+                "playParams": {
+                  "id": "1599582870",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-11-06",
+                "trackCount": 15,
+                "upc": "3616842618227",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Excuse My French",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/10/41/84/104184b5-475f-5d74-6181-31e405e9af16/cover.jpg/{w}x{h}bb.jpg",
+                  "width": 1440,
+                  "height": 1440
+                }
+              }
+            },
+            {
+              "id": "1631321590",
+              "type": "albums",
+              "attributes": {
+                "name": "À TOUS LES BÂTARDS",
+                "artistName": "Eddy de Pretto",
+                "url": "https://music.apple.com/us/album/%C3%A0-tous-les-b%C3%A2tards/1631321590",
+                "playParams": {
+                  "id": "1631321590",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2022-07-01",
+                "contentRating": "explicit",
+                "trackCount": 17,
+                "upc": "00602448190970",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Universal Music Division Virgin Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/b1/3b/2c/b13b2ceb-bdb0-ce71-d3e1-e2450271535e/20UMGIM97711.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1506632380",
+              "type": "albums",
+              "attributes": {
+                "name": "Pas Peur",
+                "artistName": "L.E.J",
+                "url": "https://music.apple.com/us/album/pas-peur/1506632380",
+                "playParams": {
+                  "id": "1506632380",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2020-05-29",
+                "trackCount": 16,
+                "upc": "00602508936852",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Universal Music Division Mercury Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/51/9b/da/519bda8a-c9d1-f037-5192-46a28e7802c3/19UMGIM87716.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1528773462",
+              "type": "albums",
+              "attributes": {
+                "name": "S16",
+                "artistName": "Woodkid",
+                "url": "https://music.apple.com/us/album/s16/1528773462",
+                "playParams": {
+                  "id": "1528773462",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2020-10-16",
+                "trackCount": 11,
+                "upc": "00602507109318",
+                "genreNames": [
+                  "Alternative",
+                  "Music"
+                ],
+                "recordLabel": "Island Records",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/c1/f1/bb/c1f1bb97-bb2d-a654-d52b-6427f0a475c8/20UMGIM26997.rgb.jpg/{w}x{h}bb.jpg",
+                  "width": 6000,
+                  "height": 6000
+                }
+              }
+            },
+            {
+              "id": "1581827718",
+              "type": "albums",
+              "attributes": {
+                "name": "Isa",
+                "artistName": "ZAZ",
+                "url": "https://music.apple.com/us/album/isa/1581827718",
+                "playParams": {
+                  "id": "1581827718",
+                  "kind": "album"
+                },
+                "isComplete": false,
+                "releaseDate": "2021-10-22",
+                "trackCount": 13,
+                "upc": "190296484575",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Parlophone (France)",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/55/94/94/55949486-a812-42c0-1ed4-8ba970cf732b/190296484575.jpg/{w}x{h}bb.jpg",
+                  "width": 4000,
+                  "height": 4000
+                }
+              }
+            },
+            {
+              "id": "1599794203",
+              "type": "albums",
+              "attributes": {
+                "name": "Un jour, je - EP",
+                "artistName": "Pierre de Maere",
+                "url": "https://music.apple.com/us/album/un-jour-je-ep/1599794203",
+                "playParams": {
+                  "id": "1599794203",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-01-21",
+                "trackCount": 6,
+                "upc": "3596974118492",
+                "genreNames": [
+                  "French Pop",
+                  "Music"
+                ],
+                "recordLabel": "Wagram Music / Cinq 7",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/4f/8b/73/4f8b7352-6b5c-f8b0-b111-4cb5ff2cbbb6/3596974118492_cover.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            },
+            {
+              "id": "1643684922",
+              "type": "albums",
+              "attributes": {
+                "name": "Mauvais Ordre",
+                "artistName": "Lomepal",
+                "url": "https://music.apple.com/us/album/mauvais-ordre/1643684922",
+                "playParams": {
+                  "id": "1643684922",
+                  "kind": "album"
+                },
+                "isComplete": true,
+                "releaseDate": "2022-09-16",
+                "contentRating": "explicit",
+                "trackCount": 15,
+                "upc": "3663729212894",
+                "genreNames": [
+                  "Hip-Hop/Rap",
+                  "Music"
+                ],
+                "recordLabel": "Pinéale",
+                "isSingle": false,
+                "isCompilation": false,
+                "artwork": {
+                  "url": "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/6f/9d/4a/6f9d4a39-9f24-4095-4b6f-275cf4339f3c/3663729212894_cover.jpg/{w}x{h}bb.jpg",
+                  "width": 3000,
+                  "height": 3000
+                }
+              }
+            }
+          ],
+          "next": "/v1/catalog/us/albums/1621698801/view/related-albums?offset=12"
+        }
+      }
+    }
+  ]
+}

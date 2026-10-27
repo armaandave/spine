@@ -7,7 +7,8 @@ from typing import Any, NamedTuple
 from lists.featured.text import normalize_isbn, normalize_title
 
 # Order in which ``Entry.key`` picks its identity. The first id present wins, so a
-# source that always sends the same ids always produces the same key.
+# source that always sends the same ids always produces the same key. New ids go last,
+# so entries that already have a key keep it (and their snapshots and chart moves).
 KEY_ID_ORDER = (
     "ref",
     "tmdb",
@@ -23,6 +24,7 @@ KEY_ID_ORDER = (
     "comicvine",
     "wikidata",
     "goodreads",
+    "apple_album",
 )
 # Ids whose value space is shared between media types, so the key carries the type.
 TYPED_IDS = {"tmdb", "mal"}
@@ -37,7 +39,8 @@ class Entry:
     ``ids`` keys: ``ref`` (an exact Spine ref, see ``Match.ref``), ``tmdb``,
     ``imdb``, ``igdb``, ``steam``, ``mal``, ``mangaupdates``, ``anilist``,
     ``mbid_rg`` (MusicBrainz release group), ``hardcover``, ``olid`` (Open Library
-    edition, ``OL…M``), ``comicvine``, ``wikidata``, ``goodreads``. People lists also
+    edition, ``OL…M``), ``comicvine``, ``wikidata``, ``goodreads``, ``apple_album``
+    (Apple Music album). People lists also
     use ``tmdb_person``, ``openlibrary_person``, ``hardcover_person``,
     ``musicbrainz_person``, ``mal_person`` and ``mangaupdates_person``.
     """

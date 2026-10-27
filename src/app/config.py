@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import reverse
 from django.utils.http import urlencode
 
@@ -202,6 +203,7 @@ MEDIA_TYPE_CONFIG = {
         "unit": ("#", "Issue"),
     },
     MediaTypes.MUSIC.value: {
+        # Replaced at call time by the music catalog setting (music_catalog_source).
         "sources": [Sources.MUSICBRAINZ],
         "default_source": Sources.MUSICBRAINZ,
         "sample_query": "Year Zero",
@@ -262,13 +264,28 @@ def get_property(media_type, prop_name):
         raise KeyError(msg) from None
 
 
+def music_catalog_source():
+    """Return where new music albums come from: Apple Music, else MusicBrainz.
+
+    Read at call time, so changing ``MUSIC_CATALOG_SOURCE`` needs no code change. A
+    value other than ``apple_music`` (a typo, say) means MusicBrainz.
+    """
+    if str(settings.MUSIC_CATALOG_SOURCE).strip() == Sources.APPLE_MUSIC.value:
+        return Sources.APPLE_MUSIC
+    return Sources.MUSICBRAINZ
+
+
 def get_sources(media_type):
     """Get the list of sources for a media type."""
+    if media_type == MediaTypes.MUSIC.value:
+        return [music_catalog_source()]
     return get_property(media_type, "sources")
 
 
 def get_default_source_name(media_type):
     """Get the human-readable default source name."""
+    if media_type == MediaTypes.MUSIC.value:
+        return music_catalog_source()
     return get_property(media_type, "default_source")
 
 

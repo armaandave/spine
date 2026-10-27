@@ -40,6 +40,7 @@ from api.serializers.common import (
     find_item,
     get_or_create_item_from_metadata,
     media_summary_from_provider,
+    music_summaries_from_provider,
     prime_collection_items,
     related_sections_from_payload,
     saved_poster_url,
@@ -53,10 +54,11 @@ from api.services.filters import (
     person_rating_source,
     update_item_filter_metadata,
 )
-from app import config, single_weight
+from app import config, music_catalog, single_weight
 from app.curation import (
     curated_image_url,
     is_curator,
+    music_picks_apply,
     picked_image_urls,
     prime_curated_artwork,
 )
@@ -88,7 +90,7 @@ from app.models import (
     MediaTypes,
     Sources,
 )
-from app.providers import anilist, hardcover, mal, musicbrainz
+from app.providers import anilist, apple_music, hardcover, mal, musicbrainz
 from app.providers import services as provider_services
 from app.providers.search_rank import normalize_search_text, rank_mixed_results
 from app.utils.color import build_accent_palette, get_poster_accent_from_url
@@ -143,6 +145,16 @@ BACKDROP_UNSUPPORTED_MESSAGE = (
     "Backdrop customization is only available for TMDB movies/TV shows/seasons/episodes, MAL anime, and IGDB games."
 )
 LOGO_UNSUPPORTED_MESSAGE = "Logo customization is only available for TMDB movies/TV shows and IGDB games."
+# Song pages are read-only: songs are tracked through their albums.
+SONG_CAPABILITIES = {
+    "trackable": False,
+    "rateable": False,
+    "reviewable": False,
+    "diary_loggable": False,
+    "likeable": False,
+    "listable": False,
+    "library_addable": False,
+}
 logger = logging.getLogger(__name__)
 
 
@@ -231,12 +243,23 @@ def _cache_candidate(cache_key, data):
 
 
 def _cache_music_data(cache_key, data):
+    """Cache music data; return why it wasn't cached, or None.
+
+    A page built from the saved Item while the provider fails, or one missing a part
+    the provider failed to answer for a moment, isn't kept: the full page comes back
+    once the provider answers, and a stale copy stays meanwhile.
+    """
+    if isinstance(data, dict):
+        for marker in (provider_services.ITEM_FALLBACK, provider_services.PARTIAL_PAGE):
+            if data.get(marker):
+                return marker
     cache.set(cache_key, data, MUSIC_CACHE_STALE_TTL)
     cache.set(
         f"{cache_key}:validation",
         {"validated_at": time.time()},
         MUSIC_CACHE_STALE_TTL,
     )
+    return None
 
 
 def _schedule_music_refresh(cache_key, task_name, *args):
@@ -300,12 +323,12 @@ def _refresh_music_cache(cache_key, fresh_ttl, fetch):
                 return {"outcome": "deduplicated"}
             if cache.get(cache_key) is not None and _cache_is_fresh(cache_key, fresh_ttl):
                 return {"outcome": "skipped_fresh"}
-        _cache_music_data(cache_key, fetch())
+        skipped = _cache_music_data(cache_key, fetch())
     except Exception as error:  # noqa: BLE001 - keep stale music data on refresh failures
         logger.warning("Music cache refresh failed type=%s", type(error).__name__)
         return {"outcome": "failed", "exception_type": type(error).__name__}
     else:
-        return {"outcome": "refreshed"}
+        return {"outcome": skipped or "refreshed"}
     finally:
         cache.delete(f"{cache_key}:refresh-scheduled")
         if acquired:
@@ -612,7 +635,12 @@ def search_media(*, media_type, query, page=1, source=None, request=None, user=N
             source=source,
         )
 
-    raw_results = data.get("results") or data.get("items") or []
+    # Cached pages keep the refs they were fetched with, so moved albums are fixed here.
+    raw_results = music_catalog.canonical_music_payloads(
+        data.get("results") or data.get("items") or [],
+        source=source,
+        media_type=media_type,
+    )
     return [
         media_summary_from_provider(
             item,
@@ -732,7 +760,9 @@ def search_all_media(*, media_types, query, request=None, user=None):
     if provider_metrics.get(music, {}).get("outcome") == "superseded":
         raise provider_services.SearchSuperseded
 
-    ranked = rank_mixed_results(query, candidates, limit=settings.PER_PAGE)
+    ranked = music_catalog.canonical_music_payloads(
+        rank_mixed_results(query, candidates, limit=settings.PER_PAGE),
+    )
     results = [
         media_summary_from_provider(
             item,
@@ -770,7 +800,7 @@ def search_people(*, query):
     started_at = time.monotonic()
     normalized_query = normalize_search_text(query)
     query_hash = hashlib.sha256(normalized_query.encode()).hexdigest()[:24]
-    sources = provider_services.SUPPORTED_PERSON_SOURCES
+    sources = provider_services.person_search_sources()
     executor = ThreadPoolExecutor(max_workers=len(sources))
     futures = {
         source: executor.submit(
@@ -927,11 +957,16 @@ def discover_media(
             DISCOVER_EMPTY_TTL if empty_mal_genre else DISCOVER_TTL,
         )
 
-    raw_results = data.get("results") or data.get("items") or []
-    return {
-        "count": data.get("total_results", len(raw_results)),
-        "page_size": data.get("per_page") or page_size or len(raw_results),
-        "results": [
+    raw_results = music_catalog.canonical_music_payloads(
+        data.get("results") or data.get("items") or [],
+        source=source,
+        media_type=media_type,
+    )
+    if media_type == MediaTypes.MUSIC.value:
+        # A genre page's Items and the viewer's state in a fixed number of queries.
+        results = music_summaries_from_provider(raw_results, source, request=request, user=user)
+    else:
+        results = [
             media_summary_from_provider(
                 item,
                 media_type=item.get("media_type", media_type),
@@ -940,7 +975,11 @@ def discover_media(
                 user=user,
             )
             for item in raw_results
-        ],
+        ]
+    return {
+        "count": data.get("total_results", len(raw_results)),
+        "page_size": data.get("per_page") or page_size or len(raw_results),
+        "results": results,
     }
 
 
@@ -989,12 +1028,69 @@ def _detail_cache_key(
 
 
 def _music_detail_metadata(*, source, media_id, include_music_enrichment):
+    # Album pages show an Apple Music album's related sections; other reads skip them.
     return provider_services.get_media_metadata(
         MediaTypes.MUSIC.value,
         media_id,
         source,
         include_music_enrichment=include_music_enrichment,
+        include_music_related=True,
     )
+
+
+def _cached_music_detail_metadata(*, source, media_id, include_music_enrichment):
+    """Return an album page's metadata, served stale while a worker refreshes it."""
+    cache_key = _detail_cache_key(
+        source=source,
+        media_type=MediaTypes.MUSIC.value,
+        media_id=media_id,
+        season_number=None,
+        episode_number=None,
+        include_music_enrichment=include_music_enrichment,
+    )
+    return _music_cache_data(
+        cache_key,
+        DETAIL_TTL,
+        lambda: _music_detail_metadata(
+            source=source,
+            media_id=media_id,
+            include_music_enrichment=include_music_enrichment,
+        ),
+        lambda: _schedule_music_refresh(
+            cache_key,
+            "refresh_music_detail",
+            source,
+            media_id,
+            include_music_enrichment,
+        ),
+    )
+
+
+def drop_music_detail_cache(source, media_id):
+    """Drop an album's cached detail pages, both stages, for the next read to build."""
+    keys = [
+        _detail_cache_key(
+            source=source,
+            media_type=MediaTypes.MUSIC.value,
+            media_id=media_id,
+            season_number=None,
+            episode_number=None,
+            include_music_enrichment=include_music_enrichment,
+        )
+        for include_music_enrichment in (False, True)
+    ]
+    cache.delete_many([*keys, *(f"{key}:validation" for key in keys)])
+
+
+def _music_page_id(source, media_id, metadata):
+    """Return the album ID a page answers for.
+
+    An Apple album's page belongs to its listing's identity, which can differ from
+    the ID asked for (a clean twin or an older upload).
+    """
+    if source == Sources.APPLE_MUSIC.value:
+        return str(metadata.get("media_id") or media_id)
+    return media_id
 
 
 def refresh_music_detail(*, source, media_id, include_music_enrichment):
@@ -1073,22 +1169,12 @@ def media_detail(
     )
 
     if media_type == MediaTypes.MUSIC.value:
-        metadata = _music_cache_data(
-            cache_key,
-            DETAIL_TTL,
-            lambda: _music_detail_metadata(
-                source=source,
-                media_id=media_id,
-                include_music_enrichment=include_music_enrichment,
-            ),
-            lambda: _schedule_music_refresh(
-                cache_key,
-                "refresh_music_detail",
-                source,
-                media_id,
-                include_music_enrichment,
-            ),
+        metadata = _cached_music_detail_metadata(
+            source=source,
+            media_id=media_id,
+            include_music_enrichment=include_music_enrichment,
         )
+        media_id = _music_page_id(source, media_id, metadata)
     else:
         metadata = cache.get(cache_key)
         if metadata is None:
@@ -1200,6 +1286,7 @@ def media_detail(
         source=source,
         request=request,
         user=user,
+        metadata=metadata,
     )
     completion = None
     if user and user.is_authenticated and media_type == MediaTypes.TV.value:
@@ -1280,7 +1367,8 @@ def _viewer_poster(user, item_id):
     """Return the viewer's own poster pick, whose accent tints their detail page."""
     if not user or not user.is_authenticated or not item_id:
         return None
-    return CustomPosterPreference.objects.filter(user=user, item_id=item_id).first()
+    preference = CustomPosterPreference.objects.filter(user=user, item_id=item_id).select_related("item").first()
+    return preference if preference and music_picks_apply(preference.item) else None
 
 
 def _persist_detail_series(metadata, *, source, media_type):
@@ -1764,8 +1852,22 @@ def _normalize_manga_relation(value, *, default):
     return normalized if normalized in allowed else default
 
 
-def music_recording_detail(*, release_group_mbid, recording_mbid, request=None, user=None):
+def music_recording_detail(
+    *,
+    release_group_mbid,
+    recording_mbid,
+    request=None,
+    user=None,
+    source=Sources.MUSICBRAINZ.value,
+):
     """Return read-only recording metadata within a representative album release."""
+    if source == Sources.APPLE_MUSIC.value:
+        return _apple_music_song_detail(
+            album_id=str(release_group_mbid),
+            song_id=str(recording_mbid),
+            request=request,
+            user=user,
+        )
     release_group_mbid = str(release_group_mbid)
     recording_mbid = str(recording_mbid)
     album_metadata = provider_services.get_media_metadata(
@@ -1848,15 +1950,37 @@ def music_recording_detail(*, release_group_mbid, recording_mbid, request=None, 
             "track": context_track,
         },
         "image_url": parent_album["image_url"],
-        "capabilities": {
-            "trackable": False,
-            "rateable": False,
-            "reviewable": False,
-            "diary_loggable": False,
-            "likeable": False,
-            "listable": False,
-            "library_addable": False,
+        "capabilities": dict(SONG_CAPABILITIES),
+    }
+
+
+def _apple_music_song_detail(*, album_id, song_id, request=None, user=None):
+    """Return an Apple Music song page, built from its album's cached page."""
+    album_metadata = _cached_music_detail_metadata(
+        source=Sources.APPLE_MUSIC.value,
+        media_id=album_id,
+        include_music_enrichment=True,
+    )
+    song = apple_music.recording(album_metadata, song_id)
+    if song is None:
+        raise Http404
+    parent_album = media_summary_from_provider(
+        {
+            **album_metadata,
+            "source": Sources.APPLE_MUSIC.value,
+            "media_type": MediaTypes.MUSIC.value,
         },
+        MediaTypes.MUSIC.value,
+        Sources.APPLE_MUSIC.value,
+        request=request,
+        user=user,
+    )
+    return {
+        **song,
+        "parent_album": parent_album,
+        "albums": [parent_album],
+        "image_url": parent_album["image_url"],
+        "capabilities": dict(SONG_CAPABILITIES),
     }
 
 
@@ -2255,6 +2379,8 @@ def person_detail(
         for credit in person.get("credits") or []
     ]
     raw_credits = _curate_person_credits(source, person_id, raw_credits)
+    # Before any Item is looked up or made, so albums that moved show as logged.
+    raw_credits = music_catalog.canonical_music_payloads(raw_credits)
     rating_source = person_rating_source(raw_credits, params)
     items = (
         _materialize_person_credits(raw_credits, rating_source)
@@ -4288,7 +4414,7 @@ def resolved_backdrop_urls(
 
 
 def _backdrop_preference_url(user, item, request=None):
-    if not user or not user.is_authenticated or item is None:
+    if not user or not user.is_authenticated or item is None or not music_picks_apply(item):
         return None
     preference = CustomBackdropPreference.objects.filter(user=user, item=item).first()
     return absolute_url(request, preference.custom_image_url) if preference else None
@@ -4435,7 +4561,7 @@ def _compact_decimal(value):
     return text or "0"
 
 
-def _stored_external_ratings(item, metadata):
+def _stored_external_ratings(item, metadata):  # noqa: C901
     ratings = {}
     if metadata.get("score") is not None and rating_source_is_exposed(item.source):
         ratings[item.source] = {
@@ -4478,6 +4604,11 @@ def _stored_external_ratings(item, metadata):
         if not rating_source_is_exposed(rating.rating_source):
             continue
         if not _rating_shown(rating.rating_source, item.media_type):
+            continue
+        # A rating kept from the Item's earlier source isn't shown: a MusicBrainz
+        # album that is now an Apple Music one keeps its rows for a move back.
+        definition = RATING_SOURCES.get(rating.rating_source)
+        if definition is not None and item.source not in definition["item_sources"]:
             continue
         if rating.rating_source == item.source and metadata.get("score") is not None:
             continue

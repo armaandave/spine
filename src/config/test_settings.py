@@ -24,6 +24,8 @@ LISTENBRAINZ_TOKEN = ""
 APPLE_MUSIC_TEAM_ID = ""
 APPLE_MUSIC_KEY_ID = ""
 APPLE_MUSIC_PRIVATE_KEY = ""
+# Tests follow the code's default catalog, never .env.
+MUSIC_CATALOG_SOURCE = MUSIC_CATALOG_DEFAULT  # noqa: F405
 
 # Steam API key for testing
 STEAM_API_KEY = "test_steam_api_key"

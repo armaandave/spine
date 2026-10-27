@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django_celery_beat.schedulers import ModelEntry
 
+from app.providers import apple_music, services
 from app.signals import create_task_result_on_publish
 from lists.featured import dispatch, order, registry
 from lists.featured.dispatch import backoff, due, plan
@@ -281,6 +282,48 @@ class DispatchTaskTests(TestCase):
         FeaturedListSync.objects.create(key="gone", lease_until=NOW)
         self.assertEqual(dispatch.sync_featured_list("gone")["status"], "unknown")
         self.assertIsNone(FeaturedListSync.objects.get().lease_until)
+
+
+class MusicPauseTests(TestCase):
+    """While the music data move runs, music lists wait and every other list syncs."""
+
+    def setUp(self):
+        dispatch.resume_music_lists()
+        self.addCleanup(dispatch.resume_music_lists)
+        self.music = make_definition(key="music-list", media_types=("music",), position=101)
+        self.movies = make_definition(key="movie-list", position=102)
+
+    def queue(self):
+        with (
+            registry.override_definitions([self.music, self.movies]),
+            patch.object(dispatch.sync_featured_list, "apply_async"),
+        ):
+            return dispatch.dispatch(now=NOW)
+
+    def test_paused_music_lists_wait_and_others_go_first(self):
+        dispatch.pause_music_lists()
+        self.assertTrue(dispatch.music_lists_paused())
+        self.assertEqual(self.queue(), ["movie-list"])
+
+        FeaturedListSync.objects.update(lease_until=None)
+        dispatch.resume_music_lists()
+        self.assertEqual(self.queue(), ["music-list"])
+
+    def test_a_music_sync_queued_before_the_pause_gives_back_its_lease(self):
+        lease = NOW + timedelta(minutes=12)
+        FeaturedListSync.objects.create(key="music-list", lease_until=lease)
+        dispatch.pause_music_lists()
+        with registry.override_definitions([self.music]), patch("lists.featured.engine.run") as run:
+            result = dispatch.sync_featured_list("music-list", lease_until=lease.isoformat())
+        run.assert_not_called()
+        self.assertEqual(result["status"], "paused")
+        self.assertIsNone(FeaturedListSync.objects.get().lease_until)
+
+    def test_the_pause_ends_on_its_own(self):
+        dispatch.pause_music_lists(timedelta(seconds=30))
+        ttl = services.redis_db.ttl(apple_music.redis_key(dispatch.MUSIC_PAUSE_KEY))
+        self.assertTrue(0 < ttl <= 30)
+        self.assertEqual(dispatch.MUSIC_PAUSE, timedelta(hours=6))
 
 
 class SchedulingConfigTests(SimpleTestCase):

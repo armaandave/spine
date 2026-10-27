@@ -2,11 +2,13 @@ from unittest.mock import patch
 
 import requests
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from app.models import Item, MediaTypes, Music, Sources, Status
 from app.providers import services
+from app.tests.providers.test_apple_music import AppleMusicTestCase, apple_item, fixture, page
 from events.calendar.helpers import date_parser
 from events.calendar.main import fetch_releases, process_items
 from events.calendar.other import process_other
@@ -168,3 +170,29 @@ class MusicReleaseEventTests(TestCase):
         self.assertNotIn("track", notification.lower())
         self.assertNotIn("episode", notification.lower())
         self.assertNotIn("watch", notification.lower())
+
+
+@override_settings(TIME_ZONE="America/New_York")
+class AppleMusicReleaseEventTests(AppleMusicTestCase):
+    def test_a_pre_order_gets_its_release_event(self):
+        item = apple_item("6803287133", title="Weathered (Deluxe Edition / Remastered 2026)")
+        self.apple((200, fixture("page_weathered_preorder.json")))
+        events = []
+
+        process_other(item, events)
+
+        self.assertEqual(len(events), 1)
+        self.assertIsNone(events[0].content_number)
+        self.assertEqual(events[0].datetime, date_parser("2026-11-20"))
+
+    def test_partial_apple_dates_use_todays_handling(self):
+        item = apple_item("1657869377")
+        for release_date, expected in (("2010", "2010-01-01"), ("1994-12", "1994-12-01")):
+            with self.subTest(release_date=release_date):
+                cache.clear()
+                self.apple((200, page("page_sos.json", releaseDate=release_date)))
+                events = []
+
+                process_other(item, events)
+
+                self.assertEqual([event.datetime for event in events], [date_parser(expected)])

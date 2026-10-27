@@ -51,7 +51,7 @@ class Entry:
     year: int | None = None
     creator: str = ""                # director, author, artist, developer
     media_type: str | None = None    # when the source knows it
-    ids: Mapping[str, str] = {}      # tmdb, imdb, wikidata, steam, igdb, mal, anilist, mbid_rg, olid, hardcover, goodreads, ref
+    ids: Mapping[str, str] = {}      # tmdb, imdb, wikidata, steam, igdb, mal, anilist, mbid_rg, apple_album, olid, hardcover, goodreads, ref
     isbns: tuple[str, ...] = ()
     image: str = ""                  # poster hint, so Items can be created without a provider call
     note: str = ""                   # "2027" (award histories), "Winner · Best Picture", "▲2"
@@ -75,7 +75,7 @@ A ref names a Spine item exactly: `<source>:<media_type>:<media_id>`, using the 
 - Books: `hardcover:book:<id>`, `openlibrary:book:OL…M` (Spine stores Open Library *editions*)
 - Anime and manga: `mal:anime:5114`, `mal:manga:2`, `mangaupdates:manga:<id>`
 - Comics: `comicvine:comic:<id>`
-- Music: `musicbrainz:music:<release-group-mbid>`
+- Music: `musicbrainz:music:<release-group-mbid>`, `apple_music:music:<album-id>` (both resolve; see `docs/music/apple-music-catalog.md`)
 
 A ref of `-` in an override means "skip this entry".
 
@@ -145,7 +145,7 @@ The existing lists keep their identities: `("mdblist", "155837")` and `("nyt", <
 **Resolver**, in this order:
 1. An override from `overrides/*.csv`.
 2. An entry `ref`.
-3. A direct provider ID: `tmdb`; `imdb` through `tmdb.find`; `steam` through `igdb.external_game`; `mal`, `igdb`, `hardcover` and `mbid_rg` directly.
+3. A direct provider ID: `tmdb`; `imdb` through `tmdb.find`; `steam` through `igdb.external_game`; `mal`, `igdb`, `hardcover`, `apple_album` and `mbid_rg` directly.
 4. ISBNs: Hardcover, then Open Library, in today's `_resolve_book` order.
 5. A strict title search per media type: exact normalized title, year ±1, creator when available. No fuzzy guessing.
 

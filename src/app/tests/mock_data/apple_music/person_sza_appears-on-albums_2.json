@@ -1,0 +1,120 @@
+{
+  "data": [
+    {
+      "id": "1444618662",
+      "type": "albums",
+      "attributes": {
+        "name": "What Lovers Do (feat. SZA) - Single",
+        "artistName": "Maroon 5",
+        "url": "https://music.apple.com/us/album/what-lovers-do-feat-sza-single/1444618662",
+        "playParams": {
+          "id": "1444618662",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-08-30",
+        "trackCount": 1,
+        "upc": "00602557960419",
+        "genreNames": [
+          "Pop",
+          "Music"
+        ],
+        "recordLabel": "Interscope Records*",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f9/02/e7/f902e79b-3e31-ceca-7a4c-de016c966d0c/17UM1IM23795.rgb.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1848781347",
+      "type": "albums",
+      "attributes": {
+        "name": "What Is Love (feat. SZA) - Single",
+        "artistName": "Kingdom",
+        "url": "https://music.apple.com/us/album/what-is-love-feat-sza-single/1848781347",
+        "playParams": {
+          "id": "1848781347",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2017-02-14",
+        "trackCount": 1,
+        "upc": "5060384611983",
+        "genreNames": [
+          "Electronic",
+          "Music"
+        ],
+        "recordLabel": "Fade to Mind",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/12/4b/86/124b8606-e384-dae1-587d-a6c721ae7175/918181.jpg/{w}x{h}bb.jpg",
+          "width": 3000,
+          "height": 3000
+        }
+      }
+    },
+    {
+      "id": "1165440919",
+      "type": "albums",
+      "attributes": {
+        "name": "Lies (feat. SZA) [Palmistry Remix] - Single",
+        "artistName": "Felix Snow",
+        "url": "https://music.apple.com/us/album/lies-feat-sza-palmistry-remix-single/1165440919",
+        "playParams": {
+          "id": "1165440919",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-10-21",
+        "trackCount": 1,
+        "upc": "075679903341",
+        "genreNames": [
+          "Electronic",
+          "Music"
+        ],
+        "recordLabel": "EFFESS",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/ae/32/5e/ae325edd-23b4-4fa2-acf1-97d57b502332/075679903341.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      }
+    },
+    {
+      "id": "1141023142",
+      "type": "albums",
+      "attributes": {
+        "name": "Lies (feat. SZA) - Single",
+        "artistName": "Felix Snow",
+        "url": "https://music.apple.com/us/album/lies-feat-sza-single/1141023142",
+        "playParams": {
+          "id": "1141023142",
+          "kind": "album"
+        },
+        "isComplete": true,
+        "releaseDate": "2016-08-12",
+        "trackCount": 1,
+        "upc": "075679905994",
+        "genreNames": [
+          "Electronic",
+          "Music"
+        ],
+        "recordLabel": "EFFESS",
+        "isSingle": true,
+        "isCompilation": false,
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/93/bc/b6/93bcb6dd-37a0-34dd-bc81-fe1fdf3b70ce/075679905994.jpg/{w}x{h}bb.jpg",
+          "width": 1425,
+          "height": 1425
+        }
+      }
+    }
+  ]
+}

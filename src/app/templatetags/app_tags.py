@@ -632,7 +632,7 @@ def get_user_poster_image(item, user):
     if not all([source, media_type, media_id]):
         return default_image
     
-    from app.curation import curated_image_url
+    from app.curation import curated_image_url, music_picks_apply
     from app.models import CustomPosterPreference, Item
     try:
         # First try to get the Item instance
@@ -651,9 +651,11 @@ def get_user_poster_image(item, user):
         if db_item is None:
             return default_image
         # Then get the custom preference, else an admin's pick, else the saved poster
+        saved = db_item.image if db_item.image and db_item.image != settings.IMG_NONE else None
+        if not music_picks_apply(db_item):
+            return saved or default_image
         pref = CustomPosterPreference.objects.filter(user=user, item=db_item).first()
         if pref is None:
-            saved = db_item.image if db_item.image and db_item.image != settings.IMG_NONE else None
             return curated_image_url(CustomPosterPreference, db_item) or saved or default_image
         return pref.custom_image_url
     except AttributeError:
