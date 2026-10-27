@@ -15,7 +15,9 @@ erases a stored value:
   or under "details"), then a 4-digit year inside a text date such as "March 2004".
 - Runtime: "runtime" (top level or under "details") in minutes, as a number or text
   such as "24 min", "1 hr 30 min", "1h 30m" or "1.5 hours". For music it is the album
-  length.
+  length; an album payload without "runtime" gets it from its tracklist
+  (music.representative_release.media[].tracks[].length_ms) when every track has a
+  length, whichever catalog (MusicBrainz or Apple Music) the payload came from.
 - Facets, each a list of names or {"name": ...} dicts (top level or under "details"):
   "genres", "languages" (spoken languages) and "themes".
 - "original_language" (top level only): the title's original language as one English
@@ -65,6 +67,10 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
     """
     if item is None or not metadata:
         return False
+    if item.media_type == MediaTypes.MUSIC.value and _runtime_minutes(metadata) is None:
+        runtime = album_runtime_minutes((metadata.get("music") or {}).get("representative_release"))
+        if runtime is not None:
+            metadata = {**metadata, "runtime": runtime}
     update_item_filter_metadata(item, metadata)
     if persist_series:
         _persist_series(item, metadata)
@@ -77,6 +83,24 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
         item.metadata_version = version
         item.save(update_fields=["metadata_version"])
     return True
+
+
+def album_runtime_minutes(representative_release):
+    """Return the album length in minutes, or None unless every track has a length."""
+    tracks = [
+        track
+        for medium in (representative_release or {}).get("media") or []
+        for track in medium.get("tracks") or []
+    ]
+    if not tracks:
+        return None
+    lengths = [
+        track.get("length_ms") or (track.get("recording") or {}).get("length_ms")
+        for track in tracks
+    ]
+    if not all(isinstance(length, int) and length > 0 for length in lengths):
+        return None
+    return max(1, round(sum(lengths) / 60000))
 
 
 def _persist_series(item, metadata):

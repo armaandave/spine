@@ -142,7 +142,7 @@ class Command(BaseCommand):
         self.stdout.write(f"New series members, roughly: {report['new_series_members']}")
         self.stdout.write(
             f"Estimated time: about {report['minutes']} min at the fill's caps (TV is per show, "
-            "8 seasons a call; music runs last at one MusicBrainz call every 3 s).",
+            "8 seasons a call; music runs last at one MusicBrainz call every 3 s, one Apple Music album a second).",
         )
         self.stdout.write(f"Chain: {STATUS_TEXT[report['status']]}.")
         self.stdout.write(

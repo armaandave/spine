@@ -98,19 +98,60 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertFalse(short.contains { $0.isEarlier }, "A span that fits has no Before bar")
     }
 
+    func testRatingsModeLeavesYearsWithoutRatingsEmpty() {
+        let points = StatsReleaseYearsChartData.yearSeries(
+            [year(2020, titles: 3, rated: 0), year(2021, titles: 1, rated: 1, average: "4.5")],
+            currentYear: 2021
+        )
+
+        XCTAssertNil(points[0].value(for: .ratings))
+        XCTAssertEqual(points[1].value(for: .ratings), 4.5)
+        XCTAssertEqual(points[0].value(for: .titles), 3)
+
+        let ratings = StatsReleaseYearsChartData.parts(points, mode: .ratings, stacked: true)
+        XCTAssertEqual(ratings.map(\.label), ["2021"], "Only years with ratings get a bar")
+        XCTAssertEqual(ratings.map(\.mediaType), [nil], "Ratings never stack")
+        XCTAssertEqual(ratings.map(\.value), [4.5])
+    }
+
     func testTitlesStackByTypeOnGlobalOnly() {
         let points = StatsReleaseYearsChartData.yearSeries(
             [year(2024, titles: 3, logs: 4, byType: ["tv": 1, "movie": 2])],
             currentYear: 2024
         )
 
-        let stacked = StatsReleaseYearsChartData.parts(points, stacked: true)
+        let stacked = StatsReleaseYearsChartData.parts(points, mode: .titles, stacked: true)
         XCTAssertEqual(stacked.map(\.mediaType), ["movie", "tv"])
         XCTAssertEqual(stacked.map(\.value), [2, 1])
 
-        let typeTab = StatsReleaseYearsChartData.parts(points, stacked: false)
+        let logs = StatsReleaseYearsChartData.parts(points, mode: .logs, stacked: true)
+        XCTAssertEqual(logs.map(\.mediaType), [nil])
+        XCTAssertEqual(logs.map(\.value), [4])
+
+        let typeTab = StatsReleaseYearsChartData.parts(points, mode: .titles, stacked: false)
         XCTAssertEqual(typeTab.map(\.mediaType), [nil])
         XCTAssertEqual(typeTab.map(\.value), [3])
+    }
+
+    func testEachModeNamesItsOwnPeak() {
+        let points = StatsReleaseYearsChartData.yearSeries(
+            [
+                year(2010, titles: 5, logs: 5, rated: 2, average: "3.0"),
+                year(2015, titles: 2, logs: 9, rated: 1, average: "4.5"),
+                year(2018, titles: 1, logs: 1),
+            ],
+            currentYear: 2018
+        )
+
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .titles), "Most titles from 2010")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .logs), "Most logs from 2015")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .ratings), "Highest rated: 2015")
+
+        let unrated = StatsReleaseYearsChartData.yearSeries([year(2018, titles: 2)], currentYear: 2018)
+        XCTAssertNil(StatsReleaseYearsChartData.summaryTitle(unrated, mode: .ratings))
+        XCTAssertEqual(StatsReleaseYearsChartData.emptyTitle(mode: .ratings), "Nothing rated yet")
+        XCTAssertEqual(StatsReleaseYearsChartData.emptyTitle(mode: .titles), "No release years yet")
+        XCTAssertEqual(StatsReleaseMode.allCases.map(\.title), ["Titles", "Ratings", "Logs"])
     }
 
     func testAxisLabelsStepOnRoundYears() {

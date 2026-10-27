@@ -334,6 +334,32 @@ class StoreItemMetadataTests(MetadataTestCase):
         self.assertEqual(item.metadata_version, CURRENT_METADATA_VERSION[MediaTypes.MUSIC.value])
         self.assertEqual(item.runtime_minutes, 64)
 
+    def test_an_album_payload_gets_its_length_from_the_tracklist(self):
+        # The shape both the MusicBrainz and the Apple Music album payloads share.
+        item = self.item(media_type=MediaTypes.MUSIC.value, source=Sources.APPLE_MUSIC.value)
+        tracks = [{"length_ms": 240_000}, {"recording": {"length_ms": 180_000}}]
+        payload = {
+            "release_date": "2007-04-17",
+            "music": {"representative_release": {"media": [{"tracks": tracks}]}},
+        }
+
+        self.assertTrue(store_item_metadata(item, payload))
+
+        item.refresh_from_db()
+        self.assertEqual(item.runtime_minutes, 7)
+        self.assertEqual(item.metadata_version, CURRENT_METADATA_VERSION[MediaTypes.MUSIC.value])
+
+    def test_a_tracklist_with_a_missing_length_gives_no_album_length(self):
+        item = self.item(media_type=MediaTypes.MUSIC.value, source=Sources.APPLE_MUSIC.value)
+        tracks = [{"length_ms": 240_000}, {"length_ms": None}]
+        payload = {"music": {"representative_release": {"media": [{"tracks": tracks}]}}}
+
+        self.assertFalse(store_item_metadata(item, payload))
+
+        item.refresh_from_db()
+        self.assertIsNone(item.runtime_minutes)
+        self.assertEqual(item.metadata_version, 0)
+
     def test_storing_current_unchanged_metadata_writes_nothing(self):
         item = self.item()
         metadata = {"release_date": "1999-10-15", "genres": ["Drama"]}
@@ -449,3 +475,15 @@ class EnsureFilterMetadataTests(MetadataTestCase):
         item.refresh_from_db()
         self.assertEqual(self.facets(item, GENRE), {"industrial"})
         self.assertEqual(item.metadata_version, 0)
+
+    def test_apple_music_albums_are_left_to_the_fill_never_sent_to_musicbrainz(self):
+        apple = self.item(media_type=MediaTypes.MUSIC.value, source=Sources.APPLE_MUSIC.value)
+
+        with (
+            patch("app.providers.services.get_media_metadata", side_effect=AssertionError("provider called")),
+            patch("app.providers.musicbrainz.music", side_effect=AssertionError("MusicBrainz called")),
+        ):
+            ensure_filter_metadata(Item.objects.filter(id=apple.id), {"genre": ["industrial"]}, item_path="")
+
+        apple.refresh_from_db()
+        self.assertEqual(apple.metadata_version, 0)

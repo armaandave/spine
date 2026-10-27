@@ -847,3 +847,132 @@ class TrackingRowsTests(FillTestCase):
         TV.objects.bulk_create([TV(item=show, user=self.user)])
 
         self.assertIn(show, metadata_fill.pending_items(user=self.user))
+
+
+def apple_album(*, durations=(240_000, 180_000), release_date="2007-04-17", genres=("Rock", "Music")):
+    """An Apple Music album resource with its tracks, as apple_music.album returns it."""
+    return {
+        "id": "1440826538",
+        "type": "albums",
+        "attributes": {"name": "Year Zero", "releaseDate": release_date, "genreNames": list(genres)},
+        "relationships": {
+            "tracks": {"data": [{"type": "songs", "attributes": {"durationInMillis": ms}} for ms in durations]},
+        },
+    }
+
+
+class AppleMusicTests(FillTestCase):
+    """Apple Music albums are filled from Apple's catalog, never from MusicBrainz."""
+
+    def setUp(self):
+        super().setUp()
+        self.no_provider = self.patch_metadata(AssertionError("Apple Music Items never use get_media_metadata"))
+        patcher = mock.patch.object(metadata_fill.apple_music, "is_configured", return_value=True)
+        self.configured = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def patch_album(self, side_effect):
+        patcher = mock.patch.object(metadata_fill.apple_music, "album", side_effect=side_effect)
+        album = patcher.start()
+        self.addCleanup(patcher.stop)
+        return album
+
+    def apple_item(self, **fields):
+        return self.item(MediaTypes.MUSIC.value, Sources.APPLE_MUSIC.value, media_id="1440826538", **fields)
+
+    def test_an_apple_album_is_filled_from_one_background_call(self):
+        album = self.apple_item()
+        fetch = self.patch_album(lambda *args, **kwargs: apple_album())
+
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_called_once_with("1440826538", background=True)
+        self.no_provider.assert_not_called()
+        self.assertEqual(totals["filled"], 1)
+        self.refresh(album)
+        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.runtime_minutes, 7)
+        self.assertEqual(album.release_date.isoformat(), "2007-04-17")
+        # Apple's catch-all "Music" is left out.
+        self.assertEqual(
+            set(album.filter_facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE).values_list("value", flat=True)),
+            {"Rock"},
+        )
+
+    def test_a_moved_album_keeps_its_musicbrainz_date_and_genres(self):
+        album = self.apple_item(release_date=datetime(1997, 5, 21, tzinfo=UTC).date(), release_year=1997)
+        self.genre(album, "industrial")
+        self.patch_album(lambda *args, **kwargs: apple_album(release_date="2017-01-01"))
+
+        metadata_fill.fill_in_process()
+
+        self.refresh(album)
+        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.runtime_minutes, 7)
+        self.assertEqual(album.release_date.isoformat(), "1997-05-21")
+        self.assertEqual(
+            set(album.filter_facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE).values_list("value", flat=True)),
+            {"industrial"},
+        )
+
+    def test_an_apple_album_with_what_apple_gives_is_only_stamped(self):
+        album = self.apple_item(release_year=2007, runtime_minutes=64)
+        self.genre(album, "industrial")
+        fetch = self.patch_album(AssertionError("no call for a stamp"))
+
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_not_called()
+        self.assertEqual(totals["stamp_only"], 1)
+        self.refresh(album)
+        self.assertEqual(album.metadata_version, CURRENT)
+
+    def test_a_track_without_a_length_leaves_the_album_unstamped(self):
+        album = self.apple_item()
+        self.patch_album(lambda *args, **kwargs: apple_album(durations=(240_000, None)))
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual(totals["unstamped"], 1)
+        self.refresh(album)
+        self.assertEqual(album.metadata_version, 0)
+        self.assertIsNone(album.runtime_minutes)
+        self.assertIsNotNone(album.metadata_attempted_at)
+
+    def test_an_album_apple_no_longer_lists_is_stamped(self):
+        album = self.apple_item()
+        self.patch_album(provider_error(404, Sources.APPLE_MUSIC.value))
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual(totals["not_found"], 1)
+        self.refresh(album)
+        self.assertEqual(album.metadata_version, CURRENT)
+
+    def test_without_the_key_apple_waits_unmarked_and_musicbrainz_carries_on(self):
+        self.configured.return_value = False
+        apple = self.apple_item()
+        musicbrainz = self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value)
+        fetch = self.patch_album(AssertionError("no Apple call without the key"))
+        self.no_provider.side_effect = lambda *args, **kwargs: {"release_date": "1997-05-21", "runtime": 53}
+
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_not_called()
+        self.no_provider.assert_called_once_with(MediaTypes.MUSIC.value, musicbrainz.media_id, Sources.MUSICBRAINZ.value)
+        self.assertEqual(totals["skipped_blocked"], 1)
+        self.refresh(apple, musicbrainz)
+        self.assertEqual((apple.metadata_version, apple.metadata_attempted_at), (0, None))
+        self.assertEqual(musicbrainz.metadata_version, CURRENT)
+
+    def test_dry_run_counts_one_apple_call_per_album(self):
+        self.apple_item()
+        stamped = self.item(MediaTypes.MUSIC.value, Sources.APPLE_MUSIC.value, release_year=2007, runtime_minutes=64)
+        self.genre(stamped, "Rock")
+
+        report = metadata_fill.estimate()
+
+        self.assertEqual(
+            [(row["provider"], row["pending"], row["stamp_only"], row["calls"]) for row in report["rows"]],
+            [(Sources.APPLE_MUSIC.value, 2, 1, 1)],
+        )

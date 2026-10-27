@@ -11,9 +11,14 @@ The chain (app.tasks.fill_item_metadata) walks pending Items by id in chunks of 
 - TV is filled by show: one tv_with_seasons call covers 8 seasons and fills the show,
   its seasons, its episodes and the stored episode lists.
 - Hardcover books are fetched about 50 at a time (hardcover.book_metadata_batch).
-- MusicBrainz, Open Library, ComicVine and IGDB Items that already have what their
-  provider gives (year, genres, a runtime where the type has one, themes for games) are
-  only stamped, without a call.
+- MusicBrainz, Apple Music, Open Library, ComicVine and IGDB Items that already have
+  what their provider gives (year, genres, a runtime where the type has one, themes for
+  games) are only stamped, without a call.
+- Apple Music albums never go to MusicBrainz: one call on Apple's background session
+  (apple_music.album with its tracks) gives the album length, and the release date and
+  Apple's broad genres only where the Item has none, so an album moved from MusicBrainz
+  keeps its first-release date and detailed genres. Without the Apple Music key the
+  provider is stopped for the run and nothing is marked.
 - A 404 or 410, NotImplementedError, TypeError, ValueError or KeyError from the provider
   stamps the Item: asking again would give the same answer. The 10th such failure in a
   row (with nothing stored in between) stops the provider instead: that looks like our
@@ -68,7 +73,7 @@ from app.models import (
     MediaTypes,
     Sources,
 )
-from app.providers import quota, services
+from app.providers import apple_music, quota, services
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +94,13 @@ CAPS = {
     Sources.OPENLIBRARY.value: (10, 60),
     Sources.HARDCOVER.value: (20, 60),
     Sources.COMICVINE.value: (60, 60 * 60),
+    # Half of Apple's background bucket (2 per second), so its other tasks keep room.
+    Sources.APPLE_MUSIC.value: (1, 1),
 }
 MUSICBRAINZ_SECONDS_PER_CALL = 3
 # Rough calls per fetch: a TMDB film and its collection, Open Library's work, edition
-# and authors, an album's release, recordings and covers. Hardcover is per batch of 50,
-# TV per 8 seasons of a show.
+# and authors, an album's release, recordings and covers, an Apple album with its
+# tracks. Hardcover is per batch of 50, TV per 8 seasons of a show.
 FETCH_CALLS = {
     Sources.TMDB.value: 2,
     Sources.MAL.value: 1,
@@ -103,6 +110,7 @@ FETCH_CALLS = {
     Sources.OPENLIBRARY.value: 4,
     Sources.COMICVINE.value: 1,
     Sources.MUSICBRAINZ.value: 5,
+    Sources.APPLE_MUSIC.value: 1,
 }
 
 TV_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
@@ -121,6 +129,7 @@ TRACKED_TYPES = (
 # Providers expensive enough that an Item with what they give is only stamped.
 STAMP_ONLY_PROVIDERS = {
     Sources.MUSICBRAINZ.value,
+    Sources.APPLE_MUSIC.value,
     Sources.OPENLIBRARY.value,
     Sources.COMICVINE.value,
     Sources.IGDB.value,
@@ -491,6 +500,11 @@ def _process(run, item):
         _stamp([item])
         run.done([item], "stamp_only")
         return True
+    if provider == Sources.APPLE_MUSIC.value and not apple_music.is_configured():
+        # Not the Items' fault: nothing is marked, and the next run asks again.
+        run.blocked[provider] = "Apple Music isn't configured"
+        run.counts["skipped_blocked"] += 1
+        return True
     if provider == Sources.MUSICBRAINZ.value:
         wait = _musicbrainz_wait()
         if wait > 0:
@@ -508,7 +522,10 @@ def _process(run, item):
 def _fill_one(run, item):
     started = _now()
     try:
-        metadata = services.get_media_metadata(item.media_type, item.media_id, item.source)
+        if item.source == Sources.APPLE_MUSIC.value:
+            metadata = _apple_music_metadata(item)
+        else:
+            metadata = services.get_media_metadata(item.media_type, item.media_id, item.source)
     except Exception as error:  # noqa: BLE001 - classified
         run.failed(item.source, [item], error)
     else:
@@ -516,6 +533,29 @@ def _fill_one(run, item):
     finally:
         if item.source == Sources.MUSICBRAINZ.value:
             _musicbrainz_done(started)
+
+
+def _apple_music_metadata(item):
+    """Return an Apple Music album's metadata from one background catalog call.
+
+    The album length comes from its tracks (only when every track has a length). The
+    release date and Apple's genres (minus the catch-all "Music") only fill what the
+    Item lacks. Music genres stay outside the genre groups (genre_groups).
+    """
+    album = apple_music.album(item.media_id, background=True)
+    attributes = album.get("attributes") or {}
+    tracks = ((album.get("relationships") or {}).get("tracks") or {}).get("data") or []
+    lengths = [(track.get("attributes") or {}).get("durationInMillis") for track in tracks]
+    metadata = {}
+    if lengths and all(isinstance(length, int) and length > 0 for length in lengths):
+        metadata["runtime"] = max(1, round(sum(lengths) / 60000))
+    if item.release_date is None and attributes.get("releaseDate"):
+        metadata["release_date"] = attributes["releaseDate"]
+    if not item.filter_facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE).exists():
+        genres = [name for name in attributes.get("genreNames") or [] if name != "Music"]
+        if genres:
+            metadata["genres"] = genres
+    return metadata
 
 
 def _flush_hardcover(run):

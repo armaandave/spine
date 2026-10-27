@@ -36,7 +36,14 @@ from rest_framework.exceptions import ValidationError
 
 from app import exposure, user_calendar
 from app.external_ratings import RATING_SOURCES, rating_source_is_exposed
-from app.models import ExternalRating, Item, ItemFilterFacet, MediaTypes, Status
+from app.models import (
+    ExternalRating,
+    Item,
+    ItemFilterFacet,
+    MediaTypes,
+    Sources,
+    Status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +230,13 @@ def ensure_filter_metadata(queryset, params, *, item_path="item__", force=False,
     from app.providers import services as provider_services
 
     item_ids = queryset.values_list(f"{item_path}id", flat=True)
-    candidates = Item.objects.filter(id__in=item_ids).prefetch_related("filter_facets")[:limit]
+    # Apple Music albums are filled by the paced metadata fill (app.metadata_fill), on
+    # Apple's background session; here they would fall through to MusicBrainz.
+    candidates = (
+        Item.objects.filter(id__in=item_ids)
+        .exclude(source=Sources.APPLE_MUSIC.value)
+        .prefetch_related("filter_facets")[:limit]
+    )
     for item in candidates:
         if is_metadata_current(item):
             continue

@@ -2,8 +2,9 @@ import Charts
 import SwiftUI
 
 // Release years (STAT-209): one fixed-width chart from the first year with titles to this year,
-// never scrolling sideways. Years or decades (folded here, on the phone); bars count titles,
-// stacked by type on Global. Scrubbing picks a year; "Show logs" opens the diary.
+// never scrolling sideways. Years or decades (folded here, on the phone), and Titles (stacked by
+// type on Global), Ratings (average stars, only years with ratings) or Logs, as Letterboxd's
+// Films / Ratings / Diary. Scrubbing picks a year; "Show logs" opens the diary.
 
 enum StatsReleaseGrouping: String, CaseIterable, Identifiable, Hashable {
     case years
@@ -11,6 +12,22 @@ enum StatsReleaseGrouping: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
     var title: String { self == .years ? "Years" : "Decades" }
+}
+
+enum StatsReleaseMode: String, CaseIterable, Identifiable, Hashable {
+    case titles
+    case ratings
+    case logs
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .titles: "Titles"
+        case .ratings: "Ratings"
+        case .logs: "Logs"
+        }
+    }
 }
 
 /// The Release years section's rows. `onDrillDown` is nil on someone else's stats; it opens a
@@ -85,6 +102,15 @@ struct StatsReleasePoint: Identifiable, Hashable {
         if isEarlier { return "Before \(end + 1)" }
         return isDecade ? "\(start)s" : String(start)
     }
+
+    /// The bar's height in a mode: nil for Ratings when nothing in it is rated.
+    func value(for mode: StatsReleaseMode) -> Double? {
+        switch mode {
+        case .titles: Double(titles)
+        case .logs: Double(logs)
+        case .ratings: rated > 0 ? averageStars : nil
+        }
+    }
 }
 
 /// One stacked part of a bar.
@@ -135,15 +161,15 @@ enum StatsReleaseYearsChartData {
         grouping == .years ? yearSeries(rows, currentYear: currentYear) : decadeSeries(rows, currentYear: currentYear)
     }
 
-    /// The bars' parts: titles, stacked by type when `stacked`.
-    static func parts(_ points: [StatsReleasePoint], stacked: Bool) -> [StatsReleaseBarPart] {
+    /// The bars' parts. Titles stack by type when `stacked`; Logs and Ratings are one part.
+    static func parts(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles, stacked: Bool) -> [StatsReleaseBarPart] {
         points.flatMap { point -> [StatsReleaseBarPart] in
-            guard point.titles > 0 else { return [] }
+            guard let value = point.value(for: mode), value > 0 else { return [] }
             let types = StatsChartStyle.orderedTypes(point.byType)
-            if stacked, !types.isEmpty {
+            if mode == .titles, stacked, !types.isEmpty {
                 return types.map { StatsReleaseBarPart(label: point.label, mediaType: $0.mediaType, value: Double($0.count)) }
             }
-            return [StatsReleaseBarPart(label: point.label, mediaType: nil, value: Double(point.titles))]
+            return [StatsReleaseBarPart(label: point.label, mediaType: nil, value: value)]
         }
     }
 
@@ -158,11 +184,11 @@ enum StatsReleaseYearsChartData {
         return labelled.filter { ($0.start / unit) % step == 0 }.map(\.label)
     }
 
-    /// The bar with the most titles, a tie going to the most recent. Nil when nothing has any.
-    static func peak(_ points: [StatsReleasePoint]) -> StatsReleasePoint? {
+    /// The bar with the most in a mode, a tie going to the most recent. Nil when nothing has any.
+    static func peak(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles) -> StatsReleasePoint? {
         points
-            .filter { $0.titles > 0 }
-            .max { ($0.titles, $0.start) < ($1.titles, $1.start) }
+            .filter { ($0.value(for: mode) ?? 0) > 0 }
+            .max { ($0.value(for: mode) ?? 0, $0.start) < ($1.value(for: mode) ?? 0, $1.start) }
     }
 
     /// "4 titles · 5 logs · 4.0 average".
@@ -178,8 +204,18 @@ enum StatsReleaseYearsChartData {
     }
 
     /// The line over the chart when nothing is picked: "Most titles from 2024".
-    static func summaryTitle(_ points: [StatsReleasePoint]) -> String? {
-        peak(points).map { "Most titles from \($0.label)" }
+    static func summaryTitle(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles) -> String? {
+        guard let peak = peak(points, mode: mode) else { return nil }
+        switch mode {
+        case .titles: return "Most titles from \(peak.label)"
+        case .logs: return "Most logs from \(peak.label)"
+        case .ratings: return "Highest rated: \(peak.label)"
+        }
+    }
+
+    /// The line when a mode has nothing to draw.
+    static func emptyTitle(mode: StatsReleaseMode) -> String {
+        mode == .ratings ? "Nothing rated yet" : "No release years yet"
     }
 
     /// A year's logs, or a decade's. The "Before" bar has no single range to open.
@@ -259,6 +295,7 @@ private struct StatsReleaseYearsChartCard: View {
     let currentYear: Int
     let onDrillDown: ((StatsDrillDown) -> Void)?
 
+    @State private var mode: StatsReleaseMode = .titles
     /// The label under the finger while scrubbing.
     @State private var scrubbed: String?
     /// The last picked bar, kept after the finger lifts.
@@ -268,24 +305,32 @@ private struct StatsReleaseYearsChartCard: View {
 
     var body: some View {
         let points = StatsReleaseYearsChartData.series(releaseYears.rows, grouping: grouping, currentYear: currentYear)
-        let parts = StatsReleaseYearsChartData.parts(points, stacked: isStacked)
-        let legendTypes = isStacked ? StatsChartStyle.types(in: points.map(\.byType)) : []
+        let parts = StatsReleaseYearsChartData.parts(points, mode: mode, stacked: isStacked)
+        let legendTypes = mode == .titles && isStacked ? StatsChartStyle.types(in: points.map(\.byType)) : []
         let seriesNames = Set(parts.map(\.seriesName))
         let domain = (legendTypes + ["all"]).filter(seriesNames.contains)
         let range = domain.map { name in
-            StatsChartStyle.color(for: name == "all" ? mediaType : name)
+            name == "all" ? allColor : StatsChartStyle.color(for: name)
         }
         let pickedPoint = points.first { $0.label == (scrubbed ?? picked) }
-        let summary = StatsReleaseYearsChartData.summaryTitle(points)
+        let summary = StatsReleaseYearsChartData.summaryTitle(points, mode: mode)
 
         VStack(alignment: .leading, spacing: 14) {
+            Picker("Show", selection: $mode) {
+                ForEach(StatsReleaseMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .sensoryFeedback(.selection, trigger: mode)
+
             readout(summary: summary, picked: pickedPoint)
                 .frame(height: 44, alignment: .leading)
 
             Chart(parts) { part in
                 BarMark(
                     x: .value("Year", part.label),
-                    y: .value("Titles", part.value)
+                    y: .value(mode.title, part.value)
                 )
                 .foregroundStyle(by: .value("Type", part.seriesName))
                 .opacity(pickedPoint == nil || pickedPoint?.label == part.label ? 1 : 0.35)
@@ -303,18 +348,18 @@ private struct StatsReleaseYearsChartCard: View {
                     }
                 }
             }
-            .statsCountYAxis(ticks: StatsChartStyle.countTicks(maximum: points.map(\.titles).max() ?? 0))
+            .modifier(StatsReleaseYAxis(mode: mode, points: points))
             .chartXSelection(value: $scrubbed)
             .frame(height: 160)
             .accessibilityLabel("Release years")
             .accessibilityValue(summary ?? "")
             .accessibilityChartDescriptor(
                 StatsChartDescriptor(
-                    title: "Release years",
+                    title: "Release years, \(mode.title.lowercased())",
                     summary: summary,
                     categoryTitle: grouping == .years ? "Year" : "Decade",
-                    valueTitle: "Titles",
-                    points: points.map { ($0.label, Double($0.titles)) }
+                    valueTitle: mode == .ratings ? "Average stars" : mode.title,
+                    points: points.map { ($0.label, $0.value(for: mode) ?? 0) }
                 )
             )
             .accessibilityActions {
@@ -345,6 +390,11 @@ private struct StatsReleaseYearsChartCard: View {
         }
     }
 
+    /// Ratings bars are star gold; Titles and Logs take the tab's colour.
+    private var allColor: Color {
+        mode == .ratings ? LogComposerStyle.starGold : StatsChartStyle.color(for: mediaType)
+    }
+
     @ViewBuilder
     private func readout(summary: String?, picked: StatsReleasePoint?) -> some View {
         if let picked {
@@ -373,7 +423,7 @@ private struct StatsReleaseYearsChartCard: View {
             .accessibilityElement(children: .contain)
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                Text(summary ?? "No release years yet")
+                Text(summary ?? StatsReleaseYearsChartData.emptyTitle(mode: mode))
                     .font(.headline)
                     .foregroundStyle(.white)
                 Text("Drag across the chart to see each \(grouping == .years ? "year" : "decade").")
@@ -382,6 +432,34 @@ private struct StatsReleaseYearsChartCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
+        }
+    }
+}
+
+/// Counts get whole-number ticks; Ratings run from 0 to 5 stars.
+private struct StatsReleaseYAxis: ViewModifier {
+    let mode: StatsReleaseMode
+    let points: [StatsReleasePoint]
+
+    func body(content: Content) -> some View {
+        if mode == .ratings {
+            content
+                .chartYScale(domain: 0 ... 5.0)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: [0.0, 1, 2, 3, 4, 5]) { value in
+                        AxisGridLine().foregroundStyle(StatsChartStyle.gridLine)
+                        AxisValueLabel {
+                            if let stars = value.as(Double.self) {
+                                Text("\(Int(stars))★")
+                                    .foregroundStyle(StatsChartStyle.axisLabel)
+                            }
+                        }
+                    }
+                }
+        } else {
+            content.statsCountYAxis(
+                ticks: StatsChartStyle.countTicks(maximum: Int(points.compactMap { $0.value(for: mode) }.max() ?? 0))
+            )
         }
     }
 }
