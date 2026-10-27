@@ -1,15 +1,15 @@
 import SwiftUI
 
-/// Update progress from Home's and Profile's In progress cards (TV-701). Every card's title and its "Update
-/// progress ›" line are one button that opens the title's own progress UI over the screen, as the title's page has it:
+/// Update progress from Home's In progress cards (TV-701). Every card's title and its "Update progress ›" line are
+/// one button that opens the title's own progress UI over Home, as the title's page has it:
 ///
 /// - a show: its episode sheet, on up next's season (`ContinueWatchingTicks`);
 /// - a book: the page's progress panel, with its Reading, Paused, Finished and DNF row;
 /// - a game: the page's progress sheet, with its status row, Edit Dates, Restart and Delete;
 /// - a manga or a comic: the page's log composer, on Progress.
 ///
-/// Each runs on the page's own model (`MediaDetailViewModel`) posting as the screen, so the card stays where it is,
-/// the screen reloads only its activity, and the rail re-sorts on the next visit. Finishing a book or a game opens
+/// Each runs on the page's own model (`MediaDetailViewModel`) posting as Home, so the card stays where it is, Home
+/// reloads only its activity, and the rail re-sorts on the next visit. Finishing a book or a game opens
 /// the page's completion log. A card with nothing to update, or a type whose page has no progress UI (anime, movies,
 /// music), opens the title's page.
 @MainActor
@@ -368,17 +368,15 @@ enum InProgressCardPresentation {
     }
 }
 
-/// A card in Home's and Profile's In progress rail (TV-701): the poster opens the title's page; the title and
-/// "Update progress ›" are one button, at least 44 points tall, that opens its progress UI over the screen. Every
-/// media type reads the same.
+/// A card in Home's In progress rail (TV-701): the poster opens the title's page; the title and "Update progress ›"
+/// are one button, at least 44 points tall, that opens its progress UI over Home. Every media type reads the same.
+/// Profile's In progress rail shows posters only.
 struct InProgressCard: View {
     /// Room under the poster for a two-line title and the line, so every card in the rail is the same height and no
-    /// title is cut short: Home's line fits one row, Profile's narrower one wraps to two.
-    @ScaledMetric(relativeTo: .caption) private var carouselLabelHeight: CGFloat = 56
-    @ScaledMetric(relativeTo: .caption) private var profileLabelHeight: CGFloat = 64
+    /// title is cut short.
+    @ScaledMetric(relativeTo: .caption) private var labelHeight: CGFloat = 56
 
     let item: LibraryItem
-    let slot: PosterSlot
     /// The title's page is loading before its progress UI opens.
     var isLoading = false
     let onOpen: () -> Void
@@ -390,11 +388,11 @@ struct InProgressCard: View {
                 MediaArtwork(
                     url: item.media.displayPosterURL,
                     title: item.media.title,
-                    slot: slot,
+                    slot: .carousel,
                     mediaType: item.media.ref.mediaType,
                     orientation: item.media.posterOrientation
                 )
-                .shadow(color: .black.opacity(slot == .carousel ? 0.26 : 0), radius: 10, y: 5)
+                .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("View \(item.media.displayTitle)")
@@ -411,12 +409,8 @@ struct InProgressCard: View {
                         .foregroundStyle(.white.opacity(0.62))
                         .lineLimit(2)
                 }
-                .padding(.top, slot == .carousel ? 8 : 4)
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: max(44, slot == .carousel ? carouselLabelHeight : profileLabelHeight),
-                    alignment: .topLeading
-                )
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, minHeight: max(44, labelHeight), alignment: .topLeading)
                 .contentShape(Rectangle())
                 .opacity(isLoading ? 0.45 : 1)
             }
@@ -425,7 +419,7 @@ struct InProgressCard: View {
             .accessibilityLabel(InProgressCardPresentation.accessibilityLabel(for: item))
             .accessibilityIdentifier("in-progress.update")
         }
-        .frame(width: slot.size.width, alignment: .leading)
+        .frame(width: PosterSlot.carousel.size.width, alignment: .leading)
     }
 }
 

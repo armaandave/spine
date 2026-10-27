@@ -17,12 +17,6 @@ final class ProfileViewModel {
     var hofErrorMessage: String?
     var savingHallOfFameSlots: Set<String> = []
 
-    /// Continue Watching's episode sheet on the user's own profile (TV-100, TV-701).
-    let continueWatching: ContinueWatchingTicks
-    /// Every In progress card's "Update progress ›": shows open the episode sheet, other titles their page's progress
-    /// UI (TV-701).
-    let progressUpdates: InProgressUpdates
-
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
@@ -34,8 +28,6 @@ final class ProfileViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
-        mediaRepository: MediaRepository? = nil,
-        diaryRepository: DiaryRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
@@ -44,32 +36,6 @@ final class ProfileViewModel {
         self.activityRepository = activityRepository
         self.username = username
         self.onUnauthorized = onUnauthorized
-        // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
-        let mediaRepository = mediaRepository ?? AppRepositories.current().media
-        let diaryRepository = diaryRepository ?? AppRepositories.current().diary
-        continueWatching = ContinueWatchingTicks(
-            mediaRepository: mediaRepository,
-            trackingRepository: trackingRepository,
-            diaryRepository: diaryRepository,
-            onUnauthorized: onUnauthorized
-        )
-        progressUpdates = InProgressUpdates(
-            continueWatching: continueWatching,
-            mediaRepository: mediaRepository,
-            trackingRepository: trackingRepository,
-            diaryRepository: diaryRepository,
-            onUnauthorized: onUnauthorized
-        )
-        // A write in the episode sheet updates its card where it is; the rail re-sorts when it next loads (TV-701).
-        continueWatching.onUpdate = { [weak self] id, tv in
-            guard let self else { return }
-            inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
-        }
-        // So does a write from another card's progress UI.
-        progressUpdates.onUpdate = { [weak self] id, state in
-            guard let self else { return }
-            inProgressItems = InProgressUpdates.replacingProgress(state, id: id, in: inProgressItems)
-        }
     }
 
     /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
@@ -126,17 +92,6 @@ final class ProfileViewModel {
 
     func reload() async {
         await load()
-    }
-
-    /// A write changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's
-    /// or game's progress) keeps its card where it is (TV-701) but still reloads Recent Activity, where it is the day's
-    /// progress (activity contract AC-4); any other write reloads the profile.
-    func mediaStateDidChange(origin: UUID?) async {
-        if origin == continueWatching.changeOrigin {
-            await loadRecentActivity(generation: requestGeneration)
-        } else {
-            await reload()
-        }
     }
 
     func isSavingHallOfFameSlot(_ mediaType: String) -> Bool {
@@ -198,8 +153,6 @@ final class ProfileViewModel {
             guard generation == requestGeneration else { return }
             inProgressItems = items
             inProgressErrorMessage = nil
-            continueWatching.railDidLoad()
-            progressUpdates.railDidLoad()
         } catch is CancellationError {
             return
         } catch {
@@ -571,8 +524,6 @@ struct ProfileView: View {
 
     @State private var viewModel: ProfileViewModel
     @State private var selectedRef: MediaRef?
-    /// The season's episodes, when Continue Watching's sheet opened one of them: its page pages through them.
-    @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
     @State private var isSettingsPresented = false
     @State private var hofPickerSlot: FavoriteSlot?
@@ -633,8 +584,6 @@ struct ProfileView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
-            mediaRepository: mediaRepository,
-            diaryRepository: diaryRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))
@@ -691,35 +640,12 @@ struct ProfileView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
-                Swift.Task<Void, Never> {
-                    await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID)
-                }
+            .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
+                Swift.Task<Void, Never> { await viewModel.reload() }
             }
-            .continueWatchingPresentations(
-                viewModel.continueWatching,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                onUnauthorized: onUnauthorized
-            ) { selection in
-                selectedEpisodes = selection.context
-                selectedRef = selection.ref
-            }
-            .inProgressUpdatePresentations(
-                viewModel.progressUpdates,
-                screenOpenedOther: selectedRef != nil || selectedPerson != nil || isSettingsPresented
-                    || hofPickerSlot != nil || isProfileBackdropSearchPresented,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                onUnauthorized: onUnauthorized
-            )
-            .fullScreenCover(item: $selectedRef, onDismiss: {
-                selectedRef = nil
-                selectedEpisodes = nil
-            }) { ref in
+            .fullScreenCover(item: $selectedRef, onDismiss: { selectedRef = nil }) { ref in
                 MediaDetailView(
                     ref: ref,
-                    browsingContext: selectedEpisodes,
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
                     diaryRepository: diaryRepository,
@@ -1335,17 +1261,7 @@ struct ProfileView: View {
                 } else if viewModel.inProgressItems.isEmpty {
                     EmptyProfileCard(title: "Nothing in progress yet", systemName: "play.circle")
                 } else {
-                    InProgressRail(
-                        items: viewModel.inProgressItems,
-                        loadingItemID: viewModel.progressUpdates.loadingItemID,
-                        onUpdateProgress: { item in
-                            Swift.Task<Void, Never> {
-                                if let ref = await viewModel.progressUpdates.updateProgress(for: item) {
-                                    selectedRef = ref
-                                }
-                            }
-                        }
-                    ) { item in
+                    InProgressRail(items: viewModel.inProgressItems) { item in
                         selectedRef = item.media.ref
                     }
                 }
@@ -2066,33 +1982,47 @@ private struct RecentActivityRail: View {
     }
 }
 
-/// The own profile's In progress rail: three to five cards that fit the width, each the poster, then the title and
-/// "Update progress ›" (TV-701).
+/// The own profile's In progress rail: three to five posters that fit the width, each opening its title's page. Home's
+/// cards are where progress is updated (TV-701).
 private struct InProgressRail: View {
     let items: [LibraryItem]
-    /// The card whose page is loading before its progress UI opens.
-    var loadingItemID: String?
-    let onUpdateProgress: (LibraryItem) -> Void
     let action: (LibraryItem) -> Void
-    @State private var width: CGFloat = 0
 
     var body: some View {
-        let spacing: CGFloat = 10
-        let itemWidth = PosterSlot.profileRail.size.width
-        let visibleCount = max(3, min(5, Int((width + spacing) / (itemWidth + spacing))))
-        HStack(alignment: .top, spacing: spacing) {
-            ForEach(Array(items.prefix(visibleCount))) { item in
-                InProgressCard(
-                    item: item,
-                    slot: .profileRail,
-                    isLoading: loadingItemID == item.id,
-                    onOpen: { action(item) },
-                    onUpdateProgress: { onUpdateProgress(item) }
-                )
+        GeometryReader { proxy in
+            let spacing: CGFloat = 10
+            let itemWidth = PosterSlot.profileRail.size.width
+            let visibleCount = max(3, min(5, Int((proxy.size.width + spacing) / (itemWidth + spacing))))
+            HStack(alignment: .top, spacing: spacing) {
+                ForEach(Array(items.prefix(visibleCount))) { item in
+                    InProgressPoster(item: item) {
+                        action(item)
+                    }
+                    .frame(width: itemWidth)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .frame(height: PosterSlot.profileRail.size.height)
+    }
+}
+
+private struct InProgressPoster: View {
+    let item: LibraryItem
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            MediaArtwork(
+                url: item.media.displayPosterURL,
+                title: item.media.title,
+                slot: .profileRail,
+                mediaType: item.media.ref.mediaType,
+                orientation: item.media.posterOrientation
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("View \(item.media.title)")
     }
 }
 

@@ -818,15 +818,14 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(loggable.seasonNumber, 3)
     }
 
-    func testTV701ProfileListsShowsAndOpensTheirEpisodesToo() async throws {
+    func testTV701ProfileListsShowsToo() async {
+        // Profile's In progress rail is posters only: it lists shows, not seasons, and has no episode sheet.
         let crown = Self.crown()
         tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let viewModel = ProfileViewModel(
             profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
             trackingRepository: tracking,
             activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
-            diaryRepository: diary,
             onUnauthorized: {}
         )
 
@@ -834,25 +833,12 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(tracking.continueWatchingPages, [nil])
         XCTAssertTrue(tracking.listRequests.isEmpty, "No season rows are requested")
         XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["The Crown"])
-
-        media.details[Self.seasonRef(2).id] = Self.crownSeason(2, watched: 4)
-        viewModel.continueWatching.openEpisodes(for: crown)
-        let sheet = try XCTUnwrap(viewModel.continueWatching.episodes)
-        await sheet.season.load()
-        holdDetails()
-        XCTAssertEqual(sheet.season.changeOrigin, viewModel.continueWatching.changeOrigin)
-        tracking.actionResponses = [Self.tickResponse(upNext: (2, 6), watched: 5, ticked: (2, 5), viewingId: 501)]
-        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[4].tv)))
-        _ = await sheet.season.settled()
-
-        XCTAssertEqual(tracking.actions.map(\.action), [.tick])
-        XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The card updates where it is")
-        XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S2 E6 next · 5 of 10")
     }
 
     func testTV703TheSheetsTickReloadsActivityButLeavesTheRail() async {
-        // A tick is the day's progress in activity, so Home and Profile reload their activity after a tick or untick
-        // in their own sheet (activity contract AC-4), and leave the rail where it is (TV-701).
+        // A tick is the day's progress in activity, so Home reloads its activity after a tick or untick in its own
+        // sheet (activity contract AC-4), and leaves the rail where it is (TV-701). Profile has no sheet: any write
+        // reloads it.
         let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
         tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let progress = ActivityItem(
@@ -884,27 +870,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
         await home.mediaStateDidChange(origin: UUID())
         XCTAssertEqual(homeActivity.requestCount, 3)
         XCTAssertEqual(tracking.continueWatchingPages.count, 2)
-
-        let profileActivity = CountingActivityRepository()
-        let profile = ProfileViewModel(
-            profileRepository: SurfacesProfileRepository(profile: Self.profile(enabled: ["tv", "season", "episode"])),
-            trackingRepository: tracking,
-            activityRepository: profileActivity,
-            mediaRepository: media,
-            diaryRepository: diary,
-            onUnauthorized: {}
-        )
-        await profile.load()
-        XCTAssertEqual(profileActivity.requestCount, 1)
-        XCTAssertEqual(tracking.continueWatchingPages.count, 3)
-
-        profileActivity.results = [progress]
-        await profile.mediaStateDidChange(origin: profile.continueWatching.changeOrigin)
-        XCTAssertEqual(profile.recentActivityItems.map(\.id), [-7], "Recent Activity shows the tick")
-        XCTAssertEqual(tracking.continueWatchingPages.count, 3, "The rail doesn't reload")
-        await profile.mediaStateDidChange(origin: nil)
-        XCTAssertEqual(profileActivity.requestCount, 3)
-        XCTAssertEqual(tracking.continueWatchingPages.count, 4)
     }
 
     func testTV701TheCardsHaveNoTouchAndHoldMenu() throws {

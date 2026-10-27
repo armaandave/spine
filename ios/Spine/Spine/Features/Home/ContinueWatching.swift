@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Continue Watching on Home and Profile (TV-701). A show's card opens the show from its poster, and from its title
+/// Continue Watching on Home (TV-701). A show's card opens the show from its poster, and from its title
 /// and "Update progress ›" a sheet of up next's season (`ContinueWatchingEpisodes`). A write in the sheet changes the
 /// card's show state where it is; the rail re-sorts the next time the screen loads it.
 @MainActor

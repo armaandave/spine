@@ -831,7 +831,8 @@ Continue Watching on Home and Profile lists shows, not seasons.
 It lists every show in Watching with an aired up-next episode, most recently watched first.
 That order goes by the latest calendar day of a tick or log under the show, then by when it was recorded; a show with nothing watched goes by when Watching was chosen.
 
-Each card shows the show's poster and title, then one line, "Update progress ›", in the app's normal width.
+On Home, each card shows the show's poster and title, then one line, "Update progress ›", in the app's normal width.
+Profile's In progress row shows posters only, with no title and no line: tapping a poster opens the title's page, and nothing opens over Profile. Progress is updated from Home.
 Every card in the In progress row reads the same, whatever its media type, and shows no counts (see "Update progress on other media" below).
 The card has no tick of its own and no touch-and-hold menu.
 
@@ -856,7 +857,7 @@ When Log Season closes, saved or not, and up next has moved on to a later season
 A row or Open Show tapped while a write is on its way opens its page once that write answers, and not when the write asks the question, opens Log Season or fails.
 A sheet closed before its write answers leaves that write's question, Log Season or failure message to show over the screen.
 
-After each write in the sheet, the card's show state changes where it is, and Home's activity or Profile's Recent Activity reloads (TV-703).
+After each write in the sheet, the card's show state changes where it is, and Home's activity reloads (TV-703).
 A failed tick or untick restores its row, with an error haptic and a short message (TV-705).
 The show keeps its place in the row until the screen next loads it: on the next visit or a pull to refresh.
 Continue Watching sends up next's title and still from the stored listing (TV-207).
@@ -865,7 +866,8 @@ Caught-up, Planning, Paused, Dropped and Completed shows are not listed.
 
 #### Update progress on other media
 
-The In progress row on Home and Profile mixes shows with the user's other titles in progress, and every card reads the same: poster, title, "Update progress ›".
+The In progress row on Home mixes shows with the user's other titles in progress, and every card reads the same: poster, title, "Update progress ›".
+Profile's In progress row mixes the same titles as posters only (above).
 The title and that line open the title's own progress UI over the screen, the one its media page uses, without leaving the screen:
 
 - a book: the page's progress panel, with pages or percent and its Reading, Paused, Finished and DNF row (BK-301); saving the last page or tapping Finished opens the completion log (BK-302);
@@ -875,7 +877,7 @@ The title and that line open the title's own progress UI over the screen, the on
 Each runs on the title's page model, with the page's writes and follow-ups: one request per change; a status change shows at once and rolls back on failure with the page's alert, and a progress save that fails says so in the panel or sheet; every failure comes with an error haptic.
 A book that isn't being read or paused, a game without a playthrough to update, and anime, movies and music, whose pages have no progress UI, open the title's page instead.
 The title's page loads before its progress UI opens. If the user taps another card, opens anything else or leaves the screen first, neither the progress UI nor the page opens.
-After a change the card stays where it is until the row reloads on the next visit, and Home's activity or Profile's Recent Activity reloads, as after a tick (TV-703).
+After a change the card stays where it is until the row reloads on the next visit, and Home's activity reloads, as after a tick (TV-703).
 VoiceOver reads the button with where the title stands, for example "Project Hail Mary, update progress, 40 of 476 pages", and reads the new progress as soon as a change is saved.
 
 ### TV-702: The Diary shows every TV log

@@ -1,8 +1,8 @@
 import XCTest
 @testable import Spine
 
-/// "Update progress ›" on Home's and Profile's In progress cards (TV-701): one line for every media type, opening the
-/// title's own page's progress UI over the screen, on the page's model and write paths.
+/// "Update progress ›" on Home's In progress cards (TV-701): one line for every media type, opening the title's own
+/// page's progress UI over Home, on the page's model and write paths. Profile's In progress rail is posters only.
 @MainActor
 final class InProgressUpdatesTests: XCTestCase {
     private var tracking: UpdatesTrackingRepository!
@@ -291,24 +291,34 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertNil(home.progressUpdates.update)
     }
 
-    func testProfilesCardsOpenTheSameProgressUI() async throws {
+    func testAPausedBooksCardOpensItsPanelToo() async throws {
         let book = Self.item("book", "427578", "Project Hail Mary")
         media.details[book.media.ref.id] = Self.bookDetail(book.media.ref, status: "Paused", pages: 40)
-        let profile = ProfileViewModel(
-            profileRepository: SurfacesProfileRepository(profile: TVTrackingSurfacesTests.profile(enabled: ["book"])),
-            trackingRepository: tracking,
-            activityRepository: SurfacesActivityRepository(),
-            mediaRepository: media,
-            diaryRepository: SurfacesDiaryRepository(),
-            onUnauthorized: {}
-        )
+        let home = homeViewModel(items: [book])
 
-        let opensPage = await profile.progressUpdates.updateProgress(for: book)
+        let opensPage = await home.progressUpdates.updateProgress(for: book)
 
         XCTAssertNil(opensPage, "A paused book's panel opens too, as on its page")
-        let update = try XCTUnwrap(profile.progressUpdates.update)
+        let update = try XCTUnwrap(home.progressUpdates.update)
         XCTAssertNotNil(update.bookPanel)
-        XCTAssertEqual(update.page.changeOrigin, profile.continueWatching.changeOrigin)
+        XCTAssertEqual(update.page.changeOrigin, home.continueWatching.changeOrigin)
+    }
+
+    func testProfilesInProgressRailIsPostersOnly() throws {
+        // Each card is the poster, which opens the title's page: no title, no "Update progress ›", nothing opens over
+        // Profile.
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Spine/Features/Profile/ProfileView.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(source.contains("InProgressPoster(item: item)"))
+        for code in ["InProgressCard(", "InProgressUpdates", "progressUpdates", "inProgressUpdatePresentations",
+                     "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line"] {
+            XCTAssertFalse(source.contains(code), "Profile still has \(code)")
+        }
     }
 
     func testTheCardsReadOneLineInTheNormalWidth() throws {
@@ -317,16 +327,13 @@ final class InProgressUpdatesTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Spine/Features", isDirectory: true)
-        for path in ["Home/ContinueWatching.swift", "Home/HomeView.swift", "Home/InProgressUpdates.swift",
-                     "Profile/ProfileView.swift"] {
+        for path in ["Home/ContinueWatching.swift", "Home/HomeView.swift", "Home/InProgressUpdates.swift"] {
             let source = try String(contentsOf: features.appendingPathComponent(path), encoding: .utf8)
             XCTAssertFalse(source.contains("fontWidth(.condensed)"), "\(path) squeezes the line")
             XCTAssertFalse(source.contains("ContinueWatchingLine("), "\(path) still has the show's own line")
         }
-        for path in ["Home/HomeView.swift", "Profile/ProfileView.swift"] {
-            let source = try String(contentsOf: features.appendingPathComponent(path), encoding: .utf8)
-            XCTAssertTrue(source.contains("InProgressCard("), "\(path) builds its own cards")
-        }
+        let home = try String(contentsOf: features.appendingPathComponent("Home/HomeView.swift"), encoding: .utf8)
+        XCTAssertTrue(home.contains("InProgressCard("), "Home builds its own cards")
     }
 
     // MARK: Fixtures

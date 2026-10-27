@@ -421,7 +421,6 @@ struct HomeView: View {
                     SpineRail(items: viewModel.inProgressItems) { item in
                         InProgressCard(
                             item: item,
-                            slot: .carousel,
                             isLoading: viewModel.progressUpdates.loadingItemID == item.id,
                             onOpen: { selectedRef = item.media.ref },
                             onUpdateProgress: { updateProgress(item) }

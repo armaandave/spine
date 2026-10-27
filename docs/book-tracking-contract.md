@@ -306,9 +306,9 @@ The update-progress screen provides direct actions to:
 Resuming a paused book returns it to Currently Reading and continues its saved
 progress rather than resetting it.
 
-The "Update progress ›" line on a book's In progress card on Home and Profile
-opens this same screen over Home or Profile, with the same actions and
-follow-ups (TV-701).
+The "Update progress ›" line on a book's In progress card on Home opens this
+same screen over Home, with the same actions and follow-ups (TV-701).
+Profile's In progress row shows posters only.
 
 Pausing saves immediately without confirmation. Marking DNF requires a simple
 confirmation, then closes the journey and preserves progress without opening a
