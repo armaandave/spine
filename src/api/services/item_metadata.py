@@ -47,7 +47,8 @@ CURRENT_METADATA_VERSION = {
     MediaTypes.MANGA.value: 2,
     MediaTypes.COMIC.value: 2,
     MediaTypes.MUSIC.value: 2,
-    MediaTypes.BOOK.value: 2,
+    # 3: the page count, which Goodreads imports left blank.
+    MediaTypes.BOOK.value: 3,
     MediaTypes.GAME.value: 2,
 }
 
@@ -72,6 +73,8 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
         if runtime is not None:
             metadata = {**metadata, "runtime": runtime}
     update_item_filter_metadata(item, metadata)
+    if item.media_type == MediaTypes.BOOK.value:
+        _store_book_pages(item, metadata)
     if persist_series:
         _persist_series(item, metadata)
     if not complete or (
@@ -83,6 +86,26 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
         item.metadata_version = version
         item.save(update_fields=["metadata_version"])
     return True
+
+
+def _store_book_pages(item, metadata):
+    """Fill a book's blank page count from the provider (imports left it empty)."""
+    if item.total_pages:
+        return
+    details = metadata.get("details") or {}
+    for value in (
+        metadata.get("total_pages"),
+        metadata.get("max_progress"),
+        details.get("number_of_pages"),
+    ):
+        try:
+            pages = int(value)
+        except (TypeError, ValueError):
+            continue
+        if pages > 0:
+            item.total_pages = pages
+            item.save(update_fields=["total_pages"])
+            return
 
 
 def album_runtime_minutes(representative_release):
