@@ -206,6 +206,19 @@ class SelectionAndDryRunTests(FillTestCase):
 
 
 class ApplyTests(FillTestCase):
+    def test_openlibrary_books_with_missing_pages_are_fetched_before_stamping(self):
+        book = self.item(MediaTypes.BOOK.value, Sources.OPENLIBRARY.value, release_year=2004)
+        self.genre(book, "Fantasy")
+        fetch = self.patch_metadata(lambda *args, **kwargs: {"max_progress": 412})
+
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_called_once_with(MediaTypes.BOOK.value, book.media_id, Sources.OPENLIBRARY.value)
+        self.refresh(book)
+        self.assertEqual(book.total_pages, 412)
+        self.assertEqual(totals["filled"], 1)
+        self.assertEqual(totals["stamp_only"], 0)
+
     def test_apply_fills_and_stamps_and_a_rerun_makes_no_calls(self):
         film = self.item()
         fetch = self.patch_metadata(lambda *args, **kwargs: movie_metadata())

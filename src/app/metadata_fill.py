@@ -289,6 +289,8 @@ def _only_needs_stamp(item):
         return False
     if item.media_type in RUNTIME_TYPES and item.runtime_minutes is None:
         return False
+    if item.media_type == MediaTypes.BOOK.value and not item.total_pages:
+        return False
     # Themes are new for games, so a game without them still needs its fetch.
     return item.media_type != MediaTypes.GAME.value or item.has_theme
 
