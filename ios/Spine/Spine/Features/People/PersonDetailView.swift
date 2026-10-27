@@ -140,15 +140,44 @@ final class PersonDetailViewModel {
         }
     }
 
+    /// After a write elsewhere, reloads the credit pages already shown and applies them together, so the
+    /// filmography never drops back to its first page under the user (and the screen never goes blank).
     func reloadLoadedPages() async {
         let lastLoadedPage = max(detail?.creditsPage ?? 1, 1)
-        await load()
-        guard errorMessage == nil else { return }
+        let requestFilter = filter
+        guard detail != nil, presentedFilter == requestFilter, errorMessage == nil else {
+            await load()
+            return
+        }
+        stopPreparationPolling()
+        requestGeneration += 1
+        let generation = requestGeneration
+        // A next-page request this one supersedes can't clear its own flag.
+        isLoadingNextPage = false
+        nextPageErrorMessage = nil
 
-        while canLoadMore, (detail?.creditsPage ?? 1) < lastLoadedPage {
-            let previousPage = detail?.creditsPage
-            await loadNextPage()
-            guard detail?.creditsPage != previousPage else { return }
+        do {
+            var pages: [PersonDetail] = []
+            var page = 1
+            while true {
+                let loaded = try await peopleRepository.detail(ref: ref, filter: requestFilter, creditsPage: page)
+                guard generation == requestGeneration, requestFilter == filter else { return }
+                pages.append(loaded)
+                guard let next = loaded.creditsNextPage, next > page, next <= lastLoadedPage else { break }
+                page = next
+            }
+            apply(pages[0], requestFilter: requestFilter)
+            for loaded in pages.dropFirst() {
+                append(loaded, requestFilter: requestFilter)
+            }
+            startPreparationPollingIfNeeded(requestFilter: requestFilter, generation: generation)
+        } catch is CancellationError {
+            return
+        } catch {
+            // The credits already shown stay; the next refresh tries again.
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
         }
     }
 
