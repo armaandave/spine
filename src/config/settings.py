@@ -22,6 +22,7 @@ from django.core.cache import CacheKeyWarning
 from django.core.exceptions import ImproperlyConfigured
 
 from config.cache_settings import cache_settings
+from config.database_settings import sqlite_database
 
 BASE_URL = config("BASE_URL", default=None)
 if BASE_URL:
@@ -241,10 +242,7 @@ if config("DB_HOST", default=None):
 
 else:
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db" / "db.sqlite3",
-        },
+        "default": sqlite_database(BASE_DIR / "db" / "db.sqlite3"),
     }
 
 # Cache
@@ -689,6 +687,10 @@ CELERY_BEAT_SCHEDULE = {
     "send_release_notifications": {
         "task": "Send release notifications",
         "schedule": 60 * 10,  # every 10 minutes
+    },
+    "refresh_aired_tv": {
+        "task": "Refresh aired TV",
+        "schedule": 60 * 60,  # every hour; reopens shows whose next episode aired
     },
     "send_daily_digest": {
         "task": "Send daily digest",

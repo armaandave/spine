@@ -17,6 +17,7 @@ from app.models import (
     Sources,
     Status,
 )
+from app.tests.tv_fixtures import FakeTVProvider
 
 
 class CreateMedia(TestCase):
@@ -95,88 +96,59 @@ class CreateMedia(TestCase):
             True,
         )
 
-    @patch("app.views.services.get_media_metadata")
-    def test_create_season(self, mock_get_metadata):
-        """Test the creation of a Season through views."""
-        mock_get_metadata.return_value = {
-            "title": "Friends",
-            "image": "http://example.com/image.jpg",
-            "season_number": 1,
-            "details": {"episodes": 0},
-            "episodes": [],
-        }
-        Item.objects.create(
-            media_id="1668",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            title="Friends",
-            image="http://example.com/image.jpg",
-            season_number=1,
-        )
-        self.client.post(
-            reverse("media_save"),
-            {
+    def test_create_season(self):
+        """A season's written status means its action; a Planning one creates nothing.
+
+        Rewritten for TV-207 and TV-205: the old view saved a Planning Season row.
+        Seasons have no Planning, Paused or Dropped of their own, so the web ignores it
+        and no empty season is created; Completed marks the season's aired episodes.
+        """
+        with FakeTVProvider() as fake:
+            fake.add_show("1668", title="Friends", seasons={1: 3, 2: 3})
+            form = {
                 "media_id": "1668",
                 "source": Sources.TMDB.value,
                 "media_type": MediaTypes.SEASON.value,
                 "season_number": 1,
                 "status": Status.PLANNING.value,
-            },
-        )
-        self.assertEqual(
-            Season.objects.filter(item__media_id="1668", user=self.user).exists(),
-            True,
-        )
-
-    @patch("app.views.services.get_media_metadata")
-    def test_create_episodes(self, mock_get_metadata):
-        """Test the creation of Episode through views."""
-        def metadata(media_type, *_args):
-            if media_type == MediaTypes.TV.value:
-                return {
-                    "title": "Friends",
-                    "image": "http://example.com/image.jpg",
-                    "max_progress": 1,
-                    "related": {"seasons": [{"season_number": 1}]},
-                }
-            season_metadata = {
-                "title": "Friends",
-                "image": "http://example.com/image.jpg",
-                "season_number": 1,
-                "episodes": [
-                    {
-                        "episode_number": 1,
-                        "name": "Episode 1",
-                        "still_path": None,
-                    },
-                ],
             }
-            if media_type == MediaTypes.SEASON.value:
-                return season_metadata
-            return {
-                "title": "Friends",
-                "season/1": season_metadata,
-            }
+            self.client.post(reverse("media_save"), form)
+            self.assertFalse(Season.objects.filter(item__media_id="1668", user=self.user).exists())
+            self.assertFalse(TV.objects.filter(item__media_id="1668", user=self.user).exists())
 
-        mock_get_metadata.side_effect = metadata
-        self.client.post(
-            reverse("episode_save"),
-            {
+            self.client.post(reverse("media_save"), {**form, "status": Status.COMPLETED.value})
+
+        season = Season.objects.get(item__media_id="1668", item__season_number=1, user=self.user)
+        self.assertEqual(season.status, Status.COMPLETED.value)
+        self.assertEqual(season.episodes.count(), 3)
+        self.assertFalse(season.episodes.exclude(kind=Episode.Kind.FILL).exists())
+        self.assertEqual(season.related_tv.status, Status.IN_PROGRESS.value)
+
+    def test_create_episodes(self):
+        """The episode form ticks the episode on the typed day (TV-100).
+
+        Rewritten for TV-100 and TV-101: the old view created a Season row and added a
+        repeat viewing on every save. Now the tick records one viewing dated with the
+        typed day, and saving it again records nothing.
+        """
+        with FakeTVProvider() as fake:
+            fake.add_show("1668", title="Friends", seasons={1: 2})
+            form = {
                 "media_id": "1668",
                 "season_number": 1,
                 "episode_number": 1,
                 "source": Sources.TMDB.value,
-                "date": "2023-06-01T00:00",
-            },
+                "end_date": "2023-06-01",
+            }
+            self.client.post(reverse("episode_save"), form)
+            self.client.post(reverse("episode_save"), form)
+        episodes = Episode.objects.filter(
+            item__media_id="1668",
+            related_season__user=self.user,
+            item__episode_number=1,
         )
-        self.assertEqual(
-            Episode.objects.filter(
-                item__media_id="1668",
-                related_season__user=self.user,
-                item__episode_number=1,
-            ).exists(),
-            True,
-        )
+        self.assertEqual(episodes.count(), 1)
+        self.assertEqual(episodes.get().watched_on, datetime.date(2023, 6, 1))
 
 
 class EditMedia(TestCase):
@@ -311,6 +283,10 @@ class DeleteMedia(TestCase):
             **self.external_credentials
         )
         self.client.login(**self.credentials)
+        # TV deletes run through app.tv_tracking, which reads the episode lists.
+        fake = FakeTVProvider().__enter__()
+        self.addCleanup(fake.__exit__, None, None, None)
+        fake.add_show("1668", title="Friends", seasons={1: 2})
 
         self.item_tv = Item.objects.create(
             media_id="1668",

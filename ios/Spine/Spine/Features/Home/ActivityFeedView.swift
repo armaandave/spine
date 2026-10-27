@@ -429,6 +429,8 @@ enum ActivityFeedPresentation {
         switch activity.type {
         case "progress_updated":
             clean(activity.object.summary) ?? "updated progress"
+        case "rating_updated":
+            "rated \(mediaTypePhrase(for: activity.media?.ref.mediaType))"
         case "diary_created":
             activity.media?.ref.mediaType == "music"
                 ? "listened to an album"

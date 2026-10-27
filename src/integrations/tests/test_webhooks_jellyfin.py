@@ -4,7 +4,6 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from app.models import (
     TV,
@@ -395,68 +394,26 @@ class JellyfinWebhookTests(WebhookProviderMocksMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Episode.objects.count(), 0)
 
-    @patch("app.models.providers.services.get_media_metadata")
-    def test_mark_unplayed_completed_episode_updates_parent_statuses(
-        self,
-        mock_get_metadata,
-    ):
-        """Test unplaying a finale moves completed parents back to in progress."""
-        mock_get_metadata.return_value = {
-            "season/1": {
-                "episodes": [{"episode_number": 1}],
-            },
-            "related": {
-                "seasons": [{"season_number": 1}],
-            },
-        }
-        tv_item = Item.objects.create(
-            media_id="123",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.TV.value,
-            title="Test Show",
-            image="http://example.com/image.jpg",
-        )
-        tv = TV.objects.create(
-            item=tv_item,
-            user=self.user,
-            status=Status.PLANNING.value,
-        )
-        season_item = Item.objects.create(
-            media_id="123",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.SEASON.value,
-            title="Test Show",
-            image="http://example.com/image.jpg",
-            season_number=1,
-        )
-        season = Season.objects.create(
-            item=season_item,
-            user=self.user,
-            related_tv=tv,
-            status=Status.PLANNING.value,
-        )
-        episode_item = Item.objects.create(
-            media_id="123",
-            source=Sources.TMDB.value,
-            media_type=MediaTypes.EPISODE.value,
-            title="Test Episode",
-            image="http://example.com/image.jpg",
-            season_number=1,
-            episode_number=1,
-        )
-        Episode.objects.create(
-            item=episode_item,
-            related_season=season,
-            end_date=timezone.now(),
-        )
-        season.refresh_from_db()
-        tv.refresh_from_db()
+    def test_mark_unplayed_completed_episode_updates_parent_statuses(self):
+        """Unplaying a finale unticks it, so the finished season and show reopen.
+
+        Rewritten for TV-802 and TV-102: the events tick and untick through
+        app.tv_tracking instead of the model cascades, and the worked-out season and
+        show statuses follow the viewings that remain (TV-200, TV-201).
+        """
+        processor = JellyfinWebhookProcessor()
+        played = {"Event": "MarkPlayed", "Item": {"UserData": {"Played": True}}}
+        unplayed = {"Event": "MarkUnplayed", "Item": {"UserData": {"Played": False}}}
+        processor._handle_tv_episode("1668", 1, 1, played, self.user)
+        processor._handle_tv_episode("1668", 1, 2, played, self.user)
+        tv = TV.objects.get(user=self.user, item__media_id="1668")
+        season = Season.objects.get(user=self.user, item__media_id="1668", item__season_number=1)
         self.assertEqual(season.status, Status.COMPLETED.value)
         self.assertEqual(tv.status, Status.COMPLETED.value)
 
-        JellyfinWebhookProcessor()._delete_tv_episode("123", 1, 1, self.user)
+        processor._handle_tv_episode("1668", 1, 2, unplayed, self.user)
 
-        self.assertEqual(Episode.objects.count(), 0)
+        self.assertEqual(Episode.objects.filter(related_season=season).count(), 1)
         season.refresh_from_db()
         tv.refresh_from_db()
         self.assertEqual(season.status, Status.IN_PROGRESS.value)

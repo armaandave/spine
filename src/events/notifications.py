@@ -247,7 +247,7 @@ def get_all_user_tracking_data(users, target_events, user_exclusions):
 
 
 def get_tv_tracking_data(users, season_items, user_exclusions):
-    """Get tracking data for TV shows and seasons."""
+    """Get tracking data for TV seasons: the show's status alone decides (TV-704)."""
     user_ids = [user.id for user in users]
 
     if not season_items:
@@ -255,8 +255,8 @@ def get_tv_tracking_data(users, season_items, user_exclusions):
 
     media_ids = list({item.media_id for item in season_items})
 
-    # Pre-fetch all TV shows and seasons
-    tv_lookup, season_lookup = build_tv_lookups(
+    # Pre-fetch all TV shows
+    tv_lookup = build_tv_lookups(
         user_ids,
         media_ids,
         user_exclusions,
@@ -266,43 +266,26 @@ def get_tv_tracking_data(users, season_items, user_exclusions):
         season_items,
         user_ids,
         tv_lookup,
-        season_lookup,
     )
 
 
 def build_tv_lookups(user_ids, media_ids, user_exclusions):
-    """Build lookup structures for TV shows and seasons."""
+    """Build the (user_id, media_id) -> TV lookup, leaving out excluded shows."""
     tv_shows = TV.objects.filter(
         user_id__in=user_ids,
         item__media_id__in=media_ids,
     ).select_related("item")
 
-    seasons = Season.objects.filter(
-        user_id__in=user_ids,
-        item__media_id__in=media_ids,
-    ).select_related("item")
-
     tv_lookup = {}  # (user_id, media_id) -> TV object
-    season_lookup = {}  # (user_id, media_id) -> list of Season objects
-
-    # Build TV lookup
     for tv in tv_shows:
-        if tv.item.id not in user_exclusions.get(tv.user.id, set()):
+        if tv.item.id not in user_exclusions.get(tv.user_id, set()):
             key = (tv.user_id, tv.item.media_id)
             tv_lookup[key] = tv
 
-    # Build season lookup
-    for season in seasons:
-        if season.item.id not in user_exclusions.get(season.user.id, set()):
-            key = (season.user_id, season.item.media_id)
-            if key not in season_lookup:
-                season_lookup[key] = []
-            season_lookup[key].append(season)
-
-    return tv_lookup, season_lookup
+    return tv_lookup
 
 
-def determine_season_tracking_status(season_items, user_ids, tv_lookup, season_lookup):
+def determine_season_tracking_status(season_items, user_ids, tv_lookup):
     """Determine tracking status for each season item."""
     tracking_data = {}
 
@@ -312,7 +295,6 @@ def determine_season_tracking_status(season_items, user_ids, tv_lookup, season_l
                 user_id,
                 season_item,
                 tv_lookup,
-                season_lookup,
             )
 
             if is_tracking is not None:
@@ -322,33 +304,18 @@ def determine_season_tracking_status(season_items, user_ids, tv_lookup, season_l
     return tracking_data
 
 
-def check_user_season_tracking(user_id, season_item, tv_lookup, season_lookup):
+def check_user_season_tracking(user_id, season_item, tv_lookup):
     """Check if a user is tracking a specific season.
 
-    Returns:
-        bool: True if tracking, False if not tracking, None if no TV show found
-    """
-    tv_key = (user_id, season_item.media_id)
-    season_key = (user_id, season_item.media_id)
+    The show's status alone decides (TV-704): seasons have no Pause or Drop of their
+    own, so a season-level status never cuts a show's later seasons off.
 
-    # Check if user has the TV show and it's active
-    tv_show = tv_lookup.get(tv_key)
+    Returns:
+        bool: True if tracking, None if no active TV show found
+    """
+    tv_show = tv_lookup.get((user_id, season_item.media_id))
     if not tv_show or tv_show.status in INACTIVE_TRACKING_STATUSES:
         return None
-
-    # Check for dropped seasons
-    user_seasons = season_lookup.get(season_key, [])
-    dropped_seasons = [
-        s
-        for s in user_seasons
-        if s.status in INACTIVE_TRACKING_STATUSES
-        and s.item.season_number <= season_item.season_number
-    ]
-
-    if dropped_seasons:
-        first_dropped = min(dropped_seasons, key=lambda s: s.item.season_number)
-        return season_item.season_number < first_dropped.item.season_number
-
     return True
 
 

@@ -60,7 +60,13 @@ def update_diary_entry_tags(entry, tag_names):
 
 def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True):
     """Set the canonical user/title like."""
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_tracking
+
+    if tv_tracking.supports(item):
+        # TV-303 to TV-305: a heart can mark an unstarted show, season or episode watched;
+        # it never copies onto logs (SW-202).
+        tv_tracking.set_like(user, item, liked, entry_point=tv_tracking.WEB)
+        return MediaLike.objects.filter(user=user, item=item).first()
 
     if game_tracking.supports(item):
         return game_tracking.set_like(user, item, liked, audit=audit)
@@ -136,7 +142,27 @@ def create_diary_entry(
     """
     from uuid import uuid4
 
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_tracking
+
+    if tv_tracking.supports(item):
+        # TV-400 to TV-407: the log puts the show in the library, counts its target
+        # watched (auto_mark_consumed is ignored) and posts one diary activity (TV-703).
+        return tv_tracking.create_log(
+            user,
+            item,
+            consumed_at=consumed_at,
+            rating=rating,
+            review=review,
+            liked=liked,
+            is_rewatch=is_rewatch,
+            tags=tags,
+            review_title=review_title,
+            contains_spoilers=contains_spoilers,
+            visibility=visibility,
+            emit_activity=emit_activity,
+            entry_point=tv_tracking.WEB,
+            mutation_id=mutation_id,
+        ).entry
 
     if game_tracking.supports(item):
         _, entry = game_tracking.complete(
@@ -251,17 +277,7 @@ def create_diary_entry(
                     media_instance.mark_consumed()
                     media_instance.end_date = consumed_at
                     media_instance.save(update_fields=["end_date"])
-            elif item.media_type == MediaTypes.EPISODE.value:
-                from app.models import Episode
 
-                Episode.objects.filter(item=item, related_season__user=user).update(end_date=consumed_at)
-            else:
-                # For TV/season, keep the existing web flow responsible for cascade behavior.
-                from app.models import BasicMedia
-                media_instance = BasicMedia.objects.filter(user=user, item=item).first()
-                if media_instance:
-                    media_instance.mark_consumed()
-            
         # Queue statistics update
         transaction.on_commit(lambda: update_daily_statistics.delay(
             user_id=user.id,
@@ -280,7 +296,11 @@ def create_diary_entry(
 
 def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
     """Sync completed tracking dates from a diary entry date edit."""
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_tracking
+
+    if tv_tracking.supports(entry.item):
+        # TV-405: a log's date moves only its own viewing, in tv_tracking.update_log.
+        return
 
     if game_tracking.supports(entry.item) or book_tracking.supports(entry.item):
         return
@@ -291,23 +311,18 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
     if previous_consumed_at == entry.consumed_at:
         return
 
-    if entry.item.media_type == MediaTypes.EPISODE.value:
-        from app.models import Episode
-
-        Episode.objects.filter(item=entry.item, related_season__user=entry.user).update(end_date=entry.consumed_at)
-    else:
-        model = _media_model(entry.item.media_type)
-        if model:
-            media_instance = model.objects.filter(user=entry.user, item=entry.item).first()
-            if media_instance and (
-                media_instance.status == Status.COMPLETED.value
-                or (
-                    entry.item.media_type == MediaTypes.BOOK.value
-                    and media_instance.completion_diary_entry_id == entry.id
-                )
-            ):
-                media_instance.end_date = entry.consumed_at
-                media_instance.save(update_fields=["end_date"])
+    model = _media_model(entry.item.media_type)
+    if model:
+        media_instance = model.objects.filter(user=entry.user, item=entry.item).first()
+        if media_instance and (
+            media_instance.status == Status.COMPLETED.value
+            or (
+                entry.item.media_type == MediaTypes.BOOK.value
+                and media_instance.completion_diary_entry_id == entry.id
+            )
+        ):
+            media_instance.end_date = entry.consumed_at
+            media_instance.save(update_fields=["end_date"])
 
     transaction.on_commit(lambda: update_daily_statistics.delay(
         user_id=entry.user_id,
@@ -317,7 +332,12 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
 
 def update_diary_entry(entry, data, *, tags=None):
     """Update a diary entry and keep title-level state in sync."""
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_tracking
+
+    if tv_tracking.supports(entry.item):
+        # TV-405, TV-407, TV-501, TV-502.
+        result = tv_tracking.update_log(entry, data, tags=tags, entry_point=tv_tracking.WEB)
+        return result.entry or entry
 
     if game_tracking.supports(entry.item):
         if tags is None:
@@ -388,7 +408,11 @@ def update_diary_entry(entry, data, *, tags=None):
 
 def delete_diary_entry(user, entry):
     """Delete a diary entry and mirror web tracking side effects."""
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_tracking
+
+    if tv_tracking.supports(entry.item):
+        # TV-406: only the log's own viewing and fills go; TV-208 then applies.
+        return tv_tracking.delete_log(user, entry, entry_point=tv_tracking.WEB)
 
     if game_tracking.supports(entry.item):
         return game_tracking.delete_completion(user, entry)
@@ -400,7 +424,7 @@ def delete_diary_entry(user, entry):
         return single_weight.delete_log(user, entry)
 
     from social.models import Activity, SocialAuditLog
-    from app.models import Book, Movie, Season, TV
+    from app.models import Book, Movie
 
     item = entry.item
     book_instance = None
@@ -434,18 +458,6 @@ def delete_diary_entry(user, entry):
         if not remaining_entries:
             if item.media_type == MediaTypes.MOVIE.value:
                 Movie.objects.filter(user=user, item=item).delete()
-            elif item.media_type == MediaTypes.TV.value:
-                tv_instance = TV.objects.filter(user=user, item=item).first()
-                if tv_instance:
-                    for season in tv_instance.seasons.all():
-                        season.episodes.all().delete()
-                        season.delete()
-                    tv_instance.delete()
-            elif item.media_type == MediaTypes.SEASON.value:
-                season_instance = Season.objects.filter(user=user, item=item).first()
-                if season_instance:
-                    season_instance.episodes.all().delete()
-                    season_instance.delete()
             elif item.media_type == MediaTypes.BOOK.value and book_instance and not book_instance.completed_manually:
                 book_instance.delete()
         elif item.media_type == MediaTypes.BOOK.value and book_instance and book_completion_entry:
@@ -462,7 +474,19 @@ def mark_consumed(user, media_instance: Media, when=None):
         media_instance: The Media instance to mark
         when: Optional datetime for when it was consumed (defaults to now)
     """
-    from app import book_tracking, game_tracking, single_weight
+    from app import book_tracking, game_tracking, single_weight, tv_listing, tv_tracking
+
+    if tv_tracking.supports(media_instance.item):
+        # TV-300: every aired episode under the eye watched, undated, as one mark.
+        item = media_instance.item
+        result = tv_tracking.mark_watched(
+            user,
+            tv_listing.show_item_for(item),
+            season_number=item.season_number if item.media_type == MediaTypes.SEASON.value else None,
+            entry_point=tv_tracking.WEB,
+        )
+        media_instance.refresh_from_db()
+        return result
 
     if game_tracking.supports(media_instance.item):
         return game_tracking.mark_completed(user, media_instance.item)

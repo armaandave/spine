@@ -247,6 +247,7 @@
       "custom_backdrop_url": null,
       "custom_poster_url": null,
       "default_source": "musicbrainz",
+      "episode_title": null,
       "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
       "overview": null,
       "poster_accent_color": null,
@@ -264,6 +265,7 @@
         "source": "musicbrainz"
       },
       "release_date": null,
+      "show_title": null,
       "subtitle": null,
       "title": "Year Zero",
       "user_state": null
@@ -274,6 +276,7 @@
     "tags": [
       "industrial"
     ],
+    "tv_log": null,
     "updated_at": "2026-07-16T12:00:00Z",
     "user": {
       "avatar_url": null,
@@ -297,6 +300,7 @@
       "custom_backdrop_url": null,
       "custom_poster_url": null,
       "default_source": "musicbrainz",
+      "episode_title": null,
       "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
       "overview": null,
       "poster_accent_color": null,
@@ -314,6 +318,7 @@
         "source": "musicbrainz"
       },
       "release_date": null,
+      "show_title": null,
       "subtitle": null,
       "title": "Year Zero",
       "user_state": null
@@ -324,6 +329,7 @@
     "tags": [
       "industrial"
     ],
+    "tv_log": null,
     "updated_at": "2026-07-16T12:00:00Z",
     "user": {
       "avatar_url": null,
@@ -352,6 +358,7 @@
           "custom_backdrop_url": null,
           "custom_poster_url": null,
           "default_source": "musicbrainz",
+          "episode_title": null,
           "image_url": "https://coverartarchive.org/release-group/3bd76d40-7f0e-36b7-9348-91a33afee20e/front-500",
           "overview": null,
           "poster_accent_color": null,
@@ -369,6 +376,7 @@
             "source": "musicbrainz"
           },
           "release_date": null,
+          "show_title": null,
           "subtitle": null,
           "title": "Year Zero",
           "user_state": null
@@ -379,6 +387,7 @@
         "tags": [
           "industrial"
         ],
+        "tv_log": null,
         "updated_at": "2026-07-16T12:00:00Z",
         "user": {
           "avatar_url": null,

@@ -14,7 +14,7 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 import app
-from app import single_weight
+from app import single_weight, tv_tracking
 from app.models import MediaTypes
 
 logger = logging.getLogger(__name__)
@@ -95,11 +95,16 @@ def cleanup_existing_media(to_delete, user):
             if not media_ids:
                 continue
 
-            deleted_count, _ = model.objects.filter(
+            rows = model.objects.filter(
                 item__media_id__in=media_ids,
                 item__source=source,
                 user=user,
-            ).delete()
+            )
+            if media_type == MediaTypes.TV.value:
+                # Overwrite replaces these shows' viewings, marks and choices; their
+                # logs survive and get their viewings back after the import (TV-800).
+                _remember_overwritten_shows(user, rows.values_list("item_id", flat=True))
+            deleted_count, _ = rows.delete()
             total_deleted += deleted_count
 
         if total_deleted > 0:
@@ -172,8 +177,56 @@ def update_episode_references(episodes, user):
             )
 
 
+def _remember_overwritten_shows(user, show_item_ids):
+    """Record shows overwrite mode deleted, for reconcile_imported (TV-800).
+
+    The importers call cleanup_existing_media and then bulk_create_media with the same
+    user object, so the record travels on it.
+    """
+    overwritten = getattr(user, "_tv_overwritten_show_item_ids", set())
+    overwritten.update(show_item_ids)
+    user._tv_overwritten_show_item_ids = overwritten  # noqa: SLF001
+
+
+def _imported_show_items(bulk_media_list):
+    """Return the tv Items of every show the import wrote rows for."""
+    keys = set()
+    for media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value):
+        for row in bulk_media_list.get(media_type) or ():
+            keys.add((row.item.media_id, row.item.source))
+    if not keys:
+        return []
+    shows = app.models.Item.objects.filter(
+        media_type=MediaTypes.TV.value,
+        media_id__in={media_id for media_id, _ in keys},
+        source__in={source for _, source in keys},
+    )
+    return [show for show in shows if (show.media_id, show.source) in keys]
+
+
+def reconcile_imported_tv(bulk_media_list, user):
+    """Work out each imported show once, so it ends where the app would (TV-800)."""
+    overwritten = getattr(user, "_tv_overwritten_show_item_ids", set())
+    if hasattr(user, "_tv_overwritten_show_item_ids"):
+        del user._tv_overwritten_show_item_ids  # noqa: SLF001
+    show_items = _imported_show_items(bulk_media_list)
+    if not show_items:
+        return
+    tv_tracking.reconcile_imported(
+        user,
+        show_items,
+        overwritten_show_item_ids=sorted(overwritten),
+    )
+
+
 def bulk_create_media(bulk_media_list, user):
     """Bulk create all media objects."""
+    _bulk_create_media(bulk_media_list, user)
+    reconcile_imported_tv(bulk_media_list, user)
+
+
+def _bulk_create_media(bulk_media_list, user):
+    """Bulk create each media type's rows as the importer built them."""
     for media_type, bulk_media in bulk_media_list.items():
         if not bulk_media:
             continue

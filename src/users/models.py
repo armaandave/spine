@@ -337,6 +337,17 @@ class User(AbstractUser):
         help_text="First day of the week",
     )
 
+    # The IANA timezone the app last sent (X-Spine-Timezone); empty until it sends
+    # one, which means the server's timezone. app.user_calendar reads it on every
+    # path, including webhooks, imports and scheduled jobs.
+    calendar_timezone = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Timezone the app last sent; empty means the server's",
+    )
+
     # Progress bar
     progress_bar = models.BooleanField(
         default=True,

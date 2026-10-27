@@ -88,6 +88,15 @@ Use this format to bulk-import media into YamTrack. Every row represents a singl
 
 The order of rows matters for TV data: import `tv` rows first, then `season` rows, then `episode` rows. Episodes depend on their parent season, and seasons depend on their parent TV show.
 
+After an import, Spine works out each imported show the way the app would (`docs/tv-tracking-contract.md`, TV-800):
+
+- A `Completed` show or season marks its aired episodes watched, with no date; episodes it already has keep their dates.
+- On a season row, every status other than `Completed` is ignored. On a show row, `Planning`, `Paused` and `Dropped` are kept as your choice, and `In progress` means Watching.
+- Each `episode` row is one viewing, dated with its `end_date` or undated.
+- `progress`, `start_date` and `end_date` on `tv` and `season` rows are ignored; progress is counted from episodes.
+- Imports never post to the feed, and a show is never moved to Paused or Dropped because nothing was watched for a while.
+- In `overwrite` mode, Spine's own marks and choices for the show are replaced by the file's; diary logs are kept.
+
 | Column Title   | Required? | Example Value                                  | Notes                                                                                                                                                                           |
 | -------------- | --------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | media_id       | No        | 12345                                          | ID of the item on the chosen provider. Must be unique per `(source, media_type)`. Leave blank to let YamTrack fetch the title from the provider automatically with the `title`. |

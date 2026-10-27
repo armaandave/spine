@@ -1778,10 +1778,12 @@ final class SpineTests: XCTestCase {
         ])
     }
 
+    /// TV-701: Continue Watching lists shows, so `tv` now maps to `tv` (loaded through Continue Watching) where it
+    /// used to map to In progress seasons; seasons and episodes are never rows.
     func testInProgressLoaderMapsMediaTypesAndSortsWithLimit() {
         let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv", "episode", "book", "music"])
 
-        XCTAssertEqual(InProgressLibraryLoader.mediaTypes(from: profile), ["movie", "season", "book", "music"])
+        XCTAssertEqual(InProgressLibraryLoader.mediaTypes(from: profile), ["movie", "tv", "book", "music"])
 
         let sorted = InProgressLibraryLoader.limitedSortedItems([
             libraryItem(id: "1", title: "Older", updatedAt: "2026-06-20T10:00:00Z"),
@@ -3871,8 +3873,10 @@ final class SpineTests: XCTestCase {
         let decoded = try JSONDecoder.api.decode(TrackingState.self, from: data)
 
         XCTAssertEqual(decoded.latestProgressChange?.id, 77)
-        XCTAssertEqual(decoded.latestProgressChange?.compactDisplayText(preferredMode: nil), "42% → 58%")
-        XCTAssertEqual(decoded.homeProgressText(preferredMode: nil), "42% → 58%")
+        XCTAssertEqual(
+            decoded.latestProgressChange?.compactDisplayParts(preferredMode: nil),
+            ProgressChangeDisplay(previous: "42%", current: "58%")
+        )
     }
 
     func testPercentageProgressDisplayUsesPercentEverywhere() {
@@ -3897,8 +3901,21 @@ final class SpineTests: XCTestCase {
             createdAt: nil
         )
 
-        XCTAssertEqual(change.compactDisplayText(preferredMode: .pages), "120/300 pages → 174/300 pages")
-        XCTAssertEqual(change.compactDisplayText(preferredMode: .percentage), "40% → 58%")
+        XCTAssertEqual(
+            change.compactDisplayParts(preferredMode: .pages),
+            ProgressChangeDisplay(previous: "120/300 pages", current: "174/300 pages")
+        )
+        XCTAssertEqual(
+            change.compactDisplayParts(preferredMode: .percentage),
+            ProgressChangeDisplay(previous: "40%", current: "58%")
+        )
+        let unchanged = ProgressChangeState(
+            id: 2,
+            previous: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
+            current: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
+            createdAt: nil
+        )
+        XCTAssertNil(unchanged.compactDisplayParts(preferredMode: nil), "No change to show")
     }
 
     func testProgressDeltaTextFormatting() {
@@ -3979,6 +3996,35 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    func testProfileRecentActivityRailShowsAShowOnceAcrossItsSeasonsAndEpisodes() {
+        func activity(_ id: Int, _ mediaType: String, mediaId: String = "1396", season: Int? = nil, episode: Int? = nil) -> ActivityItem {
+            ActivityItem(
+                id: id,
+                type: mediaType == "tv" ? "progress_updated" : "diary_created",
+                createdAt: "2026-10-26T12:00:00Z",
+                actor: UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil),
+                media: MediaSummary(
+                    ref: MediaRef(itemId: nil, source: "tmdb", mediaType: mediaType, mediaId: mediaId,
+                                  seasonNumber: season, episodeNumber: episode),
+                    title: "Breaking Bad",
+                    posterUrl: nil,
+                    posterOrientation: .portrait
+                ),
+                object: ActivityObject(type: "diary", id: id, previous: nil, current: nil, rating: nil, liked: nil, name: nil)
+            )
+        }
+        let items = [
+            activity(1, "episode", season: 2, episode: 5),
+            activity(-2, "tv"),
+            activity(3, "season", season: 2),
+            activity(4, "movie", mediaId: "1396"),
+            activity(5, "season", mediaId: "1399", season: 1),
+        ]
+
+        // The show's newest activity stands for it; a movie with the same id is another title.
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: items).map(\.activity.id), [1, 4, 5])
+    }
+
     func testProfileRecentActivityRailFitsSquareAlbumArt() {
         let albums = (1...5).map { activityItem(id: $0, title: "Album \($0)", mediaType: "music") }
         let movie = activityItem(id: 6, title: "Movie")
@@ -4006,40 +4052,6 @@ final class SpineTests: XCTestCase {
         )
     }
 
-    func testHomeProgressFallsBackWhenProgressDeltaIsMissingOrUnchanged() {
-        let unchanged = TrackingState(
-            trackingId: 1,
-            status: "In progress",
-            rating: nil,
-            progress: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-            latestProgressChange: ProgressChangeState(
-                id: 1,
-                previous: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-                current: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-                createdAt: nil
-            ),
-            repeats: nil,
-            startDate: nil,
-            endDate: nil,
-            notes: nil,
-            updatedAt: nil
-        )
-        let missing = TrackingState(
-            trackingId: 2,
-            status: "In progress",
-            rating: nil,
-            progress: ProgressState(kind: "percentage", value: Decimal(58), max: Decimal(100), unit: "percent"),
-            repeats: nil,
-            startDate: nil,
-            endDate: nil,
-            notes: nil,
-            updatedAt: nil
-        )
-
-        XCTAssertEqual(unchanged.homeProgressText(preferredMode: nil), "58%")
-        XCTAssertEqual(missing.homeProgressText(preferredMode: nil), "58%")
-    }
-
     func testMinuteProgressDoesNotInventPercentage() {
         let progress = ProgressState(kind: "progress", value: Decimal(58), max: nil, unit: "minutes")
 
@@ -4048,7 +4060,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(progress.detailDisplayText(preferredMode: .percentage), "58 minutes")
     }
 
-    func testZeroProgressDisplaysAsStartedOnHome() {
+    func testZeroProgressHasNoCompactText() {
         let tracking = TrackingState(
             trackingId: 1,
             status: "In progress",
@@ -4063,8 +4075,6 @@ final class SpineTests: XCTestCase {
 
         XCTAssertNil(tracking.progress?.compactDisplayText(preferredMode: .percentage))
         XCTAssertNil(tracking.progress?.compactDisplayText)
-        XCTAssertEqual(tracking.homeProgressText(preferredMode: nil), "Started")
-        XCTAssertEqual(tracking.homeProgressText(preferredMode: .percentage), "Started")
     }
 
     func testUserMediaStateDecodesProgress() throws {
@@ -5297,6 +5307,8 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(repository.clearMediaType, "music")
     }
 
+    /// TV-701: Continue Watching lists shows, so the TV row is a show loaded through Continue Watching; it used to
+    /// be an In progress season.
     @MainActor
     func testProfileViewModelLoadsInProgressAcrossEnabledMediaTypes() async {
         let trackingRepository = ScriptedLibraryTrackingRepository(responses: [
@@ -5314,18 +5326,17 @@ final class SpineTests: XCTestCase {
                     )
                 ]
             ),
-            "season:": PagedResponse(
+            "tv:": PagedResponse(
                 count: 1,
                 next: nil,
                 previous: nil,
                 results: [
                     libraryItem(
                         id: "2",
-                        title: "Newest Season",
-                        mediaType: "season",
+                        title: "Newest Show",
+                        mediaType: "tv",
                         status: "In progress",
-                        updatedAt: "2026-06-22T12:00:00Z",
-                        seasonNumber: 2
+                        updatedAt: "2026-06-22T12:00:00Z"
                     )
                 ]
             ),
@@ -5371,11 +5382,12 @@ final class SpineTests: XCTestCase {
 
         await viewModel.load()
 
-        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Newest Album", "Newest Season", "Middle Book", "Older Movie"])
+        XCTAssertEqual(viewModel.inProgressItems.map(\.media.title), ["Newest Album", "Newest Show", "Middle Book", "Older Movie"])
         XCTAssertEqual(viewModel.inProgressItems.first?.media.ref.mediaType, "music")
         XCTAssertEqual(trackingRepository.requests, [
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "In progress"),
-            LibraryTrackingRequest(mediaType: "season", page: nil, status: "In progress"),
+            // Continue Watching (here through the repository default, which lists In progress shows).
+            LibraryTrackingRequest(mediaType: "tv", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "book", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "music", page: nil, status: "In progress")
         ])
@@ -6601,6 +6613,9 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(tracking.completedBooks.count, 0)
     }
 
+    /// TV-705: the episode tick goes through the write queue and the TV actions endpoint, dated by the server
+    /// (TV-100). It used to bypass the queue through the legacy watch endpoint with the phone's time. A refresh
+    /// that fails afterwards keeps the confirmed tick.
     @MainActor
     func testMediaDetailEpisodeWatchKeepsMutationSuccessWhenRefreshFails() async {
         let detail = TestFixtures.episodeDetail
@@ -6610,19 +6625,22 @@ final class SpineTests: XCTestCase {
             mediaRepository: MediaDetailFixtureRepository(detailError: APIError.httpStatus(503, nil)),
             trackingRepository: tracking,
             diaryRepository: RecordingDiaryRepository(),
-            onUnauthorized: {}
+            onUnauthorized: {},
+            writeRefreshDelay: .zero
         )
         viewModel.detail = detail
-        let watchedAt = Date(timeIntervalSince1970: 1_797_120_000)
 
-        let didSave = await viewModel.watchEpisode(detail, watchedAt: watchedAt)
+        let didSave = await viewModel.tickTVEpisode(seasonNumber: 3, episodeNumber: 2).value
+        await viewModel.refreshFinished()
 
         XCTAssertTrue(didSave)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.source, "tmdb")
-        XCTAssertEqual(tracking.watchedEpisodes.first?.mediaId, "1399")
-        XCTAssertEqual(tracking.watchedEpisodes.first?.seasonNumber, 3)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.episodeNumber, 2)
-        XCTAssertEqual(tracking.watchedEpisodes.first?.watchedAt, watchedAt)
+        XCTAssertEqual(tracking.tvActions.first?.source, "tmdb")
+        XCTAssertEqual(tracking.tvActions.first?.mediaId, "1399")
+        XCTAssertEqual(tracking.tvActions.first?.action, .tick)
+        XCTAssertEqual(tracking.tvActions.first?.request.seasonNumber, 3)
+        XCTAssertEqual(tracking.tvActions.first?.request.episodeNumber, 2)
+        XCTAssertNotNil(tracking.tvActions.first?.request.mutationId)
+        XCTAssertTrue(tracking.watchedEpisodes.isEmpty, "Ticks no longer use the legacy watch endpoint.")
         XCTAssertEqual(viewModel.detail?.userState?.isTracked, true)
         XCTAssertNil(viewModel.detail?.userState?.status)
         XCTAssertNil(viewModel.quickActionErrorMessage)
@@ -9149,6 +9167,17 @@ private final class TaggedDiaryFixtureRepository: DiaryRepository {
 }
 
 private final class RecordingTrackingRepository: TrackingRepository {
+    var tvActions: [(source: String, mediaId: String, action: TVAction, request: TVActionRequest)] = []
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        tvActions.append((source, mediaId, action, request))
+        let episode = request.episodeNumber.flatMap { number in
+            request.seasonNumber.map {
+                TVEpisodeState(seasonNumber: $0, episodeNumber: number, watched: action == .tick,
+                               viewingCount: action == .tick ? 1 : 0, untickViewingId: action == .tick ? 1 : nil)
+            }
+        }
+        return TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(episode: episode, changed: true))
+    }
     var gameActions: [(ref: MediaRef, action: String, request: BookActionRequest)] = []
     func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
         gameActions.append((ref, action, request))

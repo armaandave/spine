@@ -4,6 +4,18 @@ extension Notification.Name {
     static let diaryEntriesDidChange = Notification.Name("diaryEntriesDidChange")
 }
 
+/// How late a log can be dated. Calendar-dated logs, TV logs at every level included, stop at today (TV-407);
+/// other types keep a time and have no cap.
+enum DiaryLogDateLimit {
+    static func latest(for ref: MediaRef?, now: Date = Date()) -> Date {
+        ref?.usesCalendarLogDate == true ? now : .distantFuture
+    }
+
+    static func range(for ref: MediaRef?, now: Date = Date()) -> ClosedRange<Date> {
+        Date.distantPast...latest(for: ref, now: now)
+    }
+}
+
 @MainActor
 @Observable
 final class DiaryLogDetailViewModel {
@@ -14,6 +26,11 @@ final class DiaryLogDetailViewModel {
     var deleteErrorMessage: String?
     var errorMessage: String?
     var isReviewRevealed = false
+    /// Counts the times the show changed after the delete confirmation: the page reloaded and asks again with the
+    /// new count (TV-406, TV-705).
+    private(set) var deleteReconfirmations = 0
+    /// One mutation ID per confirmed delete, kept for its retries, so a TV log deletion applies at most once (TV-705).
+    private var deleteMutationId: UUID?
 
     private let entryId: Int
     private let diaryRepository: DiaryRepository
@@ -72,6 +89,18 @@ final class DiaryLogDetailViewModel {
         }
     }
 
+    /// The delete confirmation's title. A TV log that unmarks episodes says how many (TV-406).
+    var deletePrompt: String {
+        entry?.tvLog.flatMap { TVTrackingPresentation.deleteLogPrompt(unmarksCount: $0.unmarksCount) }
+            ?? "Delete this diary entry?"
+    }
+
+    /// Starts a new confirmed delete: its retries share one mutation ID.
+    func confirmDelete() async -> Bool {
+        deleteMutationId = nil
+        return await delete()
+    }
+
     func delete() async -> Bool {
         guard !isDeleting, let entry else { return false }
         isDeleting = true
@@ -81,10 +110,31 @@ final class DiaryLogDetailViewModel {
 
         do {
             let ref = entry.media.ref
-            try await diaryRepository.delete(id: entry.id)
+            if let tvLog = entry.tvLog {
+                // The version the dialog showed: if the show changed since, nothing is deleted (TV-705).
+                let mutationId = deleteMutationId ?? UUID()
+                deleteMutationId = mutationId
+                try await diaryRepository.delete(id: entry.id, expectedVersion: tvLog.stateVersion, mutationId: mutationId)
+            } else {
+                try await diaryRepository.delete(id: entry.id)
+            }
+            deleteMutationId = nil
             NotificationCenter.default.post(name: .diaryEntriesDidChange, object: nil)
             MediaStateChange.post(ref: ref)
             return true
+        } catch let error as APIError where error.apiErrorCode == "tv_state_changed" {
+            // The show changed since the dialog: refresh the log's counts and ask again.
+            deleteMutationId = nil
+            do {
+                self.entry = try await diaryRepository.detail(id: entry.id)
+                deleteReconfirmations += 1
+            } catch {
+                deleteErrorMessage = error.localizedDescription
+                if case APIError.unauthorized = error {
+                    onUnauthorized()
+                }
+            }
+            return false
         } catch {
             errorMessage = error.localizedDescription
             deleteErrorMessage = error.localizedDescription
@@ -258,10 +308,13 @@ struct DiaryLogDetailView: View {
             Button("Try Again") { Task { if await viewModel.delete() { dismiss() } } }
             Button("Cancel", role: .cancel) { viewModel.deleteErrorMessage = nil }
         } message: { Text(viewModel.deleteErrorMessage ?? "Could not delete the log.") }
-        .confirmationDialog("Delete this diary entry?", isPresented: $isDeleteConfirmationPresented, titleVisibility: .visible) {
-            Button("Delete Entry", role: .destructive) {
+        .onChange(of: viewModel.deleteReconfirmations) {
+            isDeleteConfirmationPresented = true
+        }
+        .confirmationDialog(viewModel.deletePrompt, isPresented: $isDeleteConfirmationPresented, titleVisibility: .visible) {
+            Button(viewModel.entry?.tvLog == nil ? "Delete Entry" : "Delete Log", role: .destructive) {
                 Task {
-                    if await viewModel.delete() {
+                    if await viewModel.confirmDelete() {
                         dismiss()
                     }
                 }
@@ -353,7 +406,7 @@ struct DiaryLogDetailView: View {
                     let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.percentage).summary
                     if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
                 }
-                let parts = titleParts(entry.media.displayTitle)
+                let parts = titleParts(TVTrackingPresentation.diaryTitle(for: entry.media))
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     if let detail = viewModel.mediaDetail {
                         MediaTitleDisplay(
@@ -627,7 +680,7 @@ private struct DiaryLogHeroArtwork: View {
 
 @MainActor
 @Observable
-private final class DiaryLogEditViewModel {
+final class DiaryLogEditViewModel {
     let entry: DiaryEntry
     var consumedAt: Date
     var gameProgress: GameProgressDraft
@@ -701,7 +754,7 @@ private final class DiaryLogEditViewModel {
             isRewatch: isRewatch,
             containsSpoilers: containsSpoilers,
             visibility: entry.media.ref.isSingleWeight ? nil : visibility,
-            calendarDateOnly: entry.media.ref.usesCalendarConsumptionDate,
+            calendarDateOnly: entry.media.ref.usesCalendarLogDate,
             includesRating: true,
             totalMinutes: progress.totalMinutes, percentage: progress.percentage,
             includesMinutes: entry.media.ref.mediaType == "game" && progress.includesMinutes,
@@ -743,7 +796,7 @@ private struct DiaryLogEditSheet: View {
                     Section {
                     } header: {
                         LogHeader(
-                            title: viewModel.entry.media.displayTitle,
+                            title: TVTrackingPresentation.diaryTitle(for: viewModel.entry.media),
                             posterURL: viewModel.entry.media.displayPosterURL,
                             mediaType: viewModel.entry.media.ref.mediaType,
                             orientation: viewModel.entry.media.posterOrientation
@@ -770,7 +823,7 @@ private struct DiaryLogEditSheet: View {
                         DatePicker(
                             viewModel.entry.media.ref.consumedDateLabel,
                             selection: $viewModel.consumedAt,
-                            in: Date.distantPast...(viewModel.entry.media.ref.usesCalendarConsumptionDate ? Date() : Date.distantFuture),
+                            in: DiaryLogDateLimit.range(for: viewModel.entry.media.ref),
                             displayedComponents: .date
                         )
 

@@ -113,6 +113,7 @@ Important files:
 | GET | `/api/v1/tracking/` | Yes |
 | GET/PUT/PATCH/DELETE | `/api/v1/tracking/{source}/{media_type}/{media_id}/` | Yes |
 | POST | `/api/v1/tracking/{source}/{media_type}/{media_id}/actions/{consume,pause,resume,drop}/` | Yes |
+| POST | `/api/v1/tracking/{source}/tv/{media_id}/actions/{action}/` (TV actions, below) | Yes |
 | POST | `/api/v1/tracking/{source}/tv/{media_id}/start/` | Yes |
 | POST | `/api/v1/tracking/{source}/tv/{media_id}/seasons/{season_number}/start/` | Yes |
 | POST/DELETE | `/api/v1/tracking/{source}/tv/{media_id}/seasons/{season_number}/watch/` | Yes |
@@ -125,6 +126,60 @@ Important files:
 `status`, `ordering`/`sort`, `q`, `page`, and `page_size`. The endpoint paginates
 the tracking queryset before serialization so page responses only serialize the
 current page of rows.
+
+#### TV tracking
+
+TV follows `docs/tv-tracking-contract.md`; the laws named below are from it. The
+show is the library unit (TV-001). Every TV write goes through `app.tv_tracking`,
+which records facts (viewings, logs, marks, choices) and works out the rest
+(status, counts, up next, caught up) in the same transaction (TV-207).
+
+`POST /api/v1/tracking/{source}/tv/{media_id}/actions/{action}/` takes an optional
+body: `season_number`, `episode_number`, `viewing_id`, `mutation_id`,
+`expected_version`, `confirm`, `from`, `to`, `offer_season_number`, `rating`,
+and `page_season_number`/`page_episode_number` (the season or episode page the
+action came from, so the response carries that page's state).
+
+| `action` | Needs | Law |
+|---|---|---|
+| `watching`, `resume`, `planning`, `pause`, `drop` | | TV-005 to TV-007 |
+| `rewatch`, `stop_rewatch` | `season_number` for a season rewatch | TV-600, TV-602 |
+| `remove` | `expected_version`, `mutation_id` | TV-003 |
+| `mark_watched` (alias `consume`), `unmark` | `season_number` for a season, 0 for Specials; an `unmark` that removes more than marks added needs `confirm`, and the app also sends `expected_version` | TV-300, TV-302 |
+| `mark_up_to` | `season_number`, `episode_number` | TV-108 |
+| `mark_earlier` | `from`, `to`, `mutation_id`, optional `offer_season_number` | TV-107 |
+| `tick`, `untick` | `season_number`, `episode_number`; `untick` may name the `viewing_id` it expects to remove | TV-100 to TV-102 |
+| `rate` | `rating` (whole 1 to 10, or null), `season_number` for a season | TV-303, TV-304, TV-504 |
+
+The response is `tracking` (the show's TrackingState, or null when it left the
+library), `tv`, `season`, `episode`, `changed`, `finished` (the season or show the
+write just finished, with the composer's defaults, TV-403) and `earlier_unwatched`
+(the earlier-episodes question, TV-107). `consume`, `pause`, `resume` and `drop`
+also keep their old top-level TrackingState (TV-900).
+
+The endpoints installed builds call keep their shapes and add the same keys:
+episode `watch/` is a tick or untick (`watched_at` is ignored; the server dates the
+tick), season `watch/` marks or unmarks the season, both `start/` routes choose
+Watching for the show and create no season tracking, `PUT`/`PATCH` of a show or
+season status means the matching action (TV-207), and `DELETE` of a show is
+Remove from Library while a season `DELETE` needs `season_number`. Both deletes
+answer `409` while a log blocks them.
+
+`GET /api/v1/tracking/?media_type=tv` rows carry `tracking.progress` as watched
+over aired regular episodes (TV-104) and `tracking.tv`. `continue_watching=true`
+lists shows in Watching with an aired up next that aren't caught up, most recently
+watched first, and ignores `ordering` (TV-701). `media_type=season` lists only
+started seasons (TV-205). List reads make no provider call (TV-207).
+
+TV errors use the standard envelope: `400 validation_error` (an unlisted or
+unaired episode, a missing `season_number`, progress or date fields, a season
+Planning, Paused or Dropped, an off-scale rating, a future log date, a reused
+mutation ID), `409 tv_log_blocks` (a log blocks the change; the message names it),
+`409 tv_action_unavailable` (with the + menu's reason), `409 tv_state_changed`
+(a confirmed destructive action whose `expected_version` is stale; `error.tv`
+holds the new version and count), and a retryable `503 provider_unavailable` with
+`error.reason` `tv_details_unavailable` when TMDB can't be reached and nothing is
+stored (TV-103).
 
 ### Diary, Lists, Profiles, Social
 
@@ -160,20 +215,38 @@ current page of rows.
 `POST /api/v1/diary/` supports diary entries for `movie`, `tv`, `season`,
 `episode`, `anime`, `manga`, `game`, `book`, and `comic`. When
 `auto_mark_consumed=true`, simple completed tracking rows are created or updated
-for movie/game/anime/manga/book/comic. Episode logging only syncs an existing
-episode tracking row; full TV cascade remains in the tracking endpoints.
+for movie/game/anime/manga/book/comic.
+
+TV logs (`tv`, `season`, `episode`) follow `docs/tv-tracking-contract.md`. Every
+TV log puts the show in the library and counts its target watched, whatever
+`auto_mark_consumed` says (TV-400): a season or show log fills the aired episodes
+not yet watched (TV-401), and an episode log claims the episode's latest unlogged
+tick or adds a viewing on its date (TV-402). `consumed_at` is a calendar date on
+the user's calendar; a datetime from installed builds is converted to it, and a
+future date is a `400` (TV-407). Omitting `is_rewatch` applies the server's
+default (TV-404). A `mutation_id` saves the log at most once. The `201` response
+adds `tv`, `finished` and `earlier_unwatched`. Diary entries carry
+`media.show_title` and `media.episode_title`; `tv_log` (what a TV log covers and
+would unmark) is filled only on the log's own detail, create and update
+responses, and is null in lists.
 
 `PATCH /api/v1/diary/{id}/` accepts a partial request body with any writable
 diary field: `consumed_at`, `rating`, `review`, `review_title`, `tags`,
 `visibility`, `contains_spoilers`, `is_rewatch`, and `liked`. The diary media
 reference is not changed by PATCH. Editing `consumed_at` syncs the completion
 date on existing completed tracking rows for the same item and re-queues daily
-statistics.
+statistics. For a TV episode log it moves only that log's own viewing; a season
+or show log's date moves no viewing (TV-405).
 
 `DELETE /api/v1/diary/{id}/` removes the diary entry and mirrors web tracking
-side effects. If it was the last diary entry for a movie, TV show, season, or
-diary-completed book, the corresponding tracking row is unwatched/untracked;
-when other diary entries remain, tracking is retained.
+side effects. If it was the last diary entry for a movie or diary-completed
+book, the corresponding tracking row is unwatched/untracked; when other diary
+entries remain, tracking is retained. Deleting a TV log removes only its own
+viewing and fills; a tick it claimed stays, and the show leaves the library only
+when nothing else is recorded under it (TV-406, TV-003). TV deletes accept
+optional `expected_version` and `mutation_id` query parameters: when the
+deletion would unmark episodes and `expected_version` is stale, it answers
+`409 tv_state_changed` and changes nothing.
 
 `GET /api/v1/diary/tags/` returns `{ "results": [{ "name": "...", "usage_count": 1 }] }`. By default it is capped to 10 results for autocomplete. Passing `mine=true` limits counts to the authenticated user's diary tags. Passing `all=true` removes the autocomplete cap so native clients can render the full Profile Tags list, ordered by usage count descending and name ascending.
 
@@ -566,7 +639,7 @@ Errors use DRF field errors:
 }
 ```
 
-`enabled_media_types` must contain at least one supported `app.models.MediaTypes` value, excluding `episode`. Date, time, week-start, and quick-watch values must match the choice classes in `users.models`. Demo users cannot update preferences. Successful updates return `preferences_payload(user)`, not the full profile.
+`enabled_media_types` must contain at least one supported `app.models.MediaTypes` value, excluding `episode`. Date, time, week-start, and quick-watch values must match the choice classes in `users.models`. Demo users cannot update preferences. Successful updates return `preferences_payload(user)`, not the full profile. `quick_watch_date` is still stored, but TV no longer reads it: marks and fills are undated (TV-301, TV-901).
 
 `POST /api/v1/me/password/` changes the current user's password:
 

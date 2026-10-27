@@ -9,6 +9,51 @@ from app.models import Episode, Item, MediaTypes, Season
 
 logger = logging.getLogger(__name__)
 
+# Fields the TV tracking contract added to TV, Season and Episode. They aren't exported,
+# so the CSV keeps today's columns (TV-803). No other model has a field by these names,
+# so other media types' columns still follow their models.
+TV_TRACKING_FIELD_NAMES = frozenset(
+    {
+        "kind",
+        "watched_on",
+        "choice",
+        "choice_at",
+        "ended_choice",
+        "ended_choice_at",
+        "rewatch_started_at",
+        "rewatch_season_number",
+        "earlier_question_at",
+        "finish_offers",
+        "legacy_pending",
+        "reconciled_at",
+        "state_version",
+        "watched_count",
+        "aired_count",
+        "episode_count",
+        "up_next_season",
+        "up_next_episode",
+        "up_next_air_date",
+        "up_next_is_new",
+        "next_air_season",
+        "next_air_episode",
+        "next_air_date",
+        "finished",
+        "caught_up",
+        "last_watched_on",
+        "last_activity_on",
+        "last_activity_at",
+        "is_started",
+        "first_gap_episode",
+    },
+)
+TV_MEDIA_TYPES = frozenset(
+    {MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value},
+)
+# TV and Season also gained like_is_independent, an existing column that movies, music,
+# books and games fill. TV and Season rows keep it empty, as before, and its position
+# stays where those models put it.
+TV_EMPTY_COLUMNS = frozenset({"like_is_independent"})
+
 
 class Echo:
     """An object that implements just the write method of the file-like interface."""
@@ -67,7 +112,7 @@ def generate_rows(user):
 
         for media in queryset.iterator(chunk_size=500):
             row = [getattr(media.item, field, "") for field in fields["item"]] + [
-                getattr(media, field, "") for field in fields["track"]
+                track_value(media, media_type, field) for field in fields["track"]
             ]
 
             if media_type == MediaTypes.GAME.value:
@@ -80,6 +125,31 @@ def generate_rows(user):
             yield writer.writerow(row)
 
         logger.debug("Finished streaming %ss to CSV", media_type)
+
+
+def track_value(media, media_type, field):
+    """Return one tracking column's value for a row."""
+    if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
+        if field in TV_EMPTY_COLUMNS:
+            return ""
+        if field == "progress":
+            return tv_progress(media, media_type)
+    return getattr(media, field, "")
+
+
+def tv_progress(media, media_type):
+    """Return a show's or season's progress as the contract works it out (TV-104).
+
+    That is the stored watched count once the show has been worked out, else today's
+    computed property.
+    """
+    if media_type == MediaTypes.TV.value:
+        worked_out = not media.legacy_pending and media.reconciled_at is not None
+    else:
+        worked_out = media.is_started is not None
+    if worked_out and media.watched_count is not None:
+        return media.watched_count
+    return media.progress
 
 
 def get_model_fields(model):
@@ -98,6 +168,10 @@ def get_track_fields():
     for media_type in MediaTypes.values:
         model = apps.get_model("app", media_type)
         for field in get_model_fields(model):
+            if field in TV_TRACKING_FIELD_NAMES or (
+                media_type in TV_MEDIA_TYPES and field in TV_EMPTY_COLUMNS
+            ):
+                continue
             if field not in all_fields:
                 all_fields.append(field)
 

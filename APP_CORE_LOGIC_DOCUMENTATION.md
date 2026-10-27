@@ -114,7 +114,7 @@ Each media type has its own model inheriting from Media:
 ## Media Types & Sources
 
 ### Media Types
-1. **TV** (`tv`): TV shows (tracked at season level)
+1. **TV** (`tv`): TV shows (the show is the library card; see `docs/tv-tracking-contract.md`)
 2. **Season** (`season`): Individual seasons
 3. **Episode** (`episode`): Individual episodes
 4. **Movie** (`movie`): Movies
@@ -206,21 +206,20 @@ Extends Django's AbstractUser with extensive preference tracking.
 - When status changes to Completed:
   - Progress is set to max_progress
   - End date is set to current time
-  - For TV: All remaining seasons/episodes are created and marked completed
+  - For TV: a written Completed means marking every aired regular episode watched, undated (TV-207, TV-300)
   - For Books: Final reading session is created
 - When status changes to Dropped:
-  - For TV: All in-progress seasons are marked dropped
+  - For TV: Dropped is a choice about the show; started, unfinished seasons show it (TV-204)
   - For Books: All in-progress sessions are marked dropped
 - When status changes to In Progress:
-  - For TV: Next available season is started if none in progress
+  - For TV: In progress means choosing Watching; no season tracking is created (TV-005, TV-205)
   - For Books: Reading session is created if none exists
 
 ### Progress Tracking
 
 **Progress Calculation:**
 - **Movies**: Binary (0 or 1)
-- **TV Shows**: Sum of episodes watched across all seasons (excluding season 0)
-- **Seasons**: Highest episode number watched (handles repeats)
+- **TV Shows and Seasons**: Distinct aired regular episodes watched in the current pass, out of the aired regular episodes (TV-104); specials and repeats don't count
 - **Episodes**: Binary (watched or not)
 - **Anime/Manga**: Episode/chapter number
 - **Games**: Minutes played
@@ -235,7 +234,7 @@ Extends Django's AbstractUser with extensive preference tracking.
 
 **Max Progress Calculation:**
 - **Movies**: Always 1
-- **TV Shows**: Sum of released episodes (from events)
+- **TV Shows**: Aired regular episodes in the stored episode lists, never calendar events (TV-103)
 - **Books**: From `item.total_pages`
 - **Other**: From calendar events (content_number)
 
@@ -271,80 +270,53 @@ The `MediaManager` provides sophisticated querying:
 
 ## TV Shows, Seasons & Episodes
 
+TV follows `docs/tv-tracking-contract.md`. Every TV write (app, API, web, webhooks,
+imports, the calendar) goes through `src/app/tv_tracking.py`. It records facts
+(viewings, logs, marks and the show's Planning, Watching, Paused or Dropped choice)
+and, in the same transaction, works out and stores the rest (TV-207). Saving or
+deleting a TV, Season or Episode row works nothing out by itself; the model hooks in
+`src/app/tv_signals.py` call `app.tv_tracking`. The old model cascades are no longer
+called (TV-901).
+
 ### TV Show Model
 
-**Special Properties:**
-- `progress`: Calculated from sum of all season progress (excluding season 0)
-- `last_watched`: Returns "SxxExx" format of latest watched episode
-- `progressed_at`: Latest episode watched date
-- `start_date`: Earliest episode watched date
-- `end_date`: Latest episode watched date
+**Facts:**
+- `choice`, `choice_at`, `ended_choice`, `ended_choice_at`: the user's Planning, Watching, Paused or Dropped choice, and the one the last write ended (TV-203, TV-208)
+- `rewatch_started_at`, `rewatch_season_number`: a rewatch in progress (TV-600)
+- `earlier_question_at`: when the earlier-episodes question was used up (TV-107)
+- `rating_source`, `like_source`, `like_is_independent`: where the show's stars and heart came from (TV-501)
+- `legacy_pending`: a show stored before the contract that hasn't been worked out yet (TV-801)
 
-**Status Management:**
-- When TV status changes to Completed:
-  - `_completed()`: Creates all remaining seasons and episodes, marks them completed
-  - Only processes seasons with episodes > 0
-  - Uses bulk operations for performance
-
-- When TV status changes to Dropped:
-  - `_mark_in_progress_seasons_as_dropped()`: Marks all in-progress seasons as dropped
-
-- When TV status changes to In Progress:
-  - `_start_next_available_season()`: Finds next unwatched season and starts it
-  - If all existing seasons watched, fetches next season from provider
+**Worked-out values** (lists, Home and Continue Watching read these and never fetch provider data):
+- `status`: Completed when finished (TV-201) unless a later choice says otherwise; otherwise Watching ("In progress"), or the choice
+- `watched_count`, `aired_count`, `finished`, `caught_up` (TV-104, TV-202)
+- `up_next_season`, `up_next_episode`, `up_next_air_date`, `up_next_is_new` (TV-105, TV-206)
+- `next_air_season`, `next_air_episode`, `next_air_date`: the next regular episode to air
+- `last_watched_on`, `last_activity_on`, `last_activity_at`: Continue Watching order (TV-701)
+- `state_version`: changes on every write; destructive actions send it back (TV-705)
 
 ### Season Model
 
-**Relationships:**
-- `related_tv`: ForeignKey to TV show
-- `episodes`: Related episodes (via Episode.related_season)
+- A season gets tracking only when it gets a viewing, log, mark, stars or heart (TV-205). Choosing Watching and moving up next into a new season create nothing.
+- `is_started`, `watched_count`, `aired_count`, `first_gap_episode`, `up_next_episode`, `next_air_date`, `last_watched_on` are worked out. `status` is Completed when the season is finished (TV-200), otherwise In progress, or the show's Paused or Dropped (TV-204).
+- Seasons have no Pause, Drop or Planning of their own; a written season Planning, Paused or Dropped is rejected by the API and ignored elsewhere.
+- Each season keeps its own stars and heart (TV-500).
 
-**Special Properties:**
-- `progress`: Highest episode number watched (handles repeats by counting instances)
-- `progressed_at`: Latest episode watched date
-- `start_date`: Earliest episode watched date
-- `end_date`: Latest episode watched date
+### Episode Model (a viewing)
 
-**Status Management:**
-- When season status changes to Completed:
-  - `get_remaining_eps()`: Creates all remaining episodes
-  - Only creates episodes that have aired (checks air_date)
-  - Uses bulk operations
+- Each row is one viewing of one episode; an episode can have many.
+- `kind`: `tick` (a tap, a webhook watch or an imported play), `log` (an episode log's own viewing) or `fill` (an undated viewing a log or mark added, TV-301)
+- `end_date`: when it was watched, or null for fills and undated plays; `watched_on`: its day on the user's calendar
+- `diary_entry`: the log it belongs to, if any; deleting a log removes only its own viewing and fills (TV-406)
+- `created_at`: when it was recorded; rewatch passes and unticks go by this, never by the date (TV-102, TV-601)
 
-- When season status changes to Dropped:
-  - If TV show is not dropped, TV show is marked as dropped
+### The episode lists
 
-- When season status changes to In Progress:
-  - If TV show is not in progress, TV show is marked as in progress
-
-**Episode Management:**
-- `increase_progress()`: Watches next episode (finds next from provider metadata)
-- `decrease_progress()`: Unwatches current episode
-- `watch(episode_number, end_date)`: Creates episode instance
-- `unwatch(episode_number)`: Deletes latest episode instance
-- `get_episode_item()`: Gets or creates Item for episode
-
-**Auto-Season Progression:**
-- When last episode of season is watched, season is marked completed
-- If not the last season, next season is automatically started
-- If it's the last season, TV show is marked completed
-
-### Episode Model
-
-**Fields:**
-- `item`: ForeignKey to Item (episode item)
-- `related_season`: ForeignKey to Season
-- `end_date`: When episode was watched
-- `created_at`: When episode entry was created
-
-**Behavior:**
-- Multiple instances allowed (for rewatches)
-- When episode is created:
-  - If it's the last episode of season, season is marked completed
-  - If season was just completed and it's the last season, TV show is marked completed
-  - If season was just completed and not last season, next season is started
-  - If season is not in progress, it's marked in progress
-  - If TV show is not in progress, it's marked in progress
+`src/app/tv_listing.py` keeps a stored copy of each season's listed episode numbers
+and air dates (`TVListing`), updated whenever Spine fetches them. Writes use it when
+TMDB can't be reached; with no copy, a write is refused as retryable (TV-103). The
+hourly job in `src/events/tv_airing.py` works out shows whose next episode may have
+aired (TV-206).
 
 ---
 
@@ -512,7 +484,7 @@ The `MediaManager` provides sophisticated querying:
 - Gets all events for user in date range
 - Filters by enabled media types
 - Excludes items with inactive status (Paused, Dropped)
-- For TV shows: Complex logic to exclude seasons after first dropped season
+- For TV shows: the show's status alone decides; a Paused or Dropped show gets no events (TV-704)
 - Sorts with sentinel time last
 
 **sort_with_sentinel_last():**
@@ -926,10 +898,10 @@ The `MediaManager` provides sophisticated querying:
    - Status auto-updates if max reached
 
 2. **TV Show Progress:**
-   - Watch episode: Creates Episode instance
-   - Season progress updates automatically
-   - TV show progress updates automatically
-   - Next season starts when current completes
+   - Tick an episode: records one viewing, dated now (TV-100)
+   - The season and show are worked out again: progress, up next, finished, caught up
+   - Finishing a season in the app offers its Log Season composer once (TV-403)
+   - Moving up next into the next season creates nothing for it (TV-205)
 
 3. **Book Progress:**
    - Log reading session
