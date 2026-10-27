@@ -46,8 +46,21 @@ class TV600StartRewatchTests(TVTrackingTestCase):
         with self.assertRaises(TVConflict) as raised:
             tv_tracking.start_rewatch(self.user, show, season_number=2)
         self.assertEqual(raised.exception.message, "Finish or stop your rewatch first.")
+        # Rewatch Season isn't offered at all during a rewatch; Rewatch says why it's unavailable.
         season = tv_tracking.state_payload(self.user, self.season_item(show, 2))["season"]
-        self.assertEqual(season["action_reasons"]["rewatch_season"], "Finish or stop your rewatch first.")
+        self.assertNotIn("rewatch_season", season["available_actions"])
+        self.assertNotIn("rewatch_season", season["action_reasons"])
+        self.assertEqual(self.state(show)["action_reasons"]["rewatch"], "Finish or stop your rewatch first.")
+
+    def test_tv_600_a_show_rewatch_hides_rewatch_season(self):
+        show = self.make_show({1: 2, 2: 2})
+        tv_tracking.mark_watched(self.user, show)
+        self.advance()
+        tv_tracking.start_rewatch(self.user, show)
+        for number in (1, 2):
+            season = tv_tracking.state_payload(self.user, self.season_item(show, number))["season"]
+            self.assertNotIn("rewatch_season", season["available_actions"])
+            self.assertNotIn("rewatch_season", season["action_reasons"])
 
     def test_tv_600_a_season_rewatch(self):
         show = self.make_show({1: 2, 2: 2})

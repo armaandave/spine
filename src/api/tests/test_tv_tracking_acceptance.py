@@ -2226,7 +2226,7 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
         E3 is the log's fill, E1 and E2 keep their dates, and the season is finished, as
         if the app had made the same writes.
         """
-        show = self.make_show({1: 3})
+        show = self.make_show({1: 3}, status="Returning Series")
         old = self.new_user()
         TV.objects.bulk_create([TV(user=old, item=show, status=WATCHING, legacy_pending=True)])
         tv = TV.objects.get(user=old, item=show)

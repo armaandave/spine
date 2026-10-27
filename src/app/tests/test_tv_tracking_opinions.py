@@ -180,7 +180,7 @@ class TV500OwnStarsTests(TVTrackingTestCase):
     """TV-500: each level has its own stars and heart; nothing rolls up or down."""
 
     def test_a_33_a_rated_season_log_leaves_the_show_stars(self):
-        show = self.make_show({1: 2})
+        show = self.make_show({1: 2}, status="Returning Series")
         tv_tracking.set_rating(self.user, show, 4)
         self.log(self.season_item(show, 1), rating=9, liked=True)
         tv = self.tv(show)
@@ -212,7 +212,7 @@ class TV501SourceRulesTests(TVTrackingTestCase):
     """TV-501: show and season stars and hearts follow the shared source rules."""
 
     def test_a_32_rated_log_direct_change_then_edit(self):
-        show = self.make_show({1: 2})
+        show = self.make_show({1: 2}, status="Returning Series")
         season_item = self.season_item(show, 1)
         entry = self.log(season_item, rating=8).entry
         season = Season.objects.get(item=season_item)

@@ -1278,6 +1278,20 @@ class TVDiaryEndpointTests(TVAPITestCase):
         # TV-703: one diary activity, no second one from the API layer.
         self.assertEqual(Activity.objects.filter(actor=self.user, verb="diary_created").count(), 1)
 
+    def test_tv_408_a_season_1_log_of_an_ended_one_season_show_saves_as_the_show(self):
+        """New and installed builds: the log, its stars and heart land on the show."""
+        for name, save in (("new build", self.log), ("installed build", self.installed_build_log)):
+            with self.subTest(name):
+                show = self.make_show({1: 3})
+                response = save(show, 1, rating=8, liked=True)
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+                self.assertEqual(response.data["media"]["ref"]["media_type"], MediaTypes.TV.value)
+                self.assertEqual(response.data["tv_log"]["level"], "show")
+                self.assertEqual(response.data["tv"]["status"], "Completed")
+                self.assertEqual(response.data["season"]["state"], "watched")
+                self.assertEqual(str(self.tv(show).score), "8.0")
+                self.assertEqual(DiaryEntry.objects.get(pk=response.data["id"]).item, show)
+
     def test_tv_400_auto_mark_consumed_false_still_counts_the_log(self):
         show = self.make_show()
 

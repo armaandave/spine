@@ -311,7 +311,7 @@ class TV404ComposerTests(TVTrackingTestCase):
         self.assertEqual(composer["default_target"], "season:0")
 
     def test_tv_404_stars_and_heart_prefill_from_the_targets_own_values(self):
-        show = self.make_show({1: 2})
+        show = self.make_show({1: 2}, status="Returning Series")
         self.tick(show, 1, 1)
         tv_tracking.set_rating(self.user, show, 9)
         tv_tracking.set_rating(self.user, self.season_item(show, 1), 6)

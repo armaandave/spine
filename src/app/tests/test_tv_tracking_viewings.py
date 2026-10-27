@@ -245,7 +245,7 @@ class TV102UntickTests(TVTrackingTestCase):
         self.assertFalse(Season.objects.exists())
 
     def test_a_04_untick_of_a_season_log_fill_names_the_season_log(self):
-        show = self.make_show({1: 3})
+        show = self.make_show({1: 3}, status="Returning Series")
         self.log(self.season_item(show, 1))
         with self.assertRaises(TVLogBlocks) as raised:
             self.untick(show, 1, 2)
@@ -254,7 +254,7 @@ class TV102UntickTests(TVTrackingTestCase):
 
     def test_a_48_a_season_log_covering_ticks_blocks_the_untick(self):
         """A-48: tick E1 to E10, save the season log, untick E10: nothing changes."""
-        show = self.make_show({1: 10})
+        show = self.make_show({1: 10}, status="Returning Series")
         self.ticks(show, 1, range(1, 11))
         self.log(self.season_item(show, 1))
         with self.assertRaises(TVLogBlocks) as raised:

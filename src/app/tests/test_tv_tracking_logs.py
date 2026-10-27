@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from django.test import override_settings
 
-from app import tv_tracking, user_calendar
+from app import tv_listing, tv_tracking, user_calendar
 from app.models import DiaryEntry, Episode, MediaLike, Season
 from app.tests.test_tv_tracking_viewings import OCT_25, OCT_26, TVTrackingTestCase
 from app.tv_tracking import TVInvalid, TVLogBlocks, TVStateChanged
@@ -185,7 +185,7 @@ class TV403FinishOfferTests(TVTrackingTestCase):
         self.assertIsNone(self.tick(show, 1, 3).finished)
 
     def test_tv_403_finishing_the_show_offers_the_whole_show_too(self):
-        show = self.make_show({1: 2})
+        show = self.make_show({1: 2}, status="Returning Series")
         self.tick(show, 1, 1)
         finished = self.tick(show, 1, 2).finished
         self.assertTrue(finished["show_finished"])
@@ -254,7 +254,7 @@ class TV406DeleteLogTests(TVTrackingTestCase):
     """TV-406: deleting a log removes only its own viewing and fills."""
 
     def test_a_16_tick_e1_to_e3_log_the_season_then_delete_the_log(self):
-        show = self.make_show({1: 10})
+        show = self.make_show({1: 10}, status="Returning Series")
         self.ticks(show, 1, (1, 2, 3))
         entry = self.log(self.season_item(show, 1)).entry
         info = tv_tracking.log_info(entry)
@@ -290,7 +290,7 @@ class TV406DeleteLogTests(TVTrackingTestCase):
         self.assertEqual(self.status(show), "In progress")
 
     def test_tv_406_a_deleted_source_log_leaves_the_stars_independent(self):
-        show = self.make_show({1: 2})
+        show = self.make_show({1: 2}, status="Returning Series")
         self.tick(show, 1, 1)
         season_item = self.season_item(show, 1)
         first = self.log(season_item, rating=7, liked=True).entry
@@ -321,7 +321,7 @@ class TV406DeleteLogTests(TVTrackingTestCase):
 
     def test_tv_400_deleting_an_episode_log_a_season_log_covers_keeps_it_watched(self):
         """The episode log's own viewing becomes the season log's fill (TV-400)."""
-        show = self.make_show({1: 5})
+        show = self.make_show({1: 5}, status="Returning Series")
         episode_log = self.log(self.episode_item(show, 1, 3), consumed_at=date(2026, 10, 20)).entry
         season_log = self.log(self.season_item(show, 1)).entry
         self.assertEqual(tv_tracking.log_info(episode_log)["unmarks_count"], 0)
@@ -425,6 +425,72 @@ class TV407LogDateTests(TVTrackingTestCase):
         show = self.make_show({1: [date(2026, 10, 1)]})
         entry = self.log(self.episode_item(show, 1, 1), consumed_at="2026-09-01").entry
         self.assertEqual(entry.consumed_at.date(), date(2026, 9, 1))
+
+
+class TV408OneSeasonShowTests(TVTrackingTestCase):
+    """TV-408: an ended show with one regular season logs Season 1 as the whole show."""
+
+    def test_tv_408_a_season_1_log_of_an_ended_one_season_show_saves_as_the_show(self):
+        for provider_status in ("Ended", "Canceled"):
+            with self.subTest(provider_status):
+                show = self.make_show({0: 2, 1: 3}, status=provider_status)
+                entry = self.log(self.season_item(show, 1), rating=8, liked=True).entry
+                self.assertEqual(entry.item, show)
+                self.assertEqual(entry.progress_snapshot["tv"]["covers"], {"1": [1, 2, 3]})
+                self.assertEqual(self.status(show), "Completed")
+                self.assertEqual(str(self.tv(show).score), "8.0")
+                self.assertEqual(self.tv(show).rating_source_id, entry.pk)
+                self.assertTrue(MediaLike.objects.filter(user=self.user, item=show).exists())
+                self.assertFalse(Season.objects.filter(user=self.user, item__media_id=show.media_id).exclude(score=None).exists())
+                self.assertEqual(self.viewings(show, 0), [], "Specials aren't a season and aren't filled.")
+                self.assertEqual(self.state(self.season_item(show, 1))["season"]["state"], "watched")
+
+    def test_tv_408_returning_multi_season_airing_and_specials_logs_are_unchanged(self):
+        returning = self.make_show({1: 3}, status="Returning Series")
+        two_seasons = self.make_show({1: 3, 2: 3})
+        airing = self.make_show({1: [OCT_25 - timedelta(days=7), OCT_25 + timedelta(days=7)]})
+        specials = self.make_show({0: 2, 1: 3})
+        for show in (returning, two_seasons, airing):
+            with self.subTest(show.media_id):
+                entry = self.log(self.season_item(show, 1)).entry
+                self.assertEqual((entry.item.media_type, entry.item.season_number), ("season", 1))
+        entry = self.log(self.season_item(specials, 0)).entry
+        self.assertEqual((entry.item.media_type, entry.item.season_number), ("season", 0))
+
+    def test_tv_408_the_composers_offer_the_whole_show_instead_of_season_1(self):
+        show = self.make_show({0: 2, 1: 3})
+        composer = self.state(show)["composer"]
+        self.assertEqual([target["id"] for target in composer["targets"]], ["season:0", "show"])
+        self.assertEqual(composer["default_target"], "show")
+        season_page = self.state(self.season_item(show, 1))["composer"]
+        self.assertEqual(season_page["default_target"], "show")
+        self.assertEqual([target["id"] for target in season_page["targets"]], ["show"])
+        specials_page = self.state(self.season_item(show, 0))["composer"]
+        self.assertEqual([target["id"] for target in specials_page["targets"]], ["season:0"])
+        # Multi-season shows still offer each season.
+        two_seasons = self.make_show({1: 3, 2: 3})
+        targets = self.state(two_seasons)["composer"]["targets"]
+        self.assertEqual([target["id"] for target in targets], ["season:1", "season:2", "show"])
+
+    def test_tv_408_finishing_season_1_offers_a_log_of_the_whole_show(self):
+        show = self.make_show({1: 2})
+        self.tick(show, 1, 1)
+        finished = self.tick(show, 1, 2).finished
+        self.assertEqual(finished["season_number"], 1)
+        self.assertTrue(finished["show_finished"])
+        self.assertEqual(finished["composer"]["default_target"], "show")
+        self.assertEqual([target["id"] for target in finished["composer"]["targets"]], ["show"])
+        self.assertEqual(finished["composer"]["targets"][0]["date"], OCT_25.isoformat())
+
+    def test_tv_408_an_earlier_season_log_stays_a_season_log(self):
+        show = self.make_show({1: 3}, status="Returning Series")
+        earlier = self.log(self.season_item(show, 1)).entry
+        self.fake.show(show.media_id).status = "Ended"
+        tv_listing.get_listing(show, max_age=timedelta(0))
+        later = self.log(self.season_item(show, 1)).entry
+        earlier.refresh_from_db()
+        self.assertEqual((earlier.item.media_type, earlier.item.season_number), ("season", 1))
+        self.assertEqual(later.item, show)
 
 
 class TV703FeedTests(TVTrackingTestCase):
