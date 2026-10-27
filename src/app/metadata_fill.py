@@ -16,8 +16,7 @@ The chain (app.tasks.fill_item_metadata) walks pending Items by id in chunks of 
   games) are only stamped, without a call.
 - Apple Music albums never go to MusicBrainz: one call on Apple's background session
   (apple_music.album with its tracks) gives the album length, and the release date and
-  Apple's broad genres only where the Item has none, so an album moved from MusicBrainz
-  keeps its first-release date and detailed genres. Without the Apple Music key the
+  Apple's genres; a moved album keeps its first-release date. Without the Apple Music key the
   provider is stopped for the run and nothing is marked.
 - A 404 or 410, NotImplementedError, TypeError, ValueError or KeyError from the provider
   stamps the Item: asking again would give the same answer. The 10th such failure in a
@@ -545,8 +544,8 @@ def _apple_music_metadata(item):
     """Return an Apple Music album's metadata from one background catalog call.
 
     The album length comes from its tracks (only when every track has a length). The
-    release date and Apple's genres (minus the catch-all "Music") only fill what the
-    Item lacks. Music genres stay outside the genre groups (genre_groups).
+    release date only fills what the Item lacks. Genres refresh from Apple, minus
+    the catch-all "Music". Music genres stay outside the genre groups (genre_groups).
     """
     album = apple_music.album(item.media_id, background=True)
     attributes = album.get("attributes") or {}
@@ -557,10 +556,10 @@ def _apple_music_metadata(item):
         metadata["runtime"] = max(1, round(sum(lengths) / 60000))
     if item.release_date is None and attributes.get("releaseDate"):
         metadata["release_date"] = attributes["releaseDate"]
-    if not item.filter_facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE).exists():
-        genres = [name for name in attributes.get("genreNames") or [] if name != "Music"]
-        if genres:
-            metadata["genres"] = genres
+    if "genreNames" in attributes:
+        from app.music_catalog import apple_genre_names  # noqa: PLC0415
+
+        metadata["genres"] = apple_genre_names(attributes["genreNames"])
     return metadata
 
 

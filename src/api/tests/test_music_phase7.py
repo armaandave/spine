@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -11,6 +11,7 @@ from lists.models import CustomList, CustomListItem
 from social.models import Activity, ContentLike, Follow, FollowStatus
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicListsSocialTests(TestCase):
     """Music uses the existing Item-based list and social contracts."""
 
@@ -262,6 +263,7 @@ class MusicListsSocialTests(TestCase):
         self.assertEqual(blocked_like.status_code, status.HTTP_404_NOT_FOUND)
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicManualAndImportBoundaryTests(TestCase):
     """Manual creation stays generic and streaming imports stay unsupported."""
 

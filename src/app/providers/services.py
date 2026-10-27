@@ -679,11 +679,7 @@ def discover(media_type, *, source=None, page=1, page_size=None, genre=None, yea
         # Genre pages follow the catalog, so a genre chip on an older MusicBrainz
         # album opens Apple Music's page once the catalog is Apple Music.
         if source == Sources.APPLE_MUSIC.value or config.music_catalog_source() == Sources.APPLE_MUSIC:
-            data = _apple_music().discover(page=page, page_size=page_size, genre=genre)
-            if data.get("total_results"):
-                return data
-            # No album of the genre is linked to Apple Music yet, so the page shows
-            # MusicBrainz's genre page; the API puts its albums under their canonical refs.
+            return _apple_music().discover(page=page, page_size=page_size, genre=genre)
         return musicbrainz.discover(page=page, page_size=page_size, genre=genre)
 
     msg = f"Discovery is not supported for media_type={media_type!r} and source={source!r}."

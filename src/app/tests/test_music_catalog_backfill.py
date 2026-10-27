@@ -616,7 +616,7 @@ class ApplyTests(BackfillTestCase):
         self.assertEqual((moved.source, moved.media_id, moved.title, moved.poster_accent_color), ("apple_music", SOS, "SOS", ""))
         self.assertTrue(moved.image.startswith("https://is1-ssl.mzstatic.com/"))
         self.assertEqual(moved.release_date, date(2022, 12, 9))
-        self.assertEqual(sorted(moved.filter_facets.values_list("value", flat=True)), SOS_GENRES)
+        self.assertEqual(sorted(moved.filter_facets.values_list("value", flat=True)), ["R&B/Soul"])
         # Every row still points at the same pk; the old ref finds the album.
         for row in rows:
             row.refresh_from_db()

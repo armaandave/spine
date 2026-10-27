@@ -4,13 +4,14 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 
 from django.core.cache import cache
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.services import media
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicCacheTests(SimpleTestCase):
     """Verify the music stale cache contract."""
 
@@ -91,6 +92,7 @@ class MusicCacheTests(SimpleTestCase):
         self.assertEqual(results, [data, data])
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicDetailStageViewTests(TestCase):
     """Verify the two iOS music detail stages."""
 

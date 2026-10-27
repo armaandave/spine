@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -173,6 +173,7 @@ def recording_metadata():
     }
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicPhase9ContractTests(TransactionTestCase):
     """Lock the rendered iOS music API responses to committed JSON."""
 

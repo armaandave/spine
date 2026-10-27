@@ -96,13 +96,13 @@ class ApiV1FoundationTests(TestCase):
         self.assertIn(MediaTypes.MUSIC.value, meta.data["media_types"])
         self.assertEqual(
             meta.data["sources"][MediaTypes.MUSIC.value],
-            [Sources.MUSICBRAINZ.value],
+            [Sources.APPLE_MUSIC.value],
         )
         self.assertIn(Sources.MUSICBRAINZ.value, meta.data["source_choices"])
         self.assertIn(Sources.APPLE_MUSIC.value, meta.data["source_choices"])
         self.assertEqual(
             sources.data[MediaTypes.MUSIC.value],
-            [Sources.MUSICBRAINZ.value],
+            [Sources.APPLE_MUSIC.value],
         )
 
     def test_music_tracking_uses_generic_workflow_and_binary_progress(self):
@@ -360,6 +360,7 @@ class ApiV1FoundationTests(TestCase):
         metadata_mock.assert_not_called()
 
     @patch("app.providers.musicbrainz.search")
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_music_search_uses_generic_summary_and_outer_cache(self, search_mock):
         search_mock.return_value = {
             "page": 1,
@@ -441,6 +442,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertIsNone(media_service._music_search_superseded(None, "my beau"))
 
     @patch("app.providers.musicbrainz.search")
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_replaced_music_search_answers_conflict(self, search_mock):
         search_mock.side_effect = provider_services.SearchSuperseded
         self.client.force_authenticate(get_user_model().objects.create_user(username="music-typist"))
@@ -2776,6 +2778,7 @@ class ApiV1FoundationTests(TestCase):
         self.assertIn("Discovery is not supported", response.data["detail"])
 
     @patch("api.services.media.provider_services.discover")
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_media_discover_music_genre_contract(self, discover_mock):
         user = get_user_model().objects.create_user(
             username="music-discoverer",

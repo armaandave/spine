@@ -101,6 +101,11 @@ def link_genre_albums_to_apple():
     """Link genre page albums to Apple Music albums (hourly, on the featured worker)."""
     from app import music_links
 
+    from app import config  # noqa: PLC0415
+    from app.models import Sources  # noqa: PLC0415
+
+    if config.music_catalog_source() == Sources.APPLE_MUSIC:
+        return {"skipped": "Genre pages use Apple Music charts directly"}
     result = music_links.link_genre_albums()
     logger.info("Genre albums linked to Apple Music counts=%s", result)
     return result

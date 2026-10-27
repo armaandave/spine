@@ -332,7 +332,7 @@ class FillBridgesTests(MusicLinksTestCase):
         self.assertEqual(len(gaps), 4)
         self.assertTrue(all(gap >= music_links.BRIDGE_REQUEST_SPACING for gap in gaps), gaps)
 
-    def test_a_deluxe_gets_its_release_groups_genres_but_not_its_date(self):
+    def test_a_deluxe_keeps_apple_genres_and_its_own_date(self):
         apple_album(LANA, upc="196872790276")
         lana = apple_item(LANA, title="SOS Deluxe: LANA")
         genre_facets(lana, "r&b")
@@ -351,10 +351,10 @@ class FillBridgesTests(MusicLinksTestCase):
         self.assertEqual(lana.release_date, date(2024, 12, 20))
         self.assertEqual(
             list(lana.filter_facets.filter(facet_type="genre").values_list("value", flat=True)),
-            SOS_GENRES,
+            ["R&B/Soul"],
         )
 
-    def test_an_items_filters_take_musicbrainzs_genres_and_its_cached_pages_are_dropped(self):
+    def test_bridge_refresh_keeps_apple_genres_and_drops_cached_pages(self):
         apple_album(SOS, upc="196589564931")
         sos = apple_item(SOS)
         genre_facets(sos, "alternative r&b", "contemporary r&b", "neo soul", "r&b", "soul")
@@ -378,10 +378,10 @@ class FillBridgesTests(MusicLinksTestCase):
 
         self.fill()
 
-        # Apple's broader genres give way to MusicBrainz's, even when they are fewer.
+        # Bridge enrichment must preserve Apple genre labels.
         self.assertEqual(
             sorted(sos.filter_facets.filter(facet_type="genre").values_list("value", flat=True)),
-            SOS_GENRES,
+            ["R&B/Soul"],
         )
         sos.refresh_from_db()
         self.assertEqual(sos.release_date, date(2022, 12, 9))
@@ -389,7 +389,7 @@ class FillBridgesTests(MusicLinksTestCase):
             self.assertIsNone(cache.get(key))
             self.assertIsNone(cache.get(f"{key}:validation"))
 
-    def test_an_item_with_fewer_genres_gets_musicbrainzs(self):
+    def test_an_item_with_old_genres_gets_apples_labels(self):
         apple_album(SOS, upc="196589564931")
         sos = apple_item(SOS)
         genre_facets(sos, "r&b")
@@ -401,7 +401,7 @@ class FillBridgesTests(MusicLinksTestCase):
 
         self.assertEqual(
             list(sos.filter_facets.filter(facet_type="genre").values_list("value", flat=True)),
-            SOS_GENRES,
+            ["R&B/Soul"],
         )
 
     def test_a_link_row_fills_the_bridge_without_musicbrainz(self):
@@ -903,6 +903,7 @@ class MusicLinkTaskRegistrationTests(SimpleTestCase):
             create_task_result_on_publish(headers={"task": "Link genre albums to Apple", "id": "2"})
             store.assert_called_once()
 
+    @override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
     def test_both_tasks_enqueue_and_run(self):
         # Tests run tasks eagerly; without the key both return at once.
         self.assertEqual(fill_apple_album_bridges.delay().get(), {"skipped": "Apple Music isn't configured"})
@@ -910,3 +911,10 @@ class MusicLinkTaskRegistrationTests(SimpleTestCase):
         with patch("app.music_links.link_genre_albums", return_value={"matched": 2}) as link:
             self.assertEqual(link_genre_albums_to_apple.apply_async().get(), {"matched": 2})
         link.assert_called_once_with()
+
+    @override_settings(MUSIC_CATALOG_SOURCE="apple_music")
+    def test_native_genre_browsing_does_not_run_the_legacy_matcher(self):
+        with patch("app.music_links.link_genre_albums") as matcher:
+            result = link_genre_albums_to_apple.run()
+        self.assertEqual(result, {"skipped": "Genre pages use Apple Music charts directly"})
+        matcher.assert_not_called()

@@ -968,7 +968,7 @@ class AppleMusicTests(FillTestCase):
             {"Rock"},
         )
 
-    def test_a_moved_album_keeps_its_musicbrainz_date_and_genres(self):
+    def test_a_moved_album_keeps_its_date_and_refreshes_apple_genres(self):
         album = self.apple_item(release_date=datetime(1997, 5, 21, tzinfo=UTC).date(), release_year=1997)
         self.genre(album, "industrial")
         self.patch_album(lambda *args, **kwargs: apple_album(release_date="2017-01-01"))
@@ -981,7 +981,7 @@ class AppleMusicTests(FillTestCase):
         self.assertEqual(album.release_date.isoformat(), "1997-05-21")
         self.assertEqual(
             set(album.filter_facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE).values_list("value", flat=True)),
-            {"industrial"},
+            {"Rock"},
         )
 
     def test_an_apple_album_with_what_apple_gives_is_only_stamped(self):

@@ -3,6 +3,7 @@
 #
 # Usage: scripts/music-catalog-production.sh <step> [args...] [--confirm]
 #   check [--repair]               test the Apple Music key and count what needs attention
+#   genres [--apply]              refresh stored Apple genre labels (dry run by default)
 #   map [--limit N]                match albums (link rows only); run it at night
 #   report                         counts here; every album's row to a private CSV
 #   link --mbid M --apple A        record a manual pick
@@ -42,16 +43,16 @@ for arg in "$@"; do
 done
 
 case "$step" in
-  check | map | report | link | apply | revert) ;;
-  *) die "Usage: scripts/music-catalog-production.sh <check|map|report|link|apply|revert> [args...] [--confirm]" ;;
+  check | map | report | link | apply | revert | genres) ;;
+  *) die "Usage: scripts/music-catalog-production.sh <check|map|report|link|apply|revert|genres> [args...] [--confirm]" ;;
 esac
 
 changes_data=false
 case "$step" in
   link | apply | revert) changes_data=true ;;
-  check)
+  check | genres)
     for arg in "${args[@]+"${args[@]}"}"; do
-      if [[ "$arg" == "--repair" ]]; then
+      if [[ "$arg" == "--repair" || "$arg" == "--apply" ]]; then
         changes_data=true
       fi
     done

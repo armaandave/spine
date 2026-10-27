@@ -377,7 +377,7 @@ APPLE_MUSIC_TEAM_ID = config("APPLE_MUSIC_TEAM_ID", default="")
 APPLE_MUSIC_KEY_ID = config("APPLE_MUSIC_KEY_ID", default="")
 APPLE_MUSIC_PRIVATE_KEY = config("APPLE_MUSIC_PRIVATE_KEY", default="")  # base64 of the .p8, one line
 # Where new music albums come from: "apple_music", or anything else for MusicBrainz.
-MUSIC_CATALOG_DEFAULT = "musicbrainz"
+MUSIC_CATALOG_DEFAULT = "apple_music"
 MUSIC_CATALOG_SOURCE = config("MUSIC_CATALOG_SOURCE", default=MUSIC_CATALOG_DEFAULT)
 
 ADMIN_ENABLED = config("ADMIN_ENABLED", default=False, cast=bool)

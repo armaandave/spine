@@ -1,11 +1,8 @@
 """Apple Music catalog API client, album pages, search and artist pages.
 
-Raw catalog fetches that return Apple's JSON resources unmapped, and the album, song,
-search and artist pages built from them in Spine's shapes (see
-docs/music/apple-music-catalog.md). Also genre pages from the database, and the
-matching of MusicBrainz albums to Apple albums that genre pages and featured lists
-use. Only ``apple_music`` refs and sources reach it: music is still catalogued from
-MusicBrainz unless ``MUSIC_CATALOG_SOURCE`` says otherwise.
+Raw catalog fetches and the album, song, search, artist and genre chart pages built
+in Spine's response shapes (docs/music/apple-music-catalog.md). Apple Music is the
+default catalog; MusicBrainz refs and the explicit rollback path remain supported.
 
 The developer token is signed here from the ``APPLE_MUSIC_*`` key settings and kept
 in this process's memory only: never logged, never written to the cache.
@@ -32,13 +29,13 @@ from redis.exceptions import RedisError
 from urllib3.exceptions import ProtocolError
 
 from app import helpers, music_catalog, music_listing
+from app import apple_genres
 from app.models import (
     AppleAlbum,
     Item,
     ItemFilterFacet,
     MediaTypes,
     MusicAlbumLink,
-    MusicGenreAlbum,
     Sources,
 )
 from app.providers import musicbrainz, quota, services
@@ -583,68 +580,80 @@ def person_page(artist_id):
 
 
 def discover(*, page=1, page_size=None, genre=None):
-    """Return a music genre page from Apple Music albums, most read about first.
+    """Browse Apple's genre charts, using Apple album identities throughout.
 
-    The genre pages' albums (``MusicGenreAlbum``, filed under MusicBrainz's genres)
-    that a matched or applied link row ties to an Apple album, each under its
-    canonical ref. An album a MusicBrainz Item holds keeps its MusicBrainz ref, so its
-    data stays together. An album two rows name is shown once. Reads the database
-    only, so opening a page makes no request.
+    Cache the complete chart, then paginate after folding clean copies and
+    re-uploads. A short intermediate page must not hide later chart entries.
     """
-    genre = " ".join(str(genre or "").split()).casefold()
-    if not genre:
+    if not str(genre or "").strip():
         raise ValueError("genre is required for music discovery.")
+    genre_id = _chart_genre_id(genre)
     page = max(1, int(page))
-    per_page = page_size or settings.PER_PAGE
-    genre_albums = MusicGenreAlbum.objects.filter(genre=genre)
-    links = {
-        link.release_group_mbid: link
-        for link in MusicAlbumLink.objects.filter(
-            status__in=_SHOWN_LINK_STATUSES,
-            release_group_mbid__in=genre_albums.values("release_group_mbid"),
-        ).exclude(apple_album_id="")
-    }
-    rows = [album for album in genre_albums if album.release_group_mbid in links]
-    musicbrainz_refs = {
-        album.release_group_mbid: (Sources.MUSICBRAINZ.value, MediaTypes.MUSIC.value, album.release_group_mbid)
-        for album in rows
-    }
-    apple_refs = {
-        mbid: (Sources.APPLE_MUSIC.value, MediaTypes.MUSIC.value, link.apple_album_id)
-        for mbid, link in links.items()
-    }
-    canonical = music_catalog.canonical_music_refs([*musicbrainz_refs.values(), *apple_refs.values()])
-    held = set(
-        Item.objects.filter(
-            source=Sources.MUSICBRAINZ.value,
-            media_type=MediaTypes.MUSIC.value,
-            media_id__in=list(musicbrainz_refs),
-        ).values_list("media_id", flat=True),
-    )
-    shown = {}
-    for album in rows:
-        mbid = album.release_group_mbid
-        ref = canonical[musicbrainz_refs[mbid]]
-        if ref == musicbrainz_refs[mbid] and mbid not in held:
-            ref = canonical[apple_refs[mbid]]
-        shown.setdefault(ref, (album, links[mbid]))
+    per_page = max(1, min(int(page_size or settings.PER_PAGE), 100))
+    rows = [] if genre_id is None else _genre_chart(genre_id)
     start = (page - 1) * per_page
-    page_rows = list(shown.items())[start : start + per_page]
-    items = {
-        item.media_id: item
-        for item in Item.objects.filter(
-            source=Sources.APPLE_MUSIC.value,
-            media_type=MediaTypes.MUSIC.value,
-            media_id__in=[ref[2] for ref, _ in page_rows if ref[0] == Sources.APPLE_MUSIC.value],
-        )
+    return {
+        "page": page,
+        "per_page": per_page,
+        "total_results": len(rows),
+        "total_pages": max(1, (len(rows) + per_page - 1) // per_page),
+        "results": rows[start:start + per_page],
     }
-    results = [
-        _genre_album_row(ref, album, link, items.get(ref[2]))
-        for ref, (album, link) in page_rows
-    ]
-    data = helpers.format_search_response(page, per_page, len(shown), results)
-    data["per_page"] = per_page
-    return data
+
+
+def _chart_genre_id(genre):
+    """Map a subgenre chip to the closest genre Apple supports for charts."""
+    genre_id = apple_genres.genre_id(genre)
+    if genre_id is None:
+        return None
+    key = f"apple_music:chart_genres:v1:{_storefront()}"
+    supported = cache.get(key)
+    if supported is None:
+        supported = [str(row["id"]) for row in _get("genres").get("data") or [] if row.get("id")]
+        if supported:
+            cache.set(key, supported, 24 * 60 * 60)
+    seen = set()
+    while genre_id and genre_id not in seen:
+        if genre_id in supported:
+            return genre_id
+        seen.add(genre_id)
+        genre_id = (apple_genres.BY_ID.get(genre_id) or {}).get("parent")
+    return None
+
+
+def _genre_chart(genre_id):
+    key = f"apple_music:genre_chart:v1:{_storefront()}:{genre_id}"
+    rows = cache.get(key)
+    if rows is not None:
+        return rows
+    response = _get("charts", {"types": "albums", "genre": genre_id, "limit": 100})
+    charts = (response.get("results") or {}).get("albums") or []
+    chart = charts[0] if charts else {}
+    found = list(chart.get("data") or [])
+    next_path = chart.get("next")
+    visited = set()
+    # Apple's charts are bounded; never follow an unbounded or repeating next chain.
+    while next_path and next_path not in visited and len(found) < 200 and len(visited) < MAX_PAGES:
+        visited.add(next_path)
+        more = _get(next_path, {"limit": 100})
+        # Chart pagination can return a chart collection or a resource collection.
+        more_charts = (more.get("results") or {}).get("albums") or []
+        more_chart = more_charts[0] if more_charts else more
+        found.extend(more_chart.get("data") or [])
+        next_path = more_chart.get("next")
+    found = [album for album in found[:200] if album.get("id")]
+    today = timezone.localdate()
+    listings = _listings_with_families(found, today=today) if found else {}
+    rows, seen = [], set()
+    for album in found:
+        identity, members = listings[str(album["id"])]
+        if identity in seen or music_listing.is_hidden(members):
+            continue
+        seen.add(identity)
+        rows.append(_related_row(identity, members, today=today))
+    # Failures propagate and are never cached as an empty page.
+    cache.set(key, rows, 60 * 60)
+    return rows
 
 
 def match_album(title, artist):
@@ -1197,25 +1206,6 @@ def _related_row(identity, members, *, today):
     return {key: value for key, value in row.items() if key not in RANKING_KEYS}
 
 
-def _genre_album_row(ref, album, link, item):
-    """Return a genre page row: MusicBrainz's when the ref is, else the Apple album's.
-
-    An Apple album shows its link row's title and cover, else its Item's; the subtitle
-    keeps MusicBrainz's artist and first release year.
-    """
-    row = musicbrainz.genre_album_result(album)
-    if ref[0] != Sources.APPLE_MUSIC.value:
-        return row
-    return {
-        **row,
-        "source": Sources.APPLE_MUSIC.value,
-        "media_id": ref[2],
-        "title": link.apple_title or (item.title if item else "") or album.title,
-        "image": link.apple_image or (item.image if item else "") or settings.IMG_NONE,
-        "poster_width": ARTWORK_SIZE,
-        "poster_height": ARTWORK_SIZE,
-    }
-
 
 def _album_rank(attributes, title, artist):
     """Return how well an Apple album stands for a MusicBrainz album, or None if it can't.
@@ -1601,16 +1591,10 @@ def _first_day(value):
 
 
 def _genres(identity, attributes, bridge):
-    """Return MusicBrainz genre names: the bridge's, else the Item's, else Apple's mapped.
-
-    Album pages rewrite the Item's genre filters from this list, so it is empty only
-    when all three are: MusicBrainz's genres replace Apple's broad ones once the bridge
-    has them, and an Item's filters are never emptied.
-    """
-    bridge_genres = [str(genre) for genre in (bridge.genres if bridge is not None else []) if genre]
-    if bridge_genres:
-        return bridge_genres
-    return _item_genres(identity) or music_catalog.apple_genre_names(attributes.get("genreNames"))
+    """Use Apple's labels; stored facets are only an outage/missing-data fallback."""
+    if "genreNames" in attributes:
+        return music_catalog.apple_genre_names(attributes["genreNames"])
+    return _item_genres(identity)
 
 
 def _item_genres(album_id):

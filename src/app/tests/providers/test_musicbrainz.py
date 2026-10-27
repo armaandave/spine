@@ -109,6 +109,7 @@ def full_release(release, *, complete=True, printed_number="1", isrcs=None):
     return result
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicBrainzTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -1933,6 +1934,7 @@ class MusicBrainzTests(TestCase):
 
 
 @override_settings(MUSIC_DEFAULT_MARKET="US")
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class RepresentativeReleaseTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -2240,6 +2242,7 @@ class RepresentativeReleaseTests(TestCase):
                 )
 
 
+@override_settings(MUSIC_CATALOG_SOURCE="musicbrainz")
 class MusicBrainzRateLimitTests(TestCase):
     def test_musicbrainz_session_uses_dedicated_redis_bucket(self):
         factory = services.musicbrainz_session.limiter.bucket_factory
