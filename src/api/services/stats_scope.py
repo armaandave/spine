@@ -345,17 +345,26 @@ class StatsScope:
 
     @cached_property
     def dated_viewings(self):
-        """Viewings in the range that have a day; fills never do (TV-301)."""
+        """Viewings in the range that have a day; a mark's fills never do (STAT-104)."""
         if not self.is_all_time:
             return self.viewings
         return self.viewings.filter(self.viewing_has_day_q())
 
     @staticmethod
+    def _log_fill_q():
+        """Match fills a log made: they count on that log's day (STAT-104)."""
+        return Q(kind=Episode.Kind.FILL, diary_entry__isnull=False)
+
+    @staticmethod
     def viewing_has_day_q():
-        return Q(watched_on__isnull=False) | (Q(end_date__isnull=False) & ~Q(kind=Episode.Kind.FILL))
+        return (
+            Q(watched_on__isnull=False)
+            | (Q(end_date__isnull=False) & ~Q(kind=Episode.Kind.FILL))
+            | StatsScope._log_fill_q()
+        )
 
     def viewing_day(self):
-        """Return a viewing's day: watched_on, else a non-fill's end_date that day."""
+        """Return a viewing's day: watched_on, a non-fill's end_date, a fill's log."""
         return Coalesce(
             F("watched_on"),
             Case(
@@ -363,6 +372,7 @@ class StatsScope:
                     Q(end_date__isnull=False) & ~Q(kind=Episode.Kind.FILL),
                     then=TruncDate("end_date", tzinfo=self.zone),
                 ),
+                When(self._log_fill_q(), then=self.log_day("diary_entry__consumed_at")),
                 default=Value(None, output_field=DateField()),
                 output_field=DateField(),
             ),
@@ -375,9 +385,13 @@ class StatsScope:
             return Q()
         start = datetime.combine(self.start_date, time.min, tzinfo=self.zone)
         before = datetime.combine(self.end_date + timedelta(days=1), time.min, tzinfo=self.zone)
-        return Q(watched_on__gte=self.start_date, watched_on__lte=self.end_date) | (
-            Q(watched_on__isnull=True, end_date__gte=start, end_date__lt=before)
-            & ~Q(kind=Episode.Kind.FILL)
+        return (
+            Q(watched_on__gte=self.start_date, watched_on__lte=self.end_date)
+            | (
+                Q(watched_on__isnull=True, end_date__gte=start, end_date__lt=before)
+                & ~Q(kind=Episode.Kind.FILL)
+            )
+            | (Q(watched_on__isnull=True) & self._log_fill_q() & self.range_q("diary_entry__consumed_at"))
         )
 
     # Titles

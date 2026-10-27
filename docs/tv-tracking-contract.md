@@ -496,7 +496,7 @@ A fill is an undated viewing a log or mark adds for an aired episode that isn't 
 Each fill belongs to the log or mark that made it.
 
 Fills count as watched for progress, up next and finishing, like any viewing.
-They have no date, so they never move a last-watched date and never count in date-based statistics (SW-004).
+They have no date, so they never move a last-watched date (SW-004). Stats count a log's fills on that log's day and a mark's fills only in All Time (STAT-104).
 A mark's fill is unlogged; unticking can remove it (TV-102).
 A log's fill goes only when that log is deleted (TV-406).
 A mark ends when its last fill is removed; an ended mark counts for nothing under TV-003, TV-006, TV-205, TV-208 and the Started term.

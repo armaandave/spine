@@ -466,7 +466,8 @@ class StatsV2CountingTests(StatsV2Base):
         )
         self.assertEqual(tv_scope.events, [(date(2025, 3, 2), show.id, "tv")])
         self.assertEqual(movie_scope.events, [(date(2025, 3, 2), movie.id, "movie")])
-        self.assertEqual(scope.viewings.count(), 3)
+        # The season log's fill counts on the log's day (STAT-104).
+        self.assertEqual(scope.viewings.count(), 4)
         self.assertEqual(scope.all_time().viewings.count(), 4)
 
     def test_days_follow_the_owners_calendar_for_every_viewer(self):
