@@ -157,7 +157,7 @@ A show whose only history is specials is in Watching, with the first aired regul
 
 The show's + menu offers:
 
-- Watching, plus Resume when the show is Paused;
+- Watching, or Resume in its place when the show is Paused (one row, never both);
 - Planning;
 - Pause;
 - Drop;
@@ -165,18 +165,20 @@ The show's + menu offers:
 - Log, for a season or the whole show; and
 - Remove from Library, while the show is in the library.
 
-A season's + menu offers Log Season, and Rewatch Season once that season is finished.
+A season's + menu offers Log Season, and Rewatch Season once that season is finished and no rewatch is in progress (TV-600).
 An episode's + menu offers Log Episode.
 
 Base options stay visible whatever the status.
 Remove from Library isn't one: a show that isn't in the library has nothing to remove, so the menu leaves it out, and the server sends neither the action nor a reason for it.
+Rewatch Season isn't one either: during a rewatch the menu leaves it out rather than showing it unavailable.
 The current status shows as selected rather than as a second action.
 An unavailable option says why; the server sends the available actions and their reasons with the state.
 
 Choosing Watching for a show with nothing watched saves in one tap without a setup form.
 It puts the show in Watching with the first aired regular episode in show order up next.
 It records no date and no viewing, and creates no season tracking.
-Choosing Watching for a Paused or Dropped show continues it under TV-007.
+Resume on a Paused show, or Watching on a Dropped show, continues it under TV-007.
+The server still sends both `watching` and `resume` for a Paused show, which installed builds list as two rows; either continues the show the same way.
 Watching is unavailable while the show is finished and isn't Paused or Dropped, with the reason "You've watched everything that has aired."
 It is also unavailable before any regular episode has aired, with the reason "Nothing has aired yet."
 
@@ -198,7 +200,7 @@ Both apply to the whole show (TV-204).
 Both can be chosen for a show with nothing watched, without inventing a date or a viewing (GM-009).
 A Paused or Dropped show leaves Continue Watching and gets no calendar events or notifications (TV-704).
 
-Resume, or choosing Watching, continues where the user was.
+Resume, which a Paused show's + menu shows in place of Watching, or choosing Watching for a Dropped show, continues where the user was.
 It keeps the same viewings, the same up next and any rewatch in progress.
 Ticking, logging or marking anything also ends Paused or Dropped (TV-203).
 A show that is finished returns to Completed instead of Watching.
@@ -626,6 +628,7 @@ When a tick or an episode log in the app finishes a season, the app opens that s
 
 Spine offers the composer at most once for each season in each pass, so unticking and re-ticking the finale doesn't offer it again.
 When the same write also finishes the show, the composer opens for that season, and the user can switch its target to Whole show.
+For an ended show with one season, the composer opens on Whole show and offers nothing else, and saving it creates a show log (TV-408).
 During a rewatch, the composer opens with Rewatch on (TV-404).
 TV-107 decides when the composer opens after the earlier-episodes question.
 
@@ -647,6 +650,7 @@ The user can change all of them before saving.
 - From an episode page, the target is that episode; from a season page, that season.
 - From the show page, the target is Whole show. The user can pick a season instead; Specials are listed last. While only specials have aired, Whole show is unavailable, so the target is Specials.
 - From the season-finish composer, the target is that season (TV-403).
+- For an ended show with one season, Whole show takes that season's place: from its season page and the season-finish composer the target is Whole show, and the show page offers no separate choice for the season (TV-408).
 
 **Date**
 
@@ -708,6 +712,18 @@ Future dates are rejected when creating or editing a log, from every build.
 Air dates don't limit log dates; a log can be dated before an episode's listed air date.
 Installed builds send a date and time; the server converts it to the user's calendar date (TV-900).
 The repair converts logs from before this contract (TV-801).
+
+### TV-408: An ended show with one season logs as the whole show
+
+For an ended show with one regular season, that season is the whole show, so a log of it is a log of the show.
+Saving a log of that season, from any surface or build, saves a show log instead: the log, its stars and its heart land on the show (TV-501), and the diary entry reads as the show (TV-702).
+It covers and fills what a show log does (TV-400, TV-401), which is that season's aired episodes.
+
+A show has ended when the provider doesn't report it as returning and lists or names no regular episode still to air.
+Specials don't count as a season, and a Specials log stays a Specials log.
+A returning show, a show still airing, a show with more than one regular season and a manual show keep their season logs.
+
+Season logs saved before a show ended, or before this rule, stay season logs; nothing is rewritten.
 
 ## Stars and likes
 
@@ -779,7 +795,7 @@ Its line reads "Rewatching · S1 E1 next" for the show, and "Rewatching S2 · E1
 Earlier viewings and logs stay as history.
 
 A show can have one rewatch in progress at a time.
-While one is in progress, Rewatch and Rewatch Season are unavailable, with the reason "Finish or stop your rewatch first."
+While one is in progress, Rewatch is unavailable, with the reason "Finish or stop your rewatch first.", and season + menus leave Rewatch Season out (TV-005).
 A show or season that isn't finished can't be rewatched yet.
 
 ### TV-601: A viewing counts toward a rewatch when it's recorded after the rewatch began
@@ -1167,6 +1183,7 @@ After trying the app on 2026-10-26, the user asked for four changes, now in the 
 
 Then the user chose how to mark progress from Home: a Continue Watching card's title and line open a half-height sheet of up next's season, in the season page's episode rows (TV-100, TV-701). The touch-and-hold menu built first was removed.
 After trying it on 2026-10-27, the user asked for one line under every In progress card, "Update progress ›", for every media type, opening each title's own progress UI, and for the sheet always to open with up next at the top (TV-701).
+Later on 2026-10-27 the user asked for three more: a Paused show's + menu shows Resume in place of Watching (TV-005, TV-007); during a rewatch, season + menus leave Rewatch Season out instead of greying it (TV-005, TV-600); and an ended show with one season logs that season as the whole show (TV-403, TV-404, TV-408).
 
 Whether ticks post to friends' feeds was first settled by AGENTS.md section 9, whose feed then held logs, ratings and list activity, so ticks didn't post.
 The activity contract (`docs/activity-contract.md`) replaced that on 2026-10-26: a day's ticks are progress on the show, and TV-703 now follows it.

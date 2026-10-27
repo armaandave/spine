@@ -1249,6 +1249,37 @@ enum APIPageCursor {
     }
 }
 
+/// Re-fetches a paged list from its first page through the page that covers `count` results, so a screen can
+/// refresh what it already shows after a write elsewhere. The caller swaps all the pages in at once: reloading
+/// only the first page would shrink a list scrolled far down to 25 rows and leave the screen blank.
+enum PagedReload {
+    /// `fetch` gets each page's cursor (nil for the first); it can throw `CancellationError` to stop early.
+    static func pages<Page>(
+        covering count: Int,
+        resultCount: (Page) -> Int,
+        next: (Page) -> String?,
+        fetch: (String?) async throws -> Page
+    ) async throws -> [Page] {
+        var pages: [Page] = []
+        var cursor: String?
+        var loaded = 0
+        repeat {
+            let page = try await fetch(cursor)
+            pages.append(page)
+            loaded += resultCount(page)
+            cursor = APIPageCursor.nextPage(from: next(page))
+        } while cursor != nil && loaded < count
+        return pages
+    }
+
+    static func pages<Item>(
+        covering count: Int,
+        fetch: (String?) async throws -> PagedResponse<Item>
+    ) async throws -> [PagedResponse<Item>] {
+        try await pages(covering: count, resultCount: { $0.results.count }, next: { $0.next }, fetch: fetch)
+    }
+}
+
 struct APIActivityRepository: ActivityRepository {
     let client: APIClient
 

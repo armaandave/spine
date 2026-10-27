@@ -982,7 +982,8 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
             media_type=MediaTypes.SEASON.value,
             season_number=number,
             title=show_item.title,
-            image=show_item.image or settings.IMG_NONE,
+            # The season's own poster, never the show's: pages show the saved poster.
+            image=(listing.season_images.get(number) if listing else None) or settings.IMG_NONE,
             **(listing.item_fields(MediaTypes.SEASON.value, number) if listing else {}),
         )
         for number in missing_seasons
@@ -2543,15 +2544,19 @@ def _finish_offer(ctx, season_number, was_finished, day):
     offers[str(season_number)] = ctx.now.isoformat()
     ctx.set_tv(finish_offers=offers)
     view = _View.from_ctx(ctx)
-    targets = [view.composer_target(SEASON, season_number, date_override=day)]
     show_finished = calc.finished
-    if show_finished:
-        targets.append(view.composer_target(SHOW, None, date_override=day))
+    if _logs_as_whole_show(ctx.listing, ctx.today, season_number):
+        # An ended show's only season: the composer logs the whole show (TV-408).
+        targets = [view.composer_target(SHOW, None, date_override=day)]
+    else:
+        targets = [view.composer_target(SEASON, season_number, date_override=day)]
+        if show_finished:
+            targets.append(view.composer_target(SHOW, None, date_override=day))
     return {
         "level": "season",
         "season_number": season_number,
         "show_finished": show_finished,
-        "composer": {"default_target": f"season:{season_number}", "targets": targets},
+        "composer": {"default_target": targets[0]["id"], "targets": targets},
     }
 
 
@@ -3595,6 +3600,19 @@ def _log_positions(calc, level, season_number):
     return [(season_number, episode) for episode in (season.aired if season else [])]
 
 
+def _logs_as_whole_show(listing, today, season_number):
+    """Whether a log of this season saves as a log of the whole show (TV-408).
+
+    It does for the only regular season of a provider's show that has ended: the provider
+    doesn't report it as returning and lists or names no regular episode still to air.
+    """
+    if listing is None or season_number is None or listing.show_item.source == Sources.MANUAL.value:
+        return False
+    if listing.regular_seasons() != [season_number] or not listing.is_loaded(season_number):
+        return False
+    return not listing.returning and listing.next_regular_airing(today=today) is None
+
+
 def _do_create_log(  # noqa: C901, PLR0912, PLR0915
     ctx,
     item,
@@ -3732,6 +3750,7 @@ def create_log(  # noqa: PLR0913
     adds a viewing. consumed_at is a calendar date, or a datetime that converts to the
     user's calendar; future dates are TVInvalid. is_rewatch None takes TV-404's
     default; liked None takes the target's current heart. Posts one diary activity.
+    A log of an ended show's only season saves as a log of the whole show (TV-408).
     """
     level, season_number, episode_number = _log_target(item)
     show_item = _resolve_show_item(item)
@@ -3747,11 +3766,13 @@ def create_log(  # noqa: PLR0913
         scope = ((EPISODE, season_number, episode_number),)
 
     def body(ctx):
+        target = (item, level, season_number)
+        if level == SEASON and _logs_as_whole_show(ctx.listing, ctx.today, season_number):
+            # One regular season is the whole show, so its scope is the same Items.
+            target = (show_item, SHOW, None)
         return _do_create_log(
             ctx,
-            item,
-            level,
-            season_number,
+            *target,
             episode_number,
             day=day,
             rating=rating,
@@ -4573,9 +4594,16 @@ class _View:
             target = self.composer_target(EPISODE, season_number, episode_number)
             return {"default_target": target["id"], "targets": [target]}
         if page_level == SEASON:
-            target = self.composer_target(SEASON, season_number)
+            if _logs_as_whole_show(self.listing, self.today, season_number):
+                target = self.composer_target(SHOW, None)
+            else:
+                target = self.composer_target(SEASON, season_number)
             return {"default_target": target["id"], "targets": [target]}
-        numbers = [number for number in calc.regular if calc.seasons[number].aired]
+        numbers = [
+            number
+            for number in calc.regular
+            if calc.seasons[number].aired and not _logs_as_whole_show(self.listing, self.today, number)
+        ]
         if 0 in calc.seasons and calc.seasons[0].listed and calc.seasons[0].aired:
             numbers.append(0)
         targets = [self.composer_target(SEASON, number) for number in numbers]
@@ -4642,11 +4670,9 @@ class _View:
         else:
             reasons["log_season"] = MSG_NOTHING_AIRED
         history = self.history().seasons.get(season_number)
-        if history is not None and history.finished:
-            if calc.rewatch is not None:
-                reasons["rewatch_season"] = MSG_REWATCH_IN_PROGRESS
-            else:
-                actions.append("rewatch_season")
+        # During a rewatch Rewatch Season isn't offered at all (TV-600).
+        if history is not None and history.finished and calc.rewatch is None:
+            actions.append("rewatch_season")
         stars_reason = _stars_unavailable(calc, season_number)
         if stars_reason is None:
             actions.append("rate")

@@ -126,6 +126,45 @@ final class DiaryViewModel {
         }
     }
 
+    /// After a write elsewhere, reloads every entry already shown and swaps them in at once: `load()` keeps
+    /// only the first page, which would leave a diary scrolled past it blank.
+    func refreshLoadedEntries() async {
+        let requestFilter = diaryRequestFilter
+        guard didLoad, presentedFilter == requestFilter, !entries.isEmpty, errorMessage == nil else {
+            await load()
+            return
+        }
+        requestGeneration += 1
+        let generation = requestGeneration
+        // Requests this one supersedes can't clear their own flags.
+        isLoading = false
+        isLoadingNextPage = false
+        isLoadingAllPages = false
+        nextPageErrorMessage = nil
+        let isCurrent = { [weak self] in
+            generation == self?.requestGeneration && requestFilter == self?.diaryRequestFilter
+        }
+
+        do {
+            let pages = try await PagedReload.pages(covering: entries.count) { page in
+                guard isCurrent() else { throw CancellationError() }
+                return try await diaryRepository.page(filter: requestFilter, page: page)
+            }
+            guard isCurrent(), let first = pages.first, let last = pages.last else { return }
+            var seen = Set<Int>()
+            entries = pages.flatMap(\.results).filter { seen.insert($0.id).inserted }
+            nextPage = APIPageCursor.nextPage(from: last.next)
+            streamingPendingCount = first.streaming?.pendingCount ?? 0
+        } catch is CancellationError {
+            return
+        } catch {
+            // The entries already shown stay; the next refresh or pull to refresh tries again.
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+        }
+    }
+
     func loadNextPageIfNeeded(currentEntry: DiaryEntry) async {
         guard let thresholdIndex = entries.index(entries.endIndex, offsetBy: -6, limitedBy: entries.startIndex) ?? entries.indices.first,
               let currentIndex = entries.firstIndex(where: { $0.id == currentEntry.id }),
@@ -365,10 +404,10 @@ struct MediaDiaryView: View {
                 Task { await viewModel.load() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
-                Task { await viewModel.load() }
+                Task { await viewModel.refreshLoadedEntries() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                Task { await viewModel.load() }
+                Task { await viewModel.refreshLoadedEntries() }
             }
         }
     }
@@ -551,11 +590,12 @@ struct DiaryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await reloadDiary() }
             }
+            // A log written elsewhere refreshes in place, keeping the scroll position and the month view.
             .onReceive(NotificationCenter.default.publisher(for: .diaryEntriesDidChange)) { _ in
-                Task { await reloadDiary() }
+                Task { await viewModel.refreshLoadedEntries() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                Task { await reloadDiary() }
+                Task { await viewModel.refreshLoadedEntries() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
                 Task {

@@ -328,6 +328,43 @@ final class LibraryViewModel {
         }
     }
 
+    /// After a write elsewhere, reloads every row already shown and swaps them in at once, keeping the grid's
+    /// identity: `reload()` keeps only the first page, which would leave a Library scrolled past it blank.
+    func refreshLoadedItems() async {
+        let scope = currentRequestScope
+        guard presentedScope == scope, !items.isEmpty, errorMessage == nil else {
+            await reload()
+            return
+        }
+        requestGeneration += 1
+        let generation = requestGeneration
+        // Requests this one supersedes can't clear their own flags.
+        isLoadingInitial = false
+        isLoadingNextPage = false
+        nextPageErrorMessage = nil
+        let isCurrent = { [weak self] in
+            generation == self?.requestGeneration && scope == self?.currentRequestScope
+        }
+
+        do {
+            let pages = try await PagedReload.pages(covering: items.count) { page in
+                guard isCurrent() else { throw CancellationError() }
+                return try await trackingRepository.list(mediaType: scope.mediaType, page: page, filter: scope.filter)
+            }
+            guard isCurrent(), let first = pages.first, let last = pages.last else { return }
+            var seen = Set<LibraryItem.ID>()
+            items = pages.flatMap(\.results).filter { seen.insert($0.id).inserted }
+            totalCount = first.count
+            streamingPendingCount = first.streaming?.pendingCount ?? 0
+            nextPage = APIPageCursor.nextPage(from: last.next)
+        } catch is CancellationError {
+            return
+        } catch {
+            // The rows already shown stay; the next refresh or pull to refresh tries again.
+            handleUnauthorized(error)
+        }
+    }
+
     func loadNextPageIfNeeded(currentItem: LibraryItem) async {
         let visibleItems = displayedItems
         // As far ahead as the artwork prefetch, so the next page's posters can be prefetched before they're reached.
@@ -550,7 +587,7 @@ struct LibraryView: View {
                 Task { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { _ in
-                Task { await viewModel.reload() }
+                Task { await viewModel.refreshLoadedItems() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
                 Task {

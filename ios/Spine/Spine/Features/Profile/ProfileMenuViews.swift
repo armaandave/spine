@@ -1051,6 +1051,58 @@ final class ProfileListDetailViewModel {
         }
     }
 
+    /// After a write elsewhere (a title on the list marked watched, a person's page closed), reloads every row
+    /// already shown and swaps them in at once. `load()` keeps only the first page, so a list scrolled past it
+    /// would shrink under the user and go blank.
+    func refreshLoadedItems() async {
+        guard let current = list, errorMessage == nil else {
+            await load()
+            return
+        }
+        requestGeneration += 1
+        let generation = requestGeneration
+        let requestFilter = filter
+        // A next-page request this one supersedes can't clear its own flag.
+        isLoadingFilteredItems = false
+        nextPageErrorMessage = nil
+        let isCurrent = { [weak self] in
+            generation == self?.requestGeneration && requestFilter == self?.filter
+        }
+
+        do {
+            let detail = try await listRepository.detail(id: listId)
+            guard isCurrent() else { return }
+            switch current.listType {
+            case .media:
+                let pages = try await PagedReload.pages(covering: filteredItems.count) { page in
+                    guard isCurrent() else { throw CancellationError() }
+                    return try await listRepository.items(listId: listId, page: page, filter: requestFilter)
+                }
+                guard isCurrent(), let last = pages.last else { return }
+                filteredItems = pages.reduce([]) { MediaSummary.appendingNewEntries($1.results, to: $0) }
+                nextPage = APIPageCursor.nextPage(from: last.next)
+                streamingPendingCount = pages.first?.streaming?.pendingCount ?? 0
+                list = detail.withItems(requestFilter.isActive ? current.items : filteredItems)
+            case .people:
+                let pages = try await PagedReload.pages(covering: people.count) { page in
+                    guard isCurrent() else { throw CancellationError() }
+                    return try await listRepository.people(listId: listId, page: page)
+                }
+                guard isCurrent(), let last = pages.last else { return }
+                people = Self.deduplicatedPeople(pages.flatMap(\.results))
+                nextPage = APIPageCursor.nextPage(from: last.next)
+                list = detail.withPeople(people)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            // The rows already shown stay; the next refresh or pull to refresh tries again.
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+        }
+    }
+
     /// Returns true when it dropped services the user no longer has from the filter, so the items need reloading.
     @discardableResult
     func loadFilterOptions() async -> Bool {
@@ -1613,7 +1665,7 @@ struct ProfileListDetailView: View {
         }
         .fullScreenCover(item: $selectedPerson, onDismiss: {
             selectedPerson = nil
-            Task { await viewModel.load() }
+            Task { await viewModel.refreshLoadedItems() }
         }) { ref in
             PersonDetailView(
                 ref: ref,
@@ -1660,14 +1712,15 @@ struct ProfileListDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .customListsDidChange)) { notification in
             guard CustomListChange.listId(from: notification) == viewModel.list?.id,
                   !viewModel.isSaving else { return }
-            Task { await viewModel.load() }
+            Task { await viewModel.refreshLoadedItems() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
             guard let changedRef = notification.userInfo?["ref"] as? MediaRef else { return }
             let containsMedia = viewModel.displayedItems.contains { $0.ref.id == changedRef.id }
             let isViewingPerson = viewModel.list?.listType == .people && selectedPerson != nil
             guard containsMedia || isViewingPerson else { return }
-            Task { await viewModel.load() }
+            // In place: a title marked watched from this list mustn't cut it back to its first page.
+            Task { await viewModel.refreshLoadedItems() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .streamingPreferencesDidChange)) { _ in
             guard viewModel.list?.listType == .media else { return }

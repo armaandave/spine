@@ -635,6 +635,39 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(afterFinishing.selectedTitle, "The Show · Season 1")
     }
 
+    func testTV408AnEndedOneSeasonShowsComposersLogTheWholeShow() async {
+        // The server offers the whole show, not Season 1, for an ended show with one season.
+        let wholeShow = Fixtures.composer([Fixtures.target("show", level: .show, title: "Whole show")])
+
+        let fromShowPage = logModel(Fixtures.showDetail(tv: Fixtures.show(composer: wholeShow)))
+        XCTAssertEqual(fromShowPage.tvTargets.map(\.id), ["show"])
+        XCTAssertFalse(fromShowPage.supportsTVTargetPicker, "No separate Season 1 choice.")
+        XCTAssertEqual(fromShowPage.selectedRef.mediaType, "tv")
+
+        var seasonPage = Fixtures.seasonDetail(episodes: [Fixtures.episode(1)])
+        seasonPage.userState?.tv?.composer = wholeShow
+        let diary = PagesDiaryRepository()
+        let fromSeasonPage = logModel(seasonPage, diary: diary)
+        XCTAssertFalse(fromSeasonPage.supportsTVTargetPicker)
+        XCTAssertEqual(fromSeasonPage.selectedRef.mediaType, "tv")
+        XCTAssertNil(fromSeasonPage.selectedRef.seasonNumber)
+        XCTAssertEqual(fromSeasonPage.primaryActionTitle, "Log TV Show")
+        XCTAssertEqual(fromSeasonPage.selectedTitle, "The Show")
+        let saved = await fromSeasonPage.save()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(diary.created.first?.ref.mediaType, "tv")
+
+        // The season-finish composer for such a show targets the whole show (TV-403).
+        let finished = TVFinished(seasonNumber: 1, showFinished: true, composer: Fixtures.composer(
+            [Fixtures.target("show", level: .show, title: "Whole show", date: "2026-10-24")], default: "show"
+        ))
+        let afterFinishing = logModel(Fixtures.seasonDetail(episodes: [Fixtures.episode(1, watched: true)]),
+                                      composer: finished.composer)
+        XCTAssertFalse(afterFinishing.supportsTVTargetPicker)
+        XCTAssertEqual(afterFinishing.selectedRef.mediaType, "tv")
+        XCTAssertEqual(CalendarDateCodec.string(from: afterFinishing.consumedAt), "2026-10-24")
+    }
+
     func testTV404RewatchIsTheServersDefaultNotTheLogCount() {
         var tv = Fixtures.show(composer: Fixtures.showComposer)
         tv.started = true
