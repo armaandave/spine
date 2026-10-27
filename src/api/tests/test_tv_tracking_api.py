@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 from uuid import uuid4
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase, override_settings
@@ -30,6 +31,7 @@ from app.models import (
     MediaTypes,
     Season,
     Sources,
+    TVListing,
 )
 from app.tests.tv_fixtures import (
     FakeEpisode,
@@ -38,6 +40,7 @@ from app.tests.tv_fixtures import (
     make_user,
     patch_now,
 )
+from app.tv_listing import get_listing
 from lists.models import CustomList, CustomListItem
 from social.models import Activity, ProgressChange
 
@@ -1694,3 +1697,106 @@ class TVDiaryServerCalendarTests(TVAPITestCase):
 
         self.assertEqual(str(installed.data["consumed_at"])[:10], OCT_26.isoformat())
         self.assertEqual(new_build.status_code, status.HTTP_201_CREATED)
+
+
+class TVSeasonPosterTests(TVAPITestCase):
+    """Tracking a show never changes its season posters.
+
+    Marking a show watched once saved the show's poster on every season Item it made,
+    and the show and season pages show the saved poster, so every season card turned
+    into the show's poster.
+    """
+
+    SHOW_POSTER = "https://image.tmdb.org/t/p/original/show-picked.jpg"
+
+    def make_show(self, seasons=None, **kwargs):
+        show = super().make_show(seasons=seasons if seasons is not None else {1: 3, 2: 3}, image=self.SHOW_POSTER, **kwargs)
+        self.fake.show(show.media_id).season_posters = {1: "/s1.jpg", 2: "/s2.jpg"}
+        return show
+
+    def season_card_posters(self, show):
+        response = self.detail(show)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return {season["season_number"]: season["image_url"] for season in response.data["seasons"]}
+
+    def season_page_poster(self, show, number):
+        response = self.detail(show, number)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data["poster_url"]
+
+    def assert_season_posters(self, show):
+        cards = self.season_card_posters(show)
+        for number in (1, 2):
+            with self.subTest(season=number):
+                self.assertIn(f"/s{number}.jpg", cards[number])
+                self.assertIn(f"/s{number}.jpg", self.season_page_poster(show, number))
+                item = Item.objects.filter(
+                    media_id=show.media_id,
+                    media_type=MediaTypes.SEASON.value,
+                    season_number=number,
+                ).first()
+                if item is not None:
+                    self.assertNotEqual(item.image, self.SHOW_POSTER)
+
+    def test_tv_300_marking_a_show_watched_keeps_its_season_posters(self):
+        show = self.make_show()
+        before = self.season_card_posters(show)
+
+        response = self.action(show, "mark_watched")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(self.season_card_posters(show), before)
+        self.assert_season_posters(show)
+        self.assertEqual(
+            set(Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.SEASON.value).values_list("image", flat=True)),
+            {"https://image.tmdb.org/t/p/w500/s1.jpg", "https://image.tmdb.org/t/p/w500/s2.jpg"},
+        )
+
+    def test_tv_300_the_season_eye_keeps_its_season_poster(self):
+        show = self.make_show()
+
+        response = self.action(show, "mark_watched", season_number=2)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assert_season_posters(show)
+
+    def test_tv_100_a_tick_keeps_its_season_poster(self):
+        show = self.make_show()
+
+        self.ticks(show, 1, [1])
+
+        self.assert_season_posters(show)
+
+    def test_tv_400_a_season_log_keeps_its_season_poster(self):
+        show = self.make_show()
+
+        response = self.log(show, 2)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assert_season_posters(show)
+
+    def test_tv_303_season_stars_keep_their_season_poster(self):
+        show = self.make_show()
+        self.ticks(show, 1, [1])
+        Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.SEASON.value, season_number=2).delete()
+
+        response = self.action(show, "rate", season_number=2, rating=8)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assert_season_posters(show)
+
+    def test_a_listing_stored_without_season_posters_saves_none(self):
+        """An older stored listing has no season posters: save none, not the show's."""
+        show = self.make_show()
+        get_listing(show)
+        row = TVListing.objects.get(item=show)
+        row.seasons = {key: {k: v for k, v in entry.items() if k != "image"} for key, entry in row.seasons.items()}
+        row.save()
+
+        self.assertEqual(self.action(show, "mark_watched").status_code, status.HTTP_200_OK)
+
+        self.assertEqual(
+            set(Item.objects.filter(media_id=show.media_id, media_type=MediaTypes.SEASON.value).values_list("image", flat=True)),
+            {settings.IMG_NONE},
+        )
+        self.assert_season_posters(show)

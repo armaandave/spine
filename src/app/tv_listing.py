@@ -95,8 +95,10 @@ class ShowListing:
 
     episodes holds the listed seasons whose lists are loaded, each in episode order.
     season_air_dates holds the provider's premiere date of each listed season, when it
-    has one. any_air_dates is False only for a source that gives no air dates (manual
-    entries, TV-103): a TMDB show with no dates yet hasn't aired anything.
+    has one. season_images holds each listed season's own poster, when the provider has
+    one and the stored copy has it. any_air_dates is False only for a source that gives
+    no air dates (manual entries, TV-103): a TMDB show with no dates yet hasn't aired
+    anything.
     """
 
     show_item: Item
@@ -106,6 +108,7 @@ class ShowListing:
     returning: bool
     any_air_dates: bool
     season_air_dates: Mapping[int, date | None] = field(default_factory=dict)
+    season_images: Mapping[int, str] = field(default_factory=dict)
 
     def regular_seasons(self) -> list[int]:
         """Return the listed regular seasons (numbered 1 or higher), in order."""
@@ -535,6 +538,7 @@ class _Copy:
             numbers.add(number)
             entry = self.seasons.setdefault(str(number), {})
             entry["air_date"] = _date_string(season.get("first_air_date"))
+            entry["image"] = _season_image(season)
         self.season_numbers = sorted(numbers)
         self.seasons = {
             key: value for key, value in self.seasons.items() if int(key) in numbers
@@ -568,6 +572,8 @@ class _Copy:
         entry = self.seasons.setdefault(str(number), {})
         entry["episodes"] = [rows[key] for key in sorted(rows)]
         entry["fetched_at"] = now.isoformat()
+        if "image" in metadata:
+            entry["image"] = _season_image(metadata)
         if "air_date" not in entry:
             entry["air_date"] = _date_string(
                 (metadata.get("details") or {}).get("first_air_date"),
@@ -577,11 +583,14 @@ class _Copy:
         listed = set(self.season_numbers)
         episodes = {}
         season_air_dates = {}
+        season_images = {}
         for key, entry in self.seasons.items():
             number = int(key)
             if number not in listed:
                 continue
             season_air_dates[number] = _parse_date(entry.get("air_date"))
+            if entry.get("image"):
+                season_images[number] = entry["image"]
             if "episodes" in entry:
                 episodes[number] = tuple(
                     ListedEpisode(
@@ -608,6 +617,7 @@ class _Copy:
             returning=self.returning,
             any_air_dates=True,
             season_air_dates=season_air_dates,
+            season_images=season_images,
         )
 
 
@@ -647,6 +657,7 @@ def _save(show_item, copy, *, show_changed, seasons):
             for number in listed:
                 entry = merged.seasons.setdefault(str(number), {})
                 entry["air_date"] = copy.seasons.get(str(number), {}).get("air_date")
+                entry["image"] = copy.seasons.get(str(number), {}).get("image")
         for number in seasons:
             merged.seasons[str(number)] = copy.seasons[str(number)]
         row.season_numbers = merged.season_numbers
@@ -719,6 +730,14 @@ def _next_episode(value):
         "episode_number": int(episode_number) if episode_number is not None else None,
         "air_date": _date_string(value.get("air_date")),
     }
+
+
+def _season_image(season):
+    """Return a season's own poster from provider metadata, or None when it has none."""
+    image = season.get("image")
+    if not image or image == settings.IMG_NONE:
+        return None
+    return image
 
 
 def _episode_image(episode):

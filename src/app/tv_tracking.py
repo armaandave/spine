@@ -979,7 +979,8 @@ def _item_ids(show_item, listing, season_numbers, episode_keys):
             media_type=MediaTypes.SEASON.value,
             season_number=number,
             title=show_item.title,
-            image=show_item.image or settings.IMG_NONE,
+            # The season's own poster, never the show's: pages show the saved poster.
+            image=(listing.season_images.get(number) if listing else None) or settings.IMG_NONE,
         )
         for number in missing_seasons
     ]
