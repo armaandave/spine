@@ -131,22 +131,6 @@ Run from the feature worktree unless a step says otherwise.
 Some ships carry a data step that has to run once, right after their deploy is verified
 (Workflow A, step 8). Each one says which ship carries it.
 
-### The season poster repair, with the ship that adds `src/app/management/commands/repair_season_posters.py`
-
-The TV tracking ship (2df73ed9) gave some season Items their show's poster when tracking
-created them. This ship stops that; the repair puts back each affected season's own TMDB
-poster. It only changes `Item.image`, never a user's or an admin's artwork pick. The user's
-"ship this" covers it. On production, after the deploy is verified (step 8):
-
-1. Dry run: `docker exec spine python manage.py repair_season_posters`. Read the list of
-   seasons it would change; if anything looks wrong, stop and report.
-2. `docker exec spine python manage.py repair_season_posters --apply --record /tmp/season-posters.json`,
-   then copy the record out (`docker cp spine:/tmp/season-posters.json ~/projects/spine-backups/`).
-   `--undo <file>` restores the old images.
-3. Report the seasons changed.
-
-Remove this section once the production repair has run.
-
 ### The metadata fill, with the ship that adds `src/app/migrations/0088_item_metadata_version.py`
 
 Stats need each tracked or logged title's year, runtime, genres, themes and original
