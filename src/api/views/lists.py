@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 
 import requests
 from django.contrib.auth import get_user_model
@@ -42,6 +42,7 @@ from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
 from app.curation import prime_curated_artwork
+from app.db_threads import DatabaseThreadPoolExecutor
 from app.models import MediaTypes
 from app.providers import services as provider_services
 from lists.models import CustomList, CustomListItem, FeaturedListSync, PersonListItem
@@ -261,7 +262,7 @@ def _person_list_payloads(list_people, request):
 
     if unresolved:
         completion_service.completed_item_ids(request.user)
-        executor = ThreadPoolExecutor(
+        executor = DatabaseThreadPoolExecutor(
             max_workers=min(PERSON_COMPLETION_WORKERS, len(unresolved)),
         )
         futures = {

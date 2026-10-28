@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 from contextlib import suppress
 from copy import deepcopy
 from datetime import UTC, date, datetime
@@ -63,6 +63,7 @@ from app.curation import (
     picked_image_urls,
     prime_curated_artwork,
 )
+from app.db_threads import DatabaseThreadPoolExecutor
 from app.external_ratings import (
     RATING_SOURCES,
     eligible_rating_sources,
@@ -677,7 +678,7 @@ def search_all_media(*, media_types, query, request=None, user=None):
     }
     music = MediaTypes.MUSIC.value
     superseded = _music_search_superseded(user, query) if music in media_types else None
-    executor = ThreadPoolExecutor(max_workers=len(media_types))
+    executor = DatabaseThreadPoolExecutor(max_workers=len(media_types))
     futures = {
         media_type: executor.submit(
             _candidate_worker,
@@ -802,7 +803,7 @@ def search_people(*, query):
     normalized_query = normalize_search_text(query)
     query_hash = hashlib.sha256(normalized_query.encode()).hexdigest()[:24]
     sources = provider_services.person_search_sources()
-    executor = ThreadPoolExecutor(max_workers=len(sources))
+    executor = DatabaseThreadPoolExecutor(max_workers=len(sources))
     futures = {
         source: executor.submit(
             provider_services.search_people,
