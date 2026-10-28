@@ -427,7 +427,10 @@ coverage requirement and no matching queue on the browsing path.
 - The legacy hourly genre matcher skips while Apple is the catalog. Its rows and
   MusicBrainz genre data remain for compatibility and rollback.
 - Apple featured charts use the feed's Apple album IDs directly when the catalog is
-  Apple. MusicBrainz-derived editorial lists can continue to resolve through the
+  Apple. Foreign charts use Apple’s explicit equivalent-ID mapping for the app’s
+  storefront. An album with no equivalent is reported as unavailable and omitted
+  from stored chart rows, retaining the feed’s rank positions. MusicBrainz-derived
+  editorial lists can continue to resolve through the
   existing match/bridge path.
 - `scripts/music-catalog-production.sh genres` counts stored Apple albums without
   making provider calls. `genres --apply --confirm` creates a verified backup, then

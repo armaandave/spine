@@ -170,6 +170,19 @@ class AppleMusicTestCase(TestCase):
         return fake
 
 
+class EquivalentAlbumTests(AppleMusicTestCase):
+    def test_only_explicit_apple_mappings_are_used(self):
+        album = fixture("page_sos.json")["data"][0]
+        fake = self.apple((200, {
+            "data": [album],
+            "meta": {"filters": {"equivalents": {"foreign": [{"id": "1657869377"}], "missing": []}}},
+        }))
+        result = apple_music.equivalent_albums(["foreign", "missing", "unmapped"])
+        self.assertEqual(list(result), ["foreign"])
+        self.assertEqual(result["foreign"]["id"], "1657869377")
+        self.assertEqual(query(fake.requests[0]), {"filter[equivalents]": "foreign,missing,unmapped"})
+
+
 class DeveloperTokenTests(AppleMusicTestCase):
     def test_token_is_es256_with_key_id_team_and_twelve_hours(self):
         token = apple_music.developer_token()
