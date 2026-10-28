@@ -279,6 +279,20 @@ class AppleMusicTests(FeaturedTestCase):
         self.assertEqual(result.entries[0].ids, {"apple_album": "6822944288"})
         self.assertIn("/600x600bb", result.entries[0].image)
 
+    @override_settings(MUSIC_CATALOG_SOURCE="apple_music", MUSIC_DEFAULT_MARKET="US")
+    def test_foreign_chart_uses_apple_equivalents_and_marks_unavailable_entries(self):
+        feed = load_fixture("music", "apple_us.json")
+        equivalents = {"6822944288": {"id": "111"}, "1440642493": {"id": "222"}}
+        with (
+            api_routes({"rss.marketingtools.apple.com": feed}),
+            patch("lists.featured.adapters.apple_music.catalog.equivalent_albums", return_value=equivalents) as lookup,
+        ):
+            result = ADAPTERS["apple_music"].fetch(definition("apple-music-top-albums-uk"))
+        self.assertEqual([row.ids for row in result.entries[:2]], [{"apple_album": "111"}, {"apple_album": "222"}])
+        self.assertEqual(result.entries[2].ids, {"review": "Unavailable in the app's Apple Music storefront"})
+        self.assertEqual([row.rank for row in result.entries], [1, 2, 3])
+        lookup.assert_called_once_with(["6822944288", "1440642493", "1417709876"], background=True)
+
     def test_uk_chart_also_looks_up_uk_urls(self):
         self.assertEqual(
             apple_music.album_urls("1", "gb"),

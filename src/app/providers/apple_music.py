@@ -211,6 +211,24 @@ def albums(ids, *, views=(), include=(), background=False):
     return resources
 
 
+def equivalent_albums(ids, *, background=False):
+    """Resolve foreign storefront IDs using Apple's explicit equivalence mapping.
+
+    Never match by title or pick an unrelated search result. Missing equivalents
+    are left out so callers can mark regional content unavailable.
+    """
+    result = {}
+    for batch in _batches(ids, FILTER_BATCH):
+        response = _get("albums", {"filter[equivalents]": ",".join(batch)}, background=background)
+        albums_by_id = {str(album["id"]): album for album in response.get("data") or []}
+        mappings = ((response.get("meta") or {}).get("filters") or {}).get("equivalents") or {}
+        for original in batch:
+            candidates = [albums_by_id[str(ref["id"])] for ref in mappings.get(original, []) if str(ref.get("id")) in albums_by_id]
+            if candidates:
+                result[original] = music_listing.pick_content_member(candidates, today=timezone.localdate())
+    return result
+
+
 def album(album_id, *, views=(), include=("tracks",), background=False):
     """Return one album resource, with every page of its tracks."""
     response = _get(

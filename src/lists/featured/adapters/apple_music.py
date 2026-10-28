@@ -12,8 +12,11 @@ any MusicBrainz lookup.
 import time
 from datetime import datetime
 
+from django.conf import settings
+
 from app import config
 from app.models import Sources
+from app.providers import apple_music as catalog
 from lists.featured.adapters import _music, _rows
 from lists.featured.helpers import get_json
 from lists.featured.text import parse_year
@@ -77,12 +80,15 @@ def fetch(definition):
         raise AdapterError(msg)
     _rows.require(definition, len(albums), f"Apple Music's {country} chart")
     if config.music_catalog_source() == Sources.APPLE_MUSIC:
+        equivalents = None
+        if country != str(settings.MUSIC_DEFAULT_MARKET or "us").lower():
+            equivalents = catalog.equivalent_albums([str(album["id"]) for album in albums], background=True)
         return FetchResult(
             entries=[
                 Entry(
                     rank=rank, title=album["name"], year=parse_year(album.get("releaseDate")),
                     creator=album.get("artistName") or "", media_type="music",
-                    ids={"apple_album": str(album["id"])}, image=(album.get("artworkUrl100") or "").replace("/100x100bb", "/600x600bb"),
+                    ids=_native_ids(album, equivalents), image=(album.get("artworkUrl100") or "").replace("/100x100bb", "/600x600bb"),
                 )
                 for rank, album in enumerate(albums, start=1)
             ],
@@ -110,6 +116,15 @@ def fetch(definition):
             ),
         )
     return FetchResult(entries=entries, edition=edition_label(feed.get("updated")))
+
+
+def _native_ids(album, equivalents):
+    if equivalents is None:
+        return {"apple_album": str(album["id"])}
+    equivalent = equivalents.get(str(album["id"]))
+    if equivalent is None:
+        return {"review": "Unavailable in the app's Apple Music storefront"}
+    return {"apple_album": str(equivalent["id"])}
 
 
 ADAPTER = Adapter(key="apple_music", fetch=fetch, validate=validate)
