@@ -520,7 +520,7 @@ The section is titled "Rated higher than most", with a segmented Higher / Lower 
 The app shows them in this order:
 
 - **Global:** Header, Time, Top, Highest rated (only when Top is a list), Activity, Ratings, Rated higher than most, Release years, Genres and Music genres, Languages, List progress, Most logged, Milestones.
-- **Type tab:** Header, Time, Top, Highest rated (only when Top is a list), Ratings, Rated higher than most, Release years, Genres, Languages, Activity, List progress, Collections, Most watched / read / played / listened, Milestones.
+- **Type tab:** Header (its third big number is the tab's own measure from `time`, and Active days is the first detail row), Top, Highest rated (only when Top is a list), Ratings, Rated higher than most, Release years, Genres, Languages, People, Activity, List progress, Collections, Most watched / read / played / listened, Milestones. The Time card is Global-only; a type tab still receives `time` for its header.
 
 The app hides an empty section (STAT-302).
 
