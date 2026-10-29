@@ -34,6 +34,7 @@ final class AppSession {
     let letterboxdImportCoordinator: LetterboxdImportCoordinator
     let storygraphImportCoordinator: StoryGraphImportCoordinator
     let goodreadsImportCoordinator: GoodreadsImportCoordinator
+    let marginsImportCoordinator: MarginsImportCoordinator
     let myAnimeListImportCoordinator: MyAnimeListImportCoordinator
 
     @ObservationIgnored private let userCache: SignedInUserCache
@@ -79,6 +80,10 @@ final class AppSession {
             importRepository: repositories.imports,
             defaults: defaults
         )
+        self.marginsImportCoordinator = MarginsImportCoordinator(
+            importRepository: repositories.imports,
+            defaults: defaults
+        )
         self.myAnimeListImportCoordinator = MyAnimeListImportCoordinator(
             importRepository: repositories.imports,
             defaults: defaults
@@ -92,6 +97,9 @@ final class AppSession {
         self.goodreadsImportCoordinator.onUnauthorized = { [weak self] in
             Task { await self?.logout() }
         }
+        self.marginsImportCoordinator.onUnauthorized = { [weak self] in
+            Task { await self?.logout() }
+        }
         self.myAnimeListImportCoordinator.onUnauthorized = { [weak self] in
             Task { await self?.logout() }
         }
@@ -100,6 +108,7 @@ final class AppSession {
         self.letterboxdImportCoordinator.canResume = { [weak self] in self?.hasConfirmedConnectivity ?? false }
         self.storygraphImportCoordinator.canResume = { [weak self] in self?.hasConfirmedConnectivity ?? false }
         self.goodreadsImportCoordinator.canResume = { [weak self] in self?.hasConfirmedConnectivity ?? false }
+        self.marginsImportCoordinator.canResume = { [weak self] in self?.hasConfirmedConnectivity ?? false }
         self.myAnimeListImportCoordinator.canResume = { [weak self] in self?.hasConfirmedConnectivity ?? false }
     }
 
@@ -309,6 +318,7 @@ final class AppSession {
         letterboxdImportCoordinator.resumeIfNeeded()
         storygraphImportCoordinator.resumeIfNeeded()
         goodreadsImportCoordinator.resumeIfNeeded()
+        marginsImportCoordinator.resumeIfNeeded()
         myAnimeListImportCoordinator.resumeIfNeeded()
     }
 
@@ -346,6 +356,7 @@ final class AppSession {
         letterboxdImportCoordinator.clearFinishedJob()
         storygraphImportCoordinator.clearFinishedJob()
         goodreadsImportCoordinator.clearFinishedJob()
+        marginsImportCoordinator.clearFinishedJob()
         myAnimeListImportCoordinator.clearFinishedJob()
         signedInEntryPoint = .home
         self.errorMessage = errorMessage

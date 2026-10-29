@@ -575,6 +575,12 @@ protocol ImportRepository {
         mode: ImportMode,
         progressHandler: (@MainActor @Sendable (Double) -> Void)?
     ) async throws -> ImportQueueResponse
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse
     func queueMyAnimeListImport(
         fileData: Data,
         fileName: String,
@@ -1820,6 +1826,24 @@ struct APIImportRepository: ImportRepository {
     ) async throws -> ImportQueueResponse {
         try await client.uploadMultipart(
             "/imports/goodreads/",
+            formFields: ["mode": mode.rawValue],
+            fileFieldName: "file",
+            fileName: fileName,
+            fileData: fileData,
+            mimeType: "text/csv",
+            authenticated: true,
+            progressHandler: progressHandler
+        )
+    }
+
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)? = nil
+    ) async throws -> ImportQueueResponse {
+        try await client.uploadMultipart(
+            "/imports/margins/",
             formFields: ["mode": mode.rawValue],
             fileFieldName: "file",
             fileName: fileName,

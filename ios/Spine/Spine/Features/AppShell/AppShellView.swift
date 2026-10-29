@@ -147,6 +147,7 @@ struct AppShellView: View {
                     importCoordinator: session.letterboxdImportCoordinator,
                     storygraphImportCoordinator: session.storygraphImportCoordinator,
                     goodreadsImportCoordinator: session.goodreadsImportCoordinator,
+                    marginsImportCoordinator: session.marginsImportCoordinator,
                     myAnimeListImportCoordinator: session.myAnimeListImportCoordinator,
                     currentUserId: currentUserId,
                     onLogout: {
@@ -184,6 +185,7 @@ struct AppShellView: View {
             session.letterboxdImportCoordinator.resumeIfNeeded()
             session.storygraphImportCoordinator.resumeIfNeeded()
             session.goodreadsImportCoordinator.resumeIfNeeded()
+            session.marginsImportCoordinator.resumeIfNeeded()
             session.myAnimeListImportCoordinator.resumeIfNeeded()
         }
         .task {

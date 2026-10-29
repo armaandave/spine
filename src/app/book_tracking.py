@@ -352,6 +352,33 @@ def start(user, item, *, start_date=None, mutation_id=None):
 
 
 @transaction.atomic
+def import_journey(user, item, *, status, start_date=None, end_date=None):
+    """Record an imported current or DNF journey with its own dates.
+
+    No start is recorded: activity would show it as starting the book on the
+    day of the import.
+    """
+    if status not in {Status.IN_PROGRESS.value, Status.DROPPED.value}:
+        raise ValidationError("Only current and DNF journeys can be imported.")
+    book, created = _ensure_book(user, item)
+    if status == Status.IN_PROGRESS.value and _open_session(book):
+        return book
+    session = BookSession.objects.create(
+        related_book=book,
+        status=status,
+        start_date=_calendar_datetime(start_date, required=False),
+        end_date=_calendar_datetime(end_date, required=False),
+        origin=BookSession.Origin.LIVE,
+        previous_tracked=not created,
+        previous_status=None if created else book.status,
+        previous_session=None if created else book.current_session,
+        previous_read_override=_deactivate_override(book),
+    )
+    _set_book_from_session(book, session)
+    return book
+
+
+@transaction.atomic
 def pause(user, item):
     book = _locked_book(user, item)
     if book is None:

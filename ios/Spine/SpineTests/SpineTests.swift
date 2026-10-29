@@ -2686,6 +2686,145 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testMarginsImportCoordinatorTransitionsToSuccessWithTheWholeMessage() async throws {
+        let defaults = isolatedDefaults("MarginsImportCoordinatorTransitions")
+        // The finished message lists every book the import couldn't match, one per line; none of it is dropped.
+        let message = "Imported 3 books.\nCouldn't match 2 books:\nThe Left Hand of Darkness\nPiranesi"
+        let repository = ScriptedMarginsImportRepository(statuses: [
+            ImportTaskStatus(taskId: "margins-task-1", taskName: "Import from Margins", status: "SUCCESS", dateCreated: nil, dateDone: nil, result: message)
+        ])
+        let coordinator = MarginsImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        let fileURL = try makeTemporaryMarginsCSV()
+        var notifiedTaskId: String?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .marginsImportDidSucceed,
+            object: nil,
+            queue: nil,
+        ) { notification in
+            notifiedTaskId = notification.userInfo?["taskId"] as? String
+        }
+        defer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        coordinator.startImport(fileURL: fileURL, mode: .new)
+
+        try await waitUntil {
+            if case let .uploading(fileName, progress) = coordinator.phase {
+                return fileName == fileURL.lastPathComponent && progress == 1
+            }
+            return false
+        }
+
+        try await waitUntil {
+            if case let .processing(taskId, _, _) = coordinator.phase {
+                return taskId == "margins-task-1"
+            }
+            return false
+        }
+
+        try await waitUntil {
+            coordinator.phase == .succeeded(message: message)
+        }
+
+        XCTAssertEqual(repository.queuedFileName, fileURL.lastPathComponent)
+        XCTAssertEqual(repository.queuedMode, .new)
+        XCTAssertEqual(repository.statusRequests, ["margins-task-1"])
+        XCTAssertEqual(notifiedTaskId, "margins-task-1")
+        XCTAssertFalse(coordinator.canCheckStatus, "a finished job isn't kept for resuming")
+    }
+
+    @MainActor
+    func testMarginsImportCoordinatorPersistsAndResumesTask() async throws {
+        let defaults = isolatedDefaults("MarginsImportCoordinatorPersistence")
+        let repository = ScriptedMarginsImportRepository(statuses: [
+            ImportTaskStatus(taskId: "margins-task-2", taskName: nil, status: "PENDING", dateCreated: nil, dateDone: nil, result: nil)
+        ])
+        let coordinator = MarginsImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .seconds(60),
+            timeout: 5
+        )
+
+        coordinator.startImport(fileURL: try makeTemporaryMarginsCSV(), mode: .overwrite)
+
+        try await waitUntil {
+            if case let .processing(taskId, _, _) = coordinator.phase {
+                return taskId == "margins-task-2"
+            }
+            return false
+        }
+        XCTAssertEqual(repository.queuedMode, .overwrite)
+
+        let resumed = MarginsImportCoordinator(
+            importRepository: ScriptedMarginsImportRepository(statuses: []),
+            defaults: defaults,
+            pollInterval: .seconds(60),
+            timeout: 5
+        )
+        resumed.resumeIfNeeded()
+
+        guard case let .processing(taskId, _, _) = resumed.phase else {
+            XCTFail("Expected persisted task to resume.")
+            return
+        }
+        XCTAssertEqual(taskId, "margins-task-2")
+
+        coordinator.clearFinishedJob()
+        resumed.clearFinishedJob()
+    }
+
+    @MainActor
+    func testMarginsImportCoordinatorSurfacesTaskFailure() async throws {
+        let defaults = isolatedDefaults("MarginsImportCoordinatorFailure")
+        let repository = ScriptedMarginsImportRepository(statuses: [
+            ImportTaskStatus(taskId: "margins-task-failure", taskName: nil, status: "FAILURE", dateCreated: nil, dateDone: nil, result: "Margins import could not be completed.")
+        ])
+        let coordinator = MarginsImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+
+        coordinator.startImport(fileURL: try makeTemporaryMarginsCSV(), mode: .new)
+
+        try await waitUntil {
+            coordinator.phase == .failed(message: "Margins import could not be completed.")
+        }
+
+        XCTAssertEqual(repository.statusRequests, ["margins-task-failure"])
+        XCTAssertFalse(coordinator.canCheckStatus)
+    }
+
+    @MainActor
+    func testMarginsImportCoordinatorRejectsZipFile() async throws {
+        let defaults = isolatedDefaults("MarginsImportCoordinatorInvalidExtension")
+        let repository = ScriptedMarginsImportRepository(statuses: [])
+        let coordinator = MarginsImportCoordinator(
+            importRepository: repository,
+            defaults: defaults,
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+
+        coordinator.startImport(fileURL: try makeTemporaryZip(), mode: .new)
+
+        try await waitUntil {
+            coordinator.phase == .failed(message: "Please upload the .csv export from Margins, not a ZIP file.")
+        }
+
+        XCTAssertNil(repository.queuedFileName)
+        XCTAssertTrue(repository.statusRequests.isEmpty)
+    }
+
+    @MainActor
     func testGoodreadsImportCoordinatorTransitionsToSuccess() async throws {
         let defaults = isolatedDefaults("GoodreadsImportCoordinatorTransitions")
         let repository = ScriptedGoodreadsImportRepository(statuses: [
@@ -8667,6 +8806,13 @@ private struct FakeImportRepository: ImportRepository {
         progressHandler: (@MainActor @Sendable (Double) -> Void)?
     ) async throws -> ImportQueueResponse { fatalError("Not used") }
 
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse { fatalError("Not used") }
+
     func queueMyAnimeListImport(
         fileData: Data,
         fileName: String,
@@ -8710,6 +8856,15 @@ private final class ScriptedLetterboxdImportRepository: ImportRepository {
     }
 
     func queueGoodreadsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMarginsImport(
         fileData: Data,
         fileName: String,
         mode: ImportMode,
@@ -8778,6 +8933,15 @@ private final class ScriptedStoryGraphImportRepository: ImportRepository {
         fatalError("Not used")
     }
 
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
     func queueMyAnimeListImport(
         fileData: Data,
         fileName: String,
@@ -8838,6 +9002,84 @@ private final class ScriptedGoodreadsImportRepository: ImportRepository {
         return ImportQueueResponse(taskId: statuses.first?.taskId ?? "goodreads-task-2", status: "queued")
     }
 
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMyAnimeListImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func importTaskStatus(taskId: String) async throws -> ImportTaskStatus {
+        statusRequests.append(taskId)
+        try await Task.sleep(for: .milliseconds(40))
+        if statuses.count > 1 {
+            return statuses.removeFirst()
+        }
+        return statuses.first ?? ImportTaskStatus(taskId: taskId, taskName: nil, status: "PENDING", dateCreated: nil, dateDone: nil, result: nil)
+    }
+}
+
+private final class ScriptedMarginsImportRepository: ImportRepository {
+    private(set) var queuedFileName: String?
+    private(set) var queuedMode: ImportMode?
+    private(set) var statusRequests: [String] = []
+    private var statuses: [ImportTaskStatus]
+
+    init(statuses: [ImportTaskStatus]) {
+        self.statuses = statuses
+    }
+
+    func queueLetterboxdImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueStoryGraphImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueGoodreadsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMarginsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        queuedFileName = fileName
+        queuedMode = mode
+        progressHandler?(1)
+        try await Task.sleep(for: .milliseconds(40))
+        return ImportQueueResponse(taskId: statuses.first?.taskId ?? "margins-task-2", status: "queued")
+    }
+
     func queueMyAnimeListImport(
         fileData: Data,
         fileName: String,
@@ -8887,6 +9129,15 @@ private final class ScriptedMyAnimeListImportRepository: ImportRepository {
     }
 
     func queueGoodreadsImport(
+        fileData: Data,
+        fileName: String,
+        mode: ImportMode,
+        progressHandler: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        fatalError("Not used")
+    }
+
+    func queueMarginsImport(
         fileData: Data,
         fileName: String,
         mode: ImportMode,
@@ -8965,6 +9216,14 @@ private func makeTemporaryGoodreadsCSV() throws -> URL {
         .appendingPathComponent("goodreads-\(UUID().uuidString)")
         .appendingPathExtension("csv")
     try Data("Book Id,Title,Author\n123,Book,Author\n".utf8).write(to: url)
+    return url
+}
+
+private func makeTemporaryMarginsCSV() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("margins-reading-\(UUID().uuidString)")
+        .appendingPathExtension("csv")
+    try Data("Title,Author\nBook,Author\n".utf8).write(to: url)
     return url
 }
 

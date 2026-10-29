@@ -673,6 +673,15 @@ struct OfflineImportRepository: ImportRepository {
         throw URLError(.notConnectedToInternet)
     }
 
+    func queueMarginsImport(
+        fileData _: Data,
+        fileName _: String,
+        mode _: ImportMode,
+        progressHandler _: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        throw URLError(.notConnectedToInternet)
+    }
+
     func queueMyAnimeListImport(
         fileData _: Data,
         fileName _: String,
@@ -708,6 +717,15 @@ struct ParkedImportRepository: ImportRepository {
     }
 
     func queueGoodreadsImport(
+        fileData _: Data,
+        fileName _: String,
+        mode _: ImportMode,
+        progressHandler _: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        throw URLError(.notConnectedToInternet)
+    }
+
+    func queueMarginsImport(
         fileData _: Data,
         fileName _: String,
         mode _: ImportMode,
@@ -775,6 +793,16 @@ struct StubImportRepository: ImportRepository {
     }
 
     func queueGoodreadsImport(
+        fileData _: Data,
+        fileName _: String,
+        mode _: ImportMode,
+        progressHandler _: (@MainActor @Sendable (Double) -> Void)?
+    ) async throws -> ImportQueueResponse {
+        uploadCalls.increment()
+        try await run(upload)
+    }
+
+    func queueMarginsImport(
         fileData _: Data,
         fileName _: String,
         mode _: ImportMode,
