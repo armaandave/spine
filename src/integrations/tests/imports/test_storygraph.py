@@ -102,6 +102,16 @@ class ImportStoryGraphTests(TestCase):
         self.assertIn("Review: Not for me.", dnf.notes)
         self.assertFalse(DiaryEntry.objects.filter(item=dnf.item).exists())
 
+    def test_quarter_star_rating_rounds_up_to_half_star(self):
+        payload = FIXTURE.read_bytes().replace(b",4.5,Great review.", b",3.75,Great review.")
+
+        with patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": 321}):
+            StoryGraphImporter(payload, self.user, "new", resolver=FakeResolver()).import_data()
+
+        rich = Book.objects.get(item__media_id="101")
+        self.assertEqual(rich.score, 8)
+        self.assertEqual(DiaryEntry.objects.filter(item=rich.item).order_by("consumed_at").last().rating, 8)
+
     def test_overwrite_deletes_book_state_only(self):
         old_item = Item.objects.create(
             media_id="old",

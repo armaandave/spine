@@ -3,7 +3,7 @@ import io
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 
 from django.utils import timezone
 
@@ -138,10 +138,11 @@ def _int(value):
 
 
 def _rating(value):
+    """Return the doubled storage rating; quarter stars round up to the next half star."""
     if not value:
         return None
     try:
-        rating = Decimal(value) * 2
+        rating = (Decimal(value) * 2).to_integral_value(rounding=ROUND_CEILING)
     except (InvalidOperation, TypeError):
         return None
     return rating if Decimal("0") <= rating <= Decimal("10") else None
