@@ -58,6 +58,7 @@ class ExternalRatingImportEnqueueTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="importer")
 
+    @patch("integrations.tasks.sweep_item_metadata")
     @patch("integrations.tasks.events.tasks.reload_calendar.delay")
     @patch("integrations.tasks.enqueue_external_rating_batches")
     @patch("app.signals.enrich_external_ratings.delay")
@@ -66,6 +67,7 @@ class ExternalRatingImportEnqueueTests(TestCase):
         item_delay_mock,
         batch_enqueue_mock,
         _calendar_mock,
+        _sweep_mock,
     ):
         created_ids = []
 
