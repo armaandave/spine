@@ -449,6 +449,55 @@ class ItemFilterFacet(models.Model):
         return f"{self.facet_type}: {self.value}"
 
 
+class ItemCredit(models.Model):
+    """A person credited on a title, stored from its provider metadata (STAT-219).
+
+    Movies keep their directors and top 15 billed cast, TV shows their creators and
+    top 15 cast (show level), albums their artists and books their authors.
+    store_item_metadata (api.services.item_metadata) replaces an Item's credits
+    whenever the metadata carries them; nothing else writes them.
+    """
+
+    class Role(models.TextChoices):
+        DIRECTOR = "director", "Director"
+        CAST = "cast", "Cast"
+        CREATOR = "creator", "Creator"
+        ARTIST = "artist", "Artist"
+        AUTHOR = "author", "Author"
+
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="credits",
+    )
+    person_source = models.CharField(max_length=20, choices=Sources)
+    person_id = models.CharField(max_length=64)
+    name = models.CharField(max_length=255)
+    role = models.CharField(max_length=10, choices=Role.choices)
+    # The provider's order: billing for cast, listing order otherwise.
+    order = models.PositiveSmallIntegerField(default=0)
+    image_url = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=["item", "person_source", "person_id", "role"],
+                name="app_itemcredit_unique_item_person_role",
+            ),
+        ]
+        indexes = [
+            # Stats: one role's credits of a set of titles, grouped by person.
+            models.Index(fields=["role", "item"], name="app_itemcredit_role_item_idx"),
+            # The diary drill-down: one person's titles.
+            models.Index(fields=["person_source", "person_id"], name="app_itemcredit_person_idx"),
+        ]
+        ordering = ["item", "role", "order", "id"]
+
+    def __str__(self):
+        """Return a readable credit."""
+        return f"{self.name} ({self.role})"
+
+
 class MusicGenreAlbum(models.Model):
     """A popular album filed under one MusicBrainz genre, for genre pages.
 

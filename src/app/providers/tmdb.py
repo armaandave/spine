@@ -16,7 +16,8 @@ from app.providers.search_rank import rank_results
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.themoviedb.org/3"
-DETAIL_CACHE_VERSION = "v4"
+# v5: shows fetched with their seasons carry credits too (cast for ItemCredit).
+DETAIL_CACHE_VERSION = "v5"
 MOVIE_DETAIL_CACHE_VERSION = "v5"
 COLLECTION_CACHE_VERSION = "v1"
 base_params = {
@@ -482,8 +483,17 @@ def get_directors(credits):
 
 
 def get_creators(creators):
-    """Return all TV creators in TMDB's supplied order."""
-    return _people_details(creators)
+    """Return all TV creators in TMDB's supplied order, with "image" when TMDB has one."""
+    details = _people_details(creators)
+    images = {
+        str(person["id"]): get_image_url(person["profile_path"])
+        for person in creators or []
+        if isinstance(person, dict) and person.get("id") is not None and person.get("profile_path")
+    }
+    for detail in details:
+        if detail.get("id") in images:
+            detail["image"] = images[detail["id"]]
+    return details
 
 
 def get_creator_id(created_by):
@@ -640,7 +650,8 @@ def enrich_season_with_tv_data(season_data, tv_data, media_id, season_number):
 def fetch_and_cache_seasons(media_id, season_numbers, tv_data):
     """Fetch uncached seasons from API and cache them."""
     url = f"{base_url}/tv/{media_id}"
-    base_append = "recommendations,external_ids,watch/providers"
+    # Credits make the show's cast part of the same request (8 seasons: 20 appends).
+    base_append = "recommendations,external_ids,watch/providers,credits"
     max_seasons_per_request = 18
     fetched_tv_data = tv_data
     result_data = {}

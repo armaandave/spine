@@ -77,6 +77,7 @@ class DiaryListView(APIView):
             request.query_params,
             owner=request.user,
         )
+        entries = filter_service.apply_stats_count_filters(entries, request.query_params, owner=request.user)
         entries = filter_service.apply_rating_range(entries, request.query_params, "rating")
         entries = filter_service.apply_diary_date_range(entries, request.query_params, owner=request.user)
         entries = filter_service.apply_user_status_filter(

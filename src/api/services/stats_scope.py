@@ -19,7 +19,8 @@ What a scope holds:
   ``viewings`` (in the range: dated ones in a dated range, every one in All Time),
   ``dated_viewings`` (those with a day), ``viewing_day()``;
 - titles: ``title_id()`` (seasons and episodes fold to their show, STAT-102),
-  ``titles()`` (STAT-105), ``events()`` (STAT-106);
+  ``titles()`` (STAT-105), ``events()`` (STAT-106), ``first_seen_q()`` (a title's
+  first dated day falls in the range, STAT-213, STAT-214);
 - posters: ``media_summaries()`` (STAT-304).
 """
 
@@ -270,7 +271,7 @@ class StatsScope:
         return self._sibling(media_type=media_type)
 
     def all_time(self):
-        """Return this scope over All Time, for history (STAT-108, STAT-216)."""
+        """Return this scope over All Time, for history (STAT-301's ``years.first``)."""
         if self.is_all_time:
             return self
         return self._sibling(start_date=None, end_date=None)
@@ -383,15 +384,30 @@ class StatsScope:
         """Match viewings whose day is in the range (same rule as viewing_day)."""
         if self.is_all_time:
             return Q()
-        start = datetime.combine(self.start_date, time.min, tzinfo=self.zone)
-        before = datetime.combine(self.end_date + timedelta(days=1), time.min, tzinfo=self.zone)
+        return self.viewing_days_q(self.start_date, self.end_date)
+
+    def viewing_days_q(self, start_date=None, end_date=None):
+        """Match viewings whose day (viewing_day) is on or between the dates.
+
+        Either date may be None for an open end; with neither, every viewing matches,
+        dated or not.
+        """
+        if start_date is None and end_date is None:
+            return Q()
+        watched = Q()
+        moment = Q(watched_on__isnull=True)
+        if start_date is not None:
+            watched &= Q(watched_on__gte=start_date)
+            moment &= Q(end_date__gte=datetime.combine(start_date, time.min, tzinfo=self.zone))
+        if end_date is not None:
+            watched &= Q(watched_on__lte=end_date)
+            before = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=self.zone)
+            moment &= Q(end_date__lt=before)
+        log_days = filter_service.log_day_range_q(self.owner, start_date, end_date, "diary_entry__consumed_at")
         return (
-            Q(watched_on__gte=self.start_date, watched_on__lte=self.end_date)
-            | (
-                Q(watched_on__isnull=True, end_date__gte=start, end_date__lt=before)
-                & ~Q(kind=Episode.Kind.FILL)
-            )
-            | (Q(watched_on__isnull=True) & self._log_fill_q() & self.range_q("diary_entry__consumed_at"))
+            watched
+            | (moment & ~Q(kind=Episode.Kind.FILL))
+            | (Q(watched_on__isnull=True) & self._log_fill_q() & log_days)
         )
 
     # Titles
@@ -427,6 +443,39 @@ class StatsScope:
     def viewing_title_ids(self):
         """Title IDs of the shows with a dated viewing in the range."""
         return self.dated_viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id")
+
+    def dated_title_ids(self, start_date=None, end_date=None):
+        """One subquery of the title IDs with a dated fact on or between the dates.
+
+        A dated fact is a visible log of the tab, or a dated viewing that isn't hidden
+        (STAT-104). Either date may be None for an open end. A mark's fills and undated
+        completions have no day, so they never date a title.
+        """
+        logs = self.all_entries.filter(filter_service.log_day_range_q(self.owner, start_date, end_date))
+        parts = [logs.annotate(stats_title_id=self.title_id()).values("stats_title_id")]
+        if self.counts_tv:
+            viewings = self.all_viewings.filter(self.viewing_has_day_q(), self.viewing_days_q(start_date, end_date))
+            parts.append(viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id"))
+        return union_ids(*parts)
+
+    def first_seen_q(self, field):
+        """Match rows whose title (``field``) was first seen in this dated range.
+
+        A title is first seen on its earliest log day, for TV the earliest of its log
+        days and dated viewing days (STAT-213, STAT-214): it has a dated fact in the
+        range and none before it. Undated completions never count in a range.
+        """
+        day_before = self.start_date - timedelta(days=1)
+        return Q(**{f"{field}__in": self.dated_title_ids(self.start_date, self.end_date)}) & ~Q(
+            **{f"{field}__in": self.dated_title_ids(None, day_before)},
+        )
+
+    def first_seen_after_q(self, field):
+        """Match rows whose title (``field``) was first seen after this range's end."""
+        day_after = self.end_date + timedelta(days=1)
+        return Q(**{f"{field}__in": self.dated_title_ids(day_after, None)}) & ~Q(
+            **{f"{field}__in": self.dated_title_ids(None, self.end_date)},
+        )
 
     def undated_completion_item_ids(self):
         """Querysets of Item IDs consumed with no log at all, one per type (STAT-105).

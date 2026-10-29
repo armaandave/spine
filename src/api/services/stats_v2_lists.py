@@ -6,22 +6,28 @@ only on the movie, game, book and anime tabs (``scope.has_collections``); the
 assembly sends null elsewhere (STAT-302). collections_page serves the show-all
 endpoint (STAT-310): page is 1-based; it returns ``{"count", "results"}``.
 
-Rings and collections are lifetime (they ignore the range). An item is **seen** when
-the owner's latest tracking row for it is Completed or the viewer can see a log of
-that exact Item (STAT-213): ``seen_q`` builds that as subqueries, so no Item IDs are
-ever sent as query parameters.
+Ring and collection progress is lifetime. An item is **seen** when the owner's latest
+tracking row for it is Completed or the viewer can see a log of that exact Item
+(STAT-213): ``seen_q`` builds that as subqueries, so no Item IDs are ever sent as
+query parameters. A dated range adds the progress made in it: the seen titles first
+seen in the range (``StatsScope.first_seen_q``, also subqueries).
 """
 
 import hashlib
 import re
 
 from django.core.cache import cache
-from django.db.models import Count, F, Q, Window
+from django.db.models import BooleanField, Case, Count, F, Q, When, Window
 from django.db.models.functions import Lower, RowNumber
 
 from api.services import completion as completion_service
 from api.services import stats_v2_ratings as ratings
-from api.services.stats_scope import TV_ITEM_TYPES, latest_tracking_rows, stars
+from api.services.stats_scope import (
+    TV_ITEM_TYPES,
+    StatsScope,
+    latest_tracking_rows,
+    stars,
+)
 from api.views import featured
 from app import exposure
 from app.models import (
@@ -67,6 +73,8 @@ RING_TOTALS_TIMEOUT = 7 * 24 * 60 * 60
 RING_TOTALS_VERSION = 1
 
 COLLECTION_GROUPS = ("complete", "almost")
+# Progress made in a dated range (STAT-214): collections.in_range and its show-all.
+IN_RANGE_GROUPS = ("completed_in_range", "progressed_in_range")
 COLLECTION_ALMOST_MAX_LEFT = 2
 
 
@@ -332,8 +340,10 @@ def _ring_candidates():
 def build_list_rings(scope):
     """Build rings for lasting featured lists with at least 2 seen (STAT-213).
 
-    Lifetime: every range shows the same rings. Global shows every ring, a type tab
-    the rings of its type. Sorted by seen share, then seen, then name.
+    ``seen`` and ``total`` are lifetime. Global shows every ring, a type tab the rings
+    of its type. All Time sends every ring, sorted by seen share, then seen, then name,
+    with ``seen_in_range`` null. A dated range adds ``seen_in_range``, the seen titles
+    first seen in the range, and sends only rings with one or more, sorted by it first.
     """
     candidates = [
         candidate
@@ -342,17 +352,16 @@ def build_list_rings(scope):
     ]
     if not candidates:
         return []
-    seen = dict(
-        CustomListItem.objects.filter(
-            custom_list_id__in=[custom_list.id for custom_list, *_ in candidates],
-            item__media_type__in=exposure.media_types(),
-        )
-        .filter(seen_q(scope))
-        .order_by()
-        .values("custom_list_id")
-        .annotate(seen=Count("item_id", distinct=True))
-        .values_list("custom_list_id", "seen"),
-    )
+    members = CustomListItem.objects.filter(
+        custom_list_id__in=[custom_list.id for custom_list, *_ in candidates],
+        item__media_type__in=exposure.media_types(),
+    ).filter(seen_q(scope))
+    seen = _count_by_list(members)
+    seen_in_range = {}
+    if not scope.is_all_time:
+        # The same first-seen rule on every tab: dated facts of every type.
+        first_seen = scope.global_scope().first_seen_q("stats_title")
+        seen_in_range = _count_by_list(members.annotate(stats_title=StatsScope.title_id()).filter(first_seen))
     rings = [
         {
             "id": custom_list.id,
@@ -361,37 +370,77 @@ def build_list_rings(scope):
             "kind": kind,
             "seen": seen.get(custom_list.id, 0),
             "total": total,
+            "seen_in_range": None if scope.is_all_time else seen_in_range.get(custom_list.id, 0),
         }
         for custom_list, kind, media_type, total in candidates
         if seen.get(custom_list.id, 0) >= RING_MIN_SEEN
+        and (scope.is_all_time or seen_in_range.get(custom_list.id, 0) >= 1)
     ]
-    rings.sort(key=lambda ring: (-ring["seen"] / ring["total"], -ring["seen"], ring["name"].casefold(), ring["id"]))
+    rings.sort(
+        key=lambda ring: (
+            -(ring["seen_in_range"] or 0),
+            -ring["seen"] / ring["total"],
+            -ring["seen"],
+            ring["name"].casefold(),
+            ring["id"],
+        ),
+    )
     return rings
 
 
-def _collections(scope):
+def _count_by_list(members):
+    """Return ``{list_id: distinct Items}`` of list items, in one grouped query."""
+    return dict(
+        members.order_by()
+        .values("custom_list_id")
+        .annotate(count=Count("item_id", distinct=True))
+        .values_list("custom_list_id", "count"),
+    )
+
+
+def _collections(scope, *, in_range=False):
     """Annotate the tab's stored series with released and seen member counts.
 
     A member is released when its release date is on or before today on the owner's
     calendar, or it has no date and its source isn't TMDB. Only series with at least
     2 released members and a seen member are kept. Everything stays in SQL.
+
+    With ``in_range`` (dated ranges only) each series also counts its seen released
+    members first seen in the range (``stats_seen_in_range``) and after it
+    (``stats_seen_after``). Collections hold no TV, so a member's Item is its title,
+    and the tab's own logs are the only logs a member can have.
     """
     released = Q(memberships__item__release_date__lte=scope.today) | (
         Q(memberships__item__release_date__isnull=True) & ~Q(memberships__item__source=Sources.TMDB.value)
     )
+    seen = released & seen_q(scope, "memberships__item_id")
+    counts = {
+        "stats_released": Count("memberships", filter=released, distinct=True),
+        "stats_seen": Count("memberships", filter=seen, distinct=True),
+    }
+    if in_range:
+        counts["stats_seen_in_range"] = Count(
+            "memberships",
+            filter=seen & scope.first_seen_q("memberships__item_id"),
+            distinct=True,
+        )
+        counts["stats_seen_after"] = Count(
+            "memberships",
+            filter=seen & scope.first_seen_after_q("memberships__item_id"),
+            distinct=True,
+        )
     touched = MediaSeriesItem.objects.filter(seen_q(scope)).values("series_id")
     return (
         MediaSeries.objects.filter(media_type=scope.media_type, id__in=touched)
-        .annotate(
-            stats_released=Count("memberships", filter=released, distinct=True),
-            stats_seen=Count("memberships", filter=released & seen_q(scope, "memberships__item_id"), distinct=True),
-        )
+        .annotate(**counts)
         .filter(stats_released__gte=2)
     )
 
 
 def _collection_group(scope, group):
     """Return one group's series in STAT-214 order."""
+    if group in IN_RANGE_GROUPS:
+        return _in_range_group(scope, group)
     series = _collections(scope)
     if group == "complete":
         return series.filter(stats_seen=F("stats_released")).order_by("-stats_released", Lower("name"), "id")
@@ -409,8 +458,33 @@ def _collection_group(scope, group):
     )
 
 
+def _in_range_series(scope):
+    """Return the series with a seen member first seen in a dated range (STAT-214).
+
+    ``stats_completed`` says whether the series became complete in the range: it is
+    complete now and no member was first seen after the range, so its last member to
+    be seen was first seen in it. Every other one progressed. Sorted by members first
+    seen in the range, then size, then name.
+    """
+    became_complete = Q(stats_seen=F("stats_released"), stats_seen_after=0)
+    return (
+        _collections(scope, in_range=True)
+        .filter(stats_seen_in_range__gte=1)
+        .annotate(stats_completed=Case(When(became_complete, then=True), default=False, output_field=BooleanField()))
+        .order_by("-stats_seen_in_range", "-stats_released", Lower("name"), "id")
+    )
+
+
+def _in_range_group(scope, group):
+    """Return the series completed, or else progressed, in a dated range."""
+    return _in_range_series(scope).filter(stats_completed=group == "completed_in_range")
+
+
 def _collection_rows(scope, series_rows):
-    """Serialize series as media series summaries, with posters for these rows only."""
+    """Serialize series as media series summaries, with posters for these rows only.
+
+    Series from an in-range group also carry ``seen_in_range``.
+    """
     series_rows = list(series_rows)
     if not series_rows:
         return []
@@ -438,8 +512,9 @@ def _collection_rows(scope, series_rows):
         poster = summary.get("custom_poster_url") or summary.get("poster_url")
         if poster:
             posters.setdefault(series_id, []).append(poster)
-    return [
-        {
+    rows = []
+    for series in series_rows:
+        row = {
             "id": series.series_id,
             "source": series.source,
             "media_type": series.media_type,
@@ -448,29 +523,59 @@ def _collection_rows(scope, series_rows):
             "poster_urls": posters.get(series.id, []),
             "completion": completion_service.completion_payload(series.stats_seen, series.stats_released),
         }
-        for series in series_rows
-    ]
+        if hasattr(series, "stats_seen_in_range"):
+            row["seen_in_range"] = series.stats_seen_in_range
+        rows.append(row)
+    return rows
 
 
 def build_collections(scope):
-    """Build complete and almost complete series of the tab's type (STAT-214)."""
-    complete = _collection_group(scope, "complete")
-    almost = _collection_group(scope, "almost")
-    complete_count = complete.count()
-    almost_count = almost.count()
-    shown_complete = list(complete[:COLLECTION_PREVIEW_LIMIT]) if complete_count else []
-    shown_almost = list(almost[:COLLECTION_PREVIEW_LIMIT]) if almost_count else []
-    rows = _collection_rows(scope, shown_complete + shown_almost)
-    return {
-        "complete_count": complete_count,
-        "almost_count": almost_count,
-        "complete": rows[: len(shown_complete)],
-        "almost": rows[len(shown_complete) :],
+    """Build the tab's complete and almost complete series (STAT-214).
+
+    Both are lifetime. A dated range adds ``in_range``: the series completed and
+    progressed in it; All Time sends ``in_range`` null.
+    """
+    groups = COLLECTION_GROUPS if scope.is_all_time else COLLECTION_GROUPS + IN_RANGE_GROUPS
+    counts, shown = {}, {}
+    for group in COLLECTION_GROUPS:
+        series = _collection_group(scope, group)
+        counts[group] = series.count()
+        shown[group] = list(series[:COLLECTION_PREVIEW_LIMIT]) if counts[group] else []
+    if not scope.is_all_time:
+        # One query: only series with progress in the range, a few rows.
+        progress = list(_in_range_series(scope))
+        for group, completed in zip(IN_RANGE_GROUPS, (True, False), strict=True):
+            rows = [series for series in progress if bool(series.stats_completed) == completed]
+            counts[group] = len(rows)
+            shown[group] = rows[:COLLECTION_PREVIEW_LIMIT]
+    # One poster query for every row shown.
+    rows = _collection_rows(scope, [row for group in groups for row in shown[group]])
+    shown_rows, start = {}, 0
+    for group in groups:
+        shown_rows[group] = rows[start : start + len(shown[group])]
+        start += len(shown[group])
+    payload = {
+        "complete_count": counts["complete"],
+        "almost_count": counts["almost"],
+        "complete": shown_rows["complete"],
+        "almost": shown_rows["almost"],
+        "in_range": None,
     }
+    if not scope.is_all_time:
+        payload["in_range"] = {
+            "completed_count": counts["completed_in_range"],
+            "completed": shown_rows["completed_in_range"],
+            "progressed_count": counts["progressed_in_range"],
+            "progressed": shown_rows["progressed_in_range"],
+        }
+    return payload
 
 
 def collections_page(scope, group, page, page_size):
-    """Return one page of the ``complete`` or ``almost`` group (STAT-214, 310)."""
+    """Return one page of a group: complete, almost, or an in-range one (STAT-214, 310).
+
+    ``completed_in_range`` and ``progressed_in_range`` need a dated range.
+    """
     series = _collection_group(scope, group)
     count = series.count()
     start = (page - 1) * page_size

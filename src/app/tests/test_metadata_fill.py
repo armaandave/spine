@@ -26,6 +26,7 @@ from app.models import (
     DiaryEntry,
     Episode,
     Item,
+    ItemCredit,
     ItemFilterFacet,
     MediaTypes,
     Movie,
@@ -38,7 +39,10 @@ from app.tests.tv_fixtures import FakeTVProvider, make_show
 
 # A whole hour, so every pacing window starts with the test.
 START = 1_800_000_000.0
-CURRENT = 2
+# The versions filled Items are stamped with: anime (and comics, games), films, albums.
+CURRENT = CURRENT_METADATA_VERSION[MediaTypes.ANIME.value]
+FILM = CURRENT_METADATA_VERSION[MediaTypes.MOVIE.value]
+ALBUM = CURRENT_METADATA_VERSION[MediaTypes.MUSIC.value]
 
 
 class FakeClock:
@@ -105,6 +109,9 @@ class FillTestCase(TestCase):
             [ItemFilterFacet(item=item, facet_type=facet_type, value=name) for name in names],
         )
 
+    def credit(self, item, role=ItemCredit.Role.ARTIST.value):
+        ItemCredit.objects.create(item=item, role=role, person_source=item.source, person_id="1", name="Someone")
+
     def patch_metadata(self, side_effect):
         patcher = mock.patch.object(services, "get_media_metadata", side_effect=side_effect)
         fetch = patcher.start()
@@ -141,7 +148,7 @@ class SelectionAndDryRunTests(FillTestCase):
         self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value, release_year=1997)  # no album length
         self.item(MediaTypes.ANIME.value, Sources.MAL.value, metadata_attempted_at=now - timedelta(days=8))
         self.item(MediaTypes.ANIME.value, Sources.MAL.value, metadata_attempted_at=now - timedelta(days=1))
-        self.item(metadata_version=CURRENT)  # already current
+        self.item(metadata_version=FILM)  # already current
         fetch = self.patch_metadata(AssertionError("no provider calls in a dry run"))
         batch = self.patch_hardcover(AssertionError("no provider calls in a dry run"))
 
@@ -186,7 +193,7 @@ class SelectionAndDryRunTests(FillTestCase):
     def test_manual_untracked_and_current_items_are_never_fetched(self):
         self.item(source=Sources.MANUAL.value)
         self.item(track=False)
-        self.item(metadata_version=CURRENT)
+        self.item(metadata_version=FILM)
         fetch = self.patch_metadata(AssertionError("nothing is pending"))
 
         totals = metadata_fill.fill_in_process()
@@ -227,7 +234,7 @@ class ApplyTests(FillTestCase):
 
         fetch.assert_called_once_with(MediaTypes.MOVIE.value, film.media_id, Sources.TMDB.value)
         self.refresh(film)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
         self.assertEqual(film.release_year, 2001)
         self.assertEqual(film.runtime_minutes, 152)
 
@@ -241,6 +248,7 @@ class ApplyTests(FillTestCase):
         self.genre(comic, "Superhero")
         album = self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value, release_year=1997, runtime_minutes=53)
         self.genre(album, "Rock")
+        self.credit(album)
         themed = self.item(MediaTypes.GAME.value, Sources.IGDB.value, release_year=2017)
         self.genre(themed, "Adventure")
         self.genre(themed, "Open world", facet_type=ItemFilterFacet.FacetType.THEME)
@@ -256,7 +264,7 @@ class ApplyTests(FillTestCase):
         self.refresh(comic, album, themed, unthemed)
         self.assertEqual(
             [comic.metadata_version, album.metadata_version, themed.metadata_version, unthemed.metadata_version],
-            [CURRENT] * 4,
+            [CURRENT, ALBUM, CURRENT, CURRENT],
         )
 
     def test_limit_stops_the_in_process_fill(self):
@@ -267,7 +275,7 @@ class ApplyTests(FillTestCase):
 
         self.assertEqual(fetch.call_count, 2)
         self.refresh(*films)
-        self.assertEqual([film.metadata_version for film in films], [CURRENT, CURRENT, 0])
+        self.assertEqual([film.metadata_version for film in films], [FILM, FILM, 0])
 
     def test_an_album_without_a_length_waits_a_week(self):
         album = self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value)
@@ -307,7 +315,7 @@ class ApplyTests(FillTestCase):
             self.assertEqual(fake.count(), 1)
         self.refresh(show, seasons[1], seasons[2], episode)
         for item in (show, seasons[1], seasons[2], episode):
-            self.assertEqual(item.metadata_version, CURRENT, item)
+            self.assertEqual(item.metadata_version, CURRENT_METADATA_VERSION[item.media_type], item)
         self.assertEqual(show.release_year, 2020)
         self.assertEqual(seasons[2].release_year, 2021)
         self.assertEqual(seasons[2].runtime_minutes, 45)
@@ -433,7 +441,7 @@ class ErrorTests(FillTestCase):
         # MAL stopped for the run: the next anime waits for the next run, untouched.
         self.assertEqual(later.metadata_version, 0)
         self.assertIsNone(later.metadata_attempted_at)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
 
     def test_a_400_for_every_title_stops_the_provider_and_stamps_nothing(self):
         anime = [self.item(MediaTypes.ANIME.value, Sources.MAL.value) for _ in range(3)]
@@ -467,7 +475,7 @@ class ErrorTests(FillTestCase):
         self.assertEqual(film.metadata_version, 0)
         self.assertIsNotNone(film.metadata_attempted_at)
         # The provider isn't stopped: the next film is filled.
-        self.assertEqual(later.metadata_version, CURRENT)
+        self.assertEqual(later.metadata_version, FILM)
 
     def test_the_tenth_stamp_in_a_row_stops_the_provider(self):
         streak = metadata_fill.MAX_STAMP_STREAK
@@ -550,7 +558,7 @@ class ErrorTests(FillTestCase):
         self.refresh(show, film)
         self.assertEqual(show.metadata_version, 0)
         self.assertIsNotNone(show.metadata_attempted_at)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
 
     def test_a_malformed_season_waits_and_the_rest_is_filled(self):
         show = self.item(MediaTypes.TV.value, media_id="6000", track=False)
@@ -571,7 +579,7 @@ class ErrorTests(FillTestCase):
         self.refresh(season, film)
         self.assertEqual(season.metadata_version, 0)
         self.assertIsNotNone(season.metadata_attempted_at)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
 
     def test_deferred_stops_the_provider_without_requeueing(self):
         books = [self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id=str(200 + n)) for n in range(2)]
@@ -586,7 +594,7 @@ class ErrorTests(FillTestCase):
 
         schedule.assert_not_called()
         self.refresh(film, *books)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
         # No call was made, so the books aren't pushed back a week: the next run asks again.
         for book in books:
             self.assertEqual(book.metadata_version, 0)
@@ -741,7 +749,7 @@ class ChainTests(FillTestCase):
             fill_item_metadata.run(**kwargs)
 
         film.refresh_from_db()
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
         self.assertIsNone(metadata_fill.chain_status())
         bump.assert_called_once_with()
 
@@ -786,7 +794,7 @@ class ChainTests(FillTestCase):
             call_command("fill_item_metadata", "--apply", stdout=StringIO())
 
         film.refresh_from_db()
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, FILM)
 
     def test_apply_gives_up_when_the_lock_stays_held(self):
         self.item()
@@ -846,7 +854,7 @@ class SweepTests(FillTestCase):
         self.assertEqual(result, {"recent": 1, "chain_started": True, "enabled": True})
         schedule.assert_called_once_with()
         self.refresh(old, recent)
-        self.assertEqual((old.metadata_version, recent.metadata_version), (0, CURRENT))
+        self.assertEqual((old.metadata_version, recent.metadata_version), (0, FILM))
 
     def test_recent_logs_count_too(self):
         logged = self.item(track=False)
@@ -857,7 +865,7 @@ class SweepTests(FillTestCase):
         self.assertEqual(metadata_fill.sweep()["recent"], 1)
 
     def test_nothing_happens_when_nothing_is_pending(self):
-        self.item(metadata_version=CURRENT)
+        self.item(metadata_version=FILM)
         fetch = self.patch_metadata(AssertionError("nothing is pending"))
         schedule = self.patch_schedule()
 
@@ -919,13 +927,14 @@ class TrackingRowsTests(FillTestCase):
 
 
 def apple_album(*, durations=(240_000, 180_000), release_date="2007-04-17", genres=("Rock", "Music")):
-    """An Apple Music album resource with its tracks, as apple_music.album returns it."""
+    """An Apple Music album resource with its tracks and artists, as apple_music.album returns it."""
     return {
         "id": "1440826538",
         "type": "albums",
         "attributes": {"name": "Year Zero", "releaseDate": release_date, "genreNames": list(genres)},
         "relationships": {
             "tracks": {"data": [{"type": "songs", "attributes": {"durationInMillis": ms}} for ms in durations]},
+            "artists": {"data": [{"id": "107917", "type": "artists", "attributes": {"name": "Nine Inch Nails"}}]},
         },
     }
 
@@ -955,11 +964,15 @@ class AppleMusicTests(FillTestCase):
 
         totals = metadata_fill.fill_in_process()
 
-        fetch.assert_called_once_with("1440826538", background=True)
+        fetch.assert_called_once_with("1440826538", include=("tracks", "artists"), background=True)
         self.no_provider.assert_not_called()
         self.assertEqual(totals["filled"], 1)
         self.refresh(album)
-        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.metadata_version, ALBUM)
+        self.assertEqual(
+            list(album.credits.values_list("role", "person_source", "person_id", "name")),
+            [("artist", "apple_music", "107917", "Nine Inch Nails")],
+        )
         self.assertEqual(album.runtime_minutes, 7)
         self.assertEqual(album.release_date.isoformat(), "2007-04-17")
         # Apple's catch-all "Music" is left out.
@@ -976,7 +989,7 @@ class AppleMusicTests(FillTestCase):
         metadata_fill.fill_in_process()
 
         self.refresh(album)
-        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.metadata_version, ALBUM)
         self.assertEqual(album.runtime_minutes, 7)
         self.assertEqual(album.release_date.isoformat(), "1997-05-21")
         self.assertEqual(
@@ -987,6 +1000,7 @@ class AppleMusicTests(FillTestCase):
     def test_an_apple_album_with_what_apple_gives_is_only_stamped(self):
         album = self.apple_item(release_year=2007, runtime_minutes=64)
         self.genre(album, "industrial")
+        self.credit(album)
         fetch = self.patch_album(AssertionError("no call for a stamp"))
 
         totals = metadata_fill.fill_in_process()
@@ -994,7 +1008,7 @@ class AppleMusicTests(FillTestCase):
         fetch.assert_not_called()
         self.assertEqual(totals["stamp_only"], 1)
         self.refresh(album)
-        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.metadata_version, ALBUM)
 
     def test_a_track_without_a_length_leaves_the_album_unstamped(self):
         album = self.apple_item()
@@ -1016,7 +1030,7 @@ class AppleMusicTests(FillTestCase):
 
         self.assertEqual(totals["not_found"], 1)
         self.refresh(album)
-        self.assertEqual(album.metadata_version, CURRENT)
+        self.assertEqual(album.metadata_version, ALBUM)
 
     def test_without_the_key_apple_waits_unmarked_and_musicbrainz_carries_on(self):
         self.configured.return_value = False
@@ -1032,12 +1046,13 @@ class AppleMusicTests(FillTestCase):
         self.assertEqual(totals["skipped_blocked"], 1)
         self.refresh(apple, musicbrainz)
         self.assertEqual((apple.metadata_version, apple.metadata_attempted_at), (0, None))
-        self.assertEqual(musicbrainz.metadata_version, CURRENT)
+        self.assertEqual(musicbrainz.metadata_version, ALBUM)
 
     def test_dry_run_counts_one_apple_call_per_album(self):
         self.apple_item()
         stamped = self.item(MediaTypes.MUSIC.value, Sources.APPLE_MUSIC.value, release_year=2007, runtime_minutes=64)
         self.genre(stamped, "Rock")
+        self.credit(stamped)
 
         report = metadata_fill.estimate()
 
@@ -1045,3 +1060,76 @@ class AppleMusicTests(FillTestCase):
             [(row["provider"], row["pending"], row["stamp_only"], row["calls"]) for row in report["rows"]],
             [(Sources.APPLE_MUSIC.value, 2, 1, 1)],
         )
+
+    def test_an_apple_album_without_artists_is_fetched_for_them(self):
+        album = self.apple_item(release_year=2007, runtime_minutes=64)
+        self.genre(album, "industrial")
+        self.patch_album(lambda *args, **kwargs: apple_album())
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual((totals["filled"], totals["stamp_only"]), (1, 0))
+        self.assertEqual(list(album.credits.values_list("person_id", flat=True)), ["107917"])
+
+
+class CreditFillTests(FillTestCase):
+    """Credits (ItemCredit) come with each type's usual fetch (STAT-219)."""
+
+    def test_a_musicbrainz_album_with_a_length_is_fetched_lean_for_its_artists(self):
+        album = self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value, release_year=1997, runtime_minutes=53)
+        self.genre(album, "Rock")
+        credits = [{"artist_mbid": "a74b1b7f-71a5-4011-9441-d0b5e4122711", "name": "Radiohead", "join_phrase": ""}]
+        fetch = self.patch_metadata(
+            lambda *args, **kwargs: {"release_date": "1997-05-21", "genres": ["Rock"], "details": {"artist_credits": credits}},
+        )
+
+        self.assertEqual(metadata_fill.estimate()["rows"][0]["calls"], 1)
+        totals = metadata_fill.fill_in_process()
+
+        fetch.assert_called_once_with(
+            MediaTypes.MUSIC.value,
+            album.media_id,
+            Sources.MUSICBRAINZ.value,
+            include_music_enrichment=False,
+        )
+        self.assertEqual(totals["filled"], 1)
+        self.refresh(album)
+        self.assertEqual((album.metadata_version, album.runtime_minutes), (ALBUM, 53))
+        self.assertEqual(
+            list(album.credits.values_list("person_source", "person_id", "name")),
+            [("musicbrainz", "a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead")],
+        )
+
+    def test_a_film_and_a_show_store_their_credits(self):
+        film = self.item()
+        show = self.item(MediaTypes.TV.value)
+        cast = [{"person_id": 17419, "name": "Bryan Cranston", "image": "https://image.tmdb.org/t/p/w500/b.jpg"}]
+
+        def fetch_metadata(media_type, *args, **kwargs):
+            if media_type == "tv_with_seasons":
+                return {"release_date": "2008-01-20", "details": {"creators": [{"id": "66633", "name": "Vince Gilligan"}]}, "cast": cast}
+            return movie_metadata(details={"directors": [{"id": "525", "name": "Christopher Nolan"}]}, cast=cast, crew=[])
+
+        self.patch_metadata(fetch_metadata)
+
+        metadata_fill.fill_in_process()
+
+        self.assertEqual(
+            sorted(film.credits.values_list("role", "person_id")),
+            [("cast", "17419"), ("director", "525")],
+        )
+        self.assertEqual(
+            sorted(show.credits.values_list("role", "person_id")),
+            [("cast", "17419"), ("creator", "66633")],
+        )
+        self.refresh(film, show)
+        self.assertEqual((film.metadata_version, show.metadata_version), (FILM, CURRENT_METADATA_VERSION["tv"]))
+
+    def test_hardcover_books_store_their_authors_from_the_batch(self):
+        book = self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id="101")
+        authors = [{"name": "N. K. Jemisin", "person_id": "204", "source": "hardcover"}]
+        self.patch_hardcover(lambda media_ids: {"101": {"release_date": "2015-08-04", "details": {"authors": authors}}})
+
+        metadata_fill.fill_in_process()
+
+        self.assertEqual(list(book.credits.values_list("role", "person_id", "name")), [("author", "204", "N. K. Jemisin")])

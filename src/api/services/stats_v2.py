@@ -10,6 +10,7 @@ from django.db.models import Count, Min
 
 from api.services import stats_v2_activity as activity
 from api.services import stats_v2_lists as lists
+from api.services import stats_v2_people as people
 from api.services import stats_v2_ratings as ratings
 from api.services import stats_v2_taste as taste
 from api.services.stats_scope import media_type_bucket
@@ -37,6 +38,7 @@ def build_stats_v2(scope):
         "release_years": taste.build_release_years(scope),
         "genres": taste.build_genres(scope),
         "languages": taste.build_languages(scope) if scope.has_languages else None,
+        "people": people.build_people(scope),
         "list_rings": lists.build_list_rings(scope),
         "collections": lists.build_collections(scope) if scope.has_collections else None,
         "most_logged": ratings.build_most_logged(scope),
