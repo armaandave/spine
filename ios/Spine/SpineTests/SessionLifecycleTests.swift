@@ -874,11 +874,13 @@ final class AppSessionLaunchTests: RefreshTestCase {
         session.letterboxdImportCoordinator.resumeIfNeeded()
         session.storygraphImportCoordinator.resumeIfNeeded()
         session.goodreadsImportCoordinator.resumeIfNeeded()
+        session.marginsImportCoordinator.resumeIfNeeded()
         session.myAnimeListImportCoordinator.resumeIfNeeded()
 
         XCTAssertEqual(session.letterboxdImportCoordinator.phase, .idle)
         XCTAssertEqual(session.storygraphImportCoordinator.phase, .idle)
         XCTAssertEqual(session.goodreadsImportCoordinator.phase, .idle)
+        XCTAssertEqual(session.marginsImportCoordinator.phase, .idle)
         XCTAssertEqual(session.myAnimeListImportCoordinator.phase, .idle)
 
         // Once the profile gets through, the session resumes them itself.
@@ -891,6 +893,7 @@ final class AppSessionLaunchTests: RefreshTestCase {
         session.storygraphImportCoordinator.resumeIfNeeded() // and now the shell may too
         XCTAssertNotEqual(session.storygraphImportCoordinator.phase, .idle)
         XCTAssertTrue(session.myAnimeListImportCoordinator.hasProcessingJob, "the session resumed MyAnimeList too")
+        XCTAssertTrue(session.marginsImportCoordinator.hasProcessingJob, "the session resumed Margins too")
     }
 
     func testTheShellCannotResumeImportsOfASignedOutSession() async {
@@ -1100,9 +1103,9 @@ final class AppSessionLaunchTests: RefreshTestCase {
         defaults.set(Date().timeIntervalSince1970, forKey: "letterboxdImport.startedAt")
     }
 
-    /// Running Letterboxd, StoryGraph, Goodreads and MyAnimeList imports left by an earlier launch.
+    /// Running Letterboxd, StoryGraph, Goodreads, Margins and MyAnimeList imports left by an earlier launch.
     private func seedRunningImports() {
-        for service in ["letterboxd", "storygraph", "goodreads", "myAnimeList"] {
+        for service in ["letterboxd", "storygraph", "goodreads", "margins", "myAnimeList"] {
             defaults.set("task-1", forKey: "\(service)Import.taskId")
             defaults.set(ImportMode.new.rawValue, forKey: "\(service)Import.mode")
             defaults.set(Date().timeIntervalSince1970, forKey: "\(service)Import.startedAt")
@@ -1113,7 +1116,7 @@ final class AppSessionLaunchTests: RefreshTestCase {
         guard case .signedOut = session.state else {
             return XCTFail("Expected signed out, got \(session.state)", file: file, line: line)
         }
-        for service in ["letterboxd", "storygraph", "goodreads", "myAnimeList"] {
+        for service in ["letterboxd", "storygraph", "goodreads", "margins", "myAnimeList"] {
             XCTAssertNil(defaults.string(forKey: "\(service)Import.taskId"), "\(service) job", file: file, line: line)
         }
         XCTAssertEqual(session.letterboxdImportCoordinator.phase, .idle, file: file, line: line)
@@ -1403,6 +1406,7 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
         let letterboxd = LetterboxdImportCoordinator(importRepository: repository, defaults: defaults)
         let storyGraph = StoryGraphImportCoordinator(importRepository: repository, defaults: defaults)
         let goodreads = GoodreadsImportCoordinator(importRepository: repository, defaults: defaults)
+        let margins = MarginsImportCoordinator(importRepository: repository, defaults: defaults)
         let myAnimeList = MyAnimeListImportCoordinator(importRepository: repository, defaults: defaults)
         return [
             Harness(
@@ -1446,6 +1450,20 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 isUploading: { if case .uploading = goodreads.phase { true } else { false } },
                 isProcessing: { goodreads.hasProcessingJob },
                 isChecking: { goodreads.isCheckingStatus }
+            ),
+            Harness(
+                name: "margins",
+                fileExtension: "csv",
+                startImport: { margins.startImport(fileURL: $0, mode: .new) },
+                cancelUpload: { margins.cancelUploadFailure() },
+                resume: { margins.resumeIfNeeded() },
+                checkStatus: { margins.checkStatusOnce() },
+                clear: { margins.clearFinishedJob() },
+                isIdle: { margins.phase == .idle },
+                isFailed: { if case .failed = margins.phase { true } else { false } },
+                isUploading: { if case .uploading = margins.phase { true } else { false } },
+                isProcessing: { margins.hasProcessingJob },
+                isChecking: { margins.isCheckingStatus }
             ),
             Harness(
                 name: "myAnimeList",

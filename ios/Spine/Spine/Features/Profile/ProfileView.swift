@@ -542,6 +542,7 @@ struct ProfileView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let marginsImportCoordinator: MarginsImportCoordinator?
     private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
@@ -569,6 +570,7 @@ struct ProfileView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        marginsImportCoordinator: MarginsImportCoordinator? = nil,
         myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void,
@@ -598,6 +600,7 @@ struct ProfileView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.marginsImportCoordinator = marginsImportCoordinator
         self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
@@ -635,6 +638,9 @@ struct ProfileView: View {
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .goodreadsImportDidSucceed)) { _ in
+                Swift.Task<Void, Never> { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
                 Swift.Task<Void, Never> { await viewModel.reload() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
@@ -675,6 +681,7 @@ struct ProfileView: View {
                 if let importCoordinator,
                    let storygraphImportCoordinator,
                    let goodreadsImportCoordinator,
+                   let marginsImportCoordinator,
                    let myAnimeListImportCoordinator {
                     ProfileSettingsSheet(
                         profile: viewModel.profile,
@@ -689,6 +696,7 @@ struct ProfileView: View {
                         importCoordinator: importCoordinator,
                         storygraphImportCoordinator: storygraphImportCoordinator,
                         goodreadsImportCoordinator: goodreadsImportCoordinator,
+                        marginsImportCoordinator: marginsImportCoordinator,
                         myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                         onLogout: onLogout
                     )
@@ -1070,6 +1078,7 @@ struct ProfileView: View {
                             importCoordinator: importCoordinator,
                             storygraphImportCoordinator: storygraphImportCoordinator,
                             goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            marginsImportCoordinator: marginsImportCoordinator,
                             myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                             currentUserId: currentUserId ?? viewModel.profile?.id,
                             onLogout: onLogout,
@@ -1197,6 +1206,7 @@ struct ProfileView: View {
                     importCoordinator: importCoordinator,
                     storygraphImportCoordinator: storygraphImportCoordinator,
                     goodreadsImportCoordinator: goodreadsImportCoordinator,
+                    marginsImportCoordinator: marginsImportCoordinator,
                     myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                     currentUserId: currentUserId ?? viewModel.profile?.id,
                     onLogout: onLogout,
@@ -2210,6 +2220,7 @@ private enum ImportStatusSource: Hashable, Identifiable {
     case letterboxd
     case storygraph
     case goodreads
+    case margins
     case myAnimeList
 
     var id: Self { self }
@@ -2226,6 +2237,7 @@ private struct ProfileSettingsSheet: View {
     let importCoordinator: LetterboxdImportCoordinator
     let storygraphImportCoordinator: StoryGraphImportCoordinator
     let goodreadsImportCoordinator: GoodreadsImportCoordinator
+    let marginsImportCoordinator: MarginsImportCoordinator
     let myAnimeListImportCoordinator: MyAnimeListImportCoordinator
     let onLogout: () -> Void
     private let profileRepository: ProfileRepository
@@ -2243,6 +2255,7 @@ private struct ProfileSettingsSheet: View {
         importCoordinator: LetterboxdImportCoordinator,
         storygraphImportCoordinator: StoryGraphImportCoordinator,
         goodreadsImportCoordinator: GoodreadsImportCoordinator,
+        marginsImportCoordinator: MarginsImportCoordinator,
         myAnimeListImportCoordinator: MyAnimeListImportCoordinator,
         onLogout: @escaping () -> Void
     ) {
@@ -2251,6 +2264,7 @@ private struct ProfileSettingsSheet: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.marginsImportCoordinator = marginsImportCoordinator
         self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.onLogout = onLogout
         self.profileRepository = profileRepository
@@ -2351,6 +2365,11 @@ private struct ProfileSettingsSheet: View {
                 case .goodreads:
                     GoodreadsImportUploadView(
                         coordinator: goodreadsImportCoordinator,
+                        onDone: { importStatusSource = nil }
+                    )
+                case .margins:
+                    MarginsImportUploadView(
+                        coordinator: marginsImportCoordinator,
                         onDone: { importStatusSource = nil }
                     )
                 case .myAnimeList:
@@ -2500,6 +2519,7 @@ private struct ProfileSettingsSheet: View {
         if importCoordinator.phase == .idle &&
             storygraphImportCoordinator.phase == .idle &&
             goodreadsImportCoordinator.phase == .idle &&
+            marginsImportCoordinator.phase == .idle &&
             myAnimeListImportCoordinator.phase == .idle {
             NavigationLink {
                 LetterboxdImportView(coordinator: importCoordinator)
@@ -2544,6 +2564,17 @@ private struct ProfileSettingsSheet: View {
                 )
             }
             .buttonStyle(.plain)
+
+            NavigationLink {
+                MarginsImportView(coordinator: marginsImportCoordinator)
+            } label: {
+                SettingsNavigationRow(
+                    title: "Margins",
+                    detail: "Books and reading history",
+                    importSource: "Margins"
+                )
+            }
+            .buttonStyle(.plain)
         } else if importCoordinator.phase != .idle {
             VStack(alignment: .leading, spacing: 12) {
                 letterboxdImportStatus
@@ -2557,6 +2588,11 @@ private struct ProfileSettingsSheet: View {
         } else if storygraphImportCoordinator.phase != .idle {
             VStack(alignment: .leading, spacing: 12) {
                 storygraphImportStatus
+            }
+            .padding(16)
+        } else if marginsImportCoordinator.phase != .idle {
+            VStack(alignment: .leading, spacing: 12) {
+                marginsImportStatus
             }
             .padding(16)
         } else {
@@ -2791,6 +2827,63 @@ private struct ProfileSettingsSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var marginsImportStatus: some View {
+        switch marginsImportCoordinator.phase {
+        case .idle:
+            EmptyView()
+        case let .uploading(_, progress):
+            Button {
+                importStatusSource = .margins
+            } label: {
+                HStack(spacing: 12) {
+                    ProgressView(value: progress)
+                        .frame(width: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Uploading...")
+                        Text("Tap for details")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        case let .processing(_, statusLabel, _):
+            Button {
+                importStatusSource = .margins
+            } label: {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(statusLabel)
+                        Text("Tap for details")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            marginsCheckStatusButton
+        case let .succeeded(message):
+            // The summary lists every book the import couldn't match, one per line; show all of it.
+            importResultRow(systemName: "checkmark.circle.fill", message: message, lineLimit: nil)
+            Button("Dismiss") {
+                marginsImportCoordinator.clearFinishedJob()
+            }
+        case let .failed(message):
+            importResultRow(systemName: "exclamationmark.triangle.fill", message: message)
+            if marginsImportCoordinator.canCheckStatus {
+                marginsCheckStatusButton
+            }
+            NavigationLink {
+                MarginsImportView(coordinator: marginsImportCoordinator)
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+            }
+            Button("Dismiss") {
+                marginsImportCoordinator.clearFinishedJob()
+            }
+        }
+    }
+
     private var letterboxdCheckStatusButton: some View {
         Button {
             importCoordinator.checkStatusOnce()
@@ -2843,10 +2936,23 @@ private struct ProfileSettingsSheet: View {
         .disabled(goodreadsImportCoordinator.isCheckingStatus)
     }
 
-    private func importResultRow(systemName: String, message: String) -> some View {
+    private var marginsCheckStatusButton: some View {
+        Button {
+            marginsImportCoordinator.checkStatusOnce()
+        } label: {
+            if marginsImportCoordinator.isCheckingStatus {
+                Label("Checking Status", systemImage: "clock.arrow.circlepath")
+            } else {
+                Label("Check Status", systemImage: "arrow.clockwise")
+            }
+        }
+        .disabled(marginsImportCoordinator.isCheckingStatus)
+    }
+
+    private func importResultRow(systemName: String, message: String, lineLimit: Int? = 2) -> some View {
         Label {
             Text(message)
-                .lineLimit(2)
+                .lineLimit(lineLimit)
         } icon: {
             Image(systemName: systemName)
                 .foregroundStyle(.white)

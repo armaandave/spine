@@ -230,6 +230,11 @@ struct SettingsImportLogo: View {
                     .resizable()
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            } else if source == "Margins" {
+                Image("MarginsIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
             } else {
                 // Replace these initials with supplied StoryGraph and Goodreads logo assets.
                 Text(String(source.prefix(1)))

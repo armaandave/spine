@@ -21,6 +21,7 @@ from integrations.imports import (
     kitsu,
     letterboxd,
     mal,
+    margins,
     mal_export,
     simkl,
     steam,
@@ -215,6 +216,19 @@ def import_storygraph(file_path, user_id, mode):
             os.unlink(file_path)
         except OSError:
             logger.warning("Could not delete temporary StoryGraph import file: %s", file_path)
+
+
+@shared_task(name="Import from Margins")
+def import_margins(file_path, user_id, mode):
+    """Celery task for importing book data from a Margins CSV export."""
+    try:
+        with open(file_path, "rb") as export_file:
+            return import_media(margins.importer, export_file, user_id, mode)
+    finally:
+        try:
+            os.unlink(file_path)
+        except OSError:
+            logger.warning("Could not delete temporary Margins import file: %s", file_path)
 
 
 @shared_task(name="Import from MyAnimeList export")

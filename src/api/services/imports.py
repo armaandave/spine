@@ -20,12 +20,14 @@ TASKS_BY_SOURCE = {
     "goodreads": tasks.import_goodreads,
     "letterboxd": tasks.import_letterboxd,
     "storygraph": tasks.import_storygraph,
+    "margins": tasks.import_margins,
     "mal_export": tasks.import_mal_export,
 }
 # Uploads for these sources are spooled to a temp file the task deletes.
 FILE_SUFFIXES = {
     "letterboxd": ".zip",
     "storygraph": ".csv",
+    "margins": ".csv",
     "goodreads": ".csv",
     "mal_export": ".xml",
 }

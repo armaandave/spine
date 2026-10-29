@@ -260,6 +260,9 @@ struct HomeView: View {
             .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
+                Task { await viewModel.reload() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
             }

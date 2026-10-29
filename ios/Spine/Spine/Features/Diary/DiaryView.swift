@@ -400,6 +400,9 @@ struct MediaDiaryView: View {
             .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
                 Task { await viewModel.load() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
+                Task { await viewModel.load() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await viewModel.load() }
             }
@@ -585,6 +588,9 @@ struct DiaryView: View {
                 Task { await reloadDiary() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .storygraphImportDidSucceed)) { _ in
+                Task { await reloadDiary() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .marginsImportDidSucceed)) { _ in
                 Task { await reloadDiary() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
