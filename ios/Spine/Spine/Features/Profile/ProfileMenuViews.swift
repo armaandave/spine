@@ -642,6 +642,7 @@ struct ProfileListsView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let marginsImportCoordinator: MarginsImportCoordinator?
     private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
@@ -662,6 +663,7 @@ struct ProfileListsView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        marginsImportCoordinator: MarginsImportCoordinator? = nil,
         myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void = {},
@@ -681,6 +683,7 @@ struct ProfileListsView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.marginsImportCoordinator = marginsImportCoordinator
         self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
@@ -804,6 +807,7 @@ struct ProfileListsView: View {
                             importCoordinator: importCoordinator,
                             storygraphImportCoordinator: storygraphImportCoordinator,
                             goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            marginsImportCoordinator: marginsImportCoordinator,
                             myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                             currentUserId: currentUserId,
                             onLogout: onLogout,
@@ -849,6 +853,7 @@ struct ProfileListsView: View {
             importCoordinator: importCoordinator,
             storygraphImportCoordinator: storygraphImportCoordinator,
             goodreadsImportCoordinator: goodreadsImportCoordinator,
+            marginsImportCoordinator: marginsImportCoordinator,
             myAnimeListImportCoordinator: myAnimeListImportCoordinator,
             currentUserId: currentUserId,
             onLogout: onLogout,
@@ -1465,6 +1470,7 @@ struct ProfileListDetailView: View {
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
+    private let marginsImportCoordinator: MarginsImportCoordinator?
     private let myAnimeListImportCoordinator: MyAnimeListImportCoordinator?
     private let currentUserId: Int?
     private let onLogout: () -> Void
@@ -1495,6 +1501,7 @@ struct ProfileListDetailView: View {
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
+        marginsImportCoordinator: MarginsImportCoordinator? = nil,
         myAnimeListImportCoordinator: MyAnimeListImportCoordinator? = nil,
         currentUserId: Int? = nil,
         onLogout: @escaping () -> Void = {},
@@ -1514,6 +1521,7 @@ struct ProfileListDetailView: View {
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
+        self.marginsImportCoordinator = marginsImportCoordinator
         self.myAnimeListImportCoordinator = myAnimeListImportCoordinator
         self.currentUserId = currentUserId
         self.onLogout = onLogout
@@ -1879,6 +1887,7 @@ struct ProfileListDetailView: View {
                     importCoordinator: importCoordinator,
                     storygraphImportCoordinator: storygraphImportCoordinator,
                     goodreadsImportCoordinator: goodreadsImportCoordinator,
+                    marginsImportCoordinator: marginsImportCoordinator,
                     myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                     currentUserId: currentUserId,
                     onLogout: onLogout,
@@ -1980,6 +1989,7 @@ struct ProfileListDetailView: View {
                             importCoordinator: importCoordinator,
                             storygraphImportCoordinator: storygraphImportCoordinator,
                             goodreadsImportCoordinator: goodreadsImportCoordinator,
+                            marginsImportCoordinator: marginsImportCoordinator,
                             myAnimeListImportCoordinator: myAnimeListImportCoordinator,
                             currentUserId: currentUserId,
                             onLogout: onLogout,

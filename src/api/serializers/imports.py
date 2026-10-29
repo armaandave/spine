@@ -15,6 +15,8 @@ class ImportSerializer(serializers.Serializer):
             raise serializers.ValidationError({"file": "A Letterboxd ZIP file is required."})
         if source == "storygraph" and "file" not in attrs:
             raise serializers.ValidationError({"file": "A StoryGraph CSV file is required."})
+        if source == "margins" and "file" not in attrs:
+            raise serializers.ValidationError({"file": "A Margins CSV file is required."})
         if source == "goodreads" and "file" not in attrs:
             raise serializers.ValidationError({"file": "A Goodreads CSV file is required."})
         if source == "mal_export" and "file" not in attrs:
