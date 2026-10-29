@@ -420,7 +420,10 @@ class ExplicitBumpTests(StatsCacheBase):
         def failing(identifier, user, mode, **kwargs):
             raise RuntimeError
 
-        with mock.patch.object(import_tasks.events.tasks.reload_calendar, "delay"):
+        with (
+            mock.patch.object(import_tasks.events.tasks.reload_calendar, "delay"),
+            mock.patch.object(import_tasks, "sweep_item_metadata"),
+        ):
             self.assertBumps(self.owner, lambda: import_tasks.import_media(importer, "x", self.owner.pk, "new"))
 
             def fail():

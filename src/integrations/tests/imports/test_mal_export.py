@@ -550,6 +550,7 @@ class MALExportImporterTests(TestCase):
 @patch("app.providers.mal.manga", side_effect=_manga_metadata)
 @patch("app.providers.mal.anime", side_effect=_anime_metadata)
 @patch("events.tasks.reload_calendar.delay")
+@patch("integrations.tasks.sweep_item_metadata")
 class MALExportTaskTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="maltask", password="password")

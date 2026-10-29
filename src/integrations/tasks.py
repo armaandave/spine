@@ -10,7 +10,7 @@ import events
 from api.services import stats_cache
 from app.mixins import collect_external_rating_item_ids, disable_fetch_releases
 from app.models import MediaTypes
-from app.tasks import enqueue_external_rating_batches
+from app.tasks import enqueue_external_rating_batches, sweep_item_metadata
 from app.templatetags import app_tags
 from integrations.imports import (
     anilist,
@@ -32,6 +32,7 @@ from integrations.imports import (
 
 logger = logging.getLogger(__name__)
 ERROR_TITLE = "\n\n\n Couldn't import the following media: \n\n"
+IMPORT_FILL_DELAY_SECONDS = 60
 IMPORT_COUNT_LABELS = {
     "diary": ("diary entry", "diary entries"),
     "reviews": ("review", "reviews"),
@@ -111,6 +112,10 @@ def import_media(
         robust=True,
     )
     events.tasks.reload_calendar.delay()
+    # Fill the imported titles' details (page counts, runtimes, genres: what stats read)
+    # now rather than at the next hourly sweep. The minute lets the provider rate limits
+    # the import just used reset first.
+    sweep_item_metadata.apply_async(countdown=IMPORT_FILL_DELAY_SECONDS)
 
     return format_import_message(imported_counts, warnings)
 
