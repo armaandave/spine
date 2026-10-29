@@ -158,6 +158,25 @@ class ImportMarginsTests(TestCase):
             warnings,
         )
 
+    def test_same_day_reads_log_once_and_unkept_ratings_are_reported(self):
+        payload = (
+            b"Title,Author(s),Status,Start Date,End Date,Rating,Review\n"
+            b"Twice Read,Author One,Finished,2025-03-01,2025-03-04,4,\n"
+            b"Twice Read,Author One,Finished,2025-03-02,2025-03-04,5,\n"
+            b"Given Up,Author Three,Stopped,2024-01-02,2024-02-01,2,\n"
+        )
+
+        counts, warnings = MarginsImporter(payload, self.user, "new", resolver=FakeResolver()).import_data()
+
+        self.assertEqual(counts, {MediaTypes.BOOK.value: 2, "diary": 1, "ratings": 1})
+        self.assertEqual(DiaryEntry.objects.get(item__media_id="201").rating, 8)
+        self.assertIsNone(self._book("203").score)
+        self.assertEqual(
+            warnings,
+            "Given Up by Author Three: Stopped Feb 1, 2024, 2★. "
+            "Imported without its rating: Spine only rates books you've read.",
+        )
+
     def test_new_mode_leaves_books_already_in_spine_and_reimports_nothing(self):
         item = _item("201", "Twice Read")
         Book.objects.create(user=self.user, item=item, status=Status.PLANNING.value)

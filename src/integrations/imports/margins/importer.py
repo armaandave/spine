@@ -120,9 +120,13 @@ class MarginsImporter:
             (row for row in rows if row.state == STOPPED or (row.state == READ and row.end_date)),
             key=lambda row: (row.end_date or row.start_date or date.min, row.index),
         )
+        logged_days = set()
         for row in past:
             if row.state == READ:
-                self._log_read(item, row)
+                # A book has one log per finish day; a second row for that day is a duplicate.
+                if row.end_date not in logged_days:
+                    logged_days.add(row.end_date)
+                    self._log_read(item, row)
             else:
                 book_tracking.import_journey(
                     self.user,
@@ -165,9 +169,15 @@ class MarginsImporter:
         unlogged = [row for row in rows if not (row.state == READ and row.end_date)]
         rated = [row for row in unlogged if row.rating is not None]
         book = Book.objects.get(user=self.user, item=item)
-        if rated and book.score is None and book.status == Status.COMPLETED.value:
-            book_tracking.set_rating(self.user, item, rated[-1].rating)
-            self.counts["ratings"] += 1
+        if rated and book.score is None:
+            if book.status == Status.COMPLETED.value:
+                book_tracking.set_rating(self.user, item, rated[-1].rating)
+                self.counts["ratings"] += 1
+            else:
+                self.warnings.append(
+                    f"{_label(rated[-1])}: {_summary(rated[-1])}. "
+                    "Imported without its rating: Spine only rates books you've read.",
+                )
         reviews = [row.review for row in unlogged if row.review]
         if reviews:
             Book.objects.filter(id=book.id).update(notes="\n\n".join(reviews))
