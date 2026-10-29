@@ -20,6 +20,8 @@ struct MediaSeriesSummary: Decodable, Hashable, Identifiable {
     let itemCount: Int
     let posterUrls: [String]
     let completion: CompletionProgress?
+    /// Stats only: members first seen in a dated range (STAT-214); nil everywhere else.
+    let seenInRange: Int?
 
     var ref: SeriesRef {
         SeriesRef(source: source, id: id, mediaType: mediaType)
@@ -36,6 +38,7 @@ struct MediaSeriesSummary: Decodable, Hashable, Identifiable {
         case bookCount
         case posterUrls
         case completion
+        case seenInRange
     }
 
     init(from decoder: Decoder) throws {
@@ -49,6 +52,7 @@ struct MediaSeriesSummary: Decodable, Hashable, Identifiable {
             ?? 0
         posterUrls = try container.decodeIfPresent([String].self, forKey: .posterUrls) ?? []
         completion = try container.decodeIfPresent(CompletionProgress.self, forKey: .completion)
+        seenInRange = (try? container.decodeIfPresent(Int.self, forKey: .seenInRange)) ?? nil
     }
 }
 

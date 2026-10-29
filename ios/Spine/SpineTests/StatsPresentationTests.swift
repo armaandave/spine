@@ -167,6 +167,84 @@ final class StatsPresentationTests: XCTestCase {
         XCTAssertNil(page.mostLogged)
     }
 
+    func testDecodesTheRoundTwoFields() throws {
+        let page = try decode("""
+        {
+          "schema_version": 2,
+          "range": {"start_date": "2025-01-01", "end_date": "2025-12-31", "timezone": "UTC", "is_all_time": false},
+          "media_type": "movie",
+          "audience": "owner",
+          "header": {"titles": 40, "logs": 52, "active_days": 31, "longest_daily_streak": 4,
+                     "longest_daily_streak_range": {"start": "2025-03-01", "end": "2025-03-04"},
+                     "details": [
+                       {"key": "longest_weekly_streak", "label": "Longest weekly streak", "value": 6, "unit": "week", "approximate": false,
+                        "drill": {"watched_from": "2025-02-03", "watched_to": "2025-03-16"}},
+                       {"key": "rewatches", "label": "Rewatches", "value": 3, "unit": null, "approximate": false, "drill": {"repeat": "true"}},
+                       {"key": "days_with_two_plus_titles", "label": "Days with 2+ titles", "value": 5, "unit": null, "approximate": false,
+                        "drill": {"multi_title_days": "true"}},
+                       {"key": "reviews", "label": "Reviews", "value": 2, "unit": null, "approximate": false, "drill": {"has_review": true}},
+                       {"key": "episodes", "label": "Episodes", "value": 2, "unit": null, "approximate": false, "drill": null}
+                     ]},
+          "list_rings": [{"id": 5, "name": "Top 500", "media_type": "movie", "kind": "community", "seen": 46, "total": 98, "seen_in_range": 12}],
+          "collections": {"complete_count": 4, "almost_count": 2, "complete": [], "almost": [],
+                          "in_range": {"completed_count": 1,
+                                       "completed": [{"id": "10", "source": "tmdb", "media_type": "movie", "name": "Dune", "item_count": 3,
+                                                      "poster_urls": [], "completion": {"completed_count": 3, "total_count": 3}, "seen_in_range": 1}],
+                                       "progressed_count": 0, "progressed": []}},
+          "milestones": []
+        }
+        """)
+
+        let header = try XCTUnwrap(page.header)
+        XCTAssertEqual(header.longestDailyStreakRange, StatsDayRange(start: "2025-03-01", end: "2025-03-04"))
+        XCTAssertEqual(
+            header.details.first?.drill,
+            ["watched_from": "2025-02-03", "watched_to": "2025-03-16"],
+            "Drill keys are diary params, not converted to camel case"
+        )
+        XCTAssertEqual(header.details[1].drill, ["repeat": "true"])
+        XCTAssertEqual(header.details[2].drill, ["multi_title_days": "true"])
+        XCTAssertNil(header.details[3].drill, "A drill that isn't all strings is no drill")
+        XCTAssertNil(header.details[4].drill)
+
+        XCTAssertEqual(page.listRings.first?.seenInRange, 12)
+        let inRange = try XCTUnwrap(page.collections?.inRange)
+        XCTAssertEqual(inRange.completedCount, 1)
+        XCTAssertEqual(inRange.completed.first?.seenInRange, 1)
+        XCTAssertTrue(inRange.progressed.isEmpty)
+    }
+
+    func testRoundTwoFieldsAreOptional() throws {
+        let page = try decode("""
+        {
+          "schema_version": 2,
+          "media_type": "movie",
+          "header": {"titles": 1, "logs": 1, "active_days": 1, "longest_daily_streak": 1,
+                     "details": [{"key": "likes", "label": "Likes", "value": 1, "unit": null, "approximate": false}]},
+          "list_rings": [{"id": 5, "name": "Top 500", "media_type": "movie", "kind": "community", "seen": 4, "total": 500}],
+          "collections": {"complete_count": 1, "almost_count": 0,
+                          "complete": [{"id": "10", "source": "tmdb", "media_type": "movie", "name": "Dune", "item_count": 2,
+                                        "poster_urls": [], "completion": {"completed_count": 2, "total_count": 2}}],
+                          "almost": []},
+          "milestones": []
+        }
+        """)
+
+        XCTAssertNil(page.header?.longestDailyStreakRange)
+        XCTAssertNil(page.header?.details.first?.drill)
+        XCTAssertNil(page.listRings.first?.seenInRange)
+        XCTAssertNil(page.collections?.inRange)
+        XCTAssertNil(page.collections?.complete.first?.seenInRange)
+        XCTAssertEqual(page.collections.map(StatsCollectionsData.groups)?.map(\.group), [.complete], "The lifetime groups still show")
+    }
+
+    func testDrillKeysTurnBackIntoSnakeCase() {
+        XCTAssertEqual(StatsHeaderDetail.snakeCase("watchedFrom"), "watched_from")
+        XCTAssertEqual(StatsHeaderDetail.snakeCase("multiTitleDays"), "multi_title_days")
+        XCTAssertEqual(StatsHeaderDetail.snakeCase("repeat"), "repeat")
+        XCTAssertEqual(StatsHeaderDetail.snakeCase("has_review"), "has_review")
+    }
+
     // MARK: - Partly broken payloads
 
     func testOneBrokenBlockHidesOnlyThatSection() throws {

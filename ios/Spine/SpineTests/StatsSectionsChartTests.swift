@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Spine
 
@@ -185,11 +186,44 @@ final class StatsSectionsChartTests: XCTestCase {
         )
     }
 
-    func testAxisLabelsStepOnRoundYears() {
+    func testAxisShowsOnlyTheFirstAndLastYear() {
         let rows = [year(1990), year(2019)]
-        let points = StatsReleaseYearsChartData.yearSeries(rows, currentYear: 2019)
+        let points = StatsReleaseYearsChartData.yearSeries(rows, currentYear: 2026)
 
-        XCTAssertEqual(StatsReleaseYearsChartData.axisLabels(points), ["1990", "1995", "2000", "2005", "2010", "2015"])
+        XCTAssertEqual(StatsReleaseYearsChartData.axisLabels(points), ["1990", "2026"], "Never a wall of overlapping years")
+        XCTAssertEqual(
+            StatsReleaseYearsChartData.axisLabels(StatsReleaseYearsChartData.decadeSeries(rows, currentYear: 2026)),
+            ["1990s", "2020s"]
+        )
+        XCTAssertEqual(StatsReleaseYearsChartData.axisLabels(StatsReleaseYearsChartData.yearSeries([year(2026)], currentYear: 2026)), ["2026"])
+    }
+
+    func testEdgeLabelsThinAnyAxisToItsEnds() {
+        XCTAssertEqual(StatsChartAxis.edgeLabels(["a", "b", "c", "d"]), ["a", "d"])
+        XCTAssertEqual(StatsChartAxis.edgeLabels(["a", "b"]), ["a", "b"])
+        XCTAssertEqual(StatsChartAxis.edgeLabels(["a"]), ["a"])
+        XCTAssertEqual(StatsChartAxis.edgeLabels([String]()), [])
+        XCTAssertEqual(StatsChartAxis.edgeLabels(["a", "a"]), ["a"])
+
+        XCTAssertEqual(StatsChartAxis.anchor(index: 0, count: 2), .topLeading, "The first label runs right, inside the plot")
+        XCTAssertEqual(StatsChartAxis.anchor(index: 1, count: 2), .topTrailing, "The last label ends at its bar")
+        XCTAssertEqual(StatsChartAxis.anchor(index: 0, count: 1), .top)
+    }
+
+    func testAPickedReleaseYearOpensItsLogsAndOnGlobalEachTypes() {
+        let points = StatsReleaseYearsChartData.yearSeries(
+            [year(1999, titles: 3, logs: 4, byType: ["movie": 2, "tv": 1]), year(2001, titles: 1, logs: 0)],
+            currentYear: 2001
+        )
+
+        let global = StatsReleaseYearsChartData.selection(for: points[0], stacked: true)
+        XCTAssertEqual(global.title, "1999")
+        XCTAssertEqual(global.detail, "3 titles · 4 logs")
+        XCTAssertEqual(global.drillOptions.map(\.label), ["All logs", "Movies", "TV"])
+        XCTAssertEqual(global.drillOptions.map(\.drillDown), [.releaseYear(1999), .releaseYear(1999, mediaType: "movie"), .releaseYear(1999, mediaType: "tv")])
+
+        XCTAssertEqual(StatsReleaseYearsChartData.selection(for: points[0], stacked: false).drillOptions.map(\.drillDown), [.releaseYear(1999)])
+        XCTAssertTrue(StatsReleaseYearsChartData.selection(for: points[2], stacked: true).drillOptions.isEmpty, "No logs, nothing to open")
     }
 
     func testPeakPrefersTheMostRecentOnATie() {
@@ -323,11 +357,33 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(single.map(\.mediaType), [nil])
     }
 
-    func testRatingsAxisShowsWholeStarsOnly() {
-        XCTAssertNil(StatsRatingsChartData.axisLabel(forStars: "0.5"))
+    func testRatingsAxisShowsOnlyItsEnds() {
+        let buckets = StatsRatingsChartData.buckets([])
+        XCTAssertEqual(StatsRatingsChartData.axisLabels(buckets), ["0.5", "5.0"])
+        XCTAssertEqual(StatsRatingsChartData.axisLabel(forStars: "0.5"), "½★")
         XCTAssertEqual(StatsRatingsChartData.axisLabel(forStars: "1.0"), "1★")
-        XCTAssertNil(StatsRatingsChartData.axisLabel(forStars: "3.5"))
+        XCTAssertEqual(StatsRatingsChartData.axisLabel(forStars: "3.5"), "3½★")
         XCTAssertEqual(StatsRatingsChartData.axisLabel(forStars: "5.0"), "5★")
+        XCTAssertNil(StatsRatingsChartData.axisLabel(forStars: "0"))
+    }
+
+    func testAPickedRatingsBarOpensItsBoundsAndOnGlobalEachTypes() {
+        let split = bucket("3.5", count: 37, min: "6.5", max: "7.4", byType: ["movie": 30, "tv": 7])
+
+        let global = StatsRatingsChartData.selection(for: split, stacked: true)
+        XCTAssertEqual(global.title, "3½ stars")
+        XCTAssertEqual(global.detail, "37 ratings · 30 movies, 7 TV")
+        XCTAssertEqual(global.drillOptions.map(\.label), ["All logs", "Movies", "TV"])
+        XCTAssertEqual(global.drillOptions.last?.drillDown, .rating(split, mediaType: "tv"))
+
+        let tab = StatsRatingsChartData.selection(for: split, stacked: false)
+        XCTAssertEqual(tab.detail, "37 ratings")
+        XCTAssertEqual(tab.drillOptions.map(\.drillDown), [.rating(split)])
+
+        let one = StatsRatingsChartData.selection(for: bucket("4.0", count: 1, min: "7.5", max: "8.4", byType: ["movie": 1]), stacked: true)
+        XCTAssertEqual(one.detail, "1 rating")
+        XCTAssertEqual(one.drillOptions.count, 1, "A single type needs no menu")
+        XCTAssertTrue(StatsRatingsChartData.selection(for: bucket("1.0", count: 0, min: "1.5", max: "2.4"), stacked: true).drillOptions.isEmpty)
     }
 
     func testRatingsSummary() {
@@ -337,15 +393,6 @@ final class StatsSectionsChartTests: XCTestCase {
             StatsRatingsChartData.summary(StatsRatings(averageStars: nil, rated: 0, distribution: [])),
             "0 ratings"
         )
-    }
-
-    func testATapFindsTheStackedPartUnderIt() {
-        let parts = [StatsTypeCount(mediaType: "movie", count: 30), StatsTypeCount(mediaType: "tv", count: 7)]
-
-        XCTAssertEqual(statsStackedPart(at: 12, parts: parts), "movie")
-        XCTAssertEqual(statsStackedPart(at: 30, parts: parts), "movie")
-        XCTAssertEqual(statsStackedPart(at: 33, parts: parts), "tv")
-        XCTAssertNil(statsStackedPart(at: 40, parts: parts), "Above the bar is the whole bar")
     }
 
     func testTypesStackInTheAppsTypeOrder() {
@@ -399,20 +446,37 @@ final class StatsSectionsChartTests: XCTestCase {
     }
 
     func testMonthBarsStackOnGlobalAndSkipEmptyMonths() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let months = [
             StatsEventMonth(month: "2025-01", count: 14, byType: ["tv": 5, "movie": 9]),
             StatsEventMonth(month: "2025-02", count: 0, byType: [:]),
             StatsEventMonth(month: "2025-03", count: 2, byType: [:]),
+            StatsEventMonth(month: "nonsense", count: 2, byType: [:]),
         ]
 
-        let stacked = StatsActivityChartData.parts(months, stacked: true, calendar: calendar)
+        let stacked = StatsActivityChartData.parts(months, stacked: true)
         XCTAssertEqual(stacked.map(\.month), ["2025-01", "2025-01", "2025-03"])
         XCTAssertEqual(stacked.map(\.mediaType), ["movie", "tv", nil])
 
-        let single = StatsActivityChartData.parts(months, stacked: false, calendar: calendar)
+        let single = StatsActivityChartData.parts(months, stacked: false)
         XCTAssertEqual(single.map(\.count), [14, 2])
+    }
+
+    func testAPickedMonthOpensItsLogsAndOnGlobalEachTypes() {
+        let locale = Locale(identifier: "en_US")
+        let month = StatsEventMonth(month: "2025-03", count: 14, byType: ["tv": 5, "movie": 9])
+
+        let global = StatsActivityChartData.selection(for: month, stacked: true, locale: locale)
+        XCTAssertEqual(global.title, "March 2025")
+        XCTAssertEqual(global.detail, "14 · 9 movies, 5 TV", "Events aren't called titles")
+        XCTAssertEqual(global.drillOptions.map(\.drillDown), [.month("2025-03"), .month("2025-03", mediaType: "movie"), .month("2025-03", mediaType: "tv")])
+
+        let tab = StatsActivityChartData.selection(for: month, stacked: false, locale: locale)
+        XCTAssertEqual(tab.detail, "14")
+        XCTAssertEqual(tab.drillOptions.map(\.drillDown), [.month("2025-03")])
+
+        let empty = StatsActivityChartData.selection(for: StatsEventMonth(month: "2025-04", count: 0, byType: [:]), stacked: true, locale: locale)
+        XCTAssertTrue(empty.drillOptions.isEmpty)
+        XCTAssertEqual(empty.detail, "0")
     }
 
     func testActivityLabels() {
@@ -431,22 +495,14 @@ final class StatsSectionsChartTests: XCTestCase {
         )
     }
 
-    func testMonthAxisSwitchesToYearsForLongRanges() {
-        XCTAssertNil(StatsActivityChartData.yearStride(monthCount: 12))
-        XCTAssertEqual(StatsActivityChartData.yearStride(monthCount: 36), 1)
-        XCTAssertEqual(StatsActivityChartData.yearStride(monthCount: 150), 3)
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let end = calendar.date(from: DateComponents(year: 2026, month: 11, day: 1))!
-        let lastMark = calendar.date(from: DateComponents(year: 2026, month: 1, day: 1))!
-        let earlierMark = calendar.date(from: DateComponents(year: 2023, month: 1, day: 1))!
-        XCTAssertFalse(
-            StatsActivityChartData.yearLabelFits(lastMark, end: end, stride: 3, calendar: calendar),
-            "Ten months is too little room for a label every three years"
-        )
-        XCTAssertTrue(StatsActivityChartData.yearLabelFits(earlierMark, end: end, stride: 3, calendar: calendar))
-        XCTAssertTrue(StatsActivityChartData.yearLabelFits(lastMark, end: end, stride: 1, calendar: calendar))
+    func testMonthAxisNamesItsEndsByMonthForAYearAndByYearBeyond() {
+        let locale = Locale(identifier: "en_US")
+        let year = (1 ... 12).map { String(format: "2025-%02d", $0) }
+        XCTAssertEqual(StatsChartAxis.edgeLabels(year), ["2025-01", "2025-12"])
+        XCTAssertEqual(StatsActivityChartData.axisLabel(forMonth: "2025-01", monthCount: 12, locale: locale), "Jan")
+        XCTAssertEqual(StatsActivityChartData.axisLabel(forMonth: "2025-12", monthCount: 12, locale: locale), "Dec")
+        XCTAssertEqual(StatsActivityChartData.axisLabel(forMonth: "2019-11", monthCount: 84, locale: locale), "2019")
+        XCTAssertEqual(StatsActivityChartData.axisLabel(forMonth: "bad", monthCount: 12, locale: locale), "bad")
     }
 
     // MARK: - Genres and languages (STAT-210 to STAT-212)
@@ -578,6 +634,37 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsListProgressData.sorted(rings).map(\.id), [5, 2, 4, 3, 1])
     }
 
+    func testAYearsRingsPutTheMostMovedFirst() {
+        let rings = [
+            ring(1, "Nearly done", seen: 95, total: 100, seenInRange: 1),
+            ring(2, "Moved a lot", seen: 20, total: 100, seenInRange: 12),
+            ring(3, "Moved some", seen: 30, total: 100, seenInRange: 5),
+        ]
+        XCTAssertEqual(StatsListProgressData.sorted(rings).map(\.id), [2, 3, 1])
+    }
+
+    func testAYearsRingCaptionAndItsBrightPart() {
+        let year = ring(1, "Booker Prize Winners", seen: 46, total: 98, seenInRange: 12)
+
+        XCTAssertEqual(StatsListProgressData.caption(year, period: .year(2025)), "+12 in 2025 · 46 of 98")
+        XCTAssertEqual(
+            StatsListProgressData.accessibilityLabel(year, period: .year(2025)),
+            "Booker Prize Winners, 12 more in 2025, 46 of 98 seen"
+        )
+        XCTAssertEqual(year.fraction, 46.0 / 98, accuracy: 0.0001)
+        XCTAssertEqual(year.fractionBeforeRange, 34.0 / 98, accuracy: 0.0001, "The year's 12 are the bright part")
+
+        let allTime = ring(1, "Top", seen: 155, total: 250)
+        XCTAssertEqual(StatsListProgressData.caption(allTime, period: .allTime), "62% · 155 of 250")
+        XCTAssertEqual(allTime.fractionBeforeRange, allTime.fraction, "All Time has no year part")
+        XCTAssertEqual(
+            StatsListProgressData.caption(ring(1, "Top", seen: 155, total: 250), period: .year(2025)),
+            "62% · 155 of 250",
+            "A server that doesn't count the year keeps the lifetime caption"
+        )
+        XCTAssertEqual(ring(1, "Odd", seen: 3, total: 10, seenInRange: 9).fractionBeforeRange, 0, "Never below empty")
+    }
+
     func testRingCaptions() {
         XCTAssertEqual(StatsListProgressData.caption(ring(1, "Top", seen: 155, total: 250)), "62% · 155 of 250")
         XCTAssertEqual(StatsListProgressData.caption(ring(1, "Top", seen: 250, total: 250)), "100% · 250 of 250")
@@ -608,6 +695,33 @@ final class StatsSectionsChartTests: XCTestCase {
             StatsCollectionsData.accessibilityLabel(complete),
             "The Lord of the Rings Collection, 3 of 3 seen"
         )
+    }
+
+    func testAYearShowsItsOwnCompletedAndProgressedCollections() throws {
+        let completed = try series(id: "1", name: "Dune", completed: 3, total: 3, seenInRange: 1)
+        let progressed = try series(id: "2", name: "Alien", completed: 5, total: 8, seenInRange: 2)
+        let collections = StatsCollections(
+            completeCount: 33, almostCount: 4, complete: [completed], almost: [progressed],
+            inRange: StatsCollectionsInRange(completedCount: 1, completed: [completed], progressedCount: 6, progressed: [progressed])
+        )
+
+        let groups = StatsCollectionsData.groups(collections)
+        XCTAssertEqual(groups.map(\.group), [.completedInRange, .progressedInRange], "A year shows its own progress")
+        XCTAssertEqual(groups.map(\.count), [1, 6])
+        XCTAssertEqual(StatsCollectionsData.groupTitle(.completedInRange, count: 1, period: .year(2025)), "Completed in 2025 (1)")
+        XCTAssertEqual(StatsCollectionsData.groupTitle(.progressedInRange, count: 6, period: .year(2025)), "Progressed in 2025 (6)")
+        XCTAssertEqual(StatsCollectionsData.caption(progressed), "+2 · 5 of 8")
+        XCTAssertEqual(StatsCollectionsData.accessibilityLabel(progressed), "Alien, 2 new, 5 of 8 seen")
+        XCTAssertFalse(collections.isEmpty)
+        XCTAssertTrue(StatsCollectionGroup.progressedInRange.isInRange)
+        XCTAssertFalse(StatsCollectionGroup.almost.isInRange)
+
+        let quiet = StatsCollections(
+            completeCount: 33, almostCount: 4, complete: [completed], almost: [progressed],
+            inRange: StatsCollectionsInRange(completedCount: 0, completed: [], progressedCount: 0, progressed: [])
+        )
+        XCTAssertTrue(quiet.isEmpty, "A year that moved nothing forward hides the section")
+        XCTAssertTrue(StatsCollectionsData.groups(quiet).isEmpty)
     }
 
     func testCollectionTilesUseThreePostersOrAPlaceholder() throws {
@@ -670,8 +784,8 @@ final class StatsSectionsChartTests: XCTestCase {
         StatsLanguageRow(name: name, titles: titles, rated: 0, averageStars: nil, byType: ["movie": titles])
     }
 
-    private func ring(_ id: Int, _ name: String, seen: Int, total: Int) -> StatsListRing {
-        StatsListRing(id: id, name: name, mediaType: "movie", kind: "community", seen: seen, total: total)
+    private func ring(_ id: Int, _ name: String, seen: Int, total: Int, seenInRange: Int? = nil) -> StatsListRing {
+        StatsListRing(id: id, name: name, mediaType: "movie", kind: "community", seen: seen, total: total, seenInRange: seenInRange)
     }
 
     private func series(
@@ -679,9 +793,10 @@ final class StatsSectionsChartTests: XCTestCase {
         name: String,
         completed: Int,
         total: Int,
-        posters: [String] = ["https://example.com/a.jpg"]
+        posters: [String] = ["https://example.com/a.jpg"],
+        seenInRange: Int? = nil
     ) throws -> MediaSeriesSummary {
-        let json: [String: Any] = [
+        var json: [String: Any] = [
             "id": id,
             "source": "tmdb",
             "media_type": "movie",
@@ -690,6 +805,9 @@ final class StatsSectionsChartTests: XCTestCase {
             "poster_urls": posters,
             "completion": ["completed_count": completed, "total_count": total],
         ]
+        if let seenInRange {
+            json["seen_in_range"] = seenInRange
+        }
         let data = try JSONSerialization.data(withJSONObject: json)
         return try JSONDecoder.api.decode(MediaSeriesSummary.self, from: data)
     }

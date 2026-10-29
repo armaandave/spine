@@ -220,6 +220,13 @@ enum StatsTitleFormat {
         guard let date = StatsDateFormatters.dayParser.date(from: text) else { return nil }
         return StatsDateFormatters.utc(template: "dMMMy", locale: locale, gregorian: true).string(from: date)
     }
+
+    /// A contract day without its year ("12 Mar", or "Mar 12" in the US), for a list that
+    /// already names the year.
+    static func dayWithoutYear(_ text: String, locale: Locale = .current) -> String? {
+        guard let date = StatsDateFormatters.dayParser.date(from: text) else { return nil }
+        return StatsDateFormatters.utc(template: "dMMM", locale: locale, gregorian: true).string(from: date)
+    }
 }
 
 /// Date formatters for the Stats screens, made once and reused: charts and grids format many

@@ -14,13 +14,59 @@ final class StatsPageLayoutTests: XCTestCase {
         ])
     }
 
-    func testATypeTabMovesActivityDownAndAddsCollections() throws {
+    func testATypeTabMovesActivityDownAddsCollectionsAndFoldsTimeIntoTheHeader() throws {
         let page = try decode(Self.pageJSON(mediaType: "movie"))
 
         XCTAssertEqual(StatsPageSection.sections(for: page), [
-            .header, .time, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+            .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
             .languages, .activity, .listProgress, .collections, .mostLogged, .milestones,
         ])
+        XCTAssertNotNil(page.time, "The tab's Time row still feeds the header's third number")
+    }
+
+    func testPeopleFollowGenresAndLanguagesAndEmptyGroupsHide() throws {
+        let people = """
+        {"groups": [
+          {"role": "director", "label": "Directors", "rows": [], "rated_rows": [], "total": 0},
+          {"role": "cast", "label": "Cast", "total": 1,
+           "rows": [{"person": {"source": "tmdb", "id": "6193", "name": "Leonardo DiCaprio", "image_url": null},
+                     "titles": 2, "rated": 1, "average_stars": "4.5"}],
+           "rated_rows": []}
+        ]}
+        """
+        let page = try decode(Self.pageJSON(mediaType: "movie", people: people))
+
+        XCTAssertEqual(StatsPageSection.sections(for: page), [
+            .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+            .languages, .people, .activity, .listProgress, .collections, .mostLogged, .milestones,
+        ])
+        XCTAssertEqual(StatsPeopleData.visibleGroups(page.people).map(\.role), ["cast"], "The empty Directors group hides")
+
+        let nobody = try decode(Self.pageJSON(mediaType: "movie", people: """
+        {"groups": [{"role": "director", "label": "Directors", "rows": [], "rated_rows": [], "total": 0},
+                    {"role": "cast", "label": "Cast", "rows": [], "rated_rows": [], "total": 0}]}
+        """))
+        XCTAssertFalse(StatsPageSection.sections(for: nobody).contains(.people))
+        XCTAssertFalse(StatsPageSection.sections(for: try decode(Self.pageJSON(mediaType: "movie"))).contains(.people), "Older servers send no people")
+    }
+
+    func testAYearShowsCollectionsFromItsOwnProgress() throws {
+        let progressed = """
+        {"complete_count": 4, "almost_count": 2, "complete": [], "almost": [],
+         "in_range": {"completed_count": 0, "completed": [], "progressed_count": 1,
+                      "progressed": [{"id": "10", "source": "tmdb", "media_type": "movie", "name": "Dune", "item_count": 3,
+                                      "poster_urls": [], "completion": {"completed_count": 2, "total_count": 3}, "seen_in_range": 1}]}}
+        """
+        let page = try decode(Self.pageJSON(mediaType: "movie", collections: progressed))
+        XCTAssertTrue(StatsPageSection.sections(for: page).contains(.collections))
+        XCTAssertEqual(page.collections.map(StatsCollectionsData.groups)?.map(\.group), [.progressedInRange])
+
+        let quietYear = """
+        {"complete_count": 4, "almost_count": 2, "complete": [], "almost": [],
+         "in_range": {"completed_count": 0, "completed": [], "progressed_count": 0, "progressed": []}}
+        """
+        let quiet = try decode(Self.pageJSON(mediaType: "movie", collections: quietYear))
+        XCTAssertFalse(StatsPageSection.sections(for: quiet).contains(.collections), "A year that moved nothing forward has no Collections")
     }
 
     func testTheMediaPickerFitsAllEightTypesOnAPhone() throws {
@@ -142,7 +188,8 @@ final class StatsPageLayoutTests: XCTestCase {
         mediaType: String?,
         topSource: String = "list",
         collections: String? = nil,
-        genres: String? = nil
+        genres: String? = nil,
+        people: String? = nil
     ) -> String {
         let list = topSource == "list" ? #"{"id": 81, "name": "My 2025", "total": 24}"# : "null"
         let collectionsBlock = collections ?? (mediaType == nil ? "null" : collectionsJSON)
@@ -180,6 +227,7 @@ final class StatsPageLayoutTests: XCTestCase {
                         "total": 1, "coverage": null, "media_types": ["movie", "tv"]},
           "list_rings": [{"id": 5, "name": "Top 500", "media_type": "movie", "kind": "community", "seen": 4, "total": 500}],
           "collections": \(collectionsBlock),
+          "people": \(people ?? "null"),
           "most_logged": {"label": "Most watched", "total": 1, "items": [{"media": \(media(id: 1, title: "One")), "times": 2}]},
           "milestones": [{"number": 1, "day": "2025-03-02", "entry_id": 11, "media_type": "movie", "media": \(media(id: 1, title: "One"))}]
         }

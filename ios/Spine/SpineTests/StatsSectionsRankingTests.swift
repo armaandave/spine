@@ -119,6 +119,90 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(StatsHeaderSection.counts(for: oneDay, mediaType: nil).last?.unit, "day")
     }
 
+    func testATypeTabsThirdNumberIsItsOwnMeasure() {
+        let header = StatsHeader(titles: 40, logs: 52, activeDays: 31, longestDailyStreak: 4, details: [])
+        let time = StatsTime(
+            rows: [Self.timeRow("movie", "minutes", 18240), Self.timeRow("tv", "minutes", 20400, approximate: true), Self.timeRow("book", "pages", 4310)],
+            hoursTotal: nil
+        )
+
+        let movies = StatsHeaderSection.counts(for: header, mediaType: "movie", time: time)
+        XCTAssertEqual(movies.map(\.label), ["Movies", "Logs", "Hours", "Longest streak"])
+        XCTAssertEqual(movies[2].value, 304)
+        XCTAssertEqual(StatsHeaderSection.countValue(movies[2]), 304.formatted())
+
+        let tv = StatsHeaderSection.counts(for: header, mediaType: "tv", time: time)
+        XCTAssertEqual(StatsHeaderSection.countValue(tv[2]), "≈ 340", "An estimate reads ≈")
+
+        XCTAssertEqual(StatsHeaderSection.primaryMeasure(time: time, mediaType: "book")?.label, "Pages")
+        XCTAssertEqual(StatsHeaderSection.primaryMeasure(time: time, mediaType: "book")?.value, 4310)
+        XCTAssertEqual(StatsHeaderSection.primaryMeasure(time: StatsTime(rows: [Self.timeRow("manga", "chapters", 1)], hoursTotal: nil), mediaType: "manga")?.label, "Chapter")
+        XCTAssertEqual(StatsHeaderSection.primaryMeasure(time: StatsTime(rows: [Self.timeRow("comic", "issues", 64)], hoursTotal: nil), mediaType: "comic")?.label, "Issues")
+        XCTAssertEqual(StatsHeaderSection.primaryMeasure(time: StatsTime(rows: [Self.timeRow("music", "minutes", 45)], hoursTotal: nil), mediaType: "music")?.label, "Minutes")
+
+        XCTAssertNil(StatsHeaderSection.primaryMeasure(time: time, mediaType: nil), "Global keeps Active days")
+        XCTAssertNil(StatsHeaderSection.primaryMeasure(time: time, mediaType: "game"), "No row for the tab")
+        XCTAssertNil(StatsHeaderSection.primaryMeasure(time: StatsTime(rows: [Self.timeRow("game", "minutes", 0)], hoursTotal: nil), mediaType: "game"))
+        XCTAssertEqual(StatsHeaderSection.counts(for: header, mediaType: nil, time: time)[2].label, "Active days")
+        XCTAssertEqual(StatsHeaderSection.counts(for: header, mediaType: "game", time: time)[2].label, "Active days")
+    }
+
+    func testActiveDaysMovesIntoTheDetailsWhenTheMeasureTakesItsPlace() {
+        let header = StatsHeader(titles: 40, logs: 52, activeDays: 31, longestDailyStreak: 4, details: [
+            StatsHeaderDetail(key: "rewatches", label: "Rewatches", value: 3, unit: nil, approximate: false),
+        ])
+        let time = StatsTime(rows: [Self.timeRow("movie", "minutes", 600)], hoursTotal: nil)
+
+        XCTAssertEqual(
+            StatsHeaderSection.rows(for: header, mediaType: "movie", time: time).map(\.id),
+            ["header.counts", "header.detail.active_days", "header.detail.rewatches"]
+        )
+        let activeDays = StatsHeaderSection.shownDetails(header, mediaType: "movie", time: time)[0]
+        XCTAssertEqual(activeDays.label, "Active days")
+        XCTAssertEqual(StatsHeaderSection.detailValue(activeDays), "31")
+        XCTAssertEqual(StatsHeaderSection.drillDown(for: activeDays), .stat(label: "Active days"), "It opens the scope's logs")
+
+        XCTAssertEqual(
+            StatsHeaderSection.rows(for: header, mediaType: nil, time: time).map(\.id),
+            ["header.counts", "header.detail.rewatches"],
+            "Global keeps Active days among the numbers"
+        )
+    }
+
+    func testHeaderNumbersOpenTheScopesLogsAndTheStreakItsDays() {
+        var header = StatsHeader(titles: 40, logs: 52, activeDays: 31, longestDailyStreak: 4, details: [])
+        XCTAssertEqual(
+            StatsHeaderSection.counts(for: header, mediaType: "movie").map(\.drillDown),
+            [.stat(label: "Movies"), .stat(label: "Logs"), .stat(label: "Active days"), nil],
+            "Without its days the streak opens nothing"
+        )
+
+        header.longestDailyStreakRange = StatsDayRange(start: "2025-03-01", end: "2025-03-04")
+        XCTAssertEqual(
+            StatsHeaderSection.counts(for: header, mediaType: nil).last?.drillDown,
+            .stat(label: "Longest streak", drill: ["watched_from": "2025-03-01", "watched_to": "2025-03-04"])
+        )
+
+        let empty = StatsHeader(titles: 0, logs: 0, activeDays: 0, longestDailyStreak: 0, details: [])
+        XCTAssertTrue(StatsHeaderSection.counts(for: empty, mediaType: nil).allSatisfy { $0.drillDown == nil }, "Zero opens nothing")
+    }
+
+    func testDetailRowsOpenTheirDrill() {
+        func detail(_ key: String, value: Int = 3, drill: [String: String]?) -> StatsHeaderDetail {
+            StatsHeaderDetail(key: key, label: key.capitalized, value: value, unit: nil, approximate: false, drill: drill)
+        }
+
+        XCTAssertEqual(StatsHeaderSection.drillDown(for: detail("rewatches", drill: ["repeat": "true"])), .stat(label: "Rewatches", drill: ["repeat": "true"]))
+        XCTAssertEqual(
+            StatsHeaderSection.drillDown(for: detail("current_daily_streak", drill: ["watched_from": "2026-10-20", "watched_to": "2026-10-29"])),
+            .stat(label: "Current_Daily_Streak", drill: ["watched_from": "2026-10-20", "watched_to": "2026-10-29"])
+        )
+        XCTAssertNil(StatsHeaderSection.drillDown(for: detail("episodes", drill: nil)), "No drill, no diary")
+        XCTAssertNil(StatsHeaderSection.drillDown(for: detail("reviews", value: 0, drill: ["has_review": "true"])), "Nothing to open")
+        XCTAssertNil(StatsHeaderSection.drillDown(for: detail("reads", drill: ["mystery_param": "1"])), "A param the app can't send opens nothing")
+        XCTAssertEqual(StatsHeaderSection.drillDown(for: detail("likes", drill: nil)), .liked, "Older servers: Likes still opens the liked logs")
+    }
+
     func testHeaderDetailValuesPluralizeAndMarkEstimates() {
         XCTAssertEqual(StatsHeaderSection.detailValue(Self.detail(value: 3, unit: "day")), "3 days")
         XCTAssertEqual(StatsHeaderSection.detailValue(Self.detail(value: 1, unit: "week")), "1 week")
@@ -239,14 +323,26 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(StatsTopSection.hintText(for: top), "Tag a ranked movie list top2025")
 
         let rows = StatsTopSection.rows(for: top, highestRatedTotal: 40)
-        XCTAssertEqual(Array(rows.suffix(2)), [
-            .note("Tag a ranked movie list top2025", systemImage: "tag", isLast: false),
-            .showAllRated(total: 40),
-        ])
+        XCTAssertEqual(rows.map(\.id), ["top.title", "top.bento", "top.hint"], "The fallback draws Highest rated's bento")
+        XCTAssertEqual(rows.first, .title(showsAll: true))
+        XCTAssertEqual(rows.last, .hint("Tag a ranked movie list top2025"))
+        guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
+        XCTAssertTrue(hasHint)
+        XCTAssertEqual([bento.lead.rank] + bento.tiles.map(\.rank), [1, 2, 3])
+        XCTAssertEqual(bento.lead.stars, 4.5)
 
-        let noShowAll = StatsTopSection.rows(for: top, highestRatedTotal: 3)
-        XCTAssertEqual(noShowAll.last, .note("Tag a ranked movie list top2025", systemImage: "tag", isLast: true))
-        XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).last, noShowAll.last)
+        XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 3).first, .title(showsAll: false), "Nothing more to show")
+        XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).first, .title(showsAll: false))
+    }
+
+    func testFallbackShowsAllOnceHighestRatedHasMoreThanTheBento() throws {
+        let top = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 10, list: false))
+        let rows = StatsTopSection.rows(for: top, highestRatedTotal: 10)
+
+        XCTAssertEqual(rows.first, .title(showsAll: true), "Top sends 10, the bento shows 9")
+        guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
+        XCTAssertFalse(hasHint)
+        XCTAssertEqual(bento.tiles.count, 8)
     }
 
     func testOtherViewersSeeTheFallbackWithoutAHint() throws {
@@ -254,10 +350,11 @@ final class StatsSectionsRankingTests: XCTestCase {
         let rows = StatsTopSection.rows(for: top)
 
         XCTAssertNil(StatsTopSection.hintText(for: top))
-        XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(rows.last.map(\.id), "top.hero.\(top.items[0].id)")
-        guard case let .hero(_, isLast) = rows[1] else { return XCTFail("Expected the hero") }
-        XCTAssertTrue(isLast)
+        XCTAssertEqual(rows.map(\.id), ["top.title", "top.bento"])
+        guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
+        XCTAssertFalse(hasHint)
+        XCTAssertEqual(bento.lead.media.title, "T1")
+        XCTAssertTrue(bento.tiles.isEmpty)
     }
 
     func testHintIsTheServersTextAndIgnoresBlanks() throws {
@@ -292,20 +389,65 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertFalse(StatsHighestRatedSection.isShown(top: listTop, highestRated: nil))
     }
 
-    func testHighestRatedIsATitleThenGridRowsInTheServersOrder() throws {
+    func testHighestRatedIsATitleThenOneBentoInTheServersOrder() throws {
         let highest = try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 6, total: 140))
         let rows = StatsHighestRatedSection.rows(for: highest)
 
-        XCTAssertEqual(rows.map(\.id), ["highest.title", "highest.0", "highest.1"])
-        guard case let .posters(first, firstIsLast) = rows[1], case let .posters(second, secondIsLast) = rows[2] else {
-            return XCTFail("Expected poster rows")
-        }
-        XCTAssertEqual(first.items.map(\.media.title), ["T1", "T2", "T3", "T4"])
-        XCTAssertEqual(second.items.map(\.media.title), ["T5", "T6"])
-        XCTAssertEqual([firstIsLast, secondIsLast], [false, true])
+        XCTAssertEqual(rows.map(\.id), ["highest.title", "highest.bento"], "The bento is one lazy row")
+        guard case let .bento(bento) = rows[1] else { return XCTFail("Expected the bento") }
+        XCTAssertEqual(bento.lead.media.title, "T1")
+        XCTAssertEqual(bento.lead.rank, 1)
+        XCTAssertEqual(bento.lead.stars, 5)
+        XCTAssertEqual(bento.tiles.map(\.media.title), ["T2", "T3", "T4", "T5", "T6"])
+        XCTAssertEqual(bento.tiles.map(\.rank), [2, 3, 4, 5, 6])
         XCTAssertTrue(StatsHighestRatedSection.hasMore(highest))
         XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 6, total: 6))))
         XCTAssertTrue(StatsHighestRatedSection.rows(for: StatsHighestRated(total: 0, items: [])).isEmpty)
+    }
+
+    func testBentoTakesTheFirstNineAndShowAllCountsTheRest() throws {
+        let twelve = try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 12, total: 12))
+        guard case let .bento(bento) = StatsHighestRatedSection.rows(for: twelve)[1] else { return XCTFail("Expected the bento") }
+
+        XCTAssertEqual(StatsBento.capacity, 9)
+        XCTAssertEqual(bento.tiles.map(\.rank), Array(2 ... 9), "Two rows of four beside the lead")
+        XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 10th to 12th need Show all")
+        XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 9, total: 9))))
+
+        let one = try XCTUnwrap(StatsBento([StatsBentoEntry(rank: 1, media: try Self.media(id: 1, title: "A"), stars: nil)], id: "x"))
+        XCTAssertTrue(one.tiles.isEmpty)
+        XCTAssertNil(StatsBento([], id: "x"))
+    }
+
+    func testBentoLeadIsAsTallAsTwoTileRowsAndGapsAreEven() {
+        XCTAssertEqual(StatsBentoMetrics.leadHeight, StatsBentoMetrics.height, "The lead spans both tile rows")
+        XCTAssertEqual(StatsBentoMetrics.leadSlot.size.height / StatsBentoMetrics.leadSlot.size.width, 1.5, accuracy: 0.01)
+        XCTAssertEqual(StatsBentoMetrics.tileSlot.size.height / StatsBentoMetrics.tileSlot.size.width, 1.5, accuracy: 0.01)
+
+        // The narrowest phone: 375 pt less the page's 16 pt sides.
+        XCTAssertGreaterThanOrEqual(StatsBentoMetrics.gap(width: 375 - 32), 4)
+
+        let width: CGFloat = 402 - 32
+        let gap = StatsBentoMetrics.gap(width: width)
+        let origins = StatsBentoMetrics.origins(width: width, count: 9)
+        let tile = StatsBentoMetrics.tileSlot.size
+        XCTAssertEqual(origins.count, 9)
+        XCTAssertEqual(origins[0], .zero)
+        XCTAssertEqual(origins[1].x - StatsBentoMetrics.leadSlot.size.width, gap, accuracy: 0.001, "Lead to first tile")
+        XCTAssertEqual(origins[2].x - origins[1].x - tile.width, gap, accuracy: 0.001, "Tile to tile")
+        XCTAssertEqual(origins[4].x + tile.width, width, accuracy: 0.001, "The last column ends at the edge")
+        XCTAssertEqual(origins[5].x, origins[1].x, "The second row starts under the first")
+        XCTAssertEqual(origins[5].y, StatsBentoMetrics.tileHeight + StatsBentoMetrics.rowGap)
+        XCTAssertEqual(origins[8].y + StatsBentoMetrics.tileHeight, StatsBentoMetrics.height, accuracy: 0.001)
+        XCTAssertEqual(StatsBentoMetrics.origins(width: width, count: 3).count, 3)
+        XCTAssertTrue(StatsBentoMetrics.origins(width: width, count: 0).isEmpty)
+    }
+
+    func testBentoCellsReadTheirRank() throws {
+        let entry = StatsBentoEntry(rank: 2, media: try Self.media(id: 1, title: "Dune"), stars: 4.5)
+        XCTAssertEqual(StatsBentoCell.accessibilityLabel(for: entry), "Number 2, Dune, Rated 4.5 out of 5 stars")
+        let unrated = StatsBentoEntry(rank: 7, media: try Self.media(id: 1, title: "Dune"), stars: nil)
+        XCTAssertEqual(StatsBentoCell.accessibilityLabel(for: unrated), "Number 7, Dune")
     }
 
     func testRatedPosterAccessibilityIncludesStars() throws {
@@ -358,6 +500,27 @@ final class StatsSectionsRankingTests: XCTestCase {
         ])
         let milestone = StatsMilestone(number: 100, day: "2024-03-12", entryId: 9312, mediaType: "tv", media: try Self.media(id: 1, title: "Severance"))
         XCTAssertEqual(StatsMilestonesSection.accessibilityText(for: milestone, locale: Locale(identifier: "en_GB")), "100th log, Severance, 12 Mar 2024")
+        XCTAssertEqual(StatsMilestonesSection.dayLabel("2024-03-12", period: .allTime, locale: Locale(identifier: "en_GB")), "12 Mar 2024")
+    }
+
+    func testAYearsMilestonesCountThatYearsLogs() throws {
+        let year = StatsPeriod.year(2025)
+        XCTAssertEqual(StatsMilestonesSection.numberLabel(100, period: year), "100th log of 2025")
+        XCTAssertEqual(StatsMilestonesSection.numberLabel(1, period: year), "1st log of 2025")
+        XCTAssertEqual(StatsMilestonesSection.numberLines(100, period: year), ["100th log", "of 2025"], "Every tile breaks in the same place")
+        XCTAssertEqual(StatsMilestonesSection.numberLines(100, period: .allTime), ["100th log"])
+        XCTAssertEqual(
+            StatsMilestonesSection.dayLabel("2025-03-12", period: year, locale: Locale(identifier: "en_GB")),
+            "12 Mar",
+            "The label already names the year"
+        )
+        XCTAssertEqual(StatsMilestonesSection.dayLabel("2025-03-12", period: year, locale: Locale(identifier: "en_US")), "Mar 12")
+
+        let milestone = StatsMilestone(number: 250, day: "2025-07-04", entryId: 1, mediaType: "movie", media: try Self.media(id: 1, title: "Heat"))
+        XCTAssertEqual(
+            StatsMilestonesSection.accessibilityText(for: milestone, period: year, locale: Locale(identifier: "en_GB")),
+            "250th log of 2025, Heat, 4 Jul 2025"
+        )
     }
 
     func testMilestonesSortByNumberIntoGridRows() throws {

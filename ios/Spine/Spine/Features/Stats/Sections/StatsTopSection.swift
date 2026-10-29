@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Top (STAT-206 to STAT-208): a big #1 in a fixed cell (square for music), numbered rows for
-/// #2 to #10, then "See full list". Without a tagged list it's titled "Highest rated", and the
-/// owner sees how to tag one. One view per row, for the page's lazy stack.
+/// #2 to #10, then "See full list". Without a tagged list it's "Highest rated", drawn as Highest
+/// rated's bento, and the owner sees how to tag one. One view per row, for the page's lazy stack.
 struct StatsTopSection: View {
     let top: StatsTop
     /// Highest rated's total, for the fallback's "Show all".
@@ -13,12 +13,16 @@ struct StatsTopSection: View {
     var onShowAllHighestRated: (() -> Void)?
 
     enum Row: Hashable, Identifiable {
-        case title
+        /// The title, with "Show all" for the fallback when Highest rated has more.
+        case title(showsAll: Bool)
         case hero(StatsTopItem, isLast: Bool)
         case ranked(StatsTopItem, isLast: Bool)
         case note(String, systemImage: String, isLast: Bool)
         case seeFullList(StatsTopList)
-        case showAllRated(total: Int)
+        /// The fallback's titles; `hasHint` when the owner's hint follows it.
+        case bento(StatsBento, hasHint: Bool)
+        /// The owner's hint under the fallback's bento.
+        case hint(String)
 
         var id: String {
             switch self {
@@ -27,7 +31,8 @@ struct StatsTopSection: View {
             case let .ranked(item, _): "top.rank.\(item.rank).\(item.id)"
             case let .note(text, _, _): "top.note.\(text)"
             case .seeFullList: "top.list"
-            case .showAllRated: "top.showAll"
+            case .bento: "top.bento"
+            case .hint: "top.hint"
             }
         }
     }
@@ -35,8 +40,8 @@ struct StatsTopSection: View {
     var body: some View {
         ForEach(Self.rows(for: top, highestRatedTotal: highestRatedTotal, canShowAll: onShowAllHighestRated != nil)) { row in
             switch row {
-            case .title:
-                titleRow
+            case let .title(showsAll):
+                titleRow(showsAll: showsAll)
             case let .hero(item, isLast):
                 heroRow(item, isLast: isLast)
                     .statsCardSlice(isFirst: true, isLast: isLast)
@@ -55,22 +60,31 @@ struct StatsTopSection: View {
                 .buttonStyle(DiaryRowButtonStyle())
                 .accessibilityLabel("See full list, \(list.total.formatted()) titles")
                 .statsCardSlice(isFirst: false, isLast: true)
-            case let .showAllRated(total):
-                Button {
-                    onShowAllHighestRated?()
-                } label: {
-                    StatsLabelValueRow(label: "Show all", value: total.formatted(), showsChevron: true)
-                }
-                .buttonStyle(DiaryRowButtonStyle())
-                .accessibilityLabel("Show all \(total.formatted()) highest rated")
-                .statsCardSlice(isFirst: false, isLast: true)
+            case let .bento(bento, hasHint):
+                StatsBentoView(bento: bento, onOpenTitle: onOpenTitle)
+                    .padding(.bottom, hasHint ? 4 : StatsSectionLayout.sectionGap)
+            case let .hint(text):
+                Label(text, systemImage: "tag")
+                    .font(.footnote)
+                    .foregroundStyle(StatsChartStyle.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 8)
+                    .padding(.bottom, StatsSectionLayout.sectionGap)
             }
         }
     }
 
     @ViewBuilder
-    private var titleRow: some View {
-        if let list = top.list, top.isFromList, let onOpenList {
+    private func titleRow(showsAll: Bool) -> some View {
+        if !top.isFromList {
+            StatsSectionTitle(Self.title(for: top)) {
+                if showsAll, let onShowAllHighestRated {
+                    StatsShowAllButton(action: onShowAllHighestRated)
+                }
+            }
+        } else if let list = top.list, let onOpenList {
             Button {
                 onOpenList(list)
             } label: {
@@ -194,25 +208,37 @@ struct StatsTopSection: View {
         let items = top.items.sorted { $0.rank < $1.rank }
         guard let first = items.first else { return [] }
 
-        var notes: [Row] = []
-        if top.isFromList, top.hintPrivate {
-            notes.append(.note("Only you can see this list.", systemImage: "lock", isLast: false))
+        // The fallback is Highest rated: its bento, the owner's hint, and "Show all" by the title
+        // when Highest rated has more than the bento shows.
+        guard top.isFromList else {
+            let entries = items.map { StatsBentoEntry(rank: $0.rank, media: $0.media, stars: $0.stars?.value) }
+            guard let bento = StatsBento(entries, id: "top.bento") else { return [] }
+            let shown = 1 + bento.tiles.count
+            let hint = hintText(for: top)
+            var rows: [Row] = [
+                .title(showsAll: canShowAll && highestRatedTotal > shown),
+                .bento(bento, hasHint: hint != nil),
+            ]
+            if let hint {
+                rows.append(.hint(hint))
+            }
+            return rows
         }
-        if let hint = hintText(for: top) {
-            notes.append(.note(hint, systemImage: "tag", isLast: false))
+
+        var notes: [Row] = []
+        if top.hintPrivate {
+            notes.append(.note("Only you can see this list.", systemImage: "lock", isLast: false))
         }
 
         var footer: Row?
-        if top.isFromList, let list = top.list {
+        if let list = top.list {
             footer = .seeFullList(list)
-        } else if !top.isFromList, canShowAll, highestRatedTotal > items.count {
-            footer = .showAllRated(total: highestRatedTotal)
         }
 
         let ranked = Array(items.dropFirst())
         let trailingCount = notes.count + (footer == nil ? 0 : 1)
 
-        var rows: [Row] = [.title, .hero(first, isLast: ranked.isEmpty && trailingCount == 0)]
+        var rows: [Row] = [.title(showsAll: false), .hero(first, isLast: ranked.isEmpty && trailingCount == 0)]
         for (index, item) in ranked.enumerated() {
             rows.append(.ranked(item, isLast: index == ranked.count - 1 && trailingCount == 0))
         }

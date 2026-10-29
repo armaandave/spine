@@ -2,11 +2,12 @@ import Charts
 import SwiftUI
 
 // Activity (STAT-203): events by month and by weekday, then the busiest day and month (each
-// opens its logs on your own stats). No heatmap. Each chart is one fixed-height row of the page's lazy stack.
+// opens its logs on your own stats). No heatmap. Each chart is one fixed-height row of the
+// page's lazy stack; dragging across one picks a bar.
 
-/// The Activity section's rows. `onDrillDown` is nil on someone else's stats, where charts
-/// aren't tappable (STAT-401). A month bar opens that month's logs; on Global, a tap on one
-/// type's part of the bar opens only that type's.
+/// The Activity section's rows. `onDrillDown` is nil on someone else's stats, where nothing
+/// opens (STAT-401). A picked month's "Show logs" opens that month's logs; on Global it can open
+/// one type's.
 struct StatsActivityChartSection: View {
     let activity: StatsEventActivity
     /// The tab: nil on Global, where months stack by type.
@@ -61,8 +62,8 @@ struct StatsActivityChartSection: View {
 
 /// One stacked part of a month's bar.
 struct StatsMonthBarPart: Identifiable, Hashable {
+    /// "YYYY-MM", the bar's category.
     let month: String
-    let date: Date
     /// Nil when the month has no per-type split.
     let mediaType: String?
     let count: Int
@@ -98,13 +99,6 @@ enum StatsActivityChartData {
         return days.first { $0.count == top }
     }
 
-    /// "YYYY-MM" as the first day of that month at midnight on `calendar`, so axis labels
-    /// formatted on the same calendar name the right month.
-    static func monthDate(_ month: String, calendar: Calendar = .current) -> Date? {
-        guard let (year, number) = yearMonth(month) else { return nil }
-        return calendar.date(from: DateComponents(year: year, month: number, day: 1))
-    }
-
     /// "2025-08" → "August 2025".
     static func monthTitle(_ month: String, locale: Locale = .current) -> String {
         guard let date = utcDate(month: month) else { return month }
@@ -125,31 +119,45 @@ enum StatsActivityChartData {
     }
 
     /// Each month's bar as stacked parts: by type when `stacked` and the month has a split,
-    /// else one part. Months with nothing have no parts.
-    static func parts(_ months: [StatsEventMonth], stacked: Bool, calendar: Calendar = .current) -> [StatsMonthBarPart] {
+    /// else one part. Months with nothing, or that don't read as "YYYY-MM", have no parts.
+    static func parts(_ months: [StatsEventMonth], stacked: Bool) -> [StatsMonthBarPart] {
         months.flatMap { month -> [StatsMonthBarPart] in
-            guard month.count > 0, let date = monthDate(month.month, calendar: calendar) else { return [] }
+            guard month.count > 0, yearMonth(month.month) != nil else { return [] }
             let types = StatsChartStyle.orderedTypes(month.byType)
             if stacked, !types.isEmpty {
-                return types.map { StatsMonthBarPart(month: month.month, date: date, mediaType: $0.mediaType, count: $0.count) }
+                return types.map { StatsMonthBarPart(month: month.month, mediaType: $0.mediaType, count: $0.count) }
             }
-            return [StatsMonthBarPart(month: month.month, date: date, mediaType: nil, count: month.count)]
+            return [StatsMonthBarPart(month: month.month, mediaType: nil, count: month.count)]
         }
     }
 
-    /// Month labels for up to 14 months; beyond that, years every `yearStride`.
-    static func yearStride(monthCount: Int) -> Int? {
-        guard monthCount > 14 else { return nil }
-        let years = Int((Double(monthCount) / 12).rounded(.up))
-        return max(1, Int((Double(years) / 6).rounded(.up)))
+    /// An edge label under the month chart: the month ("Jan") for a year or so, the year
+    /// ("2019") for a longer span.
+    static func axisLabel(forMonth month: String, monthCount: Int, locale: Locale = .current) -> String {
+        guard let date = utcDate(month: month) else { return month }
+        let template = monthCount > 14 ? "yyyy" : "MMM"
+        return utcFormatter(template: template, locale: locale).string(from: date)
     }
 
-    /// Whether a year mark's label fits before the chart's end. A year label starts at its mark
-    /// and runs right, so the last one needs about half a stride of months after it, or it's cut
-    /// to "2…"; its grid line stays either way.
-    static func yearLabelFits(_ mark: Date, end: Date, stride: Int, calendar: Calendar = .current) -> Bool {
-        let months = calendar.dateComponents([.month], from: mark, to: end).month ?? 0
-        return months >= stride * 6
+    /// "14", or on Global "14 · 9 movies, 5 TV": a bar's count, then its split by type. The
+    /// count is events, each title once a day, so it isn't called titles.
+    static func countDetail(_ count: Int, byType: [String: Int], stacked: Bool) -> String {
+        let types = stacked ? StatsChartStyle.orderedTypes(byType) : []
+        guard types.count > 1 else { return count.formatted() }
+        let split = types.map { "\($0.count.formatted()) \(StatsChartCopy.typeNoun($0.mediaType))" }
+        return "\(count.formatted()) · \(split.joined(separator: ", "))"
+    }
+
+    /// A picked month's readout and its logs, each type's too on Global.
+    static func selection(for month: StatsEventMonth, stacked: Bool, locale: Locale = .current) -> StatsChartSelection {
+        let parts = stacked
+            ? StatsChartStyle.orderedTypes(month.byType).map { (mediaType: $0.mediaType, drillDown: StatsDrillDown.month(month.month, mediaType: $0.mediaType)) }
+            : []
+        return StatsChartSelection(
+            title: monthTitle(month.month, locale: locale),
+            detail: countDetail(month.count, byType: month.byType, stacked: stacked),
+            drillOptions: month.count > 0 ? StatsChartDrillOption.options(whole: .month(month.month), parts: parts) : []
+        )
     }
 
     private static func yearMonth(_ month: String) -> (Int, Int)? {
@@ -179,12 +187,16 @@ private struct StatsMonthsChartCard: View {
     let mediaType: String?
     let onDrillDown: ((StatsDrillDown) -> Void)?
 
+    /// The month under the finger while scrubbing.
+    @State private var scrubbed: String?
+    /// The last picked month, kept after the finger lifts.
+    @State private var picked: String?
+
     private var isStacked: Bool { mediaType == nil }
-    private var parts: [StatsMonthBarPart] { StatsActivityChartData.parts(months, stacked: isStacked) }
     private var legendTypes: [String] { StatsChartStyle.types(in: months.map(\.byType)) }
 
     var body: some View {
-        let parts = parts
+        let parts = StatsActivityChartData.parts(months, stacked: isStacked)
         let maximum = months.map(\.count).max() ?? 0
         let ticks = StatsChartStyle.countTicks(maximum: maximum)
         let seriesNames = Array(Set(parts.map(\.seriesName)))
@@ -192,36 +204,38 @@ private struct StatsMonthsChartCard: View {
         let range = domain.map { name in
             StatsChartStyle.color(for: name == "all" ? mediaType : name)
         }
+        let keys = months.map(\.month)
+        let pickedMonth = months.first { $0.month == (scrubbed ?? picked) }
 
         VStack(alignment: .leading, spacing: 12) {
-            Text("By month")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(StatsChartStyle.secondaryText)
+            StatsChartReadout(
+                selection: pickedMonth.map { StatsActivityChartData.selection(for: $0, stacked: isStacked) },
+                onDrillDown: onDrillDown
+            ) {
+                StatsChartIdleLine(title: "By month", hint: "Drag across the chart to see each month.")
+            }
 
             Chart(parts) { part in
                 BarMark(
-                    x: .value("Month", part.date, unit: .month),
+                    x: .value("Month", part.month),
                     y: .value("Count", part.count)
                 )
                 .foregroundStyle(by: .value("Type", part.seriesName))
+                .opacity(pickedMonth == nil || pickedMonth?.month == part.month ? 1 : 0.35)
             }
             .chartForegroundStyleScale(domain: domain, range: range)
             .chartLegend(.hidden)
-            .chartXScale(domain: xDomain)
-            .chartXAxis { xAxis }
-            .statsCountYAxis(ticks: ticks)
-            .chartOverlay { proxy in
-                if onDrillDown != nil {
-                    StatsChartTapOverlay(proxy: proxy) { location in
-                        handleTap(at: location, proxy: proxy)
-                    }
-                }
+            .chartXScale(domain: keys)
+            .statsEdgeXAxis(labels: StatsChartAxis.edgeLabels(keys)) { month in
+                StatsActivityChartData.axisLabel(forMonth: month, monthCount: keys.count)
             }
+            .statsCountYAxis(ticks: ticks)
+            .chartXSelection(value: $scrubbed)
             .frame(height: 170)
             .accessibilityLabel("Activity by month")
             .accessibilityChartDescriptor(descriptor)
             .accessibilityActions {
-                // VoiceOver can't tap a bar, so each month with logs gets an action.
+                // VoiceOver can't drag, so each month with logs gets an action.
                 if let onDrillDown {
                     ForEach(months.filter { $0.count > 0 }) { month in
                         Button("Show \(StatsActivityChartData.monthTitle(month.month)) logs") {
@@ -236,52 +250,11 @@ private struct StatsMonthsChartCard: View {
             }
         }
         .statsChartCard()
-    }
-
-    private var xDomain: ClosedRange<Date> {
-        let calendar = Calendar.current
-        let dates = months.compactMap { StatsActivityChartData.monthDate($0.month, calendar: calendar) }
-        guard let first = dates.min(), let last = dates.max(),
-              let end = calendar.date(byAdding: .month, value: 1, to: last) else {
-            let now = Date.now
-            return now ... now.addingTimeInterval(1)
+        // Scrubbing is the user's own switch; the finger lifting isn't.
+        .sensoryFeedback(.selection, trigger: scrubbed) { _, new in new != nil }
+        .onChange(of: scrubbed) { _, new in
+            if let new { picked = new }
         }
-        return first ... end
-    }
-
-    @AxisContentBuilder
-    private var xAxis: some AxisContent {
-        if let stride = StatsActivityChartData.yearStride(monthCount: months.count) {
-            let end = xDomain.upperBound
-            AxisMarks(values: .stride(by: .year, count: stride)) { value in
-                AxisGridLine().foregroundStyle(StatsChartStyle.gridLine)
-                if let mark = value.as(Date.self),
-                   StatsActivityChartData.yearLabelFits(mark, end: end, stride: stride) {
-                    AxisValueLabel(format: .dateTime.year())
-                        .foregroundStyle(StatsChartStyle.axisLabel)
-                }
-            }
-        } else {
-            AxisMarks(values: .stride(by: .month)) { _ in
-                AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
-                    .foregroundStyle(StatsChartStyle.axisLabel)
-            }
-        }
-    }
-
-    private func handleTap(at location: CGPoint, proxy: ChartProxy) {
-        guard let onDrillDown, let date: Date = proxy.value(atX: location.x) else { return }
-        let components = Calendar.current.dateComponents([.year, .month], from: date)
-        guard let year = components.year, let number = components.month else { return }
-        let key = String(format: "%04d-%02d", year, number)
-        guard let month = months.first(where: { $0.month == key }), month.count > 0 else { return }
-
-        var tappedType: String?
-        if isStacked, let value: Double = proxy.value(atY: location.y) {
-            // Above the bar is the whole month.
-            tappedType = statsStackedPart(at: value, parts: StatsChartStyle.orderedTypes(month.byType))
-        }
-        onDrillDown(.month(key, mediaType: tappedType))
     }
 
     private var descriptor: StatsChartDescriptor {
@@ -301,20 +274,29 @@ private struct StatsWeekdaysChartCard: View {
     let days: [StatsWeekdayCount]
     let mediaType: String?
 
+    /// The day under the finger while scrubbing.
+    @State private var scrubbed: String?
+    /// The last picked day, kept after the finger lifts.
+    @State private var picked: String?
+
     var body: some View {
         let ticks = StatsChartStyle.countTicks(maximum: days.map(\.count).max() ?? 0)
         let busiest = StatsActivityChartData.busiestWeekday(days)
+        let pickedDay = days.first { $0.name == (scrubbed ?? picked) }
+        // Nothing picked, the busiest day stands out; once one is picked, that one does.
+        let highlighted = pickedDay ?? busiest
 
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("By weekday")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(StatsChartStyle.secondaryText)
-                Spacer(minLength: 8)
-                if let busiest {
-                    Text("Most on \(busiest.name)s")
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
+            StatsChartReadout(
+                selection: pickedDay.map { StatsChartSelection(title: $0.name, detail: $0.count.formatted()) },
+                onDrillDown: nil
+            ) {
+                StatsChartIdleLine(title: "By weekday", hint: "Drag to see each day.") {
+                    if let busiest {
+                        Text("Most on \(busiest.name)s")
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                    }
                 }
             }
 
@@ -325,7 +307,7 @@ private struct StatsWeekdaysChartCard: View {
                     width: .ratio(0.6)
                 )
                 .foregroundStyle(StatsChartStyle.color(for: mediaType))
-                .opacity(busiest == nil || busiest?.name == day.name ? 1 : 0.45)
+                .opacity(highlighted == nil || highlighted?.name == day.name ? 1 : 0.45)
                 .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
             .chartXAxis {
@@ -339,6 +321,7 @@ private struct StatsWeekdaysChartCard: View {
                 }
             }
             .statsCountYAxis(ticks: ticks)
+            .chartXSelection(value: $scrubbed)
             .frame(height: 130)
             .accessibilityLabel("Activity by weekday")
             .accessibilityChartDescriptor(
@@ -352,6 +335,10 @@ private struct StatsWeekdaysChartCard: View {
             )
         }
         .statsChartCard()
+        .sensoryFeedback(.selection, trigger: scrubbed) { _, new in new != nil }
+        .onChange(of: scrubbed) { _, new in
+            if let new { picked = new }
+        }
     }
 }
 

@@ -43,7 +43,8 @@ final class StatsRealPayloadTests: XCTestCase {
         for name in try Self.fixtureNames().filter({ !$0.contains("show-all") }) {
             filled.formUnion(StatsPageSection.sections(for: try Self.load(name).page))
         }
-        XCTAssertEqual(filled, Set(StatsPageSection.typeOrder))
+        // The fixtures were captured before People (STAT-219) existed.
+        XCTAssertEqual(filled, Set(StatsPageSection.typeOrder + StatsPageSection.globalOrder).subtracting([.people]))
     }
 
     // MARK: - What the sample library shows
@@ -263,6 +264,15 @@ final class StatsRealPayloadTests: XCTestCase {
             XCTAssertEqual(page.languages?.mediaTypes, languages?["media_types"] as? [String], name)
         }
 
+        // People
+        if isNull("people") {
+            XCTAssertNil(page.people, name)
+        } else {
+            let groups = rows(json["people"], "groups")
+            XCTAssertEqual(page.people?.groups.count, groups.count, "\(name): people groups")
+            XCTAssertEqual(page.people?.groups.map(\.rows.count), groups.map { rows($0, "rows").count }, "\(name): people rows")
+        }
+
         // List rings
         XCTAssertEqual(page.listRings.count, (json["list_rings"] as? [Any])?.count, "\(name): list rings")
 
@@ -308,14 +318,23 @@ final class StatsRealPayloadTests: XCTestCase {
             .releaseYears: count(section("release_years"), "rows") > 0,
             .genres: count(section("genres"), "rows") + count(section("genres"), "music") > 0,
             .languages: count(section("languages"), "rows") > 0,
+            .people: ((section("people")?["groups"] as? [JSON]) ?? []).contains { count($0, "rows") > 0 },
             .listProgress: !((json["list_rings"] as? [Any]) ?? []).isEmpty,
-            .collections: !isGlobal
-                && number(section("collections"), "complete_count") + number(section("collections"), "almost_count") > 0,
+            .collections: !isGlobal && collectionsShow(section("collections")),
             .mostLogged: count(section("most_logged"), "items") > 0,
             .milestones: !((json["milestones"] as? [Any]) ?? []).isEmpty,
         ]
         let order = isGlobal ? StatsPageSection.globalOrder : StatsPageSection.typeOrder
         return order.filter { shown[$0] ?? false }
+    }
+
+    /// A year's own progress when the payload has it (`in_range`), else the lifetime groups.
+    private static func collectionsShow(_ collections: JSON?) -> Bool {
+        func number(_ object: JSON?, _ key: String) -> Int { object?[key] as? Int ?? 0 }
+        if let inRange = collections?["in_range"] as? JSON {
+            return number(inRange, "completed_count") + number(inRange, "progressed_count") > 0
+        }
+        return number(collections, "complete_count") + number(collections, "almost_count") > 0
     }
 
     // MARK: - Fixtures

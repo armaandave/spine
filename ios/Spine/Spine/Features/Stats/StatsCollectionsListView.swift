@@ -3,13 +3,14 @@ import SwiftUI
 typealias StatsCollectionsPageModel = StatsTitlesPageModel<MediaSeriesSummary>
 
 extension StatsTitlesPageModel where Item == MediaSeriesSummary {
-    /// One Collections group's pages from the collections endpoint (STAT-310). Collections are
-    /// lifetime, so there are no dates.
+    /// One Collections group's pages from the collections endpoint (STAT-310). The lifetime
+    /// groups have no dates; the in-range groups send `period`'s.
     static func collections(
         profileRepository: ProfileRepository,
         username: String?,
         mediaType: String,
         group: StatsCollectionGroup,
+        period: StatsPeriod = .allTime,
         expectedTotal: Int = 0,
         onUnauthorized: @escaping () -> Void
     ) -> StatsCollectionsPageModel {
@@ -18,6 +19,7 @@ extension StatsTitlesPageModel where Item == MediaSeriesSummary {
                 username: username,
                 mediaType: mediaType,
                 group: group,
+                period: group.isInRange ? period : nil,
                 page: page,
                 pageSize: pageSize
             )
@@ -26,19 +28,20 @@ extension StatsTitlesPageModel where Item == MediaSeriesSummary {
     }
 }
 
-/// Every complete or almost complete series of one type (STAT-214), in tiles of three posters
-/// with "N of M", four to a row (each row its own lazy item), loading the next page as the end
-/// comes near. A tile opens the series page.
+/// Every series of one type in a Collections group (STAT-214), in tiles of three posters with
+/// "N of M", four to a row (each row its own lazy item), loading the next page as the end comes
+/// near. A tile opens the series page.
 struct StatsCollectionsListView: View {
     @State private var viewModel: StatsCollectionsPageModel
-    let group: StatsCollectionGroup
+    /// The group's name: "Complete", "Completed in 2025".
+    let title: String
     let services: StatsRouteServices
 
     @State private var route: StatsRoute?
 
-    init(viewModel: StatsCollectionsPageModel, group: StatsCollectionGroup, services: StatsRouteServices) {
+    init(viewModel: StatsCollectionsPageModel, title: String, services: StatsRouteServices) {
         _viewModel = State(initialValue: viewModel)
-        self.group = group
+        self.title = title
         self.services = services
     }
 
@@ -65,7 +68,7 @@ struct StatsCollectionsListView: View {
         .background {
             LogBackdrop(url: URL(string: viewModel.items.first?.posterUrls.first ?? ""))
         }
-        .navigationTitle(group.displayTitle)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .environment(\.colorScheme, .dark)

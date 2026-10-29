@@ -12,6 +12,7 @@ enum StatsPageSection: String, Hashable, Identifiable {
     case releaseYears
     case genres
     case languages
+    case people
     case listProgress
     case collections
     case mostLogged
@@ -25,10 +26,11 @@ enum StatsPageSection: String, Hashable, Identifiable {
         .genres, .languages, .listProgress, .mostLogged, .milestones,
     ]
 
-    /// A type tab's order (STAT-218).
+    /// A type tab's order (STAT-218). Time isn't a section here: the header's third number is
+    /// the tab's measure. People (STAT-219) follows Genres and Languages.
     static let typeOrder: [StatsPageSection] = [
-        .header, .time, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
-        .languages, .activity, .listProgress, .collections, .mostLogged, .milestones,
+        .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+        .languages, .people, .activity, .listProgress, .collections, .mostLogged, .milestones,
     ]
 
     /// The sections a page shows, in its tab's order, leaving out null and empty ones
@@ -50,6 +52,7 @@ enum StatsPageSection: String, Hashable, Identifiable {
         case .releaseYears: page.releaseYears.map { !$0.isEmpty } ?? false
         case .genres: page.genres.map { !$0.isEmpty } ?? false
         case .languages: page.languages.map { !$0.isEmpty } ?? false
+        case .people: !StatsPeopleData.visibleGroups(page.people).isEmpty
         case .listProgress: !page.listRings.isEmpty
         case .collections: page.mediaType != nil && (page.collections.map { !$0.isEmpty } ?? false)
         case .mostLogged: page.mostLogged.map { !$0.isEmpty } ?? false
@@ -69,8 +72,9 @@ enum StatsPageDestination: Hashable, Identifiable {
     case route(StatsRoute)
     case highestRated(StatsScope, total: Int)
     case mostLogged(StatsScope, title: String, total: Int)
-    case collections(mediaType: String, group: StatsCollectionGroup, total: Int)
-    case listProgress([StatsListRing])
+    case collections(mediaType: String, group: StatsCollectionGroup, period: StatsPeriod, total: Int)
+    case listProgress([StatsListRing], period: StatsPeriod)
+    case people(StatsScope, mediaType: String, group: StatsPeopleGroup, sort: StatsPeopleSort)
 
     var id: Self { self }
 }
@@ -138,6 +142,7 @@ struct StatsView: View {
     @ViewBuilder
     private func sectionRows(_ section: StatsPageSection, page: StatsPage) -> some View {
         let mediaType = page.mediaType
+        let period = scope(of: page).period
         // Charts open the diary only on your own stats (STAT-401).
         let drillDown: ((StatsDrillDown) -> Void)? = isOwnStats ? { open($0, page: page) } : nil
         // On Global, a Time row switches to its type.
@@ -149,7 +154,8 @@ struct StatsView: View {
                 StatsHeaderSection(
                     header: header,
                     mediaType: mediaType,
-                    onOpenLikes: isOwnStats ? { open(.liked, page: page) } : nil
+                    time: page.time,
+                    onOpen: drillDown
                 )
             }
         case .time:
@@ -212,20 +218,36 @@ struct StatsView: View {
             if let languages = page.languages {
                 StatsLanguagesSection(languages: languages, mediaType: mediaType, onDrillDown: drillDown)
             }
+        case .people:
+            if let tabType = mediaType {
+                let pageScope = scope(of: page)
+                ForEach(StatsPeopleData.visibleGroups(page.people)) { group in
+                    StatsPeopleSection(
+                        group: group,
+                        mediaType: tabType,
+                        drillDownContext: drillDownContext(for: pageScope),
+                        onOpen: { open($0, page: page) },
+                        onShowAll: { sort in
+                            destination = .people(pageScope, mediaType: tabType, group: group, sort: sort)
+                        }
+                    )
+                }
+            }
         case .listProgress:
             StatsListProgressSection(
                 rings: page.listRings,
+                period: period,
                 onOpen: { open($0, page: page) },
-                onShowAll: { destination = .listProgress(page.listRings) }
+                onShowAll: { destination = .listProgress(page.listRings, period: period) }
             )
         case .collections:
             if let collections = page.collections, let tabType = mediaType {
                 StatsCollectionsSection(
                     collections: collections,
+                    period: period,
                     onOpen: { open($0, page: page) },
-                    onShowAll: { group in
-                        let total = group == .complete ? collections.completeCount : collections.almostCount
-                        destination = .collections(mediaType: tabType, group: group, total: total)
+                    onShowAll: { group, total in
+                        destination = .collections(mediaType: tabType, group: group, period: period, total: total)
                     }
                 )
             }
@@ -246,7 +268,7 @@ struct StatsView: View {
                 )
             }
         case .milestones:
-            StatsMilestonesSection(milestones: page.milestones) { milestone in
+            StatsMilestonesSection(milestones: page.milestones, period: period) { milestone in
                 open(.milestone(milestone), page: page)
             }
         }
@@ -335,21 +357,40 @@ struct StatsView: View {
                 onSelectTab: services.onSelectTab,
                 onUnauthorized: services.onUnauthorized
             )
-        case let .collections(mediaType, group, total):
+        case let .collections(mediaType, group, period, total):
             StatsCollectionsListView(
                 viewModel: .collections(
                     profileRepository: services.profileRepository,
                     username: username,
                     mediaType: mediaType,
                     group: group,
+                    period: period,
                     expectedTotal: total,
                     onUnauthorized: services.onUnauthorized
                 ),
-                group: group,
+                title: StatsCollectionsData.groupName(group, period: period),
                 services: services
             )
-        case let .listProgress(rings):
-            StatsListProgressListView(rings: rings, services: services)
+        case let .listProgress(rings, period):
+            StatsListProgressListView(rings: rings, period: period, services: services)
+        case let .people(scope, mediaType, group, sort):
+            StatsPeopleListView(
+                viewModel: .people(
+                    profileRepository: services.profileRepository,
+                    username: username,
+                    period: scope.period,
+                    mediaType: mediaType,
+                    role: group.role,
+                    sort: sort,
+                    expectedTotal: sort == .titles ? group.total : 0,
+                    onUnauthorized: services.onUnauthorized
+                ),
+                group: group,
+                sort: sort,
+                mediaType: mediaType,
+                drillDownContext: drillDownContext(for: scope),
+                services: services
+            )
         }
     }
 }

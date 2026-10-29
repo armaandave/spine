@@ -2,11 +2,11 @@ import Charts
 import SwiftUI
 
 // Ratings (STAT-204): rated logs in ten half-star buckets, stacked by type on Global, with the
-// average in stars. Tapping a bar opens the diary between the bucket's stored bounds.
+// average in stars. Dragging picks a bar; "Show logs" opens the diary between the bucket's
+// stored bounds.
 
-/// The Ratings section's rows. `onDrillDown` is nil on someone else's stats. A bar opens the
-/// logs between its bucket's stored bounds; on Global, a tap on one type's part opens only that
-/// type's.
+/// The Ratings section's rows. `onDrillDown` is nil on someone else's stats. A picked bar opens
+/// the logs between its bucket's stored bounds; on Global it can open one type's.
 struct StatsRatingsChartSection: View {
     let ratings: StatsRatings
     /// The tab: nil on Global, where bars stack by type.
@@ -81,10 +81,34 @@ enum StatsRatingsChartData {
         }
     }
 
-    /// The axis label under a bucket: whole stars only ("1★" … "5★").
+    /// The axis labels: the first and last bucket, "½★" and "5★".
+    static func axisLabels(_ buckets: [StatsRatingsBucket]) -> [String] {
+        StatsChartAxis.edgeLabels(buckets.map(\.stars.text))
+    }
+
+    /// A bucket's label under the axis: "½★", "3★", "3½★".
     static func axisLabel(forStars text: String) -> String? {
-        guard let value = StatsDecimal.value(text), value.rounded() == value, value >= 1 else { return nil }
-        return "\(Int(value))★"
+        guard let value = StatsDecimal.value(text), value > 0 else { return nil }
+        let halves = Int((value * 2).rounded())
+        let whole = halves / 2
+        let half = halves % 2 == 1 ? "½" : ""
+        return whole == 0 ? "\(half)★" : "\(whole)\(half)★"
+    }
+
+    /// A picked bucket's readout: "3½ stars", "37 ratings · 30 movies, 7 TV", and its logs, each
+    /// type's too on Global.
+    static func selection(for bucket: StatsRatingsBucket, stacked: Bool) -> StatsChartSelection {
+        let count = StatsChartCopy.count(bucket.count, "rating", "ratings")
+        let types = stacked ? StatsChartStyle.orderedTypes(bucket.byType) : []
+        let detail = types.count > 1
+            ? "\(count) · " + types.map { "\($0.count.formatted()) \(StatsChartCopy.typeNoun($0.mediaType))" }.joined(separator: ", ")
+            : count
+        let parts = types.map { (mediaType: $0.mediaType, drillDown: StatsDrillDown.rating(bucket, mediaType: $0.mediaType)) }
+        return StatsChartSelection(
+            title: StatsChartCopy.spokenStars(bucket.stars.value),
+            detail: detail,
+            drillOptions: bucket.count > 0 ? StatsChartDrillOption.options(whole: .rating(bucket), parts: parts) : []
+        )
     }
 
     /// "3.65 average · 140 ratings".
@@ -102,6 +126,11 @@ private struct StatsRatingsChartCard: View {
     let mediaType: String?
     let onDrillDown: ((StatsDrillDown) -> Void)?
 
+    /// The bucket under the finger while scrubbing, by its stars ("3.5").
+    @State private var scrubbed: String?
+    /// The last picked bucket, kept after the finger lifts.
+    @State private var picked: String?
+
     private var isStacked: Bool { mediaType == nil }
 
     var body: some View {
@@ -114,9 +143,22 @@ private struct StatsRatingsChartCard: View {
             StatsChartStyle.color(for: name == "all" ? mediaType : name)
         }
         let ticks = StatsChartStyle.countTicks(maximum: buckets.map(\.count).max() ?? 0)
+        let pickedBucket = buckets.first { $0.stars.text == (scrubbed ?? picked) }
 
         VStack(alignment: .leading, spacing: 14) {
-            headline
+            StatsChartReadout(
+                selection: pickedBucket.map { StatsRatingsChartData.selection(for: $0, stacked: isStacked) },
+                onDrillDown: onDrillDown
+            ) {
+                VStack(alignment: .leading, spacing: 2) {
+                    headline
+                    Text("Drag across the chart to see each rating.")
+                        .font(.footnote)
+                        .foregroundStyle(StatsChartStyle.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
 
             Chart(parts) { part in
                 BarMark(
@@ -125,28 +167,16 @@ private struct StatsRatingsChartCard: View {
                     width: .ratio(0.7)
                 )
                 .foregroundStyle(by: .value("Type", part.seriesName))
+                .opacity(pickedBucket == nil || pickedBucket?.stars.text == part.stars ? 1 : 0.35)
             }
             .chartForegroundStyleScale(domain: domain, range: range)
             .chartLegend(.hidden)
             .chartXScale(domain: buckets.map(\.stars.text))
-            .chartXAxis {
-                AxisMarks(values: buckets.map(\.stars.text)) { value in
-                    AxisValueLabel(centered: true) {
-                        if let text = value.as(String.self), let label = StatsRatingsChartData.axisLabel(forStars: text) {
-                            Text(label)
-                                .foregroundStyle(StatsChartStyle.axisLabel)
-                        }
-                    }
-                }
+            .statsEdgeXAxis(labels: StatsRatingsChartData.axisLabels(buckets)) { stars in
+                StatsRatingsChartData.axisLabel(forStars: stars) ?? stars
             }
             .statsCountYAxis(ticks: ticks)
-            .chartOverlay { proxy in
-                if onDrillDown != nil {
-                    StatsChartTapOverlay(proxy: proxy) { location in
-                        handleTap(at: location, proxy: proxy, buckets: buckets)
-                    }
-                }
-            }
+            .chartXSelection(value: $scrubbed)
             .frame(height: 160)
             .accessibilityLabel("Ratings")
             .accessibilityValue(StatsRatingsChartData.summary(ratings))
@@ -174,13 +204,17 @@ private struct StatsRatingsChartCard: View {
             }
         }
         .statsChartCard()
+        .sensoryFeedback(.selection, trigger: scrubbed) { _, new in new != nil }
+        .onChange(of: scrubbed) { _, new in
+            if let new { picked = new }
+        }
     }
 
     private var headline: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if let average = ratings.averageStars {
                 Text(average.averageText)
-                    .font(.title2.bold())
+                    .font(.title3.bold())
                     .foregroundStyle(.white)
                     .monospacedDigit()
                 Image(systemName: "star.fill")
@@ -198,16 +232,5 @@ private struct StatsRatingsChartCard: View {
                 .monospacedDigit()
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private func handleTap(at location: CGPoint, proxy: ChartProxy, buckets: [StatsRatingsBucket]) {
-        guard let onDrillDown, let stars: String = proxy.value(atX: location.x),
-              let bucket = buckets.first(where: { $0.stars.text == stars }), bucket.count > 0 else { return }
-        var tappedType: String?
-        if isStacked, let value: Double = proxy.value(atY: location.y) {
-            let types = StatsChartStyle.orderedTypes(bucket.byType)
-            tappedType = statsStackedPart(at: value, parts: types)
-        }
-        onDrillDown(.rating(bucket, mediaType: tappedType))
     }
 }
