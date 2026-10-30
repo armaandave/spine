@@ -611,7 +611,7 @@ class ErrorTests(FillTestCase):
 
         self.assertEqual(totals["retry_later"], 0)
         self.refresh(film, *books)
-        self.assertEqual(film.metadata_version, CURRENT)
+        self.assertEqual(film.metadata_version, CURRENT_METADATA_VERSION[MediaTypes.MOVIE.value])
         # Hardcover only said "slow down": the next run asks again, not one in a week.
         for book in books:
             self.assertEqual(book.metadata_version, 0)
