@@ -2446,6 +2446,27 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileSettingsKeepsSavedPreferencesWhenRootReappearsWithStaleProfile() async {
+        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
+        let repository = RecordingProfileRepository(profile: profile)
+        let viewModel = ProfileSettingsViewModel(
+            profileRepository: repository,
+            mediaRepository: FakeMediaRepository(),
+            onUnauthorized: {}
+        )
+        viewModel.loadIfNeeded(profile: profile)
+        viewModel.enabledMediaTypes.insert("tv")
+        _ = await viewModel.savePreferences()
+
+        // Popping back to the Settings root runs its task again with the profile Settings opened with.
+        viewModel.loadIfNeeded(profile: profile)
+
+        XCTAssertEqual(viewModel.enabledMediaTypes, ["movie", "tv"])
+        XCTAssertEqual(viewModel.profile?.preferences.enabledMediaTypes, ["movie", "tv"])
+        XCTAssertFalse(viewModel.hasPreferenceChanges)
+    }
+
+    @MainActor
     func testProfileSettingsAvatarUploadRecordsMime() async {
         let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
