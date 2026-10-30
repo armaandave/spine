@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Top (STAT-206 to STAT-208): a big #1 in a fixed cell (square for music), numbered rows for
-/// #2 to #10, then "See full list". Without a tagged list it's "Highest rated", drawn as Highest
-/// rated's bento, and the owner sees how to tag one. One view per row, for the page's lazy stack.
+/// Top (STAT-206 to STAT-208): the tagged list's name, its first ten titles in two rows of five,
+/// and "See full list". Without a tagged list it's "Highest rated", drawn as Highest rated's
+/// bento, and the owner sees how to tag one. One view per row, for the page's lazy stack.
 struct StatsTopSection: View {
     let top: StatsTop
     /// Highest rated's total, for the fallback's "Show all".
@@ -15,10 +15,9 @@ struct StatsTopSection: View {
     enum Row: Hashable, Identifiable {
         /// The title, with "Show all" for the fallback when Highest rated has more.
         case title(showsAll: Bool)
-        case hero(StatsTopItem, isLast: Bool)
-        case ranked(StatsTopItem, isLast: Bool)
-        case note(String, systemImage: String, isLast: Bool)
-        case seeFullList(StatsTopList)
+        /// The list's first ten, in its order; `hasNote` when a note follows it.
+        case grid([StatsTopItem], hasNote: Bool)
+        case note(String, systemImage: String)
         /// The fallback's titles; `hasHint` when the owner's hint follows it.
         case bento(StatsBento, hasHint: Bool)
         /// The owner's hint under the fallback's bento.
@@ -27,10 +26,8 @@ struct StatsTopSection: View {
         var id: String {
             switch self {
             case .title: "top.title"
-            case let .hero(item, _): "top.hero.\(item.id)"
-            case let .ranked(item, _): "top.rank.\(item.rank).\(item.id)"
-            case let .note(text, _, _): "top.note.\(text)"
-            case .seeFullList: "top.list"
+            case .grid: "top.grid"
+            case let .note(text, _): "top.note.\(text)"
             case .bento: "top.bento"
             case .hint: "top.hint"
             }
@@ -42,24 +39,17 @@ struct StatsTopSection: View {
             switch row {
             case let .title(showsAll):
                 titleRow(showsAll: showsAll)
-            case let .hero(item, isLast):
-                heroRow(item, isLast: isLast)
-                    .statsCardSlice(isFirst: true, isLast: isLast)
-            case let .ranked(item, isLast):
-                rankedRow(item, isLast: isLast)
-                    .statsCardSlice(isFirst: false, isLast: isLast)
-            case let .note(text, systemImage, isLast):
-                noteRow(text, systemImage: systemImage, isLast: isLast)
-                    .statsCardSlice(isFirst: false, isLast: isLast)
-            case let .seeFullList(list):
-                Button {
-                    onOpenList?(list)
-                } label: {
-                    StatsLabelValueRow(label: "See full list", value: list.total.formatted(), showsChevron: true)
-                }
-                .buttonStyle(DiaryRowButtonStyle())
-                .accessibilityLabel("See full list, \(list.total.formatted()) titles")
-                .statsCardSlice(isFirst: false, isLast: true)
+            case let .grid(items, hasNote):
+                StatsTopGridView(items: items, onOpenTitle: onOpenTitle)
+                    .padding(.bottom, hasNote ? 4 : StatsSectionLayout.sectionGap)
+            case let .note(text, systemImage):
+                Label(text, systemImage: systemImage)
+                    .font(.footnote)
+                    .foregroundStyle(StatsChartStyle.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 8)
+                    .padding(.bottom, StatsSectionLayout.sectionGap)
             case let .bento(bento, hasHint):
                 StatsBentoView(bento: bento, onOpenTitle: onOpenTitle)
                     .padding(.bottom, hasHint ? 4 : StatsSectionLayout.sectionGap)
@@ -84,115 +74,23 @@ struct StatsTopSection: View {
                     StatsShowAllButton(action: onShowAllHighestRated)
                 }
             }
-        } else if let list = top.list, let onOpenList {
-            Button {
-                onOpenList(list)
-            } label: {
-                StatsSectionTitle(Self.title(for: top), subtitle: list.name)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the list")
         } else {
-            StatsSectionTitle(Self.title(for: top), subtitle: top.isFromList ? top.list?.name : nil)
-        }
-    }
-
-    private func heroRow(_ item: StatsTopItem, isLast: Bool) -> some View {
-        let media = item.media
-        let cell = PosterSlot.logSheet.artworkSize(mediaType: media.ref.mediaType, orientation: media.posterOrientation)
-        return Button {
-            onOpenTitle(media)
-        } label: {
-            HStack(alignment: .center, spacing: 16) {
-                MediaArtwork(
-                    url: media.displayPosterURL,
-                    title: media.displayTitle,
-                    slot: .logSheet,
-                    mediaType: media.ref.mediaType,
-                    orientation: media.posterOrientation
-                )
-                .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
-                .frame(width: cell.width, height: cell.height)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("#\(item.rank)")
-                        .font(.subheadline.weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.45))
-
-                    Text(media.displayTitle)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let year = StatsTitleFormat.year(of: media) {
-                        Text(year)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.45))
-                    }
-
-                    if let stars = item.stars?.value {
-                        StatsStars(stars: stars, size: 13)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(14)
-            .contentShape(Rectangle())
-            .overlay(alignment: .bottom) {
-                if !isLast {
-                    DiarySeparator()
-                        .padding(.leading, 14)
+            StatsSectionTitle(Self.title(for: top)) {
+                if let list = top.list, let onOpenList {
+                    StatsShowAllButton(title: "See full list") { onOpenList(list) }
+                        .accessibilityLabel("See full list, \(list.total.formatted()) titles")
                 }
             }
         }
-        .buttonStyle(DiaryRowButtonStyle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.accessibilityLabel(for: item))
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func rankedRow(_ item: StatsTopItem, isLast: Bool) -> some View {
-        Button {
-            onOpenTitle(item.media)
-        } label: {
-            StatsMediaRow(media: item.media, rank: item.rank, showsSeparator: !isLast) {
-                if let stars = item.stars?.value {
-                    StatsStars(stars: stars)
-                }
-            } trailing: {
-                EmptyView()
-            }
-        }
-        .buttonStyle(DiaryRowButtonStyle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.accessibilityLabel(for: item))
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func noteRow(_ text: String, systemImage: String, isLast: Bool) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.footnote)
-            .foregroundStyle(.white.opacity(0.6))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .bottom) {
-                if !isLast {
-                    DiarySeparator()
-                        .padding(.leading, StatsSectionLayout.separatorInset)
-                }
-            }
     }
 
     // MARK: - Data shaping
 
-    /// "Top 10" for a list (as many as it shows), "Highest rated" for the fallback.
+    /// The tagged list's name, "Highest rated" for the fallback.
     static func title(for top: StatsTop) -> String {
         guard top.isFromList else { return "Highest rated" }
-        return top.items.count >= 2 ? "Top \(top.items.count)" : "Top"
+        let name = top.list?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Top" : name
     }
 
     /// The owner's hint in the fallback, as the server words it: "Tag a ranked movie list
@@ -206,14 +104,14 @@ struct StatsTopSection: View {
 
     static func rows(for top: StatsTop, highestRatedTotal: Int = 0, canShowAll: Bool = true) -> [Row] {
         let items = top.items.sorted { $0.rank < $1.rank }
-        guard let first = items.first else { return [] }
+        guard !items.isEmpty else { return [] }
 
         // The fallback is Highest rated: its bento, the owner's hint, and "Show all" by the title
         // when Highest rated has more than the bento shows.
         guard top.isFromList else {
             let entries = items.map { StatsBentoEntry(rank: $0.rank, media: $0.media, stars: $0.stars?.value) }
             guard let bento = StatsBento(entries, id: "top.bento") else { return [] }
-            let shown = bento.entries.count
+            let shown = 1 + bento.tiles.count
             let hint = hintText(for: top)
             var rows: [Row] = [
                 .title(showsAll: canShowAll && highestRatedTotal > shown),
@@ -225,29 +123,10 @@ struct StatsTopSection: View {
             return rows
         }
 
-        var notes: [Row] = []
-        if top.hintPrivate {
-            notes.append(.note("Only you can see this list.", systemImage: "lock", isLast: false))
-        }
-
-        var footer: Row?
-        if let list = top.list {
-            footer = .seeFullList(list)
-        }
-
-        let ranked = Array(items.dropFirst())
-        let trailingCount = notes.count + (footer == nil ? 0 : 1)
-
-        var rows: [Row] = [.title(showsAll: false), .hero(first, isLast: ranked.isEmpty && trailingCount == 0)]
-        for (index, item) in ranked.enumerated() {
-            rows.append(.ranked(item, isLast: index == ranked.count - 1 && trailingCount == 0))
-        }
-        for (index, note) in notes.enumerated() {
-            guard case let .note(text, image, _) = note else { continue }
-            rows.append(.note(text, systemImage: image, isLast: index == notes.count - 1 && footer == nil))
-        }
-        if let footer {
-            rows.append(footer)
+        let note: Row? = top.hintPrivate ? .note("Only you can see this list.", systemImage: "lock") : nil
+        var rows: [Row] = [.title(showsAll: false), .grid(Array(items.prefix(StatsTopGridMetrics.capacity)), hasNote: note != nil)]
+        if let note {
+            rows.append(note)
         }
         return rows
     }

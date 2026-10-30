@@ -268,20 +268,36 @@ final class StatsSectionsRankingTests: XCTestCase {
 
     // MARK: - Top
 
-    func testTopFromAListShowsHeroRankedRowsAndTheFullList() throws {
+    func testTopFromAListIsItsNameThenTwoRowsOfFive() throws {
         let top = try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 4, list: true))
         let rows = StatsTopSection.rows(for: top)
 
-        XCTAssertEqual(StatsTopSection.title(for: top), "Top 4")
-        let ids = top.items.map(\.id)
-        XCTAssertEqual(rows.map(\.id), ["top.title", "top.hero.\(ids[0])", "top.rank.2.\(ids[1])", "top.rank.3.\(ids[2])", "top.rank.4.\(ids[3])", "top.list"])
-        guard case let .hero(hero, heroIsLast) = rows[1], case let .ranked(_, lastRankedIsLast) = rows[4] else {
-            return XCTFail("Expected hero and ranked rows")
+        XCTAssertEqual(StatsTopSection.title(for: top), "My 2025", "The title is the tagged list's name")
+        XCTAssertEqual(rows.map(\.id), ["top.title", "top.grid"])
+        guard case let .grid(items, hasNote) = rows[1] else { return XCTFail("Expected the grid") }
+        XCTAssertEqual(items.map(\.rank), [1, 2, 3, 4])
+        XCTAssertFalse(hasNote)
+    }
+
+    func testTopGridShowsTheFirstTenInTwoEvenRowsOfFive() throws {
+        let top = try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 12, list: true))
+        guard case let .grid(items, _) = StatsTopSection.rows(for: top)[1] else { return XCTFail("Expected the grid") }
+        XCTAssertEqual(items.map(\.rank), Array(1 ... 10))
+
+        let poster = StatsTopGridMetrics.slot.size
+        XCTAssertEqual(poster.height / poster.width, 1.5, accuracy: 0.01)
+        // The narrowest phone: 375 pt less the page's 16 pt sides.
+        XCTAssertGreaterThanOrEqual(StatsTopGridMetrics.gap(width: 375 - 32), 4)
+        for width: CGFloat in [375 - 32, 402 - 32] {
+            let gap = StatsTopGridMetrics.gap(width: width)
+            let origins = StatsTopGridMetrics.origins(width: width, count: 10)
+            XCTAssertEqual(origins.count, 10)
+            XCTAssertEqual(origins[1].x, poster.width + gap, accuracy: 0.001, "Even columns")
+            XCTAssertEqual(origins[4].x + poster.width, width, accuracy: 0.001, "#5 ends at the edge")
+            XCTAssertEqual(origins[5], CGPoint(x: 0, y: poster.height + StatsTopGridMetrics.rowGap), "#6 starts the second row")
+            XCTAssertEqual(origins[9].y + poster.height, StatsTopGridMetrics.height(count: 10), accuracy: 0.001)
         }
-        XCTAssertEqual(hero.rank, 1)
-        XCTAssertFalse(heroIsLast)
-        XCTAssertFalse(lastRankedIsLast, "See full list closes the card")
-        XCTAssertEqual(rows.last, .seeFullList(StatsTopList(id: 81, name: "My 2025", total: 24)))
+        XCTAssertEqual(StatsTopGridMetrics.height(count: 4), poster.height, "A short list is one row")
     }
 
     func testTopSortsByRank() throws {
@@ -294,22 +310,17 @@ final class StatsSectionsRankingTests: XCTestCase {
            {"rank": 2, "media": \(Self.mediaJSON(id: 2, title: "B")), "stars": "4.5"}
          ]}
         """)
-        var ranks: [Int] = []
-        for row in StatsTopSection.rows(for: top) {
-            switch row {
-            case let .hero(item, _), let .ranked(item, _): ranks.append(item.rank)
-            default: break
-            }
-        }
-        XCTAssertEqual(ranks, [1, 2, 3])
+        guard case let .grid(items, _) = StatsTopSection.rows(for: top)[1] else { return XCTFail("Expected the grid") }
+        XCTAssertEqual(items.map(\.rank), [1, 2, 3])
     }
 
     func testPrivateListTellsTheOwnerOnlyTheyCanSeeIt() throws {
         let top = try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 2, list: true, hintPrivate: true))
         let rows = StatsTopSection.rows(for: top)
 
-        XCTAssertTrue(rows.contains(.note("Only you can see this list.", systemImage: "lock", isLast: false)))
-        XCTAssertEqual(rows.last, .seeFullList(StatsTopList(id: 81, name: "My 2025", total: 24)))
+        XCTAssertEqual(rows.last, .note("Only you can see this list.", systemImage: "lock"))
+        guard case let .grid(_, hasNote) = rows[1] else { return XCTFail("Expected the grid") }
+        XCTAssertTrue(hasNote)
     }
 
     func testFallbackIsHighestRatedWithTheOwnersHint() throws {
@@ -328,8 +339,8 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(rows.last, .hint("Tag a ranked movie list top2025"))
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertTrue(hasHint)
-        XCTAssertEqual(bento.entries.map(\.rank), [1, 2, 3])
-        XCTAssertEqual(bento.entries.first?.stars, 4.5)
+        XCTAssertEqual([bento.lead.rank] + bento.tiles.map(\.rank), [1, 2, 3])
+        XCTAssertEqual(bento.lead.stars, 4.5)
 
         XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 3).first, .title(showsAll: false), "Nothing more to show")
         XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).first, .title(showsAll: false))
@@ -339,10 +350,10 @@ final class StatsSectionsRankingTests: XCTestCase {
         let top = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 10, list: false))
         let rows = StatsTopSection.rows(for: top, highestRatedTotal: 10)
 
-        XCTAssertEqual(rows.first, .title(showsAll: false), "Top sends 10 and the bento shows all 10")
+        XCTAssertEqual(rows.first, .title(showsAll: true), "Top sends 10, the bento shows 9")
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertFalse(hasHint)
-        XCTAssertEqual(bento.entries.count, 10)
+        XCTAssertEqual(bento.tiles.count, 8)
     }
 
     func testOtherViewersSeeTheFallbackWithoutAHint() throws {
@@ -353,7 +364,8 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), ["top.title", "top.bento"])
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertFalse(hasHint)
-        XCTAssertEqual(bento.entries.map(\.media.title), ["T1"])
+        XCTAssertEqual(bento.lead.media.title, "T1")
+        XCTAssertTrue(bento.tiles.isEmpty)
     }
 
     func testHintIsTheServersTextAndIgnoresBlanks() throws {
@@ -364,9 +376,9 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertNil(StatsTopSection.hintText(for: blank))
     }
 
-    func testEmptyTopHasNoRowsAndASingleListItemIsJustTop() throws {
+    func testEmptyTopHasNoRowsAndASingleListItemKeepsTheListName() throws {
         XCTAssertTrue(StatsTopSection.rows(for: try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 0, list: true))).isEmpty)
-        XCTAssertEqual(StatsTopSection.title(for: try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 1, list: true))), "Top")
+        XCTAssertEqual(StatsTopSection.title(for: try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 1, list: true))), "My 2025")
     }
 
     func testTopAccessibilityReadsRankTitleYearAndStars() throws {
@@ -394,47 +406,52 @@ final class StatsSectionsRankingTests: XCTestCase {
 
         XCTAssertEqual(rows.map(\.id), ["highest.title", "highest.bento"], "The bento is one lazy row")
         guard case let .bento(bento) = rows[1] else { return XCTFail("Expected the bento") }
-        XCTAssertEqual(bento.entries.map(\.media.title), ["T1", "T2", "T3", "T4", "T5", "T6"])
-        XCTAssertEqual(bento.entries.map(\.rank), [1, 2, 3, 4, 5, 6])
-        XCTAssertEqual(bento.entries.first?.stars, 5)
+        XCTAssertEqual(bento.lead.media.title, "T1")
+        XCTAssertEqual(bento.lead.rank, 1)
+        XCTAssertEqual(bento.lead.stars, 5)
+        XCTAssertEqual(bento.tiles.map(\.media.title), ["T2", "T3", "T4", "T5", "T6"])
+        XCTAssertEqual(bento.tiles.map(\.rank), [2, 3, 4, 5, 6])
         XCTAssertTrue(StatsHighestRatedSection.hasMore(highest))
         XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 6, total: 6))))
         XCTAssertTrue(StatsHighestRatedSection.rows(for: StatsHighestRated(total: 0, items: [])).isEmpty)
     }
 
-    func testBentoTakesTheTopTenAndShowAllCountsTheRest() throws {
+    func testBentoTakesTheFirstNineAndShowAllCountsTheRest() throws {
         let twelve = try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 12, total: 12))
         guard case let .bento(bento) = StatsHighestRatedSection.rows(for: twelve)[1] else { return XCTFail("Expected the bento") }
 
-        XCTAssertEqual(StatsBento.capacity, 10)
-        XCTAssertEqual(bento.entries.map(\.rank), Array(1 ... 10), "Two rows of five")
-        XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 11th and 12th need Show all")
-        XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 10, total: 10))))
+        XCTAssertEqual(StatsBento.capacity, 9)
+        XCTAssertEqual(bento.tiles.map(\.rank), Array(2 ... 9), "Two rows of four beside the lead")
+        XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 10th to 12th need Show all")
+        XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 9, total: 9))))
 
         let one = try XCTUnwrap(StatsBento([StatsBentoEntry(rank: 1, media: try Self.media(id: 1, title: "A"), stars: nil)], id: "x"))
-        XCTAssertEqual(one.entries.count, 1)
+        XCTAssertTrue(one.tiles.isEmpty)
         XCTAssertNil(StatsBento([], id: "x"))
     }
 
-    func testBentoIsTwoEvenRowsOfFive() {
-        let poster = StatsBentoMetrics.slot.size
-        XCTAssertEqual(poster.height / poster.width, 1.5, accuracy: 0.01)
+    func testBentoLeadIsAsTallAsTwoTileRowsAndGapsAreEven() {
+        XCTAssertEqual(StatsBentoMetrics.leadHeight, StatsBentoMetrics.height, "The lead spans both tile rows")
+        XCTAssertEqual(StatsBentoMetrics.leadSlot.size.height / StatsBentoMetrics.leadSlot.size.width, 1.5, accuracy: 0.01)
+        XCTAssertEqual(StatsBentoMetrics.tileSlot.size.height / StatsBentoMetrics.tileSlot.size.width, 1.5, accuracy: 0.01)
+
         // The narrowest phone: 375 pt less the page's 16 pt sides.
         XCTAssertGreaterThanOrEqual(StatsBentoMetrics.gap(width: 375 - 32), 4)
 
-        for width: CGFloat in [375 - 32, 402 - 32] {
-            let gap = StatsBentoMetrics.gap(width: width)
-            let origins = StatsBentoMetrics.origins(width: width, count: 10)
-            XCTAssertEqual(origins.count, 10)
-            XCTAssertEqual(origins[0], .zero)
-            XCTAssertEqual(origins[1].x, poster.width + gap, accuracy: 0.001, "Even columns")
-            XCTAssertEqual(origins[4].x + poster.width, width, accuracy: 0.001, "#5 ends at the edge")
-            XCTAssertEqual(origins[5], CGPoint(x: 0, y: poster.height + StatsBentoMetrics.rowGap), "#6 starts the second row")
-            XCTAssertEqual(origins[9].x, origins[4].x, "The rows share their columns")
-            XCTAssertEqual(origins[9].y + poster.height, StatsBentoMetrics.height, accuracy: 0.001)
-        }
-        XCTAssertEqual(StatsBentoMetrics.origins(width: 370, count: 3).count, 3)
-        XCTAssertTrue(StatsBentoMetrics.origins(width: 370, count: 0).isEmpty)
+        let width: CGFloat = 402 - 32
+        let gap = StatsBentoMetrics.gap(width: width)
+        let origins = StatsBentoMetrics.origins(width: width, count: 9)
+        let tile = StatsBentoMetrics.tileSlot.size
+        XCTAssertEqual(origins.count, 9)
+        XCTAssertEqual(origins[0], .zero)
+        XCTAssertEqual(origins[1].x - StatsBentoMetrics.leadSlot.size.width, gap, accuracy: 0.001, "Lead to first tile")
+        XCTAssertEqual(origins[2].x - origins[1].x - tile.width, gap, accuracy: 0.001, "Tile to tile")
+        XCTAssertEqual(origins[4].x + tile.width, width, accuracy: 0.001, "The last column ends at the edge")
+        XCTAssertEqual(origins[5].x, origins[1].x, "The second row starts under the first")
+        XCTAssertEqual(origins[5].y, StatsBentoMetrics.tileHeight + StatsBentoMetrics.rowGap)
+        XCTAssertEqual(origins[8].y + StatsBentoMetrics.tileHeight, StatsBentoMetrics.height, accuracy: 0.001)
+        XCTAssertEqual(StatsBentoMetrics.origins(width: width, count: 3).count, 3)
+        XCTAssertTrue(StatsBentoMetrics.origins(width: width, count: 0).isEmpty)
     }
 
     func testBentoCellsReadTheirRank() throws {
