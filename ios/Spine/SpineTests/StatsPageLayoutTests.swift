@@ -90,12 +90,13 @@ final class StatsPageLayoutTests: XCTestCase {
         XCTAssertFalse(StatsPageSection.sections(for: page).contains(.collections))
     }
 
-    func testTheTopFallbackHidesHighestRated() throws {
+    func testHighestRatedKeepsItsPlaceWithoutATaggedList() throws {
         let page = try decode(Self.pageJSON(mediaType: "movie", topSource: "highest_rated"))
         let sections = StatsPageSection.sections(for: page)
 
-        XCTAssertTrue(sections.contains(.top))
-        XCTAssertFalse(sections.contains(.highestRated), "Top already shows the highest rated titles")
+        XCTAssertTrue(sections.contains(.highestRated), "Highest rated always sits above Most watched")
+        XCTAssertEqual(sections.contains(.top), page.top.map { !StatsTopSection.rows(for: $0).isEmpty } ?? false,
+                       "Top shows only as the owner's tag hint")
     }
 
     func testNullAndEmptySectionsAreHidden() throws {

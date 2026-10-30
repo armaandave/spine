@@ -323,50 +323,25 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertTrue(hasNote)
     }
 
-    func testFallbackIsHighestRatedWithTheOwnersHint() throws {
+    func testWithoutATaggedListTheOwnerSeesHowToTagOne() throws {
         let top = try Self.decode(
             StatsTop.self,
             Self.topJSON(source: "highest_rated", count: 3, list: false, tagHint: "Tag a ranked movie list top2025")
         )
 
         XCTAssertFalse(top.isFromList)
-        XCTAssertEqual(StatsTopSection.title(for: top), "Highest rated")
-        XCTAssertEqual(StatsTopSection.hintText(for: top), "Tag a ranked movie list top2025")
-
-        let rows = StatsTopSection.rows(for: top, highestRatedTotal: 40)
-        XCTAssertEqual(rows.map(\.id), ["top.title", "top.rated.0", "top.hint"], "The fallback draws Highest rated's poster rows")
-        XCTAssertEqual(rows.first, .title(showsAll: true))
-        XCTAssertEqual(rows.last, .hint("Tag a ranked movie list top2025"))
-        guard case let .ratedPosters(row, isLast, hasHint) = rows[1] else { return XCTFail("Expected poster rows") }
-        XCTAssertTrue(isLast)
-        XCTAssertTrue(hasHint)
-        XCTAssertEqual(row.items.map(\.media.title), ["T1", "T2", "T3"])
-
-        XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 3).first, .title(showsAll: false), "Nothing more to show")
-        XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).first, .title(showsAll: false))
+        XCTAssertEqual(StatsTopSection.title(for: top), "Top 10")
+        XCTAssertEqual(
+            StatsTopSection.rows(for: top),
+            [.title, .empty("Tag a ranked movie list top2025 to show it here.")],
+            "No posters: Highest rated keeps its own place lower down"
+        )
     }
 
-    func testFallbackCutsHighestRatedIntoRowsOfFour() throws {
-        let top = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 10, list: false))
-        let rows = StatsTopSection.rows(for: top, highestRatedTotal: 10)
-
-        XCTAssertEqual(rows.map(\.id), ["top.title", "top.rated.0", "top.rated.1", "top.rated.2"])
-        XCTAssertEqual(rows.first, .title(showsAll: false), "Top sends all 10 Highest rated has")
-        guard case let .ratedPosters(last, isLast, hasHint) = rows[3] else { return XCTFail("Expected poster rows") }
-        XCTAssertEqual(last.items.count, 2)
-        XCTAssertTrue(isLast)
-        XCTAssertFalse(hasHint)
-    }
-
-    func testOtherViewersSeeTheFallbackWithoutAHint() throws {
+    func testOtherViewersSeeNoTopWithoutATaggedList() throws {
         let top = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 1, list: false))
-        let rows = StatsTopSection.rows(for: top)
-
         XCTAssertNil(StatsTopSection.hintText(for: top))
-        XCTAssertEqual(rows.map(\.id), ["top.title", "top.rated.0"])
-        guard case let .ratedPosters(row, _, hasHint) = rows[1] else { return XCTFail("Expected poster rows") }
-        XCTAssertFalse(hasHint)
-        XCTAssertEqual(row.items.map(\.media.title), ["T1"])
+        XCTAssertTrue(StatsTopSection.rows(for: top).isEmpty)
     }
 
     func testHintIsTheServersTextAndIgnoresBlanks() throws {
@@ -389,16 +364,11 @@ final class StatsSectionsRankingTests: XCTestCase {
 
     // MARK: - Highest rated
 
-    func testHighestRatedShowsOnlyWhenTopIsAList() throws {
+    func testHighestRatedShowsWheneverThereAreRatings() throws {
         let highest = try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 5, total: 5))
-        let listTop = try Self.decode(StatsTop.self, Self.topJSON(source: "list", count: 2, list: true))
-        let fallbackTop = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 2, list: false))
-
-        XCTAssertTrue(StatsHighestRatedSection.isShown(top: listTop, highestRated: highest))
-        XCTAssertFalse(StatsHighestRatedSection.isShown(top: fallbackTop, highestRated: highest))
-        XCTAssertFalse(StatsHighestRatedSection.isShown(top: nil, highestRated: highest))
-        XCTAssertFalse(StatsHighestRatedSection.isShown(top: listTop, highestRated: StatsHighestRated(total: 0, items: [])))
-        XCTAssertFalse(StatsHighestRatedSection.isShown(top: listTop, highestRated: nil))
+        XCTAssertTrue(StatsHighestRatedSection.isShown(highest), "With or without a tagged list")
+        XCTAssertFalse(StatsHighestRatedSection.isShown(StatsHighestRated(total: 0, items: [])))
+        XCTAssertFalse(StatsHighestRatedSection.isShown(nil))
     }
 
     func testHighestRatedIsATitleThenGridRowsInTheServersOrder() throws {

@@ -44,8 +44,8 @@ enum StatsPageSection: String, Hashable, Identifiable {
         switch self {
         case .header: page.header.map { !$0.isEmpty } ?? false
         case .time: page.time.map { !$0.isEmpty } ?? false
-        case .top: page.top.map { !$0.isEmpty } ?? false
-        case .highestRated: StatsHighestRatedSection.isShown(top: page.top, highestRated: page.highestRated)
+        case .top: page.top.map { !StatsTopSection.rows(for: $0).isEmpty } ?? false
+        case .highestRated: StatsHighestRatedSection.isShown(page.highestRated)
         case .activity: page.activity.map { !$0.isEmpty } ?? false
         case .ratings: page.ratings.map { !$0.isEmpty } ?? false
         case .ratedVsEveryone: page.ratedVsEveryone.map { !$0.isEmpty } ?? false
@@ -171,10 +171,8 @@ struct StatsView: View {
                 let refs = top.items.map(\.media.ref)
                 StatsTopSection(
                     top: top,
-                    highestRatedTotal: page.highestRated?.total ?? 0,
                     onOpenTitle: { open(.title($0, within: refs), page: page) },
-                    onOpenList: { open(.list(id: $0.id), page: page) },
-                    onShowAllHighestRated: { showHighestRated(page) }
+                    onOpenList: { open(.list(id: $0.id), page: page) }
                 )
             }
         case .highestRated:

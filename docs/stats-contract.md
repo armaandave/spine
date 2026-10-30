@@ -307,7 +307,7 @@ Highest rated holds every Item in the scope with a title rating (STAT-109), one 
 
 Rows are sorted by stars, highest first, then by the rating's log day, newest first, with current-rating rows after logged rows of the same stars, then by Item ID.
 The section sends the first 12 rows and the total; the show-all endpoint pages through the rest (STAT-310).
-The app shows the Highest rated section only when Top comes from a list, on Global and type tabs alike. Then Highest rated leaves out the Items Top shows (its 12 rows, its total and the show-all endpoint alike), so the two never repeat each other.
+The app always shows the Highest rated section when it has rows, just above Most logged, on Global and type tabs alike. When Top comes from a list, Highest rated leaves out the Items Top shows (its 12 rows, its total and the show-all endpoint alike), so the two never repeat each other.
 
 ### STAT-206: Top reads one tag from the owner's ranked lists
 
@@ -335,6 +335,8 @@ For a calendar-year or All Time range, the owner also gets `tag_hint`:
 
 The tag in the hint is the wanted tag, so All Time reads "topalltime".
 Other viewers, and other ranges, get no hint.
+
+The app doesn't draw these fallback items: without a list, Top is an empty card that shows the owner's hint ("Tag a ranked movie list top2025 to show it here."), and other viewers see no Top section. Highest rated keeps its own place lower on the page.
 
 ### STAT-209: Release years count titles by the year they came out
 

@@ -200,12 +200,11 @@ struct StatsPersonCell: View {
                 .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
 
             VStack(spacing: 2) {
-                // Two lines, always reserved, so every cell's caption lines up.
                 Text(row.person.name)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.88))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2, reservesSpace: true)
+                    .lineLimit(2)
                     .allowsTightening(true)
                     .minimumScaleFactor(0.85)
                 Text(caption)

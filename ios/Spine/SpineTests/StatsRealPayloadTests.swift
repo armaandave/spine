@@ -75,7 +75,8 @@ final class StatsRealPayloadTests: XCTestCase {
         XCTAssertEqual(friend.top?.source, .highestRated)
         XCTAssertNil(friend.top?.tagHint)
         XCTAssertFalse(friend.top?.hintPrivate ?? true)
-        XCTAssertFalse(StatsPageSection.sections(for: friend).contains(.highestRated))
+        XCTAssertTrue(StatsPageSection.sections(for: friend).contains(.highestRated), "Highest rated keeps its place")
+        XCTAssertFalse(StatsPageSection.sections(for: friend).contains(.top), "No list and no hint for a friend")
     }
 
     func testAYearWithoutATaggedListTellsTheOwnerHowToTagOne() throws {
@@ -85,7 +86,11 @@ final class StatsRealPayloadTests: XCTestCase {
 
         let movies = try Self.load("movie-2024").page
         XCTAssertEqual(movies.top?.tagHint, "Tag a ranked movie list top2024")
-        XCTAssertFalse(StatsPageSection.sections(for: movies).contains(.highestRated))
+        XCTAssertEqual(
+            StatsTopSection.rows(for: try XCTUnwrap(movies.top)).last,
+            .empty("Tag a ranked movie list top2024 to show it here.")
+        )
+        XCTAssertTrue(StatsPageSection.sections(for: movies).contains(.highestRated), "Highest rated keeps its place")
     }
 
     func testTheMovieTabHasItsPublicTopListCollectionsAndLanguages() throws {
@@ -309,9 +314,11 @@ final class StatsRealPayloadTests: XCTestCase {
         let shown: [StatsPageSection: Bool] = [
             .header: number(section("header"), "titles") + number(section("header"), "logs") > 0,
             .time: count(section("time"), "rows") > 0,
-            .top: count(top, "items") > 0,
-            .highestRated: count(section("highest_rated"), "items") > 0
-                && top?["source"] as? String == "list" && top?["list"] is JSON,
+            // A tagged list's posters, or the owner's tag hint without one.
+            .top: top?["source"] as? String == "list"
+                ? count(top, "items") > 0
+                : !((top?["tag_hint"] as? String) ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
+            .highestRated: count(section("highest_rated"), "items") > 0,
             .activity: section("activity")?["busiest_day"] is JSON,
             .ratings: number(section("ratings"), "rated") > 0,
             .ratedVsEveryone: count(section("rated_vs_everyone"), "higher") + count(section("rated_vs_everyone"), "lower") > 0,
