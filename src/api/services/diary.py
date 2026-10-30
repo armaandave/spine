@@ -116,11 +116,7 @@ def consumed_at_payload(entry):
 
 def rating_payload(entry):
     """Return a log's rating on the API scale, or None."""
-    if entry.rating is None:
-        return None
-    if single_weight.uses_half_star_rating(entry.item):
-        return str(single_weight.rating_to_wire(entry.rating))
-    return str(entry.rating)
+    return single_weight.rating_to_api(entry.rating, entry.item)
 
 
 def _tv_log(entry, viewer):
@@ -243,6 +239,8 @@ def create_entry(user, data):
                 consumed_at = single_weight.calendar_datetime(consumed_at)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
+    else:
+        rating = _stored_rating(rating, ref["media_type"])
     auto_mark_consumed = data.get("auto_mark_consumed", False)
 
     with transaction.atomic():
@@ -355,7 +353,7 @@ def _create_tv_entry(user, data):
         user,
         item,
         consumed_at=consumed_at,
-        rating=data.get("rating"),
+        rating=_stored_rating(data.get("rating"), ref["media_type"]),
         review=data.get("review", ""),
         liked=data.get("liked"),
         is_rewatch=data.get("is_rewatch"),
@@ -377,6 +375,8 @@ def _create_tv_entry(user, data):
 def _update_tv_entry(entry, data, tags):
     """Edit a TV log through tv_tracking.update_log (TV-405, TV-407, TV-501, TV-502)."""
     payload = {key: value for key, value in data.items() if key in TV_LOG_FIELDS}
+    if "rating" in payload:
+        payload["rating"] = _stored_rating(payload["rating"], entry.item.media_type)
     result = tracking_service._call_tv(
         tv_tracking.update_log,
         entry,
@@ -406,7 +406,22 @@ def update_entry(entry, data):
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
         data.pop("visibility", None)
+    elif "rating" in data:
+        data["rating"] = _stored_rating(data["rating"], entry.item.media_type)
     return tracking_service._call_book(update_diary_entry, entry, data, tags=tags)
+
+
+def _stored_rating(value, media_type):
+    """Return a TV, anime, manga or comic log rating on the 0-10 storage scale.
+
+    Clients that send stars for every type (X-Spine-Rating-Scale) send 0.5-5 here too.
+    """
+    if not single_weight.REQUEST_STARS.get():
+        return value
+    try:
+        return single_weight.rating_from_api(value, media_type)
+    except DjangoValidationError as error:
+        raise serializers.ValidationError({"detail": error.messages[0]}) from error
 
 
 def tag_results(query, user=None, *, limit=10):

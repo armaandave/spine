@@ -2131,8 +2131,7 @@ private struct RecentActivityPoster: View {
                 if let rating = ProfileRecentActivityRailModel.rating(for: item.activity) {
                     ProfileStarRating(
                         rating: rating,
-                        reservesWidth: !ProfileRecentActivityRailModel.isLikedDiary(item.activity),
-                        mediaType: item.activity.media?.ref.mediaType
+                        reservesWidth: !ProfileRecentActivityRailModel.isLikedDiary(item.activity)
                     )
                 }
 
@@ -2176,7 +2175,6 @@ private struct RecentActivityPoster: View {
 private struct ProfileStarRating: View {
     let rating: String?
     var reservesWidth = true
-    var mediaType: String?
 
     var body: some View {
         HStack(spacing: 1) {
@@ -2191,9 +2189,10 @@ private struct ProfileStarRating: View {
         .accessibilityLabel(value.map { "Rating \($0) out of 5 stars" } ?? "")
     }
 
+    /// To the nearest half star: "3.75" draws as 4.
     private var value: Double? {
-        guard let rating, let raw = Double(rating) else { return nil }
-        return ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+        guard let rating, Double(rating) != nil else { return nil }
+        return Double(rating.ratingHalfSteps) / 2
     }
 
     private var symbolNames: [String] {

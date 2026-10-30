@@ -1,7 +1,9 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from app import single_weight
 from app.models import Status
 
 
@@ -45,11 +47,19 @@ TV_RATING_MAX = 10
 def validate_tv_rating(value):
     """Return a TV rating as a whole number 1-10, or None to clear it (TV-504).
 
-    TV keeps the doubled 0-10 wire scale, so new writes accept only the ten half-star
-    values: whole numbers 1 to 10.
+    Without ``X-Spine-Rating-Scale: stars`` TV keeps the doubled 0-10 wire scale, so new
+    writes accept only the ten half-star values: whole numbers 1 to 10. With it they
+    send 0.5-5 stars, stored doubled.
     """
     if value is None:
         return None
+    if single_weight.REQUEST_STARS.get() and not isinstance(value, bool):
+        try:
+            value = single_weight.rating_from_wire(value)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.messages[0]) from error
+        if value is None:
+            return None
     if isinstance(value, bool):
         raise serializers.ValidationError(TV_RATING_MESSAGE)
     try:

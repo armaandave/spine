@@ -7210,10 +7210,10 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testMediaLogRatingMapping() {
-        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: 0, mediaType: "movie"))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 1, mediaType: "movie"), Decimal(string: "0.5"))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10, mediaType: "music"), Decimal(5))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10, mediaType: "book"), Decimal(5))
+        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: 0))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 1), Decimal(string: "0.5"))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10), Decimal(5))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 9), Decimal(string: "4.5"))
 
         let viewModel = MediaLogViewModel(
             detail: TestFixtures.movieDetail,
@@ -7232,7 +7232,7 @@ final class SpineTests: XCTestCase {
 
         viewModel.setRating(locationX: 0, width: 100)
         XCTAssertEqual(viewModel.ratingSteps, 0)
-        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: viewModel.ratingSteps, mediaType: "movie"))
+        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: viewModel.ratingSteps))
     }
 
     @MainActor

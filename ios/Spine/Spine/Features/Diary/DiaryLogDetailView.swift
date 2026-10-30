@@ -493,8 +493,7 @@ struct DiaryLogDetailView: View {
             if let rating = clean(entry.rating) {
                 DiaryStarRating(
                     rating: rating,
-                    fontSize: 17,
-                    mediaType: entry.media.ref.mediaType
+                    fontSize: 17
                 )
             }
 
@@ -704,12 +703,7 @@ final class DiaryLogEditViewModel {
         consumedAt = CalendarDateCodec.date(from: entry.consumedAt) ?? Date()
         gameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
         initialGameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
-        let rating = entry.rating.flatMap { Decimal(string: $0) }
-        ratingSteps = rating.map {
-            entry.media.ref.usesFiveStarRatingScale
-                ? NSDecimalNumber(decimal: $0 * 2).intValue
-                : NSDecimalNumber(decimal: $0).intValue
-        } ?? 0
+        ratingSteps = entry.rating?.ratingHalfSteps ?? 0
         reviewTitle = entry.reviewTitle ?? ""
         review = entry.review ?? ""
         tagDraft = LogTagDraft(tags: entry.tags)
@@ -744,9 +738,7 @@ final class DiaryLogEditViewModel {
         let progress = try gameProgress.request(comparedTo: initialGameProgress)
         return DiaryEntryUpdateRequest(
             consumedAt: consumedAt,
-            rating: ratingSteps > 0
-                ? entry.media.ref.usesFiveStarRatingScale ? Decimal(ratingSteps) / 2 : Decimal(ratingSteps)
-                : nil,
+            rating: ratingSteps > 0 ? Decimal(ratingSteps) / 2 : nil,
             review: review,
             reviewTitle: reviewTitle,
             tags: tagDraft.tags,
@@ -1130,13 +1122,6 @@ enum DiaryLogFormat {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 4 else { return nil }
         return String(trimmed.prefix(4))
-    }
-
-    static func starRatingLabel(_ rating: String) -> String {
-        guard let raw = Double(rating) else { return rating }
-        let stars = raw / 2
-        let value = stars.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(stars))" : String(format: "%.1f", stars)
-        return "\(value)/5"
     }
 
     private static func date(from rawValue: String?) -> Date? {

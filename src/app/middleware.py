@@ -8,7 +8,7 @@ from django.db import DatabaseError, connection
 from django.shortcuts import render
 from django.utils import timezone
 
-from app import request_timing, user_calendar
+from app import request_timing, single_weight, user_calendar
 from app.providers import services
 
 logger = logging.getLogger(__name__)
@@ -138,3 +138,24 @@ class APICalendarTimezoneMiddleware:
             user_calendar.remember(user, name)
         except DatabaseError:
             logger.exception("Could not store the calendar timezone for %s", user.pk)
+
+
+class APIRatingScaleMiddleware:
+    """Send and accept 0.5-5 stars for every type when the native client asks for them.
+
+    New builds send ``X-Spine-Rating-Scale: stars``; storage stays 0-10. Installed
+    builds without the header keep 0-10 on the wire for TV, anime, manga and comics.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        stars = request.headers.get("X-Spine-Rating-Scale", "").lower() == "stars"
+        if not request.path.startswith("/api/") or not stars:
+            return self.get_response(request)
+        token = single_weight.REQUEST_STARS.set(True)
+        try:
+            return self.get_response(request)
+        finally:
+            single_weight.REQUEST_STARS.reset(token)
