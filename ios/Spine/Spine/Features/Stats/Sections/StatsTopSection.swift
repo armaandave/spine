@@ -213,7 +213,7 @@ struct StatsTopSection: View {
         guard top.isFromList else {
             let entries = items.map { StatsBentoEntry(rank: $0.rank, media: $0.media, stars: $0.stars?.value) }
             guard let bento = StatsBento(entries, id: "top.bento") else { return [] }
-            let shown = 1 + (bento.second == nil ? 0 : 1) + bento.tiles.count
+            let shown = bento.entries.count
             let hint = hintText(for: top)
             var rows: [Row] = [
                 .title(showsAll: canShowAll && highestRatedTotal > shown),

@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Highest rated (STAT-205): a compact top 10 in the server's order, five to a row: a big #1
-/// with #2 over its corner and #3 to #5 beside them, then #6 to #10, each with its rank, and
-/// "Show all". The page shows it only
+/// Highest rated (STAT-205): a compact top 10 in the server's order, two rows of five posters
+/// the same size, each with its rank, and "Show all". The page shows it only
 /// when Top comes from a list (`isShown(top:highestRated:)`), so the two never repeat each
 /// other; Top's own fallback uses the same bento.
 struct StatsHighestRatedSection: View {
@@ -71,74 +70,52 @@ struct StatsBentoEntry: Identifiable, Hashable {
     var id: String { media.id }
 }
 
-/// The first ten titles as a bento, five to a row: the big #1 with #2 over its bottom-right
-/// corner and #3 to #5 beside them, then #6 to #10. It's one row of the page's lazy stack, a
-/// fixed-size block like the header's numbers card.
+/// The first ten titles as a bento: two rows of five, all the same size. It's one row of the
+/// page's lazy stack, a fixed-size block like the header's numbers card.
 struct StatsBento: Identifiable, Hashable {
     static let columns = 5
     static var capacity: Int { columns * 2 }
 
     let id: String
-    let lead: StatsBentoEntry
-    let second: StatsBentoEntry?
-    /// #3 to #10 in reading order.
-    let tiles: [StatsBentoEntry]
+    let entries: [StatsBentoEntry]
 
     /// Nil without any entries; entries past the tenth are left out.
     init?(_ entries: [StatsBentoEntry], id: String) {
-        guard let lead = entries.first else { return nil }
+        guard !entries.isEmpty else { return nil }
         self.id = id
-        self.lead = lead
-        second = entries.dropFirst().first
-        tiles = Array(entries.dropFirst(2).prefix(Self.capacity - 2))
+        self.entries = Array(entries.prefix(Self.capacity))
     }
 }
 
-/// Where a poster sits in the bento.
-enum StatsBentoRole: Hashable {
-    case lead
-    case second
-    case tile
-}
-
-/// The bento's measurements. Every poster but #1 has the tile size, in five columns; the width
-/// left over is shared by the four gaps across, so the columns sit evenly on every phone. #1
-/// sits in the first column, as wide as reaches into the second, its bottom level with the
-/// first row's and its top standing above it.
+/// The bento's measurements. Every poster keeps the slot's fixed size, so artwork decodes once
+/// at the size it shows; the width left over is shared by the four gaps across, so the columns
+/// sit evenly on every phone.
 enum StatsBentoMetrics {
-    static let leadSlot: PosterSlot = .statsBentoLead
-    static let tileSlot: PosterSlot = .statsBentoTile
+    static let slot: PosterSlot = .statsBentoTile
     static let rowGap: CGFloat = 12
 
-    /// How far #1 stands above the first row.
-    static var leadRise: CGFloat { leadSlot.size.height - tileSlot.size.height }
-    static var height: CGFloat { leadRise + tileSlot.size.height * 2 + rowGap }
-    /// The five tile columns' own width, with no gaps.
-    static var postersWidth: CGFloat { tileSlot.size.width * CGFloat(StatsBento.columns) }
+    static var height: CGFloat { slot.size.height * 2 + rowGap }
+    /// The five columns' own width, with no gaps.
+    static var postersWidth: CGFloat { slot.size.width * CGFloat(StatsBento.columns) }
 
     /// One of the four equal gaps across `width`.
     static func gap(width: CGFloat) -> CGFloat {
         max((width - postersWidth) / CGFloat(StatsBento.columns - 1), 0)
     }
 
-    static func columnX(_ column: Int, width: CGFloat) -> CGFloat {
-        CGFloat(column) * (tileSlot.size.width + gap(width: width))
-    }
-
-    /// Each cell's top-leading corner: #1, #2 (second column, first row), then the tiles in
-    /// reading order: #3 to #5 in the first row's last three columns, #6 to #10 in the second.
+    /// Each poster's top-leading corner, in reading order: #1 to #5, then #6 to #10.
     static func origins(width: CGFloat, count: Int) -> [CGPoint] {
-        guard count > 0 else { return [] }
-        let firstRow = leadRise
-        let secondRow = leadRise + tileSlot.size.height + rowGap
-        let slots: [CGPoint] = [CGPoint(x: 0, y: 0)]
-            + (1 ..< StatsBento.columns).map { CGPoint(x: columnX($0, width: width), y: firstRow) }
-            + (0 ..< StatsBento.columns).map { CGPoint(x: columnX($0, width: width), y: secondRow) }
-        return Array(slots.prefix(count))
+        let gap = gap(width: width)
+        return (0 ..< min(count, StatsBento.capacity)).map { index in
+            CGPoint(
+                x: CGFloat(index % StatsBento.columns) * (slot.size.width + gap),
+                y: CGFloat(index / StatsBento.columns) * (slot.size.height + rowGap)
+            )
+        }
     }
 }
 
-/// Places the bento's cells at `StatsBentoMetrics.origins`, each at its own fixed size.
+/// Places the bento's posters at `StatsBentoMetrics.origins`, each at the slot's fixed size.
 struct StatsBentoLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         CGSize(width: proposal.width ?? StatsBentoMetrics.postersWidth, height: StatsBentoMetrics.height)
@@ -152,20 +129,15 @@ struct StatsBentoLayout: Layout {
     }
 }
 
-/// The bento: the big #1 with #2 over its corner and #3 to #5 beside them, then #6 to #10.
+/// The bento: two rows of five posters.
 struct StatsBentoView: View {
     let bento: StatsBento
     let onOpenTitle: (MediaSummary) -> Void
 
     var body: some View {
         StatsBentoLayout {
-            StatsBentoCell(entry: bento.lead, role: .lead) { onOpenTitle(bento.lead.media) }
-            if let second = bento.second {
-                StatsBentoCell(entry: second, role: .second) { onOpenTitle(second.media) }
-                    .zIndex(1)
-            }
-            ForEach(bento.tiles) { entry in
-                StatsBentoCell(entry: entry, role: .tile) { onOpenTitle(entry.media) }
+            ForEach(bento.entries) { entry in
+                StatsBentoCell(entry: entry) { onOpenTitle(entry.media) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -176,31 +148,27 @@ struct StatsBentoView: View {
 /// show's artwork).
 struct StatsBentoCell: View {
     let entry: StatsBentoEntry
-    let role: StatsBentoRole
     let action: () -> Void
-
-    private var isLead: Bool { role == .lead }
-    private var slot: PosterSlot { isLead ? StatsBentoMetrics.leadSlot : StatsBentoMetrics.tileSlot }
 
     var body: some View {
         Button(action: action) {
             MediaArtwork(
                 url: entry.media.displayPosterURL,
                 title: entry.media.displayTitle,
-                slot: slot,
+                slot: StatsBentoMetrics.slot,
                 mediaType: entry.media.ref.mediaType,
                 orientation: entry.media.posterOrientation
             )
             .overlay(alignment: .topLeading) {
-                StatsBentoBadge(text: "\(entry.rank)", isLarge: isLead)
+                StatsBentoBadge(text: "\(entry.rank)")
             }
             .overlay(alignment: .bottomLeading) {
                 if let season = StatsRatedPosterCell.seasonTag(for: entry.media.ref) {
-                    StatsBentoBadge(text: season, isLarge: isLead)
+                    StatsBentoBadge(text: season)
                 }
             }
-            .shadow(color: .black.opacity(role == .second ? 0.5 : 0.28), radius: role == .second ? 8 : 6, y: 3)
-            .frame(width: slot.size.width, height: slot.size.height, alignment: .bottom)
+            .shadow(color: .black.opacity(0.28), radius: 6, y: 3)
+            .frame(width: StatsBentoMetrics.slot.size.width, height: StatsBentoMetrics.slot.size.height, alignment: .bottom)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -223,18 +191,17 @@ struct StatsBentoCell: View {
 /// any artwork.
 private struct StatsBentoBadge: View {
     let text: String
-    let isLarge: Bool
 
     var body: some View {
         Text(text)
-            .font(.system(size: isLarge ? 13 : 10, weight: .bold))
+            .font(.system(size: 11, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(.white)
             .lineLimit(1)
-            .padding(.horizontal, isLarge ? 6 : 4)
-            .frame(minWidth: isLarge ? 22 : 16, minHeight: isLarge ? 22 : 16)
-            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: isLarge ? 6 : 4, style: .continuous))
-            .padding(isLarge ? 6 : 3)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .padding(4)
             .accessibilityHidden(true)
     }
 }

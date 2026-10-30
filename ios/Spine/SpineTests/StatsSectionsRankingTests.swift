@@ -328,8 +328,8 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(rows.last, .hint("Tag a ranked movie list top2025"))
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertTrue(hasHint)
-        XCTAssertEqual([bento.lead.rank, bento.second?.rank] + bento.tiles.map(\.rank), [1, 2, 3])
-        XCTAssertEqual(bento.lead.stars, 4.5)
+        XCTAssertEqual(bento.entries.map(\.rank), [1, 2, 3])
+        XCTAssertEqual(bento.entries.first?.stars, 4.5)
 
         XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 3).first, .title(showsAll: false), "Nothing more to show")
         XCTAssertEqual(StatsTopSection.rows(for: top, highestRatedTotal: 40, canShowAll: false).first, .title(showsAll: false))
@@ -342,8 +342,7 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(rows.first, .title(showsAll: false), "Top sends 10 and the bento shows all 10")
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertFalse(hasHint)
-        XCTAssertEqual(bento.second?.rank, 2)
-        XCTAssertEqual(bento.tiles.count, 8)
+        XCTAssertEqual(bento.entries.count, 10)
     }
 
     func testOtherViewersSeeTheFallbackWithoutAHint() throws {
@@ -354,9 +353,7 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), ["top.title", "top.bento"])
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertFalse(hasHint)
-        XCTAssertEqual(bento.lead.media.title, "T1")
-        XCTAssertNil(bento.second)
-        XCTAssertTrue(bento.tiles.isEmpty)
+        XCTAssertEqual(bento.entries.map(\.media.title), ["T1"])
     }
 
     func testHintIsTheServersTextAndIgnoresBlanks() throws {
@@ -397,12 +394,9 @@ final class StatsSectionsRankingTests: XCTestCase {
 
         XCTAssertEqual(rows.map(\.id), ["highest.title", "highest.bento"], "The bento is one lazy row")
         guard case let .bento(bento) = rows[1] else { return XCTFail("Expected the bento") }
-        XCTAssertEqual(bento.lead.media.title, "T1")
-        XCTAssertEqual(bento.lead.rank, 1)
-        XCTAssertEqual(bento.lead.stars, 5)
-        XCTAssertEqual(bento.second?.media.title, "T2")
-        XCTAssertEqual(bento.tiles.map(\.media.title), ["T3", "T4", "T5", "T6"])
-        XCTAssertEqual(bento.tiles.map(\.rank), [3, 4, 5, 6])
+        XCTAssertEqual(bento.entries.map(\.media.title), ["T1", "T2", "T3", "T4", "T5", "T6"])
+        XCTAssertEqual(bento.entries.map(\.rank), [1, 2, 3, 4, 5, 6])
+        XCTAssertEqual(bento.entries.first?.stars, 5)
         XCTAssertTrue(StatsHighestRatedSection.hasMore(highest))
         XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 6, total: 6))))
         XCTAssertTrue(StatsHighestRatedSection.rows(for: StatsHighestRated(total: 0, items: [])).isEmpty)
@@ -413,41 +407,31 @@ final class StatsSectionsRankingTests: XCTestCase {
         guard case let .bento(bento) = StatsHighestRatedSection.rows(for: twelve)[1] else { return XCTFail("Expected the bento") }
 
         XCTAssertEqual(StatsBento.capacity, 10)
-        XCTAssertEqual(bento.second?.rank, 2, "#2 tucks behind the lead")
-        XCTAssertEqual(bento.tiles.map(\.rank), Array(3 ... 10), "#3 to #5 finish the first row, #6 to #10 the second")
+        XCTAssertEqual(bento.entries.map(\.rank), Array(1 ... 10), "Two rows of five")
         XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 11th and 12th need Show all")
         XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 10, total: 10))))
 
         let one = try XCTUnwrap(StatsBento([StatsBentoEntry(rank: 1, media: try Self.media(id: 1, title: "A"), stars: nil)], id: "x"))
-        XCTAssertNil(one.second)
-        XCTAssertTrue(one.tiles.isEmpty)
+        XCTAssertEqual(one.entries.count, 1)
         XCTAssertNil(StatsBento([], id: "x"))
     }
 
-    func testBentoIsFiveColumnsWithTheLeadStandingAboveTheFirstRow() {
-        XCTAssertEqual(StatsBentoMetrics.leadSlot.size.height / StatsBentoMetrics.leadSlot.size.width, 1.5, accuracy: 0.01)
-        XCTAssertEqual(StatsBentoMetrics.tileSlot.size.height / StatsBentoMetrics.tileSlot.size.width, 1.5, accuracy: 0.01)
-        XCTAssertGreaterThan(StatsBentoMetrics.leadSlot.size.width, StatsBentoMetrics.tileSlot.size.width, "#1 is the big one")
-
+    func testBentoIsTwoEvenRowsOfFive() {
+        let poster = StatsBentoMetrics.slot.size
+        XCTAssertEqual(poster.height / poster.width, 1.5, accuracy: 0.01)
         // The narrowest phone: 375 pt less the page's 16 pt sides.
         XCTAssertGreaterThanOrEqual(StatsBentoMetrics.gap(width: 375 - 32), 4)
 
         for width: CGFloat in [375 - 32, 402 - 32] {
             let gap = StatsBentoMetrics.gap(width: width)
             let origins = StatsBentoMetrics.origins(width: width, count: 10)
-            let tile = StatsBentoMetrics.tileSlot.size
-            let lead = StatsBentoMetrics.leadSlot.size
             XCTAssertEqual(origins.count, 10)
             XCTAssertEqual(origins[0], .zero)
-            XCTAssertEqual(origins[0].y + lead.height, origins[1].y + tile.height, "#1's bottom is level with the first row's")
-            XCTAssertGreaterThan(lead.width, origins[1].x, "#2 sits over #1's bottom-right corner")
-            XCTAssertEqual(origins[2].x - origins[1].x, tile.width + gap, accuracy: 0.001, "Even columns")
-            XCTAssertEqual(origins[4].x + tile.width, width, accuracy: 0.001, "#5 ends at the edge")
-            XCTAssertEqual(origins[5].x, 0, "#6 starts the second row")
-            XCTAssertEqual(origins[6].x, origins[1].x, "The rows share their columns")
-            XCTAssertEqual(origins[9].x + tile.width, width, accuracy: 0.001, "#10 ends at the edge")
-            XCTAssertEqual(origins[5].y, origins[1].y + tile.height + StatsBentoMetrics.rowGap)
-            XCTAssertEqual(origins[9].y + tile.height, StatsBentoMetrics.height, accuracy: 0.001)
+            XCTAssertEqual(origins[1].x, poster.width + gap, accuracy: 0.001, "Even columns")
+            XCTAssertEqual(origins[4].x + poster.width, width, accuracy: 0.001, "#5 ends at the edge")
+            XCTAssertEqual(origins[5], CGPoint(x: 0, y: poster.height + StatsBentoMetrics.rowGap), "#6 starts the second row")
+            XCTAssertEqual(origins[9].x, origins[4].x, "The rows share their columns")
+            XCTAssertEqual(origins[9].y + poster.height, StatsBentoMetrics.height, accuracy: 0.001)
         }
         XCTAssertEqual(StatsBentoMetrics.origins(width: 370, count: 3).count, 3)
         XCTAssertTrue(StatsBentoMetrics.origins(width: 370, count: 0).isEmpty)

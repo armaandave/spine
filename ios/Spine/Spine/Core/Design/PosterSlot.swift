@@ -19,9 +19,7 @@ enum PosterSlot {
     case hofCrown
     /// Square album art on Search's featured tiles.
     case featuredSquare
-    /// Stats' Highest rated #1, standing above the first row of `statsBentoTile`.
-    case statsBentoLead
-    /// Stats' Highest rated #2 to #10, five across on the narrowest phone.
+    /// Stats' Highest rated top 10, five across on the narrowest phone.
     case statsBentoTile
 
     var size: CGSize {
@@ -54,8 +52,6 @@ enum PosterSlot {
             CGSize(width: 64, height: 96)
         case .featuredSquare:
             CGSize(width: 60, height: 60)
-        case .statsBentoLead:
-            CGSize(width: 104, height: 156)
         case .statsBentoTile:
             CGSize(width: 62, height: 93)
         }
@@ -67,7 +63,7 @@ enum PosterSlot {
             4
         case .diaryEntry:
             6
-        case .hero, .logSheet, .statsBentoLead:
+        case .hero, .logSheet:
             10
         default:
             8
