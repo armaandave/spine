@@ -95,7 +95,7 @@ final class AutofocusTextField: UITextField {
         super.didMoveToWindow()
         guard window != nil, !hasFocusedOnce else { return }
         hasFocusedOnce = true
-        // One main-queue hop, as the book progress panel does, so the window has finished attaching.
+        // One main-queue hop, so the window has finished attaching.
         DispatchQueue.main.async { [weak self] in
             self?.becomeFirstResponder()
         }

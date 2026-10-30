@@ -173,24 +173,36 @@ struct GamePlaythroughEditor: View {
 }
 
 /// Sizes a sheet to its list's rows, so it opens with no empty space and has no taller
-/// height to drag into. Apply it to the List inside the sheet.
+/// height to drag into. Apply it to the List inside the sheet. A sheet that sits on the
+/// keyboard (`aboveKeyboard`) leaves out the home indicator's inset, which the keyboard covers.
 struct FitsSheetToContent: ViewModifier {
+    var aboveKeyboard = false
     @State private var height: CGFloat = 320
+    @State private var hasMeasured = false
 
     func body(content: Content) -> some View {
         content
             .listSectionSpacing(.compact)
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
+                geometry.contentSize.height + geometry.contentInsets.top
+                    + (aboveKeyboard ? 0 : geometry.contentInsets.bottom)
             } action: { _, newHeight in
-                height = newHeight
+                // A list measured before its first layout reads zero; sizing the sheet to that would leave it no
+                // room to lay out, so it would never measure again.
+                guard newHeight > 0 else { return }
+                // While the keyboard rises the bar's inset reads zero for a moment; a sheet on the keyboard only
+                // grows, so that reading can't leave its last row under the keyboard.
+                height = aboveKeyboard && hasMeasured ? max(height, newHeight) : newHeight
+                hasMeasured = true
             }
             .presentationDetents([.height(height)])
     }
 }
 
 extension View {
-    func fitsSheetToContent() -> some View { modifier(FitsSheetToContent()) }
+    func fitsSheetToContent(aboveKeyboard: Bool = false) -> some View {
+        modifier(FitsSheetToContent(aboveKeyboard: aboveKeyboard))
+    }
 }
 
 struct GameActionSheet: View {
@@ -265,8 +277,8 @@ struct GameActionSheet: View {
     }
 }
 
-/// Update Progress for a game, laid out like the book progress panel: one number,
-/// hours or percent, against the last saved value.
+/// Update Progress for a game, laid out like the book's sheet (`ProgressSheetForm`): hours played or percent
+/// complete against the last saved value, and Finished Playing. Pause, Edit Dates, Drop, Restart and Delete sit in ⋯.
 struct GameProgressSheet: View {
     private enum Mode: String, CaseIterable, Identifiable {
         case hours = "Hours"
@@ -280,7 +292,7 @@ struct GameProgressSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
-    let detail: MediaDetail
+    let title: String
     let playthrough: GamePlaythroughState
     let onSave: (GamePlaythroughWriteRequest) async -> Bool
     let onAction: (String) -> Void
@@ -294,14 +306,12 @@ struct GameProgressSheet: View {
     @State private var isClosing = false
     @State private var error: String?
     @State private var pending: PendingAction?
-    @State private var contentHeight: CGFloat = 300
-    @State private var focusRequest = 0
 
-    init(detail: MediaDetail, playthrough: GamePlaythroughState,
+    init(title: String, playthrough: GamePlaythroughState,
          onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) -> Void,
          onDelete: @escaping () -> Void, onFinish: @escaping () -> Void, onEditDates: @escaping () -> Void,
          errorMessage: @escaping () -> String?) {
-        self.detail = detail
+        self.title = title
         self.playthrough = playthrough
         self.onSave = onSave
         self.onAction = onAction
@@ -317,10 +327,10 @@ struct GameProgressSheet: View {
         mode == .hours ? playthrough.totalMinutes.map { $0 / 60 } : playthrough.percentage
     }
 
-    private var lastText: String {
+    private var lastSaved: String? {
         switch mode {
-        case .hours: playthrough.totalMinutes.map(GameProgressValues.timeLabel) ?? "--"
-        case .percent: playthrough.percentage.map { "\($0)%" } ?? "--"
+        case .hours: playthrough.totalMinutes.map { "Last saved at \(GameProgressValues.timeLabel($0))" }
+        case .percent: playthrough.percentage.map { "Last saved at \($0)%" }
         }
     }
 
@@ -332,53 +342,41 @@ struct GameProgressSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            header
-                .disabled(saving)
-            HStack(spacing: 8) {
-                lastStat
-                nowStat
+        let warning = validation ?? error
+        ProgressSheetForm(
+            title: title,
+            subtitle: playthrough.status == "Paused" ? "Paused" : nil,
+            numberLabel: mode == .hours ? "Hours played" : "Percent complete",
+            number: $input,
+            placeholder: lastValue.map(String.init) ?? "0",
+            unit: mode == .hours ? "h" : "%",
+            footer: warning ?? lastSaved,
+            footerIsWarning: warning != nil,
+            finishTitle: playthrough.isUnfinished ? "Finished Playing" : nil,
+            canSave: newValue != nil && validation == nil && !isClosing,
+            isSaving: saving,
+            onSave: save,
+            onFinish: { finish() }
+        ) {
+            Picker("Track by", selection: $mode) {
+                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
             }
-            if let message = validation ?? error {
-                Text(message)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        } moreActions: {
             if playthrough.isUnfinished {
-                ProgressStatusRow(choices: [
-                    ProgressStatusChoice(title: "Playing", systemImage: "play.fill",
-                                         isCurrent: playthrough.status == "In progress") { choose { onAction("resume") } },
-                    ProgressStatusChoice(title: "Paused", systemImage: "pause.fill",
-                                         isCurrent: playthrough.status == "Paused") { choose { onAction("pause") } },
-                    ProgressStatusChoice(title: "Finished", systemImage: "checkmark", isCurrent: false, action: onFinish),
-                    ProgressStatusChoice(title: "Dropped", systemImage: "xmark", isCurrent: false) { pending = .drop },
-                ])
-                .disabled(saving)
-            }
-            saveButton
-            HStack(spacing: 22) {
-                Button("Edit Dates", action: onEditDates)
-                if playthrough.isUnfinished {
-                    Button("Restart") { pending = .restart }
-                    Button("Delete", role: .destructive) { pending = .delete }
+                if playthrough.status == "Paused" {
+                    Button("Resume Playing", systemImage: "play.fill") { choose { onAction("resume") } }
+                } else {
+                    Button("Pause", systemImage: "pause.fill") { choose { onAction("pause") } }
                 }
             }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .buttonStyle(.borderless)
-            .disabled(saving)
+            Button("Edit Dates", systemImage: "calendar", action: onEditDates)
+            if playthrough.isUnfinished {
+                Button("Mark as Dropped", systemImage: "xmark") { pending = .drop }
+                Divider()
+                Button("Restart from Beginning", systemImage: "arrow.counterclockwise") { pending = .restart }
+                Button("Delete Playthrough", systemImage: "trash", role: .destructive) { pending = .delete }
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 22)
-        .padding(.bottom, 16)
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(contentHeight)])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(Color(uiColor: .secondarySystemBackground))
-        .interactiveDismissDisabled(saving)
         .onChange(of: mode) { input = "" }
         .onChange(of: input) { _, value in
             let digits = String(value.filter(\.isNumber).prefix(mode == .hours ? 5 : 3))
@@ -398,76 +396,6 @@ struct GameProgressSheet: View {
             }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: { Text(confirmationMessage) }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            MediaArtwork(url: detail.displayPosterURL, title: detail.title, slot: .searchRow,
-                         mediaType: detail.ref.mediaType, orientation: detail.posterOrientation)
-                .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Update progress").font(.headline.weight(.semibold))
-                Picker("Progress as", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 180)
-            }
-            Spacer(minLength: 0)
-            Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.system(size: 14, weight: .semibold))
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Close")
-        }
-    }
-
-    private var lastStat: some View {
-        VStack(spacing: 6) {
-            Text("Last").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(lastText)
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 72)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var nowStat: some View {
-        VStack(spacing: 6) {
-            Text("Now").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            HStack(spacing: 2) {
-                AutofocusNumberField(text: $input, placeholder: lastValue.map(String.init) ?? "0",
-                                     accessibilityLabel: mode == .hours ? "Hours played" : "Percent complete",
-                                     focusRequest: focusRequest)
-                Text(mode == .hours ? "h" : "%")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 72)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contentShape(Rectangle())
-        .onTapGesture { focusRequest += 1 }
-    }
-
-    private var saveButton: some View {
-        let enabled = newValue != nil && validation == nil && !saving
-        return Button(action: save) {
-            Group {
-                if saving { ProgressView() } else { Text("Save Progress").font(.headline.weight(.semibold)) }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .foregroundStyle(enabled ? .black : .white.opacity(0.48))
-            .background(enabled ? Color.white : Color.white.opacity(0.12), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
     }
 
     private func save() {
@@ -506,6 +434,13 @@ struct GameProgressSheet: View {
         }
     }
 
+    /// Finished Playing: the completion log, which closes the sheet before it opens.
+    private func finish() {
+        guard !saving, !isClosing else { return }
+        isClosing = true
+        onFinish()
+    }
+
     /// Status changes apply behind the sheet, so it closes on the tap. A second tap while it slides away is ignored.
     private func choose(_ choice: () -> Void) {
         guard !saving, !isClosing else { return }
@@ -522,48 +457,6 @@ struct GameProgressSheet: View {
             if await operation() { dismiss() }
             else { error = errorMessage() ?? "Could not save. Try again." }
             saving = false
-        }
-    }
-}
-
-/// One status option in an update-progress panel.
-struct ProgressStatusChoice: Identifiable {
-    let title: String
-    let systemImage: String
-    let isCurrent: Bool
-    let action: () -> Void
-    var id: String { title }
-}
-
-/// The status of the current playthrough or journey as a row of plain choices, the
-/// current one highlighted, so changing status sits next to the progress itself.
-struct ProgressStatusRow: View {
-    let choices: [ProgressStatusChoice]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Status").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                ForEach(choices) { choice in
-                    Button(action: choice.action) {
-                        VStack(spacing: 4) {
-                            Image(systemName: choice.systemImage).font(.system(size: 15, weight: .semibold))
-                            Text(choice.title)
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .foregroundStyle(choice.isCurrent ? Color.black : Color.primary)
-                        .background(choice.isCurrent ? Color.white : Color.primary.opacity(0.1),
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(choice.isCurrent)
-                    .accessibilityAddTraits(choice.isCurrent ? .isSelected : [])
-                }
-            }
         }
     }
 }

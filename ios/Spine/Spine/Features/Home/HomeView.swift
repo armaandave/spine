@@ -336,7 +336,9 @@ struct HomeView: View {
                 trackingRepository: trackingRepository,
                 diaryRepository: diaryRepository,
                 onUnauthorized: onUnauthorized
-            )
+            ) { ref in
+                selectedRef = ref
+            }
             .fullScreenCover(item: $selectedActivityEntry, onDismiss: { selectedActivityEntry = nil }) { selection in
                 DiaryLogDetailNavigationCover(
                     entryId: selection.id,
