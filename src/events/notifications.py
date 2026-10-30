@@ -164,7 +164,7 @@ def get_user_releases(users, target_events):
 
     user_enabled_types = {}
     for user in users:
-        user_enabled_types[user.id] = user.get_active_media_types()
+        user_enabled_types[user.id] = user.get_enabled_media_types()
 
     user_tracking_data = get_all_user_tracking_data(
         users,
