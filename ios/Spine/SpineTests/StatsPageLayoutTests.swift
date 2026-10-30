@@ -9,8 +9,8 @@ final class StatsPageLayoutTests: XCTestCase {
         let page = try decode(Self.pageJSON(mediaType: nil))
 
         XCTAssertEqual(StatsPageSection.sections(for: page), [
-            .header, .time, .top, .highestRated, .activity, .ratings, .ratedVsEveryone, .releaseYears,
-            .genres, .languages, .listProgress, .mostLogged, .milestones,
+            .header, .time, .top, .activity, .ratings, .ratedVsEveryone, .releaseYears,
+            .genres, .languages, .listProgress, .highestRated, .mostLogged, .milestones,
         ])
     }
 
@@ -18,8 +18,8 @@ final class StatsPageLayoutTests: XCTestCase {
         let page = try decode(Self.pageJSON(mediaType: "movie"))
 
         XCTAssertEqual(StatsPageSection.sections(for: page), [
-            .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
-            .languages, .activity, .listProgress, .collections, .mostLogged, .milestones,
+            .header, .top, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+            .languages, .activity, .listProgress, .collections, .highestRated, .mostLogged, .milestones,
         ])
         XCTAssertNotNil(page.time, "The tab's Time row still feeds the header's third number")
     }
@@ -37,8 +37,8 @@ final class StatsPageLayoutTests: XCTestCase {
         let page = try decode(Self.pageJSON(mediaType: "movie", people: people))
 
         XCTAssertEqual(StatsPageSection.sections(for: page), [
-            .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
-            .languages, .people, .activity, .listProgress, .collections, .mostLogged, .milestones,
+            .header, .top, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+            .languages, .people, .activity, .listProgress, .collections, .highestRated, .mostLogged, .milestones,
         ])
         XCTAssertEqual(StatsPeopleData.visibleGroups(page.people).map(\.role), ["cast"], "The empty Directors group hides")
 

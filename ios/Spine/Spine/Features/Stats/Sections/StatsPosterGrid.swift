@@ -12,6 +12,8 @@ struct StatsPosterGridRow<Item: Identifiable>: Identifiable {
     let items: [Item]
 }
 
+extension StatsPosterGridRow: Equatable, Hashable where Item: Hashable {}
+
 enum StatsPosterGridLayout {
     static let columns = 4
     /// Every cell is this size whatever the artwork, so square album art and portrait posters

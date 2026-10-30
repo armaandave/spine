@@ -22,15 +22,15 @@ enum StatsPageSection: String, Hashable, Identifiable {
 
     /// Global's order (STAT-218).
     static let globalOrder: [StatsPageSection] = [
-        .header, .time, .top, .highestRated, .activity, .ratings, .ratedVsEveryone, .releaseYears,
-        .genres, .languages, .listProgress, .mostLogged, .milestones,
+        .header, .time, .top, .activity, .ratings, .ratedVsEveryone, .releaseYears,
+        .genres, .languages, .listProgress, .highestRated, .mostLogged, .milestones,
     ]
 
     /// A type tab's order (STAT-218). Time isn't a section here: the header's third number is
     /// the tab's measure. People (STAT-219) follows Genres and Languages.
     static let typeOrder: [StatsPageSection] = [
-        .header, .top, .highestRated, .ratings, .ratedVsEveryone, .releaseYears, .genres,
-        .languages, .people, .activity, .listProgress, .collections, .mostLogged, .milestones,
+        .header, .top, .ratings, .ratedVsEveryone, .releaseYears, .genres,
+        .languages, .people, .activity, .listProgress, .collections, .highestRated, .mostLogged, .milestones,
     ]
 
     /// The sections a page shows, in its tab's order, leaving out null and empty ones

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Top (STAT-206 to STAT-208): the tagged list's name, its first ten titles in two rows of five,
-/// and "See full list". Without a tagged list it's "Highest rated", drawn as Highest rated's
-/// bento, and the owner sees how to tag one. One view per row, for the page's lazy stack.
+/// and "See full list". Without a tagged list it's "Highest rated", drawn like the Highest rated
+/// section, and the owner sees how to tag one. One view per row, for the page's lazy stack.
 struct StatsTopSection: View {
     let top: StatsTop
     /// Highest rated's total, for the fallback's "Show all".
@@ -18,9 +18,10 @@ struct StatsTopSection: View {
         /// The list's first ten, in its order; `hasNote` when a note follows it.
         case grid([StatsTopItem], hasNote: Bool)
         case note(String, systemImage: String)
-        /// The fallback's titles; `hasHint` when the owner's hint follows it.
-        case bento(StatsBento, hasHint: Bool)
-        /// The owner's hint under the fallback's bento.
+        /// A row of the fallback's posters, as the Highest rated section draws them; `isLast` on
+        /// the final row, `hasHint` when the owner's hint follows it.
+        case ratedPosters(StatsPosterGridRow<StatsRatedTitle>, isLast: Bool, hasHint: Bool)
+        /// The owner's hint under the fallback's posters.
         case hint(String)
 
         var id: String {
@@ -28,7 +29,7 @@ struct StatsTopSection: View {
             case .title: "top.title"
             case .grid: "top.grid"
             case let .note(text, _): "top.note.\(text)"
-            case .bento: "top.bento"
+            case let .ratedPosters(row, _, _): "top.\(row.id)"
             case .hint: "top.hint"
             }
         }
@@ -50,9 +51,13 @@ struct StatsTopSection: View {
                     .padding(.horizontal, 4)
                     .padding(.top, 8)
                     .padding(.bottom, StatsSectionLayout.sectionGap)
-            case let .bento(bento, hasHint):
-                StatsBentoView(bento: bento, onOpenTitle: onOpenTitle)
-                    .padding(.bottom, hasHint ? 4 : StatsSectionLayout.sectionGap)
+            case let .ratedPosters(gridRow, isLast, hasHint):
+                StatsPosterGridRowView(row: gridRow) { title in
+                    StatsRatedPosterCell(title: title) {
+                        onOpenTitle(title.media)
+                    }
+                }
+                .padding(.bottom, isLast ? (hasHint ? 4 : StatsSectionLayout.sectionGap) : StatsPosterGridLayout.rowSpacing)
             case let .hint(text):
                 Label(text, systemImage: "tag")
                     .font(.footnote)
@@ -106,17 +111,14 @@ struct StatsTopSection: View {
         let items = top.items.sorted { $0.rank < $1.rank }
         guard !items.isEmpty else { return [] }
 
-        // The fallback is Highest rated: its bento, the owner's hint, and "Show all" by the title
-        // when Highest rated has more than the bento shows.
+        // The fallback is Highest rated, drawn like the Highest rated section: its poster rows,
+        // the owner's hint, and "Show all" by the title when Highest rated has more.
         guard top.isFromList else {
-            let entries = items.map { StatsBentoEntry(rank: $0.rank, media: $0.media, stars: $0.stars?.value) }
-            guard let bento = StatsBento(entries, id: "top.bento") else { return [] }
-            let shown = 1 + bento.tiles.count
+            let titles = items.map { StatsRatedTitle(media: $0.media, stars: $0.stars, day: nil) }
+            let gridRows = StatsPosterGridLayout.rows(titles, idPrefix: "rated")
             let hint = hintText(for: top)
-            var rows: [Row] = [
-                .title(showsAll: canShowAll && highestRatedTotal > shown),
-                .bento(bento, hasHint: hint != nil),
-            ]
+            var rows: [Row] = [.title(showsAll: canShowAll && highestRatedTotal > titles.count)]
+            rows += gridRows.map { .ratedPosters($0, isLast: $0.index == gridRows.count - 1, hasHint: hint != nil) }
             if let hint {
                 rows.append(.hint(hint))
             }
