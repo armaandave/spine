@@ -601,6 +601,23 @@ class ErrorTests(FillTestCase):
             self.assertIsNone(book.metadata_attempted_at)
         self.assertEqual(set(metadata_fill.pending_items()), set(books))
 
+    def test_a_rate_limit_stops_the_provider_without_pushing_books_back_a_week(self):
+        books = [self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id=str(400 + n)) for n in range(2)]
+        film = self.item()
+        self.patch_hardcover(provider_error(429, Sources.HARDCOVER.value))
+        self.patch_metadata(lambda *args, **kwargs: movie_metadata())
+
+        totals = metadata_fill.fill_in_process()
+
+        self.assertEqual(totals["retry_later"], 0)
+        self.refresh(film, *books)
+        self.assertEqual(film.metadata_version, CURRENT)
+        # Hardcover only said "slow down": the next run asks again, not one in a week.
+        for book in books:
+            self.assertEqual(book.metadata_version, 0)
+            self.assertIsNone(book.metadata_attempted_at)
+        self.assertEqual(set(metadata_fill.pending_items()), set(books))
+
     def test_the_fill_runs_inside_its_hardcover_and_open_library_budgets(self):
         self.item(MediaTypes.BOOK.value, Sources.HARDCOVER.value, media_id="301")
         scopes = []

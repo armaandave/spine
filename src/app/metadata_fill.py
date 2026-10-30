@@ -24,11 +24,11 @@ The chain (app.tasks.fill_item_metadata) walks pending Items by id in chunks of 
   stamps the Item: asking again would give the same answer. The 10th such failure in a
   row (with nothing stored in between) stops the provider instead: that looks like our
   bug, not missing titles. Titles TMDB no longer lists and bad ids are stamped too.
-- Any other HTTP error (400, 401, 403, 422, 429, 5xx ...), a network error, or a whole
+- Any other HTTP error (400, 401, 403, 422, 5xx ...), a network error, or a whole
   Hardcover batch failing sets metadata_attempted_at and stops that provider for the
   rest of the run; the others carry on. quota.Deferred (a spent budget, or a provider
-  that asked us to wait) only stops the provider: the Items aren't at fault, so nothing
-  is marked and the next run asks again.
+  that asked us to wait) and a 429 (its rate limit) only stop the provider: the Items
+  aren't at fault, so nothing is marked and the next run asks again.
 - An error while storing, or any other error, sets metadata_attempted_at: retried in
   7 days.
 
@@ -370,13 +370,24 @@ def classify(error):
     if isinstance(error, quota.Deferred):
         return BLOCK
     if isinstance(error, (services.ProviderAPIError, requests.RequestException)):
-        status = getattr(error, "status_code", None)
-        if status is None:
-            status = getattr(getattr(error, "response", None), "status_code", None)
-        return STAMP if status in GONE_STATUSES else BLOCK
+        return STAMP if _status(error) in GONE_STATUSES else BLOCK
     if isinstance(error, (NotImplementedError, TypeError, ValueError, KeyError)):
         return STAMP
     return RETRY
+
+
+def _status(error):
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    return status
+
+
+def _rate_limited(error):
+    return (
+        isinstance(error, (services.ProviderAPIError, requests.RequestException))
+        and _status(error) == requests.codes.too_many_requests
+    )
 
 
 def _stamp(items):
@@ -449,9 +460,9 @@ class _Run:
 
     def failed(self, provider, items, error, *, kind=None):
         """Handle a failed fetch or store: stamp, stop the provider, or retry in a week."""
-        if isinstance(error, quota.Deferred):
-            # A spent budget or a provider's wait: the Items aren't at fault, so nothing
-            # is marked and the next run asks again.
+        if isinstance(error, quota.Deferred) or _rate_limited(error):
+            # A spent budget, a provider's wait or its rate limit: the Items aren't at
+            # fault, so nothing is marked and the next run asks again.
             logger.warning("metadata fill: stopping %s for this run: %s", provider, error)
             self.blocked[provider] = str(error)[:200]
             self.counts["skipped_blocked"] += len(items)

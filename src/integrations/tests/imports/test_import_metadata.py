@@ -340,6 +340,7 @@ class SeriesCollectorTests(ImportMetadataTestCase):
             patch("app.tasks.enqueue_external_rating_batches") as own_batch,
             patch("app.signals.enrich_external_ratings") as enrich_one,
             patch("integrations.tasks.events.tasks.reload_calendar"),
+            patch("integrations.tasks.sweep_item_metadata"),
             self.captureOnCommitCallbacks(execute=True),
         ):
             import_media(run_import, None, self.user.id, "new")
@@ -349,6 +350,19 @@ class SeriesCollectorTests(ImportMetadataTestCase):
         import_batch.assert_called_once_with(ids)
         own_batch.assert_not_called()
         enrich_one.delay.assert_not_called()
+
+
+class ImportStartsMetadataFillTests(ImportMetadataTestCase):
+    """An import's titles get their details soon after, not at the next hourly sweep."""
+
+    def test_an_import_starts_the_fill_a_minute_after_it_finishes(self):
+        with (
+            patch("integrations.tasks.events.tasks.reload_calendar"),
+            patch("integrations.tasks.sweep_item_metadata") as sweep,
+        ):
+            import_media(lambda _identifier, _user, _mode: ({}, None), None, self.user.id, "new")
+
+        sweep.apply_async.assert_called_once_with(countdown=60)
 
 
 class PartialMetadataImportTests(ImportMetadataTestCase):
