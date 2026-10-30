@@ -298,7 +298,8 @@ final class ProfileSettingsViewModel {
 
         do {
             let meta = try await mediaRepository.meta()
-            mediaTypes = meta.mediaTypes.filter { $0 != "episode" }
+            // Seasons and episodes follow TV, so they get no toggle of their own.
+            mediaTypes = meta.mediaTypes.filter { !["episode", "season"].contains($0) }
             settingsOptions = meta.settingsOptions ?? settingsOptions
         } catch {
             mediaTypes = Array(Set(APIConstants.fallbackMediaTypes).union(enabledMediaTypes)).sorted()

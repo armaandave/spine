@@ -183,8 +183,7 @@ Extends Django's AbstractUser with extensive preference tracking.
 
 **Key Methods:**
 - `update_preference(field_name, new_value)`: Updates preference if valid
-- `get_enabled_media_types()`: Returns list of enabled types
-- `get_active_media_types()`: Includes season if TV is enabled
+- `get_enabled_media_types()`: Returns list of enabled types; season follows `tv_enabled`
 - `get_hall_of_fame_items()`: Returns all HOF items
 - `set_hall_of_fame_item(media_type, item)`: Sets HOF item
 - `get_import_tasks()`: Returns import history and schedules
