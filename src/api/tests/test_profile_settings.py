@@ -218,6 +218,31 @@ class ApiProfileSettingsTests(TestCase):
         self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("date_format", invalid.data)
 
+    def test_preferences_never_offer_season_and_ignore_it_from_older_apps(self):
+        profile = self.client.get("/api/v1/me/")
+        self.assertIn(MediaTypes.TV.value, profile.data["preferences"]["enabled_media_types"])
+        self.assertNotIn(MediaTypes.SEASON.value, profile.data["preferences"]["enabled_media_types"])
+
+        # An older app still has a Season toggle and may send it alone or with others.
+        only_season = self.client.patch(
+            "/api/v1/me/preferences/",
+            {"enabled_media_types": [MediaTypes.SEASON.value]},
+            format="json",
+        )
+        self.assertEqual(only_season.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("enabled_media_types", only_season.data)
+
+        updated = self.client.patch(
+            "/api/v1/me/preferences/",
+            {"enabled_media_types": [MediaTypes.SEASON.value, MediaTypes.MOVIE.value]},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        self.assertEqual(updated.data["enabled_media_types"], [MediaTypes.MOVIE.value])
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.tv_enabled)
+        self.assertNotIn(MediaTypes.SEASON.value, self.user.get_enabled_media_types())
+
     def test_preferences_require_one_enabled_media_type(self):
         response = self.client.patch(
             "/api/v1/me/preferences/",

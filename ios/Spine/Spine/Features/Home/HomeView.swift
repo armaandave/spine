@@ -223,6 +223,9 @@ struct HomeView: View {
                 SpinePageBackground()
                 HomeArtworkAtmosphere(media: viewModel.inProgressItems.first?.media)
                     .offset(y: BackdropLayout.topOffset - scrollOffset)
+                    // Fade the flattened backdrop: opacity on the layers alone also thins the gradient that hides
+                    // the artwork's bottom edge, which then shows as a hard line while scrolling.
+                    .compositingGroup()
                     .opacity(HomeBackdropMotion.opacity(for: scrollOffset))
 
                 ScrollView(showsIndicators: false) {

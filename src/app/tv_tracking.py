@@ -316,6 +316,13 @@ def _rating_string(value):
         return str(value)
 
 
+def _api_rating(value):
+    """Return a stored rating on this request's API scale: 0-10, or stars when asked."""
+    if value is not None and single_weight.REQUEST_STARS.get():
+        return str(single_weight.rating_to_wire(value))
+    return _rating_string(value)
+
+
 def _version_after(previous, now):
     return max(int(previous or 0) + 1, int(now.timestamp() * 1000))
 
@@ -4466,7 +4473,7 @@ class _View:
 
     def season_rating(self, number):
         row = self.season_row(number)
-        return _rating_string(row.score) if row is not None else None
+        return _api_rating(row.score) if row is not None else None
 
     def premiere_message(self, season_number=None):
         if season_number is None:
@@ -4536,7 +4543,7 @@ class _View:
             title = "Whole show"
             available = bool(calc.regular_aired)
             reason = None if available else MSG_NOTHING_AIRED
-            rating = _rating_string(self.tv.score) if self.in_library else None
+            rating = _api_rating(self.tv.score) if self.in_library else None
             liked = self.facts.liked(SHOW)
         elif level == SEASON:
             target_id = f"season:{season_number}"
@@ -4708,7 +4715,7 @@ class _View:
             "first_gap_episode": season.first_gap if season else None,
             "next_air_date": _iso(season.next_air_date) if season else None,
             "rewatching": bool(season and season.rewatching),
-            "rating": _rating_string(row.score) if row is not None else None,
+            "rating": _api_rating(row.score) if row is not None else None,
             "liked": self.facts.liked(SEASON, season_number),
         }
         if not detail:
@@ -4779,7 +4786,7 @@ class _View:
             "untick_message": untick_message,
             "can_mark_up_to": can_mark_up_to,
             "mark_up_to_prompt": prompt,
-            "user_rating": _rating_string(newest.rating) if newest else None,
+            "user_rating": _api_rating(newest.rating) if newest else None,
             "liked": self.facts.liked(EPISODE, season_number, episode_number),
             "is_up_next": calc.up_next == position,
         }

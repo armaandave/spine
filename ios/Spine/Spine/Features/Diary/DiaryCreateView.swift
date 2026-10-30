@@ -473,7 +473,7 @@ struct DiaryCreateView: View {
                 displayedComponents: viewModel.usesCalendarDate ? [.date] : [.date, .hourAndMinute]
             )
             TextField(
-                viewModel.selectedMedia?.ref.usesFiveStarRatingScale == true ? "Rating 0.5-5" : "Rating 0-10",
+                "Rating 0.5-5",
                 text: $viewModel.ratingText
             )
                 .keyboardType(.decimalPad)

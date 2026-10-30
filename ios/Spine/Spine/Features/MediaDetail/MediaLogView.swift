@@ -122,10 +122,8 @@ final class MediaLogViewModel {
         liked = preselectedLiked ?? tracking?.liked ?? detail.userState?.hasLiked ?? false
         if let preselectedRatingSteps {
             ratingSteps = preselectedRatingSteps
-        } else if let rating = (tracking?.rating ?? detail.userState?.rating).flatMap({ Decimal(string: $0) }) {
-            ratingSteps = detail.ref.usesFiveStarRatingScale
-                ? NSDecimalNumber(decimal: rating * 2).intValue
-                : NSDecimalNumber(decimal: rating).intValue
+        } else if let rating = tracking?.rating ?? detail.userState?.rating {
+            ratingSteps = rating.ratingHalfSteps
         }
     }
 
@@ -139,7 +137,7 @@ final class MediaLogViewModel {
         }
     }
 
-    /// Half steps 0-10; for TV these are the wire's whole values 1-10 (TV-504).
+    /// Half steps 0-10, sent as stars (TV-504 for TV).
     var ratingSteps: Int {
         get { tvDraft?.ratingSteps ?? storedRatingSteps }
         set {
@@ -309,11 +307,10 @@ final class MediaLogViewModel {
         }
     }
 
-    static func ratingDecimal(for steps: Int, mediaType: String) -> Decimal? {
+    /// Half steps as the stars the API takes: 9 → 4.5, 0 → nil.
+    static func ratingDecimal(for steps: Int) -> Decimal? {
         guard steps > 0 else { return nil }
-        return ["movie", "music", "book", "game"].contains(mediaType)
-            ? Decimal(steps) / 2
-            : Decimal(steps)
+        return Decimal(steps) / 2
     }
 
     func ratingLabel(for steps: Int? = nil) -> String {
@@ -399,7 +396,7 @@ final class MediaLogViewModel {
                     completionDate: CalendarDateCodec.string(from: consumedAt),
                     startDate: gamePlaythrough == nil && gameHasStartDate ? CalendarDateCodec.string(from: gameStartDate) : nil,
                     totalMinutes: progress.totalMinutes, percentage: progress.percentage,
-                    rating: Self.ratingDecimal(for: ratingSteps, mediaType: "game"),
+                    rating: Self.ratingDecimal(for: ratingSteps),
                     review: review, reviewTitle: reviewTitle, liked: liked, isRewatch: isRepeat,
                     containsSpoilers: containsSpoilers, tags: tagDraft.tags, mutationId: completionMutationId))
                 return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
@@ -410,7 +407,7 @@ final class MediaLogViewModel {
                     request: BookCompletionWriteRequest(
                         journeyId: completionJourneyId,
                         completionDate: CalendarDateCodec.string(from: consumedAt),
-                        rating: Self.ratingDecimal(for: ratingSteps, mediaType: selectedRef.mediaType),
+                        rating: Self.ratingDecimal(for: ratingSteps),
                         review: review,
                         reviewTitle: reviewTitle,
                         liked: liked,
@@ -425,7 +422,7 @@ final class MediaLogViewModel {
             let entry = try await diaryRepository.create(DiaryEntryWriteRequest(
                 ref: selectedRef,
                 consumedAt: consumedAt,
-                rating: Self.ratingDecimal(for: ratingSteps, mediaType: selectedRef.mediaType),
+                rating: Self.ratingDecimal(for: ratingSteps),
                 review: review,
                 reviewTitle: reviewTitle,
                 liked: liked,
@@ -440,7 +437,7 @@ final class MediaLogViewModel {
         }
     }
 
-    /// A TV log: a calendar date, the target's stars on TV's 1-10 scale, Rewatch always sent, and one mutation ID
+    /// A TV log: a calendar date, the target's stars, Rewatch always sent, and one mutation ID
     /// per composer session (TV-404, TV-407, TV-504, TV-705). The response's envelope goes back to the caller.
     private func saveTVLog() async throws -> MediaLogSaveResult {
         if let target = tvDraft?.target, !target.available {
@@ -450,7 +447,7 @@ final class MediaLogViewModel {
         var request = DiaryEntryWriteRequest(
             ref: ref,
             consumedAt: consumedAt,
-            rating: Self.ratingDecimal(for: ratingSteps, mediaType: ref.mediaType),
+            rating: Self.ratingDecimal(for: ratingSteps),
             review: review,
             reviewTitle: reviewTitle,
             liked: liked,

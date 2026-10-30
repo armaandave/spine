@@ -20,6 +20,22 @@ from users.models import (
 )
 
 
+class SeasonFollowsTVTests(TestCase):
+    """Seasons are part of their show, so the TV setting decides them."""
+
+    def test_season_follows_tv_whatever_the_old_season_setting_says(self):
+        user = get_user_model().objects.create_user(username="viewer")
+
+        for tv_enabled in (True, False):
+            for season_enabled in (True, False):
+                user.tv_enabled = tv_enabled
+                user.season_enabled = season_enabled
+                enabled = user.get_enabled_media_types()
+
+                self.assertEqual(MediaTypes.TV.value in enabled, tv_enabled)
+                self.assertEqual(MediaTypes.SEASON.value in enabled, tv_enabled)
+
+
 class UserMusicPreferenceTests(TestCase):
     """Music user fields follow the primary media defaults."""
 

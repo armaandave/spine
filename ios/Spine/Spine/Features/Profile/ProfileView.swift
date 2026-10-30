@@ -284,6 +284,13 @@ final class ProfileSettingsViewModel {
         dailyDigestEnabled = profile.preferences.dailyDigestEnabled
     }
 
+    /// Seeds the form once. Settings' root reappears after every pushed page, and the profile it was
+    /// opened with can still be the pre-save copy then, so reloading would undo what was just saved.
+    func loadIfNeeded(profile: UserProfile?) {
+        guard self.profile == nil else { return }
+        load(profile: profile)
+    }
+
     func loadOptions() async {
         guard mediaTypes.isEmpty else { return }
         isLoadingOptions = true
@@ -291,7 +298,8 @@ final class ProfileSettingsViewModel {
 
         do {
             let meta = try await mediaRepository.meta()
-            mediaTypes = meta.mediaTypes.filter { $0 != "episode" }
+            // Seasons and episodes follow TV, so they get no toggle of their own.
+            mediaTypes = meta.mediaTypes.filter { !["episode", "season"].contains($0) }
             settingsOptions = meta.settingsOptions ?? settingsOptions
         } catch {
             mediaTypes = Array(Set(APIConstants.fallbackMediaTypes).union(enabledMediaTypes)).sorted()
@@ -2123,8 +2131,7 @@ private struct RecentActivityPoster: View {
                 if let rating = ProfileRecentActivityRailModel.rating(for: item.activity) {
                     ProfileStarRating(
                         rating: rating,
-                        reservesWidth: !ProfileRecentActivityRailModel.isLikedDiary(item.activity),
-                        mediaType: item.activity.media?.ref.mediaType
+                        reservesWidth: !ProfileRecentActivityRailModel.isLikedDiary(item.activity)
                     )
                 }
 
@@ -2168,7 +2175,6 @@ private struct RecentActivityPoster: View {
 private struct ProfileStarRating: View {
     let rating: String?
     var reservesWidth = true
-    var mediaType: String?
 
     var body: some View {
         HStack(spacing: 1) {
@@ -2183,9 +2189,10 @@ private struct ProfileStarRating: View {
         .accessibilityLabel(value.map { "Rating \($0) out of 5 stars" } ?? "")
     }
 
+    /// To the nearest half star: "3.75" draws as 4.
     private var value: Double? {
-        guard let rating, let raw = Double(rating) else { return nil }
-        return ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+        guard let rating, Double(rating) != nil else { return nil }
+        return Double(rating.ratingHalfSteps) / 2
     }
 
     private var symbolNames: [String] {
@@ -2339,8 +2346,9 @@ private struct ProfileSettingsSheet: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
-                viewModel.load(profile: profile)
+            // Keyed on the profile so a form opened before the profile loaded fills in when it arrives.
+            .task(id: profile?.id) {
+                viewModel.loadIfNeeded(profile: profile)
                 await viewModel.loadOptions()
             }
             .toolbar {
