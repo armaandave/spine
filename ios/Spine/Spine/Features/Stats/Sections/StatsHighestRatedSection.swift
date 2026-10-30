@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Highest rated (STAT-205): a compact top 10 in the server's order, a big #1 with #2 tucked
-/// behind it and #3 to #10 in two rows of four, each with its rank and gold stars, and
+/// Highest rated (STAT-205): a compact top 10 in the server's order, five to a row: a big #1
+/// with #2 over its corner and #3 to #5 beside them, then #6 to #10, each with its rank, and
 /// "Show all". The page shows it only
 /// when Top comes from a list (`isShown(top:highestRated:)`), so the two never repeat each
 /// other; Top's own fallback uses the same bento.
@@ -71,17 +71,17 @@ struct StatsBentoEntry: Identifiable, Hashable {
     var id: String { media.id }
 }
 
-/// The first ten titles as a bento: the lead, #2 tucked behind its right edge, then up to eight
-/// tiles in reading order, two rows of four. It's one row of the page's lazy stack, a fixed-size
-/// block like the header's numbers card.
+/// The first ten titles as a bento, five to a row: the big #1 with #2 over its bottom-right
+/// corner and #3 to #5 beside them, then #6 to #10. It's one row of the page's lazy stack, a
+/// fixed-size block like the header's numbers card.
 struct StatsBento: Identifiable, Hashable {
-    static let columns = 4
-    static let tileRows = 2
-    static var capacity: Int { 2 + columns * tileRows }
+    static let columns = 5
+    static var capacity: Int { columns * 2 }
 
     let id: String
     let lead: StatsBentoEntry
     let second: StatsBentoEntry?
+    /// #3 to #10 in reading order.
     let tiles: [StatsBentoEntry]
 
     /// Nil without any entries; entries past the tenth are left out.
@@ -90,7 +90,7 @@ struct StatsBento: Identifiable, Hashable {
         self.id = id
         self.lead = lead
         second = entries.dropFirst().first
-        tiles = Array(entries.dropFirst(2).prefix(Self.columns * Self.tileRows))
+        tiles = Array(entries.dropFirst(2).prefix(Self.capacity - 2))
     }
 }
 
@@ -101,63 +101,40 @@ enum StatsBentoRole: Hashable {
     case tile
 }
 
-/// The bento's measurements. Every poster keeps its slot's fixed size, so artwork decodes once
-/// at the size it shows; the width left over is shared by the four gaps after #2, so the posters
-/// sit evenly spaced on every phone.
+/// The bento's measurements. Every poster but #1 has the tile size, in five columns; the width
+/// left over is shared by the four gaps across, so the columns sit evenly on every phone. #1
+/// sits in the first column, as wide as reaches into the second, its bottom level with the
+/// first row's and its top standing above it.
 enum StatsBentoMetrics {
     static let leadSlot: PosterSlot = .statsBentoLead
-    static let secondSlot: PosterSlot = .statsBentoSecond
     static let tileSlot: PosterSlot = .statsBentoTile
-    /// How far #2 tucks behind the lead's right edge.
-    static let overlap: CGFloat = 26
-    static let leadStarsSize: CGFloat = 11
-    /// #2 and the tiles are too narrow for five stars: they show one star and the rating.
-    static let secondStarsSize: CGFloat = 10
-    static let tileStarsSize: CGFloat = 9
-    static let leadCaptionHeight: CGFloat = 14
-    static let tileCaptionHeight: CGFloat = 10
-    static let leadCaptionSpacing: CGFloat = 6
-    static let tileCaptionSpacing: CGFloat = 4
-    static let rowGap: CGFloat = 10
+    static let rowGap: CGFloat = 12
 
-    /// A tile with its stars.
-    static var tileHeight: CGFloat { tileSlot.size.height + tileCaptionSpacing + tileCaptionHeight }
-    /// The lead with its stars: as tall as both tile rows and the gap between them.
-    static var leadHeight: CGFloat { leadSlot.size.height + leadCaptionSpacing + leadCaptionHeight }
-    static var height: CGFloat { tileHeight * CGFloat(StatsBento.tileRows) + rowGap * CGFloat(StatsBento.tileRows - 1) }
-    /// The part of #2 the lead doesn't cover.
-    static var secondVisibleWidth: CGFloat { secondSlot.size.width - overlap }
-    /// The posters' own width, with no gaps.
-    static var postersWidth: CGFloat {
-        leadSlot.size.width + secondVisibleWidth + tileSlot.size.width * CGFloat(StatsBento.columns)
-    }
+    /// How far #1 stands above the first row.
+    static var leadRise: CGFloat { leadSlot.size.height - tileSlot.size.height }
+    static var height: CGFloat { leadRise + tileSlot.size.height * 2 + rowGap }
+    /// The five tile columns' own width, with no gaps.
+    static var postersWidth: CGFloat { tileSlot.size.width * CGFloat(StatsBento.columns) }
 
-    /// One of the four equal gaps across `width`: after #2, and between the tiles.
+    /// One of the four equal gaps across `width`.
     static func gap(width: CGFloat) -> CGFloat {
-        max((width - postersWidth) / CGFloat(StatsBento.columns), 0)
+        max((width - postersWidth) / CGFloat(StatsBento.columns - 1), 0)
     }
 
-    /// Each cell's top-leading corner: the lead, then #2 (bottom-aligned with the lead's
-    /// poster), then the tiles in reading order.
+    static func columnX(_ column: Int, width: CGFloat) -> CGFloat {
+        CGFloat(column) * (tileSlot.size.width + gap(width: width))
+    }
+
+    /// Each cell's top-leading corner: #1, #2 (second column, first row), then the tiles in
+    /// reading order: #3 to #5 in the first row's last three columns, #6 to #10 in the second.
     static func origins(width: CGFloat, count: Int) -> [CGPoint] {
         guard count > 0 else { return [] }
-        var origins: [CGPoint] = [.zero]
-        guard count > 1 else { return origins }
-        origins.append(CGPoint(
-            x: leadSlot.size.width - overlap,
-            y: leadSlot.size.height - secondSlot.size.height
-        ))
-        let gap = gap(width: width)
-        let tilesX = leadSlot.size.width + secondVisibleWidth + gap
-        origins += (0 ..< count - 2).map { index in
-            let row = index / StatsBento.columns
-            let column = index % StatsBento.columns
-            return CGPoint(
-                x: tilesX + CGFloat(column) * (tileSlot.size.width + gap),
-                y: CGFloat(row) * (tileHeight + rowGap)
-            )
-        }
-        return origins
+        let firstRow = leadRise
+        let secondRow = leadRise + tileSlot.size.height + rowGap
+        let slots: [CGPoint] = [CGPoint(x: 0, y: 0)]
+            + (1 ..< StatsBento.columns).map { CGPoint(x: columnX($0, width: width), y: firstRow) }
+            + (0 ..< StatsBento.columns).map { CGPoint(x: columnX($0, width: width), y: secondRow) }
+        return Array(slots.prefix(count))
     }
 }
 
@@ -175,7 +152,7 @@ struct StatsBentoLayout: Layout {
     }
 }
 
-/// The bento: the lead on the left with #2 tucked behind it, and the tiles in two rows of four.
+/// The bento: the big #1 with #2 over its corner and #3 to #5 beside them, then #6 to #10.
 struct StatsBentoView: View {
     let bento: StatsBento
     let onOpenTitle: (MediaSummary) -> Void
@@ -183,9 +160,9 @@ struct StatsBentoView: View {
     var body: some View {
         StatsBentoLayout {
             StatsBentoCell(entry: bento.lead, role: .lead) { onOpenTitle(bento.lead.media) }
-                .zIndex(1)
             if let second = bento.second {
                 StatsBentoCell(entry: second, role: .second) { onOpenTitle(second.media) }
+                    .zIndex(1)
             }
             ForEach(bento.tiles) { entry in
                 StatsBentoCell(entry: entry, role: .tile) { onOpenTitle(entry.media) }
@@ -195,71 +172,35 @@ struct StatsBentoView: View {
     }
 }
 
-/// A bento poster: the artwork on its cell's bottom edge with its rank in the corner (and "S2"
-/// for a season, which can share its show's artwork), then its gold stars. #2's rank and stars
-/// sit on its right, the part the lead doesn't cover.
+/// A bento poster with its rank in the corner (and "S2" for a season, which can share its
+/// show's artwork).
 struct StatsBentoCell: View {
     let entry: StatsBentoEntry
     let role: StatsBentoRole
     let action: () -> Void
 
     private var isLead: Bool { role == .lead }
-    private var isSmall: Bool { role == .tile }
-
-    private var slot: PosterSlot {
-        switch role {
-        case .lead: StatsBentoMetrics.leadSlot
-        case .second: StatsBentoMetrics.secondSlot
-        case .tile: StatsBentoMetrics.tileSlot
-        }
-    }
-
-    private var starsSize: CGFloat {
-        switch role {
-        case .lead: StatsBentoMetrics.leadStarsSize
-        case .second: StatsBentoMetrics.secondStarsSize
-        case .tile: StatsBentoMetrics.tileStarsSize
-        }
-    }
-
-    private var badgeAlignment: Alignment { role == .second ? .topTrailing : .topLeading }
+    private var slot: PosterSlot { isLead ? StatsBentoMetrics.leadSlot : StatsBentoMetrics.tileSlot }
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: role == .second ? .trailing : .leading, spacing: isSmall ? StatsBentoMetrics.tileCaptionSpacing : StatsBentoMetrics.leadCaptionSpacing) {
-                MediaArtwork(
-                    url: entry.media.displayPosterURL,
-                    title: entry.media.displayTitle,
-                    slot: slot,
-                    mediaType: entry.media.ref.mediaType,
-                    orientation: entry.media.posterOrientation
-                )
-                .overlay(alignment: badgeAlignment) {
-                    StatsBentoBadge(text: "\(entry.rank)", isLarge: !isSmall)
-                }
-                .overlay(alignment: role == .second ? .bottomTrailing : .bottomLeading) {
-                    if let season = StatsRatedPosterCell.seasonTag(for: entry.media.ref) {
-                        StatsBentoBadge(text: season, isLarge: !isSmall)
-                    }
-                }
-                .shadow(color: .black.opacity(isLead ? 0.45 : 0.28), radius: isLead ? 10 : 6, x: isLead ? 4 : 0, y: isLead ? 5 : 3)
-                .frame(width: slot.size.width, height: slot.size.height, alignment: .bottom)
-
-                Group {
-                    if let stars = entry.stars {
-                        if isLead {
-                            StatsStars(stars: stars, size: starsSize)
-                        } else {
-                            StatsCompactRating(stars: stars, size: starsSize)
-                        }
-                    }
-                }
-                .frame(
-                    width: role == .second ? StatsBentoMetrics.secondVisibleWidth : slot.size.width,
-                    height: isSmall ? StatsBentoMetrics.tileCaptionHeight : StatsBentoMetrics.leadCaptionHeight,
-                    alignment: role == .second ? .trailing : .leading
-                )
+            MediaArtwork(
+                url: entry.media.displayPosterURL,
+                title: entry.media.displayTitle,
+                slot: slot,
+                mediaType: entry.media.ref.mediaType,
+                orientation: entry.media.posterOrientation
+            )
+            .overlay(alignment: .topLeading) {
+                StatsBentoBadge(text: "\(entry.rank)", isLarge: isLead)
             }
+            .overlay(alignment: .bottomLeading) {
+                if let season = StatsRatedPosterCell.seasonTag(for: entry.media.ref) {
+                    StatsBentoBadge(text: season, isLarge: isLead)
+                }
+            }
+            .shadow(color: .black.opacity(role == .second ? 0.5 : 0.28), radius: role == .second ? 8 : 6, y: 3)
+            .frame(width: slot.size.width, height: slot.size.height, alignment: .bottom)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -275,31 +216,6 @@ struct StatsBentoCell: View {
             parts.append(StatsStars.accessibilityLabel(for: stars))
         }
         return parts.joined(separator: ", ")
-    }
-}
-
-/// One gold star and the rating ("★ 4.5"), for posters too narrow for a row of five stars.
-struct StatsCompactRating: View {
-    let stars: Double
-    let size: CGFloat
-
-    var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: "star.fill")
-                .font(.system(size: size - 1, weight: .bold))
-                .foregroundStyle(LogComposerStyle.starGold)
-            Text(Self.text(for: stars))
-                .font(.system(size: size, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.85))
-        }
-        .lineLimit(1)
-        .accessibilityHidden(true)
-    }
-
-    /// "5", "4.5".
-    static func text(for stars: Double) -> String {
-        stars.formatted(.number.precision(.fractionLength(0 ... 1)))
     }
 }
 
