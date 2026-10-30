@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Highest rated (STAT-205): a compact bento in the server's order, a big #1 beside #2 to #9 in
-/// two rows of four, each with its rank and gold stars, and "Show all". The page shows it only
+/// Highest rated (STAT-205): a compact top 10 in the server's order, a big #1 beside #2 to #10
+/// in three rows of three, each with its rank and gold stars, and "Show all". The page shows it only
 /// when Top comes from a list (`isShown(top:highestRated:)`), so the two never repeat each
 /// other; Top's own fallback uses the same bento.
 struct StatsHighestRatedSection: View {
@@ -70,12 +70,12 @@ struct StatsBentoEntry: Identifiable, Hashable {
     var id: String { media.id }
 }
 
-/// The first nine titles as a bento: the lead, then up to eight tiles in reading order, the
-/// first four on the top row. It's one row of the page's lazy stack, a fixed-size block like
+/// The first ten titles as a bento: the lead, then up to nine tiles in reading order, three to
+/// a row. It's one row of the page's lazy stack, a fixed-size block like
 /// the header's numbers card.
 struct StatsBento: Identifiable, Hashable {
-    static let columns = 4
-    static let tileRows = 2
+    static let columns = 3
+    static let tileRows = 3
     static var capacity: Int { 1 + columns * tileRows }
 
     let id: String
@@ -108,7 +108,7 @@ enum StatsBentoMetrics {
 
     /// A tile with its stars.
     static var tileHeight: CGFloat { tileSlot.size.height + tileCaptionSpacing + tileCaptionHeight }
-    /// The lead with its stars: two tile rows and the gap between them.
+    /// The lead with its stars: as tall as the tile rows and the gaps between them.
     static var leadHeight: CGFloat { leadSlot.size.height + leadCaptionSpacing + leadCaptionHeight }
     static var height: CGFloat { tileHeight * CGFloat(StatsBento.tileRows) + rowGap * CGFloat(StatsBento.tileRows - 1) }
     /// The posters' own width, with no gaps.
@@ -149,7 +149,7 @@ struct StatsBentoLayout: Layout {
     }
 }
 
-/// The bento: the lead on the left, the tiles in two rows of four beside it.
+/// The bento: the lead on the left, the tiles in three rows of three beside it.
 struct StatsBentoView: View {
     let bento: StatsBento
     let onOpenTitle: (MediaSummary) -> Void

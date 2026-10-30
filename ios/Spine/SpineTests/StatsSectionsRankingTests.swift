@@ -339,10 +339,10 @@ final class StatsSectionsRankingTests: XCTestCase {
         let top = try Self.decode(StatsTop.self, Self.topJSON(source: "highest_rated", count: 10, list: false))
         let rows = StatsTopSection.rows(for: top, highestRatedTotal: 10)
 
-        XCTAssertEqual(rows.first, .title(showsAll: true), "Top sends 10, the bento shows 9")
+        XCTAssertEqual(rows.first, .title(showsAll: false), "Top sends 10 and the bento shows all 10")
         guard case let .bento(bento, hasHint) = rows[1] else { return XCTFail("Expected the bento") }
         XCTAssertFalse(hasHint)
-        XCTAssertEqual(bento.tiles.count, 8)
+        XCTAssertEqual(bento.tiles.count, 9)
     }
 
     func testOtherViewersSeeTheFallbackWithoutAHint() throws {
@@ -405,14 +405,14 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertTrue(StatsHighestRatedSection.rows(for: StatsHighestRated(total: 0, items: [])).isEmpty)
     }
 
-    func testBentoTakesTheFirstNineAndShowAllCountsTheRest() throws {
+    func testBentoTakesTheTopTenAndShowAllCountsTheRest() throws {
         let twelve = try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 12, total: 12))
         guard case let .bento(bento) = StatsHighestRatedSection.rows(for: twelve)[1] else { return XCTFail("Expected the bento") }
 
-        XCTAssertEqual(StatsBento.capacity, 9)
-        XCTAssertEqual(bento.tiles.map(\.rank), Array(2 ... 9), "Two rows of four beside the lead")
-        XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 10th to 12th need Show all")
-        XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 9, total: 9))))
+        XCTAssertEqual(StatsBento.capacity, 10)
+        XCTAssertEqual(bento.tiles.map(\.rank), Array(2 ... 10), "Three rows of three beside the lead")
+        XCTAssertTrue(StatsHighestRatedSection.hasMore(twelve), "The payload's 11th and 12th need Show all")
+        XCTAssertFalse(StatsHighestRatedSection.hasMore(try Self.decode(StatsHighestRated.self, Self.highestRatedJSON(count: 10, total: 10))))
 
         let one = try XCTUnwrap(StatsBento([StatsBentoEntry(rank: 1, media: try Self.media(id: 1, title: "A"), stars: nil)], id: "x"))
         XCTAssertTrue(one.tiles.isEmpty)
@@ -420,7 +420,7 @@ final class StatsSectionsRankingTests: XCTestCase {
     }
 
     func testBentoLeadIsAsTallAsTwoTileRowsAndGapsAreEven() {
-        XCTAssertEqual(StatsBentoMetrics.leadHeight, StatsBentoMetrics.height, "The lead spans both tile rows")
+        XCTAssertEqual(StatsBentoMetrics.leadHeight, StatsBentoMetrics.height, "The lead spans every tile row")
         XCTAssertEqual(StatsBentoMetrics.leadSlot.size.height / StatsBentoMetrics.leadSlot.size.width, 1.5, accuracy: 0.01)
         XCTAssertEqual(StatsBentoMetrics.tileSlot.size.height / StatsBentoMetrics.tileSlot.size.width, 1.5, accuracy: 0.01)
 
@@ -429,16 +429,16 @@ final class StatsSectionsRankingTests: XCTestCase {
 
         let width: CGFloat = 402 - 32
         let gap = StatsBentoMetrics.gap(width: width)
-        let origins = StatsBentoMetrics.origins(width: width, count: 9)
+        let origins = StatsBentoMetrics.origins(width: width, count: 10)
         let tile = StatsBentoMetrics.tileSlot.size
-        XCTAssertEqual(origins.count, 9)
+        XCTAssertEqual(origins.count, 10)
         XCTAssertEqual(origins[0], .zero)
         XCTAssertEqual(origins[1].x - StatsBentoMetrics.leadSlot.size.width, gap, accuracy: 0.001, "Lead to first tile")
         XCTAssertEqual(origins[2].x - origins[1].x - tile.width, gap, accuracy: 0.001, "Tile to tile")
-        XCTAssertEqual(origins[4].x + tile.width, width, accuracy: 0.001, "The last column ends at the edge")
-        XCTAssertEqual(origins[5].x, origins[1].x, "The second row starts under the first")
-        XCTAssertEqual(origins[5].y, StatsBentoMetrics.tileHeight + StatsBentoMetrics.rowGap)
-        XCTAssertEqual(origins[8].y + StatsBentoMetrics.tileHeight, StatsBentoMetrics.height, accuracy: 0.001)
+        XCTAssertEqual(origins[3].x + tile.width, width, accuracy: 0.001, "The last column ends at the edge")
+        XCTAssertEqual(origins[4].x, origins[1].x, "The second row starts under the first")
+        XCTAssertEqual(origins[4].y, StatsBentoMetrics.tileHeight + StatsBentoMetrics.rowGap)
+        XCTAssertEqual(origins[9].y + StatsBentoMetrics.tileHeight, StatsBentoMetrics.height, accuracy: 0.001)
         XCTAssertEqual(StatsBentoMetrics.origins(width: width, count: 3).count, 3)
         XCTAssertTrue(StatsBentoMetrics.origins(width: width, count: 0).isEmpty)
     }
