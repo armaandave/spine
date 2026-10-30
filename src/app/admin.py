@@ -259,6 +259,7 @@ SpecialModels = [
     "MediaSeries",
     "MediaSeriesItem",
     "ItemFilterFacet",
+    "ItemCredit",
     "BookCreditOverride",
     "MusicGenreAlbum",
     "MusicAlbumLink",

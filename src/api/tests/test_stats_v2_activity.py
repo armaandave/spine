@@ -142,7 +142,7 @@ class HeaderTests(ActivityBase):
             ],
         )
         for row in past["header"]["details"]:
-            self.assertEqual(set(row), {"key", "label", "value", "unit", "approximate"})
+            self.assertEqual(set(row), {"key", "label", "value", "unit", "approximate", "drill"})
             self.assertIsInstance(row["value"], int)
             self.assertFalse(row["approximate"])
         current = self.summary(YEAR_2026)
@@ -669,10 +669,14 @@ class StreakTests(ActivityBase):
 
     def test_streak_helpers(self):
         days = [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 4)]
-        self.assertEqual(activity.longest_daily_streak(days), 2)
-        self.assertEqual(activity.longest_daily_streak([]), 0)
-        self.assertEqual(activity.current_daily_streak(days, date(2025, 1, 5)), 1)
-        self.assertEqual(activity.current_daily_streak(days, date(2025, 1, 6)), 0)
+        self.assertEqual(activity.longest_daily_streak_span(days), (2, date(2025, 1, 1), date(2025, 1, 2)))
+        self.assertEqual(activity.longest_daily_streak_span([]), (0, None, None))
+        # A tie goes to the later run.
+        tied = [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 5), date(2025, 1, 6)]
+        self.assertEqual(activity.longest_daily_streak_span(tied), (2, date(2025, 1, 5), date(2025, 1, 6)))
+        self.assertEqual(activity.current_daily_streak_span(days, date(2025, 1, 5)), (1, date(2025, 1, 4), date(2025, 1, 4)))
+        self.assertEqual(activity.current_daily_streak_span(days, date(2025, 1, 2)), (2, date(2025, 1, 1), date(2025, 1, 2)))
+        self.assertEqual(activity.current_daily_streak_span(days, date(2025, 1, 6)), (0, None, None))
         self.assertEqual(activity.week_start(date(2026, 10, 25), "monday"), date(2026, 10, 19))
         self.assertEqual(activity.week_start(date(2026, 10, 25), "sunday"), date(2026, 10, 25))
         self.assertEqual(activity.week_start(date(2026, 10, 24), "sunday"), date(2026, 10, 18))
@@ -781,8 +785,9 @@ class MilestoneTests(ActivityBase):
         self.assertEqual(activity.milestone_numbers(260), [1, 100, 250])
         self.assertEqual(activity.milestone_numbers(2400), [1, 100, 250, 500, 750, 1000, 1500, 2000])
 
-    def test_a_year_shows_the_milestones_reached_in_it(self):
-        # S-26: 260 logs, the 250th on 4 May 2025.
+    def test_a_year_numbers_its_own_logs(self):
+        # S-26: 260 logs, one a day from 28 August 2024, the 250th on 4 May 2025; the
+        # 134 in 2025 start again at 1 on 1 January.
         films = [self.item(MediaTypes.MOVIE.value, f"film-{index}") for index in range(3)]
         start = date(2024, 8, 28)
         entries = [
@@ -796,17 +801,51 @@ class MilestoneTests(ActivityBase):
         DiaryEntry.objects.bulk_create(entries)
         ordered = list(DiaryEntry.objects.order_by("consumed_at", "id"))
         self.assertEqual(ordered[249].consumed_at.date(), date(2025, 5, 4))
+        self.assertEqual(ordered[126].consumed_at.date(), date(2025, 1, 1))
 
         year = self.summary(YEAR_2025)["milestones"]
-        self.assertEqual([row["number"] for row in year], [250])
         self.assertEqual(
-            {key: year[0][key] for key in ("number", "day", "entry_id", "media_type")},
-            {"number": 250, "day": "2025-05-04", "entry_id": ordered[249].id, "media_type": "movie"},
+            [{key: row[key] for key in ("number", "day", "entry_id", "media_type")} for row in year],
+            [
+                {"number": 1, "day": "2025-01-01", "entry_id": ordered[126].id, "media_type": "movie"},
+                {"number": 100, "day": "2025-04-10", "entry_id": ordered[225].id, "media_type": "movie"},
+            ],
         )
-        self.assertEqual(year[0]["media"]["ref"]["item_id"], ordered[249].item_id)
+        self.assertEqual(year[1]["media"]["ref"]["item_id"], ordered[225].item_id)
         all_time = self.summary(ALL_TIME)["milestones"]
         self.assertEqual([row["number"] for row in all_time], [1, 100, 250])
         self.assertEqual(all_time[0]["day"], "2024-08-28")
+        self.assertEqual((all_time[2]["day"], all_time[2]["entry_id"]), ("2025-05-04", ordered[249].id))
+        # Any dated range numbers its own logs, not only a calendar year.
+        spring = self.summary({"schema": "2", "start_date": "2025-03-01", "end_date": "2025-06-30"})["milestones"]
+        self.assertEqual([(row["number"], row["day"]) for row in spring], [(1, "2025-03-01")])
+
+    def test_a_year_starts_at_its_first_log_on_the_owners_calendar(self):
+        # A moment at 23:30 on 31 December stays in 2025; a TV log dated 1 January
+        # 2026 is a UTC-midnight carrier and stays on 1 January in every zone.
+        for zone in OWNER_ZONES:
+            with self.subTest(owner_zone=zone):
+                DiaryEntry.objects.all().delete()
+                self.set_zone(zone)
+                local = ZoneInfo(zone)
+                june = self.log(self.item(MediaTypes.ANIME.value, f"{zone}-june"), datetime(2025, 6, 1, 12, tzinfo=local))
+                late = self.log(self.item(MediaTypes.ANIME.value, f"{zone}-late"), datetime(2025, 12, 31, 23, 30, tzinfo=local))
+                self.tv_show(f"{zone}-show")
+                episode = self.item(MediaTypes.EPISODE.value, f"{zone}-show", season=1, episode=1)
+                new_year = self.log(episode, utc_day(2026, 1, 1))
+                early = self.log(self.item(MediaTypes.ANIME.value, f"{zone}-early"), datetime(2026, 1, 1, 0, 30, tzinfo=local))
+                for viewer, header_zone in ((self.owner, zone), (self.stranger, AUCKLAND)):
+                    year_2025 = self.summary(YEAR_2025, viewer=viewer, zone=header_zone)["milestones"]
+                    self.assertEqual([(row["number"], row["entry_id"]) for row in year_2025], [(1, june.id)])
+                    year_2026 = self.summary(YEAR_2026, viewer=viewer, zone=header_zone)["milestones"]
+                    self.assertEqual(
+                        [(row["number"], row["entry_id"], row["day"]) for row in year_2026],
+                        [(1, new_year.id, "2026-01-01")],
+                    )
+                    self.assertNotIn(late.id, [row["entry_id"] for row in year_2026])
+                    # A type tab counts that type's logs only.
+                    anime_2026 = self.summary(YEAR_2026, viewer=viewer, tab="anime", zone=header_zone)["milestones"]
+                    self.assertEqual([(row["number"], row["entry_id"]) for row in anime_2026], [(1, early.id)])
 
     def test_type_tabs_number_their_own_logs_and_tv_shows_the_show(self):
         show, _season_item, _tv, _season = self.tv_show()

@@ -2,9 +2,10 @@ import Charts
 import SwiftUI
 
 // Release years (STAT-209): one fixed-width chart from the first year with titles to this year,
-// never scrolling sideways. Years or decades (folded here, on the phone), and Titles (stacked by
-// type on Global), Ratings (average stars, only years with ratings) or Logs, as Letterboxd's
-// Films / Ratings / Diary. Scrubbing picks a year; "Show logs" opens the diary.
+// never scrolling sideways, labelled only at its two ends. Years or decades (folded here, on the
+// phone), and Titles (stacked by type on Global), Ratings (average stars, only years with
+// ratings) or Logs, as Letterboxd's Films / Ratings / Diary. Scrubbing picks a year; "Show logs"
+// opens the diary.
 
 enum StatsReleaseGrouping: String, CaseIterable, Identifiable, Hashable {
     case years
@@ -173,15 +174,10 @@ enum StatsReleaseYearsChartData {
         }
     }
 
-    /// The labels the axis shows: about six, on round years (every 1, 2, 5, 10, 20, 25 or 50
-    /// years, or decades). The "Before" bar has none.
+    /// The labels the axis shows: the first and last year or decade, never a crowded row. The
+    /// "Before" bar has none.
     static func axisLabels(_ points: [StatsReleasePoint]) -> [String] {
-        let labelled = points.filter { !$0.isEarlier }
-        guard let first = labelled.first else { return [] }
-        let unit = first.isDecade ? 10 : 1
-        let count = labelled.count
-        let step = [1, 2, 5, 10, 20, 25, 50].first { count / $0 <= 6 } ?? 50
-        return labelled.filter { ($0.start / unit) % step == 0 }.map(\.label)
+        StatsChartAxis.edgeLabels(points.filter { !$0.isEarlier }.map(\.label))
     }
 
     /// The bar with the most in a mode, a tie going to the most recent. Nil when nothing has any.
@@ -226,10 +222,26 @@ enum StatsReleaseYearsChartData {
         mode == .ratings ? "Nothing rated yet" : "No release years yet"
     }
 
-    /// A year's logs, or a decade's. The "Before" bar has no single range to open.
-    static func drillDown(for point: StatsReleasePoint) -> StatsDrillDown? {
+    /// A year's logs, or a decade's; with `mediaType`, one type's. The "Before" bar has no
+    /// single range to open.
+    static func drillDown(for point: StatsReleasePoint, mediaType: String? = nil) -> StatsDrillDown? {
         if point.isEarlier { return nil }
-        return point.isDecade ? .releaseDecade(point.start) : .releaseYear(point.start)
+        return point.isDecade ? .releaseDecade(point.start, mediaType: mediaType) : .releaseYear(point.start, mediaType: mediaType)
+    }
+
+    /// The picked bar's readout: "1999", "4 titles · 5 logs · 4.0 average", and its logs (each
+    /// type's too on Global) when it has any.
+    static func selection(for point: StatsReleasePoint, stacked: Bool) -> StatsChartSelection {
+        var options: [StatsChartDrillOption] = []
+        if point.logs > 0, let whole = drillDown(for: point) {
+            let parts = stacked
+                ? StatsChartStyle.orderedTypes(point.byType).compactMap { part in
+                    drillDown(for: point, mediaType: part.mediaType).map { (mediaType: part.mediaType, drillDown: $0) }
+                }
+                : []
+            options = StatsChartDrillOption.options(whole: whole, parts: parts)
+        }
+        return StatsChartSelection(title: point.label, detail: detail(point), drillOptions: options)
     }
 
     /// The new-vs-older counts with their labels; empty when all three are 0.
@@ -332,8 +344,21 @@ private struct StatsReleaseYearsChartCard: View {
             .pickerStyle(.segmented)
             .sensoryFeedback(.selection, trigger: mode)
 
-            readout(summary: summary, picked: pickedPoint)
-                .frame(height: 44, alignment: .leading)
+            StatsChartReadout(
+                selection: pickedPoint.map { StatsReleaseYearsChartData.selection(for: $0, stacked: isStacked) },
+                onDrillDown: onDrillDown
+            ) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(summary ?? StatsReleaseYearsChartData.emptyTitle(mode: mode))
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Drag across the chart to see each \(grouping == .years ? "year" : "decade").")
+                        .font(.footnote)
+                        .foregroundStyle(StatsChartStyle.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
 
             Chart(parts) { part in
                 BarMark(
@@ -346,16 +371,7 @@ private struct StatsReleaseYearsChartCard: View {
             .chartForegroundStyleScale(domain: domain, range: range)
             .chartLegend(.hidden)
             .chartXScale(domain: points.map(\.label))
-            .chartXAxis {
-                AxisMarks(values: StatsReleaseYearsChartData.axisLabels(points)) { value in
-                    AxisValueLabel(centered: true, collisionResolution: .disabled) {
-                        if let label = value.as(String.self) {
-                            Text(label)
-                                .foregroundStyle(StatsChartStyle.axisLabel)
-                        }
-                    }
-                }
-            }
+            .statsEdgeXAxis(labels: StatsReleaseYearsChartData.axisLabels(points))
             .modifier(StatsReleaseYAxis(mode: mode, points: points))
             .chartXSelection(value: $scrubbed)
             .frame(height: 160)
@@ -401,46 +417,6 @@ private struct StatsReleaseYearsChartCard: View {
     /// Ratings bars are star gold; Titles and Logs take the tab's colour.
     private var allColor: Color {
         mode == .ratings ? LogComposerStyle.starGold : StatsChartStyle.color(for: mediaType)
-    }
-
-    @ViewBuilder
-    private func readout(summary: String?, picked: StatsReleasePoint?) -> some View {
-        if let picked {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(picked.label)
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-                    Text(StatsReleaseYearsChartData.detail(picked))
-                        .font(.footnote)
-                        .foregroundStyle(StatsChartStyle.secondaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                Spacer(minLength: 8)
-                if let onDrillDown, picked.logs > 0, let drillDown = StatsReleaseYearsChartData.drillDown(for: picked) {
-                    Button("Show logs") {
-                        onDrillDown(drillDown)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(.white)
-                }
-            }
-            .accessibilityElement(children: .contain)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(summary ?? StatsReleaseYearsChartData.emptyTitle(mode: mode))
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Text("Drag across the chart to see each \(grouping == .years ? "year" : "decade").")
-                    .font(.footnote)
-                    .foregroundStyle(StatsChartStyle.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
     }
 }
 

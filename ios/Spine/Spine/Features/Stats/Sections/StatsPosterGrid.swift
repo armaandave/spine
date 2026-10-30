@@ -12,6 +12,8 @@ struct StatsPosterGridRow<Item: Identifiable>: Identifiable {
     let items: [Item]
 }
 
+extension StatsPosterGridRow: Equatable, Hashable where Item: Hashable {}
+
 enum StatsPosterGridLayout {
     static let columns = 4
     /// Every cell is this size whatever the artwork, so square album art and portrait posters
@@ -219,6 +221,13 @@ enum StatsTitleFormat {
     static func day(_ text: String, locale: Locale = .current) -> String? {
         guard let date = StatsDateFormatters.dayParser.date(from: text) else { return nil }
         return StatsDateFormatters.utc(template: "dMMMy", locale: locale, gregorian: true).string(from: date)
+    }
+
+    /// A contract day without its year ("12 Mar", or "Mar 12" in the US), for a list that
+    /// already names the year.
+    static func dayWithoutYear(_ text: String, locale: Locale = .current) -> String? {
+        guard let date = StatsDateFormatters.dayParser.date(from: text) else { return nil }
+        return StatsDateFormatters.utc(template: "dMMM", locale: locale, gregorian: true).string(from: date)
     }
 }
 

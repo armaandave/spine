@@ -131,10 +131,18 @@ Run from the feature worktree unless a step says otherwise.
 Some ships carry a data step that has to run once, right after their deploy is verified
 (Workflow A, step 8). Each one says which ship carries it.
 
-### The metadata fill, with the ship that adds `src/app/migrations/0088_item_metadata_version.py`
+### The metadata fill, with the ship that adds `src/app/migrations/0091_itemcredit.py`
 
-Stats need each tracked or logged title's year, runtime, genres, themes and original
-language. Titles stored before this ship are filled once by a paced fill
+The first fill ran with the 0088 ship. This ship bumps the movie, TV and music metadata
+versions to 3 and books to 4, so the fill revisits every tracked or logged movie, show,
+album and book once more to store its people (`ItemCredit`: directors, cast, creators,
+artists, authors) for the People sections. The sweep is already on in production, so it
+restarts the chain within the hour by itself; the steps below start it right away and
+check it. Expect about an hour for films and shows; Open Library books go at about 250 a
+day.
+
+Stats need each tracked or logged title's year, runtime, genres, themes, original
+language and people. Titles stored before this ship are filled once by a paced fill
 (`src/app/metadata_fill.py`, command `fill_item_metadata`): progress lives in the
 database, and its own pacing keeps MusicBrainz at one call every 3 s. It fills blanks
 and also refreshes stored years, runtimes and genres from the provider (book years move
@@ -159,8 +167,8 @@ below.
      type and provider, and the rough number of new series members (each is queued for
      external ratings).
    - `docker exec spine python manage.py fill_item_metadata --apply --limit 20`, then
-     spot-check years, runtimes and genres on a few of those titles: expect changed
-     values (refreshed from the provider), not only new ones. It can fill more
+     spot-check years, runtimes, genres and people (`ItemCredit` rows) on a few of those
+     titles: expect changed values (refreshed from the provider), not only new ones. It can fill more
      than 20: a TV show fills all its pending seasons and episodes at once.
    - `docker exec spine python manage.py fill_item_metadata --apply --queue` starts the
      Celery chain on the featured worker and turns on the hourly sweep, which from then

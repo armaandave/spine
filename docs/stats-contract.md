@@ -2,7 +2,7 @@
 
 Status: **agent-ready product contract**
 
-Last reviewed: **2026-10-26**
+Last reviewed: **2026-10-29** (round 2: drills, range progress for rings and collections, milestones within a range)
 
 This contract covers the Stats page in Spine: what each number means, who sees what, and the v2 stats API that the backend (Milestone 2) and the iPhone app (Milestone 3) both build against.
 Only the numbered laws contain accepted product decisions.
@@ -230,6 +230,25 @@ The app leaves out a current streak row (daily or weekly) whose value is 0.
 The longest daily streak is the most days in a row with an event inside the range.
 A detail whose value doesn't apply (a current streak in a range that doesn't include today) is left out of the list. A zero is sent as zero.
 
+**Drills.** Each detail row has `drill`: the extra diary list parameters (STAT-400) that list what the row counts, as an object of string values, or null when the row has no diary view.
+The app opens the diary with the scope's usual parameters (STAT-401) and applies `drill` on top; a key in `drill` replaces the scope parameter of the same name.
+
+| Key | `drill` |
+| --- | --- |
+| `current_daily_streak` | `{"watched_from": <the streak's first day>, "watched_to": <its last day, today or yesterday>}`; null when the value is 0. |
+| `longest_weekly_streak`, `current_weekly_streak` | `{"watched_from": <the first day of the streak's first week>, "watched_to": <the last day of its last week>}`, each clipped to the range (All Time has nothing to clip to); null when the value is 0. |
+| `rewatches` | `{"repeat": "true"}` |
+| `reviews` | `{"has_review": "true"}` |
+| `likes` | `{"liked": "true"}` |
+| `days_with_two_plus_titles` | `{"multi_title_days": "true"}` |
+| Every per-type row (`episodes`, `seasons_finished`, `shows_finished`, `reads`, `did_not_finish`, `completions`, `abandoned`) | null: no diary filter matches it. |
+
+When two streaks are equally long, the longest daily and weekly streaks are the later ones, as the busiest day is (STAT-203).
+Drill-downs are the owner's only (STAT-401): every other viewer gets `drill` null on every row, with the same values.
+
+`longest_daily_streak_range` holds the days of the longest daily streak, `{"start", "end"}`, or null when it is 0; the app's "Longest streak" number opens the diary on those days.
+It is a fact like the streak itself, so every viewer gets it.
+
 ### STAT-201: Time is counted per type in that type's own unit
 
 | Type | Unit | Dated range | All Time | Approximate |
@@ -288,7 +307,7 @@ Highest rated holds every Item in the scope with a title rating (STAT-109), one 
 
 Rows are sorted by stars, highest first, then by the rating's log day, newest first, with current-rating rows after logged rows of the same stars, then by Item ID.
 The section sends the first 12 rows and the total; the show-all endpoint pages through the rest (STAT-310).
-The app shows the Highest rated section only when Top comes from a list, on Global and type tabs alike. Then Highest rated leaves out the Items Top shows (its 12 rows, its total and the show-all endpoint alike), so the two never repeat each other.
+The app always shows the Highest rated section when it has rows, just above Most logged, on Global and type tabs alike. When Top comes from a list, Highest rated leaves out the Items Top shows (its 12 rows, its total and the show-all endpoint alike), so the two never repeat each other.
 
 ### STAT-206: Top reads one tag from the owner's ranked lists
 
@@ -316,6 +335,8 @@ For a calendar-year or All Time range, the owner also gets `tag_hint`:
 
 The tag in the hint is the wanted tag, so All Time reads "topalltime".
 Other viewers, and other ranges, get no hint.
+
+The app doesn't draw these fallback items: without a list, Top is an empty card that shows the owner's hint ("Tag a ranked movie list top2025 to show it here."), and other viewers see no Top section. Highest rated keeps its own place lower on the page.
 
 ### STAT-209: Release years count titles by the year they came out
 
@@ -402,8 +423,14 @@ An item is **seen** when the owner's latest tracking row for it is Completed, or
 `total` counts the list's distinct exposed items.
 A ring's type is its definition's single media type, or, for a list with no definition, the single type bucket of its items; otherwise it has none.
 Global shows every ring; a type tab shows the rings of its type.
-Rings are lifetime: every range shows the same rings.
-Rows are sorted by the seen share, highest first, then by seen, then by name.
+`seen` and `total` are lifetime in every range.
+
+A title is **first seen** on its earliest dated day: the earliest log day of its visible logs, and for TV the earliest of those and its dated viewing days that aren't hidden (STAT-104). Titles fold to their show (STAT-102), so a season or episode list item uses its show's day.
+Undated completions (STAT-105) and a mark's fills have no day, so they never count in a dated range.
+
+- **All Time** sends every qualifying ring with `seen_in_range` null, sorted by the seen share, highest first, then by seen, then by name.
+- **A dated range** adds `seen_in_range`: the ring's seen items whose title was first seen in the range. Only rings with `seen_in_range` of 1 or more are sent, sorted by `seen_in_range`, most first, then by the seen share, seen and name. The 2-seen minimum still applies, and every viewer counts the logs and viewings they can see (STAT-003).
+
 Every qualifying ring is sent; the app shows 6, then "Show all".
 
 ### STAT-214: Collections show complete and almost complete series
@@ -417,7 +444,17 @@ Collections appear on the movie, game, book and anime tabs, from stored `MediaSe
 
 Complete series are sorted by size, largest first, then by name; almost complete ones by fewest left, then largest, then name.
 The section sends both counts and the first 4 of each; the show-all endpoint pages through the rest (STAT-310).
-Collections are lifetime, like rings.
+Complete and almost complete are lifetime: every range shows the same ones.
+
+**Progress in a range.** A dated range adds `in_range`; All Time sends it null. It uses STAT-213's first-seen rule, over a series' released members that are seen:
+
+- **Completed in the range:** the series is complete now, and its last member to be seen was first seen in the range: at least one member was first seen in the range and none after it. A member seen only undated came before every dated one, so it never moves the completion later.
+- **Progressed in the range:** every other series with at least one member first seen in the range, complete or not; for example, a series whose last member was first seen after the range progressed in it.
+- Each row adds `seen_in_range`, its seen members first seen in the range.
+
+Both groups are sorted by `seen_in_range`, most first, then by size, largest first, then by name.
+The section sends both counts and the first 4 of each; the show-all endpoint pages through the rest (STAT-310).
+In a dated range the app shows `in_range` instead of the complete and almost complete groups.
 
 ### STAT-215: Most logged lists titles logged at least twice
 
@@ -429,10 +466,10 @@ The section sends the first 12 rows and the total; the show-all endpoint pages t
 
 ### STAT-216: Milestones mark the 1st, 100th, 250th, 500th, 750th and 1,000th log, then every 500th
 
-Visible logs are numbered over all time in log-day order, then by ID: all of them on Global, that type bucket's on a type tab.
+Visible logs are numbered in log-day order, then by ID: all of them on Global, that type bucket's on a type tab.
+All Time numbers every log the viewer can see. A dated range numbers only its own logs, starting again at 1 with its first log, so a year pill shows that year's 1st, 100th and so on.
 The milestones are numbers 1, 100, 250, 500, 750 and 1,000, then 1,500, 2,000 and every 500 after.
-A range shows the milestones whose log falls in it; All Time shows all of them.
-Each milestone shows the title's poster (TV as its show), the number and the day, for example "100th log · 12 Mar 2024".
+Each milestone shows the title's poster (TV as its show), the number and the day, for example "100th log · 12 Mar 2024", or in a year "100th log of 2025".
 Each viewer sees milestones numbered over the logs they can see (STAT-003).
 
 ### STAT-217: Rated higher than most compares your stars with everyone's
@@ -476,6 +513,7 @@ The section is titled "Rated higher than most", with a segmented Higher / Lower 
 | Release years (`release_years`) | yes | yes |
 | Genres (`genres`) | 15 groups, plus music | that type's genre names |
 | Languages (`languages`) | movies and TV | movie and TV tabs only |
+| People (`people`) | no | movie, TV, music and book tabs only (STAT-219) |
 | List progress (`list_rings`) | every ring | that type's rings |
 | Collections (`collections`) | no | movie, game, book and anime tabs only |
 | Most logged (`most_logged`) | yes | yes, labelled per type |
@@ -483,10 +521,94 @@ The section is titled "Rated higher than most", with a segmented Higher / Lower 
 
 The app shows them in this order:
 
-- **Global:** Header, Time, Top, Highest rated (only when Top is a list), Activity, Ratings, Rated higher than most, Release years, Genres and Music genres, Languages, List progress, Most logged, Milestones.
-- **Type tab:** Header, Time, Top, Highest rated (only when Top is a list), Ratings, Rated higher than most, Release years, Genres, Languages, Activity, List progress, Collections, Most watched / read / played / listened, Milestones.
+- **Global:** Header, Time, Top, Activity, Ratings, Rated higher than most, Release years, Genres and Music genres, Languages, List progress, Highest rated (only when Top is a list), Most logged, Milestones.
+- **Type tab:** Header (its third big number is the tab's own measure from `time`, and Active days is the first detail row), Top, Ratings, Rated higher than most, Release years, Genres, Languages, People, Activity, List progress, Collections, Highest rated (only when Top is a list), Most watched / read / played / listened, Milestones. The Time card is Global-only; a type tab still receives `time` for its header.
 
 The app hides an empty section (STAT-302).
+
+### STAT-219: People lists who you logged most, per role
+
+People is a section of its own, in the response key `people`, on the tabs STAT-218 lists.
+
+- **Tabs and groups.** Movies: Directors, then Cast. TV: Cast, then Creators. Music: Artists. Books: Authors. `people` is null on Global and on the anime, manga, game and comic tabs (STAT-302). On its tabs every group is always sent, with empty `rows` and `rated_rows` when nothing in the scope credits anyone.
+- **Credits.** `app.models.ItemCredit` holds each title's people, stored by `store_item_metadata` from the provider metadata it already gets, never from an extra call:
+  - movies (TMDB): the directors and the top 15 billed cast;
+  - TV shows (TMDB): the creators and the top 15 cast of the show's own credits; seasons and episodes have none;
+  - albums: the album artists, by Apple Music artist ID or MusicBrainz artist MBID; Various Artists and MusicBrainz's [unknown] are no one;
+  - books: the authors, by Hardcover or Open Library author ID.
+
+  A person is a source and an ID, so one person known to two sources is two rows. A role is replaced whenever the metadata carries its list, and kept when the list is missing.
+- **Counting.** A person's `titles` are the scope's titles (STAT-105) that credit them in the role: a season or episode counts through its show's credits (STAT-102), and a title counts once however many logs it has. `rated` is how many of those titles have a title rating (STAT-109: the rating Highest rated uses, STAT-205; for a show its own rating, not its seasons') and `average_stars` is their average, null when none is rated.
+- **Visibility.** People count titles like every title number: other viewers lose only titles reached through logs they can't see (STAT-003). Undated completions and current ratings count for everyone (STAT-002).
+- **Order.** Rows are sorted by titles, most first, then by average stars (none last), then by name. Each group sends its first 10 rows; `total` is how many people the group has.
+- **Highest rated.** The card has an order control like genres' (STAT-210): its first segment is named for the tab ("Most watched" for movies and TV, "Most listened" for music, "Most read" for books) and shows `rows`; the second is "Highest rated" and shows `rated_rows`: the people with at least 3 rated titles, sorted by average stars, highest first, then by titles, then by name, the first 10 of them. They needn't be among the 10 with the most titles. Show-all pages through either order (`sort=titles` or `sort=rating`).
+- **Freshness.** Credits change only when metadata is stored: by the metadata fill, whose finished chain bumps the stats epoch (STAT-006), or by a detail page, which shows within the hour.
+
+```json
+"people": {
+  "groups": [
+    {
+      "role": "director",
+      "label": "Directors",
+      "rows": [
+        {
+          "person": { "source": "tmdb", "id": "525", "name": "Christopher Nolan", "image_url": "https://image.tmdb.org/t/p/w500/xuAIuYSmsUzKlUMBFGVZaWsY3DZ.jpg" },
+          "titles": 9,
+          "rated": 8,
+          "average_stars": "4.19"
+        }
+      ],
+      "rated_rows": [
+        {
+          "person": { "source": "tmdb", "id": "1032", "name": "Martin Scorsese", "image_url": null },
+          "titles": 4,
+          "rated": 4,
+          "average_stars": "4.75"
+        }
+      ],
+      "total": 412
+    },
+    { "role": "cast", "label": "Cast", "rows": [ ], "rated_rows": [ ], "total": 0 }
+  ]
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `groups[]` | array | The tab's groups, in the order above. |
+| `groups[].role` | string | `director`, `cast`, `creator`, `artist` or `author`. |
+| `groups[].label` | string | "Directors", "Cast", "Creators", "Artists" or "Authors", ready to show. |
+| `groups[].rows[]` | array, at most 10 | One person each, by titles (the Order rule above). |
+| `groups[].rated_rows[]` | array, at most 10 | The same row shape, Highest rated: people with at least 3 rated titles, by average stars, then titles, then name. |
+| `rows[].person` | object | `source` (`tmdb`, `apple_music`, `musicbrainz`, `hardcover` or `openlibrary`) and `id` (a string) name the person, for the drill-down and person pages; `name`; `image_url`, the provider's picture or null. |
+| `rows[].titles` | int | Distinct titles in the scope that credit them. |
+| `rows[].rated` | int | Those with a title rating. |
+| `rows[].average_stars` | string or null | The average of those ratings as stars (STAT-303). |
+| `groups[].total` | int | People in the group, before the 10-row cap. |
+
+**Show-all.** `GET stats/me/people/` and `GET users/{username}/stats/people/` page through one group with STAT-310's pagination and gate:
+
+| Parameter | Meaning |
+| --- | --- |
+| `media_type` | Required: `movie`, `tv`, `music` or `book`. |
+| `role` | Required: one of that tab's roles. |
+| `start_date`, `end_date` | As STAT-300. |
+| `sort` | `titles` (the default, the section's order) or `rating` (Highest rated: at least 3 rated titles, by average stars, then titles, then name). |
+
+`results[]` are rows as above; `count` is how many people the order lists. A missing or wrong `media_type`, `role` or `sort` is a 400 under that key (STAT-311).
+
+**Drill-down.** `GET diary/?credit=<source>:<id>` (repeatable; any of them matches) keeps the owner's logs of titles that credit that person; `role=<role>` (repeatable) narrows it to those roles. With `tv_rollup=true` a season or episode log matches through its show's credits. A row sends `credit=<person.source>:<person.id>&role=<group.role>` with STAT-401's usual parameters: `skip_backfill=true`, `tv_rollup=true`, the range's dates and the tab's media types (for TV `media_type=tv&media_type=season&media_type=episode`).
+
+**What the credits cost to fill.** Storing credits bumped `CURRENT_METADATA_VERSION` for movies and TV to 3, music to 3 and books to 4, so the metadata fill visits every movie, show, album and book anyone tracks or logged once more:
+
+- a movie is one TMDB detail fetch (about 2 calls with its collection), under the fill's overall cap of 2 calls a second;
+- a show is one TMDB call (its seasons are already current); the show's cast now comes with every season-batched request too;
+- an Apple Music album is one background call (1 a second), now with its artists;
+- a MusicBrainz album that has its length is one call without the tracklist enrichment, spaced 3 s apart; one without its length still takes the full fetch;
+- Hardcover books come 50 to a batch call, which now asks for their authors; an Open Library book is its usual fetch of about 4 calls (10 a minute, 1,000 calls a day);
+- an album or book that has everything but its credits is fetched instead of only stamped.
+
+With about 3,000 distinct films that is roughly 6,000 TMDB calls, about 50 minutes, plus a few minutes for shows and the music and book time above. `fill_item_metadata` without `--apply` prints the exact counts and minutes for the data at hand.
 
 ## API (v2)
 
@@ -565,7 +687,7 @@ Every section key is always present; STAT-302 says when it is null.
   | `release_years`, `languages` | `rows` is empty |
   | `genres` | `rows` and `music` are empty |
   | `list_rings`, `milestones` | the array is empty |
-  | `collections` | both counts are 0 |
+  | `collections` | both counts are 0; in a dated range, both `in_range` counts are 0 (STAT-214) |
 
 - Inside a section, a value with nothing to measure is null, such as `average_stars` with no rated logs.
 
@@ -617,21 +739,27 @@ Examples below write a media summary as `{…}`.
   "logs": 268,
   "active_days": 141,
   "longest_daily_streak": 9,
+  "longest_daily_streak_range": { "start": "2026-03-02", "end": "2026-03-10" },
   "details": [
-    { "key": "current_daily_streak", "label": "Current daily streak", "value": 3, "unit": "day", "approximate": false },
-    { "key": "longest_weekly_streak", "label": "Longest weekly streak", "value": 21, "unit": "week", "approximate": false },
-    { "key": "current_weekly_streak", "label": "Current weekly streak", "value": 4, "unit": "week", "approximate": false },
-    { "key": "rewatches", "label": "Repeats", "value": 17, "unit": null, "approximate": false },
-    { "key": "reviews", "label": "Reviews", "value": 46, "unit": null, "approximate": false },
-    { "key": "likes", "label": "Likes", "value": 58, "unit": null, "approximate": false },
-    { "key": "days_with_two_plus_titles", "label": "Days with 2+ titles", "value": 38, "unit": null, "approximate": false }
+    { "key": "current_daily_streak", "label": "Current daily streak", "value": 3, "unit": "day", "approximate": false,
+      "drill": { "watched_from": "2026-10-24", "watched_to": "2026-10-26" } },
+    { "key": "longest_weekly_streak", "label": "Longest weekly streak", "value": 21, "unit": "week", "approximate": false,
+      "drill": { "watched_from": "2026-02-02", "watched_to": "2026-06-28" } },
+    { "key": "current_weekly_streak", "label": "Current weekly streak", "value": 4, "unit": "week", "approximate": false,
+      "drill": { "watched_from": "2026-10-05", "watched_to": "2026-11-01" } },
+    { "key": "rewatches", "label": "Repeats", "value": 17, "unit": null, "approximate": false, "drill": { "repeat": "true" } },
+    { "key": "reviews", "label": "Reviews", "value": 46, "unit": null, "approximate": false, "drill": { "has_review": "true" } },
+    { "key": "likes", "label": "Likes", "value": 58, "unit": null, "approximate": false, "drill": { "liked": "true" } },
+    { "key": "days_with_two_plus_titles", "label": "Days with 2+ titles", "value": 38, "unit": null, "approximate": false,
+      "drill": { "multi_title_days": "true" } }
   ]
 }
 ```
 
-`details[]`: `key` (string), `label` (string, ready to show), `value` (int), `unit` (`"day"`, `"week"` or null; the app pluralizes), `approximate` (bool; the app shows "≈").
+`longest_daily_streak_range`: `{start, end}` days of the longest daily streak, or null when it is 0 (STAT-200).
+`details[]`: `key` (string), `label` (string, ready to show), `value` (int), `unit` (`"day"`, `"week"` or null; the app pluralizes), `approximate` (bool; the app shows "≈"), `drill` (object of string diary parameters, or null; always null for other viewers, STAT-200).
 The app shows each detail as a label/value row and must not depend on which keys are present.
-On the TV tab in All Time, for example, the list continues with `episodes`, `seasons_finished` and `shows_finished` (STAT-200).
+On the TV tab in All Time, for example, the list continues with `episodes`, `seasons_finished` and `shows_finished` (STAT-200), each with `drill` null.
 
 #### `time`
 
@@ -841,12 +969,13 @@ A type tab:
 
 ```json
 "list_rings": [
-  { "id": 5, "name": "Letterboxd's Top 500 Films", "media_type": "movie", "kind": "community", "seen": 155, "total": 500 },
-  { "id": 12, "name": "Booker Prize Winners", "media_type": "book", "kind": "award", "seen": 9, "total": 57 }
+  { "id": 5, "name": "Letterboxd's Top 500 Films", "media_type": "movie", "kind": "community", "seen": 155, "total": 500, "seen_in_range": 12 },
+  { "id": 12, "name": "Booker Prize Winners", "media_type": "book", "kind": "award", "seen": 9, "total": 57, "seen_in_range": 2 }
 ]
 ```
 
 `id` is the `CustomList` ID, which the app opens; `media_type` is null for a ring with no single type; `kind` is the definition's kind (STAT-213). No posters.
+`seen` and `total` are lifetime; `seen_in_range` (int or null) is null in All Time and, in a dated range, the seen titles first seen in it, 1 or more (STAT-213). The app reads it as "+12 in 2025 · 155 of 500".
 
 #### `collections`
 
@@ -865,12 +994,21 @@ A type tab:
       "completion": { "completed_count": 3, "total_count": 3 }
     }
   ],
-  "almost": [ ]
+  "almost": [ ],
+  "in_range": {
+    "completed_count": 2,
+    "completed": [ { "id": "119", "source": "tmdb", "media_type": "movie", "name": "The Lord of the Rings Collection", "item_count": 3,
+                     "poster_urls": ["…"], "completion": { "completed_count": 3, "total_count": 3 }, "seen_in_range": 1 } ],
+    "progressed_count": 5,
+    "progressed": [ { "id": "10", "source": "tmdb", "media_type": "movie", "name": "Star Wars Collection", "item_count": 9,
+                      "poster_urls": ["…"], "completion": { "completed_count": 6, "total_count": 9 }, "seen_in_range": 3 } ]
+  }
 }
 ```
 
 Each row is a media series summary, the shape the legacy `series_progress` rows use (iOS `MediaSeriesSummary`): `id` (the provider series ID), `source`, `media_type`, `name`, `item_count` (released members), up to 3 `poster_urls` (the first members, with the owner's custom posters), and `completion` (`completed_count` seen of `total_count` released, STAT-214).
 `complete` and `almost` hold at most 4 rows each.
+`in_range` is null in All Time. In a dated range it holds `completed_count` and `progressed_count` and at most 4 rows each of `completed` and `progressed`: media series summaries plus `seen_in_range` (int, the members first seen in the range, STAT-214).
 
 #### `most_logged`
 
@@ -894,6 +1032,7 @@ Each row is a media series summary, the shape the legacy `series_progress` rows 
 ```
 
 Sorted by `number`. `entry_id` is the milestone log, which the viewer may open; `media_type` is its type bucket; `media` is its title, TV as its show (STAT-216).
+In a dated range, `number` counts that range's logs only.
 
 ### STAT-310: Show-all endpoints page through long sections
 
@@ -903,7 +1042,7 @@ All three use the standard pagination: `page` (from 1) and `page_size` (default 
 | Endpoint | Parameters | `results[]` |
 | --- | --- | --- |
 | `GET stats/me/highest-rated/`, `GET users/{username}/stats/highest-rated/` | `start_date`, `end_date`, optional `media_type`, as STAT-300 | `{media, stars, day}` in STAT-205 order. In All Time, current-rating rows are included for every viewer. |
-| `GET stats/me/collections/`, `GET users/{username}/stats/collections/` | `media_type` (movie, game, book or anime) and `group` (`complete` or `almost`), both required; no dates, because collections are lifetime | Media series summaries in STAT-214 order. |
+| `GET stats/me/collections/`, `GET users/{username}/stats/collections/` | `media_type` (movie, game, book or anime) and `group`, both required. `complete` and `almost` are lifetime and ignore dates. `completed_in_range` and `progressed_in_range` take `start_date` and `end_date` as STAT-300 and need a dated range | Media series summaries in STAT-214 order; the in-range groups add `seen_in_range` to each. |
 | `GET stats/me/most-logged/?schema=2`, `GET users/{username}/stats/most-logged/?schema=2` | `start_date`, `end_date`, optional `media_type` | `{media, times}`, folded to the show, in STAT-215 order. |
 
 ```json
@@ -921,7 +1060,7 @@ Without `schema=2`, `most-logged/` keeps its legacy rows `{media, log_count}`, o
 
 | Status | When |
 | --- | --- |
-| 400 | A date that isn't ISO (body key `start_date` or `end_date`), `start_date` after `end_date` or only one `all` (`date_range`), a `media_type` that isn't an exposed primary type (`media_type`), or a collections request with a missing or wrong `media_type` or `group` (that key). The body is `{key: [message]}`, as `parse_stats_range` and `parse_stats_media_type` answer today. |
+| 400 | A date that isn't ISO (body key `start_date` or `end_date`), `start_date` after `end_date` or only one `all` (`date_range`), a `media_type` that isn't an exposed primary type (`media_type`), a collections request with a missing or wrong `media_type` or `group` (that key), or an in-range collections group asked for All Time (`date_range`). The body is `{key: [message]}`, as `parse_stats_range` and `parse_stats_media_type` answer today. |
 | 401 | Not signed in. |
 | 404 | `users/{username}/` for an unknown user, a private account the viewer doesn't follow, or a block either way. |
 
@@ -940,8 +1079,12 @@ Installed builds never send them; without them the diary behaves as today.
 | `original_language=<name>` | Repeatable. Logs whose title has an `original_language` facet value equal to one of the names exactly. |
 | `rating_min`, `rating_max` | Existing; pinned here: inclusive bounds on the stored 0–10 scale for every type. A ratings bar sends its bucket's bounds as they are (STAT-204). |
 | `watched_from`, `watched_to` | Existing; they now use STAT-100's per-row day rule, on the user's calendar, with "before the next day" as the upper bound. |
+| `repeat=true` | Only the logs Stats counts as repeats (STAT-108), worked out by the same code as the header's `rewatches`, so the list matches the number for the same dates and media types. |
+| `multi_title_days=true` | Only the logs on days Stats counts as days with 2+ titles (STAT-106 events, on the user's calendar), worked out by the same code as `days_with_two_plus_titles`. The days are those of the stats tab the request's `media_type` values name: values in one type bucket (`tv`, `season` and `episode` are one) are that tab, anything else is Global. Within `watched_from`/`watched_to` when given. |
 
 Several values of one parameter match any of them; different parameters must all match.
+Whether a log is a repeat, and which titles a day holds, never depend on the range, so `repeat` and `multi_title_days` give the same logs whether the dates are a year, part of one or absent; the dates only narrow the list.
+A day can count for `multi_title_days` through events that aren't logs (a tick, a day's progress), so it lists that day's logs even when only one of its titles was logged.
 
 ### STAT-401: Each stats row opens the diary with matching filters
 
@@ -959,7 +1102,9 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | Release year, or decade | `year=1999`, or `year_min=1990&year_max=1999` |
 | Ratings bar, or one type's part of it | `rating_min=<rating_min>&rating_max=<rating_max>`, plus that part's media types |
 | A title in Top, Highest rated, Rated higher than most or Most logged | `item_id=<id>`; a show also returns its season and episode logs through `tv_rollup`, and a season row stays exact |
-| Likes | `liked=true` |
+| A header detail with a `drill` (streaks, Repeats, Reviews, Likes, Days with 2+ titles) | its `drill`, whose keys replace the scope's parameters of the same name (STAT-200) |
+| The big Titles, Logs and the type tab's primary-measure numbers | nothing more: the scope's diary |
+| Longest streak | `longest_daily_streak_range`'s `start` and `end` as `watched_from` and `watched_to` |
 | An activity month | that month's first and last day as `watched_from` and `watched_to` |
 | The busiest day | that day as both `watched_from` and `watched_to` |
 | Milestone | Opens the log (`entry_id`). |
@@ -1062,11 +1207,16 @@ Run each case for the owner, a follower and a public viewer where it applies.
 | S-23 | Featured lists of every kind, a live award list, a partial list, `igdb-playing`, and a list with 1 item seen. | Only lasting lists with 2 or more seen show rings. | STAT-213 |
 | S-24 | Series where 2 of 3, 18 of 20, 1 of 3 and 1 of 2 are seen, plus an undated TMDB member. | The first two are almost complete; the undated member isn't counted. Works with more than 1,000 tracked Items. | STAT-214 |
 | S-25 | A show whose S1 E1 has 3 viewings in 2025. | Most watched lists the show with `times` 3. | STAT-215 |
-| S-26 | 260 logs, the 250th on 4 May 2025. | The 2025 pill shows the 250th milestone; All Time shows the 1st, 100th and 250th. | STAT-216 |
+| S-26 | 260 logs, one a day from 28 August 2024, the 250th on 4 May 2025. | All Time shows the 1st, 100th and 250th. The 2025 pill numbers 2025's 134 logs: its 1st on 1 January and its 100th on 10 April. | STAT-216 |
 | S-27 | A film rated 4.5★ with Letterboxd 3.1/5 (8,000 votes) and IMDb 6.0/10, and a second rated film whose Letterboxd rating has 30 votes. | Movies use Letterboxd: `higher` shows the first film with everyone 3.1; the second film is left out, not compared on IMDb. | STAT-217 |
 | S-28 | Each tab requested for an owner with data in every type. | Every key present; `collections` and `languages` null exactly as STAT-302 says; empty sections empty. | STAT-301, STAT-302 |
 | S-29 | The same request without `schema`. | Today's legacy keys and scales, with STAT-900's fixes. | STAT-900, STAT-901 |
 | S-30 | A log saved, then stats requested again by the owner and by a follower. | Both see the new log. | STAT-006 |
+| S-31 | Repeats of every kind (an earlier log, a book with `completed_manually`, a movie marker with the saved rewatch, an episode log after an unclaimed tick, an anime moment at 00:30 on 1 January). | The diary with `repeat=true` and each scope's dates and media types lists exactly the logs the Repeats number counts, in every owner zone; the 00:30 log is the next year's. | STAT-108, STAT-400 |
+| S-32 | Two films on one day, a film and a tick on another, one film twice on a third, two TV titles on a fourth, a day's anime progress and a film. | Days with 2+ titles counts the first, second, fourth and fifth on Global, only the first on the movie tab and the fourth on the TV tab; `multi_title_days=true` lists every log of the tab on those days. | STAT-106, STAT-400 |
+| S-33 | A list ring's films: one logged in 2024 and again in 2025, one logged in 2025, one Completed with no log. | The 2025 ring has `seen_in_range` 1 and lifetime `seen` 3; 2024 has 1; a year with none sends no ring; All Time sends null. | STAT-213 |
+| S-34 | A series completed in 2025 by its last film, one whose last film was seen in 2026, and one half seen in 2025. | 2025: one completed, two progressed; 2026: the second completed. | STAT-214 |
+| S-35 | The owner's and a follower's header. | Same values; the follower's `drill` is null on every row. | STAT-200, STAT-401 |
 
 ## Review status
 
@@ -1086,6 +1236,14 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
 
+Round 2 (2026-10-29: drills, range progress, milestones within a range) settled these details the round 2 plan left open; they are provisional too:
+
+- **Ties (STAT-200).** Of two equally long streaks, the later one gives the drill and `longest_daily_streak_range`, as the busiest day does.
+- **Per-type details (STAT-200).** Episodes watched, seasons and shows finished, reads, did not finish, completions and abandoned have no drill: no diary filter lists exactly what they count.
+- **Rings in a range (STAT-213).** The 2-seen minimum still applies, and `seen_in_range` counts only seen items. A season or episode list item is first seen on its show's day.
+- **Collections in a range (STAT-214).** A member seen only undated counts as earlier than every dated one (as BK-406 and GM-216 treat undated completions), so it never stops a series from being completed in a range. Both groups sort by `seen_in_range`, then size, then name.
+- **Show-all (STAT-310, STAT-311).** An in-range collections group asked for All Time is a 400 rather than an empty page.
+
 Milestone 1 built the data these laws read: the `theme` and `original_language` facets, `Item.metadata_version`, the paced metadata fill and the genre groups. This document does not claim that any of the rest is implemented.
 Follow-up documents, as for the tracking contracts: `stats-coverage.md`, mapping each law to its tests, and a simulator verification document.
 
@@ -1095,7 +1253,7 @@ This contract does not cover:
 
 - the web's statistics page;
 - drill-downs and a read-only diary on other people's stats, which need `GET /users/{username}/diary/`;
-- people, countries and the world map;
+- countries and the world map;
 - streaming-service mix, themes and nanogenres as a stat, platforms and book format;
 - the activity heatmap, first and last log of the year, and the media mix bar;
 - a "Your lists" block and a Top list picker sheet;

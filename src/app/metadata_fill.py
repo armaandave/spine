@@ -13,11 +13,13 @@ The chain (app.tasks.fill_item_metadata) walks pending Items by id in chunks of 
 - Hardcover books are fetched about 50 at a time (hardcover.book_metadata_batch).
 - MusicBrainz, Apple Music, Open Library, ComicVine and IGDB Items that already have
   what their provider gives (year, genres, a runtime where the type has one, themes for
-  games) are only stamped, without a call.
+  games, credits for albums and books) are only stamped, without a call.
+- A MusicBrainz album that already has its length is fetched without the tracklist
+  enrichment (one call, not about five) and keeps that length.
 - Apple Music albums never go to MusicBrainz: one call on Apple's background session
-  (apple_music.album with its tracks) gives the album length, and the release date and
-  Apple's genres; a moved album keeps its first-release date. Without the Apple Music key the
-  provider is stopped for the run and nothing is marked.
+  (apple_music.album with its tracks and artists) gives the album length, the artists,
+  and the release date and Apple's genres; a moved album keeps its first-release date.
+  Without the Apple Music key the provider is stopped for the run and nothing is marked.
 - A 404 or 410, NotImplementedError, TypeError, ValueError or KeyError from the provider
   stamps the Item: asking again would give the same answer. The 10th such failure in a
   row (with nothing stored in between) stops the provider instead: that looks like our
@@ -60,13 +62,14 @@ from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 
 from api.services import stats_cache
-from api.services.item_metadata import CURRENT_METADATA_VERSION, store_item_metadata
+from api.services.item_metadata import CREDIT_TYPES, CURRENT_METADATA_VERSION, store_item_metadata
 from app import tv_listing
 from app.mixins import collect_external_rating_item_ids
 from app.models import (
     DiaryEntry,
     Episode,
     Item,
+    ItemCredit,
     ItemFilterFacet,
     MediaSeriesItem,
     MediaTypes,
@@ -277,6 +280,7 @@ def _with_facet_flags(queryset):
     return queryset.annotate(
         has_genre=Exists(facets.filter(facet_type=ItemFilterFacet.FacetType.GENRE)),
         has_theme=Exists(facets.filter(facet_type=ItemFilterFacet.FacetType.THEME)),
+        has_credit=Exists(ItemCredit.objects.filter(item=OuterRef("pk"))),
     )
 
 
@@ -290,8 +294,24 @@ def _only_needs_stamp(item):
         return False
     if item.media_type == MediaTypes.BOOK.value and not item.total_pages:
         return False
+    # Credits are new for albums and books, so one without them still needs its fetch.
+    if item.media_type in CREDIT_TYPES and not item.has_credit:
+        return False
     # Themes are new for games, so a game without them still needs its fetch.
     return item.media_type != MediaTypes.GAME.value or item.has_theme
+
+
+def _has_album_length(item):
+    """Return whether a MusicBrainz album already has its length.
+
+    Only the length needs the tracklist enrichment (about five calls), so such an
+    album is fetched without it (one call) and keeps its stored length.
+    """
+    return (
+        item.source == Sources.MUSICBRAINZ.value
+        and item.media_type == MediaTypes.MUSIC.value
+        and item.runtime_minutes is not None
+    )
 
 
 # Pacing
@@ -540,6 +560,15 @@ def _fill_one(run, item):
     try:
         if item.source == Sources.APPLE_MUSIC.value:
             metadata = _apple_music_metadata(item)
+        elif _has_album_length(item):
+            metadata = services.get_media_metadata(
+                item.media_type,
+                item.media_id,
+                item.source,
+                include_music_enrichment=False,
+            )
+            if metadata and metadata.get("runtime") is None:
+                metadata = {**metadata, "runtime": item.runtime_minutes}
         else:
             metadata = services.get_media_metadata(item.media_type, item.media_id, item.source)
     except Exception as error:  # noqa: BLE001 - classified
@@ -557,12 +586,13 @@ def _apple_music_metadata(item):
     The album length comes from its tracks (only when every track has a length). The
     release date only fills what the Item lacks. Genres refresh from Apple, minus
     the catch-all "Music". Music genres stay outside the genre groups (genre_groups).
+    The album's artists are its credits (ItemCredit).
     """
-    album = apple_music.album(item.media_id, background=True)
+    album = apple_music.album(item.media_id, include=("tracks", "artists"), background=True)
     attributes = album.get("attributes") or {}
     tracks = ((album.get("relationships") or {}).get("tracks") or {}).get("data") or []
     lengths = [(track.get("attributes") or {}).get("durationInMillis") for track in tracks]
-    metadata = {}
+    metadata = {"details": {"artist_credits": apple_music._artist_credits(album)}}
     if lengths and all(isinstance(length, int) and length > 0 for length in lengths):
         metadata["runtime"] = max(1, round(sum(lengths) / 60000))
     if item.release_date is None and attributes.get("releaseDate"):
@@ -1030,7 +1060,7 @@ def estimate(*, media_types=None, user=None):
     for item in queryset.iterator():
         row = rows.setdefault(
             (item.media_type, item.source),
-            Counter(pending=0, stamp_only=0, failed_before=0, fetch=0),
+            Counter(pending=0, stamp_only=0, failed_before=0, fetch=0, fetch_calls=0),
         )
         row["pending"] += 1
         if item.metadata_attempted_at is not None:
@@ -1043,6 +1073,7 @@ def estimate(*, media_types=None, user=None):
             row["stamp_only"] += 1
         else:
             row["fetch"] += 1
+            row["fetch_calls"] += 1 if _has_album_length(item) else FETCH_CALLS.get(item.source, 1)
             if item.media_type in SERIES_TYPES and not item.in_series:
                 fetched_without_series += 1
 
@@ -1062,7 +1093,7 @@ def estimate(*, media_types=None, user=None):
         elif source == Sources.HARDCOVER.value:
             calls = math.ceil(row["fetch"] / HARDCOVER_BATCH_SIZE) * FETCH_CALLS[source]
         else:
-            calls = row["fetch"] * FETCH_CALLS.get(source, 1)
+            calls = row["fetch_calls"]
         provider_calls[source] += calls
         result_rows.append({
             "media_type": media_type,

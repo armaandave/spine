@@ -8,11 +8,15 @@ a section with nothing yet is empty, never null (STAT-302).
 Events (STAT-106) come from ``scope.events``: distinct (day, title, type bucket)
 tuples, so active days, streaks, "Days with 2+ titles" and the activity charts all
 count the same thing.
+
+``rewatch_ids`` and ``multi_title_days`` also serve the diary's ``repeat`` and
+``multi_title_days`` filters (STAT-400), so a drill-down lists what the number counts.
 """
 
 from collections import Counter, defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from itertools import pairwise
+from typing import NamedTuple
 
 from django.db.models import (
     BooleanField,
@@ -67,43 +71,90 @@ MILESTONE_STEP = 500
 
 
 def build_header(scope):
-    """Build the four big numbers and the details list (STAT-200)."""
+    """Build the four big numbers and the details list (STAT-200).
+
+    Each detail carries ``drill``, the extra diary filters that list what it counts,
+    or None; drills are the owner's only, so every other viewer gets None.
+    """
     days = sorted({day for day, _title, _bucket in scope.events})
     counts = _log_counts(scope)
     details = []
     if scope.includes_today:
-        details.append(_detail("current_daily_streak", "Current daily streak", current_daily_streak(days, scope.today), DAY))
+        streak = current_daily_streak_span(days, scope.today)
+        details.append(
+            _detail("current_daily_streak", "Current daily streak", streak.length, DAY, drill=_days_drill(streak)),
+        )
     week_start = scope.week_starts_on
-    details.append(_detail("longest_weekly_streak", "Longest weekly streak", longest_weekly_streak(days, week_start), WEEK))
+    weekly = longest_weekly_streak_span(days, week_start)
+    details.append(
+        _detail("longest_weekly_streak", "Longest weekly streak", weekly.length, WEEK, drill=_weeks_drill(scope, weekly)),
+    )
     if scope.includes_today:
+        weekly = current_weekly_streak_span(days, scope.today, week_start)
         details.append(
             _detail(
                 "current_weekly_streak",
                 "Current weekly streak",
-                current_weekly_streak(days, scope.today, week_start),
+                weekly.length,
                 WEEK,
+                drill=_weeks_drill(scope, weekly),
             ),
         )
     details.extend(
         [
-            _detail("rewatches", REWATCH_LABELS[scope.media_type], counts["rewatches"]),
-            _detail("reviews", "Reviews", counts["reviews"]),
-            _detail("likes", "Likes", liked_titles(scope)),
-            _detail("days_with_two_plus_titles", "Days with 2+ titles", days_with_two_plus_titles(scope.events)),
+            _detail("rewatches", REWATCH_LABELS[scope.media_type], counts["rewatches"], drill={"repeat": "true"}),
+            _detail("reviews", "Reviews", counts["reviews"], drill={"has_review": "true"}),
+            _detail("likes", "Likes", liked_titles(scope), drill={"liked": "true"}),
+            _detail(
+                "days_with_two_plus_titles",
+                "Days with 2+ titles",
+                days_with_two_plus_titles(scope.events),
+                drill={"multi_title_days": "true"},
+            ),
         ],
     )
     details.extend(_type_details(scope))
+    if not scope.is_owner:
+        for detail in details:
+            detail["drill"] = None
+    longest = longest_daily_streak_span(days)
     return {
         "titles": scope.titles.count(),
         "logs": counts["logs"],
         "active_days": len(days),
-        "longest_daily_streak": longest_daily_streak(days),
+        "longest_daily_streak": longest.length,
+        "longest_daily_streak_range": (
+            {"start": day_string(longest.first), "end": day_string(longest.last)} if longest.length else None
+        ),
         "details": details,
     }
 
 
-def _detail(key, label, value, unit=None, *, approximate=False):
-    return {"key": key, "label": label, "value": value, "unit": unit, "approximate": approximate}
+def _detail(key, label, value, unit=None, *, approximate=False, drill=None):
+    return {"key": key, "label": label, "value": value, "unit": unit, "approximate": approximate, "drill": drill}
+
+
+def _days_drill(streak):
+    """Return the diary dates of a daily streak, or None when there is none."""
+    if not streak.length:
+        return None
+    return {"watched_from": day_string(streak.first), "watched_to": day_string(streak.last)}
+
+
+def _weeks_drill(scope, streak):
+    """Return a weekly streak's first to last day, clipped to the range, or None.
+
+    ``streak.first`` and ``streak.last`` are the first days of its first and last weeks.
+    """
+    if not streak.length:
+        return None
+    first = streak.first
+    last = streak.last + timedelta(days=6)
+    if scope.start_date is not None:
+        first = max(first, scope.start_date)
+    if scope.end_date is not None:
+        last = min(last, scope.end_date)
+    return {"watched_from": day_string(first), "watched_to": day_string(last)}
 
 
 def _log_counts(scope):
@@ -286,13 +337,24 @@ def _undated_fact_rule(scope):
 # Streaks, STAT-200.
 
 
-def longest_daily_streak(days):
-    """Return the most days in a row among sorted event days."""
+class Streak(NamedTuple):
+    """A run of days or weeks: its length and its first and last day (or week start)."""
+
+    length: int
+    first: date | None
+    last: date | None
+
+
+NO_STREAK = Streak(0, None, None)
+
+
+def longest_daily_streak_span(days):
+    """Return the most days in a row among sorted event days; ties go to the later."""
     return _longest_run(days, timedelta(days=1))
 
 
-def current_daily_streak(days, today):
-    """Days in a row back from today, or from yesterday when today has none."""
+def current_daily_streak_span(days, today):
+    """Return the run of days back from today, or from yesterday when today has none."""
     return _current_run(set(days), today, timedelta(days=1))
 
 
@@ -302,41 +364,51 @@ def week_start(day, week_starts_on):
     return day - timedelta(days=offset)
 
 
-def longest_weekly_streak(days, week_starts_on):
-    """Return the most weeks in a row with an event."""
+def longest_weekly_streak_span(days, week_starts_on):
+    """Return the most weeks in a row with an event, as its weeks' first days."""
     weeks = sorted({week_start(day, week_starts_on) for day in days})
     return _longest_run(weeks, timedelta(weeks=1))
 
 
-def current_weekly_streak(days, today, week_starts_on):
-    """Weeks in a row back from this week, or from last week when this week has none."""
+def current_weekly_streak_span(days, today, week_starts_on):
+    """Return the run of weeks back from this week or last, as its weeks' first days."""
     weeks = {week_start(day, week_starts_on) for day in days}
     return _current_run(weeks, week_start(today, week_starts_on), timedelta(weeks=1))
 
 
 def _longest_run(ordered, step):
     if not ordered:
-        return 0
-    longest = running = 1
+        return NO_STREAK
+    longest = Streak(1, ordered[0], ordered[0])
+    running, first = 1, ordered[0]
     for previous, current in pairwise(ordered):
-        running = running + 1 if current - previous == step else 1
-        longest = max(longest, running)
+        if current - previous == step:
+            running += 1
+        else:
+            running, first = 1, current
+        if running >= longest.length:
+            longest = Streak(running, first, current)
     return longest
 
 
 def _current_run(present, reference, step):
-    cursor = reference if reference in present else reference - step
+    last = cursor = reference if reference in present else reference - step
     run = 0
     while cursor in present:
         run += 1
         cursor -= step
-    return run
+    return Streak(run, cursor + step, last) if run else NO_STREAK
+
+
+def multi_title_days(events):
+    """Return the days with events for two or more titles (STAT-200, STAT-400)."""
+    titles = Counter(day for day, _title, _bucket in events)
+    return {day for day, count in titles.items() if count >= 2}
 
 
 def days_with_two_plus_titles(events):
     """Days with events for two or more titles."""
-    titles = Counter(day for day, _title, _bucket in events)
-    return sum(1 for count in titles.values() if count >= 2)
+    return len(multi_title_days(events))
 
 
 # Time, STAT-201 and STAT-202.
@@ -423,27 +495,25 @@ def milestone_numbers(count):
 def build_milestones(scope):
     """Build the 1st, 100th, 250th, 500th, 750th, 1,000th, then every 500th log.
 
-    STAT-216: visible logs of the tab are numbered over all time by log day, then
-    ID; a range shows the milestones whose log falls in it.
+    STAT-216: the scope's visible logs (the tab's, in the range) are numbered by log
+    day, then ID. All Time numbers every log; a dated range starts again at its own
+    first log, so its milestones are the range's 1st, 100th and so on.
     """
-    history = scope.all_time()
-    logs = history.all_entries
+    logs = scope.entries
     numbers = milestone_numbers(logs.count())
     if not numbers:
         return []
     rows = list(
-        logs.annotate(stats_day=history.log_day())
+        logs.annotate(stats_day=scope.log_day())
         .annotate(
             stats_number=Window(RowNumber(), order_by=[F("stats_day").asc(), F("id").asc()]),
-            stats_title=history.title_id(),
+            stats_title=scope.title_id(),
             stats_bucket=media_type_bucket("item__media_type"),
         )
         .filter(stats_number__in=numbers)
         .values_list("stats_number", "stats_day", "id", "stats_bucket", "stats_title")
         .order_by("stats_number"),
     )
-    if not scope.is_all_time:
-        rows = [row for row in rows if scope.start_date <= row[1] <= scope.end_date]
     summaries = scope.media_summaries([row[4] for row in rows])
     return [
         {

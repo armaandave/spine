@@ -435,6 +435,71 @@ def apply_diary_drilldown_filters(queryset, params, *, owner):
             value__in=languages,
         )
         queryset = queryset.filter(**{f"{target}__in": matching.values("item_id")})
+    return apply_credit_filter(queryset, params, target)
+
+
+def apply_credit_filter(queryset, params, target="item_id"):
+    """Keep logs whose title credits a person: ``credit=<source>:<id>`` (STAT-219).
+
+    Repeatable (any of them matches); ``role`` (repeatable) narrows to those roles.
+    With tv_rollup the target is the log's title, so a season or episode log matches
+    through its show's credits. A value without a source and an ID matches nothing.
+    """
+    from app.models import ItemCredit
+
+    people = values(params, "credit")
+    if not people:
+        return queryset
+    match = Q(pk__in=[])
+    for value in people:
+        person_source, _, person_id = value.partition(":")
+        if person_source and person_id:
+            match |= Q(person_source=person_source, person_id=person_id)
+    matching = ItemCredit.objects.filter(match)
+    roles = values(params, "role")
+    if roles:
+        matching = matching.filter(role__in=roles)
+    return queryset.filter(**{f"{target}__in": matching.values("item_id")})
+
+
+def apply_stats_count_filters(queryset, params, *, owner):
+    """Keep the owner's logs that a Stats number counts (STAT-400).
+
+    - ``repeat=true``: the logs Stats counts as repeats (STAT-108).
+    - ``multi_title_days=true``: the logs on days Stats counts as days with 2+ titles
+      (STAT-106 events on the owner's calendar). The days are those of the stats tab
+      the request's ``media_type`` values name: one type bucket is that tab (TV with
+      its seasons and episodes), anything else is Global.
+
+    Both use the Stats helpers themselves, over the owner's own view. Whether a log is a
+    repeat, and which titles a day holds, don't depend on the range, so the stats range
+    is ``watched_from``/``watched_to`` when both are given (fewer rows to work out) and
+    All Time otherwise; apply_diary_date_range narrows the rest.
+    """
+    repeat = bool_param(params, "repeat")
+    multi_title_days = bool_param(params, "multi_title_days")
+    if not (repeat or multi_title_days):
+        return queryset
+    from api.services import stats_v2_activity
+    from api.services.stats_scope import AUDIENCE_OWNER, TV_ITEM_TYPES, StatsScope
+
+    start_date = date_param(params, "watched_from")
+    end_date = date_param(params, "watched_to")
+    if start_date is None or end_date is None or start_date > end_date:
+        start_date = end_date = None
+    scope = StatsScope(owner=owner, viewer=owner, start_date=start_date, end_date=end_date, audience=AUDIENCE_OWNER)
+    if repeat:
+        queryset = queryset.filter(id__in=sorted(stats_v2_activity.rewatch_ids(scope)))
+    if multi_title_days:
+        buckets = {
+            MediaTypes.TV.value if media_type in TV_ITEM_TYPES else media_type
+            for media_type in values(params, "media_type")
+        }
+        tab = buckets.pop() if len(buckets) == 1 else None
+        if tab not in exposure.primary_media_types():
+            tab = None
+        days = stats_v2_activity.multi_title_days(scope.with_media_type(tab).events)
+        queryset = queryset.annotate(stats_drill_day=log_day_expression(owner)).filter(stats_drill_day__in=sorted(days))
     return queryset
 
 

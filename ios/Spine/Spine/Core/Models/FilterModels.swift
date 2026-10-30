@@ -128,6 +128,14 @@ struct MediaFilterState: Equatable {
     var genreGroups: [String] = []
     /// Original language names (`original_language`), never the `language` facet.
     var originalLanguages: [String] = []
+    /// Stats drill-downs (STAT-200): only the logs Stats counts as repeats (`repeat=true`).
+    var `repeat` = false
+    /// Stats drill-downs (STAT-200): only logs on days with two or more titles (`multi_title_days=true`).
+    var multiTitleDays = false
+    /// Stats drill-downs (STAT-219): logs whose title credits this person, "<source>:<id>".
+    var credit: String?
+    /// The credit's role ("director", "cast"); sent only with `credit`.
+    var role: String?
 
     var isActive: Bool {
         activeCount > 0
@@ -151,6 +159,9 @@ struct MediaFilterState: Equatable {
         if tag?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { count += 1 }
         if hasReview { count += 1 }
         if liked { count += 1 }
+        if `repeat` { count += 1 }
+        if multiTitleDays { count += 1 }
+        if credit != nil { count += 1 }
         if service.isActive { count += 1 }
         return count
     }
@@ -191,6 +202,16 @@ struct MediaFilterState: Equatable {
         }
         if liked {
             items.append(URLQueryItem(name: "liked", value: "true"))
+        }
+        if `repeat` {
+            items.append(URLQueryItem(name: "repeat", value: "true"))
+        }
+        if multiTitleDays {
+            items.append(URLQueryItem(name: "multi_title_days", value: "true"))
+        }
+        if let credit, !credit.isEmpty {
+            items.append(URLQueryItem(name: "credit", value: credit))
+            append("role", role, to: &items)
         }
         items += service.queryItems
         genreGroups.forEach { append("genre_group", $0, to: &items) }
@@ -246,6 +267,50 @@ struct MediaFilterState: Equatable {
             self[keyPath: excludeKeyPath].removeAll { $0 == trimmed }
         } else {
             self[keyPath: includeKeyPath].append(trimmed)
+        }
+    }
+
+    /// The filter with a stats row's `drill` on top (STAT-200): each key replaces the param of
+    /// the same name. Nil when a key or value is one this app can't send, so the row opens
+    /// nothing rather than the wrong logs.
+    func applying(drill: [String: String]) -> MediaFilterState? {
+        var filter = self
+        for (key, value) in drill {
+            switch key {
+            case "watched_from", "watched_to":
+                guard let date = Self.date(fromDay: value) else { return nil }
+                if key == "watched_from" {
+                    filter.watchedFrom = date
+                } else {
+                    filter.watchedTo = date
+                }
+            case "media_type":
+                guard !value.isEmpty else { return nil }
+                filter.mediaType = nil
+                filter.mediaTypes = [value]
+            default:
+                guard let flag = Self.drillFlags[key], let isOn = Self.flag(value) else { return nil }
+                filter[keyPath: flag] = isOn
+            }
+        }
+        return filter
+    }
+
+    /// The true/false params a drill can set.
+    private static let drillFlags: [String: WritableKeyPath<MediaFilterState, Bool>] = [
+        "repeat": \.`repeat`,
+        "multi_title_days": \.multiTitleDays,
+        "has_review": \.hasReview,
+        "liked": \.liked,
+        "skip_backfill": \.skipBackfill,
+        "tv_rollup": \.tvRollup,
+    ]
+
+    private static func flag(_ value: String) -> Bool? {
+        switch value.lowercased() {
+        case "true": true
+        case "false": false
+        default: nil
         }
     }
 

@@ -87,6 +87,16 @@ TYPE_DETAILS = {
     "book": ["reads", "did_not_finish"],
     "game": ["completions", "abandoned"],
 }
+# The extra diary filters each detail's drill sends (STAT-200); other details have none.
+DRILL_KEYS = {
+    "current_daily_streak": {"watched_from", "watched_to"},
+    "longest_weekly_streak": {"watched_from", "watched_to"},
+    "current_weekly_streak": {"watched_from", "watched_to"},
+    "rewatches": {"repeat"},
+    "reviews": {"has_review"},
+    "likes": {"liked"},
+    "days_with_two_plus_titles": {"multi_title_days"},
+}
 ALL_TIME_ONLY_DETAILS = {"seasons_finished", "shows_finished"}
 TODAY_ONLY_DETAILS = {"current_daily_streak", "current_weekly_streak"}
 BUCKET_BOUNDS = [
@@ -362,8 +372,12 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         self.assertEqual([ring["id"] for ring in data["list_rings"]], [self.ring.id])
         self.assertTrue(data["most_logged"]["items"])
         self.assertTrue(data["milestones"])
+        self.assertEqual([ring["seen_in_range"] for ring in data["list_rings"]], [2])
         movie_tab = self.payload(self.owner, ALL_TIME, "movie")
         self.assertEqual(movie_tab["collections"]["almost_count"], 1)
+        movie_year = self.payload(self.owner, YEAR_2025, "movie")["collections"]["in_range"]
+        self.assertEqual((movie_year["completed_count"], movie_year["progressed_count"]), (0, 1))
+        self.assertEqual(movie_year["progressed"][0]["seen_in_range"], 1)
         tv_tab = self.payload(self.owner, ALL_TIME, "tv")
         self.assertEqual(
             [detail["key"] for detail in tv_tab["header"]["details"]][-3:],
@@ -372,10 +386,14 @@ class StatsV2ContractConformanceTests(StatsV2Base):
 
     def test_followers_and_public_viewers_see_the_owners_stats(self):
         # STAT-002: with every log visible, the only differences are the audience,
-        # Top's owner-only fields and Top from a private list (STAT-003, STAT-004).
+        # Top's owner-only fields, Top from a private list (STAT-003, STAT-004) and
+        # the owner-only drills in the header's details (STAT-200).
         for params in (ALL_TIME, YEAR_2025):
             for tab in [None, *PRIMARY]:
                 owner = self.payload(self.owner, params, tab)
+                self.assertTrue(any(detail["drill"] for detail in owner["header"]["details"]))
+                for detail in owner["header"]["details"]:
+                    detail["drill"] = None
                 skipped = {"audience", "top"}
                 if owner["top"]["hint_private"]:
                     # Only the owner's Top comes from the private list, so only the
@@ -439,7 +457,7 @@ class StatsV2ContractConformanceTests(StatsV2Base):
             self.assertTrue(_is_int(row["titles"]) and _is_int(row["logs"]))
 
         all_time = data["range"]["is_all_time"]
-        self.check_header(data["header"], tab, all_time)
+        self.check_header(data["header"], tab, all_time, data["audience"])
         self.check_time(data["time"], tab)
         self.check_top(data["top"], data["audience"])
         self.check_highest_rated(data["highest_rated"])
@@ -452,9 +470,9 @@ class StatsV2ContractConformanceTests(StatsV2Base):
             self.check_languages(data["languages"], tab)
         else:
             self.assertIsNone(data["languages"])
-        self.check_rings(data["list_rings"], tab)
+        self.check_rings(data["list_rings"], tab, all_time)
         if tab in ("movie", "game", "book", "anime"):
-            self.check_collections(data["collections"], tab)
+            self.check_collections(data["collections"], tab, all_time)
         else:
             self.assertIsNone(data["collections"])
         self.check_most_logged(data["most_logged"], tab)
@@ -492,10 +510,21 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         self.assertTrue(_is_int(coverage["known"]) and _is_int(coverage["total"]))
         self.assertLessEqual(coverage["known"], coverage["total"], where)
 
-    def check_header(self, header, tab, all_time):
-        self.check_keys(header, {"titles", "logs", "active_days", "longest_daily_streak", "details"}, "header")
+    def check_header(self, header, tab, all_time, audience):
+        self.check_keys(
+            header,
+            {"titles", "logs", "active_days", "longest_daily_streak", "longest_daily_streak_range", "details"},
+            "header",
+        )
         for key in ("titles", "logs", "active_days", "longest_daily_streak"):
             self.assertTrue(_is_int(header[key]), key)
+        streak_range = header["longest_daily_streak_range"]
+        if header["longest_daily_streak"] == 0:
+            self.assertIsNone(streak_range)
+        else:
+            self.check_keys(streak_range, {"start", "end"}, "longest_daily_streak_range")
+            start, end = date.fromisoformat(streak_range["start"]), date.fromisoformat(streak_range["end"])
+            self.assertEqual((end - start).days + 1, header["longest_daily_streak"])
         allowed = SHARED_DETAILS + TYPE_DETAILS.get(tab, [])
         keys = [detail["key"] for detail in header["details"]]
         self.assertEqual(keys, [key for key in allowed if key in keys], "details order")
@@ -506,11 +535,19 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         # Both ranges tested here are All Time (includes today) and 2025 (doesn't).
         self.assertEqual(keys, expected, "details present")
         for detail in header["details"]:
-            self.check_keys(detail, {"key", "label", "value", "unit", "approximate"}, "details[]")
+            self.check_keys(detail, {"key", "label", "value", "unit", "approximate", "drill"}, "details[]")
             self.assertIsInstance(detail["label"], str)
             self.assertTrue(_is_int(detail["value"]), detail["key"])
             self.assertIn(detail["unit"], ("day", "week", None))
             self.assertIsInstance(detail["approximate"], bool)
+            drill = detail["drill"]
+            # Streaks have no drill at 0; other drills don't depend on the value.
+            zero_streak = detail["unit"] is not None and detail["value"] == 0
+            if audience != "owner" or detail["key"] not in DRILL_KEYS or zero_streak:
+                self.assertIsNone(drill, detail["key"])
+            else:
+                self.assertEqual(set(drill), DRILL_KEYS[detail["key"]], detail["key"])
+                self.assertTrue(all(isinstance(value, str) for value in drill.values()), detail["key"])
 
     def check_time(self, time, tab):
         self.check_keys(time, {"rows", "hours_total"}, "time")
@@ -671,28 +708,44 @@ class StatsV2ContractConformanceTests(StatsV2Base):
             self.check_by_type(row["by_type"], "languages.rows[].by_type", tab)
         self.check_coverage(languages["coverage"], "languages.coverage")
 
-    def check_rings(self, rings, tab):
+    def check_rings(self, rings, tab, all_time):
         self.assertIsInstance(rings, list)
         for ring in rings:
-            self.check_keys(ring, {"id", "name", "media_type", "kind", "seen", "total"}, "list_rings[]")
+            self.check_keys(ring, {"id", "name", "media_type", "kind", "seen", "total", "seen_in_range"}, "list_rings[]")
             self.assertTrue(_is_int(ring["id"]) and _is_int(ring["seen"]) and _is_int(ring["total"]))
+            if all_time:
+                self.assertIsNone(ring["seen_in_range"])
+            else:
+                self.assertTrue(_is_int(ring["seen_in_range"]))
+                self.assertTrue(1 <= ring["seen_in_range"] <= ring["seen"])
             if tab is not None:
                 self.assertEqual(ring["media_type"], tab)
 
-    def check_collections(self, collections, tab):
-        self.check_keys(collections, {"complete_count", "almost_count", "complete", "almost"}, "collections")
-        for key in ("complete", "almost"):
-            self.assertLessEqual(len(collections[key]), 4)
-            for row in collections[key]:
-                self.check_keys(
-                    row,
-                    {"id", "source", "media_type", "name", "item_count", "poster_urls", "completion"},
-                    f"collections.{key}[]",
-                )
+    def check_collections(self, collections, tab, all_time):
+        self.check_keys(
+            collections,
+            {"complete_count", "almost_count", "complete", "almost", "in_range"},
+            "collections",
+        )
+        summary_keys = {"id", "source", "media_type", "name", "item_count", "poster_urls", "completion"}
+        groups = [(collections, "complete", summary_keys), (collections, "almost", summary_keys)]
+        if all_time:
+            self.assertIsNone(collections["in_range"])
+        else:
+            in_range = collections["in_range"]
+            self.check_keys(in_range, {"completed_count", "completed", "progressed_count", "progressed"}, "in_range")
+            self.assertTrue(_is_int(in_range["completed_count"]) and _is_int(in_range["progressed_count"]))
+            groups += [(in_range, key, summary_keys | {"seen_in_range"}) for key in ("completed", "progressed")]
+        for parent, key, keys in groups:
+            self.assertLessEqual(len(parent[key]), 4)
+            for row in parent[key]:
+                self.check_keys(row, keys, f"collections.{key}[]")
                 self.assertIsInstance(row["id"], str)
                 self.assertEqual(row["media_type"], tab)
                 self.assertLessEqual(len(row["poster_urls"]), 3)
                 self.check_keys(row["completion"], {"completed_count", "total_count"}, "completion")
+                if "seen_in_range" in keys:
+                    self.assertTrue(1 <= row["seen_in_range"] <= row["completion"]["completed_count"])
 
     def check_most_logged(self, section, tab):
         self.check_keys(section, {"label", "total", "items"}, "most_logged")

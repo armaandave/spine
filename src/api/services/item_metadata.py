@@ -23,34 +23,67 @@ erases a stored value:
 - "original_language" (top level only): the title's original language as one English
   name string, for example metadata["original_language"] = "Japanese". Map the ISO
   code to an English name first; a code no table names is stored as the code itself.
+- Credits (app.models.ItemCredit, stats people, STAT-219), each role replaced only
+  when the metadata carries its list (a missing or None list keeps what is stored):
+  - movie (TMDB): directors from details.directors ({id, name}, pictures from the
+    crew entry of the same person_id) and the top 15 billed of "cast" ({person_id,
+    name, image}). Both need "cast" to be a list, which says credits were fetched
+    (tmdb.get_directors gives [] without them);
+  - TV show (TMDB): creators from details.creators ({id, name, image}, from
+    created_by) and the top 15 of "cast" when it is a list;
+  - music: album artists from details.artist_credits (or music.artist_credit): an
+    Apple artist by artist_source and artist_id (picture: image_url), a MusicBrainz
+    artist by artist_mbid. Credits with no ID, Various Artists and MusicBrainz's
+    [unknown] are left out; a list with no ID at all isn't carried;
+  - book: details.authors ({person_id, source, name, image_url}), the same rule.
+  Seasons, episodes and other types store none.
 """
 
 from functools import partial
 
+from django.conf import settings
 from django.db import transaction
 
 from api.services import completion as completion_service
 from api.services.filters import _runtime_minutes, update_item_filter_metadata
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
-from app.models import MediaTypes
+from app.models import ItemCredit, MediaTypes, Sources
 
 # The metadata rules each media type is filled under. Bump a type when what is stored
 # for it changes, so the fill revisits its Items (Item.metadata_version).
 CURRENT_METADATA_VERSION = {
-    # 2: the original language.
-    MediaTypes.MOVIE.value: 2,
-    MediaTypes.TV.value: 2,
+    # 2: the original language. 3: credits (directors, creators and top cast).
+    MediaTypes.MOVIE.value: 3,
+    MediaTypes.TV.value: 3,
     MediaTypes.SEASON.value: 2,
     MediaTypes.EPISODE.value: 2,
     # 2: runtime text, details.start_date, first_publish_year, album length, themes.
     MediaTypes.ANIME.value: 2,
     MediaTypes.MANGA.value: 2,
     MediaTypes.COMIC.value: 2,
-    MediaTypes.MUSIC.value: 2,
-    # 3: the page count, which Goodreads imports left blank.
-    MediaTypes.BOOK.value: 3,
+    # 3: album artists.
+    MediaTypes.MUSIC.value: 3,
+    # 3: the page count, which Goodreads imports left blank. 4: authors.
+    MediaTypes.BOOK.value: 4,
     MediaTypes.GAME.value: 2,
 }
+
+# Types whose Items keep credits (ItemCredit), and the cast members kept per title.
+CREDIT_TYPES = (
+    MediaTypes.MOVIE.value,
+    MediaTypes.TV.value,
+    MediaTypes.MUSIC.value,
+    MediaTypes.BOOK.value,
+)
+CAST_LIMIT = 15
+# Credits that name no person: MusicBrainz's Various Artists and [unknown], and any
+# artist or author called Various Artists.
+NOT_A_PERSON_IDS = {
+    "89ad4ac3-39f7-470e-963a-56509c546377",
+    "125ec42a-7229-4250-afc5-e057484327fe",
+}
+NOT_A_PERSON_NAMES = {"various artists"}
+CREDIT_SOURCES = {source.value for source in Sources} - {Sources.MANUAL.value}
 
 
 def is_metadata_current(item):
@@ -75,6 +108,8 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
     update_item_filter_metadata(item, metadata)
     if item.media_type == MediaTypes.BOOK.value:
         _store_book_pages(item, metadata)
+    if item.media_type in CREDIT_TYPES:
+        store_item_credits(item, metadata)
     if persist_series:
         _persist_series(item, metadata)
     if not complete or (
@@ -106,6 +141,150 @@ def _store_book_pages(item, metadata):
             item.total_pages = pages
             item.save(update_fields=["total_pages"])
             return
+
+
+def store_item_credits(item, metadata):
+    """Replace the credits of each role the metadata carries; return if any changed.
+
+    One read when nothing changed; otherwise one delete and one bulk insert, in a
+    transaction. No provider call.
+    """
+    by_role = metadata_credits(item, metadata)
+    if not by_role:
+        return False
+    rows = [
+        ItemCredit(
+            item=item,
+            role=role,
+            person_source=person_source,
+            person_id=person_id,
+            name=name,
+            order=order,
+            image_url=image_url,
+        )
+        for role, entries in by_role.items()
+        for order, (person_source, person_id, name, image_url) in enumerate(entries)
+    ]
+    stored = ItemCredit.objects.filter(item=item, role__in=list(by_role))
+    fields = ("role", "person_source", "person_id", "name", "order", "image_url")
+    wanted = {tuple(getattr(row, field) for field in fields) for row in rows}
+    if set(stored.values_list(*fields)) == wanted:
+        return False
+    with transaction.atomic():
+        stored.delete()
+        # Two requests storing one title at once insert the same rows: keep either.
+        ItemCredit.objects.bulk_create(rows, ignore_conflicts=True)
+    return True
+
+
+def metadata_credits(item, metadata):
+    """Return ``{role: [(person_source, person_id, name, image_url), ...]}`` (STAT-219).
+
+    Only the roles the metadata carries are keys (see the module docstring); each
+    list is in the provider's order, one entry per person.
+    """
+    details = metadata.get("details") or {}
+    if not isinstance(details, dict):
+        return {}
+    source = metadata.get("source") or item.source
+    if item.media_type in (MediaTypes.MOVIE.value, MediaTypes.TV.value):
+        roles = _screen_credits(item, metadata, details) if source == Sources.TMDB.value else {}
+    elif item.media_type == MediaTypes.MUSIC.value:
+        roles = _artist_credits(metadata, details)
+    elif item.media_type == MediaTypes.BOOK.value:
+        roles = _author_credits(details, source)
+    else:
+        roles = {}
+    return {role: _clean_credits(entries, role) for role, entries in roles.items()}
+
+
+def _screen_credits(item, metadata, details):
+    """Return a TMDB movie's directors and cast, or a show's creators and cast."""
+    roles = {}
+    source = Sources.TMDB.value
+    cast = metadata.get("cast")
+    # get_directors gives [] without credits too, so directors need the cast list.
+    if item.media_type == MediaTypes.MOVIE.value:
+        if isinstance(cast, list) and isinstance(details.get("directors"), list):
+            crew_images = {
+                str(member.get("person_id")): member.get("image")
+                for member in metadata.get("crew") or []
+                if isinstance(member, dict)
+            }
+            roles[ItemCredit.Role.DIRECTOR.value] = [
+                (source, person.get("id"), person.get("name"), crew_images.get(str(person.get("id"))))
+                for person in details["directors"]
+                if isinstance(person, dict)
+            ]
+    elif isinstance(details.get("creators"), list):
+        roles[ItemCredit.Role.CREATOR.value] = [
+            (source, person.get("id"), person.get("name"), person.get("image"))
+            for person in details["creators"]
+            if isinstance(person, dict)
+        ]
+    if isinstance(cast, list):
+        roles[ItemCredit.Role.CAST.value] = [
+            (source, person.get("person_id"), person.get("name"), person.get("image"))
+            for person in cast
+            if isinstance(person, dict)
+        ]
+    return roles
+
+
+def _artist_credits(metadata, details):
+    """Return an album's artists: Apple's by artist ID, else MusicBrainz's by MBID."""
+    artists = details.get("artist_credits")
+    if artists is None:
+        artists = (metadata.get("music") or {}).get("artist_credit")
+    entries = [
+        (
+            (credit.get("artist_source"), credit.get("artist_id"))
+            if credit.get("artist_id")
+            else (Sources.MUSICBRAINZ.value, credit.get("artist_mbid"))
+        )
+        + (credit.get("name"), credit.get("image_url"))
+        for credit in artists or []
+        if isinstance(credit, dict)
+    ]
+    return {ItemCredit.Role.ARTIST.value: entries} if any(entry[1] for entry in entries) else {}
+
+
+def _author_credits(details, source):
+    """Return a book's authors, each under its own source (Hardcover, Open Library)."""
+    entries = [
+        (author.get("source") or source, author.get("person_id"), author.get("name"), author.get("image_url"))
+        for author in details.get("authors") or []
+        if isinstance(author, dict)
+    ]
+    return {ItemCredit.Role.AUTHOR.value: entries} if any(entry[1] for entry in entries) else {}
+
+
+def _clean_credits(entries, role):
+    """Keep credits naming a person once, with IDs and names that fit, in order."""
+    id_length, name_length, image_length = (
+        ItemCredit._meta.get_field(field).max_length for field in ("person_id", "name", "image_url")
+    )
+    result = []
+    seen = set()
+    for person_source, raw_id, raw_name, raw_image in entries:
+        person_id = str(raw_id or "").strip()
+        name = str(raw_name or "").strip()
+        if (
+            person_source not in CREDIT_SOURCES
+            or not person_id
+            or len(person_id) > id_length
+            or not name
+            or person_id in NOT_A_PERSON_IDS
+            or name.casefold() in NOT_A_PERSON_NAMES
+            or (person_source, person_id) in seen
+        ):
+            continue
+        seen.add((person_source, person_id))
+        keep_image = isinstance(raw_image, str) and raw_image != settings.IMG_NONE and len(raw_image) <= image_length
+        result.append((person_source, person_id, name[:name_length], raw_image if keep_image else ""))
+    if role == ItemCredit.Role.CAST.value:
+        return result[:CAST_LIMIT]
+    return result
 
 
 def album_runtime_minutes(representative_release):

@@ -1,19 +1,10 @@
 import SwiftUI
 
 // Collections (STAT-214): complete and almost complete series on the movie, game, book and
-// anime tabs. Four tiles of each, a tile being three posters with "N of M" under the name, then
-// "Show all" for a group with more (`StatsCollectionsListView`, the collections endpoint). A
-// tile opens the series page. Each tile row is its own row of the page's lazy stack.
-
-extension StatsCollectionGroup {
-    /// "Complete", "Almost complete".
-    var displayTitle: String {
-        switch self {
-        case .complete: "Complete"
-        case .almost: "Almost complete"
-        }
-    }
-}
+// anime tabs; in a year, the series completed or moved forward that year instead. Four tiles of
+// each, a tile being three posters with "N of M" under the name, then "Show all" for a group
+// with more (`StatsCollectionsListView`, the collections endpoint). A tile opens the series
+// page. Each tile row is its own row of the page's lazy stack.
 
 /// One group of the section: its count from the payload and the first rows it sent.
 struct StatsCollectionsGroupRows: Identifiable, Hashable {
@@ -25,24 +16,45 @@ struct StatsCollectionsGroupRows: Identifiable, Hashable {
 }
 
 enum StatsCollectionsData {
-    /// "Complete (33)".
-    static func groupTitle(_ group: StatsCollectionGroup, count: Int) -> String {
-        "\(group.displayTitle) (\(count.formatted()))"
+    /// "Complete", "Almost complete", "Completed in 2025", "Progressed in 2025".
+    static func groupName(_ group: StatsCollectionGroup, period: StatsPeriod = .allTime) -> String {
+        switch group {
+        case .complete: "Complete"
+        case .almost: "Almost complete"
+        case .completedInRange: "Completed in \(period.title)"
+        case .progressedInRange: "Progressed in \(period.title)"
+        }
     }
 
-    /// "3 of 3": seen of released (STAT-214). Nil when the series has no counts.
+    /// "Complete (33)", "Completed in 2025 (2)".
+    static func groupTitle(_ group: StatsCollectionGroup, count: Int, period: StatsPeriod = .allTime) -> String {
+        "\(groupName(group, period: period)) (\(count.formatted()))"
+    }
+
+    /// "3 of 3": seen of released (STAT-214); in a year, "+2 · 5 of 8", the 2 being the members
+    /// first seen that year. Nil when the series has no counts.
     static func caption(_ series: MediaSeriesSummary) -> String? {
         guard let completion = series.completion, completion.totalCount > 0 else { return nil }
-        return "\(completion.normalizedCompletedCount.formatted()) of \(completion.totalCount.formatted())"
+        let seen = "\(completion.normalizedCompletedCount.formatted()) of \(completion.totalCount.formatted())"
+        guard let seenInRange = series.seenInRange, seenInRange > 0 else { return seen }
+        return "+\(seenInRange.formatted()) · \(seen)"
     }
 
-    /// The groups with something in them, with their counts and first rows.
+    /// The groups with something in them, with their counts and first rows: the range's own
+    /// groups when the server sends them, else the lifetime ones.
     static func groups(_ collections: StatsCollections) -> [StatsCollectionsGroupRows] {
-        [
-            StatsCollectionsGroupRows(group: .complete, count: collections.completeCount, series: collections.complete),
-            StatsCollectionsGroupRows(group: .almost, count: collections.almostCount, series: collections.almost),
-        ]
-        .filter { $0.count > 0 && !$0.series.isEmpty }
+        let groups = if let inRange = collections.inRange {
+            [
+                StatsCollectionsGroupRows(group: .completedInRange, count: inRange.completedCount, series: inRange.completed),
+                StatsCollectionsGroupRows(group: .progressedInRange, count: inRange.progressedCount, series: inRange.progressed),
+            ]
+        } else {
+            [
+                StatsCollectionsGroupRows(group: .complete, count: collections.completeCount, series: collections.complete),
+                StatsCollectionsGroupRows(group: .almost, count: collections.almostCount, series: collections.almost),
+            ]
+        }
+        return groups.filter { $0.count > 0 && !$0.series.isEmpty }
     }
 
     /// Whether a group has more than the section shows.
@@ -50,19 +62,23 @@ enum StatsCollectionsData {
         count > shown
     }
 
-    /// "The Lord of the Rings Collection, 3 of 3 seen".
+    /// "The Lord of the Rings Collection, 3 of 3 seen", "…, 2 new, 5 of 8 seen".
     static func accessibilityLabel(_ series: MediaSeriesSummary) -> String {
-        guard let caption = caption(series) else { return series.name }
-        return "\(series.name), \(caption) seen"
+        guard let completion = series.completion, completion.totalCount > 0 else { return series.name }
+        let seen = "\(completion.normalizedCompletedCount.formatted()) of \(completion.totalCount.formatted()) seen"
+        guard let seenInRange = series.seenInRange, seenInRange > 0 else { return "\(series.name), \(seen)" }
+        return "\(series.name), \(seenInRange.formatted()) new, \(seen)"
     }
 }
 
 /// The Collections section's rows. `onOpen` gets `.collection(series)`; `onShowAll` opens a
-/// group's full list.
+/// group's full list, with its count.
 struct StatsCollectionsSection: View {
     let collections: StatsCollections
+    /// The range, for the year's group names.
+    var period: StatsPeriod = .allTime
     let onOpen: (StatsDrillDown) -> Void
-    var onShowAll: ((StatsCollectionGroup) -> Void)?
+    var onShowAll: ((StatsCollectionGroup, Int) -> Void)?
 
     var body: some View {
         let groups = StatsCollectionsData.groups(collections)
@@ -76,14 +92,14 @@ struct StatsCollectionsSection: View {
                 let rows = StatsPosterGridLayout.rows(entry.series, idPrefix: "collections.\(entry.group.rawValue)")
 
                 HStack(alignment: .center, spacing: 12) {
-                    Text(StatsCollectionsData.groupTitle(entry.group, count: entry.count))
+                    Text(StatsCollectionsData.groupTitle(entry.group, count: entry.count, period: period))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(StatsChartStyle.secondaryText)
                         .accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     if let onShowAll, StatsCollectionsData.hasMore(count: entry.count, shown: entry.series.count) {
                         StatsShowAllButton {
-                            onShowAll(entry.group)
+                            onShowAll(entry.group, entry.count)
                         }
                     } else {
                         Color.clear.frame(width: 1, height: 44)

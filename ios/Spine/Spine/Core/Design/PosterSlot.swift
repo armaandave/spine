@@ -19,6 +19,8 @@ enum PosterSlot {
     case hofCrown
     /// Square album art on Search's featured tiles.
     case featuredSquare
+    /// Stats' Top from a tagged list: two rows of five on the narrowest phone.
+    case statsTopGrid
 
     var size: CGSize {
         switch self {
@@ -50,6 +52,8 @@ enum PosterSlot {
             CGSize(width: 64, height: 96)
         case .featuredSquare:
             CGSize(width: 60, height: 60)
+        case .statsTopGrid:
+            CGSize(width: 62, height: 93)
         }
     }
 

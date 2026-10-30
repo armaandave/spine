@@ -1498,17 +1498,20 @@ def _artist_credits(album):
     credits = []
     for index, artist in enumerate(artists):
         remaining = len(artists) - index - 1
-        credits.append(
-            {
-                # Never an Apple ID here: installed builds open artist_mbid as a
-                # MusicBrainz artist.
-                "artist_mbid": None,
-                "name": artist["attributes"]["name"],
-                "join_phrase": ", " if remaining > 1 else " & " if remaining else "",
-                "artist_source": Sources.APPLE_MUSIC.value,
-                "artist_id": str(artist["id"]),
-            },
-        )
+        credit = {
+            # Never an Apple ID here: installed builds open artist_mbid as a
+            # MusicBrainz artist.
+            "artist_mbid": None,
+            "name": artist["attributes"]["name"],
+            "join_phrase": ", " if remaining > 1 else " & " if remaining else "",
+            "artist_source": Sources.APPLE_MUSIC.value,
+            "artist_id": str(artist["id"]),
+        }
+        # The artist's picture, for stats people rows (ItemCredit).
+        image_url = artwork_url(artist["attributes"].get("artwork"))
+        if image_url:
+            credit["image_url"] = image_url
+        credits.append(credit)
     return credits
 
 

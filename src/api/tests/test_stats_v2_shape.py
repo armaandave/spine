@@ -68,6 +68,7 @@ TOP_LEVEL_KEYS = {
     "release_years",
     "genres",
     "languages",
+    "people",
     "list_rings",
     "collections",
     "most_logged",
@@ -287,13 +288,7 @@ class StatsV2ShapeTests(StatsV2Base):
             self.assertIsInstance(data[key], dict, key)
         for key in LIST_SECTIONS:
             self.assertIsInstance(data[key], list, key)
-        if tab in COLLECTION_TABS:
-            self.assertEqual(
-                set(data["collections"]),
-                {"complete_count", "almost_count", "complete", "almost"},
-            )
-        else:
-            self.assertIsNone(data["collections"])
+        self.assert_collections_shape(data, tab)
         if tab in LANGUAGE_TABS:
             self.assertEqual(data["languages"]["media_types"], ["movie", "tv"] if tab is None else [tab])
         else:
@@ -316,6 +311,23 @@ class StatsV2ShapeTests(StatsV2Base):
             )
         for path, value in _star_values(data):
             self.assertTrue(value is None or isinstance(value, str), f"{path} is {value!r}")
+
+    def assert_collections_shape(self, data, tab):
+        """Check collections: null off its tabs, no in_range in All Time (STAT-214)."""
+        if tab not in COLLECTION_TABS:
+            self.assertIsNone(data["collections"])
+            return
+        self.assertEqual(
+            set(data["collections"]),
+            {"complete_count", "almost_count", "complete", "almost", "in_range"},
+        )
+        if data["range"]["is_all_time"]:
+            self.assertIsNone(data["collections"]["in_range"])
+        else:
+            self.assertEqual(
+                set(data["collections"]["in_range"]),
+                {"completed_count", "completed", "progressed_count", "progressed"},
+            )
 
 
 class StatsV2CountingTests(StatsV2Base):

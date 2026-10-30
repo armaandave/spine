@@ -1,19 +1,28 @@
 import SwiftUI
 
 /// The header (STAT-200): four big numbers in one card, then a card of label/value details.
-/// Its body is one view per row, so each row is its own item in the page's lazy stack.
+/// On a type tab the third number is the tab's own measure (hours, pages, chapters or issues)
+/// and Active days opens the details card. Its body is one view per row, so each row is its own
+/// item in the page's lazy stack.
 struct StatsHeaderSection: View {
     let header: StatsHeader
     /// The tab: nil on Global.
     let mediaType: String?
-    /// Opens the liked logs (STAT-401); nil on someone else's stats, where nothing opens.
-    var onOpenLikes: (() -> Void)?
+    /// The page's Time block, for a type tab's measure.
+    var time: StatsTime?
+    /// Opens a number's or a row's logs (STAT-401); nil on someone else's stats, where nothing
+    /// opens.
+    var onOpen: ((StatsDrillDown) -> Void)?
 
     struct Count: Hashable, Identifiable {
         let label: String
         let value: Int
         /// "days" beside the number, or nil.
         let unit: String?
+        /// The number reads "≈ 340".
+        var approximate = false
+        /// What a tap opens on your own stats; nil when it opens nothing.
+        var drillDown: StatsDrillDown?
 
         var id: String { label }
     }
@@ -31,14 +40,17 @@ struct StatsHeaderSection: View {
     }
 
     var body: some View {
-        ForEach(Self.rows(for: header)) { row in
+        let details = Self.shownDetails(header, mediaType: mediaType, time: time)
+        ForEach(Self.rows(for: header, mediaType: mediaType, time: time)) { row in
             switch row {
             case .counts:
                 countsCard
-                    .padding(.bottom, Self.shownDetails(header).isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
+                    .padding(.bottom, details.isEmpty ? StatsSectionLayout.sectionGap : StatsSectionLayout.cardGap)
             case let .detail(detail, isFirst, isLast):
-                if let onOpenLikes, Self.opensLikes(detail) {
-                    Button(action: onOpenLikes) {
+                if let onOpen, let drillDown = Self.drillDown(for: detail) {
+                    Button {
+                        onOpen(drillDown)
+                    } label: {
                         StatsLabelValueRow(
                             label: detail.label,
                             value: Self.detailValue(detail),
@@ -62,7 +74,7 @@ struct StatsHeaderSection: View {
     }
 
     private var countsCard: some View {
-        let counts = Self.counts(for: header, mediaType: mediaType)
+        let counts = Self.counts(for: header, mediaType: mediaType, time: time)
         return Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 18) {
             ForEach(Array(stride(from: 0, to: counts.count, by: 2)), id: \.self) { start in
                 GridRow {
@@ -77,10 +89,25 @@ struct StatsHeaderSection: View {
         .diaryCard()
     }
 
+    @ViewBuilder
     private func countCell(_ count: Count) -> some View {
+        if let onOpen, let drillDown = count.drillDown {
+            Button {
+                onOpen(drillDown)
+            } label: {
+                countContent(count, showsChevron: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+        } else {
+            countContent(count, showsChevron: false)
+        }
+    }
+
+    private func countContent(_ count: Count, showsChevron: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(count.value.formatted())
+                Text(Self.countValue(count))
                     .font(.title.weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
@@ -94,12 +121,21 @@ struct StatsHeaderSection: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
 
-            Text(count.label)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
-                .lineLimit(1)
+            HStack(spacing: 3) {
+                Text(count.label)
+                    .lineLimit(1)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.6))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
@@ -109,30 +145,92 @@ struct StatsHeaderSection: View {
     /// running shows.
     static let hiddenWhenZero: Set<String> = ["current_daily_streak", "current_weekly_streak"]
 
-    static func shownDetails(_ header: StatsHeader) -> [StatsHeaderDetail] {
-        header.details.filter { !(hiddenWhenZero.contains($0.key) && $0.value == 0) }
+    /// The details card's rows: Active days first when the tab's measure took its number, then
+    /// the server's rows without the zero current streaks.
+    static func shownDetails(_ header: StatsHeader, mediaType: String? = nil, time: StatsTime? = nil) -> [StatsHeaderDetail] {
+        let details = header.details.filter { !(hiddenWhenZero.contains($0.key) && $0.value == 0) }
+        guard primaryMeasure(time: time, mediaType: mediaType) != nil else { return details }
+        let activeDays = StatsHeaderDetail(
+            key: "active_days",
+            label: "Active days",
+            value: header.activeDays,
+            unit: nil,
+            approximate: false,
+            drill: [:]
+        )
+        return [activeDays] + details.filter { $0.key != activeDays.key }
     }
 
-    static func rows(for header: StatsHeader) -> [Row] {
-        let details = shownDetails(header)
+    static func rows(for header: StatsHeader, mediaType: String? = nil, time: StatsTime? = nil) -> [Row] {
+        let details = shownDetails(header, mediaType: mediaType, time: time)
         return [.counts] + details.enumerated().map { index, detail in
             .detail(detail, isFirst: index == 0, isLast: index == details.count - 1)
         }
     }
 
-    /// Whether a detail row opens the liked logs: the "likes" row, when it counts any.
-    static func opensLikes(_ detail: StatsHeaderDetail) -> Bool {
-        detail.key == "likes" && detail.value > 0
+    /// What a detail row opens: its `drill` on top of the scope's logs (an empty one is the
+    /// scope's own logs), or, from a server that sends no drills, the liked logs for "likes".
+    /// A row that counts nothing opens nothing.
+    static func drillDown(for detail: StatsHeaderDetail) -> StatsDrillDown? {
+        guard detail.value > 0 else { return nil }
+        if let drill = detail.drill {
+            return StatsDrillDown.headerStat(label: detail.label, drill: drill)
+        }
+        return detail.key == "likes" ? .liked : nil
     }
 
-    /// Titles, logs, active days and the longest daily streak. "Titles" names the tab's kind.
-    static func counts(for header: StatsHeader, mediaType: String?) -> [Count] {
-        [
+    /// Titles, logs, the third number and the longest daily streak. "Titles" names the tab's
+    /// kind; the third number is the tab's measure on a type tab, else active days. Each opens
+    /// the scope's logs, and the streak opens its own days when the server sends them.
+    static func counts(for header: StatsHeader, mediaType: String?, time: StatsTime? = nil) -> [Count] {
+        var counts = [
             Count(label: titlesLabel(for: mediaType), value: header.titles, unit: nil),
             Count(label: "Logs", value: header.logs, unit: nil),
-            Count(label: "Active days", value: header.activeDays, unit: nil),
-            Count(label: "Longest streak", value: header.longestDailyStreak, unit: unitText("day", value: header.longestDailyStreak)),
+            primaryMeasure(time: time, mediaType: mediaType)
+                ?? Count(label: "Active days", value: header.activeDays, unit: nil),
         ]
+        for index in counts.indices where counts[index].value > 0 {
+            counts[index].drillDown = .stat(label: counts[index].label)
+        }
+
+        let streakLabel = "Longest streak"
+        var streak = Count(label: streakLabel, value: header.longestDailyStreak, unit: unitText("day", value: header.longestDailyStreak))
+        if header.longestDailyStreak > 0, let range = header.longestDailyStreakRange {
+            streak.drillDown = StatsDrillDown.headerStat(
+                label: streakLabel,
+                drill: ["watched_from": range.start, "watched_to": range.end]
+            )
+        }
+        return counts + [streak]
+    }
+
+    /// A type tab's own measure from its Time row: hours (minutes under an hour), pages,
+    /// chapters or issues. Nil on Global, and when the tab has no Time row or it counts nothing,
+    /// so Active days keeps its place.
+    static func primaryMeasure(time: StatsTime?, mediaType: String?) -> Count? {
+        guard let mediaType,
+              let row = time?.rows.first(where: { $0.mediaType == mediaType }),
+              row.value > 0 else { return nil }
+        let value: Int
+        let label: String
+        switch row.unit {
+        case "minutes" where row.value >= 60:
+            value = Int((Double(row.value) / 60).rounded())
+            label = value == 1 ? "Hour" : "Hours"
+        case "minutes":
+            value = row.value
+            label = value == 1 ? "Minute" : "Minutes"
+        default:
+            let singular = row.unit.hasSuffix("s") ? String(row.unit.dropLast()) : row.unit
+            value = row.value
+            label = (value == 1 ? singular : singular + "s").capitalized
+        }
+        return Count(label: label, value: value, unit: nil, approximate: row.approximate)
+    }
+
+    /// "1,204", or "≈ 340" for an estimate.
+    static func countValue(_ count: Count) -> String {
+        count.approximate ? "≈ \(count.value.formatted())" : count.value.formatted()
     }
 
     static func titlesLabel(for mediaType: String?) -> String {

@@ -13,7 +13,7 @@ from api.pagination import StandardResultsSetPagination
 from api.permissions import can_view_user_profile
 from api.serializers.common import media_summary_from_item
 from api.services import stats as stats_service
-from api.services import stats_cache, stats_v2_lists, stats_v2_ratings
+from api.services import stats_cache, stats_v2_lists, stats_v2_people, stats_v2_ratings
 from api.services.stats_scope import COLLECTION_TABS, build_scope
 from api.services.stats_v2 import build_stats_v2
 from app import statistics as legacy_stats
@@ -232,23 +232,32 @@ class UserStatsHighestRatedView(APIView):
         return highest_rated_response(visible_profile_owner(request, username), request)
 
 
-COLLECTION_GROUPS = ("complete", "almost")
+COLLECTION_GROUPS = stats_v2_lists.COLLECTION_GROUPS + stats_v2_lists.IN_RANGE_GROUPS
 
 
 def collections_response(user, request):
-    """Page through one group of one type's collections, lifetime (STAT-310)."""
+    """Page through one group of one type's collections (STAT-310).
+
+    ``complete`` and ``almost`` are lifetime and ignore dates; ``completed_in_range``
+    and ``progressed_in_range`` read the range and need a dated one.
+    """
     media_type = request.query_params.get("media_type")
     if media_type not in COLLECTION_TABS:
         raise ValidationError({"media_type": [f"Use one of: {', '.join(COLLECTION_TABS)}."]})
     group = request.query_params.get("group")
     if group not in COLLECTION_GROUPS:
-        raise ValidationError({"group": ["Use complete or almost."]})
-    scope = build_scope(
-        user,
-        request.user,
-        {"start_date": "all", "end_date": "all", "media_type": media_type},
-        request=request,
-    )
+        raise ValidationError({"group": [f"Use one of: {', '.join(COLLECTION_GROUPS)}."]})
+    if group in stats_v2_lists.IN_RANGE_GROUPS:
+        scope = build_scope(user, request.user, request.query_params, request=request)
+        if scope.is_all_time:
+            raise ValidationError({"date_range": [f"{group} needs a start_date and an end_date, not all."]})
+    else:
+        scope = build_scope(
+            user,
+            request.user,
+            {"start_date": "all", "end_date": "all", "media_type": media_type},
+            request=request,
+        )
     return paged_response(
         request,
         lambda page, page_size: stats_cache.cached(
@@ -278,6 +287,51 @@ class UserStatsCollectionsView(APIView):
 
     def get(self, request, username):
         return collections_response(visible_profile_owner(request, username), request)
+
+
+def people_response(user, request):
+    """Page through one role's people on a people tab (STAT-219, STAT-310)."""
+    media_type = request.query_params.get("media_type")
+    if media_type not in stats_v2_people.GROUPS:
+        raise ValidationError({"media_type": [f"Use one of: {', '.join(stats_v2_people.GROUPS)}."]})
+    roles = stats_v2_people.roles_for(media_type)
+    role = request.query_params.get("role")
+    if role not in roles:
+        raise ValidationError({"role": [f"Use one of: {', '.join(roles)}."]})
+    sort = request.query_params.get("sort") or stats_v2_people.SORT_TITLES
+    if sort not in stats_v2_people.SORTS:
+        raise ValidationError({"sort": [f"Use one of: {', '.join(stats_v2_people.SORTS)}."]})
+    scope = build_scope(user, request.user, request.query_params, request=request)
+    return paged_response(
+        request,
+        lambda page, page_size: stats_cache.cached(
+            scope,
+            "people",
+            lambda: stats_v2_people.people_page(scope, role, sort, page, page_size),
+            role,
+            sort,
+            page,
+            page_size,
+        ),
+    )
+
+
+class MyStatsPeopleView(APIView):
+    """Current user's people of one role, paged."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return people_response(request.user, request)
+
+
+class UserStatsPeopleView(APIView):
+    """Another user's people of one role, paged."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username):
+        return people_response(visible_profile_owner(request, username), request)
 
 
 def paged_response(request, fetch):

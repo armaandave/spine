@@ -164,6 +164,82 @@ final class StatsDrillDownTests: XCTestCase {
         XCTAssertEqual(values("media_type", in: liked), ["movie"])
     }
 
+    // MARK: - Header drills (STAT-200)
+
+    func testAHeaderDrillGoesOnTopOfTheScopesFilter() {
+        let repeats = pairs(StatsDrillDown.stat(label: "Repeats", drill: ["repeat": "true"]).diaryFilter(in: ownMovies2025))
+        XCTAssertEqual(values("repeat", in: repeats), ["true"])
+        XCTAssertEqual(values("watched_from", in: repeats), ["2025-01-01"], "The scope's own params stay")
+        XCTAssertEqual(values("media_type", in: repeats), ["movie"])
+        XCTAssertTrue(repeats.contains(["skip_backfill", "true"]))
+        XCTAssertTrue(repeats.contains(["tv_rollup", "true"]))
+
+        let multi = pairs(StatsDrillDown.stat(label: "Days with 2+ titles", drill: ["multi_title_days": "true"]).diaryFilter(in: ownGlobal2025))
+        XCTAssertEqual(values("multi_title_days", in: multi), ["true"])
+
+        let reviews = pairs(StatsDrillDown.stat(label: "Reviews", drill: ["has_review": "true"]).diaryFilter(in: ownGlobal2025))
+        XCTAssertEqual(values("has_review", in: reviews), ["true"])
+        let likes = pairs(StatsDrillDown.stat(label: "Likes", drill: ["liked": "true"]).diaryFilter(in: ownGlobal2025))
+        XCTAssertEqual(values("liked", in: likes), ["true"])
+    }
+
+    func testADrillKeyReplacesTheScopesParamOfTheSameName() {
+        let streak = StatsDrillDown.stat(
+            label: "Current daily streak",
+            drill: ["watched_from": "2025-12-27", "watched_to": "2025-12-31"]
+        )
+        let query = pairs(streak.diaryFilter(in: ownGlobal2025))
+        XCTAssertEqual(values("watched_from", in: query), ["2025-12-27"])
+        XCTAssertEqual(values("watched_to", in: query), ["2025-12-31"])
+
+        let tvOnly = pairs(StatsDrillDown.stat(label: "X", drill: ["media_type": "episode"]).diaryFilter(in: ownTVAllTime))
+        XCTAssertEqual(values("media_type", in: tvOnly), ["episode"])
+
+        let noRollup = pairs(StatsDrillDown.stat(label: "X", drill: ["tv_rollup": "false"]).diaryFilter(in: ownTVAllTime))
+        XCTAssertFalse(names(noRollup).contains("tv_rollup"))
+    }
+
+    func testAnEmptyDrillIsTheScopesOwnLogs() {
+        let scope = StatsDrillDown.stat(label: "Logs").diaryFilter(in: ownMovies2025)
+        var expected = MediaFilterState()
+        expected.skipBackfill = true
+        expected.tvRollup = true
+        expected.watchedFrom = MediaFilterState.date(fromDay: "2025-01-01")
+        expected.watchedTo = MediaFilterState.date(fromDay: "2025-12-31")
+        expected.mediaTypes = ["movie"]
+        XCTAssertEqual(scope, expected)
+        XCTAssertEqual(StatsDrillDown.stat(label: "Logs").diaryTitle(in: ownMovies2025), "Logs · 2025")
+        XCTAssertEqual(StatsDrillDown.stat(label: "Repeats", drill: ["repeat": "true"]).diaryTitle(in: ownGlobal2025), "Repeats · 2025")
+    }
+
+    func testDrillsTheAppCantSendOpenNothing() {
+        XCTAssertNil(MediaFilterState().applying(drill: ["mystery": "true"]))
+        XCTAssertNil(MediaFilterState().applying(drill: ["watched_from": "last week"]))
+        XCTAssertNil(MediaFilterState().applying(drill: ["repeat": "yes"]))
+        XCTAssertNil(MediaFilterState().applying(drill: ["media_type": ""]))
+        XCTAssertNotNil(MediaFilterState().applying(drill: [:]))
+        XCTAssertNotNil(MediaFilterState().applying(drill: ["liked": "TRUE"]))
+
+        XCTAssertNil(StatsDrillDown.headerStat(label: "Reads", drill: ["mystery": "1"]))
+        XCTAssertNil(StatsDrillDown.stat(label: "Reads", drill: ["mystery": "1"]).route(in: ownGlobal2025))
+        XCTAssertEqual(
+            StatsDrillDown.stat(label: "Repeats", drill: ["repeat": "true"]).route(in: ownGlobal2025),
+            .diary(.stat(label: "Repeats", drill: ["repeat": "true"]), ownGlobal2025)
+        )
+        XCTAssertNil(StatsDrillDown.stat(label: "Repeats", drill: ["repeat": "true"]).route(in: theirsGlobal2025), "Owner only")
+    }
+
+    func testRepeatAndMultiTitleDaysCountAsFilters() {
+        var filter = MediaFilterState()
+        filter.repeat = true
+        XCTAssertEqual(filter.activeCount, 1)
+        filter.multiTitleDays = true
+        XCTAssertEqual(filter.activeCount, 2)
+        XCTAssertEqual(values("repeat", in: pairs(filter)), ["true"])
+        XCTAssertEqual(values("multi_title_days", in: pairs(filter)), ["true"])
+        XCTAssertFalse(names(pairs(MediaFilterState())).contains("repeat"), "Off sends nothing")
+    }
+
     func testDrillDownFiltersDontChangeTheFilterBadgeForRollupAndBackfill() {
         var filter = MediaFilterState()
         filter.skipBackfill = true

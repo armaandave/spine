@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Every list progress ring from the page's payload (STAT-213), most complete first. Rings are
-/// lifetime and the payload sends them all, so this list needs no request. A row opens the list.
+/// Every list progress ring from the page's payload (STAT-213), in the section's order. The
+/// payload sends them all, so this list needs no request. A row opens the list.
 struct StatsListProgressListView: View {
     let rings: [StatsListRing]
+    /// The page's range, for a year's captions.
+    var period: StatsPeriod = .allTime
     let services: StatsRouteServices
 
     @State private var route: StatsRoute?
@@ -23,6 +25,7 @@ struct StatsListProgressListView: View {
                 ForEach(Array(sorted.enumerated()), id: \.element.id) { index, ring in
                     StatsListRingRow(
                         ring: ring,
+                        period: period,
                         isFirst: index == 0,
                         isLast: index == sorted.count - 1
                     ) {

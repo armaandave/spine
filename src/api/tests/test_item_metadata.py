@@ -294,13 +294,14 @@ class StoreItemMetadataTests(MetadataTestCase):
 
     def test_every_media_type_has_a_current_version(self):
         self.assertEqual(set(CURRENT_METADATA_VERSION), set(MediaTypes.values))
-        for media_type in (
-            MediaTypes.MOVIE.value,
-            MediaTypes.TV.value,
-            MediaTypes.SEASON.value,
-            MediaTypes.EPISODE.value,
+        # Movies and shows are at 3 for credits; seasons and episodes keep none.
+        for media_type, version in (
+            (MediaTypes.MOVIE.value, 3),
+            (MediaTypes.TV.value, 3),
+            (MediaTypes.SEASON.value, 2),
+            (MediaTypes.EPISODE.value, 2),
         ):
-            self.assertEqual(CURRENT_METADATA_VERSION[media_type], 2)
+            self.assertEqual(CURRENT_METADATA_VERSION[media_type], version)
 
     def test_complete_metadata_stamps_the_current_version(self):
         item = self.item()

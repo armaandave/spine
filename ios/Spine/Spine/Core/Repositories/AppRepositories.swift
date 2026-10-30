@@ -372,14 +372,27 @@ protocol ProfileRepository {
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<StatsRatedTitle>
-    /// Collections' show-all pages. Collections are lifetime, so there are no dates (STAT-310).
+    /// Collections' show-all pages (STAT-310). The lifetime groups have no dates; the in-range
+    /// groups send `period`'s.
     func statsCollections(
         username: String?,
         mediaType: String,
         group: StatsCollectionGroup,
+        period: StatsPeriod?,
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<MediaSeriesSummary>
+    /// People's show-all pages (STAT-219, STAT-310): one role of one type tab, by titles or by
+    /// average stars.
+    func statsPeople(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String,
+        role: String,
+        sort: StatsPeopleSort,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsPersonRow>
     func likedMedia() async throws -> [MediaSummary]
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile
     func uploadAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> String?
@@ -444,10 +457,36 @@ extension ProfileRepository {
         username: String?,
         mediaType: String,
         group: StatsCollectionGroup,
+        period: StatsPeriod?,
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<MediaSeriesSummary> {
         fatalError("Not implemented")
+    }
+
+    func statsPeople(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String,
+        role: String,
+        sort: StatsPeopleSort,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsPersonRow> {
+        fatalError("Not implemented")
+    }
+
+    /// A lifetime group's pages, with no dates.
+    func statsCollections(
+        username: String?,
+        mediaType: String,
+        group: StatsCollectionGroup,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<MediaSeriesSummary> {
+        try await statsCollections(
+            username: username, mediaType: mediaType, group: group, period: nil, page: page, pageSize: pageSize
+        )
     }
 }
 
@@ -1378,6 +1417,7 @@ struct APIProfileRepository: ProfileRepository {
         username: String?,
         mediaType: String,
         group: StatsCollectionGroup,
+        period: StatsPeriod?,
         page: String?,
         pageSize: Int
     ) async throws -> PagedResponse<MediaSeriesSummary> {
@@ -1386,10 +1426,29 @@ struct APIProfileRepository: ProfileRepository {
             URLQueryItem(name: "group", value: group.rawValue),
             URLQueryItem(name: "page_size", value: String(pageSize)),
         ]
+        if let period {
+            query += period.query
+        }
         if let page {
             query.append(URLQueryItem(name: "page", value: page))
         }
         return try await client.get(Self.statsPath("collections", username: username), query: query, authenticated: true)
+    }
+
+    func statsPeople(
+        username: String?,
+        period: StatsPeriod,
+        mediaType: String,
+        role: String,
+        sort: StatsPeopleSort,
+        page: String?,
+        pageSize: Int
+    ) async throws -> PagedResponse<StatsPersonRow> {
+        let query = Self.statsPageQuery(period: period, mediaType: mediaType, page: page, pageSize: pageSize) + [
+            URLQueryItem(name: "role", value: role),
+            URLQueryItem(name: "sort", value: sort.rawValue),
+        ]
+        return try await client.get(Self.statsPath("people", username: username), query: query, authenticated: true)
     }
 
     /// `/stats/me/<endpoint>/`, or `/users/<username>/stats/<endpoint>/`.

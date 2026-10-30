@@ -28,6 +28,9 @@ struct StatsPage: Decodable, Hashable {
     let releaseYears: StatsReleaseYears?
     let genres: StatsGenres?
     let languages: StatsLanguages?
+    /// The movie, TV, music and book tabs' people (STAT-219); nil elsewhere and from servers
+    /// that don't send it.
+    let people: StatsPeople?
     let listRings: [StatsListRing]
     let collections: StatsCollections?
     let mostLogged: StatsMostLogged?
@@ -52,6 +55,7 @@ struct StatsPage: Decodable, Hashable {
         releaseYears: StatsReleaseYears? = nil,
         genres: StatsGenres? = nil,
         languages: StatsLanguages? = nil,
+        people: StatsPeople? = nil,
         listRings: [StatsListRing] = [],
         collections: StatsCollections? = nil,
         mostLogged: StatsMostLogged? = nil,
@@ -74,6 +78,7 @@ struct StatsPage: Decodable, Hashable {
         self.releaseYears = releaseYears
         self.genres = genres
         self.languages = languages
+        self.people = people
         self.listRings = listRings
         self.collections = collections
         self.mostLogged = mostLogged
@@ -95,6 +100,7 @@ struct StatsPage: Decodable, Hashable {
             && (releaseYears?.isEmpty ?? true)
             && (genres?.isEmpty ?? true)
             && (languages?.isEmpty ?? true)
+            && (people?.isEmpty ?? true)
             && listRings.isEmpty
             && (collections?.isEmpty ?? true)
             && (mostLogged?.isEmpty ?? true)
@@ -134,6 +140,7 @@ struct StatsPage: Decodable, Hashable {
         case releaseYears
         case genres
         case languages
+        case people
         case listRings
         case collections
         case mostLogged
@@ -165,6 +172,7 @@ struct StatsPage: Decodable, Hashable {
             releaseYears: container.statsValue(StatsReleaseYears.self, forKey: .releaseYears),
             genres: container.statsValue(StatsGenres.self, forKey: .genres),
             languages: container.statsValue(StatsLanguages.self, forKey: .languages),
+            people: container.statsValue(StatsPeople.self, forKey: .people),
             listRings: container.statsArray(StatsListRing.self, forKey: .listRings),
             collections: container.statsValue(StatsCollections.self, forKey: .collections),
             mostLogged: container.statsValue(StatsMostLogged.self, forKey: .mostLogged),
@@ -268,6 +276,9 @@ struct StatsHeader: Decodable, Hashable {
     let longestDailyStreak: Int
     /// Label/value rows. The app must not depend on which keys are present.
     let details: [StatsHeaderDetail]
+    /// The longest daily streak's days, for its number's drill-down; nil when there's none or
+    /// the server doesn't send it.
+    var longestDailyStreakRange: StatsDayRange? = nil
 
     var isEmpty: Bool { titles == 0 && logs == 0 }
 }
@@ -281,8 +292,17 @@ struct StatsHeaderDetail: Decodable, Hashable, Identifiable {
     let unit: String?
     /// The app shows "≈".
     let approximate: Bool
+    /// Extra diary params the row opens on top of the scope's (STAT-200); nil when the row opens
+    /// nothing, on someone else's stats, or from a server that doesn't send it.
+    var drill: [String: String]? = nil
 
     var id: String { key }
+}
+
+/// Two contract days, "YYYY-MM-DD", both inclusive.
+struct StatsDayRange: Decodable, Hashable {
+    let start: String
+    let end: String
 }
 
 // MARK: - Time (STAT-201, STAT-202)
@@ -542,6 +562,60 @@ struct StatsLanguageRow: Decodable, Hashable, Identifiable {
     var id: String { name }
 }
 
+// MARK: - People (STAT-219)
+
+/// The people you logged most, one group per role: directors and cast on the movie tab, cast
+/// and creators on TV, artists on music, authors on books.
+struct StatsPeople: Decodable, Hashable {
+    /// Every group of the tab, in the server's order, empty ones included.
+    let groups: [StatsPeopleGroup]
+
+    var isEmpty: Bool { groups.allSatisfy(\.isEmpty) }
+}
+
+struct StatsPeopleGroup: Decodable, Hashable, Identifiable {
+    /// "director", "cast", "creator", "artist" or "author": the drill-down's and show-all's `role`.
+    let role: String
+    /// Ready to show: "Directors", "Cast".
+    let label: String
+    /// The first 10 by titles.
+    let rows: [StatsPersonRow]
+    /// The first 10 with at least 3 rated titles, by average stars.
+    let ratedRows: [StatsPersonRow]
+    /// Everyone in `rows`' order, for "Show all".
+    let total: Int
+
+    var id: String { role }
+    var isEmpty: Bool { rows.isEmpty }
+}
+
+/// The people show-all endpoint's `sort`: Most watched or Highest rated.
+enum StatsPeopleSort: String, Hashable, CaseIterable, Identifiable {
+    case titles
+    case rating
+
+    var id: String { rawValue }
+}
+
+/// A person row, in the section and on its show-all pages.
+struct StatsPersonRow: Decodable, Hashable, Identifiable {
+    let person: StatsPerson
+    let titles: Int
+    let rated: Int
+    let averageStars: StatsDecimal?
+
+    var id: String { person.id }
+}
+
+struct StatsPerson: Decodable, Hashable, Identifiable {
+    let ref: PersonRef
+    let name: String
+    let imageUrl: String?
+
+    /// "tmdb:525", the drill-down's `credit`.
+    var id: String { "\(ref.source):\(ref.id)" }
+}
+
 // MARK: - List progress and collections (STAT-213, STAT-214)
 
 struct StatsListRing: Decodable, Hashable, Identifiable {
@@ -553,10 +627,18 @@ struct StatsListRing: Decodable, Hashable, Identifiable {
     let kind: String?
     let seen: Int
     let total: Int
+    /// Titles first seen in a dated range; nil in All Time and from servers that don't send it.
+    var seenInRange: Int? = nil
 
     /// Seen share from 0 to 1.
     var fraction: Double {
         total > 0 ? min(max(Double(seen) / Double(total), 0), 1) : 0
+    }
+
+    /// The share seen before the range, from 0 to `fraction`: the ring's dimmed part in a year.
+    var fractionBeforeRange: Double {
+        guard let seenInRange, total > 0 else { return fraction }
+        return min(max(Double(seen - seenInRange) / Double(total), 0), fraction)
     }
 }
 
@@ -565,14 +647,35 @@ struct StatsCollections: Decodable, Hashable {
     let almostCount: Int
     let complete: [MediaSeriesSummary]
     let almost: [MediaSeriesSummary]
+    /// A dated range's progress, shown instead of `complete` and `almost`; nil in All Time and
+    /// from servers that don't send it, which keep showing the lifetime groups.
+    var inRange: StatsCollectionsInRange? = nil
 
-    var isEmpty: Bool { completeCount == 0 && almostCount == 0 }
+    var isEmpty: Bool {
+        if let inRange { return inRange.isEmpty }
+        return completeCount == 0 && almostCount == 0
+    }
 }
 
-/// The collections show-all endpoint's `group`.
+/// Collections completed, or moved forward, in a dated range (STAT-214). Each row's
+/// `seenInRange` counts its members first seen in the range.
+struct StatsCollectionsInRange: Decodable, Hashable {
+    let completedCount: Int
+    let completed: [MediaSeriesSummary]
+    let progressedCount: Int
+    let progressed: [MediaSeriesSummary]
+
+    var isEmpty: Bool { completedCount == 0 && progressedCount == 0 }
+}
+
+/// The collections show-all endpoint's `group`. The in-range groups need the range's dates.
 enum StatsCollectionGroup: String, Hashable, CaseIterable {
     case complete
     case almost
+    case completedInRange = "completed_in_range"
+    case progressedInRange = "progressed_in_range"
+
+    var isInRange: Bool { self == .completedInRange || self == .progressedInRange }
 }
 
 // MARK: - Most logged and milestones (STAT-215, STAT-216)
@@ -646,7 +749,9 @@ extension StatsCoverage {
 }
 
 extension StatsHeader {
-    private enum CodingKeys: String, CodingKey { case titles, logs, activeDays, longestDailyStreak, details }
+    private enum CodingKeys: String, CodingKey {
+        case titles, logs, activeDays, longestDailyStreak, details, longestDailyStreakRange
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -655,11 +760,12 @@ extension StatsHeader {
         activeDays = c.statsInt(forKey: .activeDays)
         longestDailyStreak = c.statsInt(forKey: .longestDailyStreak)
         details = c.statsArray(StatsHeaderDetail.self, forKey: .details)
+        longestDailyStreakRange = c.statsValue(StatsDayRange.self, forKey: .longestDailyStreakRange)
     }
 }
 
 extension StatsHeaderDetail {
-    private enum CodingKeys: String, CodingKey { case key, label, value, unit, approximate }
+    private enum CodingKeys: String, CodingKey { case key, label, value, unit, approximate, drill }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -668,6 +774,36 @@ extension StatsHeaderDetail {
         value = c.statsInt(forKey: .value)
         unit = c.statsValue(String.self, forKey: .unit)
         approximate = c.statsBool(forKey: .approximate)
+        drill = c.statsValue([String: String].self, forKey: .drill).map(Self.diaryParams)
+    }
+
+    /// The API decoder's `convertFromSnakeCase` rewrites dictionary keys too ("watched_from"
+    /// arrives as "watchedFrom"). A drill's keys are diary params, so they're turned back.
+    nonisolated static func diaryParams(_ params: [String: String]) -> [String: String] {
+        Dictionary(params.map { (snakeCase($0.key), $0.value) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// "watchedFrom" → "watched_from"; a key that's already snake case stays as it is.
+    nonisolated static func snakeCase(_ key: String) -> String {
+        var result = ""
+        for character in key {
+            if character.isUppercase {
+                result += "_" + character.lowercased()
+            } else {
+                result.append(character)
+            }
+        }
+        return result
+    }
+}
+
+extension StatsDayRange {
+    private enum CodingKeys: String, CodingKey { case start, end }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        start = try c.decode(String.self, forKey: .start)
+        end = try c.decode(String.self, forKey: .end)
     }
 }
 
@@ -967,8 +1103,55 @@ extension StatsLanguageRow {
     }
 }
 
+extension StatsPeople {
+    private enum CodingKeys: String, CodingKey { case groups }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        groups = c.statsArray(StatsPeopleGroup.self, forKey: .groups)
+    }
+}
+
+extension StatsPeopleGroup {
+    private enum CodingKeys: String, CodingKey { case role, label, rows, ratedRows, total }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        role = try c.decode(String.self, forKey: .role)
+        label = c.statsValue(String.self, forKey: .label) ?? role.capitalized
+        rows = c.statsArray(StatsPersonRow.self, forKey: .rows)
+        ratedRows = c.statsArray(StatsPersonRow.self, forKey: .ratedRows)
+        total = max(c.statsInt(forKey: .total), rows.count)
+    }
+}
+
+extension StatsPersonRow {
+    private enum CodingKeys: String, CodingKey { case person, titles, rated, averageStars }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        person = try c.decode(StatsPerson.self, forKey: .person)
+        titles = c.statsInt(forKey: .titles)
+        rated = c.statsInt(forKey: .rated)
+        averageStars = c.statsValue(StatsDecimal.self, forKey: .averageStars)
+    }
+}
+
+extension StatsPerson {
+    private enum CodingKeys: String, CodingKey { case source, id, name, imageUrl }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // The ID is a string; a number is read as one, in case a server sends it bare.
+        let id = try c.statsValue(String.self, forKey: .id) ?? String(c.decode(Int.self, forKey: .id))
+        ref = PersonRef(source: try c.decode(String.self, forKey: .source), id: id)
+        name = c.statsValue(String.self, forKey: .name) ?? ""
+        imageUrl = c.statsValue(String.self, forKey: .imageUrl).flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+
 extension StatsListRing {
-    private enum CodingKeys: String, CodingKey { case id, name, mediaType, kind, seen, total }
+    private enum CodingKeys: String, CodingKey { case id, name, mediaType, kind, seen, total, seenInRange }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -978,11 +1161,12 @@ extension StatsListRing {
         kind = c.statsValue(String.self, forKey: .kind)
         seen = c.statsInt(forKey: .seen)
         total = c.statsInt(forKey: .total)
+        seenInRange = c.statsValue(Int.self, forKey: .seenInRange)
     }
 }
 
 extension StatsCollections {
-    private enum CodingKeys: String, CodingKey { case completeCount, almostCount, complete, almost }
+    private enum CodingKeys: String, CodingKey { case completeCount, almostCount, complete, almost, inRange }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -990,6 +1174,19 @@ extension StatsCollections {
         almost = c.statsArray(MediaSeriesSummary.self, forKey: .almost)
         completeCount = max(c.statsInt(forKey: .completeCount), complete.count)
         almostCount = max(c.statsInt(forKey: .almostCount), almost.count)
+        inRange = c.statsValue(StatsCollectionsInRange.self, forKey: .inRange)
+    }
+}
+
+extension StatsCollectionsInRange {
+    private enum CodingKeys: String, CodingKey { case completedCount, completed, progressedCount, progressed }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        completed = c.statsArray(MediaSeriesSummary.self, forKey: .completed)
+        progressed = c.statsArray(MediaSeriesSummary.self, forKey: .progressed)
+        completedCount = max(c.statsInt(forKey: .completedCount), completed.count)
+        progressedCount = max(c.statsInt(forKey: .progressedCount), progressed.count)
     }
 }
 

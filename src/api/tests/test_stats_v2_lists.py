@@ -8,6 +8,7 @@ Acceptance scenarios S-12 to S-16, S-23 and S-24.
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -17,9 +18,17 @@ from django.test.utils import CaptureQueriesContext
 
 from api.services import stats_v2_lists
 from api.services.stats_scope import StatsScope
-from api.tests.test_stats_v2_shape import ALL_TIME, YEAR_2024, YEAR_2025, StatsV2Base
+from api.tests.test_stats_v2_shape import (
+    ALL_TIME,
+    OWNER_ZONES,
+    YEAR_2024,
+    YEAR_2025,
+    StatsV2Base,
+)
 from app.models import (
+    TV,
     Anime,
+    DiaryEntry,
     Game,
     Item,
     MediaSeries,
@@ -83,6 +92,10 @@ class ListsBase(StatsV2Base):
             end_date=end,
             media_type=media_type,
         )
+
+    def set_zone(self, zone):
+        self.owner.calendar_timezone = zone
+        self.owner.save(update_fields=["calendar_timezone"])
 
     def top(self, viewer, params, media_type=None):
         path = "/api/v1/stats/me/summary/" if viewer == self.owner else self.user_path()
@@ -334,12 +347,12 @@ class ListRingTests(ListsBase):
         self.assertNotIn(retired.id, by_id)
         self.assertEqual(by_id[lasting["award"].id],
                          {"id": lasting["award"].id, "name": "award-list", "media_type": "movie",
-                          "kind": "award", "seen": 3, "total": 4})
+                          "kind": "award", "seen": 3, "total": 4, "seen_in_range": None})
         self.assertEqual((by_id[manual.id]["kind"], by_id[manual.id]["media_type"]), ("editorial", "movie"))
         # The manual list is 3 of 3: the highest share comes first.
         self.assertEqual(rings[0]["id"], manual.id)
 
-    def test_rings_follow_the_tab_and_ignore_the_range(self):
+    def test_rings_follow_the_tab(self):
         films = self.movies(2)
         games = [self.item(MediaTypes.GAME.value, f"g{index}") for index in range(2)]
         self.completed(Movie, films)
@@ -351,12 +364,14 @@ class ListRingTests(ListsBase):
         self.assertEqual({ring["id"] for ring in self.rings()}, {movie_ring.id, game_ring.id, mixed.id})
         self.assertEqual([ring["id"] for ring in self.rings(media_type="game")], [game_ring.id])
         self.assertEqual([ring["id"] for ring in self.rings(media_type="movie")], [movie_ring.id])
+        self.assertIsNone(next(ring for ring in self.rings() if ring["id"] == mixed.id)["media_type"])
+        # Completed with no log is an undated completion: it never counts in a range,
+        # so a year has no progress to show and sends no rings.
         with registry.override_definitions(self.definitions):
             year = stats_v2_lists.build_list_rings(
                 self.scope(start=date(2020, 1, 1), end=date(2020, 12, 31)),
             )
-        self.assertEqual({ring["id"] for ring in year}, {movie_ring.id, game_ring.id, mixed.id})
-        self.assertIsNone(next(ring for ring in year if ring["id"] == mixed.id)["media_type"])
+        self.assertEqual(year, [])
 
     def test_other_viewers_count_completed_rows_but_only_logs_they_can_see(self):
         # STAT-002/003: Completed rows count for everyone; a hidden log doesn't.
@@ -385,8 +400,127 @@ class ListRingTests(ListsBase):
         ring = self.featured("canon", films, kind="canon")
         with registry.override_definitions(self.definitions):
             for viewer, path in ((self.owner, "/api/v1/stats/me/summary/"), (self.follower, self.user_path())):
-                data = self.get(viewer, YEAR_2025, path=path).data
+                data = self.get(viewer, ALL_TIME, path=path).data
                 self.assertEqual([r["id"] for r in data["list_rings"]], [ring.id])
+
+    def ring_in(self, ring, year=None, viewer=None, media_type=None):
+        """Return the ring's row in a calendar year, or All Time; None when not sent."""
+        dates = {} if year is None else {"start": date(year, 1, 1), "end": date(year, 12, 31)}
+        rows = self.ring_rows(viewer, media_type=media_type, **dates)
+        return next((row for row in rows if row["id"] == ring.id), None)
+
+    def ring_rows(self, viewer=None, **scope_fields):
+        with registry.override_definitions(self.definitions):
+            return stats_v2_lists.build_list_rings(self.scope(viewer, **scope_fields))
+
+    def test_a_year_counts_the_titles_first_seen_in_it(self):
+        films = self.movies(5)
+        self.completed(Movie, films[:1] + films[2:3])
+        # Seen in 2024, then again in 2025: first seen in 2024.
+        self.log(films[0], datetime(2024, 5, 1, tzinfo=UTC))
+        self.log(films[0], datetime(2025, 5, 1, tzinfo=UTC))
+        self.log(films[1], datetime(2025, 7, 1, tzinfo=UTC))
+        # films[2] is Completed with no log: an undated completion, never in a range.
+        # films[3] is logged on 1 January 2025, a UTC-midnight carrier: 2025 everywhere.
+        self.log(films[3], datetime(2025, 1, 1, tzinfo=UTC))
+        ring = self.featured("canon", films, kind="canon")
+        for zone in OWNER_ZONES:
+            with self.subTest(owner_zone=zone):
+                self.set_zone(zone)
+                year = self.ring_in(ring, 2025)
+                self.assertEqual(
+                    {key: year[key] for key in ("seen", "total", "seen_in_range")},
+                    {"seen": 4, "total": 5, "seen_in_range": 2},
+                )
+                self.assertEqual(self.ring_in(ring, 2024)["seen_in_range"], 1)
+                # No title first seen in 2023: the ring isn't sent that year.
+                self.assertIsNone(self.ring_in(ring, 2023))
+                self.assertIsNone(self.ring_in(ring)["seen_in_range"])
+                self.assertEqual(self.ring_in(ring, 2025, media_type="movie")["seen_in_range"], 2)
+
+    def test_a_year_sorts_rings_by_titles_first_seen_in_it(self):
+        films = self.movies(6)
+        self.completed(Movie, films[:1])
+        self.log(films[1], datetime(2025, 3, 1, tzinfo=UTC))
+        for film in films[2:5]:
+            self.log(film, datetime(2025, 4, 1, tzinfo=UTC))
+        full = self.featured("full", films[:2], kind="canon")
+        most = self.featured("most", films[2:6], kind="canon")
+        # All Time: the higher share first. 2025: more first seen in it first.
+        self.assertEqual([row["id"] for row in self.ring_rows()], [full.id, most.id])
+        year = self.ring_rows(start=date(2025, 1, 1), end=date(2025, 12, 31))
+        self.assertEqual([(row["id"], row["seen_in_range"]) for row in year], [(most.id, 3), (full.id, 1)])
+
+    def test_first_seen_days_are_on_the_owners_calendar(self):
+        anime = [self.item(MediaTypes.ANIME.value, f"a{index}") for index in range(3)]
+        ring = self.featured("anime-manual", anime, definition=False, sync=False)
+        for zone in OWNER_ZONES:
+            with self.subTest(owner_zone=zone):
+                DiaryEntry.objects.all().delete()
+                self.set_zone(zone)
+                local = ZoneInfo(zone)
+                self.log(anime[0], datetime(2025, 12, 31, 23, 30, tzinfo=local))
+                self.log(anime[1], datetime(2026, 1, 1, 0, 30, tzinfo=local))
+                for viewer in (self.owner, self.follower):
+                    self.assertEqual(self.ring_in(ring, 2025, viewer)["seen_in_range"], 1)
+                    self.assertEqual(self.ring_in(ring, 2026, viewer)["seen_in_range"], 1)
+                    self.assertIsNone(self.ring_in(ring, 2024, viewer))
+
+    def test_tv_titles_are_first_seen_on_their_earliest_log_or_dated_viewing(self):
+        shows = []
+        for index in range(5):
+            show = self.item(MediaTypes.TV.value, f"show{index}")
+            season = self.item(MediaTypes.SEASON.value, f"show{index}", season=1)
+            episode = self.item(MediaTypes.EPISODE.value, f"show{index}", season=1, episode=1)
+            tv, season_row = self.show_rows(show, season)
+            TV.objects.filter(pk=tv.pk).update(status=Status.COMPLETED.value)
+            shows.append((show, season, episode, season_row))
+        # 0: ticked in 2024, then an episode log in 2025: first seen in 2024.
+        _show, _season, episode, season_row = shows[0]
+        self.viewing(season_row, episode, watched_on=date(2024, 5, 1))
+        entry = self.log(episode, datetime(2025, 3, 1, tzinfo=UTC))
+        self.viewing(season_row, episode, watched_on=date(2025, 3, 1), kind="log", entry=entry)
+        # 1: ticked in 2025, with no log.
+        self.viewing(shows[1][3], shows[1][2], watched_on=date(2025, 3, 1))
+        # 2: a season log in 2025 counts as its show.
+        self.log(shows[2][1], datetime(2025, 4, 1, tzinfo=UTC))
+        # 3: marked watched: its fills have no day.
+        self.viewing(shows[3][3], shows[3][2], kind="fill")
+        # 4: its only viewing belongs to a private log in 2025.
+        private = self.log(shows[4][2], datetime(2025, 5, 1, tzinfo=UTC), visibility="private")
+        self.viewing(shows[4][3], shows[4][2], watched_on=date(2025, 5, 1), kind="log", entry=private)
+        ring = self.featured("tv-manual", [row[0] for row in shows], definition=False, sync=False)
+
+        owner = self.ring_in(ring, 2025)
+        self.assertEqual((owner["media_type"], owner["seen"], owner["seen_in_range"]), ("tv", 5, 3))
+        self.assertEqual(self.ring_in(ring, 2025, media_type="tv")["seen_in_range"], 3)
+        self.assertEqual(self.ring_in(ring, 2024)["seen_in_range"], 1)
+        # A hidden log and its viewing count for nothing (STAT-003).
+        stranger = self.ring_in(ring, 2025, self.stranger)
+        self.assertEqual((stranger["seen"], stranger["seen_in_range"]), (5, 2))
+
+    def test_query_count_is_flat_in_a_year(self):
+        def count_queries():
+            scope = self.scope(start=date(2025, 1, 1), end=date(2025, 12, 31))
+            with registry.override_definitions(self.definitions):
+                # Ring totals are cached per list: warm them, then count.
+                stats_v2_lists.build_list_rings(scope)
+                with CaptureQueriesContext(connection) as queries:
+                    rings = stats_v2_lists.build_list_rings(
+                        self.scope(start=date(2025, 1, 1), end=date(2025, 12, 31)),
+                    )
+            self.assertTrue(rings)
+            return len(queries)
+
+        films = self.movies(40)
+        for film in films[:2]:
+            self.log(film, datetime(2025, 3, 1, tzinfo=UTC))
+        self.featured("canon", films[:2], kind="canon")
+        baseline = count_queries()
+        for index, film in enumerate(films[2:]):
+            self.log(film, datetime(2024 + index % 2, 3, 1, tzinfo=UTC))
+        self.featured("more", films[2:], kind="canon", fingerprint="f2")
+        self.assertEqual(count_queries(), baseline)
 
 
 class CollectionTests(ListsBase):
@@ -522,4 +656,163 @@ class CollectionTests(ListsBase):
         self.series("done", 2, 0)
         data = self.get(self.follower, {**ALL_TIME, "media_type": "movie"}, path=self.user_path()).data
         self.assertEqual(data["collections"]["complete_count"], 1)
+        self.assertIsNone(data["collections"]["in_range"])
         self.assertIsNone(self.get(self.owner, ALL_TIME).data["collections"])
+        year = self.get(self.owner, {**YEAR_2025, "media_type": "movie"}).data["collections"]
+        self.assertEqual(year["complete_count"], 1)
+        self.assertEqual(
+            year["in_range"],
+            {"completed_count": 0, "completed": [], "progressed_count": 0, "progressed": []},
+        )
+
+    # Progress made in a dated range: collections.in_range.
+
+    def members(self, name, items, *, media_type="movie", source=Sources.TMDB.value):
+        """Store a released series of the given Items, in order."""
+        series = MediaSeries.objects.create(source=source, series_id=name, media_type=media_type, name=name)
+        Item.objects.filter(id__in=[item.id for item in items]).update(release_date=date(2020, 1, 1))
+        MediaSeriesItem.objects.bulk_create([
+            MediaSeriesItem(series=series, item=item, position=index) for index, item in enumerate(items, start=1)
+        ])
+        return series
+
+    def in_range(self, year, viewer=None, media_type="movie"):
+        scope = self.scope(viewer, start=date(year, 1, 1), end=date(year, 12, 31), media_type=media_type)
+        return stats_v2_lists.build_collections(scope)["in_range"]
+
+    def rows(self, rows):
+        return [(row["id"], row["seen_in_range"]) for row in rows]
+
+    def test_collections_completed_and_progressed_in_a_year(self):
+        a = self.movies(3, "a")
+        self.completed(Movie, a[:2])
+        self.log(a[0], datetime(2023, 2, 1, tzinfo=UTC))
+        # a[1] is Completed with no log: undated, so earlier than every dated member.
+        self.log(a[2], datetime(2025, 6, 1, tzinfo=UTC))
+        b = self.movies(2, "b")
+        self.log(b[0], datetime(2025, 2, 1, tzinfo=UTC))
+        self.log(b[1], datetime(2026, 2, 1, tzinfo=UTC))
+        c = self.movies(4, "c")
+        self.log(c[0], datetime(2025, 3, 1, tzinfo=UTC))
+        self.log(c[1], datetime(2025, 1, 1, tzinfo=UTC))
+        d = self.movies(2, "d")
+        for film in d:
+            self.log(film, datetime(2020, 5, 1, tzinfo=UTC))
+        # Seeing a title again isn't progress.
+        self.log(d[0], datetime(2025, 5, 1, tzinfo=UTC))
+        e = self.movies(2, "e")
+        self.completed(Movie, e)
+        for name, films in (("A", a), ("B", b), ("C", c), ("D", d), ("E", e)):
+            self.members(name, films)
+
+        year = self.in_range(2025)
+        self.assertEqual((year["completed_count"], year["progressed_count"]), (1, 2))
+        # A became complete in 2025; B's last member was first seen in 2026.
+        self.assertEqual(self.rows(year["completed"]), [("A", 1)])
+        self.assertEqual(self.rows(year["progressed"]), [("C", 2), ("B", 1)])
+        self.assertEqual(year["completed"][0]["completion"], {"completed_count": 3, "total_count": 3})
+        self.assertEqual(year["progressed"][0]["completion"], {"completed_count": 2, "total_count": 4})
+        self.assertEqual(year["completed"][0]["poster_urls"], ["https://example.com/poster.jpg"] * 3)
+        next_year = self.in_range(2026)
+        self.assertEqual((self.rows(next_year["completed"]), next_year["progressed"]), ([("B", 1)], []))
+        self.assertEqual(self.rows(self.in_range(2020)["completed"]), [("D", 2)])
+        # The lifetime groups don't change with the range and carry no seen_in_range.
+        lifetime = stats_v2_lists.build_collections(self.scope(media_type="movie"))
+        self.assertIsNone(lifetime["in_range"])
+        dated = stats_v2_lists.build_collections(
+            self.scope(start=date(2025, 1, 1), end=date(2025, 12, 31), media_type="movie"),
+        )
+        self.assertEqual(
+            {key: dated[key] for key in ("complete_count", "almost_count", "complete", "almost")},
+            {key: lifetime[key] for key in ("complete_count", "almost_count", "complete", "almost")},
+        )
+        self.assertTrue(all("seen_in_range" not in row for row in dated["complete"]))
+
+    def test_in_range_rows_are_capped_at_four(self):
+        for index in range(6):
+            films = self.movies(2, f"s{index}-")
+            for film in films:
+                self.log(film, datetime(2025, 3, 1, tzinfo=UTC))
+            self.members(f"S{index}", films)
+        year = self.in_range(2025)
+        self.assertEqual(year["completed_count"], 6)
+        self.assertEqual([row["id"] for row in year["completed"]], ["S0", "S1", "S2", "S3"])
+
+    def test_in_range_first_seen_days_are_on_the_owners_calendar(self):
+        anime = [self.item("anime", f"f{index}") for index in range(2)]
+        self.members("F", anime, media_type="anime", source=Sources.MAL.value)
+        for zone in OWNER_ZONES:
+            with self.subTest(owner_zone=zone):
+                DiaryEntry.objects.all().delete()
+                self.set_zone(zone)
+                local = ZoneInfo(zone)
+                self.log(anime[0], datetime(2024, 12, 31, 23, 30, tzinfo=local))
+                self.log(anime[1], datetime(2025, 1, 1, 0, 30, tzinfo=local))
+                for viewer in (self.owner, self.follower):
+                    year = self.in_range(2025, viewer, "anime")
+                    self.assertEqual((self.rows(year["completed"]), year["progressed"]), ([("F", 1)], []))
+                    before = self.in_range(2024, viewer, "anime")
+                    self.assertEqual((before["completed"], self.rows(before["progressed"])), ([], [("F", 1)]))
+
+    def test_other_viewers_count_only_the_logs_they_can_see_in_range(self):
+        anime = [self.item("anime", f"p{index}") for index in range(2)]
+        self.log(anime[0], datetime(2025, 2, 1, tzinfo=UTC))
+        self.log(anime[1], datetime(2025, 3, 1, tzinfo=UTC), visibility="private")
+        self.members("P", anime, media_type="anime", source=Sources.MAL.value)
+        owner = self.in_range(2025, media_type="anime")
+        self.assertEqual((self.rows(owner["completed"]), owner["progressed"]), ([("P", 2)], []))
+        stranger = self.in_range(2025, self.stranger, "anime")
+        self.assertEqual((stranger["completed"], self.rows(stranger["progressed"])), ([], [("P", 1)]))
+
+    def test_show_all_pages_the_in_range_groups(self):
+        for index in range(3):
+            films = self.movies(2, f"s{index}-")
+            for film in films:
+                self.log(film, datetime(2025, 3, 1 + index, tzinfo=UTC))
+            self.members(f"S{index}", films)
+        path = "/api/v1/stats/me/collections/"
+        params = {"media_type": "movie", "group": "completed_in_range", "start_date": "2025-01-01",
+                  "end_date": "2025-12-31", "page_size": 2}
+        response = self.get(self.owner, params, path=path)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["count"], 3)
+        self.assertEqual(self.rows(response.data["results"]), [("S0", 2), ("S1", 2)])
+        self.assertIsNotNone(response.data["next"])
+        second = self.get(self.owner, {**params, "page": 2}, path=path)
+        self.assertEqual(self.rows(second.data["results"]), [("S2", 2)])
+        progressed = self.get(self.owner, {**params, "group": "progressed_in_range"}, path=path)
+        self.assertEqual(progressed.data["count"], 0)
+        self.assertEqual(self.get(self.owner, {**params, "start_date": "2024-01-01", "end_date": "2024-12-31"},
+                                  path=path).data["count"], 0)
+        follower = self.get(self.follower, params, path=self.user_path("collections"))
+        self.assertEqual((follower.status_code, follower.data["count"]), (200, 3))
+        # The lifetime groups still ignore dates.
+        lifetime = self.get(self.owner, {**params, "group": "complete"}, path=path)
+        self.assertEqual(lifetime.data["count"], 3)
+        self.assertTrue(all("seen_in_range" not in row for row in lifetime.data["results"]))
+        all_time = self.get(self.owner, {**params, "start_date": "all", "end_date": "all"}, path=path)
+        self.assertEqual(all_time.status_code, 400)
+        self.assertIn("date_range", all_time.data["error"]["fields"])
+        bad = self.get(self.owner, {**params, "end_date": "2024-01-01"}, path=path)
+        self.assertEqual(bad.status_code, 400)
+
+    def test_in_range_query_count_is_flat(self):
+        def count_queries():
+            scope = self.scope(start=date(2025, 1, 1), end=date(2025, 12, 31), media_type="movie")
+            with CaptureQueriesContext(connection) as queries:
+                data = stats_v2_lists.build_collections(scope)
+            self.assertTrue(data["in_range"]["completed"] and data["in_range"]["progressed"])
+            return len(queries)
+
+        def seed(prefix, count):
+            for index in range(count):
+                films = self.movies(3, f"{prefix}{index}-")
+                self.log(films[0], datetime(2024, 3, 1, tzinfo=UTC))
+                self.log(films[1], datetime(2025, 3, 1, tzinfo=UTC))
+                self.members(f"{prefix}-done-{index}", films[:2])
+                self.members(f"{prefix}-part-{index}", films)
+
+        seed("small", 1)
+        baseline = count_queries()
+        seed("big", 8)
+        self.assertEqual(count_queries(), baseline)

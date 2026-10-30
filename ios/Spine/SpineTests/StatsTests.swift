@@ -482,6 +482,101 @@ final class StatsTests: XCTestCase {
         XCTAssertEqual(mostLogged.results.first?.times, 3)
     }
 
+    func testInRangeCollectionsShowAllSendsTheYearsDatesAndReadsSeenInRange() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        var queries: [[String: String]] = []
+        StatsRequestCaptureURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            queries.append(self.queryDictionary(components.queryItems ?? []))
+            return Self.response(for: request, data: Data("""
+            {"count": 1, "next": null, "previous": null, "results": [
+              {"id": "10", "source": "tmdb", "media_type": "movie", "name": "Dune Collection", "item_count": 3,
+               "poster_urls": [], "completion": {"completed_count": 2, "total_count": 3}, "seen_in_range": 2}
+            ]}
+            """.utf8))
+        }
+
+        let viewModel = StatsCollectionsPageModel.collections(
+            profileRepository: repository,
+            username: nil,
+            mediaType: "movie",
+            group: .progressedInRange,
+            period: .year(2025),
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        let lifetime = StatsCollectionsPageModel.collections(
+            profileRepository: repository,
+            username: nil,
+            mediaType: "movie",
+            group: .complete,
+            period: .year(2025),
+            onUnauthorized: {}
+        )
+        await lifetime.load()
+
+        XCTAssertEqual(queries, [
+            ["media_type": "movie", "group": "progressed_in_range", "page_size": "48",
+             "start_date": "2025-01-01", "end_date": "2025-12-31"],
+            ["media_type": "movie", "group": "complete", "page_size": "48"],
+        ], "Only the in-range groups send dates; the lifetime ones never do")
+        XCTAssertEqual(viewModel.items.first?.seenInRange, 2)
+        XCTAssertEqual(viewModel.items.first.flatMap(StatsCollectionsData.caption), "+2 · 2 of 3")
+    }
+
+    func testPeopleShowAllRequestsOneRoleInItsOrderAndPages() async throws {
+        let repository = makeAPIRepository()
+        repository.client.tokenProvider.accessToken = "stats-access"
+        var paths: [String] = []
+        var queries: [[String: String]] = []
+        StatsRequestCaptureURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            paths.append(components.path)
+            queries.append(self.queryDictionary(components.queryItems ?? []))
+            let isFirst = components.queryItems?.contains { $0.name == "page" } != true
+            return Self.response(for: request, data: Data("""
+            {"count": 2, "next": \(isFirst ? "\"https://example.com/api/v1/stats/me/people/?page=2\"" : "null"), "previous": null, "results": [
+              {"person": {"source": "tmdb", "id": "\(isFirst ? "525" : "1032")", "name": "\(isFirst ? "Christopher Nolan" : "Martin Scorsese")",
+                          "image_url": null},
+               "titles": 9, "rated": 8, "average_stars": "4.19"}
+            ]}
+            """.utf8))
+        }
+
+        let viewModel = StatsPeoplePageModel.people(
+            profileRepository: repository,
+            username: nil,
+            period: .year(2025),
+            mediaType: "movie",
+            role: "director",
+            sort: .rating,
+            expectedTotal: 0,
+            onUnauthorized: {}
+        )
+        await viewModel.load()
+        await viewModel.loadNextPage()
+        _ = try await repository.statsPeople(
+            username: "mika", period: .allTime, mediaType: "tv", role: "creator", sort: .titles, page: nil, pageSize: 25
+        )
+
+        XCTAssertEqual(paths, [
+            "/api/v1/stats/me/people/",
+            "/api/v1/stats/me/people/",
+            "/api/v1/users/mika/stats/people/",
+        ])
+        XCTAssertEqual(queries, [
+            ["start_date": "2025-01-01", "end_date": "2025-12-31", "page_size": "48", "media_type": "movie",
+             "role": "director", "sort": "rating"],
+            ["start_date": "2025-01-01", "end_date": "2025-12-31", "page_size": "48", "media_type": "movie",
+             "role": "director", "sort": "rating", "page": "2"],
+            ["start_date": "all", "end_date": "all", "page_size": "25", "media_type": "tv", "role": "creator", "sort": "titles"],
+        ])
+        XCTAssertEqual(viewModel.items.map(\.person.name), ["Christopher Nolan", "Martin Scorsese"])
+        XCTAssertEqual(viewModel.totalCount, 2)
+        XCTAssertFalse(viewModel.hasMorePages)
+    }
+
     func testLegacyOnlyRepositoryAnswersTheV2CallWithTheFallbackPage() async throws {
         let legacy = StatsSummary(overview: StatsOverview(diaryEntryCount: 9, uniqueLoggedCount: 7))
         let repository = StatsProfileRepositoryFake { _, _ in legacy }

@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// Highest rated (STAT-205): a four-column poster grid in the server's order, gold stars under
-/// each poster, and "Show all". The page shows it only when Top comes from a list
-/// (`isShown(top:highestRated:)`), so the two never repeat each other. Each grid row is its own
-/// item in the page's lazy stack.
+/// each poster, and "Show all". When Top comes from a list, the server leaves Top's titles out of
+/// it, so the two never repeat each other. Each grid row is its own item in the page's lazy stack.
 struct StatsHighestRatedSection: View {
     let highestRated: StatsHighestRated
     let onOpenTitle: (MediaSummary) -> Void
@@ -43,10 +42,10 @@ struct StatsHighestRatedSection: View {
 
     // MARK: - Data shaping
 
-    /// Only when Top comes from a list; otherwise Top already shows these titles.
-    static func isShown(top: StatsTop?, highestRated: StatsHighestRated?) -> Bool {
-        guard let highestRated, !highestRated.isEmpty else { return false }
-        return top?.isFromList == true
+    /// Whenever there's something rated; Top no longer stands in for it.
+    static func isShown(_ highestRated: StatsHighestRated?) -> Bool {
+        guard let highestRated else { return false }
+        return !highestRated.isEmpty
     }
 
     static func hasMore(_ highestRated: StatsHighestRated) -> Bool {

@@ -43,7 +43,8 @@ final class StatsRealPayloadTests: XCTestCase {
         for name in try Self.fixtureNames().filter({ !$0.contains("show-all") }) {
             filled.formUnion(StatsPageSection.sections(for: try Self.load(name).page))
         }
-        XCTAssertEqual(filled, Set(StatsPageSection.typeOrder))
+        // The fixtures were captured before People (STAT-219) existed.
+        XCTAssertEqual(filled, Set(StatsPageSection.typeOrder + StatsPageSection.globalOrder).subtracting([.people]))
     }
 
     // MARK: - What the sample library shows
@@ -74,7 +75,8 @@ final class StatsRealPayloadTests: XCTestCase {
         XCTAssertEqual(friend.top?.source, .highestRated)
         XCTAssertNil(friend.top?.tagHint)
         XCTAssertFalse(friend.top?.hintPrivate ?? true)
-        XCTAssertFalse(StatsPageSection.sections(for: friend).contains(.highestRated))
+        XCTAssertTrue(StatsPageSection.sections(for: friend).contains(.highestRated), "Highest rated keeps its place")
+        XCTAssertFalse(StatsPageSection.sections(for: friend).contains(.top), "No list and no hint for a friend")
     }
 
     func testAYearWithoutATaggedListTellsTheOwnerHowToTagOne() throws {
@@ -84,7 +86,11 @@ final class StatsRealPayloadTests: XCTestCase {
 
         let movies = try Self.load("movie-2024").page
         XCTAssertEqual(movies.top?.tagHint, "Tag a ranked movie list top2024")
-        XCTAssertFalse(StatsPageSection.sections(for: movies).contains(.highestRated))
+        XCTAssertEqual(
+            StatsTopSection.rows(for: try XCTUnwrap(movies.top)).last,
+            .empty("Tag a ranked movie list top2024 to show it here.")
+        )
+        XCTAssertTrue(StatsPageSection.sections(for: movies).contains(.highestRated), "Highest rated keeps its place")
     }
 
     func testTheMovieTabHasItsPublicTopListCollectionsAndLanguages() throws {
@@ -263,6 +269,15 @@ final class StatsRealPayloadTests: XCTestCase {
             XCTAssertEqual(page.languages?.mediaTypes, languages?["media_types"] as? [String], name)
         }
 
+        // People
+        if isNull("people") {
+            XCTAssertNil(page.people, name)
+        } else {
+            let groups = rows(json["people"], "groups")
+            XCTAssertEqual(page.people?.groups.count, groups.count, "\(name): people groups")
+            XCTAssertEqual(page.people?.groups.map(\.rows.count), groups.map { rows($0, "rows").count }, "\(name): people rows")
+        }
+
         // List rings
         XCTAssertEqual(page.listRings.count, (json["list_rings"] as? [Any])?.count, "\(name): list rings")
 
@@ -299,23 +314,34 @@ final class StatsRealPayloadTests: XCTestCase {
         let shown: [StatsPageSection: Bool] = [
             .header: number(section("header"), "titles") + number(section("header"), "logs") > 0,
             .time: count(section("time"), "rows") > 0,
-            .top: count(top, "items") > 0,
-            .highestRated: count(section("highest_rated"), "items") > 0
-                && top?["source"] as? String == "list" && top?["list"] is JSON,
+            // A tagged list's posters, or the owner's tag hint without one.
+            .top: top?["source"] as? String == "list"
+                ? count(top, "items") > 0
+                : !((top?["tag_hint"] as? String) ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
+            .highestRated: count(section("highest_rated"), "items") > 0,
             .activity: section("activity")?["busiest_day"] is JSON,
             .ratings: number(section("ratings"), "rated") > 0,
             .ratedVsEveryone: count(section("rated_vs_everyone"), "higher") + count(section("rated_vs_everyone"), "lower") > 0,
             .releaseYears: count(section("release_years"), "rows") > 0,
             .genres: count(section("genres"), "rows") + count(section("genres"), "music") > 0,
             .languages: count(section("languages"), "rows") > 0,
+            .people: ((section("people")?["groups"] as? [JSON]) ?? []).contains { count($0, "rows") > 0 },
             .listProgress: !((json["list_rings"] as? [Any]) ?? []).isEmpty,
-            .collections: !isGlobal
-                && number(section("collections"), "complete_count") + number(section("collections"), "almost_count") > 0,
+            .collections: !isGlobal && collectionsShow(section("collections")),
             .mostLogged: count(section("most_logged"), "items") > 0,
             .milestones: !((json["milestones"] as? [Any]) ?? []).isEmpty,
         ]
         let order = isGlobal ? StatsPageSection.globalOrder : StatsPageSection.typeOrder
         return order.filter { shown[$0] ?? false }
+    }
+
+    /// A year's own progress when the payload has it (`in_range`), else the lifetime groups.
+    private static func collectionsShow(_ collections: JSON?) -> Bool {
+        func number(_ object: JSON?, _ key: String) -> Int { object?[key] as? Int ?? 0 }
+        if let inRange = collections?["in_range"] as? JSON {
+            return number(inRange, "completed_count") + number(inRange, "progressed_count") > 0
+        }
+        return number(collections, "complete_count") + number(collections, "almost_count") > 0
     }
 
     // MARK: - Fixtures

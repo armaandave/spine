@@ -98,10 +98,12 @@ from api.views.stats import (
     MyStatsCollectionsView,
     MyStatsHighestRatedView,
     MyStatsMostLoggedView,
+    MyStatsPeopleView,
     MyStatsSummaryView,
     UserStatsCollectionsView,
     UserStatsHighestRatedView,
     UserStatsMostLoggedView,
+    UserStatsPeopleView,
     UserStatsSummaryView,
 )
 from api.views.streaming import (
@@ -240,6 +242,7 @@ urlpatterns = [
     path("stats/me/most-logged/", MyStatsMostLoggedView.as_view(), name="api-my-stats-most-logged"),
     path("stats/me/highest-rated/", MyStatsHighestRatedView.as_view(), name="api-my-stats-highest-rated"),
     path("stats/me/collections/", MyStatsCollectionsView.as_view(), name="api-my-stats-collections"),
+    path("stats/me/people/", MyStatsPeopleView.as_view(), name="api-my-stats-people"),
     path("lists/", ListsView.as_view(), name="api-lists"),
     path("lists/featured/", FeaturedListsView.as_view(), name="api-featured-lists"),
     path("lists/featured/shelves/", FeaturedShelvesView.as_view(), name="api-featured-shelves"),
@@ -290,6 +293,11 @@ urlpatterns = [
         "users/<str:username>/stats/collections/",
         UserStatsCollectionsView.as_view(),
         name="api-user-stats-collections",
+    ),
+    path(
+        "users/<str:username>/stats/people/",
+        UserStatsPeopleView.as_view(),
+        name="api-user-stats-people",
     ),
     path("users/<str:username>/activity/", UserActivityView.as_view(), name="api-user-activity"),
     path("users/<str:username>/follow/", FollowView.as_view(), name="api-user-follow"),

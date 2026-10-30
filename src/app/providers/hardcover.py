@@ -574,6 +574,15 @@ query BookMetadataBatch($ids: [Int!]) {
     pages
     release_date
     cached_featured_series
+    cached_contributors(path: "[0]['author']['name']")
+    contributions(where: {contributable_type: {_eq: "Book"}}) {
+      contribution
+      author {
+        id
+        name
+        cached_image(path: "url")
+      }
+    }
     default_cover_edition {
       release_date
     }
@@ -606,9 +615,9 @@ def book_metadata_batch(media_ids):
     """Return the stored-metadata fields of many books, keyed by media id.
 
     Each value has the shape book() returns, limited to what Item metadata stores:
-    title, pages, genres, the release dates (including original_release_date) and the
-    featured series with its members. Two requests per 50 books (the books, then
-    their series not already cached) instead of book()'s 2-3 per book. Requests go
+    title, pages, genres, the release dates (including original_release_date), the
+    authors and the featured series with its members. Two requests per 50 books (the
+    books, then their series not already cached) instead of book()'s 2-3 per book. Requests go
     through services.api_request, so a quota scope's budget and 429 blocks apply;
     quota.Deferred and ProviderAPIError propagate. Ids Hardcover doesn't return are
     left out.
@@ -649,6 +658,8 @@ def _book_metadata(book_data, featured_series, series):
             "publish_date": release_date,
             "release_date": release_date,
             "original_release_date": format_release_date(book_release_date),
+            "author": book_data.get("cached_contributors"),
+            "authors": get_authors(book_data),
             "series_id": featured_series.get("id") if featured_series else None,
             "series_name": featured_series.get("name") if featured_series else None,
             "series_position": featured_series.get("position") if featured_series else None,

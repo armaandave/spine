@@ -3,8 +3,8 @@ import Charts
 import SwiftUI
 
 // Shared pieces for the Stats chart and list sections: colours, copy, card slices, the stacked
-// type bar, the chart tap overlay and the accessibility descriptor. Type colours
-// (`MediaTypeTheme.statsColor`) appear only on chart marks.
+// type bar, the drag readout, the edge-only x-axis and the accessibility descriptor. Type
+// colours (`MediaTypeTheme.statsColor`) appear only on chart marks.
 
 // MARK: - Style
 
@@ -284,37 +284,158 @@ struct StatsStackedBar: View {
     }
 }
 
-// MARK: - Chart taps
+// MARK: - Dragging across a chart
 
-/// A clear layer over a chart that reports taps in the plot's own coordinates.
-struct StatsChartTapOverlay: View {
-    let proxy: ChartProxy
-    let onTap: (CGPoint) -> Void
+/// One thing "Show logs" can open for a picked bar.
+struct StatsChartDrillOption: Identifiable, Hashable {
+    /// The menu item: "All logs", "Movies".
+    let label: String
+    let drillDown: StatsDrillDown
+
+    var id: String { label }
+
+    /// A bar's choices: the whole bar, and on Global, when it has two or more types, each
+    /// type's part after it.
+    static func options(whole: StatsDrillDown, parts: [(mediaType: String, drillDown: StatsDrillDown)]) -> [StatsChartDrillOption] {
+        guard parts.count > 1 else { return [StatsChartDrillOption(label: "All logs", drillDown: whole)] }
+        return [StatsChartDrillOption(label: "All logs", drillDown: whole)]
+            + parts.map { StatsChartDrillOption(label: StatsChartStyle.typeName($0.mediaType), drillDown: $0.drillDown) }
+    }
+}
+
+/// The bar under the finger, or the last one picked: its name, a detail line, and what
+/// "Show logs" opens (nothing for a chart without a diary filter, like weekdays).
+struct StatsChartSelection: Hashable {
+    let title: String
+    let detail: String
+    var drillOptions: [StatsChartDrillOption] = []
+}
+
+/// The line over a draggable chart, as Release years has it: the idle line while nothing is
+/// picked, else the picked bar's name and detail with "Show logs" on your own stats (a menu when
+/// a Global bar splits by type). Its height is fixed, so picking a bar never moves the chart.
+struct StatsChartReadout<Idle: View>: View {
+    let selection: StatsChartSelection?
+    /// Nil on someone else's stats: nothing opens.
+    let onDrillDown: ((StatsDrillDown) -> Void)?
+    @ViewBuilder let idle: () -> Idle
+
+    static var height: CGFloat { 44 }
 
     var body: some View {
-        GeometryReader { geometry in
-            Rectangle()
-                .fill(.clear)
-                .contentShape(Rectangle())
-                .onTapGesture { location in
-                    guard let plotFrame = proxy.plotFrame else { return }
-                    let origin = geometry[plotFrame].origin
-                    onTap(CGPoint(x: location.x - origin.x, y: location.y - origin.y))
+        Group {
+            if let selection {
+                picked(selection)
+            } else {
+                idle()
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
+    }
+
+    private func picked(_ selection: StatsChartSelection) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selection.title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                Text(selection.detail)
+                    .font(.footnote)
+                    .foregroundStyle(StatsChartStyle.secondaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 8)
+            if let onDrillDown, let first = selection.drillOptions.first {
+                if selection.drillOptions.count > 1 {
+                    Menu("Show logs") {
+                        ForEach(selection.drillOptions) { option in
+                            Button(option.label) { onDrillDown(option.drillDown) }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.white)
+                } else {
+                    Button("Show logs") { onDrillDown(first.drillDown) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(.white)
                 }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// The idle readout of a chart card: its name, and how to read it.
+struct StatsChartIdleLine<Trailing: View>: View {
+    let title: String
+    let hint: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(StatsChartStyle.secondaryText)
+                Text(hint)
+                    .font(.footnote)
+                    .foregroundStyle(StatsChartStyle.secondaryText.opacity(0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 8)
+            trailing()
         }
     }
 }
 
-/// Which stacked part a tap at `value` on the count axis lands in: parts stack upwards in
-/// order. Nil above the bar.
-func statsStackedPart(at value: Double, parts: [StatsTypeCount]) -> String? {
-    guard value >= 0 else { return parts.first?.mediaType }
-    var top = 0.0
-    for part in parts {
-        top += Double(part.count)
-        if value <= top { return part.mediaType }
+extension StatsChartIdleLine where Trailing == EmptyView {
+    init(title: String, hint: String) {
+        self.init(title: title, hint: hint) { EmptyView() }
     }
-    return nil
+}
+
+// MARK: - X axis
+
+enum StatsChartAxis {
+    /// The x-axis labels a chart shows: its first and last, never a crowded row of them.
+    static func edgeLabels<Value: Equatable>(_ values: [Value]) -> [Value] {
+        guard let first = values.first, let last = values.last else { return [] }
+        return first == last ? [first] : [first, last]
+    }
+
+    /// Where an edge label sits on its bar: the first runs right from it and the last ends at it,
+    /// so neither spills past the plot; a lone label is centred.
+    static func anchor(index: Int, count: Int) -> UnitPoint {
+        guard count > 1 else { return .top }
+        return index == 0 ? .topLeading : .topTrailing
+    }
+}
+
+extension View {
+    /// A categorical x-axis labelled only at `labels` (from `StatsChartAxis.edgeLabels`), each
+    /// written by `text`.
+    func statsEdgeXAxis(labels: [String], text: @escaping (String) -> String = { $0 }) -> some View {
+        chartXAxis {
+            AxisMarks(values: labels) { value in
+                AxisValueLabel(
+                    anchor: StatsChartAxis.anchor(index: value.index, count: value.count),
+                    collisionResolution: .disabled
+                ) {
+                    if let label = value.as(String.self) {
+                        Text(text(label))
+                            .foregroundStyle(StatsChartStyle.axisLabel)
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Accessibility

@@ -33,7 +33,13 @@ enum StatsDrillDown: Hashable {
     /// section's titles, for swiping between title pages.
     case title(MediaSummary, within: [MediaRef] = [])
     case liked
+    /// A header number or detail row (STAT-200): the scope's logs with the row's `drill` params
+    /// on top, each replacing the scope's param of the same name. An empty `drill` is the
+    /// scope's own logs. `label` names the diary ("Repeats · 2025").
+    case stat(label: String, drill: [String: String] = [:])
     case tag(String)
+    /// A person in People (STAT-219), in the group's role.
+    case person(StatsPerson, role: String)
     case milestone(StatsMilestone)
     /// Top's list or a list progress ring.
     case list(id: Int)
@@ -67,9 +73,23 @@ enum StatsDrillDown: Hashable {
                 return .log(entryId: entryId)
             }
             return .title(MediaBrowsingSelection(ref: milestone.media.ref, within: [milestone.media.ref]))
+        case let .stat(_, drill):
+            guard context.isOwnStats, MediaFilterState().applying(drill: drill) != nil else { return nil }
+            return .diary(self, context)
+        case let .person(person, _):
+            if context.isOwnStats {
+                return .diary(self, context)
+            }
+            // Someone else's: a TMDB person has a page to open; anyone else opens nothing.
+            return person.ref.source == "tmdb" ? .person(person.ref) : nil
         case .genre, .genreGroup, .language, .releaseYear, .releaseDecade, .rating, .month, .day, .liked, .tag:
             return context.isOwnStats ? .diary(self, context) : nil
         }
+    }
+
+    /// A header stat's drill-down, or nil when its drill is one this app can't send.
+    static func headerStat(label: String, drill: [String: String]) -> StatsDrillDown? {
+        MediaFilterState().applying(drill: drill) == nil ? nil : .stat(label: label, drill: drill)
     }
 
     /// The diary filter for this drill-down: always `skip_backfill`, `tv_rollup` and the range's
@@ -113,6 +133,11 @@ enum StatsDrillDown: Hashable {
             filter.itemId = media.ref.itemId
         case .liked:
             filter.liked = true
+        case let .stat(_, drill):
+            filter = filter.applying(drill: drill) ?? filter
+        case let .person(person, role):
+            filter.credit = person.id
+            filter.role = role
         case let .tag(tag):
             filter.tag = tag
         case .milestone, .list, .collection:
@@ -155,6 +180,10 @@ enum StatsDrillDown: Hashable {
             return media.displayTitle
         case .liked:
             return "Likes"
+        case let .stat(label, _):
+            return label
+        case let .person(person, _):
+            return person.name
         case let .tag(tag):
             return tag
         case let .milestone(milestone):
@@ -239,12 +268,13 @@ enum StatsRoute: Hashable, Identifiable {
     case list(id: Int)
     case series(SeriesRef)
     case title(MediaBrowsingSelection)
+    case person(PersonRef)
 
     var id: Self { self }
 
     var presentsFullScreen: Bool {
         switch self {
-        case .series, .title: true
+        case .series, .title, .person: true
         case .diary, .log, .list: false
         }
     }
@@ -333,6 +363,19 @@ struct StatsRouteDestination: View {
                 diaryRepository: services.diaryRepository,
                 listRepository: services.listRepository,
                 peopleRepository: services.peopleRepository,
+                currentUserId: services.currentUserId,
+                selectedTab: services.selectedTab,
+                onSelectTab: services.onSelectTab,
+                onUnauthorized: services.onUnauthorized
+            )
+        case let .person(ref):
+            PersonDetailView(
+                ref: ref,
+                peopleRepository: services.peopleRepository,
+                mediaRepository: services.mediaRepository,
+                trackingRepository: services.trackingRepository,
+                diaryRepository: services.diaryRepository,
+                listRepository: services.listRepository,
                 currentUserId: services.currentUserId,
                 selectedTab: services.selectedTab,
                 onSelectTab: services.onSelectTab,
