@@ -2346,7 +2346,8 @@ private struct ProfileSettingsSheet: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
+            // Keyed on the profile so a form opened before the profile loaded fills in when it arrives.
+            .task(id: profile?.id) {
                 viewModel.loadIfNeeded(profile: profile)
                 await viewModel.loadOptions()
             }
