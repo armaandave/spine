@@ -403,6 +403,9 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            // A slow drag down starts as a scroll of the rows, which would lower the number pad and leave the sheet
+            // with nothing to type into; the drag moves the sheet instead.
+            .scrollDismissesKeyboard(.never)
             // The sheet rides on the number pad, so the keyboard takes no room inside it.
             .ignoresSafeArea(.keyboard)
             .fitsSheetToContent(aboveKeyboard: true)
@@ -443,6 +446,11 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(isSaving)
+        // Dragging the sheet down lowers the number pad even when the sheet springs back. Without it the sheet has
+        // nothing to do, so it closes all the way.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            dismiss()
+        }
     }
 }
 
