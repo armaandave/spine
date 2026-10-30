@@ -284,6 +284,13 @@ final class ProfileSettingsViewModel {
         dailyDigestEnabled = profile.preferences.dailyDigestEnabled
     }
 
+    /// Seeds the form once. Settings' root reappears after every pushed page, and the profile it was
+    /// opened with can still be the pre-save copy then, so reloading would undo what was just saved.
+    func loadIfNeeded(profile: UserProfile?) {
+        guard self.profile == nil else { return }
+        load(profile: profile)
+    }
+
     func loadOptions() async {
         guard mediaTypes.isEmpty else { return }
         isLoadingOptions = true
@@ -2340,7 +2347,7 @@ private struct ProfileSettingsSheet: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                viewModel.load(profile: profile)
+                viewModel.loadIfNeeded(profile: profile)
                 await viewModel.loadOptions()
             }
             .toolbar {
