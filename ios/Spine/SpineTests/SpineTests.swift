@@ -2467,6 +2467,25 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileSettingsFillsInWhenOpenedBeforeProfileLoaded() {
+        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv"])
+        let viewModel = ProfileSettingsViewModel(
+            profileRepository: RecordingProfileRepository(profile: profile),
+            mediaRepository: FakeMediaRepository(),
+            onUnauthorized: {}
+        )
+
+        // Settings can open before the Profile page has loaded the profile.
+        viewModel.loadIfNeeded(profile: nil)
+        XCTAssertTrue(viewModel.enabledMediaTypes.isEmpty)
+
+        viewModel.loadIfNeeded(profile: profile)
+
+        XCTAssertEqual(viewModel.enabledMediaTypes, ["movie", "tv"])
+        XCTAssertEqual(viewModel.profile?.id, profile.id)
+    }
+
+    @MainActor
     func testProfileSettingsAvatarUploadRecordsMime() async {
         let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
