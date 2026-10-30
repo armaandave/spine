@@ -143,6 +143,7 @@ struct APIClient: Sendable {
             request.timeoutInterval = 120
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
+            request.setValue(Self.ratingScale, forHTTPHeaderField: Self.ratingScaleHeaderField)
             Self.setRegionHeader(on: &request)
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let accessToken {
@@ -323,6 +324,7 @@ struct APIClient: Sendable {
         request.timeoutInterval = requestTimeout ?? 10
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(TimeZone.current.identifier, forHTTPHeaderField: "X-Spine-Timezone")
+        request.setValue(Self.ratingScale, forHTTPHeaderField: Self.ratingScaleHeaderField)
         Self.setRegionHeader(on: &request)
         if let body {
             request.httpBody = body
@@ -335,6 +337,11 @@ struct APIClient: Sendable {
     }
 
     nonisolated static let regionHeaderField = "X-Spine-Region"
+
+    /// Asks the server for every rating as stars, 0.5-5, whatever the media type; builds without it get TV, anime,
+    /// manga and comic ratings on the stored 0-10 scale.
+    nonisolated static let ratingScaleHeaderField = "X-Spine-Rating-Scale"
+    nonisolated static let ratingScale = "stars"
 
     /// The device region as an ISO 3166-1 alpha-2 code ("US"), which the server uses as the streaming country until
     /// the user saves one. nil when the locale has no region or it isn't a country (a UN M.49 area such as "419").

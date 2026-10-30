@@ -43,7 +43,7 @@ final class BookTrackingContractTests: XCTestCase {
         let request = BookCompletionWriteRequest(
             journeyId: 41,
             completionDate: "2026-07-20",
-            rating: MediaLogViewModel.ratingDecimal(for: 9, mediaType: "book"),
+            rating: MediaLogViewModel.ratingDecimal(for: 9),
             review: "Great ending",
             reviewTitle: "A favorite",
             liked: true,
@@ -187,7 +187,6 @@ final class BookTrackingContractTests: XCTestCase {
         XCTAssertEqual(ref.trackingStatusLabel("In progress"), "Currently Reading")
         XCTAssertEqual(ref.trackingStatusLabel("Dropped"), "Did Not Finish")
         XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Read")
-        XCTAssertTrue(ref.usesFiveStarRatingScale)
         XCTAssertTrue(ref.usesCalendarConsumptionDate)
 
         XCTAssertEqual(

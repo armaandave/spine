@@ -31,7 +31,7 @@ from rest_framework.exceptions import ValidationError
 from api.serializers.common import media_summary_from_item, prime_collection_items
 from api.services import completion as completion_service
 from api.services import filters as filter_service
-from app import config, exposure, user_calendar
+from app import config, exposure, single_weight, user_calendar
 from app.models import (
     DiaryEntry,
     Item,
@@ -564,7 +564,12 @@ def wire_rating(value, media_type):
     if value is None:
         return None
     rating = Decimal(value)
-    return rating / 2 if media_type in SINGLE_WEIGHT_MEDIA_TYPES else rating
+    return rating / 2 if uses_stars(media_type) else rating
+
+
+def uses_stars(media_type):
+    """Return whether this request's legacy stats show a type's ratings in stars."""
+    return media_type in SINGLE_WEIGHT_MEDIA_TYPES or single_weight.REQUEST_STARS.get()
 
 
 def _top_rated_payloads(entries, request, *, owner):

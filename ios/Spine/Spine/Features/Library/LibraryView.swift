@@ -1175,12 +1175,12 @@ private struct LibraryListRow: View {
     private var metadataText: String {
         var parts: [String] = []
         if item.media.ref.mediaType == "tv" {
-            // The show's own stars, drawn from TV's 0-10 scale (TV-500, TV-504); counts are on the card line.
-            if let stars = item.tracking.rating?.starCount(mediaType: "tv") { parts.append("\(stars) stars") }
+            // The show's own stars (TV-500, TV-504); counts are on the card line.
+            if let stars = item.tracking.rating?.starCount { parts.append("\(stars) stars") }
             return parts.joined(separator: " - ")
         }
-        if let rating = item.tracking.rating {
-            parts.append("\(rating) stars")
+        if let stars = item.tracking.rating?.starCount {
+            parts.append("\(stars) stars")
         }
         if item.media.ref.mediaType == "game" {
             let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""
