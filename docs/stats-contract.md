@@ -666,7 +666,7 @@ GET /api/v1/users/{username}/stats/summary/?schema=2&start_date=…&end_date=…
 | `audience` | string | `owner`, `follower` or `public`. |
 | `years.first` | int or null | The year of the earliest log day or dated viewing the viewer can count, of any type; null when there is none. |
 | `years.current` | int | Today's year on the owner's calendar. |
-| `media_types[]` | array | One row per exposed primary type, in `primary_media_types()` order, whatever the tab, with that type's `titles` (STAT-105) and `logs` (STAT-103) in the range. The app builds its type picker from it. |
+| `media_types[]` | array | One row per exposed primary type the owner has turned on in Media & Preferences, in `primary_media_types()` order, whatever the tab, with that type's `titles` (STAT-105) and `logs` (STAT-103) in the range. The app builds its type picker from it. A type the owner turned off has no row, yet Global still counts it. |
 
 Every section key is always present; STAT-302 says when it is null.
 

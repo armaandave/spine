@@ -11,6 +11,8 @@ final class DiaryViewModel {
     private(set) var monthSections: [DiaryMonthSection] = []
     var filter: MediaFilterState
     var filterOptions: MediaFilterOptionsResponse = .empty
+    /// The types the picker offers: those the user has on in Settings.
+    private(set) var mediaTypes = APIConstants.fallbackMediaTypes
     var isBootstrapping = true
     var isLoading = false
     var isLoadingNextPage = false
@@ -68,6 +70,15 @@ final class DiaryViewModel {
         self.filterOptionsRepository = filterOptionsRepository ?? APIFilterOptionsRepository(client: AppEnvironment.apiClient)
         filter = mediaFilter
         self.onUnauthorized = onUnauthorized
+    }
+
+    /// Offers only `types`. If the picked type was turned off, the diary goes back to All and this returns true.
+    @discardableResult
+    func setEnabledMediaTypes(_ types: [String]) -> Bool {
+        mediaTypes = SearchViewModel.lensMediaTypes(from: types)
+        guard let selected = filter.mediaType, !mediaTypes.contains(selected) else { return false }
+        filter.selectMediaType(nil)
+        return true
     }
 
     func loadIfNeeded(loadsFilterOptions: Bool = false) async {
@@ -582,7 +593,15 @@ struct DiaryView: View {
             .sensoryFeedback(.selection, trigger: monthSwitchCount)
             .sensoryFeedback(.selection, trigger: viewModel.filter.mediaType)
             .task {
+                async let enabledTypes: Void = loadEnabledMediaTypes()
                 await viewModel.loadIfNeeded(loadsFilterOptions: true)
+                await enabledTypes
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
+                guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
+                if viewModel.setEnabledMediaTypes(profile.preferences.enabledMediaTypes) {
+                    Task { await reloadDiary(loadsFilterOptions: true) }
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
                 Task { await reloadDiary() }
@@ -768,6 +787,13 @@ struct DiaryView: View {
         await viewModel.load()
     }
 
+    private func loadEnabledMediaTypes() async {
+        guard let enabled = try? await mediaRepository.meta().enabledMediaTypes else { return }
+        if viewModel.setEnabledMediaTypes(enabled) {
+            await reloadDiary(loadsFilterOptions: true)
+        }
+    }
+
     private var contentPhase: SpineContentPhase {
         .resolve(
             isLoading: viewModel.isBootstrapping || viewModel.isLoading,
@@ -788,6 +814,7 @@ struct DiaryView: View {
                 filter: $viewModel.filter,
                 scope: .diary,
                 options: viewModel.filterOptions,
+                mediaTypes: viewModel.mediaTypes,
                 surface: .glass,
                 onUnauthorized: onUnauthorized
             ) {
@@ -801,7 +828,7 @@ struct DiaryView: View {
     private var mediaPicker: some View {
         MediaSearchLensPicker(
             selectedType: selectedMediaTypeBinding,
-            availableTypes: APIConstants.fallbackMediaTypes,
+            availableTypes: viewModel.mediaTypes,
             horizontalPadding: 0,
             fitsAllTypes: true,
             allowsEmptySelection: true,

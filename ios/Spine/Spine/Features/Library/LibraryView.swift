@@ -119,6 +119,8 @@ final class LibraryViewModel {
 
     var mediaType = "movie"
     var mediaTypes = LibraryViewModel.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
+    /// Every type the server offers, for when the user turns a type back on.
+    private var exposedMediaTypes = APIConstants.fallbackMediaTypes
     var query = ""
     var filter = MediaFilterState()
     var filterOptions: MediaFilterOptionsResponse = .empty
@@ -184,8 +186,9 @@ final class LibraryViewModel {
         return streaming.available && !streaming.services.isEmpty
     }
 
-    static func libraryMediaTypes(from mediaTypes: [String]) -> [String] {
-        let filtered = mediaTypes.filter { !["episode", "season"].contains($0) }
+    /// The picker's types: `mediaTypes` in order, less any the user turned off in Settings (`enabled`).
+    static func libraryMediaTypes(from mediaTypes: [String], enabled: [String]? = nil) -> [String] {
+        let filtered = mediaTypes.filter { !["episode", "season"].contains($0) && enabled?.contains($0) != false }
         return filtered.isEmpty ? APIConstants.fallbackMediaTypes.filter { !["episode", "season"].contains($0) } : filtered
     }
 
@@ -222,7 +225,8 @@ final class LibraryViewModel {
     func loadMeta(selectedMediaType: String? = nil) async {
         do {
             let meta = try await mediaRepository.meta()
-            mediaTypes = Self.libraryMediaTypes(from: meta.mediaTypes)
+            exposedMediaTypes = meta.mediaTypes
+            mediaTypes = Self.libraryMediaTypes(from: meta.mediaTypes, enabled: meta.enabledMediaTypes)
         } catch is CancellationError {
             return
         } catch {
@@ -237,6 +241,11 @@ final class LibraryViewModel {
         if !availableShelves.contains(shelf) {
             shelf = LibraryShelf.defaultShelf(for: mediaType)
         }
+    }
+
+    /// After Settings saves: the picker offers only the types now on.
+    func setEnabledMediaTypes(_ enabled: [String]) {
+        mediaTypes = Self.libraryMediaTypes(from: exposedMediaTypes, enabled: enabled)
     }
 
     func selectMediaType(_ type: String, searchText: String? = nil) async {
@@ -576,6 +585,12 @@ struct LibraryView: View {
             }
             .onChange(of: mediaLensStore.selectedMediaType) {
                 Task { await viewModel.selectMediaType(mediaLensStore.selectedMediaType, searchText: searchDraftText) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
+                guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
+                viewModel.setEnabledMediaTypes(profile.preferences.enabledMediaTypes)
+                // Moving off a type just turned off reloads through the change above.
+                mediaLensStore.validateSelection(in: viewModel.mediaTypes)
             }
             .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
