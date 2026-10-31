@@ -4156,6 +4156,56 @@ final class SpineTests: XCTestCase {
         )
     }
 
+    func testProfileRecentActivityRailShowsOneStarWithTheRating() {
+        func stars(_ rating: String?, _ mediaType: String) -> String? {
+            ProfileRecentActivityRailModel.starValueText(
+                for: activityItem(id: 1, title: "Log", type: "diary_created", rating: rating, mediaType: mediaType)
+            )
+        }
+
+        // Movies, albums, books and games rate out of 5; everything else out of 10.
+        XCTAssertEqual(stars("4.5", "movie"), "4.5")
+        XCTAssertEqual(stars("2.0", "book"), "2")
+        XCTAssertEqual(stars("5", "game"), "5")
+        XCTAssertEqual(stars("9.0", "tv"), "4.5")
+        XCTAssertEqual(stars("8", "anime"), "4")
+        XCTAssertEqual(stars("7.3", "tv"), "3.5")
+        XCTAssertNil(stars(nil, "movie"))
+        XCTAssertNil(stars("0", "movie"))
+    }
+
+    func testProfileRecentActivityRailShowsProgressAsAGain() throws {
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("230 pages"), "+230 pages")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("15%"), "+15%")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("2h 30m"), "+2h 30m")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("12 chapters"), "+12 chapters")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("1 issue"), "+1 issue")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("3 episodes"), "+3 eps.")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("1 episode"), "+1 ep.")
+        XCTAssertEqual(ProfileRecentActivityRailModel.progressGainText("Started"), "Started")
+        XCTAssertNil(ProfileRecentActivityRailModel.progressGainText("  "))
+    }
+
+    func testProfileRecentActivityRailMarksARewatchLog() throws {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let log = try decoder.decode(
+            ActivityObject.self,
+            from: Data(#"{"type": "diary", "id": 9, "rating": null, "liked": false, "is_rewatch": true}"#.utf8)
+        )
+        let rewatch = ActivityItem(
+            id: 9,
+            type: "diary_created",
+            createdAt: "2026-10-30T12:00:00Z",
+            actor: UserSummary(id: 1, username: "mobile", displayName: "Mobile", avatarUrl: nil),
+            media: nil,
+            object: log
+        )
+
+        XCTAssertTrue(ProfileRecentActivityRailModel.isRewatchDiary(rewatch))
+        XCTAssertFalse(ProfileRecentActivityRailModel.isRewatchDiary(activityItem(id: 2, title: "Log", type: "diary_created")))
+    }
+
     func testProfileRecentActivityRailShowsAShowOnceAcrossItsSeasonsAndEpisodes() {
         func activity(_ id: Int, _ mediaType: String, mediaId: String = "1396", season: Int? = nil, episode: Int? = nil) -> ActivityItem {
             ActivityItem(
@@ -5623,7 +5673,9 @@ final class SpineTests: XCTestCase {
         let today = page.results[0]
 
         XCTAssertEqual(ActivityFeedPresentation.actionText(for: today), "watched 4 episodes")
-        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: today), "4 episodes")
+        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: today), "+4 eps.")
+        XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: page.results[1]), "+1 ep.")
+        XCTAssertNil(page.results[2].object.isRewatch)
         XCTAssertEqual(ActivityDestination.resolve(today), .media(try XCTUnwrap(today.media).ref))
         XCTAssertEqual(
             ActivityFeedPresentation.actionText(for: activityItem(id: 4, title: "Older server")),

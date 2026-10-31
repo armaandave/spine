@@ -273,6 +273,7 @@ def _log_payload(entry, request):
             "id": entry.id,
             "rating": diary_service.rating_payload(entry),
             "liked": entry.liked,
+            "is_rewatch": entry.is_rewatch,
         },
         "viewer": {"can_view": True, "has_liked": entry.viewer_has_liked},
     }

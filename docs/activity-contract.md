@@ -73,7 +73,7 @@ the shape installed apps read. `consumed_at` is the item's calendar day
 (`YYYY-MM-DD`) and `created_at` when it was last written.
 
 - A log: `type` is `diary_created`, `id` is the log's id, and `object` is
-  `{"type": "diary", "id", "rating", "liked"}`.
+  `{"type": "diary", "id", "rating", "liked", "is_rewatch"}`.
 - A day's progress: `type` is `progress_updated`, `id` is negative (so ids stay
   unique across both kinds), `media` is the title, and `object` is
   `{"type": "progress_day", "id", "summary", "label"}`, for example

@@ -41,6 +41,7 @@
         },
         "object": {
           "id": 1,
+          "is_rewatch": false,
           "liked": true,
           "rating": "4.5",
           "type": "diary"
