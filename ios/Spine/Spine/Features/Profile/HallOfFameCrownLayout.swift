@@ -130,12 +130,11 @@ struct HallOfFameCrownLayout {
         return isSquare ? CGSize(width: cardSize.width, height: cardSize.width) : cardSize
     }
 
-    static func aboveMusicClearance(for slots: [FavoriteSlot], collapseProgress: CGFloat) -> CGFloat {
-        let arrangement = arrangement(for: slots)
-        guard let music = arrangement.above else { return 0 }
-        let cardSize = cardSize(for: max(arrangement.below.count, 1))
-        let musicSize = visualSize(for: music, cardSize: cardSize)
-        return (musicSize.height + musicAvatarGap(forLowerCount: arrangement.below.count))
+    /// Room kept above the avatar on every profile, sized for the largest music card
+    /// (one card below), so the avatar sits in the same place whatever the favorites.
+    static func avatarTopClearance(collapseProgress: CGFloat) -> CGFloat {
+        let musicHeight = cardSize(for: 1).width
+        return (musicHeight + musicAvatarGap(forLowerCount: 1))
             * (1 - clampedCollapseProgress(collapseProgress))
     }
 

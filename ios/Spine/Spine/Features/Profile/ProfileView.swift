@@ -1031,20 +1031,17 @@ struct ProfileView: View {
         // Empty slots are for adding favorites, so someone else's profile shows only the ones they picked.
         let allSlots = favoriteSlots(from: profile).filter { isOwnProfile || $0.item != nil }
         let backdropURL = profileBackdropURL(from: profile)
-        let musicClearance = HallOfFameCrownLayout.aboveMusicClearance(
-            for: allSlots,
-            collapseProgress: layoutProgress
-        )
-        let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + musicClearance
+        let topClearance = HallOfFameCrownLayout.avatarTopClearance(collapseProgress: layoutProgress)
+        let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + topClearance
         let backdropContentOffset = backdropURL == nil ? 0 : ProfileHeroBackdropLayout.contentTopOffset
 
         return VStack(spacing: profileElementSpacing) {
             VStack(spacing: 8) {
-                // With no favorites to fan out (someone else who picked none), only the avatar needs room, below the
-                // back and more buttons.
+                // With no favorites to fan out (someone else who picked none), only the avatar shows, in the same
+                // place as on every profile.
                 if allSlots.isEmpty {
                     avatar(profile)
-                        .padding(.top, 48)
+                        .padding(.top, topClearance)
                         .padding(.bottom, 8)
                 } else {
                     ZStack(alignment: .top) {
@@ -1071,7 +1068,7 @@ struct ProfileView: View {
                         avatar(profile)
                             .zIndex(1)
                     }
-                    .padding(.top, musicClearance)
+                    .padding(.top, topClearance)
                     .frame(height: crownHeight)
                 }
             }

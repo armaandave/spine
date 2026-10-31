@@ -258,7 +258,7 @@ private struct HallOfFameCrownPreview: View {
     }
 
     var body: some View {
-        let clearance = HallOfFameCrownLayout.aboveMusicClearance(for: slots, collapseProgress: 0)
+        let clearance = HallOfFameCrownLayout.avatarTopClearance(collapseProgress: 0)
 
         ZStack {
             SpinePageBackground()

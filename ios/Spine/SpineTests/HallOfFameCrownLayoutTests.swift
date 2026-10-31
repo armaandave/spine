@@ -291,13 +291,19 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
         }
     }
 
-    func testAboveMusicClearanceUsesSharedCollapseProgress() {
-        let evenSlots = slots(["movie", "music"])
+    func testAvatarTopClearanceIsTheSameForEveryArrangement() {
+        XCTAssertEqual(HallOfFameCrownLayout.avatarTopClearance(collapseProgress: 0), 104.3, accuracy: 0.001)
+        XCTAssertEqual(HallOfFameCrownLayout.avatarTopClearance(collapseProgress: 0.5), 52.15, accuracy: 0.001)
+        XCTAssertEqual(HallOfFameCrownLayout.avatarTopClearance(collapseProgress: 1), 0)
+    }
 
-        XCTAssertEqual(HallOfFameCrownLayout.aboveMusicClearance(for: evenSlots, collapseProgress: 0), 104.3, accuracy: 0.001)
-        XCTAssertEqual(HallOfFameCrownLayout.aboveMusicClearance(for: evenSlots, collapseProgress: 0.5), 52.15, accuracy: 0.001)
-        XCTAssertEqual(HallOfFameCrownLayout.aboveMusicClearance(for: evenSlots, collapseProgress: 1), 0)
-        XCTAssertEqual(HallOfFameCrownLayout.aboveMusicClearance(for: slots(["music"]), collapseProgress: 0), 0)
+    func testAvatarTopClearanceFitsMusicAboveForEveryEvenCount() {
+        for lowerCount in [1, 3, 5, 7] {
+            let cardSize = HallOfFameCrownLayout.cardSize(for: lowerCount)
+            let needed = cardSize.width + HallOfFameCrownLayout.musicAvatarGap(forLowerCount: lowerCount)
+
+            XCTAssertLessThanOrEqual(needed, HallOfFameCrownLayout.avatarTopClearance(collapseProgress: 0) + 0.001)
+        }
     }
 
     func testProfileHeroCollapseProgressClampsAtRestAndRefreshPull() {
