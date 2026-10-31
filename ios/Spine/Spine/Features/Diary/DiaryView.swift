@@ -524,6 +524,8 @@ struct DiaryView: View {
     @State private var pendingMonthAnchor: String?
     /// Counts the user's switches between the diary and the month index, for the haptic.
     @State private var monthSwitchCount = 0
+    /// Once per diary: later changes come from Settings saves.
+    @State private var hasCheckedEnabledMediaTypes = false
 
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
@@ -798,7 +800,9 @@ struct DiaryView: View {
     }
 
     private func loadEnabledMediaTypes() async {
-        guard let enabled = try? await mediaRepository.meta().enabledMediaTypes else { return }
+        guard !hasCheckedEnabledMediaTypes,
+              let enabled = try? await mediaRepository.meta().enabledMediaTypes else { return }
+        hasCheckedEnabledMediaTypes = true
         if viewModel.setEnabledMediaTypes(enabled) {
             await reloadDiary(loadsFilterOptions: true)
         }

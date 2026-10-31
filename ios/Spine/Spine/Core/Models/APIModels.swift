@@ -108,7 +108,9 @@ enum APIConstants {
     /// A type picker's types: those the user has on, always in the same order, so a picker
     /// built from a saved list matches the one the server sends later.
     static func pickerMediaTypes(enabled: [String]) -> [String] {
-        let types = fallbackMediaTypes.filter(enabled.contains)
+        // A type the app doesn't list yet goes last rather than missing.
+        let unlisted = enabled.filter { !fallbackMediaTypes.contains($0) && !["season", "episode"].contains($0) }
+        let types = fallbackMediaTypes.filter(enabled.contains) + unlisted
         return types.isEmpty ? fallbackMediaTypes : types
     }
 

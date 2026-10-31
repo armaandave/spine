@@ -19,6 +19,11 @@ final class SettingsMediaTypesTests: XCTestCase {
         // The profile sends TV first, /meta and Stats send movies first: every picker shows the same.
         XCTAssertEqual(APIConstants.pickerMediaTypes(enabled: ["tv", "book", "movie"]), ["movie", "tv", "book"])
         XCTAssertEqual(APIConstants.pickerMediaTypes(enabled: []), APIConstants.fallbackMediaTypes)
+        XCTAssertEqual(
+            APIConstants.pickerMediaTypes(enabled: ["boardgame", "season", "tv"]),
+            ["tv", "boardgame"],
+            "A type the app doesn't list yet still shows, last"
+        )
     }
 
     func testLibraryOpensOnTheRememberedTypesAndFollowsSettings() async throws {

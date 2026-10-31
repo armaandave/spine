@@ -98,11 +98,11 @@ def _media_count(user, *, status=None, exclude_status=None):
 
 def preferences_payload(user):
     """Serialize mobile-relevant preferences."""
+    enabled = set(user.get_enabled_media_types())
     return {
+        # Top-level types in the order /meta and stats use, so every picker agrees.
         "enabled_media_types": [
-            media_type
-            for media_type in exposure.filter_media_types(user.get_enabled_media_types())
-            if media_type != MediaTypes.SEASON.value
+            media_type for media_type in exposure.primary_media_types() if media_type in enabled
         ],
         "date_format": user.date_format,
         "time_format": user.time_format,

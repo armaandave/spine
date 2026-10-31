@@ -231,7 +231,7 @@ final class LibraryViewModel {
         } catch is CancellationError {
             return
         } catch {
-            mediaTypes = Self.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
+            // Keep the types the picker opened on: the remembered ones, else every type.
         }
 
         if let selectedMediaType, mediaTypes.contains(selectedMediaType) {
