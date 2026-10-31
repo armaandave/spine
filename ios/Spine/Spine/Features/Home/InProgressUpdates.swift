@@ -4,9 +4,12 @@ import SwiftUI
 /// one button that opens the title's own progress UI over Home, as the title's page has it:
 ///
 /// - a show: its episode sheet, on up next's season (`ContinueWatchingTicks`);
-/// - a book: the page's progress panel, with its Reading, Paused, Finished and DNF row;
-/// - a game: the page's progress sheet, with its status row, Edit Dates, Restart and Delete;
+/// - a book: the page's progress sheet, with Finished Reading and the journey's other choices in ⋯;
+/// - a game: the page's progress sheet, with Finished Playing, and Edit Dates and the rest in ⋯;
 /// - a manga or a comic: the page's log composer, on Progress.
+///
+/// A book's or a game's sheet opens at once from the card, as a show's does, while the page loads behind it; its
+/// writes wait for that load. A manga's or a comic's composer needs the loaded page, so it opens after it.
 ///
 /// Each runs on the page's own model (`MediaDetailViewModel`) posting as Home, so the card stays where it is, Home
 /// reloads only its activity, and the rail re-sorts on the next visit. Finishing a book or a game opens
@@ -40,7 +43,7 @@ final class InProgressUpdates {
     /// The title whose progress UI is on screen, or was last: kept until another card opens, so a write still on its
     /// way can say it failed.
     private(set) var update: InProgressUpdate?
-    /// The card whose page is loading before its progress UI opens.
+    /// The card whose page is loading before its composer opens (a manga or a comic).
     private(set) var loadingItemID: String?
     /// A write changed a card since the rail last loaded: the screen re-sorts the rail on its next visit.
     private(set) var needsReload = false
@@ -75,6 +78,8 @@ final class InProgressUpdates {
     /// A card's title and "Update progress ›". Returns the page to open instead, if any. It replaces a card still
     /// waiting for its page.
     func updateProgress(for item: LibraryItem) async -> MediaRef? {
+        // A second tap before the first's sheet is up, or while one slides away, opens nothing.
+        if let update, update.isPresenting || update.isClosing { return nil }
         cancelPendingOpen()
         switch Self.route(for: item) {
         case .episodes:
@@ -83,7 +88,10 @@ final class InProgressUpdates {
         case .page:
             return item.media.ref
         case .progress:
-            return await openProgress(for: item)
+            if ["book", "game"].contains(item.media.ref.mediaType) {
+                return openSheet(for: item)
+            }
+            return await openComposer(for: item)
         }
     }
 
@@ -99,10 +107,33 @@ final class InProgressUpdates {
         needsReload = false
     }
 
-    /// Loads the title's page, then opens its progress UI. Returns the page to open instead when there's nothing to
-    /// update there or the page didn't load: the page says why. Nothing opens when another tap, or something else on
-    /// the screen, came first.
-    private func openProgress(for item: LibraryItem) async -> MediaRef? {
+    /// A book's or a game's sheet, at once from the card, with its page loading behind it. Returns the page to open
+    /// instead when the card has nothing to update.
+    private func openSheet(for item: LibraryItem) -> MediaRef? {
+        let update = makeUpdate(for: item)
+        guard update.openSheet() else { return item.media.ref }
+        self.update = update
+        openings += 1
+        return nil
+    }
+
+    /// Loads a manga's or a comic's page, then opens its composer on Progress. Returns the page to open instead when
+    /// there's nothing to update there or the page didn't load: the page says why. Nothing opens when another tap, or
+    /// something else on the screen, came first.
+    private func openComposer(for item: LibraryItem) async -> MediaRef? {
+        let update = makeUpdate(for: item)
+        let ticket = request
+        loadingItemID = item.id
+        await update.page.load()
+        guard ticket == request else { return nil }
+        loadingItemID = nil
+        guard update.openComposer() else { return item.media.ref }
+        self.update = update
+        openings += 1
+        return nil
+    }
+
+    private func makeUpdate(for item: LibraryItem) -> InProgressUpdate {
         let page = MediaDetailViewModel(
             ref: item.media.ref,
             mediaRepository: mediaRepository,
@@ -111,20 +142,11 @@ final class InProgressUpdates {
             onUnauthorized: onUnauthorized,
             changeOrigin: continueWatching.changeOrigin
         )
-        let ticket = request
-        loadingItemID = item.id
-        await page.load()
-        guard ticket == request else { return nil }
-        loadingItemID = nil
-        let update = InProgressUpdate(item: item, page: page) { [weak self] state in
+        return InProgressUpdate(item: item, page: page) { [weak self] state in
             guard let self else { return }
             needsReload = true
             if let state { onUpdate(item.id, state) }
         }
-        guard update.start() else { return item.media.ref }
-        self.update = update
-        openings += 1
-        return nil
     }
 
     /// The rail with one card's status and progress replaced where it is, from its page after a write.
@@ -158,7 +180,7 @@ final class InProgressUpdates {
 }
 
 /// One title's progress UI over the screen, and what it opens next, as the title's page runs them
-/// (`MediaDetailPageView`'s progress panel, game sheets and completion log).
+/// (`MediaDetailPageView`'s progress sheets and completion log).
 @MainActor
 @Observable
 final class InProgressUpdate {
@@ -178,8 +200,8 @@ final class InProgressUpdate {
     let item: LibraryItem
     /// The title's page model: its writes, one request each through its queue, show at once and roll back on failure.
     let page: MediaDetailViewModel
-    /// The book's progress panel, on the page as it was when the panel opened.
-    var bookPanel: MediaDetail?
+    /// The book's progress sheet, opened from the card.
+    var bookPanel: ProgressSheetTitle?
     /// The game's progress sheet, for its current playthrough.
     var gameProgress: GamePlaythroughState?
     /// The playthrough editor the game sheet's Edit Dates opens.
@@ -188,6 +210,10 @@ final class InProgressUpdate {
     /// A choice closed a sheet; what follows waits for it to go (`sheetDidClose`).
     private(set) var isClosing = false
     @ObservationIgnored private var next: Next?
+    /// The page to open once the sheet has gone: the page loaded with nothing left to update.
+    @ObservationIgnored private var destination: MediaRef?
+    /// The page's load behind a sheet opened from the card.
+    @ObservationIgnored private var loading: Task<Void, Never>?
     /// A write landed: the page's confirmed state, for the card.
     @ObservationIgnored private let onChange: (UserMediaState?) -> Void
 
@@ -207,69 +233,156 @@ final class InProgressUpdate {
         page.quickActionErrorMessage != nil && !isPresenting && !isClosing
     }
 
-    /// Opens the progress UI the title's page offers. False when the page has nothing to update: a book that isn't
-    /// being read, a game without a playthrough, or a type whose page has no progress UI.
-    func start() -> Bool {
-        guard let detail = page.detail, let viewer = page.viewer else { return false }
-        page.progressErrorMessage = nil
-        page.formErrorMessage = nil
-        switch detail.ref.mediaType {
+    /// The book's sheet's title: the page's once loaded, which knows the page count; until then the card's.
+    var bookTitle: ProgressSheetTitle {
+        page.detail.map(ProgressSheetTitle.init(detail:)) ?? ProgressSheetTitle(item: item)
+    }
+
+    /// Where the book stands, from the page once loaded; until then the card's.
+    var bookProgress: ProgressState? {
+        page.viewer.map(\.progress) ?? item.tracking.progress
+    }
+
+    /// The current journey's status, or the book's own when it has no journey (paused directly).
+    var bookJourneyStatus: String? {
+        page.viewer.map { $0.book?.currentJourney?.status ?? $0.status }
+            ?? item.tracking.book?.currentJourney?.status ?? item.tracking.status
+    }
+
+    /// Opens a book's or a game's sheet from its card, as its page would, and loads the page behind it. False when the
+    /// card has nothing to update: a book that isn't being read, or a game without a playthrough.
+    func openSheet() -> Bool {
+        let tracking = item.tracking
+        switch item.media.ref.mediaType {
         case "book":
             // The page's Update Progress shows while the book is being read or paused.
-            guard ["In progress", "Paused"].contains(viewer.status ?? "") else { return false }
-            bookPanel = detail
+            guard ["In progress", "Paused"].contains(tracking.status ?? "") else { return false }
+            bookPanel = ProgressSheetTitle(item: item)
         case "game":
-            guard let game = viewer.game, game.canUpdateProgress, let playthrough = game.currentPlaythrough else {
+            guard let game = tracking.game, game.canUpdateProgress, let playthrough = game.currentPlaythrough else {
                 return false
             }
             gameProgress = playthrough
         default:
-            guard MediaLogViewModel.supportsProgress(mediaType: detail.ref.mediaType) else { return false }
-            composer = Composer(mode: .progress, completionJourneyId: nil)
+            return false
+        }
+        loading = Task {
+            await page.load()
+            pageDidLoad()
         }
         return true
     }
 
-    // MARK: Book: the page's progress panel
+    /// Opens a manga's or a comic's composer on Progress from its loaded page. False when the page has nothing to
+    /// update.
+    func openComposer() -> Bool {
+        guard let detail = page.detail, page.viewer != nil,
+              MediaLogViewModel.supportsProgress(mediaType: detail.ref.mediaType) else { return false }
+        composer = Composer(mode: .progress, completionJourneyId: nil)
+        return true
+    }
+
+    /// The page behind a sheet has loaded. When it no longer offers the update (the title changed elsewhere since the
+    /// rail loaded), the sheet closes and the page opens, saying where the title stands. A page that didn't load keeps
+    /// the sheet: a save tries again.
+    private func pageDidLoad() {
+        guard page.viewer != nil, !isClosing, bookPanel != nil || gameProgress != nil,
+              !pageOffersUpdate(playthrough: gameProgress) else { return }
+        destination = item.media.ref
+        isClosing = true
+        bookPanel = nil
+        gameProgress = nil
+    }
+
+    /// The loaded page still offers this update: the book is being read or paused, or the game's current playthrough
+    /// is still the sheet's. A title changed elsewhere since the rail loaded doesn't, and takes no write.
+    private func pageOffersUpdate(playthrough: GamePlaythroughState?) -> Bool {
+        guard let viewer = page.viewer else { return false }
+        if item.media.ref.mediaType == "book" {
+            return ["In progress", "Paused"].contains(viewer.status ?? "")
+        }
+        guard let game = viewer.game, game.canUpdateProgress else { return false }
+        return game.currentPlaythrough?.id == playthrough?.id
+    }
+
+    /// The page, for a write: as soon as its detail has arrived (not its reviews), or once a load that failed has
+    /// been tried again. Nil when it fails again; the page's error says why.
+    private func loadedPage() async -> MediaDetail? {
+        if let detail = page.detail { return detail }
+        await loading?.value
+        if page.detail == nil {
+            await page.load()
+        }
+        return page.detail
+    }
+
+    /// Runs a write on the loaded page: at once when it has loaded, so it shows at once; otherwise once it loads. A
+    /// page that can't load says so in the alert over the screen.
+    private func whenLoaded(_ write: @escaping (MediaDetail) -> Void) {
+        if let detail = page.detail {
+            write(detail)
+            return
+        }
+        Task {
+            guard let detail = await loadedPage() else {
+                page.quickActionErrorMessage = page.errorMessage
+                return
+            }
+            write(detail)
+        }
+    }
+
+    // MARK: Book: the page's progress sheet
 
     func saveBookProgress(_ request: ProgressUpdateSaveRequest) async -> Bool {
-        guard let detail = bookPanel else { return false }
+        guard let detail = await loadedPage() else {
+            page.progressErrorMessage = page.errorMessage
+            return false
+        }
+        guard pageOffersUpdate(playthrough: nil) else { return false }
         return await tracked(page.saveProgress(request, for: detail)).value
     }
 
-    /// Reading, Paused, DNF and Restart from the panel's rows. The panel closes on the tap.
+    /// Pause, Resume, Did Not Finish and Restart from the sheet's ⋯. The sheet closes on the tap.
     func performBookAction(_ action: String) {
-        guard let detail = page.detail else { return }
-        tracked(page.performBookAction(action, for: detail))
+        isClosing = true
+        whenLoaded { [self] detail in
+            _ = tracked(page.performBookAction(action, for: detail))
+        }
     }
 
     func deleteBookJourney() {
-        guard let detail = page.detail, let journey = page.viewer?.book?.currentJourney else { return }
-        tracked(page.deleteBookJourney(journey, for: detail))
-    }
-
-    func closeBookPanel() {
-        bookPanel = nil
+        isClosing = true
+        whenLoaded { [self] detail in
+            guard let journey = page.viewer?.book?.currentJourney else { return }
+            _ = tracked(page.deleteBookJourney(journey, for: detail))
+        }
     }
 
     // MARK: Game: the page's progress sheet and playthrough editor
 
     func saveGame(_ playthrough: GamePlaythroughState, _ request: GamePlaythroughWriteRequest) async -> Bool {
-        guard let detail = page.detail else { return false }
+        guard let detail = await loadedPage() else {
+            page.formErrorMessage = page.errorMessage
+            return false
+        }
+        guard pageOffersUpdate(playthrough: playthrough) else { return false }
         return await tracked(page.updateGamePlaythrough(playthrough, request: request, for: detail)).value
     }
 
-    /// Playing, Paused, Dropped and Restart. The sheet closes itself on the tap.
+    /// Pause, Resume, Drop and Restart. The sheet closes itself on the tap.
     func performGameAction(_ action: String) {
-        guard let detail = page.detail else { return }
         isClosing = true
-        tracked(page.performGameAction(action, for: detail))
+        whenLoaded { [self] detail in
+            _ = tracked(page.performGameAction(action, for: detail))
+        }
     }
 
     func deletePlaythrough(_ playthrough: GamePlaythroughState) {
-        guard let detail = page.detail else { return }
         isClosing = true
-        tracked(page.deleteGamePlaythrough(playthrough, for: detail))
+        whenLoaded { [self] detail in
+            _ = tracked(page.deleteGamePlaythrough(playthrough, for: detail))
+        }
     }
 
     /// Edit Dates: the playthrough editor, once the progress sheet has gone.
@@ -278,9 +391,12 @@ final class InProgressUpdate {
         gameProgress = nil
     }
 
-    /// A game sheet has gone: what a choice in it opens next, if anything.
-    func sheetDidClose() {
+    /// A sheet has gone: what a choice in it opens next, if anything. Returns the title's page when the page loaded
+    /// with nothing left to update.
+    @discardableResult
+    func sheetDidClose() -> MediaRef? {
         isClosing = false
+        defer { destination = nil }
         switch next {
         case let .dates(playthrough):
             next = nil
@@ -292,21 +408,26 @@ final class InProgressUpdate {
         case nil:
             break
         }
+        return destination
     }
 
     // MARK: Finishing: the page's completion log
 
-    /// Finished, Finish & Log, or progress saved at the end: the completion log, which captures the journey or
-    /// playthrough, so it opens once the page's writes have settled, from confirmed state. A sheet still open closes
+    /// Finished, or progress saved at the end: the completion log, which captures the journey or playthrough, so it
+    /// opens once the page has loaded and its writes have settled, from confirmed state. A sheet still open closes
     /// first, and the log follows its dismissal. Nothing opens when a write it waited for failed.
     func openCompletion() {
-        if gameProgress != nil || gameDates != nil {
+        if bookPanel != nil || gameProgress != nil || gameDates != nil {
             isClosing = true
+            bookPanel = nil
             gameProgress = nil
             gameDates = nil
         }
-        bookPanel = nil
         Task {
+            guard await loadedPage() != nil else {
+                page.quickActionErrorMessage = page.errorMessage
+                return
+            }
             guard await page.settled(), gameProgress == nil, gameDates == nil, composer == nil,
                   page.quickActionErrorMessage == nil else { return }
             let confirmed = page.detail?.userState
@@ -501,8 +622,9 @@ private struct InProgressCardButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// What a card's "Update progress ›" opens over the screen when the title isn't a show: the book's progress
-    /// panel, the game's sheets, the log composer, and the alert for a write that failed once they had gone.
+    /// What a card's "Update progress ›" opens over the screen when the title isn't a show: the book's and the game's
+    /// progress sheets, the log composer, and the alert for a write that failed once they had gone. `onOpenPage` opens
+    /// the title's page when a sheet closes because the page loaded with nothing left to update.
     /// `screenOpenedOther` is true while the screen shows something else it opened (a page, a person, a sheet): that,
     /// or leaving the screen, cancels a card still waiting for its page.
     func inProgressUpdatePresentations(
@@ -510,14 +632,16 @@ extension View {
         screenOpenedOther: Bool,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
-        onUnauthorized: @escaping () -> Void
+        onUnauthorized: @escaping () -> Void,
+        onOpenPage: @escaping (MediaRef) -> Void
     ) -> some View {
         modifier(InProgressUpdatePresentations(
             updates: updates,
             screenOpenedOther: screenOpenedOther,
             trackingRepository: trackingRepository,
             diaryRepository: diaryRepository,
-            onUnauthorized: onUnauthorized
+            onUnauthorized: onUnauthorized,
+            onOpenPage: onOpenPage
         ))
     }
 }
@@ -528,31 +652,10 @@ private struct InProgressUpdatePresentations: ViewModifier {
     let trackingRepository: TrackingRepository
     let diaryRepository: DiaryRepository
     let onUnauthorized: () -> Void
+    let onOpenPage: (MediaRef) -> Void
 
     func body(content: Content) -> some View {
         content
-            .overlay {
-                if let update = updates.update, let detail = update.bookPanel {
-                    let page = update.page
-                    // The book page's progress panel, over the screen with the keyboard (ProgressUpdateSheet).
-                    ProgressUpdateSheet(
-                        detail: detail,
-                        progress: page.viewer?.progress,
-                        isSaving: page.isSavingProgress,
-                        errorMessage: page.progressErrorMessage,
-                        journeyStatus: page.viewer?.book?.currentJourney?.status,
-                        onSave: { await update.saveBookProgress($0) },
-                        onDismiss: { update.closeBookPanel() },
-                        onLogFinished: { update.openCompletion() },
-                        onPause: { update.performBookAction("pause") },
-                        onResume: { update.performBookAction("resume") },
-                        onDrop: { update.performBookAction("drop") },
-                        onRestart: { update.performBookAction("restart") },
-                        onDelete: { update.deleteBookJourney() }
-                    )
-                    .id(ObjectIdentifier(update))
-                }
-            }
             .background {
                 if let update = updates.update {
                     Color.clear
@@ -560,7 +663,8 @@ private struct InProgressUpdatePresentations: ViewModifier {
                             update: update,
                             trackingRepository: trackingRepository,
                             diaryRepository: diaryRepository,
-                            onUnauthorized: onUnauthorized
+                            onUnauthorized: onUnauthorized,
+                            onOpenPage: onOpenPage
                         ))
                         .id(ObjectIdentifier(update))
                 }
@@ -574,31 +678,43 @@ private struct InProgressUpdatePresentations: ViewModifier {
     }
 }
 
-/// The game's sheets, the log composer and the failure alert for one title (as on its page).
+/// The book's and the game's sheets, the log composer and the failure alert for one title (as on its page).
 private struct InProgressUpdateSheets: ViewModifier {
     @Bindable var update: InProgressUpdate
     let trackingRepository: TrackingRepository
     let diaryRepository: DiaryRepository
     let onUnauthorized: () -> Void
+    let onOpenPage: (MediaRef) -> Void
 
     func body(content: Content) -> some View {
         let page = update.page
         content
-            .sheet(item: $update.gameProgress, onDismiss: update.sheetDidClose) { playthrough in
-                if let detail = page.detail {
-                    GameProgressSheet(
-                        detail: detail,
-                        playthrough: playthrough,
-                        onSave: { await update.saveGame(playthrough, $0) },
-                        onAction: { update.performGameAction($0) },
-                        onDelete: { update.deletePlaythrough(playthrough) },
-                        onFinish: { update.openCompletion() },
-                        onEditDates: { update.editDates(playthrough) },
-                        errorMessage: { page.formErrorMessage }
-                    )
-                }
+            .sheet(item: $update.bookPanel, onDismiss: sheetDidClose) { _ in
+                ProgressUpdateSheet(
+                    title: update.bookTitle,
+                    progress: update.bookProgress,
+                    isSaving: page.isSavingProgress,
+                    errorMessage: page.progressErrorMessage,
+                    journeyStatus: update.bookJourneyStatus,
+                    onSave: { await update.saveBookProgress($0) },
+                    onFinish: { update.openCompletion() },
+                    onAction: { update.performBookAction($0) },
+                    onDelete: { update.deleteBookJourney() }
+                )
             }
-            .sheet(item: $update.gameDates, onDismiss: update.sheetDidClose) { playthrough in
+            .sheet(item: $update.gameProgress, onDismiss: sheetDidClose) { playthrough in
+                GameProgressSheet(
+                    title: update.item.media.displayTitle,
+                    playthrough: playthrough,
+                    onSave: { await update.saveGame(playthrough, $0) },
+                    onAction: { update.performGameAction($0) },
+                    onDelete: { update.deletePlaythrough(playthrough) },
+                    onFinish: { update.openCompletion() },
+                    onEditDates: { update.editDates(playthrough) },
+                    errorMessage: { page.formErrorMessage }
+                )
+            }
+            .sheet(item: $update.gameDates, onDismiss: sheetDidClose) { playthrough in
                 GamePlaythroughEditor(
                     playthrough: playthrough,
                     onSave: { await update.saveGame(playthrough, $0) },
@@ -632,8 +748,12 @@ private struct InProgressUpdateSheets: ViewModifier {
                 Text(page.quickActionErrorMessage ?? "")
             }
             .sensoryFeedback(.error, trigger: page.quickActionErrorMessage) { _, message in message != nil }
-            // A failed page or hour save says so in the panel or sheet, with an error haptic, as a failed tick does.
+            // A failed page or hour save says so in its sheet, with an error haptic, as a failed tick does.
             .sensoryFeedback(.error, trigger: page.progressErrorMessage) { _, message in message != nil }
             .sensoryFeedback(.error, trigger: page.formErrorMessage) { _, message in message != nil }
+    }
+
+    private func sheetDidClose() {
+        if let ref = update.sheetDidClose() { onOpenPage(ref) }
     }
 }

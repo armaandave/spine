@@ -2068,6 +2068,7 @@ private struct MediaDetailPageView: View {
     @State private var completionLiked: Bool?
     @State private var completionRatingSteps: Int?
     @State private var progressUpdateDetail: MediaDetail?
+    @State private var pendingProgressUpdate: MediaDetail?
     @State private var editingBookJourney: BookJourneyState?
     @State private var editingGamePlaythrough: GamePlaythroughState?
     @State private var pendingGameProgress: GamePlaythroughState?
@@ -2220,9 +2221,6 @@ private struct MediaDetailPageView: View {
                     .gesture(edgeSwipeBackGesture)
             }
         }
-        .overlay {
-            progressUpdateOverlay
-        }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: TopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -2331,9 +2329,26 @@ private struct MediaDetailPageView: View {
                 }
             }
         }
+        .sheet(item: $progressUpdateDetail, onDismiss: presentPendingSheet) { detail in
+            ProgressUpdateSheet(
+                title: ProgressSheetTitle(detail: detail),
+                progress: currentProgress(detail),
+                isSaving: viewModel.isSavingProgress,
+                errorMessage: viewModel.progressErrorMessage,
+                journeyStatus: viewModel.viewer?.book?.currentJourney?.status ?? viewModel.viewer?.status,
+                onSave: { await viewModel.saveProgress($0, for: detail).value },
+                onFinish: { openBookCompletion(for: detail) },
+                onAction: { isClosingPresentation = true; viewModel.performBookAction($0, for: detail) },
+                onDelete: {
+                    isClosingPresentation = true
+                    guard let journey = viewModel.viewer?.book?.currentJourney else { return }
+                    viewModel.deleteBookJourney(journey, for: detail)
+                }
+            )
+        }
         .sheet(item: $progressGamePlaythrough, onDismiss: presentPendingSheet) { playthrough in
             if let detail = viewModel.detail {
-                GameProgressSheet(detail: detail, playthrough: playthrough,
+                GameProgressSheet(title: detail.displayTitle, playthrough: playthrough,
                     onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail).value },
                     onAction: { isClosingPresentation = true; viewModel.performGameAction($0, for: detail) },
                     onDelete: { isClosingPresentation = true; viewModel.deleteGamePlaythrough(playthrough, for: detail) },
@@ -2698,45 +2713,6 @@ private struct MediaDetailPageView: View {
             // A new country or new services change Where to Watch.
             guard let detail = viewModel.detail, WhereToWatch.isAvailable(for: detail.ref) else { return }
             Swift.Task<Void, Never> { await viewModel.load() }
-        }
-    }
-
-    @ViewBuilder
-    private var progressUpdateOverlay: some View {
-        if let detail = progressUpdateDetail {
-            ProgressUpdateSheet(
-                detail: detail,
-                progress: currentProgress(detail),
-                isSaving: viewModel.isSavingProgress,
-                errorMessage: viewModel.progressErrorMessage,
-                journeyStatus: viewModel.viewer?.book?.currentJourney?.status,
-                onSave: { request in
-                    await viewModel.saveProgress(request, for: detail).value
-                },
-                onDismiss: {
-                    progressUpdateDetail = nil
-                },
-                onLogFinished: {
-                    progressUpdateDetail = nil
-                    openBookCompletion(for: detail)
-                },
-                onPause: {
-                    viewModel.performBookAction("pause", for: detail)
-                },
-                onResume: {
-                    viewModel.performBookAction("resume", for: detail)
-                },
-                onDrop: {
-                    viewModel.performBookAction("drop", for: detail)
-                },
-                onRestart: {
-                    viewModel.performBookAction("restart", for: detail)
-                },
-                onDelete: {
-                    guard let journey = viewModel.viewer?.book?.currentJourney else { return }
-                    viewModel.deleteBookJourney(journey, for: detail)
-                }
-            )
         }
     }
 
@@ -3148,10 +3124,10 @@ private struct MediaDetailPageView: View {
     /// The composer captures playthrough and journey ids, so it opens only once the write queue has settled,
     /// from confirmed state. A tracking sheet still open closes first; the composer follows its dismissal.
     private func openBookCompletion(for detail: MediaDetail, liked: Bool? = nil, ratingSteps: Int? = nil) {
-        if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil {
+        if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil
+            || progressUpdateDetail != nil {
             closeSheetForChoice()
         }
-        progressUpdateDetail = nil
         presentAfterSettling {
             let confirmed = viewModel.detail?.userState
             if detail.ref.mediaType == "game" {
@@ -3179,7 +3155,7 @@ private struct MediaDetailPageView: View {
                 let playthrough = confirmed.userState?.game?.currentPlaythrough
                 if isClosingPresentation { pendingGameProgress = playthrough } else { progressGamePlaythrough = playthrough }
             } else {
-                progressUpdateDetail = confirmed
+                if isClosingPresentation { pendingProgressUpdate = confirmed } else { progressUpdateDetail = confirmed }
             }
         }
     }
@@ -3209,7 +3185,7 @@ private struct MediaDetailPageView: View {
     }
 
     private var isPresentingTrackingScreen: Bool {
-        presentedSheet != nil || progressGamePlaythrough != nil
+        presentedSheet != nil || progressGamePlaythrough != nil || progressUpdateDetail != nil
             || editingGamePlaythrough != nil || editingBookJourney != nil
             || gameCompletionPresentation != nil || isLogPresented
     }
@@ -3220,11 +3196,15 @@ private struct MediaDetailPageView: View {
         presentedSheet = nil
         editingGamePlaythrough = nil
         progressGamePlaythrough = nil
+        progressUpdateDetail = nil
     }
 
     private func presentPendingSheet() {
         isClosingPresentation = false
-        if let playthrough = pendingGameProgress {
+        if let detail = pendingProgressUpdate {
+            pendingProgressUpdate = nil
+            progressUpdateDetail = detail
+        } else if let playthrough = pendingGameProgress {
             pendingGameProgress = nil
             progressGamePlaythrough = playthrough
         } else if let playthrough = pendingGameEdit {

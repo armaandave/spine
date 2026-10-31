@@ -6888,7 +6888,14 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertEqual(viewModel.input, "75")
         XCTAssertEqual(viewModel.lastValue, 50)
-        XCTAssertEqual(viewModel.deltaText, "+25% read")
+        XCTAssertEqual(viewModel.summaryText, "+25% since 50%")
+
+        viewModel.selectMode(.pages)
+        XCTAssertEqual(viewModel.summaryText, "+75 pages since page 150")
+        viewModel.updateInput("149")
+        XCTAssertEqual(viewModel.summaryText, "−1 page since page 150")
+        viewModel.updateInput("150")
+        XCTAssertEqual(viewModel.summaryText, "Last saved at page 150")
     }
 
     @MainActor
@@ -6906,7 +6913,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertEqual(viewModel.lastValue, 7)
         XCTAssertEqual(viewModel.currentValue, 7)
-        XCTAssertEqual(viewModel.lastValueText, "7%")
+        XCTAssertEqual(viewModel.summaryText, "Last saved at 7%")
     }
 
     @MainActor
@@ -6924,7 +6931,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertNil(viewModel.lastValue)
         XCTAssertNil(viewModel.currentValue)
-        XCTAssertEqual(viewModel.lastValueText, "--")
+        XCTAssertNil(viewModel.summaryText)
     }
 
     @MainActor
@@ -6940,16 +6947,47 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(viewModel.input, "25")
         XCTAssertEqual(viewModel.currentValue, 25)
-        XCTAssertEqual(viewModel.keyboardInputText, "")
+        XCTAssertEqual(viewModel.keyboardInputText, "", "The field shows the last value as its placeholder")
 
-        let fieldText = viewModel.applyKeyboardInput(
-            currentText: viewModel.keyboardInputText,
-            range: NSRange(location: 0, length: 0),
-            replacement: "6"
-        )
-        XCTAssertEqual(fieldText, "6")
+        // The field's text after the first digit.
+        viewModel.updateInput("6")
+        XCTAssertEqual(viewModel.keyboardInputText, "6")
         XCTAssertEqual(viewModel.input, "6")
         XCTAssertTrue(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdateFirstDigitMatchingTheLastValueStaysForTheNext() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 7, max: 100, unit: "%").progress
+        )
+
+        viewModel.updateInput("7")
+        XCTAssertEqual(viewModel.keyboardInputText, "7", "The typed 7 shows, not the placeholder")
+        viewModel.updateInput("75")
+        XCTAssertEqual(viewModel.input, "75", "Not 5")
+        XCTAssertTrue(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdatePercentProgressInPagesCountsTheBooksPagesNotAHundred() throws {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.pages, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 35, max: 100, unit: "percent").progress
+        )
+        let pages = try XCTUnwrap(viewModel.totalPages)
+
+        XCTAssertEqual(viewModel.mode, .pages)
+        XCTAssertEqual(viewModel.lastValue, Int((Double(pages) * 0.35).rounded()), "35% of the book, not page 35")
+        XCTAssertEqual(viewModel.currentValue, viewModel.lastValue)
+        XCTAssertFalse(viewModel.canSave, "Nothing typed, nothing to save")
     }
 
     @MainActor
