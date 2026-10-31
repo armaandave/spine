@@ -1095,6 +1095,13 @@ struct ProfileView: View {
             }
             .padding(.top, 3)
 
+            if let location = profile.location?.trimmedNonEmpty {
+                Label(location, systemImage: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
+            }
+
             if let bio = profile.bio?.trimmedNonEmpty {
                 Text(bio)
                     .font(.system(size: 15, weight: .medium))
@@ -1102,13 +1109,6 @@ struct ProfileView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                     .padding(.horizontal, 10)
-                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
-            }
-
-            if let location = profile.location?.trimmedNonEmpty {
-                Label(location, systemImage: "mappin.and.ellipse")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.56))
                     .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
             }
 
