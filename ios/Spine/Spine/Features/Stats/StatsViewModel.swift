@@ -112,6 +112,7 @@ final class StatsViewModel {
         username: String? = nil,
         selectedPeriod: StatsPeriod = .allTime,
         selectedMediaType: String? = nil,
+        enabledMediaTypes: [String]? = nil,
         debounce: Duration = StatsViewModel.defaultDebounce,
         defaults: UserDefaults = .standard,
         now: @escaping () -> Date = Date.init,
@@ -125,7 +126,10 @@ final class StatsViewModel {
         pickerCache = StatsPickerCache(defaults: defaults)
         selected = StatsScope(period: selectedPeriod, mediaType: selectedMediaType)
         years = pickerCache.years(for: username)
-        mediaTypes = pickerCache.mediaTypes(for: username) ?? APIConstants.fallbackMediaTypes
+        // The owner's types when known (the server sends the same ones), else the last page's.
+        mediaTypes = enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
+            ?? pickerCache.mediaTypes(for: username)
+            ?? APIConstants.fallbackMediaTypes
     }
 
     var selectedPeriod: StatsPeriod { selected.period }

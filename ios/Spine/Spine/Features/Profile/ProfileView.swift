@@ -298,7 +298,8 @@ final class ProfileSettingsViewModel {
 
         do {
             let meta = try await mediaRepository.meta()
-            mediaTypes = meta.mediaTypes.filter { $0 != "episode" }
+            // Seasons and episodes follow TV, so they get no toggle of their own.
+            mediaTypes = meta.mediaTypes.filter { !["episode", "season"].contains($0) }
             settingsOptions = meta.settingsOptions ?? settingsOptions
         } catch {
             mediaTypes = Array(Set(APIConstants.fallbackMediaTypes).union(enabledMediaTypes)).sorted()
@@ -1179,6 +1180,7 @@ struct ProfileView: View {
                     currentUserId: currentUserId ?? viewModel.profile?.id,
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
+                    enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
                     onUnauthorized: onUnauthorized
                 )
             } label: {
@@ -1933,13 +1935,10 @@ enum ProfileRecentActivityRailModel {
         clean(activity.object.rating)
     }
 
-    /// A log's rating on the 5-star scale, shown beside one star: "4.5" or "2".
+    /// A log's stars to the nearest half, shown beside one star: "4.5" or "2".
     static func starValueText(for activity: ActivityItem) -> String? {
-        guard let rating = rating(for: activity), let raw = Double(rating) else { return nil }
-        let value = ["movie", "music", "book", "game"].contains(activity.media?.ref.mediaType) ? raw : raw / 2
-        let halves = (value * 2).rounded(.down) / 2
-        guard halves > 0 else { return nil }
-        return halves == halves.rounded() ? String(Int(halves)) : String(format: "%.1f", halves)
+        guard let halfSteps = rating(for: activity)?.ratingHalfSteps, halfSteps > 0 else { return nil }
+        return halfSteps.isMultiple(of: 2) ? "\(halfSteps / 2)" : "\(halfSteps / 2).5"
     }
 
     static func isLikedDiary(_ activity: ActivityItem) -> Bool {
@@ -2364,7 +2363,8 @@ private struct ProfileSettingsSheet: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
+            // Keyed on the profile so a form opened before the profile loaded fills in when it arrives.
+            .task(id: profile?.id) {
                 viewModel.loadIfNeeded(profile: profile)
                 await viewModel.loadOptions()
             }

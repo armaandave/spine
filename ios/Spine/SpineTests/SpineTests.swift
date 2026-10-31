@@ -2467,6 +2467,25 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testProfileSettingsFillsInWhenOpenedBeforeProfileLoaded() {
+        let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie", "tv"])
+        let viewModel = ProfileSettingsViewModel(
+            profileRepository: RecordingProfileRepository(profile: profile),
+            mediaRepository: FakeMediaRepository(),
+            onUnauthorized: {}
+        )
+
+        // Settings can open before the Profile page has loaded the profile.
+        viewModel.loadIfNeeded(profile: nil)
+        XCTAssertTrue(viewModel.enabledMediaTypes.isEmpty)
+
+        viewModel.loadIfNeeded(profile: profile)
+
+        XCTAssertEqual(viewModel.enabledMediaTypes, ["movie", "tv"])
+        XCTAssertEqual(viewModel.profile?.id, profile.id)
+    }
+
+    @MainActor
     func testProfileSettingsAvatarUploadRecordsMime() async {
         let profile = profileFixture(hof: [:], enabledMediaTypes: ["movie"])
         let repository = RecordingProfileRepository(profile: profile)
@@ -4163,13 +4182,14 @@ final class SpineTests: XCTestCase {
             )
         }
 
-        // Movies, albums, books and games rate out of 5; everything else out of 10.
+        // Every rating comes in stars; in-between ones round to the nearest half, like everywhere else.
         XCTAssertEqual(stars("4.5", "movie"), "4.5")
         XCTAssertEqual(stars("2.0", "book"), "2")
         XCTAssertEqual(stars("5", "game"), "5")
-        XCTAssertEqual(stars("9.0", "tv"), "4.5")
-        XCTAssertEqual(stars("8", "anime"), "4")
-        XCTAssertEqual(stars("7.3", "tv"), "3.5")
+        XCTAssertEqual(stars("4.5", "tv"), "4.5")
+        XCTAssertEqual(stars("3.65", "tv"), "3.5")
+        XCTAssertEqual(stars("3.75", "anime"), "4")
+        XCTAssertEqual(stars("0.5", "movie"), "0.5")
         XCTAssertNil(stars(nil, "movie"))
         XCTAssertNil(stars("0", "movie"))
     }
@@ -6921,7 +6941,14 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertEqual(viewModel.input, "75")
         XCTAssertEqual(viewModel.lastValue, 50)
-        XCTAssertEqual(viewModel.deltaText, "+25% read")
+        XCTAssertEqual(viewModel.summaryText, "+25% since 50%")
+
+        viewModel.selectMode(.pages)
+        XCTAssertEqual(viewModel.summaryText, "+75 pages since page 150")
+        viewModel.updateInput("149")
+        XCTAssertEqual(viewModel.summaryText, "−1 page since page 150")
+        viewModel.updateInput("150")
+        XCTAssertEqual(viewModel.summaryText, "Last saved at page 150")
     }
 
     @MainActor
@@ -6939,7 +6966,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertEqual(viewModel.lastValue, 7)
         XCTAssertEqual(viewModel.currentValue, 7)
-        XCTAssertEqual(viewModel.lastValueText, "7%")
+        XCTAssertEqual(viewModel.summaryText, "Last saved at 7%")
     }
 
     @MainActor
@@ -6957,7 +6984,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(viewModel.mode, .percentage)
         XCTAssertNil(viewModel.lastValue)
         XCTAssertNil(viewModel.currentValue)
-        XCTAssertEqual(viewModel.lastValueText, "--")
+        XCTAssertNil(viewModel.summaryText)
     }
 
     @MainActor
@@ -6973,16 +7000,47 @@ final class SpineTests: XCTestCase {
 
         XCTAssertEqual(viewModel.input, "25")
         XCTAssertEqual(viewModel.currentValue, 25)
-        XCTAssertEqual(viewModel.keyboardInputText, "")
+        XCTAssertEqual(viewModel.keyboardInputText, "", "The field shows the last value as its placeholder")
 
-        let fieldText = viewModel.applyKeyboardInput(
-            currentText: viewModel.keyboardInputText,
-            range: NSRange(location: 0, length: 0),
-            replacement: "6"
-        )
-        XCTAssertEqual(fieldText, "6")
+        // The field's text after the first digit.
+        viewModel.updateInput("6")
+        XCTAssertEqual(viewModel.keyboardInputText, "6")
         XCTAssertEqual(viewModel.input, "6")
         XCTAssertTrue(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdateFirstDigitMatchingTheLastValueStaysForTheNext() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 7, max: 100, unit: "%").progress
+        )
+
+        viewModel.updateInput("7")
+        XCTAssertEqual(viewModel.keyboardInputText, "7", "The typed 7 shows, not the placeholder")
+        viewModel.updateInput("75")
+        XCTAssertEqual(viewModel.input, "75", "Not 5")
+        XCTAssertTrue(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdatePercentProgressInPagesCountsTheBooksPagesNotAHundred() throws {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.pages, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 35, max: 100, unit: "percent").progress
+        )
+        let pages = try XCTUnwrap(viewModel.totalPages)
+
+        XCTAssertEqual(viewModel.mode, .pages)
+        XCTAssertEqual(viewModel.lastValue, Int((Double(pages) * 0.35).rounded()), "35% of the book, not page 35")
+        XCTAssertEqual(viewModel.currentValue, viewModel.lastValue)
+        XCTAssertFalse(viewModel.canSave, "Nothing typed, nothing to save")
     }
 
     @MainActor
@@ -7262,10 +7320,10 @@ final class SpineTests: XCTestCase {
 
     @MainActor
     func testMediaLogRatingMapping() {
-        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: 0, mediaType: "movie"))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 1, mediaType: "movie"), Decimal(string: "0.5"))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10, mediaType: "music"), Decimal(5))
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10, mediaType: "book"), Decimal(5))
+        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: 0))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 1), Decimal(string: "0.5"))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 10), Decimal(5))
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 9), Decimal(string: "4.5"))
 
         let viewModel = MediaLogViewModel(
             detail: TestFixtures.movieDetail,
@@ -7284,7 +7342,7 @@ final class SpineTests: XCTestCase {
 
         viewModel.setRating(locationX: 0, width: 100)
         XCTAssertEqual(viewModel.ratingSteps, 0)
-        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: viewModel.ratingSteps, mediaType: "movie"))
+        XCTAssertNil(MediaLogViewModel.ratingDecimal(for: viewModel.ratingSteps))
     }
 
     @MainActor

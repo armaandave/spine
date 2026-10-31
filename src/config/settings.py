@@ -163,6 +163,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "app.middleware.ProviderAPIErrorMiddleware",
     "app.middleware.APICalendarTimezoneMiddleware",
+    "app.middleware.APIRatingScaleMiddleware",
 ]
 
 YAMTRACK_AUTO_LOGIN_USERNAME = config("YAMTRACK_AUTO_LOGIN_USERNAME", default=None)

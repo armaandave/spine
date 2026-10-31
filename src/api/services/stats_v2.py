@@ -47,12 +47,14 @@ def build_stats_v2(scope):
 
 
 def media_type_rows(scope):
-    """Count titles (STAT-105) and logs (STAT-103) per exposed type (STAT-301).
+    """Count titles (STAT-105) and logs (STAT-103) per type the owner has on (STAT-301).
 
-    Always over every type, whatever the tab, so the app's type picker never needs a
-    Global load.
+    Always over every such type, whatever the tab, so the app's type picker never needs
+    a Global load. A type the owner turned off gets no row, so the picker never offers
+    it, but Global still counts it.
     """
     everything = scope.global_scope()
+    enabled = set(scope.owner.get_enabled_media_types())
     titles = dict(
         everything.titles.annotate(stats_bucket=media_type_bucket("media_type"))
         .values("stats_bucket")
@@ -72,6 +74,7 @@ def media_type_rows(scope):
             "logs": logs.get(media_type, 0),
         }
         for media_type in everything.primary_types
+        if media_type in enabled
     ]
 
 

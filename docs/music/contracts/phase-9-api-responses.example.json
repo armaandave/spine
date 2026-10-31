@@ -874,9 +874,8 @@
     "daily_digest_enabled": true,
     "date_format": "Y-m-d",
     "enabled_media_types": [
-      "tv",
-      "season",
       "movie",
+      "tv",
       "anime",
       "manga",
       "game",
@@ -964,9 +963,8 @@
       "daily_digest_enabled": true,
       "date_format": "Y-m-d",
       "enabled_media_types": [
-        "tv",
-        "season",
         "movie",
+        "tv",
         "anime",
         "manga",
         "game",

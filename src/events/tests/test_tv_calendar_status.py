@@ -104,6 +104,26 @@ class TVCalendarStatusTests(TestCase):
         self.assertEqual(self.calendar() & set(events), set(events))
         self.assertEqual(self.releases(events), set(events))
 
+    def test_turning_tv_off_stops_its_events_and_notifications(self):
+        show, events = self.show_with_events("Watching")
+        self.act(tv_tracking.tick, show, 1, 1)
+        # The old Season setting stays on; it no longer keeps TV events alive.
+        self.user.tv_enabled = False
+        self.user.season_enabled = True
+        self.user.save(update_fields=["tv_enabled", "season_enabled"])
+
+        self.assertFalse(self.calendar() & set(events))
+        self.assertFalse(self.releases(events))
+
+    def test_the_old_season_setting_cannot_hide_tv_events(self):
+        show, events = self.show_with_events("Watching")
+        self.act(tv_tracking.tick, show, 1, 1)
+        self.user.season_enabled = False
+        self.user.save(update_fields=["season_enabled"])
+
+        self.assertEqual(self.calendar() & set(events), set(events))
+        self.assertEqual(self.releases(events), set(events))
+
     def test_tv_704_a_stored_season_dropped_value_cuts_nothing_off(self):
         show, events = self.show_with_events("Watching")
         self.act(tv_tracking.tick, show, 2, 1)

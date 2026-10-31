@@ -98,10 +98,12 @@ def _media_count(user, *, status=None, exclude_status=None):
 
 def preferences_payload(user):
     """Serialize mobile-relevant preferences."""
+    enabled = set(user.get_enabled_media_types())
     return {
-        "enabled_media_types": exposure.filter_media_types(
-            user.get_enabled_media_types(),
-        ),
+        # Top-level types in the order /meta and stats use, so every picker agrees.
+        "enabled_media_types": [
+            media_type for media_type in exposure.primary_media_types() if media_type in enabled
+        ],
         "date_format": user.date_format,
         "time_format": user.time_format,
         "week_start_day": user.week_start_day,
@@ -180,6 +182,8 @@ class PreferencesSerializer(serializers.Serializer):
         if invalid:
             message = f"Unsupported media type(s): {', '.join(invalid)}."
             raise serializers.ValidationError(message)
+        # Older app builds still send "season"; seasons follow TV, so drop it.
+        value = [media_type for media_type in value if media_type != MediaTypes.SEASON.value]
         if not value:
             raise serializers.ValidationError("At least one media type must be enabled.")
         return value
@@ -202,7 +206,7 @@ class PreferencesSerializer(serializers.Serializer):
             enabled = set(enabled)
             for media_type in exposure.media_types():
                 field = f"{media_type}_enabled"
-                if media_type != MediaTypes.EPISODE.value and hasattr(user, field):
+                if media_type not in (MediaTypes.EPISODE.value, MediaTypes.SEASON.value) and hasattr(user, field):
                     value = media_type in enabled
                     if getattr(user, field) != value:
                         setattr(user, field, value)

@@ -925,7 +925,7 @@ class MediaManager(models.Manager):
         # Get active types excluding TV (TV shows are tracked at season level)
         return [
             media_type
-            for media_type in user.get_active_media_types()
+            for media_type in user.get_enabled_media_types()
             if media_type != MediaTypes.TV.value
         ]
 

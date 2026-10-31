@@ -771,7 +771,7 @@ nonisolated struct TVLogInfo: Codable, Hashable {
 // MARK: Requests and responses
 
 /// The body of a TV action. Nil keys are omitted; `rating` is sent as `null` (to clear the stars) only when
-/// `includesRating`, as `TrackingWriteRequest` does.
+/// `includesRating`, as `TrackingWriteRequest` does. `rating` is half steps 1-10, sent as stars 0.5-5.
 nonisolated struct TVActionRequest: Encodable, Hashable {
     var seasonNumber: Int?
     var episodeNumber: Int?
@@ -832,7 +832,7 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
         try c.encodeIfPresent(to, forKey: .to)
         try c.encodeIfPresent(offerSeasonNumber, forKey: .offerSeasonNumber)
         if includesRating || rating != nil {
-            try c.encode(rating, forKey: .rating)
+            try c.encode(rating.map { Decimal($0) / 2 }, forKey: .rating)
         }
         try c.encodeIfPresent(pageSeasonNumber, forKey: .pageSeasonNumber)
         try c.encodeIfPresent(pageEpisodeNumber, forKey: .pageEpisodeNumber)
