@@ -1935,14 +1935,37 @@ enum ProfileRecentActivityRailModel {
         clean(activity.object.rating)
     }
 
+    /// A log's stars to the nearest half, shown beside one star: "4.5" or "2".
+    static func starValueText(for activity: ActivityItem) -> String? {
+        guard let halfSteps = rating(for: activity)?.ratingHalfSteps, halfSteps > 0 else { return nil }
+        return halfSteps.isMultiple(of: 2) ? "\(halfSteps / 2)" : "\(halfSteps / 2).5"
+    }
+
     static func isLikedDiary(_ activity: ActivityItem) -> Bool {
         isDiary(activity) && activity.object.liked == true
+    }
+
+    static func isRewatchDiary(_ activity: ActivityItem) -> Bool {
+        isDiary(activity) && activity.object.isRewatch == true
+    }
+
+    /// A day's progress as a gain, "+230 pages", with episodes shortened to fit: "+3 eps.", "+1 ep.".
+    static func progressGainText(_ label: String?) -> String? {
+        guard let label = clean(label) else { return nil }
+        guard label != "Started" else { return label }
+        if label.hasSuffix(" episodes") {
+            return "+\(label.dropLast(" episodes".count)) eps."
+        }
+        if label.hasSuffix(" episode") {
+            return "+\(label.dropLast(" episode".count)) ep."
+        }
+        return "+\(label)"
     }
 
     static func fallbackLabel(for activity: ActivityItem) -> String? {
         switch activity.type {
         case "progress_updated":
-            clean(activity.object.label)
+            progressGainText(activity.object.label)
         case "list_created":
             clean(activity.object.name)
         case "list_item_added":
@@ -2127,22 +2150,47 @@ private struct RecentActivityPoster: View {
                 .minimumScaleFactor(0.7)
                 .frame(width: PosterSlot.profileRail.size.width, height: 12.5, alignment: .leading)
         } else if ProfileRecentActivityRailModel.isDiary(item.activity),
-                  ProfileRecentActivityRailModel.rating(for: item.activity) != nil || ProfileRecentActivityRailModel.isLikedDiary(item.activity) {
-            HStack(spacing: 5) {
-                if let rating = ProfileRecentActivityRailModel.rating(for: item.activity) {
-                    ProfileStarRating(
-                        rating: rating,
-                        reservesWidth: !ProfileRecentActivityRailModel.isLikedDiary(item.activity)
-                    )
+                  ProfileRecentActivityRailModel.starValueText(for: item.activity) != nil
+                  || ProfileRecentActivityRailModel.isLikedDiary(item.activity)
+                  || ProfileRecentActivityRailModel.isRewatchDiary(item.activity) {
+            // "4.5★ ♥ ↻": one icon size, centered on the line, and the same visible 3pt between every piece.
+            // Each piece is trimmed to its ink by the empty space it carries beside it, measured for SF Pro
+            // Bold 12.5 (a trailing "1" leaves more) and the 9.5pt bold symbols.
+            HStack(spacing: 3) {
+                if let stars = ProfileRecentActivityRailModel.starValueText(for: item.activity) {
+                    HStack(spacing: 3) {
+                        Text(stars)
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.54))
+                            .padding(.trailing, stars.hasSuffix("1") ? -1.375 : -0.75)
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow.opacity(0.92))
+                            .padding(.leading, -0.875)
+                            .padding(.trailing, -1.375)
+                    }
+                    .fixedSize()
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Rating \(stars) out of 5 stars")
                 }
 
                 if ProfileRecentActivityRailModel.isLikedDiary(item.activity) {
                     Image(systemName: "heart.fill")
-                        .font(.system(size: 11.25, weight: .bold))
                         .foregroundStyle(.pink)
+                        .padding(.leading, -1.125)
+                        .padding(.trailing, -1.25)
                         .accessibilityLabel("Liked")
                 }
+
+                if ProfileRecentActivityRailModel.isRewatchDiary(item.activity) {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.leading, -0.875)
+                        .padding(.trailing, -1.625)
+                        .accessibilityLabel(media.ref.repeatLabel)
+                }
             }
+            .font(.system(size: 9.5, weight: .bold))
+            .lineLimit(1)
             .frame(width: PosterSlot.profileRail.size.width, height: 12.5, alignment: .leading)
         } else if let label = ProfileRecentActivityRailModel.fallbackLabel(for: item.activity) {
             Text(label)
@@ -2170,38 +2218,6 @@ private struct RecentActivityPoster: View {
         case .person:
             "Opens person details"
         }
-    }
-}
-
-private struct ProfileStarRating: View {
-    let rating: String?
-    var reservesWidth = true
-
-    var body: some View {
-        HStack(spacing: 1) {
-            ForEach(Array(symbolNames.enumerated()), id: \.offset) { _, symbolName in
-                Image(systemName: symbolName)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.yellow.opacity(0.92))
-            }
-        }
-        .frame(width: reservesWidth ? PosterSlot.profileRail.size.width : nil, height: 12.5, alignment: .leading)
-        .accessibilityHidden(value == nil)
-        .accessibilityLabel(value.map { "Rating \($0) out of 5 stars" } ?? "")
-    }
-
-    /// To the nearest half star: "3.75" draws as 4.
-    private var value: Double? {
-        guard let rating, Double(rating) != nil else { return nil }
-        return Double(rating.ratingHalfSteps) / 2
-    }
-
-    private var symbolNames: [String] {
-        guard let value else { return [] }
-        let fullStars = Int(value.rounded(.down))
-        let hasHalfStar = value - Double(fullStars) >= 0.5
-        return Array(repeating: "star.fill", count: fullStars)
-            + (hasHalfStar ? ["star.leadinghalf.filled"] : [])
     }
 }
 

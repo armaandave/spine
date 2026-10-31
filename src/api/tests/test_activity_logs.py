@@ -107,9 +107,17 @@ class ActivityIsLogsTests(TestCase):
         self.assertIsNone(activity["person"])
         self.assertEqual(
             activity["object"],
-            {"type": "diary", "id": entry.id, "rating": "4.5", "liked": True},
+            {"type": "diary", "id": entry.id, "rating": "4.5", "liked": True, "is_rewatch": False},
         )
         self.assertEqual(activity["viewer"], {"can_view": True, "has_liked": True})
+
+    def test_a_rewatch_log_says_so(self):
+        entry = self.log(self.item(), datetime(2026, 10, 1, tzinfo=UTC), is_rewatch=True)
+
+        [activity] = self.activity()
+
+        self.assertEqual(activity["id"], entry.id)
+        self.assertTrue(activity["object"]["is_rewatch"])
 
     def test_imported_logs_are_activity_at_their_own_date(self):
         recent = self.log(self.item(media_id="recent"), datetime(2026, 10, 24, tzinfo=UTC))
