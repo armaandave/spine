@@ -6957,6 +6957,40 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testProgressUpdateFirstDigitMatchingTheLastValueStaysForTheNext() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 7, max: 100, unit: "%").progress
+        )
+
+        viewModel.updateInput("7")
+        XCTAssertEqual(viewModel.keyboardInputText, "7", "The typed 7 shows, not the placeholder")
+        viewModel.updateInput("75")
+        XCTAssertEqual(viewModel.input, "75", "Not 5")
+        XCTAssertTrue(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdatePercentProgressInPagesCountsTheBooksPagesNotAHundred() throws {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.pages, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 35, max: 100, unit: "percent").progress
+        )
+        let pages = try XCTUnwrap(viewModel.totalPages)
+
+        XCTAssertEqual(viewModel.mode, .pages)
+        XCTAssertEqual(viewModel.lastValue, Int((Double(pages) * 0.35).rounded()), "35% of the book, not page 35")
+        XCTAssertEqual(viewModel.currentValue, viewModel.lastValue)
+        XCTAssertFalse(viewModel.canSave, "Nothing typed, nothing to save")
+    }
+
+    @MainActor
     func testProgressUpdateValidationAndFullProgress() {
         let bookDetail = TestFixtures.logDetail(mediaType: "book")
         ProgressDisplayPreferences.removeMode(for: bookDetail.ref)

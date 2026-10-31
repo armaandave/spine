@@ -10,7 +10,7 @@ struct ProgressUpdateSaveRequest: Equatable {
 struct ProgressSheetTitle: Identifiable, Equatable {
     let ref: MediaRef
     let title: String
-    /// A book's page count from its page. Without it, page progress's total stands in.
+    /// A book's page count: from its page, or from a card's page progress.
     let totalPages: Int?
 
     var id: String { ref.id }
@@ -24,7 +24,10 @@ struct ProgressSheetTitle: Identifiable, Equatable {
     init(item: LibraryItem) {
         ref = item.media.ref
         title = item.media.displayTitle
-        totalPages = nil
+        // Percentage progress's max is 100, not a page count.
+        totalPages = item.tracking.progress.flatMap { progress in
+            progress.mode == .pages ? progress.max.map { NSDecimalNumber(decimal: $0).intValue } : nil
+        }
     }
 }
 
@@ -57,6 +60,10 @@ final class ProgressUpdateViewModel {
 
     var lastValue: Int? {
         guard let progress else { return nil }
+        // Percentage progress's max is 100, not a page count, so its page comes from the book's own count.
+        if progress.mode == .percentage, mode == .pages, let percent = progress.value(in: .percentage) {
+            return converted(percent, from: .percentage, to: .pages)
+        }
         return progress.value(in: mode)
     }
 
@@ -121,6 +128,8 @@ final class ProgressUpdateViewModel {
         let limit = mode == .percentage ? 3 : 6
         let digits = String(rawValue.filter(\.isNumber).prefix(limit))
         if !hasEditedInput, digits == input {
+            // The first digit typed is the last value itself: it stays, so the next digit adds to it.
+            hasEditedInput = true
             return
         }
         guard !digits.isEmpty else {
@@ -447,8 +456,10 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled(isSaving)
         // Dragging the sheet down lowers the number pad even when the sheet springs back. Without it the sheet has
-        // nothing to do, so it closes all the way.
+        // nothing to do, so it closes all the way. Not while a save is out (its failure shows here), nor when the app
+        // leaves the screen.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            guard !isSaving, UIApplication.shared.applicationState == .active else { return }
             dismiss()
         }
     }

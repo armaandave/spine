@@ -204,6 +204,7 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertNil(home.progressUpdates.loadingItemID, "The card doesn't wait")
         XCTAssertEqual(home.progressUpdates.openings, 1)
         XCTAssertEqual(update.bookTitle.title, "Project Hail Mary")
+        XCTAssertEqual(update.bookTitle.totalPages, 476, "The card's page progress knows the count, so it counts pages")
         XCTAssertEqual(update.bookProgress?.value, 40, "Where the card says the book stands")
         XCTAssertEqual(ProgressUpdateViewModel(title: update.bookTitle, progress: update.bookProgress).totalPages, 476,
                        "The card's page progress knows the count")
@@ -311,6 +312,75 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertTrue(update.isClosing)
         XCTAssertEqual(update.sheetDidClose(), book.media.ref, "Its page opens once the sheet has gone, saying where it stands")
         XCTAssertNil(update.sheetDidClose(), "Once")
+    }
+
+    func testASaveAfterThePageFoundTheBookFinishedElsewhereWritesNothing() async throws {
+        let book = Self.item("book", "427578", "Project Hail Mary")
+        media.details[book.media.ref.id] = Self.bookDetail(book.media.ref, status: "Completed", pages: 476)
+        tracking.bookProgressResult = Self.bookTracking(status: "In progress", pages: 120)
+        let home = homeViewModel(items: [book])
+        _ = await home.progressUpdates.updateProgress(for: book)
+        let update = try XCTUnwrap(home.progressUpdates.update)
+
+        let saved = await update.saveBookProgress(ProgressUpdateSaveRequest(mode: .pages, value: 120))
+
+        XCTAssertFalse(saved)
+        XCTAssertTrue(tracking.bookProgressCalls.isEmpty, "No progress on a finished book")
+    }
+
+    func testAGameRestartedElsewhereClosesItsSheetAndTakesNoWriteOnTheOldPlaythrough() async throws {
+        let old = Self.playthrough(minutes: 120, percentage: nil)
+        let game = Self.item("game", "113112", "Hades", tracking: Self.tracking(game: Self.game(playthrough: old)))
+        let restarted = GamePlaythroughState(id: 32, status: "In progress", origin: "live", startDate: "2026-10-30",
+                                             endDate: nil, totalMinutes: nil, percentage: nil,
+                                             completionDiaryEntryId: nil, isReplay: false)
+        media.details[game.media.ref.id] = MediaDetail(
+            ref: game.media.ref,
+            title: "Hades",
+            userState: UserMediaState(isTracked: true, status: "In progress", game: Self.game(playthrough: restarted))
+        )
+        let home = homeViewModel(items: [game])
+        _ = await home.progressUpdates.updateProgress(for: game)
+        let update = try XCTUnwrap(home.progressUpdates.update)
+
+        var request = GamePlaythroughWriteRequest(progressedOn: "2026-10-30")
+        request.totalMinutes = 300
+        request.includesMinutes = true
+        let saved = await update.saveGame(old, request)
+
+        XCTAssertFalse(saved)
+        XCTAssertTrue(tracking.playthroughUpdates.isEmpty, "Not on the old attempt")
+        await waitUntil { update.gameProgress == nil }
+        XCTAssertEqual(update.sheetDidClose(), game.media.ref, "Its page opens, with the new playthrough")
+    }
+
+    func testASecondTapBeforeTheSheetIsGoneOpensNothing() async throws {
+        let book = Self.item("book", "427578", "Project Hail Mary")
+        let game = Self.item("game", "113112", "Hades", tracking: Self.tracking(
+            game: Self.game(playthrough: Self.playthrough(minutes: 120, percentage: nil))
+        ))
+        let home = homeViewModel(items: [book, game])
+
+        _ = await home.progressUpdates.updateProgress(for: book)
+        let first = try XCTUnwrap(home.progressUpdates.update)
+        let secondOpensPage = await home.progressUpdates.updateProgress(for: game)
+
+        XCTAssertNil(secondOpensPage)
+        XCTAssertTrue(home.progressUpdates.update === first, "The first sheet stays")
+        XCTAssertNil(first.gameProgress)
+        XCTAssertEqual(home.progressUpdates.openings, 1)
+    }
+
+    func testABookPausedWithoutAJourneySaysPaused() async throws {
+        let book = Self.item("book", "427578", "Project Hail Mary", tracking: Self.tracking(status: "Paused"))
+        let gate = RefreshGate()
+        media.detailGate = gate
+        let home = homeViewModel(items: [book])
+        _ = await home.progressUpdates.updateProgress(for: book)
+        let update = try XCTUnwrap(home.progressUpdates.update)
+
+        XCTAssertEqual(update.bookJourneyStatus, "Paused", "So the sheet offers Resume, not Pause")
+        await gate.open()
     }
 
     func testACardWithNothingToUpdateOpensItsPageWithoutLoadingIt() async {

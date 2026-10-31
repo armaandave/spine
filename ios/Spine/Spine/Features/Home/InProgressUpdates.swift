@@ -78,6 +78,8 @@ final class InProgressUpdates {
     /// A card's title and "Update progress ›". Returns the page to open instead, if any. It replaces a card still
     /// waiting for its page.
     func updateProgress(for item: LibraryItem) async -> MediaRef? {
+        // A second tap before the first's sheet is up, or while one slides away, opens nothing.
+        if let update, update.isPresenting || update.isClosing { return nil }
         cancelPendingOpen()
         switch Self.route(for: item) {
         case .episodes:
@@ -241,8 +243,10 @@ final class InProgressUpdate {
         page.viewer.map(\.progress) ?? item.tracking.progress
     }
 
+    /// The current journey's status, or the book's own when it has no journey (paused directly).
     var bookJourneyStatus: String? {
-        page.viewer.map { $0.book?.currentJourney?.status } ?? item.tracking.book?.currentJourney?.status
+        page.viewer.map { $0.book?.currentJourney?.status ?? $0.status }
+            ?? item.tracking.book?.currentJourney?.status ?? item.tracking.status
     }
 
     /// Opens a book's or a game's sheet from its card, as its page would, and loads the page behind it. False when the
@@ -282,20 +286,29 @@ final class InProgressUpdate {
     /// rail loaded), the sheet closes and the page opens, saying where the title stands. A page that didn't load keeps
     /// the sheet: a save tries again.
     private func pageDidLoad() {
-        guard let viewer = page.viewer, !isClosing, bookPanel != nil || gameProgress != nil else { return }
-        let offersUpdate = item.media.ref.mediaType == "book"
-            ? ["In progress", "Paused"].contains(viewer.status ?? "")
-            : viewer.game?.canUpdateProgress == true
-        guard !offersUpdate else { return }
+        guard page.viewer != nil, !isClosing, bookPanel != nil || gameProgress != nil,
+              !pageOffersUpdate(playthrough: gameProgress) else { return }
         destination = item.media.ref
         isClosing = true
         bookPanel = nil
         gameProgress = nil
     }
 
-    /// The page, for a write: once its load behind the sheet has finished, and tried again if it failed. Nil when it
-    /// fails again; the page's error says why.
+    /// The loaded page still offers this update: the book is being read or paused, or the game's current playthrough
+    /// is still the sheet's. A title changed elsewhere since the rail loaded doesn't, and takes no write.
+    private func pageOffersUpdate(playthrough: GamePlaythroughState?) -> Bool {
+        guard let viewer = page.viewer else { return false }
+        if item.media.ref.mediaType == "book" {
+            return ["In progress", "Paused"].contains(viewer.status ?? "")
+        }
+        guard let game = viewer.game, game.canUpdateProgress else { return false }
+        return game.currentPlaythrough?.id == playthrough?.id
+    }
+
+    /// The page, for a write: as soon as its detail has arrived (not its reviews), or once a load that failed has
+    /// been tried again. Nil when it fails again; the page's error says why.
     private func loadedPage() async -> MediaDetail? {
+        if let detail = page.detail { return detail }
         await loading?.value
         if page.detail == nil {
             await page.load()
@@ -326,6 +339,7 @@ final class InProgressUpdate {
             page.progressErrorMessage = page.errorMessage
             return false
         }
+        guard pageOffersUpdate(playthrough: nil) else { return false }
         return await tracked(page.saveProgress(request, for: detail)).value
     }
 
@@ -352,6 +366,7 @@ final class InProgressUpdate {
             page.formErrorMessage = page.errorMessage
             return false
         }
+        guard pageOffersUpdate(playthrough: playthrough) else { return false }
         return await tracked(page.updateGamePlaythrough(playthrough, request: request, for: detail)).value
     }
 
