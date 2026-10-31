@@ -1180,6 +1180,7 @@ struct ProfileView: View {
                     currentUserId: currentUserId ?? viewModel.profile?.id,
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
+                    enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
                     onUnauthorized: onUnauthorized
                 )
             } label: {

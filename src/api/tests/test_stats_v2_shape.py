@@ -333,6 +333,21 @@ class StatsV2ShapeTests(StatsV2Base):
 class StatsV2CountingTests(StatsV2Base):
     """media_types[], years and the scope's titles and events (STAT-102 to STAT-106)."""
 
+    def test_a_type_the_owner_turned_off_leaves_the_picker_but_still_counts_on_global(self):
+        self.log(self.item(MediaTypes.MOVIE.value, "movie"))
+        self.log(self.item(MediaTypes.ANIME.value, "anime"))
+        self.owner.anime_enabled = False
+        self.owner.save(update_fields=["anime_enabled"])
+        # The viewer's own switches never matter: the stranger keeps anime on.
+        for viewer, path in ((self.owner, "/api/v1/stats/me/summary/"), (self.stranger, self.user_path())):
+            with self.subTest(viewer=viewer.username):
+                data = self.get(viewer, YEAR_2025, path=path).data
+
+                types = [row["media_type"] for row in data["media_types"]]
+                self.assertNotIn("anime", types)
+                self.assertEqual(types, [media_type for media_type in PRIMARY if media_type != "anime"])
+                self.assertEqual((data["header"]["titles"], data["header"]["logs"]), (2, 2))
+
     def test_a_show_with_show_season_and_episode_logs_is_one_title(self):
         # S-03
         show = self.item(MediaTypes.TV.value, "show")
