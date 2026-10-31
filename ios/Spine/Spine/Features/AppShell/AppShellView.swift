@@ -3,12 +3,15 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(PushNotifications.self) private var push: PushNotifications?
     @State private var selectedTab: AppTab
     @State private var searchFocusRequest = 0
+    @State private var findPeopleRequest = 0
     @State private var requestedLibraryShelf: LibraryShelf?
     @State private var mediaLensStore = MediaLensStore()
     @State private var profileTabImage = ProfileTabImage.fallback
     @State private var appNavigationState = AppNavigationState()
+    @State private var openedPushRoute: PushRoute?
 
     let session: AppSession
 
@@ -21,6 +24,13 @@ struct AppShellView: View {
     private var currentUserId: Int? {
         if case let .signedIn(user) = session.state {
             return user?.id
+        }
+        return nil
+    }
+
+    private var currentUsername: String? {
+        if case let .signedIn(user) = session.state {
+            return user?.username
         }
         return nil
     }
@@ -57,6 +67,10 @@ struct AppShellView: View {
                 currentUserId: currentUserId,
                 selectedTab: selectedTab,
                 onSelectTab: { selectedTab = $0 },
+                onFindPeople: {
+                    findPeopleRequest += 1
+                    selectedTab = .search
+                },
                 onUnauthorized: unauthorized
             )
             .ignoresSafeArea(.container, edges: .bottom)
@@ -75,10 +89,12 @@ struct AppShellView: View {
                     diaryRepository: session.repositories.diary,
                     listRepository: session.repositories.lists,
                     peopleRepository: session.repositories.people,
+                    socialRepository: session.repositories.social,
                     mediaLensStore: mediaLensStore,
                     currentUserId: currentUserId,
                     selectedTab: selectedTab,
                     focusRequest: searchFocusRequest,
+                    findPeopleRequest: findPeopleRequest,
                     onSelectTab: { selectedTab = $0 },
                     onUnauthorized: unauthorized
                 )
@@ -144,15 +160,14 @@ struct AppShellView: View {
                     listRepository: session.repositories.lists,
                     peopleRepository: session.repositories.people,
                     streamingRepository: session.repositories.streaming,
+                    socialRepository: session.repositories.social,
                     importCoordinator: session.letterboxdImportCoordinator,
                     storygraphImportCoordinator: session.storygraphImportCoordinator,
                     goodreadsImportCoordinator: session.goodreadsImportCoordinator,
                     marginsImportCoordinator: session.marginsImportCoordinator,
                     myAnimeListImportCoordinator: session.myAnimeListImportCoordinator,
                     currentUserId: currentUserId,
-                    onLogout: {
-                        Task { await session.logout() }
-                    },
+                    onLogout: logout,
                     onOpenDiary: {
                         selectedTab = .diary
                     },
@@ -177,6 +192,20 @@ struct AppShellView: View {
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .tabBarMinimizeBehavior(.never)
         .environment(\.appNavigationState, appNavigationState)
+        .environment(\.userProfileBuilder, profileBuilder)
+        .fullScreenCover(item: $openedPushRoute) { route in
+            pushRouteDestination(route)
+                .environment(\.userProfileBuilder, profileBuilder)
+        }
+        .onChange(of: push?.pendingRoute, initial: true) {
+            guard let route = push?.pendingRoute, currentUserId != nil else { return }
+            push?.pendingRoute = nil
+            openedPushRoute = route
+        }
+        .task(id: currentUserId) {
+            guard currentUserId != nil else { return }
+            await push?.signedIn(repository: session.repositories.social)
+        }
         .onChange(of: appNavigationState.returnHomeRequest) {
             selectedTab = .home
         }
@@ -219,6 +248,71 @@ struct AppShellView: View {
 
     private func unauthorized() {
         Task { await session.logout() }
+    }
+
+    private func logout() {
+        Task {
+            await push?.signOut()
+            await session.logout()
+        }
+    }
+
+    /// Someone's profile, pushed from any page: your own username opens your own profile.
+    private var profileBuilder: UserProfileBuilder {
+        UserProfileBuilder { username in
+            AnyView(ProfileView(
+                profileRepository: session.repositories.profile,
+                diaryRepository: session.repositories.diary,
+                mediaRepository: session.repositories.media,
+                trackingRepository: session.repositories.tracking,
+                activityRepository: session.repositories.activity,
+                listRepository: session.repositories.lists,
+                peopleRepository: session.repositories.people,
+                streamingRepository: session.repositories.streaming,
+                socialRepository: session.repositories.social,
+                currentUserId: currentUserId,
+                onLogout: logout,
+                onOpenDiary: {
+                    selectedTab = .diary
+                },
+                onOpenLibrary: { shelf in
+                    requestedLibraryShelf = shelf
+                    selectedTab = .library
+                },
+                selectedTab: selectedTab,
+                onSelectTab: { selectedTab = $0 },
+                username: username == currentUsername ? nil : username,
+                isPushedProfile: true,
+                onUnauthorized: unauthorized
+            ))
+        }
+    }
+
+    /// What a tapped push opens, over whatever tab is showing.
+    @ViewBuilder
+    private func pushRouteDestination(_ route: PushRoute) -> some View {
+        NavigationStack {
+            switch route {
+            case let .profile(username):
+                profileBuilder.build(username)
+            case .followRequests:
+                FollowListView(
+                    username: currentUsername ?? "",
+                    showsFollowers: true,
+                    isOwnProfile: true,
+                    currentUserId: currentUserId,
+                    repository: session.repositories.social,
+                    onUnauthorized: unauthorized
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(role: .close) {
+                            openedPushRoute = nil
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

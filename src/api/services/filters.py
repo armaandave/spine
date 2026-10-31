@@ -462,7 +462,7 @@ def apply_credit_filter(queryset, params, target="item_id"):
     return queryset.filter(**{f"{target}__in": matching.values("item_id")})
 
 
-def apply_stats_count_filters(queryset, params, *, owner):
+def apply_stats_count_filters(queryset, params, *, owner, viewer=None):
     """Keep the owner's logs that a Stats number counts (STAT-400).
 
     - ``repeat=true``: the logs Stats counts as repeats (STAT-108).
@@ -471,9 +471,10 @@ def apply_stats_count_filters(queryset, params, *, owner):
       the request's ``media_type`` values name: one type bucket is that tab (TV with
       its seasons and episodes), anything else is Global.
 
-    Both use the Stats helpers themselves, over the owner's own view. Whether a log is a
-    repeat, and which titles a day holds, don't depend on the range, so the stats range
-    is ``watched_from``/``watched_to`` when both are given (fewer rows to work out) and
+    Both use the Stats helpers themselves, over what ``viewer`` may see of the owner's
+    logs (the owner's own view when not given). Whether a log is a repeat, and which
+    titles a day holds, don't depend on the range, so the stats range is
+    ``watched_from``/``watched_to`` when both are given (fewer rows to work out) and
     All Time otherwise; apply_diary_date_range narrows the rest.
     """
     repeat = bool_param(params, "repeat")
@@ -481,13 +482,13 @@ def apply_stats_count_filters(queryset, params, *, owner):
     if not (repeat or multi_title_days):
         return queryset
     from api.services import stats_v2_activity
-    from api.services.stats_scope import AUDIENCE_OWNER, TV_ITEM_TYPES, StatsScope
+    from api.services.stats_scope import TV_ITEM_TYPES, StatsScope
 
     start_date = date_param(params, "watched_from")
     end_date = date_param(params, "watched_to")
     if start_date is None or end_date is None or start_date > end_date:
         start_date = end_date = None
-    scope = StatsScope(owner=owner, viewer=owner, start_date=start_date, end_date=end_date, audience=AUDIENCE_OWNER)
+    scope = StatsScope(owner=owner, viewer=viewer or owner, start_date=start_date, end_date=end_date)
     if repeat:
         queryset = queryset.filter(id__in=sorted(stats_v2_activity.rewatch_ids(scope)))
     if multi_title_days:

@@ -36,6 +36,7 @@ dependencies = [
   "django-simple-history~=3.11.0",
   "django-widget-tweaks~=1.5.1",
   "gunicorn~=25.3.0",
+  "httpx[http2]~=0.28.1",
   "icalendar~=7.0.3",
   "pillow~=12.2.0",
   "psycopg[binary,pool]~=3.3.4",

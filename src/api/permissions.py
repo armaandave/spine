@@ -13,6 +13,13 @@ def users_blocked(user, other_user):
     ).exists()
 
 
+def user_blocks(blocker, blocked):
+    """Return whether ``blocker`` blocks ``blocked``."""
+    if not blocker.is_authenticated or not blocked.is_authenticated:
+        return False
+    return Block.objects.filter(blocker=blocker, blocked=blocked).exists()
+
+
 def can_view_user_profile(viewer, target_user):
     """Check public/private profile visibility and block rules."""
     if target_user is None:

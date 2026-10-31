@@ -92,6 +92,13 @@ final class HomeViewModel {
     /// A write changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's
     /// or game's progress) keeps its card where it is (TV-701) but still reloads activity, where it is the day's
     /// progress (activity contract AC-4); any other write reloads Home.
+    /// You followed, unfollowed or blocked someone: the people in your activity, and the empty state's count, changed.
+    func followsDidChange() async {
+        guard let refreshed = try? await profileRepository.me() else { return }
+        profile = refreshed
+        await loadActivity()
+    }
+
     func mediaStateDidChange(origin: UUID?) async {
         if origin == continueWatching.changeOrigin {
             await loadActivity()
@@ -134,8 +141,9 @@ final class HomeViewModel {
         continueWatching.needsReload || progressUpdates.needsReload
     }
 
+    /// The activity of the people you follow; your own is on your profile.
     func loadActivity() async {
-        guard let username = profile?.username else {
+        guard profile != nil else {
             activityItems = []
             activityErrorMessage = nil
             isLoadingActivity = false
@@ -146,7 +154,8 @@ final class HomeViewModel {
         defer { isLoadingActivity = false }
 
         do {
-            activityItems = try await activityRepository.userActivity(username: username, limit: 6)
+            let page = try await activityRepository.feedPage(pageSize: 6, cursorLink: nil)
+            activityItems = Array(page.results.prefix(6))
         } catch is CancellationError {
             return
         } catch {
@@ -182,6 +191,7 @@ struct HomeView: View {
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
+    private let onFindPeople: () -> Void
     private let onUnauthorized: () -> Void
 
     init(
@@ -195,6 +205,7 @@ struct HomeView: View {
         currentUserId: Int? = nil,
         selectedTab: AppTab = .home,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
+        onFindPeople: @escaping () -> Void = {},
         onUnauthorized: @escaping () -> Void = {}
     ) {
         self.mediaRepository = mediaRepository
@@ -206,6 +217,7 @@ struct HomeView: View {
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
+        self.onFindPeople = onFindPeople
         self.onUnauthorized = onUnauthorized
         _viewModel = State(initialValue: HomeViewModel(
             profileRepository: profileRepository,
@@ -268,6 +280,9 @@ struct HomeView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .myAnimeListImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .followsDidChange)) { _ in
+                Task { await viewModel.followsDidChange() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
                 Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
@@ -452,11 +467,19 @@ struct HomeView: View {
                     ) {
                         Task { await viewModel.loadActivity() }
                     }
+                } else if viewModel.activityItems.isEmpty, viewModel.profile?.counts.following ?? 0 == 0 {
+                    HomeInlineState(
+                        title: "Follow people you know",
+                        systemImage: "person.2",
+                        message: "What they log and watch will appear here.",
+                        actionTitle: "Find People",
+                        action: onFindPeople
+                    )
                 } else if viewModel.activityItems.isEmpty {
                     HomeInlineState(
                         title: "No activity yet",
                         systemImage: "clock.arrow.circlepath",
-                        message: "Diary logs and progress updates will appear here."
+                        message: "Logs and progress from people you follow will appear here."
                     )
                 } else {
                     VStack(spacing: 0) {
@@ -474,12 +497,12 @@ struct HomeView: View {
                             }
                         }
 
-                        if let username = viewModel.profile?.username {
+                        if viewModel.profile != nil {
                             ActivityFeedDivider()
 
                             NavigationLink {
                                 ActivityFeedView(
-                                    username: username,
+                                    username: nil,
                                     activityRepository: activityRepository,
                                     onUnauthorized: onUnauthorized,
                                     onSelectActivity: handleActivityTap

@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct SpineApp: App {
+    @UIApplicationDelegateAdaptor(SpineAppDelegate.self) private var appDelegate
+
     init() {
         SpineImagePipeline.install()
     }
@@ -12,6 +14,7 @@ struct SpineApp: App {
             // imports against the same Keychain and network the tests are using.
             if !LaunchEnvironment.isHostingUnitTests {
                 RootView()
+                    .environment(appDelegate.push)
             }
         }
     }

@@ -191,7 +191,8 @@ These defaults are now agent guidance:
    - Activity is diary logs, each day's progress on a title, and starting a title, as defined in `docs/activity-contract.md` (not ratings without a log or list activity).
    - Newest date first (no algorithmic ranking yet).
 10. Social notifications:
-    - Disabled for now (no follow/like/comment notification work unless requested later).
+    - Push only, no in-app list: a new follower, a follow request, and an accepted request push to the person concerned; a report pushes to the project owner (`src/social/push.py`).
+    - No like/comment notifications unless requested later.
 11. Performance expectation:
     - Prioritize fast pages and query hygiene; no hard SLA currently defined.
 12. Rate limiting:
