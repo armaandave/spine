@@ -114,20 +114,11 @@ struct FollowButton: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
-            if state == .none {
-                Button(action: tap) {
-                    label.foregroundStyle(.black)
-                }
-                .tint(.white)
-                .buttonStyle(.glassProminent)
-            } else {
-                Button(action: tap) {
-                    label
-                }
-                .buttonStyle(.glass)
-            }
+        Button(action: tap) {
+            Text(state.title(followedBy: followedBy))
+                .socialButtonLabel(size)
         }
+        .socialGlass(prominent: state == .none)
         .disabled(isWorking)
         .sensoryFeedback(.impact(weight: .light), trigger: state)
         .accessibilityIdentifier("follow.\(username)")
@@ -145,13 +136,6 @@ struct FollowButton: View {
         } message: {
             Text(errorMessage ?? "")
         }
-    }
-
-    private var label: some View {
-        Text(state.title(followedBy: followedBy))
-            .font(size == .profile ? .subheadline.weight(.bold) : .footnote.weight(.semibold))
-            .lineLimit(1)
-            .frame(minWidth: size == .profile ? 132 : 84, minHeight: size == .profile ? 36 : 28)
     }
 
     private var errorBinding: Binding<Bool> {
@@ -470,21 +454,17 @@ struct FollowListView: View {
                 Task { await viewModel.answer(request, accept: true) }
             } label: {
                 Text("Approve")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.black)
-                    .frame(minHeight: 28)
+                    .socialButtonLabel(.row)
             }
-            .tint(.white)
-            .buttonStyle(.glassProminent)
+            .socialGlass(prominent: true)
 
             Button {
                 Task { await viewModel.answer(request, accept: false) }
             } label: {
                 Text("Decline")
-                    .font(.footnote.weight(.semibold))
-                    .frame(minHeight: 28)
+                    .socialButtonLabel(.row)
             }
-            .buttonStyle(.glass)
+            .socialGlass(prominent: false)
         }
         .sensoryFeedback(.impact(weight: .light), trigger: viewModel.requests.count)
         .padding(.vertical, 10)
@@ -499,10 +479,9 @@ struct FollowListView: View {
                     removing = user
                 } label: {
                     Text("Remove")
-                        .font(.footnote.weight(.semibold))
-                        .frame(minWidth: 84, minHeight: 28)
+                        .socialButtonLabel(.row)
                 }
-                .buttonStyle(.glass)
+                .socialGlass(prominent: false)
             } else if user.id != currentUserId {
                 FollowButton(
                     username: user.username,
@@ -583,6 +562,28 @@ struct UserSearchResults: View {
         } else {
             Color.clear
         }
+    }
+}
+
+private extension Text {
+    func socialButtonLabel(_ size: FollowButton.Size) -> some View {
+        font(size == .profile ? .footnote.weight(.semibold) : .caption.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, size == .profile ? 16 : 11)
+            .frame(height: size == .profile ? 30 : 26)
+    }
+}
+
+private extension View {
+    /// A small Liquid Glass capsule. The glass goes on the button, as on the app's other glass buttons (glass in
+    /// the label swallowed taps), and lifts a little behind the main action.
+    func socialGlass(prominent: Bool) -> some View {
+        buttonStyle(.plain)
+            .contentShape(.capsule)
+            .glassEffect(
+                prominent ? .regular.tint(.white.opacity(0.24)).interactive() : .regular.interactive(),
+                in: .capsule
+            )
     }
 }
 

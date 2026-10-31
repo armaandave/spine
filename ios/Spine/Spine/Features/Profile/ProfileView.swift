@@ -1073,12 +1073,6 @@ struct ProfileView: View {
                     .padding(.top, musicClearance)
                     .frame(height: crownHeight)
                 }
-
-                if allSlots.isEmpty, !profile.isRestricted {
-                    Text("No favorites yet")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.4))
-                }
             }
 
             VStack(spacing: 0) {
