@@ -858,11 +858,8 @@ struct ProfileView: View {
     private func hero(_ profile: UserProfile, collapseProgress: CGFloat, layoutProgress: CGFloat) -> some View {
         let allSlots = favoriteSlots(from: profile)
         let backdropURL = profileBackdropURL(from: profile)
-        let musicClearance = HallOfFameCrownLayout.aboveMusicClearance(
-            for: allSlots,
-            collapseProgress: layoutProgress
-        )
-        let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + musicClearance
+        let topClearance = HallOfFameCrownLayout.avatarTopClearance(collapseProgress: layoutProgress)
+        let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + topClearance
         let backdropContentOffset = backdropURL == nil ? 0 : ProfileHeroBackdropLayout.contentTopOffset
 
         return VStack(spacing: profileElementSpacing) {
@@ -891,7 +888,7 @@ struct ProfileView: View {
                     avatar(profile)
                         .zIndex(1)
                 }
-                .padding(.top, musicClearance)
+                .padding(.top, topClearance)
                 .frame(height: crownHeight)
 
                 if allSlots.isEmpty {
