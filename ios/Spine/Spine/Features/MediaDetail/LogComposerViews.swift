@@ -551,3 +551,260 @@ struct LogGameProgressRows<Focus: Hashable>: View {
         .accessibilityIdentifier(label)
     }
 }
+
+/// A season whose episodes a log's favorite can come from.
+struct LogFavoriteSeason: Hashable, Identifiable {
+    let number: Int
+    let title: String
+
+    var id: Int { number }
+
+    /// A show's seasons, Specials last.
+    static func from(_ seasons: [SeasonSummary]) -> [LogFavoriteSeason] {
+        (seasons.filter { $0.seasonNumber != 0 } + seasons.filter { $0.seasonNumber == 0 }).map {
+            LogFavoriteSeason(number: $0.seasonNumber, title: TVTrackingPresentation.seasonTitle($0.seasonNumber))
+        }
+    }
+}
+
+extension LogFavorite.Kind {
+    /// Album logs pick a favorite song, show and season logs a favorite episode, when there's one to pick.
+    static func of(_ ref: MediaRef, discs: [MusicMedium], seasons: [LogFavoriteSeason]) -> Self? {
+        switch ref.mediaType {
+        case "music":
+            discs.isEmpty ? nil : .song
+        case "tv", "season":
+            seasons.isEmpty ? nil : .episode
+        default:
+            nil
+        }
+    }
+}
+
+extension MediaDetail {
+    /// The album's discs that list songs.
+    var favoriteDiscs: [MusicMedium] {
+        (music?.representativeRelease?.media ?? []).filter { !$0.tracks.isEmpty }
+    }
+}
+
+/// A log's favorite song or episode. Episodes load a season at a time, when the list first shows it.
+@MainActor
+@Observable
+final class LogFavoriteDraft {
+    var favorite: LogFavorite?
+    var isExpanded = false
+    /// The season whose episodes are listed.
+    var season: Int?
+    private(set) var episodes: [Int: [EpisodeSummary]]
+    private(set) var failedSeasons: Set<Int> = []
+    private let loadSeason: ((Int) async throws -> [EpisodeSummary])?
+
+    init(
+        favorite: LogFavorite? = nil,
+        episodes: [Int: [EpisodeSummary]] = [:],
+        loadSeason: ((Int) async throws -> [EpisodeSummary])? = nil
+    ) {
+        self.favorite = favorite
+        self.episodes = episodes
+        self.loadSeason = loadSeason
+        season = favorite?.seasonNumber
+    }
+
+    /// A season page already has its episodes; other seasons load from the media repository when listed.
+    convenience init(favorite: LogFavorite? = nil, detail: MediaDetail?, mediaRepository: MediaRepository?) {
+        var episodes: [Int: [EpisodeSummary]] = [:]
+        if let detail, detail.ref.mediaType == "season", let number = detail.ref.seasonNumber, let listed = detail.episodes {
+            episodes[number] = listed
+        }
+        let ref = detail?.ref
+        self.init(favorite: favorite, episodes: episodes, loadSeason: ref.flatMap { ref in
+            mediaRepository.map { repository in
+                { number in
+                    try await repository.detail(ref: MediaRef(
+                        itemId: nil,
+                        source: ref.source,
+                        mediaType: "season",
+                        mediaId: ref.mediaId,
+                        seasonNumber: number,
+                        episodeNumber: nil
+                    )).episodes ?? []
+                }
+            }
+        })
+    }
+
+    /// A season log's own season, or a show log's seasons; only those whose episodes can be listed.
+    func seasons(for ref: MediaRef, showSeasons: [LogFavoriteSeason]) -> [LogFavoriteSeason] {
+        let seasons: [LogFavoriteSeason]
+        switch ref.mediaType {
+        case "season":
+            seasons = ref.seasonNumber.map { [LogFavoriteSeason(number: $0, title: TVTrackingPresentation.seasonTitle($0))] } ?? []
+        case "tv":
+            seasons = showSeasons
+        default:
+            seasons = []
+        }
+        return seasons.filter { episodes[$0.number] != nil || loadSeason != nil }
+    }
+
+    func load(season: Int) async {
+        guard episodes[season] == nil, let loadSeason else { return }
+        failedSeasons.remove(season)
+        do {
+            episodes[season] = try await loadSeason(season)
+        } catch {
+            failedSeasons.insert(season)
+        }
+    }
+
+    /// Keeps the favorite and the listed season within the log's seasons as its target changes.
+    func limit(to seasons: [Int]) {
+        if favorite?.kind == .episode, let number = favorite?.seasonNumber, !seasons.contains(number) {
+            favorite = nil
+        }
+        if season.map(seasons.contains) != true {
+            season = favorite?.seasonNumber ?? seasons.first
+        }
+    }
+
+    /// Picks a song or episode and folds the list away; picking the favorite again clears it.
+    func toggle(_ choice: LogFavorite) {
+        if choice.matches(favorite) {
+            favorite = nil
+        } else {
+            favorite = choice
+            isExpanded = false
+        }
+    }
+}
+
+/// The favorite song or episode row. It opens into the album's tracklist or a season's episodes, each with a
+/// plus to pick it.
+struct LogFavoriteSection: View {
+    @Bindable var draft: LogFavoriteDraft
+    let kind: LogFavorite.Kind
+    /// Album logs: the tracklist's discs.
+    var discs: [MusicMedium] = []
+    /// Show and season logs: the seasons to pick from.
+    var seasons: [LogFavoriteSeason] = []
+
+    var body: some View {
+        Section {
+            Button {
+                withAnimation(.snappy(duration: 0.3)) {
+                    draft.isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(kind.label)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 12)
+                    Text(draft.favorite?.title ?? "None")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(draft.isExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("log.favorite")
+            .accessibilityValue(draft.favorite?.title ?? "None")
+
+            if draft.isExpanded {
+                switch kind {
+                case .song:
+                    songRows
+                case .episode:
+                    episodeRows
+                }
+            }
+        }
+        .logRowBackground()
+        .onChange(of: seasons, initial: true) {
+            draft.limit(to: seasons.map(\.number))
+        }
+        .task(id: draft.isExpanded ? draft.season : nil) {
+            if draft.isExpanded, let season = draft.season {
+                await draft.load(season: season)
+            }
+        }
+        .sensoryFeedback(trigger: draft.favorite) { _, favorite in
+            favorite == nil ? SensoryFeedback.selection : .impact(weight: .light)
+        }
+    }
+
+    @ViewBuilder
+    private var songRows: some View {
+        ForEach(discs, id: \.position) { disc in
+            if discs.count > 1 {
+                Text(disc.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Disc \(disc.position)")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(disc.tracks) { track in
+                choiceRow(number: track.number, choice: .song(track))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var episodeRows: some View {
+        if seasons.count > 1 {
+            Picker("Season", selection: $draft.season) {
+                ForEach(seasons) { season in
+                    Text(season.title).tag(Int?.some(season.number))
+                }
+            }
+        }
+        if let season = draft.season {
+            if let episodes = draft.episodes[season] {
+                let aired = episodes.filter { !CalendarDateCodec.isFuture(CalendarDateCodec.date(from: $0.airDate) ?? .distantPast) }
+                if aired.isEmpty {
+                    Text("No episodes have aired yet.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(aired) { episode in
+                    choiceRow(number: "\(episode.episodeNumber)", choice: .episode(episode, seasonNumber: season))
+                }
+            } else if draft.failedSeasons.contains(season) {
+                Button("Couldn't load episodes. Try Again") {
+                    Task { await draft.load(season: season) }
+                }
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func choiceRow(number: String, choice: LogFavorite) -> some View {
+        let isChosen = choice.matches(draft.favorite)
+        return Button {
+            withAnimation(.snappy(duration: 0.3)) {
+                draft.toggle(choice)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(number)
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 22)
+                Text(choice.title)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Image(systemName: isChosen ? "checkmark.circle.fill" : "plus.circle")
+                    .font(.title3)
+                    .foregroundStyle(isChosen ? LogComposerStyle.starGold : Color.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(isChosen ? "Remove \(choice.title) as \(kind.label.lowercased())" : "Pick \(choice.title)")
+        .accessibilityAddTraits(isChosen ? .isSelected : [])
+    }
+}

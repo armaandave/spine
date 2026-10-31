@@ -294,6 +294,8 @@ struct DiaryLogDetailView: View {
                 DiaryLogEditSheet(
                     entry: entry,
                     diaryRepository: diaryRepository,
+                    mediaDetail: viewModel.mediaDetail,
+                    mediaRepository: mediaRepository,
                     backdropURL: viewModel.mediaDetail?.displayBackdropURL,
                     errorMessage: { viewModel.errorMessage }
                 ) { request in
@@ -459,6 +461,10 @@ struct DiaryLogDetailView: View {
                 ratingLikeLine(entry)
             }
 
+            if let favorite = entry.favorite {
+                favoriteLine(favorite)
+            }
+
             if let title = clean(entry.reviewTitle) {
                 Text(title)
                     .font(.system(size: 21, weight: .heavy))
@@ -504,6 +510,31 @@ struct DiaryLogDetailView: View {
                     .accessibilityLabel("Liked")
             }
         }
+    }
+
+    /// "FAVORITE SONG" over "3  Song Title"; episodes read "S1 E4  Title".
+    private func favoriteLine(_ favorite: LogFavorite) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(favorite.kind.label)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(.white.opacity(0.56))
+                .textCase(.uppercase)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let number = favorite.numberLabel {
+                    Text(number)
+                        .font(.system(size: 15, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.56))
+                }
+                Text(favorite.title)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("diary-log.favorite")
     }
 
     @ViewBuilder
@@ -692,14 +723,23 @@ final class DiaryLogEditViewModel {
     var isRewatch: Bool
     var containsSpoilers: Bool
     var visibility: String
+    let favoriteDraft: LogFavoriteDraft
+    let favoriteDiscs: [MusicMedium]
+    let favoriteSeasons: [LogFavoriteSeason]
     var isSaving = false
     var errorMessage: String?
 
     private let diaryRepository: DiaryRepository
 
-    init(entry: DiaryEntry, diaryRepository: DiaryRepository) {
+    init(entry: DiaryEntry, diaryRepository: DiaryRepository, mediaDetail: MediaDetail? = nil, mediaRepository: MediaRepository? = nil) {
         self.entry = entry
         self.diaryRepository = diaryRepository
+        favoriteDraft = LogFavoriteDraft(favorite: entry.favorite, detail: mediaDetail, mediaRepository: mediaRepository)
+        favoriteDiscs = mediaDetail?.favoriteDiscs ?? []
+        favoriteSeasons = favoriteDraft.seasons(
+            for: entry.media.ref,
+            showSeasons: LogFavoriteSeason.from(mediaDetail?.seasons ?? [])
+        )
         consumedAt = CalendarDateCodec.date(from: entry.consumedAt) ?? Date()
         gameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
         initialGameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
@@ -715,6 +755,10 @@ final class DiaryLogEditViewModel {
 
     var repeatLabel: String {
         entry.media.ref.repeatLabel
+    }
+
+    var favoriteKind: LogFavorite.Kind? {
+        .of(entry.media.ref, discs: favoriteDiscs, seasons: favoriteSeasons)
     }
 
     func ratingLabel() -> String {
@@ -736,7 +780,7 @@ final class DiaryLogEditViewModel {
 
     func request() throws -> DiaryEntryUpdateRequest {
         let progress = try gameProgress.request(comparedTo: initialGameProgress)
-        return DiaryEntryUpdateRequest(
+        var request = DiaryEntryUpdateRequest(
             consumedAt: consumedAt,
             rating: ratingSteps > 0 ? Decimal(ratingSteps) / 2 : nil,
             review: review,
@@ -752,6 +796,12 @@ final class DiaryLogEditViewModel {
             includesMinutes: entry.media.ref.mediaType == "game" && progress.includesMinutes,
             includesPercentage: entry.media.ref.mediaType == "game" && progress.includesPercentage
         )
+        // Only a change is sent, so a log whose tracklist didn't load keeps its favorite.
+        if favoriteKind != nil, favoriteDraft.favorite != entry.favorite {
+            request.favorite = favoriteDraft.favorite
+            request.includesFavorite = true
+        }
+        return request
     }
 }
 
@@ -772,8 +822,21 @@ private struct DiaryLogEditSheet: View {
         case gamePercentage
     }
 
-    init(entry: DiaryEntry, diaryRepository: DiaryRepository, backdropURL: String? = nil, errorMessage: @escaping () -> String? = { nil }, onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool) {
-        _viewModel = State(initialValue: DiaryLogEditViewModel(entry: entry, diaryRepository: diaryRepository))
+    init(
+        entry: DiaryEntry,
+        diaryRepository: DiaryRepository,
+        mediaDetail: MediaDetail? = nil,
+        mediaRepository: MediaRepository? = nil,
+        backdropURL: String? = nil,
+        errorMessage: @escaping () -> String? = { nil },
+        onSave: @escaping (DiaryEntryUpdateRequest) async -> Bool
+    ) {
+        _viewModel = State(initialValue: DiaryLogEditViewModel(
+            entry: entry,
+            diaryRepository: diaryRepository,
+            mediaDetail: mediaDetail,
+            mediaRepository: mediaRepository
+        ))
         self.backdropURL = backdropURL
         self.onSave = onSave
         self.errorMessage = errorMessage
@@ -810,6 +873,15 @@ private struct DiaryLogEditSheet: View {
                         }
                     }
                     .logRowBackground()
+
+                    if let kind = viewModel.favoriteKind {
+                        LogFavoriteSection(
+                            draft: viewModel.favoriteDraft,
+                            kind: kind,
+                            discs: viewModel.favoriteDiscs,
+                            seasons: viewModel.favoriteSeasons
+                        )
+                    }
 
                     Section {
                         DatePicker(

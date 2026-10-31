@@ -28,6 +28,7 @@ final class MediaLogViewModel {
     var reviewTitle = ""
     var review = ""
     let tagDraft = LogTagDraft()
+    let favoriteDraft: LogFavoriteDraft
     var containsSpoilers = false
     var visibility = "public"
     /// A TV log's target and defaults from the server (TV-404). The date, stars, heart and Rewatch below read and
@@ -66,6 +67,7 @@ final class MediaLogViewModel {
         detail: MediaDetail,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
+        mediaRepository: MediaRepository? = nil,
         tracking: TrackingState? = nil,
         completionJourneyId: Int? = nil,
         preselectedLiked: Bool? = nil,
@@ -90,6 +92,7 @@ final class MediaLogViewModel {
         self.onUnauthorized = onUnauthorized
         self.onResult = onResult
         self.onSaved = onSaved
+        favoriteDraft = LogFavoriteDraft(detail: detail, mediaRepository: mediaRepository)
         if detail.ref.isTVFamily {
             // The server works out every default when the composer opens (TV-404); the user's own picks win.
             tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap { TVComposerDraft(composer: $0) }
@@ -157,6 +160,29 @@ final class MediaLogViewModel {
         set {
             if tvDraft != nil { tvDraft?.isRewatch = newValue } else { storedIsRepeat = newValue }
         }
+    }
+
+    // MARK: Favorite
+
+    var favoriteKind: LogFavorite.Kind? {
+        .of(selectedRef, discs: favoriteDiscs, seasons: favoriteSeasons)
+    }
+
+    var favoriteDiscs: [MusicMedium] {
+        detail.favoriteDiscs
+    }
+
+    /// The TV composer's seasons, or the page's when the server sent no composer.
+    var favoriteSeasons: [LogFavoriteSeason] {
+        let targets = tvTargets.filter { $0.level == .season }.compactMap { target in
+            target.seasonNumber.map { LogFavoriteSeason(number: $0, title: target.title) }
+        }
+        let showSeasons = targets.isEmpty ? LogFavoriteSeason.from(detail.seasons ?? []) : targets
+        return favoriteDraft.seasons(for: selectedRef, showSeasons: showSeasons)
+    }
+
+    private var favoriteToSave: LogFavorite? {
+        favoriteKind == nil ? nil : favoriteDraft.favorite
     }
 
     // MARK: Targets
@@ -419,7 +445,7 @@ final class MediaLogViewModel {
                 )
                 return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
             }
-            let entry = try await diaryRepository.create(DiaryEntryWriteRequest(
+            var request = DiaryEntryWriteRequest(
                 ref: selectedRef,
                 consumedAt: consumedAt,
                 rating: Self.ratingDecimal(for: ratingSteps),
@@ -431,7 +457,9 @@ final class MediaLogViewModel {
                 containsSpoilers: containsSpoilers,
                 visibility: selectedRef.isSingleWeight ? "public" : visibility,
                 tags: tagDraft.tags
-            ))
+            )
+            request.favorite = favoriteToSave
+            let entry = try await diaryRepository.create(request)
             // A diary create returns no tracking state, so the page refreshes in full.
             return result(tracking: nil, diaryEntry: entry)
         }
@@ -458,6 +486,7 @@ final class MediaLogViewModel {
             tags: tagDraft.tags,
             mutationId: completionMutationId
         )
+        request.favorite = favoriteToSave
         if let tvPage, tvPage.mediaType == "season" || tvPage.isEpisode {
             request.pageSeasonNumber = tvPage.seasonNumber
             request.pageEpisodeNumber = tvPage.isEpisode ? tvPage.episodeNumber : nil
@@ -561,6 +590,7 @@ struct MediaLogView: View {
         detail: MediaDetail,
         trackingRepository: TrackingRepository,
         diaryRepository: DiaryRepository,
+        mediaRepository: MediaRepository? = nil,
         tracking: TrackingState? = nil,
         completionJourneyId: Int? = nil,
         preselectedLiked: Bool? = nil,
@@ -577,6 +607,7 @@ struct MediaLogView: View {
             detail: detail,
             trackingRepository: trackingRepository,
             diaryRepository: diaryRepository,
+            mediaRepository: mediaRepository,
             tracking: tracking,
             completionJourneyId: completionJourneyId,
             preselectedLiked: preselectedLiked,
@@ -731,6 +762,15 @@ struct MediaLogView: View {
             }
         }
         .logRowBackground()
+
+        if let kind = viewModel.favoriteKind {
+            LogFavoriteSection(
+                draft: viewModel.favoriteDraft,
+                kind: kind,
+                discs: viewModel.favoriteDiscs,
+                seasons: viewModel.favoriteSeasons
+            )
+        }
 
         Section {
             DatePicker(
