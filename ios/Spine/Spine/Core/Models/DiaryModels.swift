@@ -346,6 +346,8 @@ struct ActivityObject: Codable {
     let rating: String?
     let liked: Bool?
     let name: String?
+    /// A log that was a rewatch or reread; older servers don't send it.
+    var isRewatch: Bool? = nil
     /// A day's progress, whole ("watched 4 episodes") and short ("4 episodes").
     var summary: String? = nil
     var label: String? = nil

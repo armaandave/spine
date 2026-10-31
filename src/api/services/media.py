@@ -5140,7 +5140,7 @@ def community_stats(
         stored_ratings = list(newest.values())
     else:
         stored_ratings = _current_ratings(media_type, item)
-    half_star = single_weight.uses_half_star_rating(media_type)
+    half_star = single_weight.api_uses_stars(media_type)
     rating_values = [single_weight.rating_to_wire(value) if half_star else value for value in stored_ratings]
     average = round(sum(rating_values) / len(rating_values), 2) if rating_values else None
     distribution = [

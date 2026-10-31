@@ -99,11 +99,13 @@ struct StatsView: View {
         selectedTab: AppTab = .profile,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         username: String? = nil,
+        enabledMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void = {}
     ) {
         _viewModel = State(initialValue: StatsViewModel(
             profileRepository: profileRepository,
             username: username,
+            enabledMediaTypes: enabledMediaTypes,
             onUnauthorized: onUnauthorized
         ))
         self.username = username

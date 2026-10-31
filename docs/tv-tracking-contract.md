@@ -781,6 +781,7 @@ On the wire, shows, seasons and episodes keep the doubled values 1 to 10 in whol
 Storage uses the same doubled scale as movies (`src/app/single_weight.py:47-78`).
 New writes from the app and the API accept only those ten values.
 Imports keep a source's off-scale score as it is, and stored ratings from before this contract that fall off the scale are kept as they are, not rewritten.
+A request with `X-Spine-Rating-Scale: stars` gets 0.5–5 stars instead, for TV and every other type: ratings go out as exact halves of storage (an imported 7.5 is "3.75"; the app rounds when it draws stars) and come in as the ten half-star values (`src/app/single_weight.py`, `APIRatingScaleMiddleware`). Requests without the header keep the 0–10 wire.
 
 ## Rewatch
 

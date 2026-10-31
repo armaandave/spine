@@ -55,7 +55,7 @@ final class GameTrackingContractTests: XCTestCase {
         XCTAssertEqual(GameProgressValues(totalMinutes: 0, percentage: 0).summary, "0% · 0h")
         XCTAssertEqual(GameProgressValues(totalMinutes: 750, percentage: 65).summary, "65% · 12h 30m")
         XCTAssertEqual(LibraryShelf.available(for: "game").map { $0.title(mediaType: "game") }, ["Planning", "Playing", "Paused", "Dropped", "Completed"])
-        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 9, mediaType: "game"), 4.5)
+        XCTAssertEqual(MediaLogViewModel.ratingDecimal(for: 9), 4.5)
     }
     func testUnchangedProgressDoesNotBreakIndependentFieldLinks() throws {
         let original = GameProgressDraft(totalMinutes: 2400, percentage: 65)
@@ -178,6 +178,7 @@ final class GameTrackingContractTests: XCTestCase {
         let request = try XCTUnwrap(GameTrackingURLProtocol.requests.first)
         XCTAssertEqual(request.url!.absoluteString, "https://example.com/api/v1/tracking/igdb/game/42/complete/")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Spine-Timezone"), TimeZone.current.identifier)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Spine-Rating-Scale"), "stars")
         let body = try XCTUnwrap(GameTrackingURLProtocol.bodies.first)
         XCTAssertEqual(body["playthrough_id"] as? Int, 41)
         XCTAssertEqual(body["total_minutes"] as? Int, 750)

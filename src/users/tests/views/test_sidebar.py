@@ -35,6 +35,7 @@ class SidebarViewTests(TestCase):
         self.assertIn(MediaTypes.TV.value, response.context["media_types"])
         self.assertIn(MediaTypes.MOVIE.value, response.context["media_types"])
         self.assertNotIn(MediaTypes.EPISODE.value, response.context["media_types"])
+        self.assertNotIn(MediaTypes.SEASON.value, response.context["media_types"])
 
     def test_sidebar_post_update_preferences(self):
         """Test POST request to update preferences."""

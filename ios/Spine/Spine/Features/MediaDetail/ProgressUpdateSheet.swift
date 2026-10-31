@@ -1,35 +1,69 @@
 import SwiftUI
-import UIKit
 
 struct ProgressUpdateSaveRequest: Equatable {
     let mode: ProgressUpdateMode
     let value: Int
 }
 
+/// The title a progress sheet updates. A Home card knows it before the title's page has loaded, so the sheet opens at
+/// once; the page's own copy takes over once it has.
+struct ProgressSheetTitle: Identifiable, Equatable {
+    let ref: MediaRef
+    let title: String
+    /// A book's page count: from its page, or from a card's page progress.
+    let totalPages: Int?
+
+    var id: String { ref.id }
+
+    init(detail: MediaDetail) {
+        ref = detail.ref
+        title = detail.displayTitle
+        totalPages = detail.progressTotalPages
+    }
+
+    init(item: LibraryItem) {
+        ref = item.media.ref
+        title = item.media.displayTitle
+        // Percentage progress's max is 100, not a page count.
+        totalPages = item.tracking.progress.flatMap { progress in
+            progress.mode == .pages ? progress.max.map { NSDecimalNumber(decimal: $0).intValue } : nil
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class ProgressUpdateViewModel {
-    let detail: MediaDetail
+    var title: ProgressSheetTitle
     let progress: ProgressState?
     var mode: ProgressUpdateMode
     var input = ""
     private var hasEditedInput = false
 
-    init(detail: MediaDetail, progress: ProgressState?) {
-        self.detail = detail
+    convenience init(detail: MediaDetail, progress: ProgressState?) {
+        self.init(title: ProgressSheetTitle(detail: detail), progress: progress)
+    }
+
+    init(title: ProgressSheetTitle, progress: ProgressState?) {
+        self.title = title
         self.progress = progress
-        self.mode = Self.defaultMode(for: detail, progress: progress)
+        self.mode = Self.defaultMode(for: title, progress: progress)
         if let lastValue {
             input = String(lastValue)
         }
     }
 
+    /// Percentage progress's total is 100, not a page count.
     var totalPages: Int? {
-        detail.progressTotalPages ?? Self.intValue(progress?.max)
+        title.totalPages ?? (progress?.mode == .pages ? Self.intValue(progress?.max) : nil)
     }
 
     var lastValue: Int? {
         guard let progress else { return nil }
+        // Percentage progress's max is 100, not a page count, so its page comes from the book's own count.
+        if progress.mode == .percentage, mode == .pages, let percent = progress.value(in: .percentage) {
+            return converted(percent, from: .percentage, to: .pages)
+        }
         return progress.value(in: mode)
     }
 
@@ -37,50 +71,20 @@ final class ProgressUpdateViewModel {
         Int(input)
     }
 
+    /// The field's text: empty until the first digit, so the last saved value shows as its placeholder and the first
+    /// digit typed replaces it.
     var keyboardInputText: String {
         hasEditedInput ? input : ""
     }
 
-    var totalTitle: String {
-        detail.ref.mediaType == "book" ? "Total Pages" : "Total"
-    }
-
-    var totalValueText: String {
-        if detail.ref.mediaType == "book" {
-            return totalPages.map(String.init) ?? "--"
-        }
-        return "100%"
-    }
-
-    var lastValueText: String {
-        valueText(lastValue)
-    }
-
-    var currentValueText: String {
-        valueText(currentValue)
-    }
-
-    var deltaText: String {
-        guard currentValue != lastValue else {
-            guard let value = currentValue ?? lastValue else {
-                return mode == .pages ? "Pages read" : "\(mode.title) \(actionVerb)"
-            }
-            if mode == .percentage {
-                return "\(value)% \(actionVerb)"
-            }
-            let unit = value == 1 ? "page" : "pages"
-            return "\(value) \(unit) \(actionVerb)"
-        }
-        guard let currentValue else {
-            return mode == .pages ? "Pages read" : "\(mode.title) \(actionVerb)"
-        }
-        let delta = currentValue - (lastValue ?? 0)
-        let prefix = delta > 0 ? "+" : ""
-        if mode == .percentage {
-            return "\(prefix)\(delta)% \(actionVerb)"
-        }
-        let unit = abs(delta) == 1 ? "page" : "pages"
-        return "\(prefix)\(delta) \(unit) \(actionVerb)"
+    /// Under the number: where the last save left off, and how far this one moves from it. Nil before a first save.
+    var summaryText: String? {
+        guard let lastValue else { return nil }
+        let last = mode == .percentage ? "\(lastValue)%" : "page \(lastValue)"
+        guard let currentValue, currentValue != lastValue else { return "Last saved at \(last)" }
+        let delta = abs(currentValue - lastValue)
+        let amount = mode == .percentage ? "\(delta)%" : delta == 1 ? "1 page" : "\(delta) pages"
+        return "\(currentValue > lastValue ? "+" : "−")\(amount) since \(last)"
     }
 
     var validationMessage: String? {
@@ -113,7 +117,7 @@ final class ProgressUpdateViewModel {
     }
 
     func selectMode(_ newMode: ProgressUpdateMode) {
-        guard detail.ref.mediaType == "book", newMode != mode else { return }
+        guard title.ref.mediaType == "book", newMode != mode else { return }
         if let currentValue {
             input = converted(currentValue, from: mode, to: newMode).map(String.init) ?? ""
         }
@@ -124,6 +128,8 @@ final class ProgressUpdateViewModel {
         let limit = mode == .percentage ? 3 : 6
         let digits = String(rawValue.filter(\.isNumber).prefix(limit))
         if !hasEditedInput, digits == input {
+            // The first digit typed is the last value itself: it stays, so the next digit adds to it.
+            hasEditedInput = true
             return
         }
         guard !digits.isEmpty else {
@@ -140,32 +146,6 @@ final class ProgressUpdateViewModel {
         hasEditedInput = true
     }
 
-    @discardableResult
-    func applyKeyboardInput(currentText: String, range: NSRange, replacement: String) -> String {
-        guard let textRange = Range(range, in: currentText) else {
-            return keyboardInputText
-        }
-        let nextText = currentText.replacingCharacters(in: textRange, with: replacement)
-        if !hasEditedInput, replacement.contains(where: \.isNumber) {
-            updateInput(replacement)
-        } else {
-            updateInput(nextText)
-        }
-        return keyboardInputText
-    }
-
-    private var actionVerb: String {
-        detail.ref.mediaType == "game" ? "played" : "read"
-    }
-
-    private func valueText(_ value: Int?) -> String {
-        guard let value else { return "--" }
-        if mode == .percentage {
-            return "\(value)%"
-        }
-        return String(value)
-    }
-
     private func converted(_ value: Int, from: ProgressUpdateMode, to: ProgressUpdateMode) -> Int? {
         guard from != to else { return value }
         guard let totalPages, totalPages > 0 else { return nil }
@@ -179,15 +159,15 @@ final class ProgressUpdateViewModel {
         }
     }
 
-    private static func defaultMode(for detail: MediaDetail, progress: ProgressState?) -> ProgressUpdateMode {
-        guard detail.ref.mediaType == "book" else { return .percentage }
-        if let preferredMode = ProgressDisplayPreferences.mode(for: detail.ref) {
+    private static func defaultMode(for title: ProgressSheetTitle, progress: ProgressState?) -> ProgressUpdateMode {
+        guard title.ref.mediaType == "book" else { return .percentage }
+        if let preferredMode = ProgressDisplayPreferences.mode(for: title.ref) {
             return preferredMode
         }
         if let progress {
             return progress.mode
         }
-        return detail.progressTotalPages == nil ? .percentage : .pages
+        return title.totalPages == nil ? .percentage : .pages
     }
 
     private static func intValue(_ value: Decimal?) -> Int? {
@@ -196,72 +176,80 @@ final class ProgressUpdateViewModel {
     }
 }
 
+/// Update Progress for a book, a native sheet like the TV episode sheet: the book in the bar with Close, ⋯ and Save,
+/// the page it's on against the last saved one, and Finished Reading. Pause, Did Not Finish, Restart and Delete
+/// Journey sit in ⋯. Its choices close it; their writes apply behind it.
 struct ProgressUpdateSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ProgressUpdateViewModel
-    @State private var isInputActive = true
     @State private var pendingJourneyAction: BookJourneyMenuAction?
+    /// A save waiting for its answer, or for the page it writes to.
+    @State private var isSubmitting = false
+    /// A choice closed the sheet: a second tap while it slides away does nothing.
+    @State private var isClosing = false
 
+    let title: ProgressSheetTitle
     let isSaving: Bool
     let errorMessage: String?
     let journeyStatus: String?
     let onSave: (ProgressUpdateSaveRequest) async -> Bool
-    let onDismiss: () -> Void
-    let onLogFinished: () -> Void
-    let onPause: (() -> Void)?
-    let onResume: (() -> Void)?
-    let onDrop: (() -> Void)?
-    let onRestart: (() -> Void)?
-    let onDelete: (() -> Void)?
+    /// Finished Reading, or progress saved at the last page: the completion log, which closes the sheet first.
+    let onFinish: () -> Void
+    /// "pause", "resume", "drop" or "restart".
+    let onAction: (String) -> Void
+    let onDelete: () -> Void
 
     init(
-        detail: MediaDetail,
+        title: ProgressSheetTitle,
         progress: ProgressState?,
         isSaving: Bool,
         errorMessage: String?,
-        journeyStatus: String? = nil,
+        journeyStatus: String?,
         onSave: @escaping (ProgressUpdateSaveRequest) async -> Bool,
-        onDismiss: @escaping () -> Void,
-        onLogFinished: @escaping () -> Void,
-        onPause: (() -> Void)? = nil,
-        onResume: (() -> Void)? = nil,
-        onDrop: (() -> Void)? = nil,
-        onRestart: (() -> Void)? = nil,
-        onDelete: (() -> Void)? = nil
+        onFinish: @escaping () -> Void,
+        onAction: @escaping (String) -> Void,
+        onDelete: @escaping () -> Void
     ) {
-        _viewModel = State(initialValue: ProgressUpdateViewModel(detail: detail, progress: progress))
+        _viewModel = State(initialValue: ProgressUpdateViewModel(title: title, progress: progress))
+        self.title = title
         self.isSaving = isSaving
         self.errorMessage = errorMessage
         self.journeyStatus = journeyStatus
         self.onSave = onSave
-        self.onDismiss = onDismiss
-        self.onLogFinished = onLogFinished
-        self.onPause = onPause
-        self.onResume = onResume
-        self.onDrop = onDrop
-        self.onRestart = onRestart
+        self.onFinish = onFinish
+        self.onAction = onAction
         self.onDelete = onDelete
     }
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    close()
-                }
-
-            ProgressKeyboardPresenter(
-                viewModel: viewModel,
-                isActive: $isInputActive,
-                accessoryHeight: viewModel.detail.ref.mediaType == "book" ? 392 : 264,
-                accessory: panel
-            ) {
-                onDismiss()
+        let warning = viewModel.validationMessage ?? errorMessage
+        ProgressSheetForm(
+            title: title.title,
+            subtitle: journeyStatus == "Paused" ? "Paused" : nil,
+            numberLabel: viewModel.mode == .pages ? "Page" : "Progress",
+            number: Binding(get: { viewModel.keyboardInputText }, set: { viewModel.updateInput($0) }),
+            placeholder: viewModel.lastValue.map(String.init) ?? "0",
+            unit: viewModel.mode == .pages ? viewModel.totalPages.map { "of \($0)" } ?? "" : "%",
+            footer: warning ?? viewModel.summaryText,
+            footerIsWarning: warning != nil,
+            finishTitle: "Finished Reading",
+            canSave: viewModel.canSave && !isClosing,
+            isSaving: isSaving || isSubmitting,
+            onSave: save,
+            onFinish: { perform(.finish) }
+        ) {
+            Picker("Track by", selection: Binding(get: { viewModel.mode }, set: { viewModel.selectMode($0) })) {
+                ForEach(ProgressUpdateMode.allCases) { Text($0.title).tag($0) }
             }
-            .frame(width: 1, height: 1)
-            .allowsHitTesting(false)
+        } moreActions: {
+            menuButton(journeyStatus == "Paused" ? .resume : .pause)
+            menuButton(.didNotFinish)
+            Divider()
+            menuButton(.restart)
+            menuButton(.delete)
         }
+        // The page's copy, once it has loaded behind a sheet opened from Home, knows the book's page count.
+        .onChange(of: title) { _, title in viewModel.title = title }
         .confirmationDialog(
             pendingJourneyAction?.confirmationTitle ?? "",
             isPresented: Binding(
@@ -281,69 +269,199 @@ struct ProgressUpdateSheet: View {
         }
     }
 
-    private var panel: some View {
-        ProgressUpdatePanel(
-            viewModel: viewModel,
-            isSaving: isSaving,
-            errorMessage: errorMessage,
-            journeyStatus: journeyStatus,
-            onClose: {
-                close()
-            },
-            onSave: saveTapped,
-            onJourneyAction: { action in
-                if action.requiresConfirmation {
-                    pendingJourneyAction = action
-                } else {
-                    perform(action)
-                }
+    private func menuButton(_ action: BookJourneyMenuAction) -> some View {
+        Button(action.title, systemImage: action.systemImage, role: action == .delete ? .destructive : nil) {
+            if action.requiresConfirmation {
+                pendingJourneyAction = action
+            } else {
+                perform(action)
             }
-        )
+        }
     }
 
-    private func saveTapped() {
-        guard viewModel.canSave else { return }
+    private func save() {
+        guard let request = viewModel.saveRequest, !isSubmitting, !isClosing else { return }
+        let finishes = viewModel.isFullProgress
+        isSubmitting = true
         Task {
-            await save()
-        }
-    }
-
-    private func save() async {
-        guard let request = viewModel.saveRequest else { return }
-        if await onSave(request) {
-            let shouldLogFinished = viewModel.isFullProgress
-            close()
-            if shouldLogFinished {
-                onLogFinished()
+            let saved = await onSave(request)
+            isSubmitting = false
+            guard saved else { return }
+            isClosing = true
+            if finishes {
+                onFinish()
+            } else {
+                dismiss()
             }
         }
     }
 
-    /// Journey changes apply behind the panel, so it closes on the tap.
     private func perform(_ action: BookJourneyMenuAction) {
         pendingJourneyAction = nil
+        guard !isClosing, !isSubmitting else { return }
+        isClosing = true
         switch action {
-        case .pause:
-            onPause?()
-        case .resume:
-            onResume?()
-        case .didNotFinish:
-            onDrop?()
+        case .pause: onAction("pause")
+        case .resume: onAction("resume")
+        case .didNotFinish: onAction("drop")
+        case .restart: onAction("restart")
+        case .delete: onDelete()
         case .finish:
-            close()
-            onLogFinished()
+            // The completion log closes the sheet before it opens.
+            onFinish()
             return
-        case .restart:
-            onRestart?()
-        case .delete:
-            onDelete?()
         }
-        close()
+        dismiss()
+    }
+}
+
+/// A progress sheet's layout, for a book or a game, in the look of the TV episode sheet and the log sheet: the title
+/// in the bar with Close, ⋯ and Save; one number against the last saved one, and how it's counted; and Finished. The
+/// number pad rises with the sheet.
+struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var focusRequest = 0
+
+    let title: String
+    let subtitle: String?
+    let numberLabel: String
+    @Binding var number: String
+    let placeholder: String
+    let unit: String
+    /// Under the number: the last save, or what's wrong with this one.
+    let footer: String?
+    let footerIsWarning: Bool
+    /// Finished Reading or Finished Playing; nil leaves it out.
+    let finishTitle: String?
+    let canSave: Bool
+    let isSaving: Bool
+    let onSave: () -> Void
+    let onFinish: () -> Void
+    let countOptions: CountOptions
+    let moreActions: MoreActions
+
+    init(
+        title: String,
+        subtitle: String?,
+        numberLabel: String,
+        number: Binding<String>,
+        placeholder: String,
+        unit: String,
+        footer: String?,
+        footerIsWarning: Bool,
+        finishTitle: String?,
+        canSave: Bool,
+        isSaving: Bool,
+        onSave: @escaping () -> Void,
+        onFinish: @escaping () -> Void,
+        @ViewBuilder countOptions: () -> CountOptions,
+        @ViewBuilder moreActions: () -> MoreActions
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.numberLabel = numberLabel
+        _number = number
+        self.placeholder = placeholder
+        self.unit = unit
+        self.footer = footer
+        self.footerIsWarning = footerIsWarning
+        self.finishTitle = finishTitle
+        self.canSave = canSave
+        self.isSaving = isSaving
+        self.onSave = onSave
+        self.onFinish = onFinish
+        self.countOptions = countOptions()
+        self.moreActions = moreActions()
     }
 
-    private func close() {
-        isInputActive = false
-        onDismiss()
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 6) {
+                        Text(numberLabel)
+                        Spacer(minLength: 12)
+                        AutofocusNumberField(
+                            text: $number,
+                            placeholder: placeholder,
+                            accessibilityLabel: numberLabel,
+                            focusRequest: focusRequest
+                        )
+                        if !unit.isEmpty {
+                            Text(unit)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { focusRequest += 1 }
+
+                    countOptions
+                } footer: {
+                    if let footer {
+                        Text(footer)
+                            .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
+                    }
+                }
+                .logRowBackground()
+
+                if let finishTitle {
+                    Section {
+                        Button(finishTitle, systemImage: "checkmark.circle", action: onFinish)
+                    }
+                    .logRowBackground()
+                }
+            }
+            .scrollContentBackground(.hidden)
+            // A slow drag down starts as a scroll of the rows, which would lower the number pad and leave the sheet
+            // with nothing to type into; the drag moves the sheet instead.
+            .scrollDismissesKeyboard(.never)
+            // The sheet rides on the number pad, so the keyboard takes no room inside it.
+            .ignoresSafeArea(.keyboard)
+            .fitsSheetToContent(aboveKeyboard: true)
+            .disabled(isSaving)
+            .navigationTitle(title)
+            .navigationSubtitle(subtitle ?? "")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                    }
+                    .disabled(isSaving)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        moreActions
+                    } label: {
+                        Label("More", systemImage: "ellipsis")
+                    }
+                    .disabled(isSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button(role: .confirm, action: onSave) {
+                            Label("Save", systemImage: "checkmark")
+                        }
+                        .disabled(!canSave)
+                        .accessibilityLabel("Save Progress")
+                    }
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled(isSaving)
+        // Dragging the sheet down lowers the number pad even when the sheet springs back. Without it the sheet has
+        // nothing to do, so it closes all the way. Not while a save is out (its failure shows here), nor when the app
+        // leaves the screen.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            guard !isSaving, UIApplication.shared.applicationState == .active else { return }
+            dismiss()
+        }
     }
 }
 
@@ -394,327 +512,6 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
         case .delete: "This journey and its progress will be removed. Completion diary logs are managed separately."
         default: ""
         }
-    }
-}
-
-private struct ProgressUpdatePanel: View {
-    let viewModel: ProgressUpdateViewModel
-    let isSaving: Bool
-    let errorMessage: String?
-    let journeyStatus: String?
-    let onClose: () -> Void
-    let onSave: () -> Void
-    let onJourneyAction: (BookJourneyMenuAction) -> Void
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Capsule()
-                .fill(.secondary.opacity(0.28))
-                .frame(width: 38, height: 5)
-
-            header
-            progressSummary
-            if viewModel.detail.ref.mediaType == "book" {
-                ProgressStatusRow(choices: [
-                    ProgressStatusChoice(title: "Reading", systemImage: "book.pages",
-                                         isCurrent: journeyStatus == "In progress") { onJourneyAction(.resume) },
-                    ProgressStatusChoice(title: "Paused", systemImage: "pause.fill",
-                                         isCurrent: journeyStatus == "Paused") { onJourneyAction(.pause) },
-                    ProgressStatusChoice(title: "Finished", systemImage: "checkmark", isCurrent: false) { onJourneyAction(.finish) },
-                    ProgressStatusChoice(title: "DNF", systemImage: "xmark", isCurrent: false) { onJourneyAction(.didNotFinish) },
-                ])
-                .disabled(isSaving)
-            }
-            saveButton
-            if viewModel.detail.ref.mediaType == "book" {
-                HStack(spacing: 22) {
-                    Button("Restart") { onJourneyAction(.restart) }
-                    Button("Delete Journey", role: .destructive) { onJourneyAction(.delete) }
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.borderless)
-                .disabled(isSaving)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .foregroundStyle(.primary)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
-        .gesture(
-            DragGesture(minimumDistance: 12)
-                .onEnded { value in
-                    if value.translation.height > 28 {
-                        onClose()
-                    }
-                }
-        )
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            MediaArtwork(
-                url: viewModel.detail.displayPosterURL,
-                title: viewModel.detail.title,
-                slot: .searchRow,
-                mediaType: viewModel.detail.ref.mediaType,
-                orientation: viewModel.detail.posterOrientation
-            )
-            .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Add new progress...")
-                    .font(.headline.weight(.semibold))
-                    .lineLimit(1)
-
-                progressModeControl
-            }
-
-            Spacer()
-
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
-            .controlSize(.regular)
-            .accessibilityLabel("Close")
-        }
-    }
-
-    @ViewBuilder
-    private var progressModeControl: some View {
-        if viewModel.detail.ref.mediaType == "book" {
-            Menu {
-                ForEach(ProgressUpdateMode.allCases) { mode in
-                    Button(mode.title) {
-                        viewModel.selectMode(mode)
-                    }
-                }
-            } label: {
-                modeLabel(showsChevron: true)
-            }
-        } else {
-            modeLabel(showsChevron: false)
-        }
-    }
-
-    private func modeLabel(showsChevron: Bool) -> some View {
-        HStack(spacing: 6) {
-            Text(viewModel.deltaText)
-                .font(.subheadline.weight(.semibold))
-            if showsChevron {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .foregroundStyle(.primary)
-        .background(Color.primary.opacity(0.11), in: Capsule())
-        .contentShape(Rectangle())
-        .accessibilityLabel("Progress mode")
-        .accessibilityValue(viewModel.mode.title)
-    }
-
-    private var progressSummary: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 8) {
-                progressStat(title: "Last", value: viewModel.lastValueText)
-                currentProgressStat
-                progressStat(title: viewModel.totalTitle, value: viewModel.totalValueText)
-            }
-
-            if let message = viewModel.validationMessage ?? errorMessage {
-                Text(message)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private func progressStat(title: String, value: String) -> some View {
-        VStack(spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(value)
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 72)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var currentProgressStat: some View {
-        VStack(spacing: 6) {
-            Text("Current")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Text(viewModel.currentValueText)
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-                .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 72)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var saveButton: some View {
-        Button(action: onSave) {
-            HStack {
-                Spacer()
-                Group {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Save Progress")
-                            .font(.headline.weight(.semibold))
-                    }
-                }
-                .spineContentTransition(value: isSaving)
-                Spacer()
-            }
-            .frame(height: 50)
-            .foregroundStyle(viewModel.canSave && !isSaving ? .black : .white.opacity(0.48))
-            .background(viewModel.canSave && !isSaving ? Color.white : Color.white.opacity(0.12), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!viewModel.canSave || isSaving)
-    }
-}
-
-private struct ProgressKeyboardPresenter<Accessory: View>: UIViewRepresentable {
-    let viewModel: ProgressUpdateViewModel
-    @Binding var isActive: Bool
-    let accessoryHeight: CGFloat
-    let accessory: Accessory
-    let onDidEndEditing: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel, accessory: accessory, accessoryHeight: accessoryHeight, onDidEndEditing: onDidEndEditing)
-    }
-
-    func makeUIView(context: Context) -> UITextField {
-        let textField = UITextField(frame: .zero)
-        textField.alpha = 0.01
-        textField.keyboardType = .numberPad
-        textField.delegate = context.coordinator
-        textField.inputAccessoryView = context.coordinator.accessoryView
-        DispatchQueue.main.async {
-            if isActive {
-                textField.becomeFirstResponder()
-            }
-        }
-        return textField
-    }
-
-    func updateUIView(_ textField: UITextField, context: Context) {
-        context.coordinator.viewModel = viewModel
-        context.coordinator.onDidEndEditing = onDidEndEditing
-        context.coordinator.accessoryHeight = accessoryHeight
-        context.coordinator.hostingController.rootView = accessory
-        context.coordinator.accessoryView.invalidateIntrinsicContentSize()
-        if textField.text != viewModel.keyboardInputText {
-            textField.text = viewModel.keyboardInputText
-        }
-        if isActive, !textField.isFirstResponder {
-            DispatchQueue.main.async {
-                textField.becomeFirstResponder()
-            }
-        } else if !isActive, textField.isFirstResponder {
-            textField.resignFirstResponder()
-        }
-    }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var viewModel: ProgressUpdateViewModel
-        var onDidEndEditing: () -> Void
-        var accessoryHeight: CGFloat {
-            didSet {
-                accessoryView.height = accessoryHeight
-            }
-        }
-        let accessoryView: AccessoryContainerView
-        let hostingController: UIHostingController<Accessory>
-
-        init(
-            viewModel: ProgressUpdateViewModel,
-            accessory: Accessory,
-            accessoryHeight: CGFloat,
-            onDidEndEditing: @escaping () -> Void
-        ) {
-            self.viewModel = viewModel
-            self.onDidEndEditing = onDidEndEditing
-            self.accessoryHeight = accessoryHeight
-            self.accessoryView = AccessoryContainerView(height: accessoryHeight)
-            self.hostingController = UIHostingController(rootView: accessory)
-            super.init()
-
-            hostingController.view.backgroundColor = .secondarySystemBackground
-            hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-            accessoryView.addSubview(hostingController.view)
-            NSLayoutConstraint.activate([
-                hostingController.view.leadingAnchor.constraint(equalTo: accessoryView.leadingAnchor),
-                hostingController.view.trailingAnchor.constraint(equalTo: accessoryView.trailingAnchor),
-                hostingController.view.topAnchor.constraint(equalTo: accessoryView.topAnchor),
-                hostingController.view.bottomAnchor.constraint(equalTo: accessoryView.bottomAnchor)
-            ])
-        }
-
-        func textField(
-            _ textField: UITextField,
-            shouldChangeCharactersIn range: NSRange,
-            replacementString string: String
-        ) -> Bool {
-            textField.text = viewModel.applyKeyboardInput(
-                currentText: textField.text ?? "",
-                range: range,
-                replacement: string
-            )
-            return false
-        }
-
-        func textFieldDidEndEditing(_ textField: UITextField) {
-            onDidEndEditing()
-        }
-    }
-}
-
-private final class AccessoryContainerView: UIView {
-    var height: CGFloat {
-        didSet {
-            invalidateIntrinsicContentSize()
-        }
-    }
-
-    init(height: CGFloat) {
-        self.height = height
-        super.init(frame: CGRect(x: 0, y: 0, width: 0, height: height))
-        backgroundColor = .secondarySystemBackground
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: height)
     }
 }
 

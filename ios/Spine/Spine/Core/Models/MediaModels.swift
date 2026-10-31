@@ -32,10 +32,6 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         mediaType == "movie" || mediaType == "music"
     }
 
-    var usesFiveStarRatingScale: Bool {
-        isSingleWeight || ["book", "game"].contains(mediaType)
-    }
-
     var usesCalendarConsumptionDate: Bool {
         isSingleWeight || ["book", "game"].contains(mediaType)
     }

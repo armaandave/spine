@@ -1705,6 +1705,19 @@ final class SignedInUserCacheTests: XCTestCase {
         XCTAssertNil(cache.load())
     }
 
+    func testRemembersTheMediaTypesTurnedOnAndReadsUsersSavedBeforeThem() throws {
+        let cache = SignedInUserCache(defaults: defaults)
+        cache.save(AuthUser(id: 3, username: "ada", displayName: "Ada", isPrivate: false, avatarUrl: nil, enabledMediaTypes: ["movie", "book"]))
+        XCTAssertEqual(cache.load()?.enabledMediaTypes, ["movie", "book"])
+
+        // Saved by a build from before the field: still the same user, types unknown.
+        let older = #"{"id":3,"username":"ada","displayName":"Ada","isPrivate":false}"#
+        defaults.set(Data(older.utf8), forKey: "spine.signedInUser.v1")
+        let loaded = try XCTUnwrap(cache.load())
+        XCTAssertEqual(loaded.username, "ada")
+        XCTAssertNil(loaded.enabledMediaTypes)
+    }
+
     func testUnreadableDataIsNoUser() {
         defaults.set(Data("garbage".utf8), forKey: "spine.signedInUser.v1")
 

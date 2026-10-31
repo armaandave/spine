@@ -300,6 +300,12 @@ final class AppSession {
         return user
     }
 
+    /// Settings saved the profile: remember what changed, such as the media types now on.
+    func profileDidUpdate(_ profile: UserProfile) {
+        guard case let .signedIn(user?) = state, user.id == profile.id else { return }
+        adopt(profile)
+    }
+
     /// A profile got through: remember the user and show them.
     private func adopt(_ profile: UserProfile) {
         guard !isSigningOut else { return }
@@ -429,7 +435,8 @@ private extension AuthUser {
             username: profile.username,
             displayName: profile.displayName,
             isPrivate: profile.isPrivate,
-            avatarUrl: profile.avatarUrl
+            avatarUrl: profile.avatarUrl,
+            enabledMediaTypes: profile.preferences.enabledMediaTypes
         )
     }
 }

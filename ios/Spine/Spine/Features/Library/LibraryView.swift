@@ -118,7 +118,7 @@ final class LibraryViewModel {
     }
 
     var mediaType = "movie"
-    var mediaTypes = LibraryViewModel.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
+    var mediaTypes: [String]
     var query = ""
     var filter = MediaFilterState()
     var filterOptions: MediaFilterOptionsResponse = .empty
@@ -147,11 +147,15 @@ final class LibraryViewModel {
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         filterOptionsRepository: FilterOptionsRepository? = nil,
+        enabledMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.filterOptionsRepository = filterOptionsRepository ?? APIFilterOptionsRepository(client: AppEnvironment.apiClient)
+        // The remembered types, so the picker opens right instead of on every type.
+        mediaTypes = enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
+            ?? Self.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
         self.onUnauthorized = onUnauthorized
     }
 
@@ -222,11 +226,12 @@ final class LibraryViewModel {
     func loadMeta(selectedMediaType: String? = nil) async {
         do {
             let meta = try await mediaRepository.meta()
-            mediaTypes = Self.libraryMediaTypes(from: meta.mediaTypes)
+            mediaTypes = meta.enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
+                ?? Self.libraryMediaTypes(from: meta.mediaTypes)
         } catch is CancellationError {
             return
         } catch {
-            mediaTypes = Self.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
+            // Keep the types the picker opened on: the remembered ones, else every type.
         }
 
         if let selectedMediaType, mediaTypes.contains(selectedMediaType) {
@@ -237,6 +242,11 @@ final class LibraryViewModel {
         if !availableShelves.contains(shelf) {
             shelf = LibraryShelf.defaultShelf(for: mediaType)
         }
+    }
+
+    /// After Settings saves: the picker offers only the types now on.
+    func setEnabledMediaTypes(_ enabled: [String]) {
+        mediaTypes = APIConstants.pickerMediaTypes(enabled: enabled)
     }
 
     func selectMediaType(_ type: String, searchText: String? = nil) async {
@@ -513,6 +523,7 @@ struct LibraryView: View {
         filterOptionsRepository: FilterOptionsRepository? = nil,
         mediaLensStore: MediaLensStore? = nil,
         currentUserId: Int? = nil,
+        enabledMediaTypes: [String]? = nil,
         requestedShelf: Binding<LibraryShelf?> = .constant(nil),
         selectedTab: AppTab = .library,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
@@ -533,6 +544,7 @@ struct LibraryView: View {
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
             filterOptionsRepository: self.filterOptionsRepository,
+            enabledMediaTypes: enabledMediaTypes,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -576,6 +588,12 @@ struct LibraryView: View {
             }
             .onChange(of: mediaLensStore.selectedMediaType) {
                 Task { await viewModel.selectMediaType(mediaLensStore.selectedMediaType, searchText: searchDraftText) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
+                guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
+                viewModel.setEnabledMediaTypes(profile.preferences.enabledMediaTypes)
+                // Moving off a type just turned off reloads through the change above.
+                mediaLensStore.validateSelection(in: viewModel.mediaTypes)
             }
             .onReceive(NotificationCenter.default.publisher(for: .letterboxdImportDidSucceed)) { _ in
                 Task { await viewModel.reload() }
@@ -1160,12 +1178,12 @@ private struct LibraryListRow: View {
     private var metadataText: String {
         var parts: [String] = []
         if item.media.ref.mediaType == "tv" {
-            // The show's own stars, drawn from TV's 0-10 scale (TV-500, TV-504); counts are on the card line.
-            if let stars = item.tracking.rating?.starCount(mediaType: "tv") { parts.append("\(stars) stars") }
+            // The show's own stars (TV-500, TV-504); counts are on the card line.
+            if let stars = item.tracking.rating?.starCount { parts.append("\(stars) stars") }
             return parts.joined(separator: " - ")
         }
-        if let rating = item.tracking.rating {
-            parts.append("\(rating) stars")
+        if let stars = item.tracking.rating?.starCount {
+            parts.append("\(stars) stars")
         }
         if item.media.ref.mediaType == "game" {
             let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""

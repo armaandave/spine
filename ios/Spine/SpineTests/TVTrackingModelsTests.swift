@@ -80,7 +80,7 @@ final class TVTrackingModelsTests: XCTestCase {
         XCTAssertEqual(first.level, .season)
         XCTAssertEqual(first.seasonNumber, 1)
         XCTAssertEqual(first.date, "2026-10-26")
-        XCTAssertEqual(first.rating, "8.0")
+        XCTAssertEqual(first.rating, "4.0")
         XCTAssertTrue(first.liked)
         XCTAssertFalse(first.isRewatch)
         XCTAssertTrue(first.available)
@@ -322,7 +322,7 @@ final class TVTrackingModelsTests: XCTestCase {
         XCTAssertEqual(full["from"] as? [String: Int], ["season_number": 1, "episode_number": 1])
         XCTAssertEqual(full["to"] as? [String: Int], ["season_number": 2, "episode_number": 10])
         XCTAssertEqual(full["offer_season_number"] as? Int, 3)
-        XCTAssertEqual(full["rating"] as? Int, 8)
+        XCTAssertEqual((full["rating"] as? NSNumber)?.doubleValue, 4, "Half steps go out as stars.")
 
         let tick = try object(TVActionRequest(seasonNumber: 1, episodeNumber: 2))
         XCTAssertEqual(Set(tick.keys), ["season_number", "episode_number"])
@@ -700,10 +700,10 @@ final class TVTrackingModelsTests: XCTestCase {
      "available_actions":["pause","drop","log","remove","rate"],
      "action_reasons":{"planning":"You've started this show. Pause or drop it instead."},
      "composer":{"default_target":"season:1","targets":[
-       {"id":"season:1","level":"season","season_number":1,"episode_number":null,"title":"Season 1","date":"2026-10-26","rating":"8.0","liked":true,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null},
+       {"id":"season:1","level":"season","season_number":1,"episode_number":null,"title":"Season 1","date":"2026-10-26","rating":"4.0","liked":true,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null},
        {"id":"season:2","level":"season","season_number":2,"episode_number":null,"title":"Season 2","date":"2026-10-26","rating":null,"liked":false,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null},
        {"id":"season:0","level":"season","season_number":0,"episode_number":null,"title":"Specials","date":"2026-10-26","rating":null,"liked":false,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null},
-       {"id":"show","level":"show","season_number":null,"episode_number":null,"title":"Whole show","date":"2026-10-26","rating":"9.0","liked":false,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null}]},
+       {"id":"show","level":"show","season_number":null,"episode_number":null,"title":"Whole show","date":"2026-10-26","rating":"4.5","liked":false,"is_rewatch":false,"claims_viewing_id":null,"available":true,"reason":null}]},
      "season":null,"episode":null}
     """
 

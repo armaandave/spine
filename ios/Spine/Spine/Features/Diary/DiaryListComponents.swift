@@ -507,16 +507,18 @@ struct DiaryEntrySummary: Equatable {
     let hasReview: Bool
 
     init(entry: DiaryEntry) {
-        stars = entry.rating?.starCount(mediaType: entry.media.ref.mediaType)
+        stars = entry.rating?.starCount
         liked = entry.liked
         hasReview = [entry.reviewTitle, entry.review].contains {
             $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
     }
 
-    /// A filled star per whole star, then a half star for a .5: "3.5" is ★★★½.
+    /// A filled star per whole star, then a half star for a .5: "3.5" is ★★★½. Ratings between half stars
+    /// round to the nearest: "3.8" is ★★★★.
     var starSymbols: [String] {
-        guard let value = stars.flatMap(Double.init) else { return [] }
+        guard let stars, Double(stars) != nil else { return [] }
+        let value = Double(stars.ratingHalfSteps) / 2
         let whole = Array(repeating: "star.fill", count: Int(value))
         return value - Double(Int(value)) >= 0.5 ? whole + ["star.leadinghalf.filled"] : whole
     }
@@ -533,7 +535,6 @@ struct DiaryEntrySummary: Equatable {
 struct DiaryStarRating: View {
     let rating: String
     var fontSize: CGFloat = 9
-    var mediaType: String?
 
     var body: some View {
         HStack(spacing: 1) {
@@ -546,9 +547,9 @@ struct DiaryStarRating: View {
         .accessibilityLabel("Rating \(displayValue) out of 5 stars")
     }
 
+    /// To the nearest half star: "3.75" draws as 4.
     private var value: Double {
-        guard let raw = Double(rating) else { return 0 }
-        return max(0, min(5, ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2))
+        Double(rating.ratingHalfSteps) / 2
     }
 
     private var displayValue: String {

@@ -1131,11 +1131,7 @@ def user_state_for_item(user, item):
     diary_state = {
         "diary_entry_id": latest_diary.id if latest_diary else None,
         "diary_count": diary_count,
-        "diary_rating": (
-            decimal_string(single_weight.rating_to_wire(latest_diary.rating))
-            if uses_half_star and latest_diary and latest_diary.rating is not None
-            else decimal_string(latest_diary.rating) if latest_diary else None
-        ),
+        "diary_rating": single_weight.rating_to_api(latest_diary.rating, item) if latest_diary else None,
         "diary_consumed_at": (
             single_weight.calendar_date(latest_diary.consumed_at).isoformat()
             if uses_half_star and latest_diary
@@ -1154,7 +1150,7 @@ def user_state_for_item(user, item):
         return {
             "is_tracked": False,
             "status": None,
-            "rating": decimal_string(media.score),
+            "rating": single_weight.rating_to_api(media.score, item),
             "in_lists": list_ids,
             **diary_state,
         }
@@ -1162,11 +1158,7 @@ def user_state_for_item(user, item):
         "is_tracked": True,
         "tracking_id": media.id,
         "status": getattr(media, "status", None),
-        "rating": (
-            decimal_string(single_weight.rating_to_wire(media.score))
-            if uses_half_star and media.score is not None
-            else decimal_string(getattr(media, "score", None))
-        ),
+        "rating": single_weight.rating_to_api(getattr(media, "score", None), item),
         "in_lists": list_ids,
         **diary_state,
     }
@@ -1345,11 +1337,7 @@ def tracking_state(media, *, tv=None, tv_detail=False):
     state = {
         "tracking_id": media.id,
         "status": getattr(media, "status", None),
-        "rating": (
-            decimal_string(single_weight.rating_to_wire(media.score))
-            if uses_half_star and media.score is not None
-            else decimal_string(getattr(media, "score", None))
-        ),
+        "rating": single_weight.rating_to_api(getattr(media, "score", None), media.item),
         "progress": progress_for_media(media),
         "repeats": getattr(media, "repeats", 1),
         "start_date": start_date,

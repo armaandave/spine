@@ -823,21 +823,12 @@ class User(AbstractUser):
 
         for media_type in USER_OWNED_MEDIA_TYPES:
             enabled_field = f"{media_type}_enabled"
+            # Seasons are part of their show, so they follow the TV setting.
+            # season_enabled is a leftover from upstream and is never read.
+            if media_type == MediaTypes.SEASON.value:
+                enabled_field = "tv_enabled"
             if getattr(self, enabled_field, False):
                 enabled_types.append(media_type)
-
-        return enabled_types
-
-    def get_active_media_types(self):
-        """Return a list of active media type values based on user preferences."""
-        enabled_types = self.get_enabled_media_types()
-
-        # Add season if TV is enabled (and season isn't already in the list)
-        if (
-            MediaTypes.TV.value in enabled_types
-            and MediaTypes.SEASON.value not in enabled_types
-        ):
-            enabled_types.insert(0, MediaTypes.SEASON.value)
 
         return enabled_types
 

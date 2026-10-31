@@ -86,7 +86,7 @@ def _wire_score_distribution(distribution, user_media):
     ):
         values = [0] * len(labels)
         for storage_bucket, bucket_count in enumerate(dataset["data"]):
-            index = storage_bucket if media_type in stats_service.SINGLE_WEIGHT_MEDIA_TYPES else storage_bucket * 2
+            index = storage_bucket if stats_service.uses_stars(media_type) else storage_bucket * 2
             values[index] += bucket_count
         datasets.append({**dataset, "data": values})
         for rating in media_list.exclude(score__isnull=True).values_list("score", flat=True):

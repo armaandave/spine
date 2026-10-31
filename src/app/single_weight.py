@@ -1,5 +1,6 @@
 """Canonical state transitions for single-weight media."""
 
+from contextvars import ContextVar
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -26,6 +27,8 @@ MEDIA_TYPES = {MediaTypes.MOVIE.value, MediaTypes.MUSIC.value}
 HALF_STAR_MEDIA_TYPES = {*MEDIA_TYPES, MediaTypes.BOOK.value, MediaTypes.GAME.value}
 WIRE_RATINGS = {Decimal(step) / 2 for step in range(1, 11)}
 STORAGE_RATINGS = {Decimal(step) for step in range(1, 11)}
+# Set by APIRatingScaleMiddleware for one request from a client that reads stars everywhere.
+REQUEST_STARS = ContextVar("request_stars", default=False)
 UNSET = object()
 
 
@@ -43,6 +46,31 @@ def uses_half_star_rating(value):
     """Return whether API ratings use the shared 0.5-to-5 wire scale."""
     media_type = getattr(value, "media_type", value)
     return media_type in HALF_STAR_MEDIA_TYPES
+
+
+def api_uses_stars(value):
+    """Return whether this request's API ratings for an item or type are 0.5-5 stars.
+
+    Clients that send ``X-Spine-Rating-Scale: stars`` get stars for every type; older
+    builds keep 0-10 for the types outside HALF_STAR_MEDIA_TYPES.
+    """
+    return REQUEST_STARS.get() or uses_half_star_rating(value)
+
+
+def rating_to_api(value, media_type):
+    """Return a stored rating on this request's API scale, as a string, or None."""
+    if value is None:
+        return None
+    if api_uses_stars(media_type):
+        return str(rating_to_wire(value))
+    return str(value)
+
+
+def rating_from_api(value, media_type):
+    """Convert an API rating to 0-10 storage when this request sends stars for the type."""
+    if api_uses_stars(media_type):
+        return rating_from_wire(value)
+    return value
 
 
 def rating_from_wire(value):

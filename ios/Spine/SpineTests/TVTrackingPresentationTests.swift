@@ -406,7 +406,9 @@ final class TVTrackingPresentationTests: XCTestCase {
         draft.setDate(TVTrackingPresentation.calendarDate("2026-10-21", calendar: calendar)!, calendar: calendar)
         XCTAssertEqual(draft.date, "2026-10-21")
         XCTAssertEqual(draft.dateValue(calendar: calendar), TVTrackingPresentation.calendarDate("2026-10-21", calendar: calendar))
-        XCTAssertEqual(TVComposerDraft.ratingSteps(from: "10.0"), 10)
+        XCTAssertEqual(TVComposerDraft.ratingSteps(from: "5.0"), 10)
+        XCTAssertEqual(TVComposerDraft.ratingSteps(from: "4.5"), 9)
+        XCTAssertEqual(TVComposerDraft.ratingSteps(from: "3.75"), 8, "An imported rating between half stars rounds up.")
         XCTAssertEqual(TVComposerDraft.ratingSteps(from: nil), 0)
     }
 

@@ -418,7 +418,7 @@ nonisolated struct TVComposerDraft: Hashable {
         set { storedDate = newValue; editedFields.insert(.date) }
     }
 
-    /// 0 for no stars, else 1-10 on TV's wire scale (TV-504).
+    /// 0 for no stars, else 1-10 half steps (TV-504).
     var ratingSteps: Int {
         get { storedRatingSteps }
         set { storedRatingSteps = min(max(newValue, 0), 10); editedFields.insert(.rating) }
@@ -452,9 +452,8 @@ nonisolated struct TVComposerDraft: Hashable {
         if !editedFields.contains(.rewatch) { storedIsRewatch = next.isRewatch }
     }
 
-    /// "8.0" → 8 on TV's 0-10 scale; no stars → 0.
+    /// Stars to the nearest half step: "4.0" → 8, "3.75" → 8; no stars → 0.
     static func ratingSteps(from rating: String?) -> Int {
-        guard let rating, let value = Decimal(string: rating) else { return 0 }
-        return min(max(NSDecimalNumber(decimal: value).intValue, 0), 10)
+        rating?.ratingHalfSteps ?? 0
     }
 }

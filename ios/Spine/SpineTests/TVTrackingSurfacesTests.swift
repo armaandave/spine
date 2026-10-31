@@ -1471,10 +1471,13 @@ final class SurfacesMediaRepository: MediaRepository {
     var details: [String: MediaDetail] = [:]
     /// Holds detail loads until it opens.
     var detailGate: RefreshGate?
+    /// Fails every detail load while set.
+    var detailError: Error?
 
     func detail(ref: MediaRef) async throws -> MediaDetail {
         detailRequests.append(ref)
         await detailGate?.wait()
+        if let detailError { throw detailError }
         return details[ref.id] ?? MediaDetail(ref: ref, title: ref.seasonNumber.map { "Season \($0)" } ?? "Breaking Bad")
     }
 

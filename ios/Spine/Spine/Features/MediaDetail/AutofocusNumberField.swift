@@ -11,6 +11,9 @@ struct AutofocusNumberField: UIViewRepresentable {
     let focusRequest: Int
 
     private static let minimumWidth: CGFloat = 28
+    /// Room beside the text for the caret. Before a first digit it blinks at the placeholder's leading edge, and a field
+    /// exactly as wide as a placeholder like "174" clips it away.
+    private static let caretRoom: CGFloat = 6
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text, focusRequest: focusRequest)
@@ -39,7 +42,7 @@ struct AutofocusNumberField: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: AutofocusTextField, context: Context) -> CGSize? {
         let size = uiView.intrinsicContentSize
-        return CGSize(width: max(size.width, Self.minimumWidth), height: size.height)
+        return CGSize(width: max(size.width + Self.caretRoom, Self.minimumWidth), height: size.height)
     }
 
     private func update(_ field: AutofocusTextField, sizeCategory: UIContentSizeCategory) {
@@ -95,7 +98,7 @@ final class AutofocusTextField: UITextField {
         super.didMoveToWindow()
         guard window != nil, !hasFocusedOnce else { return }
         hasFocusedOnce = true
-        // One main-queue hop, as the book progress panel does, so the window has finished attaching.
+        // One main-queue hop, so the window has finished attaching.
         DispatchQueue.main.async { [weak self] in
             self?.becomeFirstResponder()
         }

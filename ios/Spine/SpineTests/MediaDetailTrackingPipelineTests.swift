@@ -1048,7 +1048,7 @@ final class MediaDetailTrackingPipelineTests: XCTestCase {
         XCTAssertEqual(media.enrichmentCount, 0)
     }
 
-    /// TV-504: season stars go through the TV `rate` action, in whole steps on the 0-10 wire with the season number
+    /// TV-504: season stars go through the TV `rate` action, as half steps (sent as stars) with the season number
     /// (they used to PATCH the season's tracking with no season number). Season pages still refresh the whole detail.
     func testSeasonPageWritesRefreshTheWholeDetail() async throws {
         let season = Self.seasonDetail(title: "Season 3")

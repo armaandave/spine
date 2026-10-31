@@ -578,11 +578,10 @@ final class MediaDetailViewModel {
     func setCurrentRating(for detail: MediaDetail, halfSteps: Int) -> Task<Bool, Never> {
         let ref = detail.ref
         if ref.isTVFamily {
-            // TV keeps its 0-10 wire scale: the picker's half steps are the whole values 1-10 (TV-504).
             return rateTV(steps: halfSteps)
         }
         let rating = halfSteps > 0 ? Decimal(halfSteps) / 2 : nil
-        let wire = halfSteps > 0 ? String(format: "%.1f", Double(halfSteps) / 2) : nil
+        let wire = String.starRatingWire(halfSteps: halfSteps)
         let repository = trackingRepository
         return enqueue(
             TrackingProjection.rating(wire, impliesCompletion: Self.opinionImpliesCompletion(ref)),
@@ -1019,13 +1018,13 @@ final class MediaDetailViewModel {
         }
     }
 
-    /// Show and season stars: whole values 1-10 on TV's wire, or nil to clear, with the season number on a season
+    /// Show and season stars: half steps 1-10, sent as stars, or nil to clear, with the season number on a season
     /// page (TV-504). On a show the user hasn't started they mark it watched; on a started one they are opinion
     /// only (TV-303, TV-304).
     @discardableResult
     func rateTV(steps: Int) -> Task<Bool, Never> {
         let steps = min(max(steps, 0), 10)
-        let wire = steps > 0 ? "\(steps).0" : nil
+        let wire = String.starRatingWire(halfSteps: steps)
         let seasonNumber = pageSeasonNumber
         return sendTV(.rate, projection: TrackingProjection.rating(wire, impliesCompletion: false)) { [self] in
             TVActionRequest(
@@ -2069,6 +2068,7 @@ private struct MediaDetailPageView: View {
     @State private var completionLiked: Bool?
     @State private var completionRatingSteps: Int?
     @State private var progressUpdateDetail: MediaDetail?
+    @State private var pendingProgressUpdate: MediaDetail?
     @State private var editingBookJourney: BookJourneyState?
     @State private var editingGamePlaythrough: GamePlaythroughState?
     @State private var pendingGameProgress: GamePlaythroughState?
@@ -2221,9 +2221,6 @@ private struct MediaDetailPageView: View {
                     .gesture(edgeSwipeBackGesture)
             }
         }
-        .overlay {
-            progressUpdateOverlay
-        }
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(key: TopSafeAreaInsetKey.self, value: proxy.safeAreaInsets.top)
@@ -2332,9 +2329,26 @@ private struct MediaDetailPageView: View {
                 }
             }
         }
+        .sheet(item: $progressUpdateDetail, onDismiss: presentPendingSheet) { detail in
+            ProgressUpdateSheet(
+                title: ProgressSheetTitle(detail: detail),
+                progress: currentProgress(detail),
+                isSaving: viewModel.isSavingProgress,
+                errorMessage: viewModel.progressErrorMessage,
+                journeyStatus: viewModel.viewer?.book?.currentJourney?.status ?? viewModel.viewer?.status,
+                onSave: { await viewModel.saveProgress($0, for: detail).value },
+                onFinish: { openBookCompletion(for: detail) },
+                onAction: { isClosingPresentation = true; viewModel.performBookAction($0, for: detail) },
+                onDelete: {
+                    isClosingPresentation = true
+                    guard let journey = viewModel.viewer?.book?.currentJourney else { return }
+                    viewModel.deleteBookJourney(journey, for: detail)
+                }
+            )
+        }
         .sheet(item: $progressGamePlaythrough, onDismiss: presentPendingSheet) { playthrough in
             if let detail = viewModel.detail {
-                GameProgressSheet(detail: detail, playthrough: playthrough,
+                GameProgressSheet(title: detail.displayTitle, playthrough: playthrough,
                     onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail).value },
                     onAction: { isClosingPresentation = true; viewModel.performGameAction($0, for: detail) },
                     onDelete: { isClosingPresentation = true; viewModel.deleteGamePlaythrough(playthrough, for: detail) },
@@ -2702,45 +2716,6 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    @ViewBuilder
-    private var progressUpdateOverlay: some View {
-        if let detail = progressUpdateDetail {
-            ProgressUpdateSheet(
-                detail: detail,
-                progress: currentProgress(detail),
-                isSaving: viewModel.isSavingProgress,
-                errorMessage: viewModel.progressErrorMessage,
-                journeyStatus: viewModel.viewer?.book?.currentJourney?.status,
-                onSave: { request in
-                    await viewModel.saveProgress(request, for: detail).value
-                },
-                onDismiss: {
-                    progressUpdateDetail = nil
-                },
-                onLogFinished: {
-                    progressUpdateDetail = nil
-                    openBookCompletion(for: detail)
-                },
-                onPause: {
-                    viewModel.performBookAction("pause", for: detail)
-                },
-                onResume: {
-                    viewModel.performBookAction("resume", for: detail)
-                },
-                onDrop: {
-                    viewModel.performBookAction("drop", for: detail)
-                },
-                onRestart: {
-                    viewModel.performBookAction("restart", for: detail)
-                },
-                onDelete: {
-                    guard let journey = viewModel.viewer?.book?.currentJourney else { return }
-                    viewModel.deleteBookJourney(journey, for: detail)
-                }
-            )
-        }
-    }
-
     private var contentPhase: SpineContentPhase {
         .resolve(
             isLoading: viewModel.isLoading,
@@ -2974,8 +2949,8 @@ private struct MediaDetailPageView: View {
 
     /// The episode page's stars show the newest rated log's stars and open Log Episode with them (TV-502).
     private func tvEpisodeRatingSteps() -> Int? {
-        guard let rating = viewModel.viewer?.tv?.episode?.userRating, let value = Double(rating) else { return nil }
-        return min(max(Int(value.rounded()), 0), 10)
+        guard let rating = viewModel.viewer?.tv?.episode?.userRating, Double(rating) != nil else { return nil }
+        return rating.ratingHalfSteps
     }
 
     /// Show and season stars can't be set before anything has aired (TV-303).
@@ -3109,7 +3084,7 @@ private struct MediaDetailPageView: View {
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
         if detail.ref.isTVFamily, detail.ref.mediaType != "episode" {
-            // Show and season stars: whole steps on TV's 0-10 wire, with the season number on a season page (TV-504).
+            // Show and season stars, with the season number on a season page (TV-504).
             let write = viewModel.rateTV(steps: halfSteps)
             Task {
                 if !(await write.value) {
@@ -3118,7 +3093,8 @@ private struct MediaDetailPageView: View {
             }
             return
         }
-        guard detail.ref.usesFiveStarRatingScale else { return }
+        // Episodes have no stars of their own; their stars open Log Episode (TV-502).
+        guard !detail.ref.isTVFamily else { return }
         if halfSteps > 0, bookState(detail)?.hasLiveJourney == true || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
             ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
             ratingPicker.rollbackWatch()
@@ -3134,9 +3110,7 @@ private struct MediaDetailPageView: View {
     }
 
     private func ratingHalfSteps(_ rating: String?) -> Int {
-        guard let rating, let value = Decimal(string: rating) else { return 0 }
-        let steps = viewModel.detail?.ref.usesFiveStarRatingScale == true ? value * 2 : value
-        return NSDecimalNumber(decimal: steps).intValue
+        rating?.ratingHalfSteps ?? 0
     }
 
     private func gameState(_ detail: MediaDetail) -> GameTrackingState? {
@@ -3150,10 +3124,10 @@ private struct MediaDetailPageView: View {
     /// The composer captures playthrough and journey ids, so it opens only once the write queue has settled,
     /// from confirmed state. A tracking sheet still open closes first; the composer follows its dismissal.
     private func openBookCompletion(for detail: MediaDetail, liked: Bool? = nil, ratingSteps: Int? = nil) {
-        if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil {
+        if presentedSheet != nil || editingGamePlaythrough != nil || progressGamePlaythrough != nil
+            || progressUpdateDetail != nil {
             closeSheetForChoice()
         }
-        progressUpdateDetail = nil
         presentAfterSettling {
             let confirmed = viewModel.detail?.userState
             if detail.ref.mediaType == "game" {
@@ -3181,7 +3155,7 @@ private struct MediaDetailPageView: View {
                 let playthrough = confirmed.userState?.game?.currentPlaythrough
                 if isClosingPresentation { pendingGameProgress = playthrough } else { progressGamePlaythrough = playthrough }
             } else {
-                progressUpdateDetail = confirmed
+                if isClosingPresentation { pendingProgressUpdate = confirmed } else { progressUpdateDetail = confirmed }
             }
         }
     }
@@ -3211,7 +3185,7 @@ private struct MediaDetailPageView: View {
     }
 
     private var isPresentingTrackingScreen: Bool {
-        presentedSheet != nil || progressGamePlaythrough != nil
+        presentedSheet != nil || progressGamePlaythrough != nil || progressUpdateDetail != nil
             || editingGamePlaythrough != nil || editingBookJourney != nil
             || gameCompletionPresentation != nil || isLogPresented
     }
@@ -3222,11 +3196,15 @@ private struct MediaDetailPageView: View {
         presentedSheet = nil
         editingGamePlaythrough = nil
         progressGamePlaythrough = nil
+        progressUpdateDetail = nil
     }
 
     private func presentPendingSheet() {
         isClosingPresentation = false
-        if let playthrough = pendingGameProgress {
+        if let detail = pendingProgressUpdate {
+            pendingProgressUpdate = nil
+            progressUpdateDetail = detail
+        } else if let playthrough = pendingGameProgress {
             pendingGameProgress = nil
             progressGamePlaythrough = playthrough
         } else if let playthrough = pendingGameEdit {
@@ -3939,7 +3917,6 @@ private struct MediaDetailPageView: View {
                     || viewModel.reviewCount > 0 {
                     SpineRatingDistributionSection(
                         community: detail.community,
-                        mediaType: detail.ref.mediaType,
                         reviewCount: viewModel.reviewCount
                     ) {
                         isReviewsPresented = true
@@ -4033,7 +4010,6 @@ private struct MediaDetailPageView: View {
             trackingSummarySection(detail)
             SpineRatingDistributionSection(
                 community: detail.community,
-                mediaType: detail.ref.mediaType,
                 reviewCount: viewModel.reviewCount
             ) {
                 isReviewsPresented = true
@@ -4364,7 +4340,7 @@ private struct MediaDetailPageView: View {
         if let rating = detail.community?.averageRating, !rating.isEmpty {
             chips.append(RatingChip(
                 source: "SP",
-                value: "\(rating.starRatingValue(mediaType: detail.ref.mediaType))/5",
+                value: "\(rating.starRatingValue)/5",
                 assetName: nil,
                 providerName: "Spine",
                 voteCount: detail.community?.ratingCount,
@@ -6640,7 +6616,7 @@ struct TrackingSummarySection: View {
     }
 
     static func stars(detail: MediaDetail, state: UserMediaState?) -> String? {
-        state?.rating?.starCount(mediaType: detail.ref.mediaType)
+        state?.rating?.starCount
     }
 
     private static func hasMultipleLogs(_ state: UserMediaState?) -> Bool {
@@ -7744,7 +7720,7 @@ private struct MediaReviewsView: View {
                 .frame(maxWidth: .infinity, minHeight: 220)
         } else {
             ForEach(viewModel.reviews) { review in
-                MediaReviewRow(review: review, mediaType: detail.ref.mediaType)
+                MediaReviewRow(review: review)
                     .padding(.horizontal, 16)
                     .task {
                         guard viewModel.shouldLoadNext(after: review.id) else { return }
@@ -7801,7 +7777,6 @@ private struct MediaReviewRow: View {
     @State private var revealsSpoiler = false
 
     let review: MediaReview
-    let mediaType: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -7828,7 +7803,7 @@ private struct MediaReviewRow: View {
 
                 if let rating = review.rating {
                     Label(
-                        rating.starRatingLabel(mediaType: mediaType),
+                        rating.starRatingLabel,
                         systemImage: "star.fill"
                     )
                     .font(.system(size: 11, weight: .heavy))
@@ -8217,7 +8192,6 @@ private func aniListDestination(_ rawValue: String?) -> URL? {
 
 private struct SpineRatingDistributionSection: View {
     let community: CommunityStats?
-    let mediaType: String
     let reviewCount: Int
     let onSeeReviews: () -> Void
 
@@ -8225,7 +8199,7 @@ private struct SpineRatingDistributionSection: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 if let average = community?.averageRating {
-                    Label(average.starRatingLabel(mediaType: mediaType), systemImage: "star.fill")
+                    Label(average.starRatingLabel, systemImage: "star.fill")
                         .font(.system(size: 18, weight: .heavy))
                         .foregroundStyle(.white)
                 }
@@ -8280,7 +8254,7 @@ private struct SpineRatingDistributionSection: View {
         guard !rawBuckets.isEmpty else { return [] }
         let counts = Dictionary(
             grouping: rawBuckets,
-            by: { $0.rating.starRatingStep(mediaType: mediaType) }
+            by: { $0.rating.starRatingStep }
         )
             .mapValues { $0.reduce(0) { $0 + $1.count } }
         return (1...10).map { step in
@@ -9279,38 +9253,25 @@ private extension String {
         count >= 4 ? String(prefix(4)) : nil
     }
 
+    /// Every API rating is stars, 0.5-5 (the app sends `X-Spine-Rating-Scale: stars`).
     var starRatingLabel: String {
-        guard let raw = Double(self) else { return self }
-        let stars = raw / 2
+        guard let stars = Double(self) else { return self }
         return "\(Self.cleanRating(stars))/5"
     }
 
     var starRatingValue: String {
-        guard let raw = Double(self) else { return self }
-        return String(format: "%.1f", raw / 2)
-    }
-
-    var starRatingStep: Int {
-        guard let raw = Double(self) else { return 0 }
-        return min(max(Int(round(raw)), 1), 10)
-    }
-
-    func starRatingLabel(mediaType: String) -> String {
-        guard let raw = Double(self) else { return self }
-        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
-        return "\(Self.cleanRating(stars))/5"
-    }
-
-    func starRatingValue(mediaType: String) -> String {
-        guard let raw = Double(self) else { return self }
-        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+        guard let stars = Double(self) else { return self }
         return String(format: "%.1f", stars)
     }
 
-    func starRatingStep(mediaType: String) -> Int {
-        guard let raw = Double(self) else { return 0 }
-        let step = ["movie", "music", "book", "game"].contains(mediaType) ? raw * 2 : raw
-        return min(max(Int(round(step)), 1), 10)
+    /// The nearest half star, 1-10 half steps: "3.75" → 8.
+    var starRatingStep: Int {
+        min(max(ratingHalfSteps, 1), 10)
+    }
+
+    /// Half steps as the stars sent to the API: 9 → "4.5", 0 → nil.
+    static func starRatingWire(halfSteps: Int) -> String? {
+        halfSteps > 0 ? String(format: "%.1f", Double(halfSteps) / 2) : nil
     }
 
     var shortDateLabel: String {
@@ -9423,10 +9384,16 @@ extension ExternalRating {
 
 extension String {
     /// Just the stars, "3.5" or "4", for places that draw the star themselves.
-    func starCount(mediaType: String) -> String? {
-        guard let raw = Double(self) else { return nil }
-        let stars = ["movie", "music", "book", "game"].contains(mediaType) ? raw : raw / 2
+    var starCount: String? {
+        guard let stars = Double(self) else { return nil }
         return Self.cleanRating(stars)
+    }
+
+    /// Stars (every API rating, since the app sends `X-Spine-Rating-Scale: stars`) as half steps to the nearest
+    /// half star, 0 for none: "4.5" → 9, "3.75" → 8. Imported ratings can sit between half stars; ties round up.
+    nonisolated var ratingHalfSteps: Int {
+        guard let stars = Double(self), stars > 0 else { return 0 }
+        return min(max(Int((stars * 2).rounded()), 0), 10)
     }
 
     var ratingCountLabel: String {

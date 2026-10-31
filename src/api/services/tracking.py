@@ -145,6 +145,18 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
         )
 
     previous_status = media.status if existing_media else None
+    _set_tracking_fields(media, media_type, data)
+    media.save()
+    _record_start(user, media, previous_status)
+    if previous_progress is not None:
+        _record_progress_change(user, media, previous_progress)
+    return media
+
+
+def _set_tracking_fields(media, media_type, data):
+    """Copy a generic tracking write onto the model, its rating on the stored scale."""
+    if "rating" in data:
+        data = {**data, "rating": _stored_rating(data["rating"], media_type)}
     for api_field, model_field in {
         "status": "status",
         "rating": "score",
@@ -157,11 +169,14 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             api_field == "progress" and media_type == MediaTypes.TV.value
         ):
             setattr(media, model_field, data[api_field])
-    media.save()
-    _record_start(user, media, previous_status)
-    if previous_progress is not None:
-        _record_progress_change(user, media, previous_progress)
-    return media
+
+
+def _stored_rating(value, media_type):
+    """Return an API rating on the 0-10 storage scale, or a 400 for a bad star value."""
+    try:
+        return single_weight.rating_from_api(value, media_type)
+    except DjangoValidationError as error:
+        raise serializers.ValidationError({"rating": error.messages[0]}) from error
 
 
 def _record_start(user, media, previous_status):

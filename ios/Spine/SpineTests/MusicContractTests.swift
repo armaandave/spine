@@ -1279,7 +1279,7 @@ private struct Phase9Responses: Decodable {
     let musicSearch: PagedResponse<MediaSummary>
 }
 
-private struct MetaOnlyMediaRepository: MediaRepository {
+struct MetaOnlyMediaRepository: MediaRepository {
     let meta: MetaResponse
 
     func meta() async throws -> MetaResponse { meta }

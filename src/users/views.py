@@ -258,6 +258,7 @@ def preferences(request):
     """Render the preferences settings page."""
     media_types = exposure.media_types()
     media_types.remove(MediaTypes.EPISODE.value)
+    media_types.remove(MediaTypes.SEASON.value)
     watch_provider_regions = tmdb.watch_provider_regions()
 
     if request.method == "GET":

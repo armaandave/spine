@@ -17,11 +17,18 @@ final class DiaryEntrySummaryTests: XCTestCase {
         XCTAssertEqual(summary.accessibilityLabel, "Rated 3 out of 5 stars, Liked, Has review")
     }
 
-    func testTenPointRatingsBecomeStars() throws {
-        let summary = DiaryEntrySummary(entry: try diaryEntry(mediaType: "tv", rating: "7"))
+    func testEveryTypeReadsStars() throws {
+        let summary = DiaryEntrySummary(entry: try diaryEntry(mediaType: "tv", rating: "3.5"))
 
         XCTAssertEqual(summary.stars, "3.5")
         XCTAssertEqual(summary.starSymbols, ["star.fill", "star.fill", "star.fill", "star.leadinghalf.filled"])
+    }
+
+    func testRatingsBetweenHalfStarsDrawTheNearest() throws {
+        let summary = DiaryEntrySummary(entry: try diaryEntry(mediaType: "anime", rating: "3.75"))
+
+        XCTAssertEqual(summary.stars, "3.8")
+        XCTAssertEqual(summary.starSymbols, ["star.fill", "star.fill", "star.fill", "star.fill"])
     }
 
     func testReviewTitleAloneCountsAsReview() throws {

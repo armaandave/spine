@@ -526,10 +526,10 @@ final class TVTrackingPagesTests: XCTestCase {
 
     // MARK: Stars (TV-504, TV-502)
 
-    func testTV504ShowAndSeasonStarsSendWholeStepsToRate() async throws {
+    func testTV504ShowAndSeasonStarsSendStarsToRate() async throws {
         let show = model(Fixtures.showDetail(tv: Fixtures.show()))
         let rated = show.setCurrentRating(for: show.detail!, halfSteps: 7)
-        XCTAssertEqual(show.viewer?.rating, "7.0", "The stars show at once.")
+        XCTAssertEqual(show.viewer?.rating, "3.5", "The stars show at once.")
         let result19 = await rated.value
         XCTAssertTrue(result19)
         let result20 = await show.setCurrentRating(for: show.detail!, halfSteps: 0).value
@@ -537,6 +537,7 @@ final class TVTrackingPagesTests: XCTestCase {
 
         XCTAssertEqual(tracking.sent.map(\.action), [.rate, .rate])
         XCTAssertEqual(tracking.sent[0].request.rating, 7)
+        XCTAssertEqual((try Fixtures.json(tracking.sent[0].request)["rating"] as? NSNumber)?.doubleValue, 3.5)
         XCTAssertNil(tracking.sent[0].request.seasonNumber)
         let cleared = try Fixtures.json(tracking.sent[1].request)
         XCTAssertTrue(cleared["rating"] is NSNull, "Clearing sends rating null.")
@@ -551,7 +552,7 @@ final class TVTrackingPagesTests: XCTestCase {
     func testTV502EpisodeStarsOpenLogEpisodeWithThoseStars() async throws {
         let diary = PagesDiaryRepository()
         var episode = Fixtures.episode(3, watched: true, viewing: 5)
-        episode.userRating = "8.0"
+        episode.userRating = "4.0"
         episode.composer = Fixtures.composer([Fixtures.target("episode:1:3", level: .episode, season: 1, episode: 3)])
         let detail = Fixtures.episodeDetail(episode)
         let composer = MediaLogViewModel(
@@ -567,7 +568,7 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(composer.primaryActionTitle, "Log Episode")
         let result22 = await composer.save()
         XCTAssertTrue(result22)
-        XCTAssertEqual(diary.created.first?.rating, Decimal(8))
+        XCTAssertEqual(diary.created.first?.rating, Decimal(4), "Eight half steps go out as 4 stars.")
         XCTAssertEqual(diary.created.first?.ref.mediaType, "episode")
         XCTAssertEqual(diary.created.first?.ref.episodeNumber, 3)
     }
@@ -725,7 +726,7 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(body["consumed_at"] as? String, CalendarDateCodec.string(from: Date()))
         XCTAssertEqual(body["is_rewatch"] as? Bool, false, "Rewatch is always sent.")
         XCTAssertNotNil(body["mutation_id"] as? String)
-        XCTAssertEqual(body["rating"] as? Double, 8, "TV stars stay on the 1-10 scale.")
+        XCTAssertEqual(body["rating"] as? Double, 4, "TV stars go out as stars, 0.5-5.")
     }
 
     func testTV705OneMutationIDPerComposerSessionAndTheEnvelopeGoesBack() async throws {
@@ -1092,10 +1093,10 @@ private enum Fixtures {
     /// The show page's targets in the server's order: seasons, Specials last, then Whole show. It opens on Season 1,
     /// so tests can tell the server's default from the app's.
     static let showComposer = composer([
-        target("season:1", level: .season, season: 1, title: "Season 1", date: "2026-10-20", rating: "8.0", liked: true),
+        target("season:1", level: .season, season: 1, title: "Season 1", date: "2026-10-20", rating: "4.0", liked: true),
         target("season:2", level: .season, season: 2, title: "Season 2"),
         target("season:0", level: .season, season: 0, title: "Specials"),
-        target("show", level: .show, title: "Whole show", rating: "9.0", isRewatch: true),
+        target("show", level: .show, title: "Whole show", rating: "4.5", isRewatch: true),
     ], default: "season:1")
 
     /// The show page's composer as the server sends it now: the same targets, opening on the whole show.
