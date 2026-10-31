@@ -6,6 +6,9 @@ struct AuthUser: Codable, Identifiable {
     let displayName: String
     let isPrivate: Bool
     let avatarUrl: String?
+    /// The media types the user has on, remembered with the user so type pickers open on
+    /// them. Nil until a profile has loaded.
+    var enabledMediaTypes: [String]? = nil
 }
 
 struct AuthTokenResponse: Decodable {

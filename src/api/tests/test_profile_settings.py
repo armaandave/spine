@@ -222,6 +222,11 @@ class ApiProfileSettingsTests(TestCase):
         profile = self.client.get("/api/v1/me/")
         self.assertIn(MediaTypes.TV.value, profile.data["preferences"]["enabled_media_types"])
         self.assertNotIn(MediaTypes.SEASON.value, profile.data["preferences"]["enabled_media_types"])
+        # The order /meta and stats use, so every picker in the app agrees.
+        self.assertEqual(
+            profile.data["preferences"]["enabled_media_types"],
+            self.client.get("/api/v1/meta/").data["enabled_media_types"],
+        )
 
         # An older app still has a Season toggle and may send it alone or with others.
         only_season = self.client.patch(
