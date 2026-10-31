@@ -1045,6 +1045,7 @@ struct ProfileView: View {
                 if allSlots.isEmpty {
                     avatar(profile)
                         .padding(.top, 48)
+                        .padding(.bottom, 8)
                 } else {
                     ZStack(alignment: .top) {
                         HallOfFameCrownView(
@@ -1127,6 +1128,9 @@ struct ProfileView: View {
                     },
                     onUnauthorized: onUnauthorized
                 )
+                // Room around it, so the names, the button and the counts read as separate rows.
+                .padding(.top, 10)
+                .padding(.bottom, 8)
             }
 
             statsGrid(profile)
