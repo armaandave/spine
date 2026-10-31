@@ -46,6 +46,7 @@ final class DiaryViewModel {
         diaryRepository: DiaryRepository,
         filter: DiaryFilter? = nil,
         filterOptionsRepository: FilterOptionsRepository? = nil,
+        enabledMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.diaryRepository = diaryRepository
@@ -56,6 +57,10 @@ final class DiaryViewModel {
         mediaFilter.hasReview = filter?.hasReview ?? false
         mediaFilter.liked = filter?.liked ?? false
         self.filter = mediaFilter
+        // The remembered types, so the picker opens right instead of on every type.
+        if let enabledMediaTypes {
+            mediaTypes = APIConstants.pickerMediaTypes(enabled: enabledMediaTypes)
+        }
         self.onUnauthorized = onUnauthorized
     }
 
@@ -75,7 +80,7 @@ final class DiaryViewModel {
     /// Offers only `types`. If the picked type was turned off, the diary goes back to All and this returns true.
     @discardableResult
     func setEnabledMediaTypes(_ types: [String]) -> Bool {
-        mediaTypes = SearchViewModel.lensMediaTypes(from: types)
+        mediaTypes = APIConstants.pickerMediaTypes(enabled: types)
         guard let selected = filter.mediaType, !mediaTypes.contains(selected) else { return false }
         filter.selectMediaType(nil)
         return true
@@ -533,6 +538,7 @@ struct DiaryView: View {
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         currentUserId: Int? = nil,
+        enabledMediaTypes: [String]? = nil,
         selectedTab: AppTab = .diary,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
@@ -544,7 +550,11 @@ struct DiaryView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
-        _viewModel = State(initialValue: DiaryViewModel(diaryRepository: diaryRepository, onUnauthorized: onUnauthorized))
+        _viewModel = State(initialValue: DiaryViewModel(
+            diaryRepository: diaryRepository,
+            enabledMediaTypes: enabledMediaTypes,
+            onUnauthorized: onUnauthorized
+        ))
     }
 
     var body: some View {

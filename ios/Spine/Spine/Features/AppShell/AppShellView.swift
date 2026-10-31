@@ -25,6 +25,14 @@ struct AppShellView: View {
         return nil
     }
 
+    /// The media types the user has on, as last remembered, so type pickers open on them.
+    private var currentUserMediaTypes: [String]? {
+        if case let .signedIn(user) = session.state {
+            return user?.enabledMediaTypes
+        }
+        return nil
+    }
+
     private var currentUserAvatarURL: URL? {
         guard case let .signedIn(user?) = session.state,
               let avatarUrl = user.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -99,6 +107,7 @@ struct AppShellView: View {
                     listRepository: session.repositories.lists,
                     mediaLensStore: mediaLensStore,
                     currentUserId: currentUserId,
+                    enabledMediaTypes: currentUserMediaTypes,
                     requestedShelf: $requestedLibraryShelf,
                     selectedTab: selectedTab,
                     onSelectTab: { selectedTab = $0 },
@@ -120,6 +129,7 @@ struct AppShellView: View {
                     mediaRepository: session.repositories.media,
                     trackingRepository: session.repositories.tracking,
                     currentUserId: currentUserId,
+                    enabledMediaTypes: currentUserMediaTypes,
                     selectedTab: selectedTab,
                     onSelectTab: { selectedTab = $0 },
                     onUnauthorized: unauthorized
@@ -179,6 +189,10 @@ struct AppShellView: View {
         .environment(\.appNavigationState, appNavigationState)
         .onChange(of: appNavigationState.returnHomeRequest) {
             selectedTab = .home
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
+            guard let profile = notification.userInfo?["profile"] as? UserProfile else { return }
+            session.profileDidUpdate(profile)
         }
         .onChange(of: scenePhase) {
             guard scenePhase == .active else { return }

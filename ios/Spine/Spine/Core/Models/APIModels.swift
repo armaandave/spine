@@ -104,6 +104,14 @@ enum APIConstants {
     nonisolated static let allMedia = "all"
     // ponytail: boardgame removed from fallback list; add back if board games return
     static let fallbackMediaTypes = ["movie", "tv", "anime", "manga", "game", "book", "comic", "music"]
+
+    /// A type picker's types: those the user has on, always in the same order, so a picker
+    /// built from a saved list matches the one the server sends later.
+    static func pickerMediaTypes(enabled: [String]) -> [String] {
+        let types = fallbackMediaTypes.filter(enabled.contains)
+        return types.isEmpty ? fallbackMediaTypes : types
+    }
+
     static let statusChoices = ["Completed", "In progress", "Planning", "Paused", "Dropped"]
     static let visibilityChoices = ["public", "followers", "private"]
 }

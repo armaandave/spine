@@ -118,9 +118,7 @@ final class LibraryViewModel {
     }
 
     var mediaType = "movie"
-    var mediaTypes = LibraryViewModel.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
-    /// Every type the server offers, for when the user turns a type back on.
-    private var exposedMediaTypes = APIConstants.fallbackMediaTypes
+    var mediaTypes: [String]
     var query = ""
     var filter = MediaFilterState()
     var filterOptions: MediaFilterOptionsResponse = .empty
@@ -149,11 +147,15 @@ final class LibraryViewModel {
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
         filterOptionsRepository: FilterOptionsRepository? = nil,
+        enabledMediaTypes: [String]? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.filterOptionsRepository = filterOptionsRepository ?? APIFilterOptionsRepository(client: AppEnvironment.apiClient)
+        // The remembered types, so the picker opens right instead of on every type.
+        mediaTypes = enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
+            ?? Self.libraryMediaTypes(from: APIConstants.fallbackMediaTypes)
         self.onUnauthorized = onUnauthorized
     }
 
@@ -186,9 +188,8 @@ final class LibraryViewModel {
         return streaming.available && !streaming.services.isEmpty
     }
 
-    /// The picker's types: `mediaTypes` in order, less any the user turned off in Settings (`enabled`).
-    static func libraryMediaTypes(from mediaTypes: [String], enabled: [String]? = nil) -> [String] {
-        let filtered = mediaTypes.filter { !["episode", "season"].contains($0) && enabled?.contains($0) != false }
+    static func libraryMediaTypes(from mediaTypes: [String]) -> [String] {
+        let filtered = mediaTypes.filter { !["episode", "season"].contains($0) }
         return filtered.isEmpty ? APIConstants.fallbackMediaTypes.filter { !["episode", "season"].contains($0) } : filtered
     }
 
@@ -225,8 +226,8 @@ final class LibraryViewModel {
     func loadMeta(selectedMediaType: String? = nil) async {
         do {
             let meta = try await mediaRepository.meta()
-            exposedMediaTypes = meta.mediaTypes
-            mediaTypes = Self.libraryMediaTypes(from: meta.mediaTypes, enabled: meta.enabledMediaTypes)
+            mediaTypes = meta.enabledMediaTypes.map(APIConstants.pickerMediaTypes(enabled:))
+                ?? Self.libraryMediaTypes(from: meta.mediaTypes)
         } catch is CancellationError {
             return
         } catch {
@@ -245,7 +246,7 @@ final class LibraryViewModel {
 
     /// After Settings saves: the picker offers only the types now on.
     func setEnabledMediaTypes(_ enabled: [String]) {
-        mediaTypes = Self.libraryMediaTypes(from: exposedMediaTypes, enabled: enabled)
+        mediaTypes = APIConstants.pickerMediaTypes(enabled: enabled)
     }
 
     func selectMediaType(_ type: String, searchText: String? = nil) async {
@@ -522,6 +523,7 @@ struct LibraryView: View {
         filterOptionsRepository: FilterOptionsRepository? = nil,
         mediaLensStore: MediaLensStore? = nil,
         currentUserId: Int? = nil,
+        enabledMediaTypes: [String]? = nil,
         requestedShelf: Binding<LibraryShelf?> = .constant(nil),
         selectedTab: AppTab = .library,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
@@ -542,6 +544,7 @@ struct LibraryView: View {
             mediaRepository: mediaRepository,
             trackingRepository: trackingRepository,
             filterOptionsRepository: self.filterOptionsRepository,
+            enabledMediaTypes: enabledMediaTypes,
             onUnauthorized: onUnauthorized
         ))
     }
