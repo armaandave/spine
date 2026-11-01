@@ -594,6 +594,10 @@ naming the album it was on. Run `map` at night.
 the Apple album with one request and stores its listing's identity. An album that has
 moved must be reverted first.
 
+A special edition (edition words the MusicBrainz title lacks) is picked only when
+Apple has nothing plainer: the barcode pick prefers plain albums, and a pick that is
+still a special edition checks Apple search for the plain one, as tier 3.
+
 ### Moving (`apply`)
 
 `apply` moves tier 1, tier 2 and manual matches, and tier 3 for albums with no user

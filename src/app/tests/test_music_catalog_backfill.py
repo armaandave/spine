@@ -603,6 +603,30 @@ class MapAlbumsWithoutUserDataTests(BackfillTestCase):
         self.assertEqual(MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID).tier, 1)
         self.assertEqual(counts["group 3: matched tier 1"], 1)
 
+    def test_a_barcode_that_finds_only_a_special_edition_yields_to_the_plain_album(self):
+        edition = {"media_id": "1", "title": "Boy In Da Corner (20th Anniversary Edition)", "image": ""}
+        plain = {"media_id": "2", "title": "Boy In da Corner", "image": ""}
+        found = (edition, MusicAlbumLink.Method.UPC_EXACT, 3, [])
+        with patch("app.music_move.apple_music.match_album", return_value=plain):
+            chosen = music_move._prefer_plain_album(found, "Boy in da Corner", "Dizzee Rascal")
+        self.assertEqual((chosen[0], chosen[1], chosen[2]), (plain, MusicAlbumLink.Method.SEARCH, 3))
+
+    def test_a_special_edition_stays_when_apple_has_nothing_plainer(self):
+        edition = {"media_id": "1", "title": "Spiritual Unity (50th Anniversary Expanded Edition)", "image": ""}
+        found = (edition, MusicAlbumLink.Method.UPC_EXACT, 1, [])
+        for other in (None, edition):
+            with patch("app.music_move.apple_music.match_album", return_value=other):
+                self.assertIs(music_move._prefer_plain_album(found, "Spiritual Unity", "Albert Ayler"), found)
+
+    def test_a_plain_album_outranks_a_special_editions_exact_barcode(self):
+        def entry(name, tracks, *, exact):
+            return {"album": {"attributes": {"name": name, "trackCount": tracks}}, "exact": exact, "equal": True}
+
+        deluxe = entry("It Takes a Nation of Millions (Deluxe Edition)", 29, exact=True)
+        plain = entry("It Takes a Nation of Millions", 16, exact=False)
+        title = "It Takes a Nation of Millions"
+        self.assertLess(music_move._pick_key("2", plain, title, 16), music_move._pick_key("1", deluxe, title, 16))
+
     def test_recheck_unmatched_tries_a_fresh_row_now(self):
         self.musicbrainz_item(CTRL_MBID, "Ctrl")
         MusicAlbumLink.objects.create(
