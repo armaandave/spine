@@ -1070,6 +1070,7 @@ struct ProfileView: View {
                     }
                     .padding(.top, topClearance)
                     .frame(height: crownHeight)
+                    .padding(.bottom, HallOfFameCrownLayout.nameOffset(for: allSlots, collapseProgress: layoutProgress))
                 }
             }
 
