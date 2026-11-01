@@ -5,13 +5,14 @@ from django.db import IntegrityError
 from django.db.models import Q
 from rest_framework import serializers
 
+from api.permissions import user_blocks
 from api.serializers.common import image_url, media_summary_from_item
 from api.services.stats import visible_diary_entries
 from api.views.lists import _lists_visible_to
 from app import exposure
 from app.curation import prime_curated_artwork
 from app.models import BasicMedia, DiaryEntry, MediaLike, MediaTypes, Status, Tag
-from social.models import Block, Follow, FollowStatus
+from social.models import Follow, FollowStatus
 from users.forms import PasswordChangeForm
 from users.models import (
     DateFormatChoices,
@@ -36,7 +37,7 @@ def profile_payload(user, request=None, viewer=None, *, restricted=False):
         entries = visible_diary_entries(user=user, viewer=viewer)
         lists = _lists_visible_to(viewer, user)
     if viewer and viewer.is_authenticated and viewer != user:
-        blocked = Block.objects.filter(blocker=viewer, blocked=user).exists()
+        blocked = user_blocks(viewer, user)
         following = Follow.objects.filter(
             from_user=viewer,
             to_user=user,
@@ -75,7 +76,7 @@ def profile_payload(user, request=None, viewer=None, *, restricted=False):
             "requested": requested,
             "blocked": blocked,
         },
-        "counts": {
+        "counts": _restricted_counts(user) if restricted else {
             "followers": user.follower_edges.filter(status=FollowStatus.ACCEPTED).count(),
             "following": user.following_edges.filter(status=FollowStatus.ACCEPTED).count(),
             "diary_entries": entries.count(),
@@ -88,6 +89,21 @@ def profile_payload(user, request=None, viewer=None, *, restricted=False):
         },
         "hof": {} if restricted else hof_payload(user, request=request),
         "preferences": preferences_payload(user),
+    }
+
+
+def _restricted_counts(user):
+    """Return a closed profile's counts: its people and logs, nothing else."""
+    return {
+        "followers": user.follower_edges.filter(status=FollowStatus.ACCEPTED).count(),
+        "following": user.following_edges.filter(status=FollowStatus.ACCEPTED).count(),
+        "diary_entries": user.diaryentry_set.count(),
+        "lists": 0,
+        "library_items": 0,
+        "reviews": 0,
+        "planned_items": 0,
+        "liked_items": 0,
+        "tags": 0,
     }
 
 

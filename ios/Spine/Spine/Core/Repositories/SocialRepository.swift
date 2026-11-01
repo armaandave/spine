@@ -30,7 +30,7 @@ struct APISocialRepository: SocialRepository {
 
     func follow(username: String) async throws -> FollowState {
         let response: FollowStateResponse = try await client.post(
-            "\(Self.userPath(username))follow/",
+            userScopedPath("follow/", username: username),
             body: EmptyResponse(),
             authenticated: true
         )
@@ -38,7 +38,7 @@ struct APISocialRepository: SocialRepository {
     }
 
     func unfollow(username: String) async throws {
-        let _: FollowStateResponse = try await client.delete("\(Self.userPath(username))follow/", authenticated: true)
+        let _: FollowStateResponse = try await client.delete(userScopedPath("follow/", username: username), authenticated: true)
     }
 
     func followList(username: String, followers: Bool, page: String?) async throws -> PagedResponse<SocialUser> {
@@ -47,7 +47,7 @@ struct APISocialRepository: SocialRepository {
             query.append(URLQueryItem(name: "page", value: page))
         }
         return try await client.get(
-            "\(Self.userPath(username))\(followers ? "followers" : "following")/",
+            userScopedPath(followers ? "followers/" : "following/", username: username),
             query: query,
             authenticated: true
         )
@@ -72,19 +72,19 @@ struct APISocialRepository: SocialRepository {
 
     func block(username: String) async throws {
         let _: EmptyResponse = try await client.post(
-            "\(Self.userPath(username))block/",
+            userScopedPath("block/", username: username),
             body: EmptyResponse(),
             authenticated: true
         )
     }
 
     func unblock(username: String) async throws {
-        let _: EmptyResponse = try await client.delete("\(Self.userPath(username))block/", authenticated: true)
+        let _: EmptyResponse = try await client.delete(userScopedPath("block/", username: username), authenticated: true)
     }
 
     func report(username: String) async throws {
         let _: EmptyResponse = try await client.post(
-            "\(Self.userPath(username))report/",
+            userScopedPath("report/", username: username),
             body: EmptyResponse(),
             authenticated: true
         )
@@ -100,10 +100,6 @@ struct APISocialRepository: SocialRepository {
 
     private static func escaped(_ username: String) -> String {
         username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-    }
-
-    private static func userPath(_ username: String) -> String {
-        "/users/\(escaped(username))/"
     }
 
     /// A page-number `next` link from the API, reduced to its page number.

@@ -192,6 +192,7 @@ These defaults are now agent guidance:
    - Newest date first (no algorithmic ranking yet).
 10. Social notifications:
     - Push only, no in-app list: a new follower, a follow request, and an accepted request push to the person concerned; a report pushes to the project owner (`src/social/push.py`).
+    - Not live yet: the server needs the `APNS_*` key settings, and the app needs the push entitlement and Push Notifications capability before `PushNotifications.isAvailable` can be turned on.
     - No like/comment notifications unless requested later.
 11. Performance expectation:
     - Prioritize fast pages and query hygiene; no hard SLA currently defined.

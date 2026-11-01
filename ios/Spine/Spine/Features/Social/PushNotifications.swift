@@ -21,12 +21,18 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
         #endif
     }
 
+    /// Off until the app is signed for push (an `aps-environment` entitlement, with the Push Notifications
+    /// capability on its App ID) and the server has a push key. Until then the app doesn't ask for permission, so
+    /// the one-time prompt isn't spent on notifications that can't arrive.
+    static let isAvailable = false
+
     func install() {
         UNUserNotificationCenter.current().delegate = self
     }
 
     /// Asks once, then registers on every launch so a changed token reaches the backend.
     func signedIn(repository: SocialRepository) async {
+        guard Self.isAvailable else { return }
         self.repository = repository
         let center = UNUserNotificationCenter.current()
         var status = await center.notificationSettings().authorizationStatus

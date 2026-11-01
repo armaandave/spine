@@ -208,9 +208,11 @@ struct AppShellView: View {
                 .environment(\.userProfileBuilder, profileBuilder)
         }
         .onChange(of: push?.pendingRoute, initial: true) {
-            guard let route = push?.pendingRoute, currentUserId != nil else { return }
-            push?.pendingRoute = nil
-            openedPushRoute = route
+            openPendingPushRoute()
+        }
+        // A cold launch from a tapped push gets its route before the profile has loaded.
+        .onChange(of: currentUserId) {
+            openPendingPushRoute()
         }
         .task(id: currentUserId) {
             guard currentUserId != nil else { return }
@@ -262,6 +264,12 @@ struct AppShellView: View {
 
     private func unauthorized() {
         Task { await session.logout() }
+    }
+
+    private func openPendingPushRoute() {
+        guard let route = push?.pendingRoute, currentUserId != nil else { return }
+        push?.pendingRoute = nil
+        openedPushRoute = route
     }
 
     private func logout() {

@@ -293,6 +293,8 @@ class ProfileVisibilityTests(SocialTestCase):
 
     def test_a_private_account_you_dont_follow_shows_only_its_header(self):
         self.make_private(self.friend)
+        self.log("1", visibility="private", review="Secret")
+        self.log("2", visibility="public")
 
         response = self.profile()
 
@@ -300,6 +302,12 @@ class ProfileVisibilityTests(SocialTestCase):
         self.assertTrue(response.data["restricted"])
         self.assertEqual(response.data["hof"], {})
         self.assertEqual(response.data["display_name"], "Sai")
+        # Like a post count: how many logs, but nothing about them.
+        self.assertEqual(response.data["counts"]["diary_entries"], 2)
+        self.assertEqual(
+            (response.data["counts"]["reviews"], response.data["counts"]["tags"], response.data["counts"]["lists"]),
+            (0, 0, 0),
+        )
         self.follow(self.me, self.friend)
         self.assertFalse(self.profile().data["restricted"])
 
