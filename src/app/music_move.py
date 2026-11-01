@@ -436,12 +436,28 @@ def match_release_group(release_group_mbid, title, *, pacer, today):
         found = (match, Method.SEARCH, 3, None) if match else None
     if found is None:
         return _row_fields(None, method=Method.SEARCH, tier=None)
+    found = _prefer_plain_album(found, title, _credit_text((official or releases or [{}])[0]))
     match, method, tier, members = found
     # The Spotify album is the one the page shows, not the pick: a clean twin's barcode
     # can find an explicit album's listing.
     album = music_listing.pick_content_member(members, today=today) if members else None
     spotify = _spotify_link(releases, album) if album is not None else ""
     return _row_fields(match, method=method, tier=tier, spotify_url=spotify)
+
+
+def _prefer_plain_album(found, title, artist):
+    """Swap a special edition the barcodes found for the plain album, when Apple has one.
+
+    Barcodes reach only the album's product family, and a reissue can sit outside it:
+    Boy In da Corner's barcodes find its 20th Anniversary Edition alone.
+    """
+    match = found[0]
+    if not artist or not _is_special_edition(match["title"], title):
+        return found
+    plain = apple_music.match_album(title, artist)
+    if plain is None or plain["media_id"] == match["media_id"] or _is_special_edition(plain["title"], title):
+        return found
+    return plain, Method.SEARCH, 3, None
 
 
 def _match_barcodes(barcodes, title, names, standard, *, today):
@@ -704,17 +720,21 @@ def _credit_text(entity):
 def _pick_key(album_id, entry, title, standard):
     attributes = entry["album"].get("attributes") or {}
     name = apple_music.album_title(attributes)[0]
-    tagged = bool(apple_music._EDITION_TAGS.search(name)) and not apple_music._EDITION_TAGS.search(str(title or ""))
     tracks = _int(attributes.get("trackCount"))
     rating = {"explicit": 0, "clean": 2}.get(attributes.get("contentRating"), 1)
     return (
-        not entry["exact"],
+        _is_special_edition(name, title),
         not entry["equal"],
-        tagged,
         abs(tracks - standard) if standard else 0,
+        not entry["exact"],
         rating,
         music_listing._id_order(album_id),
     )
+
+
+def _is_special_edition(name, title):
+    """Return whether an Apple album's name has edition words the album's own title lacks."""
+    return bool(apple_music._EDITION_TAGS.search(str(name or ""))) and not apple_music._EDITION_TAGS.search(str(title or ""))
 
 
 def _close_track_count(album, standard):
