@@ -202,6 +202,46 @@ class ProgressChange(models.Model):
         )
 
 
+class PushDevice(models.Model):
+    """A phone's Apple push token, for the app it was issued to."""
+
+    class Environment(models.TextChoices):
+        SANDBOX = "sandbox", "Sandbox"
+        PRODUCTION = "production", "Production"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="push_devices",
+    )
+    # A token belongs to one install, so signing in as someone else moves it.
+    token = models.CharField(max_length=200, unique=True)
+    bundle_id = models.CharField(max_length=200)
+    environment = models.CharField(max_length=20, choices=Environment.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class UserReport(models.Model):
+    """A user reporting another user to the project owner."""
+
+    reporter = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="reports_sent",
+    )
+    reported = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reports_received",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
 class SocialAuditLog(models.Model):
     """Audit log for important social actions."""
 

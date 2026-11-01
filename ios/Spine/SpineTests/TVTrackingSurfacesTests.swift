@@ -836,9 +836,9 @@ final class TVTrackingSurfacesTests: XCTestCase {
     }
 
     func testTV703TheSheetsTickReloadsActivityButLeavesTheRail() async {
-        // A tick is the day's progress in activity, so Home reloads its activity after a tick or untick in its own
-        // sheet (activity contract AC-4), and leaves the rail where it is (TV-701). Profile has no sheet: any write
-        // reloads it.
+        // A tick is the day's progress in activity, so Home reloads its activity (the people you follow) after a tick
+        // or untick in its own sheet (activity contract AC-4), and leaves the rail where it is (TV-701). Profile has no
+        // sheet: any write reloads it.
         let crown = Self.showItem("1396", "The Crown", tv: Self.showState(status: "In progress", watched: 4, aired: 10, upNext: (2, 5)))
         tracking.continueWatchingResponse = PagedResponse(count: 1, next: nil, previous: nil, results: [crown])
         let progress = ActivityItem(
@@ -864,7 +864,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
         homeActivity.results = [progress]
         await home.mediaStateDidChange(origin: home.continueWatching.changeOrigin)
-        XCTAssertEqual(home.activityItems.map(\.id), [-7], "Home's activity shows the tick")
+        XCTAssertEqual(home.activityItems.map(\.id), [-7], "Home's activity reloads")
         XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The rail doesn't reload")
         // Any other screen's write reloads Home.
         await home.mediaStateDidChange(origin: UUID())
@@ -1540,6 +1540,11 @@ final class CountingActivityRepository: ActivityRepository {
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem] {
         requestCount += 1
         return results
+    }
+
+    func feedPage(pageSize _: Int, cursorLink _: String?) async throws -> ActivityCursorResponse {
+        requestCount += 1
+        return ActivityCursorResponse(nextCursor: nil, previousCursor: nil, results: results)
     }
 }
 

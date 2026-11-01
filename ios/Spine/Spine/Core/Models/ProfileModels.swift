@@ -19,10 +19,16 @@ struct UserProfile: Codable, Identifiable {
     let profileBackdropUrl: String?
     let profileBackdropItem: MediaSummary?
     let isPrivate: Bool
+    /// Someone else's private account the viewer doesn't follow, or one they block: only the header shows.
+    var restricted: Bool? = nil
     let viewerRelationship: ViewerRelationship
     let counts: ProfileCounts
     let hof: [String: MediaSummary?]
     let preferences: UserPreferences
+
+    var isRestricted: Bool {
+        restricted ?? false
+    }
 }
 
 extension UserProfile {
@@ -39,6 +45,7 @@ extension UserProfile {
             profileBackdropUrl: profileBackdropUrl,
             profileBackdropItem: profileBackdropItem,
             isPrivate: isPrivate,
+            restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
             hof: hof,
@@ -59,6 +66,7 @@ extension UserProfile {
             profileBackdropUrl: profileBackdropUrl,
             profileBackdropItem: profileBackdropItem,
             isPrivate: isPrivate,
+            restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
             hof: hof,
@@ -79,6 +87,7 @@ extension UserProfile {
             profileBackdropUrl: profileBackdropUrl,
             profileBackdropItem: profileBackdropItem,
             isPrivate: isPrivate,
+            restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
             hof: hof,
@@ -99,6 +108,7 @@ extension UserProfile {
             profileBackdropUrl: response.profileBackdropUrl,
             profileBackdropItem: response.profileBackdropItem,
             isPrivate: isPrivate,
+            restricted: restricted,
             viewerRelationship: viewerRelationship,
             counts: counts,
             hof: hof,

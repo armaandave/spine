@@ -3,50 +3,117 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
-from api.permissions import can_view_user_profile, users_blocked
+from api.permissions import can_view_user_profile, user_blocks, users_blocked
 from app import single_weight
 from app.models import DiaryEntry
 from lists.models import CustomList
+from social import push
 from social.models import (
     Block,
     ContentLike,
     Follow,
     FollowStatus,
     SocialAuditLog,
+    UserReport,
     Visibility,
 )
 
 
 def follow_user(actor, username):
-    """Follow or request to follow a user."""
+    """Follow a user, or ask to when their account is private.
+
+    Following again keeps an accepted follow, and accepts a request to an account that
+    has since gone public. A new follow or request pushes to the person followed.
+    """
     User = get_user_model()
     target = get_object_or_404(User, username=username)
+    if target == actor or users_blocked(actor, target):
+        raise Http404
     status = FollowStatus.PENDING if target.profile_private else FollowStatus.ACCEPTED
-    follow, _ = Follow.objects.update_or_create(
+    follow, created = Follow.objects.get_or_create(
         from_user=actor,
         to_user=target,
         defaults={"status": status},
     )
+    if not created:
+        if follow.status == FollowStatus.ACCEPTED or status == FollowStatus.PENDING:
+            return follow
+        follow.status = FollowStatus.ACCEPTED
+        follow.save(update_fields=["status", "updated_at"])
     SocialAuditLog.objects.create(
         actor=actor,
         action="follow" if status == FollowStatus.ACCEPTED else "follow_request",
         target_user=target,
     )
+    if status == FollowStatus.ACCEPTED:
+        push.notify(target, f"{_name(actor)} started following you.", _profile_route(actor))
+    else:
+        push.notify(target, f"{_name(actor)} wants to follow you.", {"kind": "follow_requests"})
     return follow
 
 
 def unfollow_user(actor, username):
-    """Remove a follow edge."""
+    """Unfollow a user, or take back a request to follow them."""
     User = get_user_model()
     target = get_object_or_404(User, username=username)
     Follow.objects.filter(from_user=actor, to_user=target).delete()
     SocialAuditLog.objects.create(actor=actor, action="unfollow", target_user=target)
 
 
+def answer_follow_request(owner, request_id, accept):
+    """Accept or decline a request to follow ``owner``; accepting tells them."""
+    follow = get_object_or_404(
+        Follow.objects.select_related("from_user"),
+        id=request_id,
+        to_user=owner,
+        status=FollowStatus.PENDING,
+    )
+    requester = follow.from_user
+    if accept:
+        follow.status = FollowStatus.ACCEPTED
+        follow.save(update_fields=["status", "updated_at"])
+        SocialAuditLog.objects.create(actor=owner, action="follow_request_accept", target_user=requester)
+        push.notify(requester, f"{_name(owner)} accepted your follow request.", _profile_route(owner))
+    else:
+        follow.delete()
+        SocialAuditLog.objects.create(actor=owner, action="follow_request_reject", target_user=requester)
+
+
+def remove_follower(owner, username):
+    """Stop a user following ``owner``, without telling them."""
+    User = get_user_model()
+    follower = get_object_or_404(User, username=username)
+    Follow.objects.filter(from_user=follower, to_user=owner).delete()
+    SocialAuditLog.objects.create(actor=owner, action="remove_follower", target_user=follower)
+
+
+def report_user(reporter, username):
+    """Report a user to the project owner, who gets a push about it."""
+    User = get_user_model()
+    reported = get_object_or_404(User, username=username)
+    if reported == reporter or user_blocks(reported, reporter):
+        raise Http404
+    report = UserReport.objects.create(reporter=reporter, reported=reported)
+    SocialAuditLog.objects.create(actor=reporter, action="report", target_user=reported)
+    for owner in User.objects.filter(is_superuser=True, is_active=True).exclude(id=reported.id):
+        push.notify(owner, f"{_name(reporter)} reported @{reported.username}.", _profile_route(reported))
+    return report
+
+
+def _name(user):
+    return user.display_name or user.username
+
+
+def _profile_route(user):
+    return {"kind": "profile", "username": user.username}
+
+
 def block_user(actor, username):
     """Block a user and remove follow edges both ways."""
     User = get_user_model()
     target = get_object_or_404(User, username=username)
+    if target == actor:
+        raise Http404
     with transaction.atomic():
         block, _ = Block.objects.get_or_create(blocker=actor, blocked=target)
         Follow.objects.filter(from_user__in=[actor, target], to_user__in=[actor, target]).delete()

@@ -16,10 +16,14 @@ final class ProfileViewModel {
     var inProgressErrorMessage: String?
     var hofErrorMessage: String?
     var savingHallOfFameSlots: Set<String> = []
+    /// What the Follow button on someone else's profile says.
+    var followState = FollowState.none
+    var socialMessage: SocialActionMessage?
 
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
     private let activityRepository: ActivityRepository
+    private let socialRepository: SocialRepository
     private let onUnauthorized: () -> Void
     private let username: String?
     private var requestGeneration = 0
@@ -28,14 +32,21 @@ final class ProfileViewModel {
         profileRepository: ProfileRepository,
         trackingRepository: TrackingRepository,
         activityRepository: ActivityRepository,
+        socialRepository: SocialRepository? = nil,
         username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
         self.activityRepository = activityRepository
+        self.socialRepository = socialRepository ?? AppRepositories.current().social
         self.username = username
         self.onUnauthorized = onUnauthorized
+    }
+
+    /// Someone else's private account you don't follow, or one you block: only its header shows.
+    var isRestricted: Bool {
+        profile?.isRestricted ?? false
     }
 
     /// The signed-in user's own profile refreshes each time it appears, so changes made elsewhere show up.
@@ -69,10 +80,11 @@ final class ProfileViewModel {
             }
             guard generation == requestGeneration else { return }
             profile = loadedProfile
-            if username == nil {
+            followState = FollowState(relationship: loadedProfile.viewerRelationship)
+            if !loadedProfile.isRestricted {
                 isLoadingInProgress = isFirstLoad
+                isLoadingActivity = isFirstLoad
             }
-            isLoadingActivity = isFirstLoad
         } catch is CancellationError {
             return
         } catch {
@@ -84,10 +96,65 @@ final class ProfileViewModel {
             return
         }
 
-        if username == nil {
-            await loadInProgressItems(generation: generation)
+        guard !isRestricted else {
+            inProgressItems = []
+            recentActivityItems = []
+            return
         }
+        await loadInProgressItems(generation: generation)
         await loadRecentActivity(generation: generation)
+    }
+
+    func block() async {
+        let blocked = await socialAction { [self] in
+            guard let username else { return }
+            try await socialRepository.block(username: username)
+        }
+        if blocked {
+            // Blocking ends follows both ways.
+            NotificationCenter.default.post(name: .followsDidChange, object: nil)
+        }
+        await load()
+    }
+
+    func unblock() async {
+        await socialAction { [self] in
+            guard let username else { return }
+            try await socialRepository.unblock(username: username)
+        }
+        await load()
+    }
+
+    func report() async {
+        let sent = await socialAction { [self] in
+            guard let username else { return }
+            try await socialRepository.report(username: username)
+        }
+        if sent {
+            socialMessage = SocialActionMessage(title: "Report sent", message: "Thanks for letting us know.")
+        }
+    }
+
+    func removeFollower() async {
+        await socialAction { [self] in
+            guard let username else { return }
+            try await socialRepository.removeFollower(username: username)
+        }
+        await load()
+    }
+
+    @discardableResult
+    private func socialAction(_ action: () async throws -> Void) async -> Bool {
+        do {
+            try await action()
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            socialMessage = SocialActionMessage(title: "Couldn't update", message: error.localizedDescription)
+            handleUnauthorized(error)
+            return false
+        }
     }
 
     func reload() async {
@@ -147,7 +214,7 @@ final class ProfileViewModel {
         do {
             let items = try await InProgressLibraryLoader.load(
                 mediaTypes: mediaTypes,
-                trackingRepository: trackingRepository,
+                trackingRepository: username.map(trackingRepository.owned(by:)) ?? trackingRepository,
                 limit: 8
             )
             guard generation == requestGeneration else { return }
@@ -538,6 +605,7 @@ struct ProfileView: View {
     @State private var heroScrollOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
     @State private var isProfileBackdropSearchPresented = false
+    @State private var pendingSocialAction: ProfileSocialAction?
 
     private let profileRepository: ProfileRepository
     private let mediaRepository: MediaRepository
@@ -547,6 +615,7 @@ struct ProfileView: View {
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
     private let streamingRepository: StreamingRepository
+    private let socialRepository: SocialRepository
     private let importCoordinator: LetterboxdImportCoordinator?
     private let storygraphImportCoordinator: StoryGraphImportCoordinator?
     private let goodreadsImportCoordinator: GoodreadsImportCoordinator?
@@ -575,6 +644,7 @@ struct ProfileView: View {
         listRepository: ListRepository,
         peopleRepository: PeopleRepository,
         streamingRepository: StreamingRepository = AppRepositories.current().streaming,
+        socialRepository: SocialRepository = AppRepositories.current().social,
         importCoordinator: LetterboxdImportCoordinator? = nil,
         storygraphImportCoordinator: StoryGraphImportCoordinator? = nil,
         goodreadsImportCoordinator: GoodreadsImportCoordinator? = nil,
@@ -594,6 +664,7 @@ struct ProfileView: View {
             profileRepository: profileRepository,
             trackingRepository: trackingRepository,
             activityRepository: activityRepository,
+            socialRepository: socialRepository,
             username: username,
             onUnauthorized: onUnauthorized
         ))
@@ -605,6 +676,7 @@ struct ProfileView: View {
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
         self.streamingRepository = streamingRepository
+        self.socialRepository = socialRepository
         self.importCoordinator = importCoordinator
         self.storygraphImportCoordinator = storygraphImportCoordinator
         self.goodreadsImportCoordinator = goodreadsImportCoordinator
@@ -733,6 +805,27 @@ struct ProfileView: View {
                     applyProfileBackdrop(response)
                 }
             }
+            .confirmationDialog(
+                pendingSocialAction?.title(username: viewModel.profile?.username ?? "") ?? "",
+                isPresented: pendingSocialActionBinding,
+                titleVisibility: .visible,
+                presenting: pendingSocialAction
+            ) { action in
+                Button(action.confirmTitle, role: .destructive) {
+                    Swift.Task<Void, Never> { await perform(action) }
+                }
+            } message: { action in
+                Text(action.message(displayName: viewModel.profile?.displayName ?? ""))
+            }
+            .alert(
+                viewModel.socialMessage?.title ?? "",
+                isPresented: socialMessageBinding,
+                presenting: viewModel.socialMessage
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { message in
+                Text(message.message)
+            }
             .alert("Hall of Fame Update Failed", isPresented: hofErrorBinding) {
                 Button("OK") {
                     viewModel.hofErrorMessage = nil
@@ -763,16 +856,18 @@ struct ProfileView: View {
                                 collapseProgress: reduceMotion ? 0 : ProfileHeroCollapse.progress(for: heroScrollOffset),
                                 layoutProgress: reduceMotion ? 0 : ProfileHeroCollapse.layoutProgress(for: heroScrollOffset)
                             )
-                            if isOwnProfile {
+                            if profile.isRestricted {
+                                restrictedCard(profile)
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 20)
+                            } else {
                                 inProgressSection
                                     .padding(.horizontal, 16)
                                     .padding(.top, 20)
-                            }
-                            activitySection
-                                .padding(.horizontal, 16)
-                                .padding(.top, 20)
-                            if isOwnProfile {
-                                profileMenuSection(profile.counts)
+                                activitySection
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 20)
+                                profileMenuSection(profile)
                                     .padding(.horizontal, 16)
                                     .padding(.top, 20)
                             }
@@ -815,8 +910,11 @@ struct ProfileView: View {
                     .padding(.top, topSafeAreaInset + 6)
                     .padding(.trailing, 16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            } else if !isPushedProfile {
-                EmptyView()
+            } else if let profile = viewModel.profile {
+                moreMenu(profile)
+                    .padding(.top, topSafeAreaInset + 6)
+                    .padding(.trailing, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
         .background {
@@ -855,8 +953,83 @@ struct ProfileView: View {
         .accessibilityLabel("Settings")
     }
 
+    /// Someone else's profile: Remove Follower (when they follow you), Block or Unblock, and Report.
+    private func moreMenu(_ profile: UserProfile) -> some View {
+        Menu {
+            if profile.viewerRelationship.followedBy {
+                Button {
+                    pendingSocialAction = .removeFollower
+                } label: {
+                    Label("Remove Follower", systemImage: "person.badge.minus")
+                }
+            }
+            if profile.viewerRelationship.blocked {
+                Button {
+                    Swift.Task<Void, Never> { await viewModel.unblock() }
+                } label: {
+                    Label("Unblock", systemImage: "hand.raised.slash")
+                }
+            } else {
+                Button(role: .destructive) {
+                    pendingSocialAction = .block
+                } label: {
+                    Label("Block", systemImage: "hand.raised")
+                }
+            }
+            Button(role: .destructive) {
+                pendingSocialAction = .report
+            } label: {
+                Label("Report", systemImage: "exclamationmark.bubble")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .frame(width: 38, height: 38)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("profile.more")
+    }
+
+    private func perform(_ action: ProfileSocialAction) async {
+        switch action {
+        case .block: await viewModel.block()
+        case .report: await viewModel.report()
+        case .removeFollower: await viewModel.removeFollower()
+        }
+    }
+
+    private var pendingSocialActionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingSocialAction != nil },
+            set: { if !$0 { pendingSocialAction = nil } }
+        )
+    }
+
+    private var socialMessageBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.socialMessage != nil },
+            set: { if !$0 { viewModel.socialMessage = nil } }
+        )
+    }
+
+    private func restrictedCard(_ profile: UserProfile) -> some View {
+        if profile.viewerRelationship.blocked {
+            return EmptyProfileCard(title: "You blocked @\(profile.username)", systemName: "hand.raised")
+        }
+        return EmptyProfileCard(
+            title: viewModel.followState == .requested
+                ? "Requested. Their logs and lists show once they approve."
+                : "This account is private. Follow to see their logs and lists.",
+            systemName: "lock.fill"
+        )
+    }
+
     private func hero(_ profile: UserProfile, collapseProgress: CGFloat, layoutProgress: CGFloat) -> some View {
-        let allSlots = favoriteSlots(from: profile)
+        // Empty slots are for adding favorites, so someone else's profile shows only the ones they picked.
+        let allSlots = favoriteSlots(from: profile).filter { isOwnProfile || $0.item != nil }
         let backdropURL = profileBackdropURL(from: profile)
         let topClearance = HallOfFameCrownLayout.avatarTopClearance(collapseProgress: layoutProgress)
         let crownHeight = ProfileHeroBackdropLayout.crownHeight(for: layoutProgress) + topClearance
@@ -864,37 +1037,39 @@ struct ProfileView: View {
 
         return VStack(spacing: profileElementSpacing) {
             VStack(spacing: 8) {
-                ZStack(alignment: .top) {
-                    HallOfFameCrownView(
-                        slots: allSlots,
-                        savingSlotIDs: viewModel.savingHallOfFameSlots,
-                        collapseProgress: collapseProgress
-                    ) { slot in
-                        if let item = slot.item {
-                            selectedRef = item.ref
-                        }
-                    } onEmptyTap: { slot in
-                        if isOwnProfile {
-                            hofPickerSlot = slot
-                        }
-                    } onFilledLongPress: { slot in
-                        if isOwnProfile {
-                            hofPickerSlot = slot
-                        }
-                    }
-                    .offset(y: -21 * collapseProgress)
-                    .zIndex(0)
-
-                    avatar(profile)
-                        .zIndex(1)
-                }
-                .padding(.top, topClearance)
-                .frame(height: crownHeight)
-
+                // With no favorites to fan out (someone else who picked none), only the avatar shows, in the same
+                // place as on every profile.
                 if allSlots.isEmpty {
-                    Text("No favorites yet")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.4))
+                    avatar(profile)
+                        .padding(.top, topClearance)
+                        .padding(.bottom, 8)
+                } else {
+                    ZStack(alignment: .top) {
+                        HallOfFameCrownView(
+                            slots: allSlots,
+                            savingSlotIDs: viewModel.savingHallOfFameSlots,
+                            collapseProgress: collapseProgress
+                        ) { slot in
+                            if let item = slot.item {
+                                selectedRef = item.ref
+                            }
+                        } onEmptyTap: { slot in
+                            if isOwnProfile {
+                                hofPickerSlot = slot
+                            }
+                        } onFilledLongPress: { slot in
+                            if isOwnProfile {
+                                hofPickerSlot = slot
+                            }
+                        }
+                        .offset(y: -21 * collapseProgress)
+                        .zIndex(0)
+
+                        avatar(profile)
+                            .zIndex(1)
+                    }
+                    .padding(.top, topClearance)
+                    .frame(height: crownHeight)
                 }
             }
 
@@ -920,6 +1095,13 @@ struct ProfileView: View {
             }
             .padding(.top, 3)
 
+            if let location = profile.location?.trimmedNonEmpty {
+                Label(location, systemImage: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
+            }
+
             if let bio = profile.bio?.trimmedNonEmpty {
                 Text(bio)
                     .font(.system(size: 15, weight: .medium))
@@ -930,14 +1112,25 @@ struct ProfileView: View {
                     .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
             }
 
-            if let location = profile.location?.trimmedNonEmpty {
-                Label(location, systemImage: "mappin.and.ellipse")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.56))
-                    .shadow(color: .black.opacity(backdropURL == nil ? 0 : 0.22), radius: 8, y: 4)
+            if !isOwnProfile, !profile.viewerRelationship.blocked {
+                FollowButton(
+                    username: profile.username,
+                    isPrivate: profile.isPrivate,
+                    followedBy: profile.viewerRelationship.followedBy,
+                    state: $viewModel.followState,
+                    repository: socialRepository,
+                    size: .profile,
+                    onChange: { _ in
+                        Swift.Task<Void, Never> { await viewModel.reload() }
+                    },
+                    onUnauthorized: onUnauthorized
+                )
+                // Room around it, so the names, the button and the counts read as separate rows.
+                .padding(.top, 10)
+                .padding(.bottom, 8)
             }
 
-            statsGrid(profile.counts)
+            statsGrid(profile)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
@@ -1048,8 +1241,10 @@ struct ProfileView: View {
         }
     }
 
-    private func statsGrid(_ counts: ProfileCounts) -> some View {
-        GlassEffectContainer(spacing: 3.5) {
+    /// Logs, Followers, Following and Lists. A restricted profile shows its counts but opens none of them.
+    private func statsGrid(_ profile: UserProfile) -> some View {
+        let counts = profile.counts
+        return GlassEffectContainer(spacing: 3.5) {
             HStack(spacing: 7) {
                 if isOwnProfile {
                     Button(action: onOpenDiary) {
@@ -1063,36 +1258,29 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("profile.logs")
                     .accessibilityHint("Opens Diary")
+                } else if !profile.isRestricted {
+                    NavigationLink {
+                        profileDiaryView(profile)
+                    } label: {
+                        ProfileStatChip(
+                            value: counts.diaryEntries,
+                            title: "Logs",
+                            systemName: "calendar",
+                            isInteractive: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("profile.logs")
                 } else {
                     ProfileStatChip(value: counts.diaryEntries, title: "Logs", systemName: "calendar")
                 }
 
-                ProfileStatChip(value: counts.followers, title: "Followers", systemName: "person.2")
-                ProfileStatChip(value: counts.following, title: "Following", systemName: "person.crop.circle.badge.checkmark")
+                followChip(profile, followers: true)
+                followChip(profile, followers: false)
 
-                if isOwnProfile {
+                if !profile.isRestricted {
                     NavigationLink {
-                        ProfileListsView(
-                            profileRepository: profileRepository,
-                            listRepository: listRepository,
-                            peopleRepository: peopleRepository,
-                            mediaRepository: mediaRepository,
-                            trackingRepository: trackingRepository,
-                            diaryRepository: diaryRepository,
-                            activityRepository: activityRepository,
-                            importCoordinator: importCoordinator,
-                            storygraphImportCoordinator: storygraphImportCoordinator,
-                            goodreadsImportCoordinator: goodreadsImportCoordinator,
-                            marginsImportCoordinator: marginsImportCoordinator,
-                            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
-                            currentUserId: currentUserId ?? viewModel.profile?.id,
-                            onLogout: onLogout,
-                            onOpenDiary: onOpenDiary,
-                            onOpenLibrary: onOpenLibrary,
-                            selectedTab: selectedTab,
-                            onSelectTab: onSelectTab,
-                            onUnauthorized: onUnauthorized
-                        )
+                        profileListsView(profile)
                     } label: {
                         ProfileStatChip(
                             value: counts.lists,
@@ -1107,6 +1295,73 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func followChip(_ profile: UserProfile, followers: Bool) -> some View {
+        let chip = ProfileStatChip(
+            value: followers ? profile.counts.followers : profile.counts.following,
+            title: followers ? "Followers" : "Following",
+            systemName: followers ? "person.2" : "person.crop.circle.badge.checkmark",
+            isInteractive: !profile.isRestricted
+        )
+        if profile.isRestricted {
+            chip
+        } else {
+            NavigationLink {
+                FollowListView(
+                    username: profile.username,
+                    showsFollowers: followers,
+                    isOwnProfile: isOwnProfile,
+                    currentUserId: currentUserId ?? (isOwnProfile ? profile.id : nil),
+                    repository: socialRepository,
+                    onUnauthorized: onUnauthorized
+                )
+            } label: {
+                chip
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(followers ? "profile.followers" : "profile.following")
+        }
+    }
+
+    private func profileListsView(_ profile: UserProfile) -> some View {
+        ProfileListsView(
+            profileRepository: profileRepository,
+            listRepository: listRepository,
+            peopleRepository: peopleRepository,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            diaryRepository: diaryRepository,
+            activityRepository: activityRepository,
+            importCoordinator: importCoordinator,
+            storygraphImportCoordinator: storygraphImportCoordinator,
+            goodreadsImportCoordinator: goodreadsImportCoordinator,
+            marginsImportCoordinator: marginsImportCoordinator,
+            myAnimeListImportCoordinator: myAnimeListImportCoordinator,
+            currentUserId: currentUserId ?? viewModel.profile?.id,
+            onLogout: onLogout,
+            onOpenDiary: onOpenDiary,
+            onOpenLibrary: onOpenLibrary,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            username: username,
+            onUnauthorized: onUnauthorized
+        )
+    }
+
+    /// Someone else's logs, read-only. Your own Logs open the Diary tab.
+    private func profileDiaryView(_ profile: UserProfile) -> some View {
+        ProfileLogsView(
+            username: profile.username,
+            diaryRepository: diaryRepository,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            currentUserId: currentUserId,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     private var activitySection: some View {
@@ -1133,15 +1388,17 @@ struct ProfileView: View {
         }
     }
 
-    private func profileMenuSection(_ counts: ProfileCounts) -> some View {
+    private func profileMenuSection(_ profile: UserProfile) -> some View {
         let shape = RoundedRectangle(cornerRadius: ProfileMenuRow.groupCornerRadius, style: .continuous)
+        let destinations = ProfileMenuDestination.allCases.filter { isOwnProfile || $0.opensForOtherUsers }
 
         return VStack(spacing: 0) {
-            ForEach(Array(ProfileMenuDestination.allCases.enumerated()), id: \.element) { index, destination in
+            ForEach(Array(destinations.enumerated()), id: \.element) { index, destination in
                 profileMenuLink(
                     destination,
-                    count: destination.count(from: counts),
-                    showsDivider: index != ProfileMenuDestination.allCases.count - 1
+                    profile: profile,
+                    count: destination.count(from: profile.counts),
+                    showsDivider: index != destinations.count - 1
                 )
             }
         }
@@ -1150,7 +1407,12 @@ struct ProfileView: View {
     }
 
     @ViewBuilder
-    private func profileMenuLink(_ destination: ProfileMenuDestination, count: Int?, showsDivider: Bool) -> some View {
+    private func profileMenuLink(
+        _ destination: ProfileMenuDestination,
+        profile: UserProfile,
+        count: Int?,
+        showsDivider: Bool
+    ) -> some View {
         switch destination {
         case .library:
             Button {
@@ -1160,12 +1422,21 @@ struct ProfileView: View {
             }
             .buttonStyle(ProfileMenuRowButtonStyle())
         case .diary:
-            Button {
-                onOpenDiary()
-            } label: {
-                ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
+            if isOwnProfile {
+                Button {
+                    onOpenDiary()
+                } label: {
+                    ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
+                }
+                .buttonStyle(ProfileMenuRowButtonStyle())
+            } else {
+                NavigationLink {
+                    profileDiaryView(profile)
+                } label: {
+                    ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
+                }
+                .buttonStyle(ProfileMenuRowButtonStyle())
             }
-            .buttonStyle(ProfileMenuRowButtonStyle())
         case .stats:
             NavigationLink {
                 StatsView(
@@ -1177,6 +1448,7 @@ struct ProfileView: View {
                     currentUserId: currentUserId ?? viewModel.profile?.id,
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
+                    username: username,
                     enabledMediaTypes: isOwnProfile ? viewModel.profile?.preferences.enabledMediaTypes : nil,
                     onUnauthorized: onUnauthorized
                 )
@@ -1187,6 +1459,7 @@ struct ProfileView: View {
         case .reviews:
             NavigationLink {
                 ProfileReviewsView(
+                    username: username,
                     diaryRepository: diaryRepository,
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
@@ -1201,27 +1474,7 @@ struct ProfileView: View {
             .buttonStyle(ProfileMenuRowButtonStyle())
         case .lists:
             NavigationLink {
-                ProfileListsView(
-                    profileRepository: profileRepository,
-                    listRepository: listRepository,
-                    peopleRepository: peopleRepository,
-                    mediaRepository: mediaRepository,
-                    trackingRepository: trackingRepository,
-                    diaryRepository: diaryRepository,
-                    activityRepository: activityRepository,
-                    importCoordinator: importCoordinator,
-                    storygraphImportCoordinator: storygraphImportCoordinator,
-                    goodreadsImportCoordinator: goodreadsImportCoordinator,
-                    marginsImportCoordinator: marginsImportCoordinator,
-                    myAnimeListImportCoordinator: myAnimeListImportCoordinator,
-                    currentUserId: currentUserId ?? viewModel.profile?.id,
-                    onLogout: onLogout,
-                    onOpenDiary: onOpenDiary,
-                    onOpenLibrary: onOpenLibrary,
-                    selectedTab: selectedTab,
-                    onSelectTab: onSelectTab,
-                    onUnauthorized: onUnauthorized
-                )
+                profileListsView(profile)
             } label: {
                 ProfileMenuRow(title: destination.title, count: count, showsDivider: showsDivider)
             }
@@ -1236,6 +1489,7 @@ struct ProfileView: View {
         case .likes:
             NavigationLink {
                 ProfileLikesView(
+                    username: username,
                     profileRepository: profileRepository,
                     diaryRepository: diaryRepository,
                     mediaRepository: mediaRepository,
@@ -1252,6 +1506,7 @@ struct ProfileView: View {
         case .tags:
             NavigationLink {
                 ProfileTagsView(
+                    username: username,
                     diaryRepository: diaryRepository,
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
@@ -1705,6 +1960,11 @@ enum ProfileMenuDestination: CaseIterable, Hashable {
         case .likes: "Likes"
         case .tags: "Tags"
         }
+    }
+
+    /// Library and Planned open the Library tab, which shows only your own titles.
+    var opensForOtherUsers: Bool {
+        self != .library && self != .planned
     }
 
     func count(from counts: ProfileCounts) -> Int? {

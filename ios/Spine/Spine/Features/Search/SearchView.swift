@@ -23,20 +23,30 @@ struct RecentSearch: Codable, Equatable, Hashable {
 @MainActor
 @Observable
 final class SearchViewModel {
+    /// Search's last lens, after the media types: people instead of media.
+    static let usersScope = "users"
+
     var query = ""
     var mediaTypes = APIConstants.fallbackMediaTypes
     var results: [MediaSummary] = []
+    var users: [SocialUser] = []
     var isLoading = false
     var errorMessage: String?
     var unavailableMediaTypes: [String] = []
     var resultRevision = 0
 
     private let mediaRepository: MediaRepository
+    private let socialRepository: SocialRepository?
     private let onUnauthorized: () -> Void
     private var searchID = 0
 
-    init(mediaRepository: MediaRepository, onUnauthorized: @escaping () -> Void) {
+    init(
+        mediaRepository: MediaRepository,
+        socialRepository: SocialRepository? = nil,
+        onUnauthorized: @escaping () -> Void
+    ) {
         self.mediaRepository = mediaRepository
+        self.socialRepository = socialRepository
         self.onUnauthorized = onUnauthorized
     }
 
@@ -67,6 +77,7 @@ final class SearchViewModel {
         searchID += 1
         query = ""
         results = []
+        users = []
         errorMessage = nil
         unavailableMediaTypes = []
         isLoading = false
@@ -80,6 +91,7 @@ final class SearchViewModel {
 
         guard !trimmed.isEmpty else {
             results = []
+            users = []
             unavailableMediaTypes = []
             return
         }
@@ -94,6 +106,14 @@ final class SearchViewModel {
         }
 
         do {
+            if mediaType == Self.usersScope, let socialRepository {
+                let found = try await socialRepository.searchUsers(query: trimmed)
+                guard currentSearchID == searchID else { return }
+                users = found
+                results = []
+                resultRevision += 1
+                return
+            }
             let response: MediaSearchResponse
             if mediaType == APIConstants.allMedia {
                 response = try await mediaRepository.searchAll(query: trimmed)
@@ -104,6 +124,7 @@ final class SearchViewModel {
             }
             guard currentSearchID == searchID else { return }
             results = response.results
+            users = []
             unavailableMediaTypes = response.unavailableMediaTypes
             resultRevision += 1
         } catch is CancellationError {
@@ -124,10 +145,12 @@ struct SearchView: View {
     private let diaryRepository: DiaryRepository
     private let listRepository: ListRepository
     private let peopleRepository: PeopleRepository
+    private let socialRepository: SocialRepository
     private let mediaLensStore: MediaLensStore
     private let currentUserId: Int?
     private let selectedTab: AppTab
     private let focusRequest: Int
+    private let findPeopleRequest: Int
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
 
@@ -138,10 +161,12 @@ struct SearchView: View {
         diaryRepository: DiaryRepository,
         listRepository: ListRepository? = nil,
         peopleRepository: PeopleRepository? = nil,
+        socialRepository: SocialRepository? = nil,
         mediaLensStore: MediaLensStore? = nil,
         currentUserId: Int? = nil,
         selectedTab: AppTab = .search,
         focusRequest: Int = 0,
+        findPeopleRequest: Int = 0,
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
@@ -150,10 +175,12 @@ struct SearchView: View {
         self.diaryRepository = diaryRepository
         self.listRepository = listRepository ?? AppRepositories.current().lists
         self.peopleRepository = peopleRepository ?? AppRepositories.current().people
+        self.socialRepository = socialRepository ?? AppRepositories.current().social
         self.mediaLensStore = mediaLensStore ?? MediaLensStore()
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.focusRequest = focusRequest
+        self.findPeopleRequest = findPeopleRequest
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
     }
@@ -165,10 +192,12 @@ struct SearchView: View {
             diaryRepository: diaryRepository,
             listRepository: listRepository,
             peopleRepository: peopleRepository,
+            socialRepository: socialRepository,
             mediaLensStore: mediaLensStore,
             currentUserId: currentUserId,
             selectedTab: selectedTab,
             focusRequest: focusRequest,
+            findPeopleRequest: findPeopleRequest,
             onSelectTab: onSelectTab,
             onUnauthorized: onUnauthorized
         )
@@ -189,10 +218,12 @@ private struct SearchViewContainer: View {
     let diaryRepository: DiaryRepository
     let listRepository: ListRepository
     let peopleRepository: PeopleRepository
+    let socialRepository: SocialRepository
     let mediaLensStore: MediaLensStore
     let currentUserId: Int?
     let selectedTab: AppTab
     let focusRequest: Int
+    let findPeopleRequest: Int
     let onSelectTab: (AppTab) -> Void
     let onUnauthorized: () -> Void
 
@@ -200,8 +231,10 @@ private struct SearchViewContainer: View {
         SearchViewContent(
             mediaRepository: mediaRepository,
             listRepository: listRepository,
+            socialRepository: socialRepository,
             mediaLensStore: mediaLensStore,
             focusRequest: focusRequest + returnFocusRequest,
+            findPeopleRequest: findPeopleRequest,
             onUnauthorized: onUnauthorized,
             onFeaturedList: { selectedFeaturedList = $0 },
             onSelect: { selectedRef = $0.ref }
@@ -354,10 +387,14 @@ private struct SearchViewContent: View {
     @State private var recentMedia: [MediaSummary] = []
     @State private var featuredStore: FeaturedListsStore?
     @State private var selectedSearchType: String
+    @State private var handledFindPeopleRequest = 0
     @AppStorage("recentMedia") private var recentMediaData = "[]"
 
     let mediaLensStore: MediaLensStore
     let focusRequest: Int
+    let findPeopleRequest: Int
+    /// Only the Search tab has the Users lens.
+    let includesUsers: Bool
     let supportedMediaTypes: [String]?
     let title: String
     let onCancel: (() -> Void)?
@@ -367,8 +404,10 @@ private struct SearchViewContent: View {
     init(
         mediaRepository: MediaRepository,
         listRepository: ListRepository? = nil,
+        socialRepository: SocialRepository? = nil,
         mediaLensStore: MediaLensStore,
         focusRequest: Int = 0,
+        findPeopleRequest: Int = 0,
         supportedMediaTypes: [String]? = nil,
         title: String = "Search",
         onCancel: (() -> Void)? = nil,
@@ -376,13 +415,19 @@ private struct SearchViewContent: View {
         onFeaturedList: @escaping (FeaturedListSelection) -> Void = { _ in },
         onSelect: @escaping (MediaSummary) -> Void
     ) {
-        _viewModel = State(initialValue: SearchViewModel(mediaRepository: mediaRepository, onUnauthorized: onUnauthorized))
+        _viewModel = State(initialValue: SearchViewModel(
+            mediaRepository: mediaRepository,
+            socialRepository: socialRepository,
+            onUnauthorized: onUnauthorized
+        ))
         _selectedSearchType = State(initialValue: supportedMediaTypes == nil ? APIConstants.allMedia : mediaLensStore.selectedMediaType)
         _featuredStore = State(initialValue: listRepository.map {
             FeaturedListsStore(repository: $0, onUnauthorized: onUnauthorized)
         })
         self.mediaLensStore = mediaLensStore
         self.focusRequest = focusRequest
+        self.findPeopleRequest = findPeopleRequest
+        includesUsers = socialRepository != nil && supportedMediaTypes == nil
         self.supportedMediaTypes = supportedMediaTypes
         self.title = title
         self.onCancel = onCancel
@@ -421,29 +466,35 @@ private struct SearchViewContent: View {
                         focusRequest: focusRequest
                     )
 
-                    SearchResultsSection(
-                        query: viewModel.query,
-                        selectedMediaType: selectedSearchType,
-                        results: viewModel.results,
-                        resultRevision: viewModel.resultRevision,
-                        isLoading: viewModel.isLoading,
-                        errorMessage: viewModel.errorMessage,
-                        unavailableMediaTypes: viewModel.unavailableMediaTypes,
-                        showsMediaTypes: selectedSearchType == APIConstants.allMedia,
-                        isSearchActive: isSearchActive,
-                        recentMedia: recentMedia,
-                        featuredStore: featuredStore,
-                        enabledMediaTypes: viewModel.mediaTypes,
-                        onFeaturedList: onFeaturedList,
-                        onRecentMedia: { media in
-                            saveRecentMedia(media)
-                            onSelect(media)
-                        },
-                        onSelect: { media in
-                            saveRecentMedia(media)
-                            onSelect(media)
+                    Group {
+                        if selectedSearchType == SearchViewModel.usersScope {
+                            UserSearchResults(query: viewModel.query, users: viewModel.users, isLoading: viewModel.isLoading)
+                        } else {
+                            SearchResultsSection(
+                                query: viewModel.query,
+                                selectedMediaType: selectedSearchType,
+                                results: viewModel.results,
+                                resultRevision: viewModel.resultRevision,
+                                isLoading: viewModel.isLoading,
+                                errorMessage: viewModel.errorMessage,
+                                unavailableMediaTypes: viewModel.unavailableMediaTypes,
+                                showsMediaTypes: selectedSearchType == APIConstants.allMedia,
+                                isSearchActive: isSearchActive,
+                                recentMedia: recentMedia,
+                                featuredStore: featuredStore,
+                                enabledMediaTypes: viewModel.mediaTypes,
+                                onFeaturedList: onFeaturedList,
+                                onRecentMedia: { media in
+                                    saveRecentMedia(media)
+                                    onSelect(media)
+                                },
+                                onSelect: { media in
+                                    saveRecentMedia(media)
+                                    onSelect(media)
+                                }
+                            )
                         }
-                    )
+                    }
                     .blur(radius: isMediaLensExpanded ? 8 : 0)
                     .allowsHitTesting(!isMediaLensExpanded)
                     .overlay {
@@ -479,6 +530,13 @@ private struct SearchViewContent: View {
                     loadRecentMedia()
                 }
                 .onChange(of: recentMediaData) { _, _ in loadRecentMedia() }
+                // Initial too: Home's Find People can be what first opens the Search tab.
+                .onChange(of: findPeopleRequest, initial: true) {
+                    guard includesUsers, findPeopleRequest != handledFindPeopleRequest else { return }
+                    handledFindPeopleRequest = findPeopleRequest
+                    selectedMediaTypeBinding.wrappedValue = SearchViewModel.usersScope
+                    Task { await searchCurrentQuery(mediaType: SearchViewModel.usersScope) }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .profileDidUpdate)) { notification in
                     guard allowsAllMediaSearch,
                           let profile = notification.userInfo?["profile"] as? UserProfile else { return }
@@ -510,7 +568,8 @@ private struct SearchViewContent: View {
 
     private var availableSearchTypes: [String] {
         let concrete = viewModel.mediaTypes
-        return allowsAllMediaSearch ? SearchViewModel.allSearchScopes(from: concrete) : concrete
+        guard allowsAllMediaSearch else { return concrete }
+        return SearchViewModel.allSearchScopes(from: concrete) + (includesUsers ? [SearchViewModel.usersScope] : [])
     }
 
     private var selectedMediaTypeBinding: Binding<String> {
@@ -518,7 +577,8 @@ private struct SearchViewContent: View {
             get: { selectedSearchType },
             set: {
                 selectedSearchType = $0
-                if $0 != APIConstants.allMedia {
+                // The lens store is shared with Library, which has no Users lens.
+                if $0 != APIConstants.allMedia, $0 != SearchViewModel.usersScope {
                     mediaLensStore.setMediaType($0)
                 }
                 loadRecentMedia()
@@ -540,6 +600,7 @@ private struct SearchViewContent: View {
     private func validateSelectedMediaType() {
         if allowsAllMediaSearch {
             if selectedSearchType != APIConstants.allMedia,
+               !(includesUsers && selectedSearchType == SearchViewModel.usersScope),
                !viewModel.mediaTypes.contains(selectedSearchType) {
                 selectedSearchType = APIConstants.allMedia
             }

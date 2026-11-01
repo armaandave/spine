@@ -5,7 +5,10 @@ from django.db import IntegrityError
 from django.db.models import Q
 from rest_framework import serializers
 
+from api.permissions import user_blocks
 from api.serializers.common import image_url, media_summary_from_item
+from api.services.stats import visible_diary_entries
+from api.views.lists import _lists_visible_to
 from app import exposure
 from app.curation import prime_curated_artwork
 from app.models import BasicMedia, DiaryEntry, MediaLike, MediaTypes, Status, Tag
@@ -19,11 +22,22 @@ from users.models import (
 )
 
 
-def profile_payload(user, request=None, viewer=None):
-    """Serialize a profile with mobile-relevant preferences."""
+def profile_payload(user, request=None, viewer=None, *, restricted=False):
+    """Serialize a profile with mobile-relevant preferences.
+
+    Someone else's counts cover only the logs and lists they may open. A ``restricted``
+    profile (a private account they don't follow, or one they block) leaves out the
+    favorites and backdrop: the app shows its header and nothing else.
+    """
     viewer = viewer or getattr(request, "user", None)
     following = requested = followed_by = blocked = False
+    entries = DiaryEntry.objects.filter(user=user)
+    lists = user.customlist_set.all()
+    if viewer != user:
+        entries = visible_diary_entries(user=user, viewer=viewer)
+        lists = _lists_visible_to(viewer, user)
     if viewer and viewer.is_authenticated and viewer != user:
+        blocked = user_blocks(viewer, user)
         following = Follow.objects.filter(
             from_user=viewer,
             to_user=user,
@@ -48,32 +62,48 @@ def profile_payload(user, request=None, viewer=None):
         "pronouns": user.pronouns,
         "location": user.location,
         "avatar_url": image_url(request, user.profile_picture) if user.profile_picture else None,
-        "profile_backdrop_url": user.profile_backdrop_url or None,
+        "profile_backdrop_url": None if restricted else user.profile_backdrop_url or None,
         "profile_backdrop_item": (
             media_summary_from_item(user.profile_backdrop_item, request=request, user=user)
-            if user.profile_backdrop_item
+            if user.profile_backdrop_item and not restricted
             else None
         ),
         "is_private": user.profile_private,
+        "restricted": restricted,
         "viewer_relationship": {
             "following": following,
             "followed_by": followed_by,
             "requested": requested,
             "blocked": blocked,
         },
-        "counts": {
+        "counts": _restricted_counts(user) if restricted else {
             "followers": user.follower_edges.filter(status=FollowStatus.ACCEPTED).count(),
             "following": user.following_edges.filter(status=FollowStatus.ACCEPTED).count(),
-            "diary_entries": user.diaryentry_set.count(),
-            "lists": user.customlist_set.count(),
+            "diary_entries": entries.count(),
+            "lists": lists.count(),
             "library_items": _media_count(user, exclude_status=Status.PLANNING.value),
-            "reviews": DiaryEntry.objects.filter(user=user).filter(_review_q()).count(),
+            "reviews": entries.filter(_review_q()).count(),
             "planned_items": _media_count(user, status=Status.PLANNING.value),
             "liked_items": MediaLike.objects.filter(user=user).count(),
-            "tags": Tag.objects.filter(diary_entries__user=user).distinct().count(),
+            "tags": Tag.objects.filter(diary_entries__in=entries).distinct().count(),
         },
-        "hof": hof_payload(user, request=request),
+        "hof": {} if restricted else hof_payload(user, request=request),
         "preferences": preferences_payload(user),
+    }
+
+
+def _restricted_counts(user):
+    """Return a closed profile's counts: its people and logs, nothing else."""
+    return {
+        "followers": user.follower_edges.filter(status=FollowStatus.ACCEPTED).count(),
+        "following": user.following_edges.filter(status=FollowStatus.ACCEPTED).count(),
+        "diary_entries": user.diaryentry_set.count(),
+        "lists": 0,
+        "library_items": 0,
+        "reviews": 0,
+        "planned_items": 0,
+        "liked_items": 0,
+        "tags": 0,
     }
 
 
