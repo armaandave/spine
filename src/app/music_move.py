@@ -306,7 +306,7 @@ def undo_moves(moved):
 # map
 
 
-def map_albums(*, limit=None, clock=None, sleep=None):
+def map_albums(*, limit=None, recheck_unmatched=False, clock=None, sleep=None):
     """Match the MusicBrainz albums that have Items to Apple Music albums.
 
     Writes only link rows, in three groups, in this order:
@@ -315,8 +315,9 @@ def map_albums(*, limit=None, clock=None, sleep=None):
        their row says, unless it is applied or a manual pick. Their rows get the
        Item's genres.
     2. Albums only featured lists hold, and 3. the other albums: their link row, else
-       Apple search with an artist the database already knows, with no MusicBrainz
-       requests. An unmatched one is searched again after 30 days.
+       Apple search with an artist the database already knows, else the same match as
+       group 1. An unmatched one is tried again after 30 days, or now with
+       ``recheck_unmatched``.
 
     ``limit`` caps the albums looked at. An album MusicBrainz no longer has (a 404 or
     400) is ``unmatched``, checked now, and the run carries on. Any other failed request
@@ -329,17 +330,14 @@ def map_albums(*, limit=None, clock=None, sleep=None):
     today = timezone.localdate()
     counts = Counter({"looked at": 0})
     stopped = ""
-    for item, group, link in _map_candidates(limit):
+    for item, group, link in _map_candidates(limit, recheck_unmatched=recheck_unmatched):
         counts["looked at"] += 1
         try:
             if group == 1:
                 fields = match_release_group(item.media_id, item.title, pacer=pacer, today=today)
                 fields["genres"] = _item_genres(item) or (list(link.genres) if link else [])
             else:
-                fields = _match_listed(item, today=today)
-                if fields is None:
-                    counts[f"group {group}: no artist known"] += 1
-                    continue
+                fields = _match_unlogged(item, pacer=pacer, today=today)
             outcome = _outcome(fields)
         except services.ProviderAPIError as error:
             if not _gone_from_musicbrainz(error):
@@ -360,7 +358,7 @@ def _gone_from_musicbrainz(error):
     return error.provider == MUSICBRAINZ and error.status_code in GONE_STATUSES
 
 
-def _map_candidates(limit):
+def _map_candidates(limit, *, recheck_unmatched=False):
     """Yield ``(item, group, link row)`` for map, group by group."""
     items = list(_musicbrainz_items())
     links = {
@@ -376,7 +374,7 @@ def _map_candidates(limit):
         if link is not None and (link.status == Status.APPLIED or link.method == Method.MANUAL):
             continue
         if group != 1 and link is not None:
-            fresh = link.checked_at is not None and link.checked_at > recheck_before
+            fresh = not recheck_unmatched and link.checked_at is not None and link.checked_at > recheck_before
             if link.status != Status.UNMATCHED or fresh:
                 continue
         checked = link.checked_at if link is not None and link.checked_at else None
@@ -550,6 +548,21 @@ def _match_songs(releases, title, names, standard, *, pacer, today):
         return None
     identity, members = listings[str(best[0]["id"])]
     return apple_music._match(identity, members, today=today), Method.ISRC, 3, members
+
+
+def _match_unlogged(item, *, pacer, today):
+    """Return the link row fields for an album with no user data.
+
+    Nobody's logs ride on these, so a tier-3 match is ``matched``, not a review.
+    """
+    fields = _match_listed(item, today=today)
+    if fields is not None and fields["status"] != Status.UNMATCHED:
+        return fields
+    fields = match_release_group(item.media_id, item.title, pacer=pacer, today=today)
+    fields["genres"] = _item_genres(item)
+    if fields["status"] == Status.REVIEW:
+        fields["status"] = Status.MATCHED
+    return fields
 
 
 def _match_listed(item, *, today):  # noqa: ARG001
