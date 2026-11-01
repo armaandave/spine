@@ -4337,16 +4337,6 @@ private struct MediaDetailPageView: View {
 
     private func ratingChips(_ detail: MediaDetail) -> [RatingChip] {
         var chips: [RatingChip] = []
-        if let rating = detail.community?.averageRating, !rating.isEmpty {
-            chips.append(RatingChip(
-                source: "SP",
-                value: "\(rating.starRatingValue)/5",
-                assetName: nil,
-                providerName: "Spine",
-                voteCount: detail.community?.ratingCount,
-                voteCountLabel: "ratings"
-            ))
-        }
         for rating in sortedExternalRatings(detail.externalRatings ?? []) where !rating.value.isEmpty {
             if !MediaExternalRatingPresentation.includes(
                 source: rating.source,
@@ -9257,11 +9247,6 @@ private extension String {
     var starRatingLabel: String {
         guard let stars = Double(self) else { return self }
         return "\(Self.cleanRating(stars))/5"
-    }
-
-    var starRatingValue: String {
-        guard let stars = Double(self) else { return self }
-        return String(format: "%.1f", stars)
     }
 
     /// The nearest half star, 1-10 half steps: "3.75" → 8.
