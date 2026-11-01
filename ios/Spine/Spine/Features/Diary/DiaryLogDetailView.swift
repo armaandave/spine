@@ -461,7 +461,7 @@ struct DiaryLogDetailView: View {
                 ratingLikeLine(entry)
             }
 
-            if let favorite = entry.favorite {
+            if let favorite = entry.favorite, !hidesFavorite(entry) {
                 favoriteLine(favorite)
             }
 
@@ -537,28 +537,31 @@ struct DiaryLogDetailView: View {
         .accessibilityIdentifier("diary-log.favorite")
     }
 
+    private func hidesFavorite(_ entry: DiaryEntry) -> Bool {
+        entry.favorite?.isHidden(containsSpoilers: entry.containsSpoilers, revealed: viewModel.isReviewRevealed) == true
+    }
+
     @ViewBuilder
     private func reviewBody(_ entry: DiaryEntry) -> some View {
-        if let review = clean(entry.review) {
-            if entry.containsSpoilers && !viewModel.isReviewRevealed {
-                Button {
-                    viewModel.isReviewRevealed = true
-                } label: {
-                    Label("Reveal spoiler review", systemImage: "eye.slash")
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(review)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.78))
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
+        let review = clean(entry.review)
+        if hidesFavorite(entry) || (review != nil && entry.containsSpoilers && !viewModel.isReviewRevealed) {
+            Button {
+                viewModel.isReviewRevealed = true
+            } label: {
+                Label(hidesFavorite(entry) ? "Reveal spoilers" : "Reveal spoiler review", systemImage: "eye.slash")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
+            .buttonStyle(.plain)
+        } else if let review {
+            Text(review)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
         } else {
             Text("No review text.")
                 .font(.system(size: 14, weight: .semibold))

@@ -57,9 +57,66 @@ final class LogFavoriteTests: XCTestCase {
         XCTAssertFalse(draft.isExpanded)
 
         draft.isExpanded = true
-        draft.toggle(LogFavorite(kind: .song, title: "First (renamed)", id: "recording-1"))
+        let sameRecordingOnDiscTwo = LogFavorite(kind: .song, title: "First", id: "recording-1", number: "B1")
+        draft.toggle(sameRecordingOnDiscTwo)
+        XCTAssertEqual(draft.favorite, sameRecordingOnDiscTwo, "A deluxe album's second copy is its own pick")
+
+        draft.isExpanded = true
+        draft.toggle(LogFavorite(kind: .song, title: "First (renamed)", id: "recording-1", number: "B1"))
         XCTAssertNil(draft.favorite, "The same song, whatever its title")
         XCTAssertTrue(draft.isExpanded)
+    }
+
+    func testAFavoriteEpisodeWaitsBehindASpoilerLogsRevealAndASongDoesnt() {
+        let episode = LogFavorite(kind: .episode, title: "Ozymandias", seasonNumber: 5, episodeNumber: 14)
+        XCTAssertTrue(episode.isHidden(containsSpoilers: true, revealed: false))
+        XCTAssertFalse(episode.isHidden(containsSpoilers: true, revealed: true))
+        XCTAssertFalse(episode.isHidden(containsSpoilers: false, revealed: false))
+        XCTAssertFalse(Self.song.isHidden(containsSpoilers: true, revealed: false))
+    }
+
+    func testOnlyAiredEpisodesAreOfferedAndUnnamedOnesGetAName() {
+        func episode(airDate: String?, title: String = "Named") -> EpisodeSummary {
+            EpisodeSummary(episodeNumber: 3, title: title, overview: nil, airDate: airDate, runtime: nil, imageUrl: nil, rating: nil)
+        }
+        XCTAssertTrue(episode(airDate: "2020-01-01").hasAired)
+        XCTAssertFalse(episode(airDate: "2999-01-01").hasAired)
+        XCTAssertFalse(episode(airDate: nil).hasAired, "To be announced")
+
+        XCTAssertEqual(LogFavorite.episode(episode(airDate: nil, title: ""), seasonNumber: 1).title, "Episode 3")
+    }
+
+    /// A Form drops a row that scrolls away, which cancels that row's task. That isn't a failed load, and two rows
+    /// asking at once make one request.
+    func testALoadSurvivesItsAskerGoingAwayAndRunsOnce() async throws {
+        let disc = try Self.disc()
+        var songLoads = 0
+        let songs = LogFavoriteDraft(loadDiscs: {
+            songLoads += 1
+            try await Task.sleep(for: .milliseconds(50))
+            return [disc]
+        })
+        let songAsker = Task { await songs.loadSongs() }
+        await Task.yield()
+        songAsker.cancel()
+        await songs.loadSongs()
+        XCTAssertFalse(songs.discsFailed)
+        XCTAssertEqual(songs.discs.map(\.position), [1])
+        XCTAssertEqual(songLoads, 1)
+
+        var seasonLoads = 0
+        let seasons = LogFavoriteDraft(loadSeason: { _ in
+            seasonLoads += 1
+            try await Task.sleep(for: .milliseconds(50))
+            return []
+        })
+        let seasonAsker = Task { await seasons.load(season: 1) }
+        await Task.yield()
+        seasonAsker.cancel()
+        await seasons.load(season: 1)
+        XCTAssertTrue(seasons.failedSeasons.isEmpty)
+        XCTAssertEqual(seasons.episodes[1]?.count, 0)
+        XCTAssertEqual(seasonLoads, 1)
     }
 
     func testFavoriteEpisodesFollowTheLoggedSeasons() {
@@ -77,13 +134,20 @@ final class LogFavoriteTests: XCTestCase {
         let loading = LogFavoriteDraft(loadSeason: { _ in [] })
         XCTAssertEqual(loading.seasons(for: TVTrackingSurfacesTests.ref("tv"), showSeasons: show).map(\.number), [1, 2])
 
-        // Switching the log from the whole show to another season drops an episode from elsewhere.
+        // The list opens on the picked season, else the favorite's, else the first it can show.
         draft.favorite = .episode(pilot, seasonNumber: 2)
-        draft.limit(to: [1, 2])
-        XCTAssertEqual(draft.season, 2, "The list opens on the favorite's season")
-        draft.limit(to: [1])
+        XCTAssertEqual(draft.listedSeason(in: show), 2)
+        draft.season = 1
+        XCTAssertEqual(draft.listedSeason(in: show), 1)
+        draft.season = nil
+        XCTAssertEqual(draft.listedSeason(in: [show[0]]), 1, "The favorite's season isn't listed")
+        XCTAssertNotNil(draft.favorite, "Working out what to list never changes a saved favorite")
+
+        // Pointing the log at another season drops an episode from elsewhere.
+        draft.dropFavorite(outside: show)
+        XCTAssertNotNil(draft.favorite)
+        draft.dropFavorite(outside: [show[0]])
         XCTAssertNil(draft.favorite)
-        XCTAssertEqual(draft.season, 1)
     }
 
     func testOnlyAlbumShowAndSeasonLogsOfferAFavorite() throws {

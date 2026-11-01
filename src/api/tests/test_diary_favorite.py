@@ -51,6 +51,26 @@ class AlbumFavoriteSongTests(TestCase):
         self.assertIsNone(cleared.data["favorite"])
         self.assertIsNone(DiaryEntry.objects.get(pk=logged.data["id"]).favorite)
 
+    def test_an_incomplete_favorite_on_an_edit_is_a_400_not_a_crash(self):
+        path = f"/api/v1/diary/{self.log(favorite=SONG).data['id']}/"
+        for favorite in (
+            {},
+            {"title": "No kind"},
+            {"kind": "song", "id": "rec-1"},
+            {"kind": "song", "title": "No ID"},
+            {"kind": "episode", "title": "No numbers"},
+        ):
+            with self.subTest(favorite=favorite):
+                response = self.client.patch(path, {"favorite": favorite}, format="json")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.client.get(path).data["favorite"], SONG)
+
+    def test_a_very_long_song_title_still_saves(self):
+        favorite = {**SONG, "title": "Symphony No. 9 " * 40}
+        logged = self.log(favorite=favorite)
+        self.assertEqual(logged.status_code, status.HTTP_201_CREATED, logged.data)
+        self.assertEqual(logged.data["favorite"]["title"], favorite["title"].strip())
+
     def test_log_without_a_favorite_reads_null(self):
         logged = self.log()
         self.assertEqual(logged.status_code, status.HTTP_201_CREATED, logged.data)

@@ -61,8 +61,20 @@ struct LogFavorite: Codable, Hashable {
         LogFavorite(kind: .song, title: track.title, id: track.recording.recordingMbid, number: track.number)
     }
 
+    /// TMDB sometimes has no name for an episode yet.
     static func episode(_ episode: EpisodeSummary, seasonNumber: Int) -> LogFavorite {
-        LogFavorite(kind: .episode, title: episode.title, seasonNumber: seasonNumber, episodeNumber: episode.episodeNumber)
+        LogFavorite(
+            kind: .episode,
+            title: episode.title.isEmpty ? "Episode \(episode.episodeNumber)" : episode.title,
+            seasonNumber: seasonNumber,
+            episodeNumber: episode.episodeNumber
+        )
+    }
+
+    /// A favorite episode can give away a log marked as spoilers, so it waits behind the same reveal as the review.
+    /// A song can't.
+    func isHidden(containsSpoilers: Bool, revealed: Bool) -> Bool {
+        kind == .episode && containsSpoilers && !revealed
     }
 
     /// "S1 E4" for an episode; a song's own number.
@@ -75,11 +87,12 @@ struct LogFavorite: Codable, Hashable {
         }
     }
 
-    /// The same song or episode, whatever its stored title.
+    /// The same song or episode, whatever its stored title. A deluxe album can list one recording twice, so a song
+    /// is also its place on the album.
     func matches(_ other: LogFavorite?) -> Bool {
         guard let other, kind == other.kind else { return false }
         return kind == .song
-            ? id == other.id
+            ? id == other.id && number == other.number
             : seasonNumber == other.seasonNumber && episodeNumber == other.episodeNumber
     }
 }

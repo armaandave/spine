@@ -24,7 +24,9 @@ final class MediaLogViewModel {
     let detail: MediaDetail
     var mode: MediaLogMode = .finished
     /// The season a TV show log targets when the server sent no composer (nil for the whole show).
-    var selectedSeasonNumber: Int?
+    var selectedSeasonNumber: Int? {
+        didSet { favoriteDraft.dropFavorite(outside: favoriteSeasons) }
+    }
     var reviewTitle = ""
     var review = ""
     let tagDraft = LogTagDraft()
@@ -221,7 +223,10 @@ final class MediaLogViewModel {
     /// Switching the target replaces only the defaults the user hasn't changed (TV-404).
     var selectedTVTargetId: String {
         get { tvDraft?.target.id ?? "" }
-        set { tvDraft?.selectTarget(id: newValue) }
+        set {
+            tvDraft?.selectTarget(id: newValue)
+            favoriteDraft.dropFavorite(outside: favoriteSeasons)
+        }
     }
 
     var selectedRef: MediaRef {

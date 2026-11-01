@@ -574,22 +574,31 @@ extension MediaDetail {
     }
 }
 
+extension EpisodeSummary {
+    /// By the viewer's episode state, else its date. An episode with no date hasn't aired.
+    var hasAired: Bool {
+        tv?.aired ?? CalendarDateCodec.date(from: airDate).map { !CalendarDateCodec.isFuture($0) } ?? false
+    }
+}
+
 /// A log's favorite song or episode. The pages a log opens from may not have the album's songs yet (a MusicBrainz
-/// album's first payload has none), so the draft loads them itself when needed; episodes load a season at a time,
-/// when the list first shows it.
+/// album's first payload has none), so the draft loads them itself when the list needs them; episodes load a season
+/// at a time. Loads run on their own rather than in the asking row's task: a Form drops rows that scroll away, and
+/// that mustn't read as a failed load.
 @MainActor
 @Observable
 final class LogFavoriteDraft {
     var favorite: LogFavorite?
     var isExpanded = false
-    /// The season whose episodes are listed.
+    /// The season picked in the list's menu.
     var season: Int?
     private(set) var discs: [MusicMedium]
     private(set) var discsFailed = false
     private(set) var songsLoaded = false
-    private var isLoadingSongs = false
     private(set) var episodes: [Int: [EpisodeSummary]]
     private(set) var failedSeasons: Set<Int> = []
+    @ObservationIgnored private var songsLoad: Task<Void, Never>?
+    @ObservationIgnored private var seasonLoads: [Int: Task<Void, Never>] = [:]
     private let loadDiscs: (() async throws -> [MusicMedium])?
     private let loadSeason: ((Int) async throws -> [EpisodeSummary])?
 
@@ -605,7 +614,6 @@ final class LogFavoriteDraft {
         self.loadDiscs = loadDiscs
         self.episodes = episodes
         self.loadSeason = loadSeason
-        season = favorite?.seasonNumber
     }
 
     /// Starts from what the page already has; the rest loads from the media repository: an album's songs from its
@@ -658,16 +666,23 @@ final class LogFavoriteDraft {
 
     /// Loads the album's songs once, when the page didn't have them.
     func loadSongs() async {
-        guard discs.isEmpty, !isLoadingSongs, !songsLoaded, let loadDiscs else { return }
-        isLoadingSongs = true
-        discsFailed = false
-        defer { isLoadingSongs = false }
-        do {
-            discs = try await loadDiscs()
-            songsLoaded = true
-        } catch {
-            discsFailed = true
+        guard discs.isEmpty, !songsLoaded, let loadDiscs else { return }
+        if let songsLoad {
+            await songsLoad.value
+            return
         }
+        discsFailed = false
+        let load = Task {
+            do {
+                discs = try await loadDiscs()
+                songsLoaded = true
+            } catch {
+                discsFailed = true
+            }
+            songsLoad = nil
+        }
+        songsLoad = load
+        await load.value
     }
 
     /// A season log's own season, or a show log's seasons; only those whose episodes can be listed.
@@ -686,21 +701,35 @@ final class LogFavoriteDraft {
 
     func load(season: Int) async {
         guard episodes[season] == nil, let loadSeason else { return }
-        failedSeasons.remove(season)
-        do {
-            episodes[season] = try await loadSeason(season)
-        } catch {
-            failedSeasons.insert(season)
+        if let running = seasonLoads[season] {
+            await running.value
+            return
         }
+        failedSeasons.remove(season)
+        let load = Task {
+            do {
+                episodes[season] = try await loadSeason(season)
+            } catch {
+                failedSeasons.insert(season)
+            }
+            seasonLoads[season] = nil
+        }
+        seasonLoads[season] = load
+        await load.value
     }
 
-    /// Keeps the favorite and the listed season within the log's seasons as its target changes.
-    func limit(to seasons: [Int]) {
-        if favorite?.kind == .episode, let number = favorite?.seasonNumber, !seasons.contains(number) {
+    /// The season whose episodes are listed: the one picked, else the favorite's, else the first.
+    func listedSeason(in seasons: [LogFavoriteSeason]) -> Int? {
+        let numbers = seasons.map(\.number)
+        return [season, favorite?.seasonNumber].compactMap { $0 }.first(where: numbers.contains) ?? numbers.first
+    }
+
+    /// When the user points the log at another target, drops a favorite episode it no longer covers. Only that:
+    /// opening a sheet never changes a saved favorite, whatever seasons the page lists today.
+    func dropFavorite(outside seasons: [LogFavoriteSeason]) {
+        guard favorite?.kind == .episode, let number = favorite?.seasonNumber else { return }
+        if !seasons.contains(where: { $0.number == number }) {
             favorite = nil
-        }
-        if season.map(seasons.contains) != true {
-            season = favorite?.seasonNumber ?? seasons.first
         }
     }
 
@@ -757,23 +786,6 @@ struct LogFavoriteSection: View {
             }
         }
         .logRowBackground()
-        .onChange(of: seasons, initial: true) {
-            draft.limit(to: seasons.map(\.number))
-        }
-        .task(id: draft.isExpanded ? draft.season : nil) {
-            if draft.isExpanded, let season = draft.season {
-                await draft.load(season: season)
-            }
-        }
-        .task {
-            // As the sheet opens, so the songs are usually there by the time the row is tapped.
-            if kind == .song {
-                await draft.loadSongs()
-            }
-        }
-        .sensoryFeedback(trigger: draft.favorite) { _, favorite in
-            favorite == nil ? SensoryFeedback.selection : .impact(weight: .light)
-        }
     }
 
     @ViewBuilder
@@ -800,21 +812,23 @@ struct LogFavoriteSection: View {
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity)
+                .task { await draft.loadSongs() }
         }
     }
 
     @ViewBuilder
     private var episodeRows: some View {
+        let listed = draft.listedSeason(in: seasons)
         if seasons.count > 1 {
-            Picker("Season", selection: $draft.season) {
+            Picker("Season", selection: Binding(get: { listed }, set: { draft.season = $0 })) {
                 ForEach(seasons) { season in
                     Text(season.title).tag(Int?.some(season.number))
                 }
             }
         }
-        if let season = draft.season {
+        if let season = listed {
             if let episodes = draft.episodes[season] {
-                let aired = episodes.filter { !CalendarDateCodec.isFuture(CalendarDateCodec.date(from: $0.airDate) ?? .distantPast) }
+                let aired = episodes.filter(\.hasAired)
                 if aired.isEmpty {
                     Text("No episodes have aired yet.")
                         .foregroundStyle(.secondary)
@@ -829,6 +843,7 @@ struct LogFavoriteSection: View {
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
+                    .task(id: season) { await draft.load(season: season) }
             }
         }
     }
@@ -836,6 +851,12 @@ struct LogFavoriteSection: View {
     private func choiceRow(number: String, choice: LogFavorite) -> some View {
         let isChosen = choice.matches(draft.favorite)
         return Button {
+            // Here rather than a modifier: picking folds this row away in the same moment.
+            if isChosen {
+                UISelectionFeedbackGenerator().selectionChanged()
+            } else {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
             withAnimation(.snappy(duration: 0.3)) {
                 draft.toggle(choice)
             }
