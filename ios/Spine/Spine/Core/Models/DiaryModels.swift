@@ -18,6 +18,8 @@ struct DiaryEntry: Codable, Identifiable {
     var percentage: Int? = nil
     var isTrueReplay: Bool? = nil
     let tags: [String]
+    /// The log's favorite song (album logs) or episode (show and season logs).
+    var favorite: LogFavorite? = nil
     let visibility: String
     let likeCount: Int
     let viewerHasLiked: Bool
@@ -33,6 +35,66 @@ struct DiaryEntry: Codable, Identifiable {
     var seasonEpisodes: [TVEpisodeState]? = nil
     var finished: TVFinished? = nil
     var earlierUnwatched: TVEarlierUnwatched? = nil
+}
+
+/// A log's favorite: a song from the album's tracklist, or an episode of the show or season.
+struct LogFavorite: Codable, Hashable {
+    let kind: Kind
+    let title: String
+    /// Songs: the tracklist's recording ID and the song's number on the album.
+    var id: String? = nil
+    var number: String? = nil
+    var seasonNumber: Int? = nil
+    var episodeNumber: Int? = nil
+
+    enum Kind: String, Codable {
+        case song
+        case episode
+
+        /// "Favorite Song" or "Favorite Episode".
+        var label: String {
+            self == .song ? "Favorite Song" : "Favorite Episode"
+        }
+    }
+
+    static func song(_ track: MusicTrack) -> LogFavorite {
+        LogFavorite(kind: .song, title: track.title, id: track.recording.recordingMbid, number: track.number)
+    }
+
+    /// TMDB sometimes has no name for an episode yet.
+    static func episode(_ episode: EpisodeSummary, seasonNumber: Int) -> LogFavorite {
+        LogFavorite(
+            kind: .episode,
+            title: episode.title.isEmpty ? "Episode \(episode.episodeNumber)" : episode.title,
+            seasonNumber: seasonNumber,
+            episodeNumber: episode.episodeNumber
+        )
+    }
+
+    /// A favorite episode can give away a log marked as spoilers, so it waits behind the same reveal as the review.
+    /// A song can't.
+    func isHidden(containsSpoilers: Bool, revealed: Bool) -> Bool {
+        kind == .episode && containsSpoilers && !revealed
+    }
+
+    /// "S1 E4" for an episode; a song's own number.
+    var numberLabel: String? {
+        switch kind {
+        case .song:
+            number.flatMap { $0.isEmpty ? nil : $0 }
+        case .episode:
+            seasonNumber.flatMap { season in episodeNumber.map { "S\(season) E\($0)" } }
+        }
+    }
+
+    /// The same song or episode, whatever its stored title. A deluxe album can list one recording twice, so a song
+    /// is also its place on the album.
+    func matches(_ other: LogFavorite?) -> Bool {
+        guard let other, kind == other.kind else { return false }
+        return kind == .song
+            ? id == other.id && number == other.number
+            : seasonNumber == other.seasonNumber && episodeNumber == other.episodeNumber
+    }
 }
 
 struct DiaryMedia: Codable {
@@ -94,6 +156,7 @@ struct DiaryEntryWriteRequest: Encodable {
     let tags: [String]
     let journeyId: Int?
     let mutationId: UUID?
+    var favorite: LogFavorite?
     /// False leaves `is_rewatch` out, so the server's TV-404 default applies (a TV log whose default hasn't loaded).
     var includesIsRewatch = true
     /// A TV log saved from a season or episode page names that page, so the response's `tv` carries the page's
@@ -145,6 +208,7 @@ struct DiaryEntryWriteRequest: Encodable {
         case tags
         case journeyId
         case mutationId
+        case favorite
         case pageSeasonNumber
         case pageEpisodeNumber
     }
@@ -173,6 +237,7 @@ struct DiaryEntryWriteRequest: Encodable {
         try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(journeyId, forKey: .journeyId)
         try container.encodeIfPresent(mutationId, forKey: .mutationId)
+        try container.encodeIfPresent(favorite, forKey: .favorite)
         try container.encodeIfPresent(pageSeasonNumber, forKey: .pageSeasonNumber)
         try container.encodeIfPresent(pageEpisodeNumber, forKey: .pageEpisodeNumber)
     }
@@ -194,6 +259,9 @@ struct DiaryEntryUpdateRequest: Encodable {
     let percentage: Int?
     let includesMinutes: Bool
     let includesPercentage: Bool
+    /// Sent only when `includesFavorite`, so nil clears it.
+    var favorite: LogFavorite?
+    var includesFavorite = false
 
     init(
         consumedAt: Date?,
@@ -241,6 +309,7 @@ struct DiaryEntryUpdateRequest: Encodable {
         case visibility
         case totalMinutes
         case percentage
+        case favorite
     }
 
     func encode(to encoder: Encoder) throws {
@@ -264,6 +333,7 @@ struct DiaryEntryUpdateRequest: Encodable {
         try container.encodeIfPresent(visibility, forKey: .visibility)
         if includesMinutes { try container.encode(totalMinutes, forKey: .totalMinutes) }
         if includesPercentage { try container.encode(percentage, forKey: .percentage) }
+        if includesFavorite { try container.encode(favorite, forKey: .favorite) }
     }
 }
 
