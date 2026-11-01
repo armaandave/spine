@@ -340,6 +340,50 @@ class ReleaseYearTests(TasteBase):
         self.assertEqual(section["rows"][2]["by_type"], {"anime": 1})
         self.assertEqual(section["coverage"], {"known": 4, "total": 5})
 
+    def test_logs_by_year_counts_logs_by_the_year_they_were_made(self):
+        old_film = self.item("movie", "1", year=1994)
+        new_film = self.item("movie", "2", year=2025)
+        album = self.item("music", "3", year=2024)
+        self.log(old_film, datetime(2024, 6, 1, tzinfo=UTC))
+        self.log(old_film)
+        self.log(new_film)
+        self.log(album)
+
+        expected = [{"year": 2024, "logs": 1}, {"year": 2025, "logs": 3}]
+        self.assertEqual(taste.build_release_years(self.scope())["logs_by_year"], expected)
+
+        # A year pill still sends every year, and its own year matches its logs.
+        in_2025 = self.scope(dates=YEAR_2025)
+        self.assertEqual(taste.build_release_years(in_2025)["logs_by_year"], expected)
+        self.assertEqual(expected[1]["logs"], in_2025.entries.count())
+
+        # A tab counts its own logs.
+        self.assertEqual(
+            taste.build_release_years(self.scope(media_type="music"))["logs_by_year"],
+            [{"year": 2025, "logs": 1}],
+        )
+
+    def test_logs_by_year_uses_the_log_day_on_the_owners_calendar(self):
+        film = self.item("movie", "1", year=1999)
+        # 00:30 UTC on 1 January is still 2024 in New York; midnight UTC is a date.
+        self.log(film, datetime(2025, 1, 1, 0, 30, tzinfo=UTC))
+        self.log(film, datetime(2025, 1, 1, tzinfo=UTC))
+
+        self.assertEqual(
+            taste.build_release_years(self.scope())["logs_by_year"],
+            [{"year": 2024, "logs": 1}, {"year": 2025, "logs": 1}],
+        )
+
+    def test_logs_by_year_leaves_out_logs_the_viewer_cannot_see(self):
+        _show, (season,) = self.show("1", year=1999)
+        self.log(season)
+        self.log(season, visibility="private")
+
+        self.assertEqual(
+            taste.build_release_years(self.scope(viewer=self.follower))["logs_by_year"],
+            [{"year": 2025, "logs": 1}],
+        )
+
     def test_new_vs_older_by_age_when_first_seen_in_the_range(self):
         new = self.item("movie", "1", year=2025)
         recent = self.item("movie", "2", year=2018)

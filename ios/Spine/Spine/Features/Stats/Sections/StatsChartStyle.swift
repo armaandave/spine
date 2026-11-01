@@ -416,6 +416,14 @@ enum StatsChartAxis {
         guard count > 1 else { return .top }
         return index == 0 ? .topLeading : .topTrailing
     }
+
+    /// Where a mark's label sits, or nil when the mark isn't one of `labels` and draws nothing.
+    /// iOS 27 asks for a mark on every bar of a categorical axis, whatever `AxisMarks(values:)`
+    /// says, so the list alone doesn't thin the labels.
+    static func anchor(for label: String?, in labels: [String]) -> UnitPoint? {
+        guard let label, let index = labels.firstIndex(of: label) else { return nil }
+        return anchor(index: index, count: labels.count)
+    }
 }
 
 extension View {
@@ -424,11 +432,10 @@ extension View {
     func statsEdgeXAxis(labels: [String], text: @escaping (String) -> String = { $0 }) -> some View {
         chartXAxis {
             AxisMarks(values: labels) { value in
-                AxisValueLabel(
-                    anchor: StatsChartAxis.anchor(index: value.index, count: value.count),
-                    collisionResolution: .disabled
-                ) {
-                    if let label = value.as(String.self) {
+                let label = value.as(String.self)
+                let anchor = StatsChartAxis.anchor(for: label, in: labels)
+                AxisValueLabel(anchor: anchor ?? .top, collisionResolution: .disabled) {
+                    if let label, anchor != nil {
                         Text(text(label))
                             .foregroundStyle(StatsChartStyle.axisLabel)
                     }

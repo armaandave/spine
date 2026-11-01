@@ -345,6 +345,10 @@ Each row counts its titles, its visible logs in the range, how many of those log
 A season or episode row uses its show's year.
 Titles with no release year are left out of the rows and counted in `coverage`.
 
+**Logs by year** counts the tab's visible logs by the year of their log day (STAT-100), not by release year.
+It covers every year whatever the range, so a year pill can show its year among the others; that year's row equals the header's `logs`.
+The app titles this section "By year", because its Logs switch doesn't go by release year.
+
 **New vs older** sorts the scope's logged titles by how old they were when first logged in the range:
 
 - `new`: released the same calendar year as that log day, or later;
@@ -898,11 +902,16 @@ The fallback, as the owner sees it:
     { "year": 2024, "titles": 31, "logs": 33, "rated": 30, "average_stars": "3.45", "by_type": { "movie": 25, "anime": 6 } }
   ],
   "coverage": { "known": 110, "total": 120 },
-  "new_vs_older": { "new": 12, "recent": 40, "older": 58 }
+  "new_vs_older": { "new": 12, "recent": 40, "older": 58 },
+  "logs_by_year": [
+    { "year": 2024, "logs": 41 },
+    { "year": 2025, "logs": 57 }
+  ]
 }
 ```
 
 `rows[]` are sorted by year, oldest first, one per year with titles (STAT-209); `by_type` counts titles.
+`logs_by_year[]` are sorted by year, oldest first, one per year with logs, whatever the range.
 `coverage.known` counts the scope's titles with a release year, out of `coverage.total`.
 The app folds years into decades itself.
 
@@ -1100,6 +1109,7 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | Genre group on Global, or one type's part of its bar | `genre_group=<key>`, plus that part's media types |
 | Language | `original_language=<name>`, plus the part's media types on Global |
 | Release year, or decade | `year=1999`, or `year_min=1990&year_max=1999` |
+| A year or decade of `logs_by_year` | its first and last day as `watched_from` and `watched_to`, replacing the range's |
 | Ratings bar, or one type's part of it | `rating_min=<rating_min>&rating_max=<rating_max>`, plus that part's media types |
 | A title in Top, Highest rated, Rated higher than most or Most logged | `item_id=<id>`; a show also returns its season and episode logs through `tv_rollup`, and a season row stays exact |
 | A header detail with a `drill` (streaks, Repeats, Reviews, Likes, Days with 2+ titles) | its `drill`, whose keys replace the scope's parameters of the same name (STAT-200) |
