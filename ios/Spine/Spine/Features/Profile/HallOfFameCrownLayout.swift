@@ -138,6 +138,32 @@ struct HallOfFameCrownLayout {
             * (1 - clampedCollapseProgress(collapseProgress))
     }
 
+    /// How far below the crown's top the lowest card reaches, counting its scale and tilt.
+    /// Cards are placed without taking up layout space, so the header has to ask.
+    static func lowestCardEdge(for slots: [FavoriteSlot]) -> CGFloat {
+        let below = arrangement(for: slots).below
+        let cardSize = cardSize(for: max(below.count, 1))
+        let placements = placements(count: below.count, avatarDiameter: avatarDiameter, position: .belowAvatar)
+
+        return zip(below, placements).map { slot, placement in
+            let size = visualSize(for: slot, cardSize: cardSize)
+            let top = crownHeight / 2 + placement.y - size.height / 2
+            let tilt = abs(placement.rotation.radians)
+            return top + placement.scale * (size.height * cos(tilt) + size.width / 2 * sin(tilt))
+        }.max() ?? 0
+    }
+
+    /// How much further down the name sits than it does under a full crown (seven cards below),
+    /// so it keeps the same distance from the lowest card on every profile. Fewer favorites mean
+    /// bigger cards, so this can be either sign.
+    static func nameOffset(for slots: [FavoriteSlot], collapseProgress: CGFloat) -> CGFloat {
+        (lowestCardEdge(for: slots) - fullCrownCardEdge) * (1 - clampedCollapseProgress(collapseProgress))
+    }
+
+    private static let fullCrownCardEdge = lowestCardEdge(
+        for: Array(repeating: FavoriteSlot(id: "movie", title: "", item: nil), count: 7)
+    )
+
     static func musicAvatarGap(forLowerCount count: Int) -> CGFloat {
         let cardSize = cardSize(for: count)
         let center = placements(count: count, avatarDiameter: avatarDiameter, position: .belowAvatar)[count / 2]
