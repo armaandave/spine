@@ -251,10 +251,10 @@ Do not restart the playthrough or change existing completion logs.
 For example, changing 40 hours to 35 or 70 percent to 60 corrects the current playthrough only.
 Separate updates after completion follow the field-link rules in GM-212.
 
-### GM-105: Percentage uses whole numbers from zero to 100
+### GM-105: Percentage runs from zero to 100, with up to two decimals
 
-Accept only whole-number percentages from 0 through 100, inclusive.
-Reject negative values, decimals, and values above 100.
+Accept percentages from 0 through 100, inclusive, whole or with up to two decimals, such as 65 or 42.5.
+Reject negative values, more than two decimals, and values above 100.
 Blank means unknown; an explicit zero means zero percent.
 Saving 100 percent does not automatically finish the playthrough, as specified in GM-200.
 
@@ -675,7 +675,7 @@ Run shared book and single-weight regression cases alongside these game cases.
 | G-02 | Save hours only, then percentage only. | Preserve the untouched field. Store both values on the same attempt. | GM-100, GM-101 |
 | G-03 | Clear one progress field; later enter zero. | Clear means unknown. Explicit zero remains a supplied value. Preserve the other field. | GM-101, GM-105, GM-106 |
 | G-04 | Lower hours or percentage to correct an error. | Keep the same attempt and status. Do not alter an existing completion log. | GM-104 |
-| G-05 | Enter invalid percentage or negative playtime. | Reject invalid input without partial changes. Accept whole percentages from 0 through 100. | GM-000, GM-105, GM-106 |
+| G-05 | Enter invalid percentage or negative playtime. | Reject invalid input without partial changes. Accept percentages from 0 through 100 with up to two decimals. | GM-000, GM-105, GM-106 |
 | G-06 | Enter 12h 30m, then replace it with 13h. | Store totals of 750, then 780 minutes, not their sum. | GM-102, GM-106 |
 | G-07 | Save 100 percent while Playing. | Stay Playing. Do not create a log or automatically open a completion composer. | GM-000, GM-200 |
 | G-08 | Finish at 65 percent and 40 hours. | Complete through one saved log. Preserve those values; do not force 100 percent. | GM-200, GM-204 |

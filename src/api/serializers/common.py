@@ -1231,7 +1231,9 @@ def progress_for_media(media):  # noqa: PLR0911 - media kinds are intentionally 
     if media_type == MediaTypes.GAME.value:
         session = media.current_session
         if session and session.percentage is not None:
-            return {"kind": "percentage", "value": session.percentage, "max": 100, "unit": "percent"}
+            from app import game_tracking
+
+            return {"kind": "percentage", "value": game_tracking.exact_percentage(session.completion), "max": 100, "unit": "percent"}
         return {"kind": "minutes", "value": session.total_minutes if session else None, "max": None, "unit": "minute"}
     if media_type == MediaTypes.BOOK.value:
         snapshot = getattr(media, "progress_snapshot", None)
@@ -1246,12 +1248,16 @@ def progress_for_media(media):  # noqa: PLR0911 - media kinds are intentionally 
                     "unit": "page",
                 }
             return {"kind": "percentage", "value": 100, "max": 100, "unit": "percent"}
-        return {
+        progress = {
             "kind": "pages",
             "value": snapshot.pages if snapshot and snapshot.has_pages else value,
             "max": media.item.total_pages,
             "unit": "page",
         }
+        if snapshot and snapshot.has_percentage:
+            # The page is rounded, so it can't give back a percent saved with it.
+            progress["percentage_exact"] = round(snapshot.percentage, 2)
+        return progress
     return {
         "kind": "count",
         "value": value,

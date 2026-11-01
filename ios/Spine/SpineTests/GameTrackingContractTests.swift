@@ -30,8 +30,8 @@ final class GameTrackingContractTests: XCTestCase {
     }
 
     func testProgressRejectsInvalidNumbers() throws {
-        for input in ["-1", "1.5", "101", "x"] {
-            XCTAssertThrowsError(try GameProgressDraft(percentage: input).values())
+        for input in ["-1", "1.555", "100.01", "101", "x"] {
+            XCTAssertThrowsError(try GameProgressDraft(percentage: input).values(), input)
         }
         XCTAssertThrowsError(try GameProgressDraft(hours: "-1").values())
         XCTAssertThrowsError(try GameProgressDraft(minutes: "60").values())
@@ -129,6 +129,76 @@ final class GameTrackingContractTests: XCTestCase {
         XCTAssertEqual(json["consumed_at"] as? String, "2025-01-01")
         XCTAssertNil(json["total_minutes"])
         XCTAssertNil(json["percentage"])
+    }
+
+    func testProgressKeepsTwoDecimalsAndStaysWholeWithoutThem() throws {
+        XCTAssertEqual(try GameProgressDraft(percentage: "42.5").values().percentage, Decimal(string: "42.5"))
+        XCTAssertEqual(try GameProgressDraft(percentage: "42,25").values().percentage, Decimal(string: "42.25"))
+        XCTAssertEqual(GameProgressDraft(totalMinutes: nil, percentage: Decimal(string: "42.50")).percentage, "42.5")
+        XCTAssertEqual(GameProgressDraft(totalMinutes: nil, percentage: 65).percentage, "65")
+        XCTAssertEqual(GameProgressValues(totalMinutes: nil, percentage: Decimal(string: "42.5")).summary, "42.5%")
+        XCTAssertEqual(GameProgressValues(totalMinutes: nil, percentage: 65).summary, "65%")
+
+        let request = GamePlaythroughWriteRequest(percentage: Decimal(string: "42.5"), includesPercentage: true)
+        XCTAssertEqual(try object(request)["percentage"] as? Double, 42.5)
+    }
+
+    func testPlaythroughReadsTheExactPercentOverTheWholeOne() throws {
+        let exact = #"""
+        {"id":1,"status":"In progress","total_minutes":null,"percentage":42,"percentage_exact":42.5,"is_replay":false}
+        """#
+        let playthrough = try JSONDecoder.api.decode(GamePlaythroughState.self, from: Data(exact.utf8))
+        XCTAssertEqual(playthrough.completion, Decimal(string: "42.5"))
+        XCTAssertEqual(playthrough.progress.summary, "42.5%")
+
+        let whole = #"""
+        {"id":1,"status":"In progress","total_minutes":null,"percentage":65,"is_replay":false}
+        """#
+        XCTAssertEqual(try JSONDecoder.api.decode(GamePlaythroughState.self, from: Data(whole.utf8)).completion, 65)
+    }
+
+    func testProgressSheetOpensInTheModeLastSavedForThatGame() {
+        let other = MediaRef(itemId: nil, source: "igdb", mediaType: "game", mediaId: "43", seasonNumber: nil, episodeNumber: nil)
+        ProgressDisplayPreferences.setGameMode(nil, for: Self.ref)
+        ProgressDisplayPreferences.setGameMode(nil, for: other)
+        defer {
+            ProgressDisplayPreferences.setGameMode(nil, for: Self.ref)
+            ProgressDisplayPreferences.setGameMode(nil, for: other)
+        }
+        let both = playthrough(totalMinutes: 720, percentage: 65)
+
+        XCTAssertEqual(GameProgressMode.initial(for: Self.ref, playthrough: both), .hours, "Nothing saved yet")
+        ProgressDisplayPreferences.setGameMode(.percent, for: Self.ref)
+        XCTAssertEqual(GameProgressMode.initial(for: Self.ref, playthrough: both), .percent, "Even with hours saved too")
+        XCTAssertEqual(GameProgressMode.initial(for: other, playthrough: both), .hours, "Each game keeps its own")
+
+        ProgressDisplayPreferences.setGameMode(.hours, for: Self.ref)
+        XCTAssertEqual(
+            GameProgressMode.initial(for: Self.ref, playthrough: playthrough(totalMinutes: nil, percentage: 65)),
+            .hours,
+            "Back to hours once saved in hours"
+        )
+    }
+
+    func testProgressSheetBeforeASaveOpensInPercentOnlyWhenThatsAllItHas() {
+        ProgressDisplayPreferences.setGameMode(nil, for: Self.ref)
+        XCTAssertEqual(GameProgressMode.initial(for: Self.ref, playthrough: playthrough(totalMinutes: nil, percentage: 65)), .percent)
+        XCTAssertEqual(GameProgressMode.initial(for: Self.ref, playthrough: playthrough(totalMinutes: 60, percentage: nil)), .hours)
+        XCTAssertEqual(GameProgressMode.initial(for: Self.ref, playthrough: playthrough(totalMinutes: nil, percentage: nil)), .hours)
+    }
+
+    func testSavingAGameModeLeavesItsCaptionsAlone() {
+        ProgressDisplayPreferences.removeMode(for: Self.ref)
+        defer { ProgressDisplayPreferences.setGameMode(nil, for: Self.ref) }
+        ProgressDisplayPreferences.setGameMode(.percent, for: Self.ref)
+        XCTAssertNil(ProgressDisplayPreferences.mode(for: Self.ref), "Activity reads this: a game saved by percent still tells its hours")
+    }
+
+    private func playthrough(totalMinutes: Int?, percentage: Int?) -> GamePlaythroughState {
+        GamePlaythroughState(
+            id: 1, status: "In progress", origin: "live", startDate: nil, endDate: nil,
+            totalMinutes: totalMinutes, percentage: percentage, completionDiaryEntryId: nil, isReplay: false
+        )
     }
 
     func testGameStateDecodesUnknownAndCompletedProgressAndHistory() throws {

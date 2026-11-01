@@ -7039,9 +7039,110 @@ final class SpineTests: XCTestCase {
         let pages = try XCTUnwrap(viewModel.totalPages)
 
         XCTAssertEqual(viewModel.mode, .pages)
-        XCTAssertEqual(viewModel.lastValue, Int((Double(pages) * 0.35).rounded()), "35% of the book, not page 35")
+        XCTAssertEqual(viewModel.lastValue, Decimal(Int((Double(pages) * 0.35).rounded())), "35% of the book, not page 35")
         XCTAssertEqual(viewModel.currentValue, viewModel.lastValue)
         XCTAssertFalse(viewModel.canSave, "Nothing typed, nothing to save")
+    }
+
+    @MainActor
+    func testProgressUpdatePercentTakesDecimalsAndStaysWholeWithoutThem() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(
+            detail: detail,
+            progress: trackingProgress(kind: "percentage", value: 40, max: 100, unit: "percent").progress
+        )
+
+        viewModel.updateInput("42")
+        XCTAssertEqual(viewModel.saveRequest?.value, 42)
+        XCTAssertEqual(viewModel.summaryText, "+2% since 40%")
+
+        viewModel.updateInput("42.")
+        XCTAssertEqual(viewModel.keyboardInputText, "42.")
+        XCTAssertEqual(viewModel.currentValue, 42)
+
+        viewModel.updateInput("42,5")
+        XCTAssertEqual(viewModel.keyboardInputText, "42.5", "A comma from a regional keypad is the point")
+        XCTAssertEqual(viewModel.saveRequest, ProgressUpdateSaveRequest(mode: .percentage, value: Decimal(string: "42.5")!))
+        XCTAssertEqual(viewModel.summaryText, "+2.5% since 40%")
+
+        viewModel.updateInput("42.555")
+        XCTAssertEqual(viewModel.keyboardInputText, "42.55", "Two decimals at most")
+
+        viewModel.updateInput("100.5")
+        XCTAssertNotNil(viewModel.validationMessage)
+        XCTAssertFalse(viewModel.canSave)
+
+        viewModel.updateInput("99.99")
+        XCTAssertFalse(viewModel.isFullProgress, "Only exactly 100 offers the finish")
+        viewModel.updateInput("100")
+        XCTAssertTrue(viewModel.isFullProgress)
+    }
+
+    @MainActor
+    func testProgressUpdatePagesTakeNoDecimalPoint() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.removeMode(for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let viewModel = ProgressUpdateViewModel(detail: detail, progress: nil)
+
+        XCTAssertEqual(viewModel.mode, .pages)
+        viewModel.updateInput("12.5")
+        XCTAssertEqual(viewModel.input, "125")
+    }
+
+    @MainActor
+    func testProgressUpdateShowsTheSavedPercentOfABookWithPages() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.percentage, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let progress = ProgressState(kind: "pages", value: 128, max: 300, unit: "page", percentageExact: Decimal(string: "42.5"))
+        let viewModel = ProgressUpdateViewModel(detail: detail, progress: progress)
+
+        XCTAssertEqual(viewModel.mode, .percentage)
+        XCTAssertEqual(viewModel.lastValue, Decimal(string: "42.5"), "Not the 43% that page 128 rounds to")
+        XCTAssertEqual(viewModel.summaryText, "Last saved at 42.5%")
+        XCTAssertFalse(viewModel.canSave, "Nothing typed, nothing to save")
+        XCTAssertEqual(progress.compactDisplayText(preferredMode: .percentage), "42.5%")
+        XCTAssertEqual(progress.detailDisplayText(preferredMode: .percentage), "42.5%")
+
+        viewModel.selectMode(.pages)
+        XCTAssertEqual(viewModel.lastValue, 128)
+        XCTAssertFalse(viewModel.canSave)
+        viewModel.selectMode(.percentage)
+        XCTAssertEqual(viewModel.input, "42.5", "Back to the saved percent, not a rounding of the page")
+        XCTAssertFalse(viewModel.canSave)
+    }
+
+    @MainActor
+    func testProgressUpdatePercentOfAPageTrackedBookStaysWhole() {
+        let detail = TestFixtures.logDetail(mediaType: "book")
+        ProgressDisplayPreferences.setMode(.pages, for: detail.ref)
+        defer { ProgressDisplayPreferences.removeMode(for: detail.ref) }
+        let progress = ProgressState(kind: "pages", value: 128, max: 300, unit: "page", percentageExact: Decimal(string: "42.67"))
+        let viewModel = ProgressUpdateViewModel(detail: detail, progress: progress)
+
+        viewModel.selectMode(.percentage)
+        XCTAssertEqual(viewModel.lastValue, 43)
+        XCTAssertEqual(viewModel.input, "43")
+        XCTAssertFalse(viewModel.canSave)
+    }
+
+    func testProgressPercentReadsAndWritesNumbers() {
+        XCTAssertEqual(ProgressPercent.value("42."), 42)
+        XCTAssertEqual(ProgressPercent.value(".5"), Decimal(string: "0.5"))
+        XCTAssertEqual(ProgressPercent.value("42,5"), Decimal(string: "42.5"))
+        XCTAssertEqual(ProgressPercent.value("٤٢"), 42, "Digits from a regional keypad")
+        for invalid in [".", "", "1.2.3", "x", "-1", "4x"] {
+            XCTAssertNil(ProgressPercent.value(invalid), invalid)
+        }
+        XCTAssertEqual(ProgressPercent.text(65), "65")
+        XCTAssertEqual(ProgressPercent.text(Decimal(string: "65.00")!), "65")
+        XCTAssertEqual(ProgressPercent.text(Decimal(string: "42.50")!), "42.5")
+        XCTAssertEqual(ProgressPercent.sanitized("1234"), "123")
+        XCTAssertEqual(ProgressPercent.sanitized("12.3.4"), "12.34")
+        XCTAssertEqual(ProgressPercent.sanitized("abc"), "")
     }
 
     @MainActor

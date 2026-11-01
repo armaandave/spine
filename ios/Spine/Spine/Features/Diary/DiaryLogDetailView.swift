@@ -405,7 +405,7 @@ struct DiaryLogDetailView: View {
                 }
 
                 if entry.media.ref.mediaType == "game" {
-                    let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.percentage).summary
+                    let progress = GameProgressValues(totalMinutes: entry.totalMinutes, percentage: entry.completion).summary
                     if !progress.isEmpty { Text("At completion: \(progress)").font(.subheadline) }
                 }
                 let parts = titleParts(TVTrackingPresentation.diaryTitle(for: entry.media))
@@ -747,8 +747,8 @@ final class DiaryLogEditViewModel {
             showSeasons: LogFavoriteSeason.from(mediaDetail?.seasons ?? [])
         )
         consumedAt = CalendarDateCodec.date(from: entry.consumedAt) ?? Date()
-        gameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
-        initialGameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.percentage)
+        gameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.completion)
+        initialGameProgress = GameProgressDraft(totalMinutes: entry.totalMinutes, percentage: entry.completion)
         ratingSteps = entry.rating?.ratingHalfSteps ?? 0
         reviewTitle = entry.reviewTitle ?? ""
         review = entry.review ?? ""

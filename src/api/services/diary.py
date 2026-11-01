@@ -104,7 +104,10 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
     }
     if entry.item.media_type == "game":
         session = getattr(entry, "game_playthrough", None)
-        payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": (entry.progress_snapshot or {}).get("total_minutes"), "percentage": (entry.progress_snapshot or {}).get("percentage")})
+        from app import game_tracking
+
+        snapshot = entry.progress_snapshot or {}
+        payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": snapshot.get("total_minutes"), "percentage": game_tracking.whole_percentage(snapshot.get("percentage")), "percentage_exact": snapshot.get("percentage")})
     return payload
 
 

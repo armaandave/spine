@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from api.serializers.common import MediaRefSerializer
-from api.serializers.tracking import GameIntegerField
+from api.serializers.tracking import GameIntegerField, GamePercentageField
 
 
 class CalendarOrDateTimeField(serializers.Field):
@@ -48,7 +48,7 @@ class DiaryEntryWriteSerializer(serializers.Serializer):
     mutation_id = serializers.UUIDField(required=False)
     playthrough_id = serializers.IntegerField(required=False, min_value=1)
     total_minutes = GameIntegerField(required=False, min_value=0, allow_null=True)
-    percentage = GameIntegerField(required=False, min_value=0, max_value=100, allow_null=True)
+    percentage = GamePercentageField(required=False, allow_null=True)
     start_date = serializers.DateField(required=False, allow_null=True)
     consumed_at = CalendarOrDateTimeField(required=False)
     rating = serializers.DecimalField(

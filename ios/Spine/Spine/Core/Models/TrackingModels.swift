@@ -1,5 +1,58 @@
 import Foundation
 
+/// A percent as it's typed and shown: whole unless someone wants decimals, and then up to two.
+nonisolated enum ProgressPercent {
+    /// What a percent field keeps of what's typed: three digits, a decimal point and two decimals. A comma, from a
+    /// keypad in a region that uses one, becomes the point.
+    static func sanitized(_ text: String) -> String {
+        var whole = ""
+        var decimals = ""
+        var hasPoint = false
+        for character in text {
+            if let digit = character.wholeNumberValue {
+                if !hasPoint, whole.count < 3 {
+                    whole += String(digit)
+                } else if hasPoint, decimals.count < 2 {
+                    decimals += String(digit)
+                }
+            } else if separators.contains(String(character)) {
+                hasPoint = true
+            }
+        }
+        return hasPoint ? "\(whole).\(decimals)" : whole
+    }
+
+    /// The number in a field's text, or nil when it isn't one. "42." is 42 and ".5" is 0.5.
+    static func value(_ text: String) -> Decimal? {
+        var normalized = ""
+        for character in text.trimmingCharacters(in: .whitespacesAndNewlines) {
+            if let digit = character.wholeNumberValue {
+                normalized += String(digit)
+            } else if separators.contains(String(character)) {
+                normalized += "."
+            } else {
+                return nil
+            }
+        }
+        guard normalized.contains(where: \.isNumber), normalized.filter({ $0 == "." }).count <= 1 else { return nil }
+        return Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static var separators: Set<String> { [".", ",", Locale.current.decimalSeparator ?? "."] }
+
+    static func rounded(_ value: Decimal) -> Decimal {
+        var value = value
+        var result = Decimal()
+        NSDecimalRound(&result, &value, 2, .plain)
+        return result
+    }
+
+    /// "65" or "42.5", never "65.0".
+    static func text(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: rounded(value)).stringValue
+    }
+}
+
 enum ProgressUpdateMode: String, CaseIterable, Identifiable {
     case pages
     case percentage
@@ -273,10 +326,10 @@ extension ProgressChangeState {
 
         let prefix = delta > 0 ? "+" : ""
         if mode == .percentage {
-            return "\(prefix)\(delta)%"
+            return "\(prefix)\(ProgressPercent.text(delta))%"
         }
         let unit = abs(delta) == 1 ? current.unit : current.pluralizedUnit
-        return "\(prefix)\(delta) \(unit)"
+        return "\(prefix)\(ProgressState.display(delta)) \(unit)"
     }
 }
 
@@ -285,6 +338,8 @@ nonisolated struct ProgressState: Codable, Hashable {
     let value: Decimal?
     let max: Decimal?
     let unit: String
+    /// The percent saved alongside a page position, which is rounded and can't be worked back to it.
+    var percentageExact: Decimal? = nil
 }
 
 extension ProgressState {
@@ -297,41 +352,42 @@ extension ProgressState {
     }
 
     func compactDisplayText(preferredMode: ProgressUpdateMode?) -> String? {
-        if preferredMode == .percentage, let value = value(in: .percentage) {
+        if preferredMode == .percentage, let value = savedPercentage {
             guard value > 0 else { return nil }
-            return "\(Self.display(Decimal(value)))%"
+            return "\(ProgressPercent.text(value))%"
         }
         if preferredMode == .pages, let value = value(in: .pages) {
             guard value > 0 else { return nil }
             let maxText = max.map { "/\(Self.display($0))" } ?? ""
             let unitText = value == 1 && max == nil ? "page" : "pages"
-            return "\(value)\(maxText) \(unitText)"
+            return "\(Self.display(value))\(maxText) \(unitText)"
         }
         guard let value else { return nil }
         guard value > 0 else { return nil }
         if isPercentage {
-            return "\(Self.display(value))%"
+            return "\(ProgressPercent.text(value))%"
         }
         let maxText = max.map { "/\(Self.display($0))" } ?? ""
         return "\(Self.display(value))\(maxText) \(pluralizedUnit(for: max ?? value))"
     }
 
     func detailDisplayText(preferredMode: ProgressUpdateMode?) -> String? {
-        if preferredMode == .percentage, let value = value(in: .percentage) {
+        if preferredMode == .percentage, let value = savedPercentage {
             guard value > 0 else { return nil }
-            return "\(value)%"
+            return "\(ProgressPercent.text(value))%"
         }
         if preferredMode == .pages, let value = value(in: .pages) {
             guard value > 0 else { return nil }
+            let pages = Self.display(value)
             if let max {
-                return "\(value) of \(Self.display(max)) pages"
+                return "\(pages) of \(Self.display(max)) pages"
             }
-            return "\(value) pages"
+            return "\(pages) pages"
         }
         guard let value else { return nil }
         guard value > 0 else { return nil }
         if isPercentage {
-            return "\(Self.display(value))%"
+            return "\(ProgressPercent.text(value))%"
         }
         if let max {
             return "\(Self.display(value)) of \(Self.display(max)) \(pluralizedUnit(for: max))"
@@ -348,20 +404,29 @@ extension ProgressState {
         return .pages
     }
 
-    func value(in requestedMode: ProgressUpdateMode) -> Int? {
+    /// A percent saved by someone tracking this title by percent. Someone tracking by pages gets `value(in:)`'s whole
+    /// number instead of the 44.54% a page works out to.
+    var savedPercentage: Decimal? {
+        percentageExact.map(ProgressPercent.rounded) ?? value(in: .percentage)
+    }
+
+    /// Pages are whole. A saved percent keeps its decimals, and a percent worked out from pages is whole.
+    func value(in requestedMode: ProgressUpdateMode) -> Decimal? {
         guard let value else { return nil }
-        let intValue = Int(NSDecimalNumber(decimal: value).doubleValue.rounded())
-        guard mode != requestedMode else { return intValue }
+        let number = NSDecimalNumber(decimal: value).doubleValue
+        guard mode != requestedMode else {
+            return mode == .percentage ? ProgressPercent.rounded(value) : Decimal(Int(number.rounded()))
+        }
         guard let maxValue = max.map({ NSDecimalNumber(decimal: $0).doubleValue }), maxValue > 0 else {
             return nil
         }
         switch (mode, requestedMode) {
         case (.pages, .percentage):
-            return Int((Double(intValue) / maxValue * 100).rounded())
+            return Decimal(Int((number.rounded() / maxValue * 100).rounded()))
         case (.percentage, .pages):
-            return Int((Double(intValue) / 100 * maxValue).rounded())
+            return Decimal(Int((number / 100 * maxValue).rounded()))
         default:
-            return intValue
+            return value
         }
     }
 
@@ -380,7 +445,7 @@ extension ProgressState {
         unit.hasSuffix("s") ? unit : "\(unit)s"
     }
 
-    private static func display(_ value: Decimal) -> String {
+    fileprivate static func display(_ value: Decimal) -> String {
         NSDecimalNumber(decimal: value).stringValue
     }
 }
@@ -400,8 +465,22 @@ enum ProgressDisplayPreferences {
         UserDefaults.standard.removeObject(forKey: key(for: ref))
     }
 
+    /// The mode a game's progress sheet last saved in. Kept apart from `mode`, which captions read: a game saved by
+    /// percent still tells its hours in activity.
+    static func gameMode(for ref: MediaRef) -> GameProgressMode? {
+        UserDefaults.standard.string(forKey: gameKey(for: ref)).flatMap(GameProgressMode.init(rawValue:))
+    }
+
+    static func setGameMode(_ mode: GameProgressMode?, for ref: MediaRef) {
+        UserDefaults.standard.set(mode?.rawValue, forKey: gameKey(for: ref))
+    }
+
     private static func key(for ref: MediaRef) -> String {
         "\(prefix)\(ref.id)"
+    }
+
+    private static func gameKey(for ref: MediaRef) -> String {
+        "progress.game.mode.\(ref.id)"
     }
 }
 

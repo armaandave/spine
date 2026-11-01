@@ -16,6 +16,14 @@ class GameIntegerField(serializers.IntegerField):
         return super().to_internal_value(data)
 
 
+class GamePercentageField(serializers.DecimalField):
+    """Accept a percentage from 0 to 100, whole or with up to two decimals (GM-105)."""
+
+    def __init__(self, **kwargs):
+        """Fix the field's range and precision."""
+        super().__init__(max_digits=5, decimal_places=2, min_value=Decimal(0), max_value=Decimal(100), **kwargs)
+
+
 class TrackingWriteSerializer(serializers.Serializer):
     """Validate generic tracking writes."""
 
@@ -31,7 +39,7 @@ class TrackingWriteSerializer(serializers.Serializer):
     progress = serializers.IntegerField(min_value=0, required=False)
     progressed_on = serializers.DateField(required=False)
     total_minutes = GameIntegerField(min_value=0, max_value=2147483647, required=False, allow_null=True)
-    percentage = GameIntegerField(min_value=0, max_value=100, required=False, allow_null=True)
+    percentage = GamePercentageField(required=False, allow_null=True)
     start_date = serializers.DateTimeField(required=False, allow_null=True)
     end_date = serializers.DateTimeField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
@@ -206,7 +214,7 @@ class GameProgressSerializer(serializers.Serializer):
     playthrough_id = serializers.IntegerField(required=False, min_value=1)
     progressed_on = serializers.DateField(required=False)
     total_minutes = GameIntegerField(required=False, allow_null=True, min_value=0, max_value=2147483647)
-    percentage = GameIntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    percentage = GamePercentageField(required=False, allow_null=True)
 
 
 class GamePlaythroughSerializer(GameProgressSerializer):

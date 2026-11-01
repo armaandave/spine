@@ -166,11 +166,11 @@ class GameTrackingWebTests(TestCase):
         self.assertEqual(log.consumed_at, original_date)
         self.assertEqual(log.progress_snapshot, {"total_minutes": 650, "percentage": 0})
 
-    def test_completion_create_rejects_missing_date_and_decimal_progress_atomically(self):
+    def test_completion_create_rejects_missing_date_and_invalid_progress_atomically(self):
         game_tracking.start(self.user, self.item)
         url = reverse("add_movie_diary_entry", args=["manual", "game", self.item.media_id])
         for invalid in ({}, {"watch_date": ""}, {"watch_date": "not-a-date"},
-                        {"watch_date": str(timezone.localdate()), "percentage": "65.0"}):
+                        {"watch_date": str(timezone.localdate()), "percentage": "65.555"}):
             response = self.client.post(url, {"mutation_id": str(uuid4()), **invalid})
             self.assertEqual(response.status_code, 400)
             self.assertFalse(DiaryEntry.objects.filter(user=self.user, item=self.item).exists())

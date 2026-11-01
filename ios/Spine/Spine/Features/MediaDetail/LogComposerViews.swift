@@ -516,7 +516,7 @@ struct LogGameProgressRows<Focus: Hashable>: View {
 
         LabeledContent("Completion") {
             HStack(spacing: 4) {
-                numberField("Percentage", text: $draft.percentage, focusValue: percentageFocus)
+                numberField("Percentage", text: $draft.percentage, focusValue: percentageFocus, keyboard: .decimalPad)
                 Text("%")
                 clearButton("Clear percentage", isVisible: !draft.percentage.isEmpty) {
                     draft.percentage = ""
@@ -525,9 +525,9 @@ struct LogGameProgressRows<Focus: Hashable>: View {
         }
     }
 
-    private func numberField(_ label: String, text: Binding<String>, focusValue: Focus) -> some View {
+    private func numberField(_ label: String, text: Binding<String>, focusValue: Focus, keyboard: UIKeyboardType = .numberPad) -> some View {
         TextField("–", text: text)
-            .keyboardType(.numberPad)
+            .keyboardType(keyboard)
             .multilineTextAlignment(.trailing)
             .monospacedDigit()
             .foregroundStyle(.primary)

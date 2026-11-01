@@ -117,7 +117,7 @@ final class MediaLogViewModel {
             isRepeat = (game?.lifetimeCompletionCount ?? 0) > 0
             if game?.hasLivePlaythrough == true {
                 gamePlaythrough = game?.currentPlaythrough
-                gameProgress = GameProgressDraft(totalMinutes: gamePlaythrough?.totalMinutes, percentage: gamePlaythrough?.percentage)
+                gameProgress = GameProgressDraft(totalMinutes: gamePlaythrough?.totalMinutes, percentage: gamePlaythrough?.completion)
             }
         } else if detail.ref.mediaType == "book" {
             isRepeat = tracking?.book?.isRereading ?? detail.userState?.book?.isRereading ?? false
@@ -498,17 +498,19 @@ final class MediaLogViewModel {
 
     private func saveProgressOnly() async -> Bool {
         await performSave {
-            guard let value = Decimal(string: progressText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            guard let value = ProgressPercent.value(progressText) else {
                 throw MediaLogError.invalidProgress
             }
             if detail.ref.mediaType == "book" {
-                return result(tracking: try await trackingRepository.updateBookProgress(
+                let tracking = try await trackingRepository.updateBookProgress(
                     source: detail.ref.source,
                     mediaId: detail.ref.mediaId,
                     progressType: progressType,
                     value: value,
                     notes: review
-                ))
+                )
+                ProgressDisplayPreferences.setMode(progressType == "percentage" ? .percentage : .pages, for: detail.ref)
+                return result(tracking: tracking)
             }
             return result(tracking: try await trackingRepository.update(
                 ref: detail.ref,
@@ -856,7 +858,7 @@ struct MediaLogView: View {
             LabeledContent("Progress") {
                 HStack(spacing: 6) {
                     TextField(viewModel.progressPlaceholder, text: $viewModel.progressText)
-                        .keyboardType(.decimalPad)
+                        .keyboardType(viewModel.progressType == "percentage" ? .decimalPad : .numberPad)
                         .multilineTextAlignment(.trailing)
                         .monospacedDigit()
                         .foregroundStyle(.primary)
