@@ -207,6 +207,7 @@ struct StatsView: View {
                     releaseYears: releaseYears,
                     mediaType: mediaType,
                     currentYear: page.years?.current ?? Calendar.current.component(.year, from: Date()),
+                    period: period,
                     onDrillDown: drillDown
                 )
             }
