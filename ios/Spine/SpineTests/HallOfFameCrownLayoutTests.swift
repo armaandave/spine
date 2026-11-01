@@ -306,6 +306,71 @@ final class HallOfFameCrownLayoutTests: XCTestCase {
         }
     }
 
+    func testLowestCardEdgeGrowsAsCardsGetBigger() {
+        // Odd rows hang one upright card straight down the middle, and fewer cards are bigger.
+        let ids = ["movie", "tv", "anime", "manga", "game", "book", "comic"]
+        let expected: [(count: Int, edge: CGFloat)] = [(1, 273.74), (3, 267.26), (5, 260.78), (7, 257.54)]
+
+        for (count, edge) in expected {
+            XCTAssertEqual(
+                HallOfFameCrownLayout.lowestCardEdge(for: slots(Array(ids.prefix(count)))),
+                edge,
+                accuracy: 0.001
+            )
+        }
+    }
+
+    func testLowestCardEdgeCountsTheTiltOfEvenRows() {
+        // Four cards below: the inner two are the lowest, and their tilt drops one corner further.
+        let edge = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "anime", "manga"]))
+        let inner = HallOfFameCrownLayout.placements(count: 4, avatarDiameter: 128, position: .belowAvatar)[1]
+        let cardSize = HallOfFameCrownLayout.cardSize(for: 4)
+        let top = HallOfFameCrownLayout.crownHeight / 2 + inner.y - cardSize.height / 2
+        let untiltedEdge = top + cardSize.height * inner.scale
+
+        XCTAssertNotEqual(inner.rotation.degrees, 0)
+        XCTAssertEqual(edge, top + inner.scale * (
+            cardSize.height * cos(abs(inner.rotation.radians))
+                + cardSize.width / 2 * sin(abs(inner.rotation.radians))
+        ), accuracy: 0.001)
+        XCTAssertGreaterThan(edge, untiltedEdge)
+    }
+
+    func testLowestCardEdgeUsesTheSquareMusicCardInTheMiddle() {
+        // Music takes the middle of an odd row, and its square card is shorter than a poster.
+        let withMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "music"]))
+        let withoutMusic = HallOfFameCrownLayout.lowestCardEdge(for: slots(["movie", "tv", "book"]))
+
+        XCTAssertLessThan(withMusic, withoutMusic)
+    }
+
+    func testNameKeepsTheSameDistanceFromTheLowestCard() {
+        let fullCrown = slots(["movie", "tv", "anime", "manga", "game", "book", "comic", "music"])
+        let threeBelow = slots(["movie", "tv", "book", "music"])
+        let twoBelow = slots(["movie", "tv"])
+
+        // A full crown is the baseline, and its name stays where it was.
+        XCTAssertEqual(HallOfFameCrownLayout.nameOffset(for: fullCrown, collapseProgress: 0), 0, accuracy: 0.001)
+        XCTAssertEqual(HallOfFameCrownLayout.nameOffset(for: threeBelow, collapseProgress: 0), 9.72, accuracy: 0.001)
+        XCTAssertLessThan(HallOfFameCrownLayout.nameOffset(for: twoBelow, collapseProgress: 0), 0)
+
+        for favorites in [fullCrown, threeBelow, twoBelow] {
+            XCTAssertEqual(
+                HallOfFameCrownLayout.lowestCardEdge(for: favorites)
+                    - HallOfFameCrownLayout.nameOffset(for: favorites, collapseProgress: 0),
+                257.54,
+                accuracy: 0.001
+            )
+        }
+    }
+
+    func testNameOffsetFadesOutAsTheHeroCollapses() {
+        let threeBelow = slots(["movie", "tv", "book", "music"])
+
+        XCTAssertEqual(HallOfFameCrownLayout.nameOffset(for: threeBelow, collapseProgress: 0.5), 4.86, accuracy: 0.001)
+        XCTAssertEqual(HallOfFameCrownLayout.nameOffset(for: threeBelow, collapseProgress: 1), 0, accuracy: 0.001)
+    }
+
     func testProfileHeroCollapseProgressClampsAtRestAndRefreshPull() {
         XCTAssertEqual(ProfileHeroCollapse.progress(for: 0), 0)
         XCTAssertEqual(ProfileHeroCollapse.progress(for: -24), 0)

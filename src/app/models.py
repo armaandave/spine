@@ -3074,6 +3074,9 @@ class DiaryEntry(models.Model):
     import_source = models.CharField(max_length=50, blank=True, default="")
     import_source_id = models.CharField(max_length=255, blank=True, default="")
     import_source_order = models.PositiveIntegerField(null=True, blank=True)
+    # The log's favorite song (album logs) or episode (show and season logs), as
+    # api.services.diary.favorite_payload describes it; null for none.
+    favorite = models.JSONField(null=True, blank=True)
     tags = models.ManyToManyField('Tag', through='DiaryEntryTag', blank=True, related_name='diary_entries')
     updated_at = models.DateTimeField(auto_now=True)
 
