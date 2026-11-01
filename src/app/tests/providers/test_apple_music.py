@@ -1169,3 +1169,34 @@ class AlbumSourceTests(AppleMusicTestCase):
             [call.kwargs for call in music.call_args_list],
             [{}, {"include_enrichment": False}],
         )
+
+
+class TitleComparisonTests(TestCase):
+    def test_titles_that_name_the_same_album(self):
+        for apple, musicbrainz in (
+            ("Slanted & Enchanted", "Slanted and Enchanted"),
+            ("Norman F*****g Rockwell!", "Norman Fucking Rockwell!"),
+            ("÷", "÷"),
+            ("÷ (Deluxe)", "÷"),
+            ("Hamilton: An American Musical (Original Broadway Cast Recording)", "Hamilton: An American Musical"),
+        ):
+            with self.subTest(apple=apple):
+                self.assertTrue(apple_music.same_title(apple, musicbrainz))
+
+    def test_titles_that_do_not(self):
+        for apple, musicbrainz in (
+            ("Norman F*****g Rockwell!", "Norman Rockwell"),
+            ("F*****g", "Rockwell"),
+            ("÷", "×"),
+            ("+-=÷× (Tour Collection)", "÷"),
+            ("Slanted & Enchanted: Luxe & Reduxe", "Slanted and Enchanted"),
+        ):
+            with self.subTest(apple=apple):
+                self.assertFalse(apple_music.same_title(apple, musicbrainz))
+
+    def test_a_list_of_artists_credits_one_of_them_whole(self):
+        cast = "Lin-Manuel Miranda, Leslie Odom, Jr., Phillipa Soo, Daveed Diggs & Christopher Jackson"
+        self.assertTrue(apple_music._artist_credited(cast, "Lin‐Manuel Miranda"))
+        self.assertTrue(apple_music._artist_credited("Future & Lil Uzi Vert", "Future"))
+        self.assertFalse(apple_music._artist_credited("Skyscrapers Walk Among Us", "Misfits"))
+        self.assertFalse(apple_music._artist_credited("The Miranda Sisters", "Miranda"))

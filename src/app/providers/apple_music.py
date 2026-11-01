@@ -1235,7 +1235,7 @@ def _album_rank(attributes, title, artist):
     """
     attributes = attributes or {}
     name, kind = album_title(attributes)
-    if kind == "Single" or not same_name(attributes.get("artistName"), artist):
+    if kind == "Single" or not _artist_credited(attributes.get("artistName"), artist):
         return None
     if not same_title(name, title):
         return None
@@ -1262,9 +1262,26 @@ def same_title(apple_title, musicbrainz_title):
     """Return whether an Apple album title names a MusicBrainz title.
 
     The same, or the same once trailing bracketed tags ("(Remastered)") are left out
-    of Apple's.
+    of Apple's. A word Apple censors ("F*****g") matches any letters.
     """
-    return same_name(apple_title, musicbrainz_title) or same_name(_without_tags(apple_title), musicbrainz_title)
+    return any(
+        same_name(name, musicbrainz_title) or _same_censored(name, musicbrainz_title)
+        for name in (apple_title, _without_tags(apple_title))
+    )
+
+
+def _same_censored(apple_title, musicbrainz_title):
+    parts = [_loose(part) for part in re.split(r"\*+", str(apple_title or ""))]
+    if len(parts) < 2:  # noqa: PLR2004
+        return False
+    return bool(re.fullmatch(".+".join(re.escape(part) for part in parts), _loose(musicbrainz_title)))
+
+
+def _artist_credited(apple_artist, artist):
+    """Return whether Apple's artist is this one, or a list of artists that credits it."""
+    if same_name(apple_artist, artist):
+        return True
+    return any(same_name(name, artist) for name in re.split(r",|&", str(apple_artist or "")))
 
 
 def filter_metadata(identity, attributes, bridge):
@@ -1279,8 +1296,13 @@ def filter_metadata(identity, attributes, bridge):
 
 
 def _loose(text):
-    folded = unicodedata.normalize("NFKD", str(text or "")).casefold()
-    return "".join(char for char in folded if char.isalnum())
+    """Return text for comparing: letters and digits, or its symbols if that's all it has.
+
+    "&" reads as "and", and a title like "÷" keeps its symbol.
+    """
+    folded = unicodedata.normalize("NFKD", str(text or "")).casefold().replace("&", " and ")
+    loose = "".join(char for char in folded if char.isalnum())
+    return loose or "".join(folded.split())
 
 
 def _without_tags(title):
