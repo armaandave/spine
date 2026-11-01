@@ -306,7 +306,7 @@ def undo_moves(moved):
 # map
 
 
-def map_albums(*, limit=None, clock=None, sleep=None):
+def map_albums(*, limit=None, recheck_unmatched=False, clock=None, sleep=None):
     """Match the MusicBrainz albums that have Items to Apple Music albums.
 
     Writes only link rows, in three groups, in this order:
@@ -315,8 +315,9 @@ def map_albums(*, limit=None, clock=None, sleep=None):
        their row says, unless it is applied or a manual pick. Their rows get the
        Item's genres.
     2. Albums only featured lists hold, and 3. the other albums: their link row, else
-       Apple search with an artist the database already knows, with no MusicBrainz
-       requests. An unmatched one is searched again after 30 days.
+       Apple search with an artist the database already knows, else the same match as
+       group 1. An unmatched one is tried again after 30 days, or now with
+       ``recheck_unmatched``.
 
     ``limit`` caps the albums looked at. An album MusicBrainz no longer has (a 404 or
     400) is ``unmatched``, checked now, and the run carries on. Any other failed request
@@ -329,17 +330,14 @@ def map_albums(*, limit=None, clock=None, sleep=None):
     today = timezone.localdate()
     counts = Counter({"looked at": 0})
     stopped = ""
-    for item, group, link in _map_candidates(limit):
+    for item, group, link in _map_candidates(limit, recheck_unmatched=recheck_unmatched):
         counts["looked at"] += 1
         try:
             if group == 1:
                 fields = match_release_group(item.media_id, item.title, pacer=pacer, today=today)
                 fields["genres"] = _item_genres(item) or (list(link.genres) if link else [])
             else:
-                fields = _match_listed(item, today=today)
-                if fields is None:
-                    counts[f"group {group}: no artist known"] += 1
-                    continue
+                fields = _match_unlogged(item, pacer=pacer, today=today)
             outcome = _outcome(fields)
         except services.ProviderAPIError as error:
             if not _gone_from_musicbrainz(error):
@@ -360,7 +358,7 @@ def _gone_from_musicbrainz(error):
     return error.provider == MUSICBRAINZ and error.status_code in GONE_STATUSES
 
 
-def _map_candidates(limit):
+def _map_candidates(limit, *, recheck_unmatched=False):
     """Yield ``(item, group, link row)`` for map, group by group."""
     items = list(_musicbrainz_items())
     links = {
@@ -376,7 +374,7 @@ def _map_candidates(limit):
         if link is not None and (link.status == Status.APPLIED or link.method == Method.MANUAL):
             continue
         if group != 1 and link is not None:
-            fresh = link.checked_at is not None and link.checked_at > recheck_before
+            fresh = not recheck_unmatched and link.checked_at is not None and link.checked_at > recheck_before
             if link.status != Status.UNMATCHED or fresh:
                 continue
         checked = link.checked_at if link is not None and link.checked_at else None
@@ -438,12 +436,28 @@ def match_release_group(release_group_mbid, title, *, pacer, today):
         found = (match, Method.SEARCH, 3, None) if match else None
     if found is None:
         return _row_fields(None, method=Method.SEARCH, tier=None)
+    found = _prefer_plain_album(found, title, _credit_text((official or releases or [{}])[0]))
     match, method, tier, members = found
     # The Spotify album is the one the page shows, not the pick: a clean twin's barcode
     # can find an explicit album's listing.
     album = music_listing.pick_content_member(members, today=today) if members else None
     spotify = _spotify_link(releases, album) if album is not None else ""
     return _row_fields(match, method=method, tier=tier, spotify_url=spotify)
+
+
+def _prefer_plain_album(found, title, artist):
+    """Swap a special edition the barcodes found for the plain album, when Apple has one.
+
+    Barcodes reach only the album's product family, and a reissue can sit outside it:
+    Boy In da Corner's barcodes find its 20th Anniversary Edition alone.
+    """
+    match = found[0]
+    if not artist or not _is_special_edition(match["title"], title):
+        return found
+    plain = apple_music.match_album(title, artist)
+    if plain is None or plain["media_id"] == match["media_id"] or _is_special_edition(plain["title"], title):
+        return found
+    return plain, Method.SEARCH, 3, None
 
 
 def _match_barcodes(barcodes, title, names, standard, *, today):
@@ -550,6 +564,21 @@ def _match_songs(releases, title, names, standard, *, pacer, today):
         return None
     identity, members = listings[str(best[0]["id"])]
     return apple_music._match(identity, members, today=today), Method.ISRC, 3, members
+
+
+def _match_unlogged(item, *, pacer, today):
+    """Return the link row fields for an album with no user data.
+
+    Nobody's logs ride on these, so a tier-3 match is ``matched``, not a review.
+    """
+    fields = _match_listed(item, today=today)
+    if fields is not None and fields["status"] != Status.UNMATCHED:
+        return fields
+    fields = match_release_group(item.media_id, item.title, pacer=pacer, today=today)
+    fields["genres"] = _item_genres(item)
+    if fields["status"] == Status.REVIEW:
+        fields["status"] = Status.MATCHED
+    return fields
 
 
 def _match_listed(item, *, today):  # noqa: ARG001
@@ -691,17 +720,21 @@ def _credit_text(entity):
 def _pick_key(album_id, entry, title, standard):
     attributes = entry["album"].get("attributes") or {}
     name = apple_music.album_title(attributes)[0]
-    tagged = bool(apple_music._EDITION_TAGS.search(name)) and not apple_music._EDITION_TAGS.search(str(title or ""))
     tracks = _int(attributes.get("trackCount"))
     rating = {"explicit": 0, "clean": 2}.get(attributes.get("contentRating"), 1)
     return (
-        not entry["exact"],
+        _is_special_edition(name, title),
         not entry["equal"],
-        tagged,
         abs(tracks - standard) if standard else 0,
+        not entry["exact"],
         rating,
         music_listing._id_order(album_id),
     )
+
+
+def _is_special_edition(name, title):
+    """Return whether an Apple album's name has edition words the album's own title lacks."""
+    return bool(apple_music._EDITION_TAGS.search(str(name or ""))) and not apple_music._EDITION_TAGS.search(str(title or ""))
 
 
 def _close_track_count(album, standard):

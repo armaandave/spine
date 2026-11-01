@@ -560,15 +560,88 @@ class MapAlbumsWithoutUserDataTests(BackfillTestCase):
         self.assertEqual(counts["group 2: matched tier 3"], 1)
         self.assertEqual(query(apple.requests[0])["term"], "SZA SOS")
 
-    def test_an_album_with_no_known_artist_is_left(self):
-        self.musicbrainz_item(CTRL_MBID, "Ctrl")
-        self.musicbrainz()
-        self.apple(background=True)
+    def test_a_featured_album_with_no_known_artist_is_matched_by_barcode(self):
+        item = self.sos_item()
+        featured = CustomList.objects.create(owner=self.user, name="Top albums", is_featured=True)
+        CustomListItem.objects.create(item=item, custom_list=featured)
+        self.musicbrainz(*browse("sos"))
+        self.apple(*sos_map_answers(), background=True)
 
         counts = self.map()
 
-        self.assertEqual(counts["group 3: no artist known"], 1)
-        self.assertFalse(MusicAlbumLink.objects.exists())
+        link = MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID)
+        self.assertEqual((link.status, link.tier, link.apple_album_id, link.spotify_url), ("matched", 1, SOS, SOS_SPOTIFY))
+        self.assertEqual(counts["group 2: matched tier 1"], 1)
+
+    def test_a_tier_three_match_with_no_user_data_can_move(self):
+        self.musicbrainz_item(CTRL_MBID, "Ctrl")
+        review = {
+            "status": MusicAlbumLink.Status.REVIEW,
+            "method": MusicAlbumLink.Method.SEARCH,
+            "tier": 3,
+            "apple_album_id": "1239976329",
+            "apple_title": "Ctrl",
+            "apple_image": "",
+            "spotify_url": "",
+        }
+        self.musicbrainz()
+        self.apple(background=True)
+        with patch("app.music_move.match_release_group", return_value=review):
+            counts = self.map()
+
+        self.assertEqual(MusicAlbumLink.objects.get(release_group_mbid=CTRL_MBID).status, "matched")
+        self.assertEqual(counts["group 3: matched tier 3"], 1)
+
+    def test_a_failed_search_falls_through_to_the_barcodes(self):
+        self.sos_item()
+        genre_album(SOS_MBID, "SOS", "SZA", "r&b")
+        self.musicbrainz(*browse("sos"))
+        self.apple((200, {"results": {}}), *sos_map_answers(), background=True)
+
+        counts = self.map()
+
+        self.assertEqual(MusicAlbumLink.objects.get(release_group_mbid=SOS_MBID).tier, 1)
+        self.assertEqual(counts["group 3: matched tier 1"], 1)
+
+    def test_a_barcode_that_finds_only_a_special_edition_yields_to_the_plain_album(self):
+        edition = {"media_id": "1", "title": "Boy In Da Corner (20th Anniversary Edition)", "image": ""}
+        plain = {"media_id": "2", "title": "Boy In da Corner", "image": ""}
+        found = (edition, MusicAlbumLink.Method.UPC_EXACT, 3, [])
+        with patch("app.music_move.apple_music.match_album", return_value=plain):
+            chosen = music_move._prefer_plain_album(found, "Boy in da Corner", "Dizzee Rascal")
+        self.assertEqual((chosen[0], chosen[1], chosen[2]), (plain, MusicAlbumLink.Method.SEARCH, 3))
+
+    def test_a_special_edition_stays_when_apple_has_nothing_plainer(self):
+        edition = {"media_id": "1", "title": "Spiritual Unity (50th Anniversary Expanded Edition)", "image": ""}
+        found = (edition, MusicAlbumLink.Method.UPC_EXACT, 1, [])
+        for other in (None, edition):
+            with patch("app.music_move.apple_music.match_album", return_value=other):
+                self.assertIs(music_move._prefer_plain_album(found, "Spiritual Unity", "Albert Ayler"), found)
+
+    def test_a_plain_album_outranks_a_special_editions_exact_barcode(self):
+        def entry(name, tracks, *, exact):
+            return {"album": {"attributes": {"name": name, "trackCount": tracks}}, "exact": exact, "equal": True}
+
+        deluxe = entry("It Takes a Nation of Millions (Deluxe Edition)", 29, exact=True)
+        plain = entry("It Takes a Nation of Millions", 16, exact=False)
+        title = "It Takes a Nation of Millions"
+        self.assertLess(music_move._pick_key("2", plain, title, 16), music_move._pick_key("1", deluxe, title, 16))
+
+    def test_recheck_unmatched_tries_a_fresh_row_now(self):
+        self.musicbrainz_item(CTRL_MBID, "Ctrl")
+        MusicAlbumLink.objects.create(
+            release_group_mbid=CTRL_MBID,
+            status=MusicAlbumLink.Status.UNMATCHED,
+            method=MusicAlbumLink.Method.SEARCH,
+            checked_at=timezone.now(),
+        )
+        self.musicbrainz()
+        self.apple(background=True)
+        self.assertEqual(self.map()["looked at"], 0)
+
+        with patch("app.music_move.match_release_group", return_value=music_move._row_fields(None, method="search", tier=None)):
+            counts = self.map(recheck_unmatched=True)
+        self.assertEqual(counts["group 3: unmatched"], 1)
 
     def test_an_unmatched_album_is_searched_again_after_thirty_days(self):
         self.musicbrainz_item(CTRL_MBID, "Ctrl")
@@ -585,7 +658,8 @@ class MapAlbumsWithoutUserDataTests(BackfillTestCase):
 
         MusicAlbumLink.objects.filter(pk=link.pk).update(checked_at=timezone.now() - timedelta(days=31))
         self.apple((200, {"results": {}}), background=True)
-        self.assertEqual(self.map()["group 3: unmatched"], 1)
+        with patch("app.music_move.match_release_group", return_value=music_move._row_fields(None, method="search", tier=None)):
+            self.assertEqual(self.map()["group 3: unmatched"], 1)
 
 
 class ApplyTests(BackfillTestCase):

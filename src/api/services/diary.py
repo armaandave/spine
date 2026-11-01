@@ -93,6 +93,7 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
         "contains_spoilers": entry.contains_spoilers,
         "liked": entry.liked,
         "is_rewatch": entry.is_rewatch,
+        "favorite": entry.favorite,
         "tags": [tag.name for tag in entry.tags.all()],
         "visibility": "public" if is_single_weight else entry.visibility,
         "like_count": like_count,
@@ -214,7 +215,55 @@ def prime_diary_likes(entries, viewer):
         entry.viewer_has_liked = entry.pk in liked
 
 
+def favorite_payload(favorite, media_type, season_number=None):
+    """Return a log's favorite as stored, or raise a 400 when it doesn't fit the log.
+
+    A song fits an album log: {"kind": "song", "id", "title", "number"}. An episode
+    fits a show log, or a season log of its own season: {"kind": "episode",
+    "season_number", "episode_number", "title"}. None clears it.
+    """
+    if favorite is None:
+        return None
+    if favorite["kind"] == "song":
+        if media_type != MediaTypes.MUSIC.value:
+            raise serializers.ValidationError({"favorite": "Only album logs have a favorite song."})
+        return {
+            "kind": "song",
+            "id": favorite["id"],
+            "title": favorite["title"],
+            "number": favorite.get("number", ""),
+        }
+    if media_type != MediaTypes.TV.value and not (
+        media_type == MediaTypes.SEASON.value and season_number == favorite["season_number"]
+    ):
+        raise serializers.ValidationError(
+            {"favorite": "A favorite episode must belong to the logged show or season."},
+        )
+    return {
+        "kind": "episode",
+        "season_number": favorite["season_number"],
+        "episode_number": favorite["episode_number"],
+        "title": favorite["title"],
+    }
+
+
+def _save_favorite(entry, favorite):
+    """Store a validated favorite on a saved log."""
+    entry.favorite = favorite
+    entry.save(update_fields=["favorite", "updated_at"])
+
+
 def create_entry(user, data):
+    """Create a diary entry from API payload, checking its favorite first."""
+    ref = data["ref"]
+    favorite = favorite_payload(data.get("favorite"), ref["media_type"], ref.get("season_number"))
+    entry = _create_entry(user, data)
+    if favorite:
+        _save_favorite(entry, favorite)
+    return entry
+
+
+def _create_entry(user, data):
     """Create a diary entry from API payload."""
     ref = data["ref"]
     if tv_tracking.supports(ref["media_type"]):
@@ -395,6 +444,16 @@ def update_entry(entry, data):
     tags = data.pop("tags", None)
     for page_key in TV_PAGE_FIELDS:
         data.pop(page_key, None)
+    if "favorite" in data:
+        favorite = favorite_payload(data.pop("favorite"), entry.item.media_type, entry.item.season_number)
+        updated = _update_entry(entry, data, tags)
+        _save_favorite(updated, favorite)
+        return updated
+    return _update_entry(entry, data, tags)
+
+
+def _update_entry(entry, data, tags):
+    """Apply an update's log fields through the media type's own rules."""
     if tv_tracking.supports(entry.item):
         return _update_tv_entry(entry, data, tags)
     if single_weight.uses_half_star_rating(entry.item):
