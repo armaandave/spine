@@ -2,10 +2,10 @@ import Foundation
 
 nonisolated struct GameProgressValues: Codable, Hashable {
     let totalMinutes: Int?
-    let percentage: Int?
+    let percentage: Decimal?
 
     var summary: String {
-        [percentage.map { "\($0)%" }, totalMinutes.map { Self.timeLabel($0) }].compactMap { $0 }.joined(separator: " · ")
+        [percentage.map { "\(ProgressPercent.text($0))%" }, totalMinutes.map { Self.timeLabel($0) }].compactMap { $0 }.joined(separator: " · ")
     }
 
     static func timeLabel(_ minutes: Int) -> String {
@@ -20,11 +20,14 @@ nonisolated struct GamePlaythroughState: Codable, Hashable, Identifiable {
     var startDate: String?
     var endDate: String?
     var totalMinutes: Int?
+    /// Rounded down to a whole number, for builds that read only those.
     var percentage: Int?
+    var percentageExact: Decimal? = nil
     var completionDiaryEntryId: Int?
     var isReplay: Bool
 
-    var progress: GameProgressValues { GameProgressValues(totalMinutes: totalMinutes, percentage: percentage) }
+    var completion: Decimal? { percentageExact ?? percentage.map { Decimal($0) } }
+    var progress: GameProgressValues { GameProgressValues(totalMinutes: totalMinutes, percentage: completion) }
     var isUnfinished: Bool { ["in progress", "paused"].contains(status.lowercased()) }
 }
 
@@ -51,6 +54,20 @@ nonisolated struct GameTrackingState: Codable, Hashable {
     func supports(_ action: String) -> Bool { availableActions.contains(action) }
 }
 
+/// How a game's progress sheet counts: by hours played or by percent complete.
+enum GameProgressMode: String, CaseIterable, Identifiable {
+    case hours = "Hours"
+    case percent = "Percent"
+
+    var id: String { rawValue }
+
+    /// The mode this game was last saved in. Before a save, percent only if that's all the playthrough has.
+    static func initial(for ref: MediaRef, playthrough: GamePlaythroughState) -> GameProgressMode {
+        if let saved = ProgressDisplayPreferences.gameMode(for: ref) { return saved }
+        return playthrough.totalMinutes == nil && playthrough.completion != nil ? .percent : .hours
+    }
+}
+
 struct GameProgressDraft: Equatable {
     private var minutesEdited = false
     private var percentageEdited = false
@@ -64,10 +81,10 @@ struct GameProgressDraft: Equatable {
         self.percentage = percentage
     }
 
-    init(totalMinutes: Int?, percentage: Int?) {
+    init(totalMinutes: Int?, percentage: Decimal?) {
         hours = totalMinutes.map { String($0 / 60) } ?? ""
         minutes = totalMinutes.map { String($0 % 60) } ?? ""
-        self.percentage = percentage.map(String.init) ?? ""
+        self.percentage = percentage.map(ProgressPercent.text) ?? ""
     }
 
     func values() throws -> GameProgressValues {
@@ -79,10 +96,17 @@ struct GameProgressDraft: Equatable {
             }
             return value
         }
+        func percent(_ text: String) throws -> Decimal? {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+            guard let value = ProgressPercent.value(text), value <= 100, ProgressPercent.rounded(value) == value else {
+                throw GameProgressError.invalid("Enter percentage from 0 to 100, with up to 2 decimals.")
+            }
+            return value
+        }
         let maximumMinutes = Int(Int32.max)
         let h = try number(hours, name: "hours", maximum: maximumMinutes / 60)
         let m = try number(minutes, name: "minutes", maximum: 59)
-        let p = try number(percentage, name: "percentage", maximum: 100)
+        let p = try percent(percentage)
         let total = h == nil && m == nil ? nil : (h ?? 0) * 60 + (m ?? 0)
         if let total, total > maximumMinutes {
             throw GameProgressError.invalid("Total playthrough time is too large.")
@@ -110,7 +134,7 @@ struct GamePlaythroughWriteRequest: Encodable {
     var startDate: String? = nil
     var endDate: String? = nil
     var totalMinutes: Int? = nil
-    var percentage: Int? = nil
+    var percentage: Decimal? = nil
     var includesMinutes = false
     var includesPercentage = false
     var includesStartDate = false
@@ -133,7 +157,7 @@ struct GameCompletionWriteRequest: Encodable {
     let completionDate: String
     let startDate: String?
     let totalMinutes: Int?
-    let percentage: Int?
+    let percentage: Decimal?
     let rating: Decimal?
     let review: String
     let reviewTitle: String

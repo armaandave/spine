@@ -1119,7 +1119,7 @@ final class MediaDetailViewModel {
                     source: ref.source,
                     mediaId: ref.mediaId,
                     progressType: request.mode.apiValue,
-                    value: Decimal(request.value),
+                    value: request.value,
                     notes: ""
                 )
             } else {
@@ -1127,7 +1127,7 @@ final class MediaDetailViewModel {
                     ref: ref,
                     request: TrackingWriteRequest(
                         status: "In progress",
-                        progress: request.value
+                        progress: NSDecimalNumber(decimal: request.value).intValue
                     )
                 )
             }
@@ -1307,7 +1307,7 @@ final class MediaDetailViewModel {
         }
         return ProgressState(
             kind: request.mode.apiValue,
-            value: Decimal(request.value),
+            value: request.value,
             max: max,
             unit: request.mode.unit
         )
@@ -2348,7 +2348,7 @@ private struct MediaDetailPageView: View {
         }
         .sheet(item: $progressGamePlaythrough, onDismiss: presentPendingSheet) { playthrough in
             if let detail = viewModel.detail {
-                GameProgressSheet(title: detail.displayTitle, playthrough: playthrough,
+                GameProgressSheet(title: detail.displayTitle, ref: detail.ref, playthrough: playthrough,
                     onSave: { await viewModel.updateGamePlaythrough(playthrough, request: $0, for: detail).value },
                     onAction: { isClosingPresentation = true; viewModel.performGameAction($0, for: detail) },
                     onDelete: { isClosingPresentation = true; viewModel.deleteGamePlaythrough(playthrough, for: detail) },

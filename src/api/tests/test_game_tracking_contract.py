@@ -1,6 +1,7 @@
 """Game contract regression cases, exercised through authenticated API writes."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -115,7 +116,7 @@ class GameTrackingContractTests(TestCase):
 
     def test_g05_invalid_progress_is_atomic(self):
         self.action("start")
-        for value in (-1, 101, 1.5, 65.0, "65.0", True):
+        for value in (-1, 101, 100.01, 1.555, "1.555", True):
             response = self.client.post(
                 f"{self.url}progress/",
                 {"total_minutes": 44, "percentage": value},
@@ -127,6 +128,58 @@ class GameTrackingContractTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIsNone(self.state()["game"]["current_playthrough"]["total_minutes"])
+
+    def test_gm105_percentage_keeps_two_decimals(self):
+        self.action("start")
+        state = self.progress(percentage=42.5)
+        self.assertEqual(state["percentage_exact"], 42.5)
+        self.assertEqual(self.state()["progress"]["value"], 42.5)
+        self.assertEqual(self.progress(percentage="99.99")["percentage_exact"], 99.99)
+        state = self.progress(percentage=65)
+        self.assertEqual((state["percentage"], state["percentage_exact"]), (65, 65))
+        self.assertIsNone(self.progress(percentage=None)["percentage_exact"])
+
+    def test_gm105_installed_builds_read_a_whole_percentage(self):
+        """Their `percentage` decodes as an Int: a decimal would break the page."""
+        self.action("start")
+        self.assertEqual(self.progress(percentage=99.99)["percentage"], 99)
+
+        result = self.complete(percentage=42.5)
+        self.assertEqual(result["tracking"]["game"]["current_playthrough"]["percentage"], 42)
+        self.assertEqual(result["diary_entry"]["percentage"], 42)
+        self.assertIsInstance(result["diary_entry"]["percentage"], int)
+        self.assertEqual(result["diary_entry"]["percentage_exact"], 42.5)
+
+    def test_gm105_whole_percentage_column_stays_whole(self):
+        """A rollback's older code reads and writes only this column."""
+        self.action("start")
+        self.progress(percentage=42.5)
+        session = Game.objects.get(user=self.user, item=self.item).current_session
+        self.assertEqual((session.percentage, session.completion), (42, Decimal("42.50")))
+
+        # Older code moves the whole number and leaves the exact one behind.
+        session.percentage = 50
+        session.save(update_fields=["percentage"])
+        self.assertEqual(self.state()["game"]["current_playthrough"]["percentage_exact"], 50)
+        self.assertEqual(self.state()["progress"]["value"], 50)
+
+    def test_gm105_a_log_keeps_its_decimals_through_edits(self):
+        self.action("start")
+        entry = self.complete(percentage=42.5)["diary_entry"]
+        self.assertEqual(
+            DiaryEntry.objects.get(pk=entry["id"]).progress_snapshot["percentage"], 42.5
+        )
+
+        saved = self.edit_log(entry["id"], percentage=70.25)
+        self.assertEqual((saved["percentage"], saved["percentage_exact"]), (70, 70.25))
+        self.assertEqual(
+            self.state()["game"]["current_playthrough"]["percentage_exact"], 70.25
+        )
+
+        response = self.client.patch(
+            f"/api/v1/diary/{entry['id']}/", {"percentage": 70.255}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_g08_g16_g17_g18_independent_completion_snapshot_coupling(self):
         self.action("start")

@@ -15,7 +15,10 @@ struct DiaryEntry: Codable, Identifiable {
     let bookJourneyId: Int?
     var gamePlaythroughId: Int? = nil
     var totalMinutes: Int? = nil
+    /// Rounded down to a whole number, for builds that read only those.
     var percentage: Int? = nil
+    var percentageExact: Decimal? = nil
+    var completion: Decimal? { percentageExact ?? percentage.map { Decimal($0) } }
     var isTrueReplay: Bool? = nil
     let tags: [String]
     /// The log's favorite song (album logs) or episode (show and season logs).
@@ -256,7 +259,7 @@ struct DiaryEntryUpdateRequest: Encodable {
     let calendarDateOnly: Bool
     let includesRating: Bool
     let totalMinutes: Int?
-    let percentage: Int?
+    let percentage: Decimal?
     let includesMinutes: Bool
     let includesPercentage: Bool
     /// Sent only when `includesFavorite`, so nil clears it.
@@ -276,7 +279,7 @@ struct DiaryEntryUpdateRequest: Encodable {
         calendarDateOnly: Bool = false,
         includesRating: Bool = false,
         totalMinutes: Int? = nil,
-        percentage: Int? = nil,
+        percentage: Decimal? = nil,
         includesMinutes: Bool = false,
         includesPercentage: Bool = false
     ) {

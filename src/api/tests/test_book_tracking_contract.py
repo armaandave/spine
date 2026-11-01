@@ -289,6 +289,7 @@ class BookTrackingContractTests(TestCase):
         )
         self.assert_status(percentage, status.HTTP_200_OK)
         self.assertEqual(percentage.data["progress"]["value"], 75)
+        self.assertEqual(percentage.data["progress"]["percentage_exact"], 25)
 
         blocked_remove = self.client.delete(self.detail_url(item))
         self.assert_status(blocked_remove, status.HTTP_409_CONFLICT)

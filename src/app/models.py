@@ -2605,6 +2605,7 @@ class GameSession(models.Model):
     end_date = models.DateField(null=True, blank=True)
     total_minutes = models.PositiveIntegerField(null=True, blank=True)
     percentage = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(100)])
+    percentage_exact = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
     first_progress_on = models.DateField(null=True, blank=True)
     minutes_updated_on = models.DateField(null=True, blank=True)
     percentage_updated_on = models.DateField(null=True, blank=True)
@@ -2621,12 +2622,30 @@ class GameSession(models.Model):
             UniqueConstraint(fields=["related_game", "mutation_id"], condition=Q(mutation_id__isnull=False), name="app_game_unique_start_mutation"),
             UniqueConstraint(fields=["related_game", "completion_mutation_id"], condition=Q(completion_mutation_id__isnull=False), name="app_game_unique_log_mutation"),
             CheckConstraint(condition=Q(percentage__isnull=True) | Q(percentage__lte=100), name="app_game_percentage_range"),
+            CheckConstraint(condition=Q(percentage_exact__isnull=True) | Q(percentage_exact__gte=0, percentage_exact__lte=100), name="app_game_percentage_exact_range"),
             CheckConstraint(condition=Q(start_date__isnull=True) | Q(end_date__isnull=True) | Q(end_date__gte=F("start_date")), name="app_game_dates_ordered"),
             CheckConstraint(condition=~Q(origin="live") | Q(start_date__isnull=False), name="app_game_live_start_required"),
         ]
 
     def __str__(self):
         return f"{self.related_game.item.title} — playthrough {self.pk}"
+
+    @property
+    def completion(self):
+        """Return the percent as entered, whole or with up to two decimals.
+
+        Code from before `percentage_exact` writes only `percentage`, so the exact value
+        counts only while the two agree.
+        """
+        exact = self.percentage_exact
+        if exact is not None and self.percentage == int(exact):
+            return exact
+        return self.percentage
+
+    def set_completion(self, value):
+        """Store a percent: `percentage` rounded down, `percentage_exact` as entered."""
+        self.percentage = None if value is None else int(value)
+        self.percentage_exact = value
 
 
 class Book(Media):

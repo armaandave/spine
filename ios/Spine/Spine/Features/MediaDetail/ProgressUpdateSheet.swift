@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ProgressUpdateSaveRequest: Equatable {
     let mode: ProgressUpdateMode
-    let value: Int
+    let value: Decimal
 }
 
 /// The title a progress sheet updates. A Home card knows it before the title's page has loaded, so the sheet opens at
@@ -49,7 +49,7 @@ final class ProgressUpdateViewModel {
         self.progress = progress
         self.mode = Self.defaultMode(for: title, progress: progress)
         if let lastValue {
-            input = String(lastValue)
+            input = ProgressPercent.text(lastValue)
         }
     }
 
@@ -58,17 +58,20 @@ final class ProgressUpdateViewModel {
         title.totalPages ?? (progress?.mode == .pages ? Self.intValue(progress?.max) : nil)
     }
 
-    var lastValue: Int? {
+    var lastValue: Decimal? {
         guard let progress else { return nil }
         // Percentage progress's max is 100, not a page count, so its page comes from the book's own count.
         if progress.mode == .percentage, mode == .pages, let percent = progress.value(in: .percentage) {
             return converted(percent, from: .percentage, to: .pages)
         }
+        if mode == .percentage, ProgressDisplayPreferences.mode(for: title.ref) == .percentage {
+            return progress.savedPercentage
+        }
         return progress.value(in: mode)
     }
 
-    var currentValue: Int? {
-        Int(input)
+    var currentValue: Decimal? {
+        ProgressPercent.value(input)
     }
 
     /// The field's text: empty until the first digit, so the last saved value shows as its placeholder and the first
@@ -80,10 +83,12 @@ final class ProgressUpdateViewModel {
     /// Under the number: where the last save left off, and how far this one moves from it. Nil before a first save.
     var summaryText: String? {
         guard let lastValue else { return nil }
-        let last = mode == .percentage ? "\(lastValue)%" : "page \(lastValue)"
+        let lastText = ProgressPercent.text(lastValue)
+        let last = mode == .percentage ? "\(lastText)%" : "page \(lastText)"
         guard let currentValue, currentValue != lastValue else { return "Last saved at \(last)" }
         let delta = abs(currentValue - lastValue)
-        let amount = mode == .percentage ? "\(delta)%" : delta == 1 ? "1 page" : "\(delta) pages"
+        let deltaText = ProgressPercent.text(delta)
+        let amount = mode == .percentage ? "\(deltaText)%" : delta == 1 ? "1 page" : "\(deltaText) pages"
         return "\(currentValue > lastValue ? "+" : "−")\(amount) since \(last)"
     }
 
@@ -92,7 +97,7 @@ final class ProgressUpdateViewModel {
         if mode == .percentage, value > 100 {
             return "Enter a value from 0 to 100."
         }
-        if mode == .pages, let totalPages, value > totalPages {
+        if mode == .pages, let totalPages, value > Decimal(totalPages) {
             return "Enter a value from 0 to \(totalPages)."
         }
         return nil
@@ -108,7 +113,7 @@ final class ProgressUpdateViewModel {
         if mode == .percentage {
             return currentValue == 100
         }
-        return totalPages.map { currentValue == $0 } ?? false
+        return totalPages.map { currentValue == Decimal($0) } ?? false
     }
 
     var saveRequest: ProgressUpdateSaveRequest? {
@@ -118,15 +123,17 @@ final class ProgressUpdateViewModel {
 
     func selectMode(_ newMode: ProgressUpdateMode) {
         guard title.ref.mediaType == "book", newMode != mode else { return }
-        if let currentValue {
-            input = converted(currentValue, from: mode, to: newMode).map(String.init) ?? ""
-        }
+        // Nothing typed: the new mode's last value, not its rounding of the old one, which would look like a change.
+        let isLastValue = input == lastValue.map(ProgressPercent.text)
+        let typed = currentValue.flatMap { converted($0, from: mode, to: newMode) }
         mode = newMode
+        input = (isLastValue ? lastValue : typed).map(ProgressPercent.text) ?? ""
     }
 
     func updateInput(_ rawValue: String) {
-        let limit = mode == .percentage ? 3 : 6
-        let digits = String(rawValue.filter(\.isNumber).prefix(limit))
+        let digits = mode == .percentage
+            ? ProgressPercent.sanitized(rawValue)
+            : String(rawValue.filter(\.isNumber).prefix(6))
         if !hasEditedInput, digits == input {
             // The first digit typed is the last value itself: it stays, so the next digit adds to it.
             hasEditedInput = true
@@ -139,21 +146,22 @@ final class ProgressUpdateViewModel {
         }
         if !hasEditedInput {
             let replacement = !input.isEmpty && digits.hasPrefix(input) ? String(digits.dropFirst(input.count)) : digits
-            input = replacement.isEmpty ? digits : String(replacement.prefix(limit))
+            input = replacement.isEmpty ? digits : replacement
         } else {
             input = digits
         }
         hasEditedInput = true
     }
 
-    private func converted(_ value: Int, from: ProgressUpdateMode, to: ProgressUpdateMode) -> Int? {
+    private func converted(_ value: Decimal, from: ProgressUpdateMode, to: ProgressUpdateMode) -> Decimal? {
         guard from != to else { return value }
         guard let totalPages, totalPages > 0 else { return nil }
+        let number = NSDecimalNumber(decimal: value).doubleValue
         switch (from, to) {
         case (.pages, .percentage):
-            return Int((Double(value) / Double(totalPages) * 100).rounded())
+            return Decimal(Int((number / Double(totalPages) * 100).rounded()))
         case (.percentage, .pages):
-            return Int((Double(value) / 100 * Double(totalPages)).rounded())
+            return Decimal(Int((number / 100 * Double(totalPages)).rounded()))
         default:
             return value
         }
@@ -228,7 +236,8 @@ struct ProgressUpdateSheet: View {
             subtitle: journeyStatus == "Paused" ? "Paused" : nil,
             numberLabel: viewModel.mode == .pages ? "Page" : "Progress",
             number: Binding(get: { viewModel.keyboardInputText }, set: { viewModel.updateInput($0) }),
-            placeholder: viewModel.lastValue.map(String.init) ?? "0",
+            placeholder: viewModel.lastValue.map(ProgressPercent.text) ?? "0",
+            allowsDecimal: viewModel.mode == .percentage,
             unit: viewModel.mode == .pages ? viewModel.totalPages.map { "of \($0)" } ?? "" : "%",
             footer: warning ?? viewModel.summaryText,
             footerIsWarning: warning != nil,
@@ -327,6 +336,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     let numberLabel: String
     @Binding var number: String
     let placeholder: String
+    let allowsDecimal: Bool
     let unit: String
     /// Under the number: the last save, or what's wrong with this one.
     let footer: String?
@@ -346,6 +356,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         numberLabel: String,
         number: Binding<String>,
         placeholder: String,
+        allowsDecimal: Bool,
         unit: String,
         footer: String?,
         footerIsWarning: Bool,
@@ -362,6 +373,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
         self.numberLabel = numberLabel
         _number = number
         self.placeholder = placeholder
+        self.allowsDecimal = allowsDecimal
         self.unit = unit
         self.footer = footer
         self.footerIsWarning = footerIsWarning
@@ -385,7 +397,8 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                             text: $number,
                             placeholder: placeholder,
                             accessibilityLabel: numberLabel,
-                            focusRequest: focusRequest
+                            focusRequest: focusRequest,
+                            allowsDecimal: allowsDecimal
                         )
                         if !unit.isEmpty {
                             Text(unit)

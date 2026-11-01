@@ -9,6 +9,8 @@ struct AutofocusNumberField: UIViewRepresentable {
     let accessibilityLabel: String
     /// Changing this value focuses the field again.
     let focusRequest: Int
+    /// A keypad with a decimal key, for a percent.
+    var allowsDecimal = false
 
     private static let minimumWidth: CGFloat = 28
     /// Room beside the text for the caret. Before a first digit it blinks at the placeholder's leading edge, and a field
@@ -21,7 +23,7 @@ struct AutofocusNumberField: UIViewRepresentable {
 
     func makeUIView(context: Context) -> AutofocusTextField {
         let field = AutofocusTextField()
-        field.keyboardType = .numberPad
+        field.keyboardType = keyboardType
         field.textAlignment = .center
         field.tintColor = .white
         field.setContentHuggingPriority(.required, for: .horizontal)
@@ -34,11 +36,17 @@ struct AutofocusNumberField: UIViewRepresentable {
     func updateUIView(_ field: AutofocusTextField, context: Context) {
         context.coordinator.text = $text
         update(field, sizeCategory: UIContentSizeCategory(context.environment.dynamicTypeSize))
+        if field.keyboardType != keyboardType {
+            field.keyboardType = keyboardType
+            field.reloadInputViews()
+        }
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
             field.becomeFirstResponder()
         }
     }
+
+    private var keyboardType: UIKeyboardType { allowsDecimal ? .decimalPad : .numberPad }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: AutofocusTextField, context: Context) -> CGSize? {
         let size = uiView.intrinsicContentSize

@@ -504,7 +504,7 @@ enum InProgressCardPresentation {
         case "game":
             // A playthrough with hours only has no bar.
             if let game = tracking.game {
-                return fraction(game.currentPlaythrough?.percentage.map(Double.init), of: 100)
+                return fraction(game.currentPlaythrough?.completion.map { NSDecimalNumber(decimal: $0).doubleValue }, of: 100)
             }
         default:
             break
@@ -705,6 +705,7 @@ private struct InProgressUpdateSheets: ViewModifier {
             .sheet(item: $update.gameProgress, onDismiss: sheetDidClose) { playthrough in
                 GameProgressSheet(
                     title: update.item.media.displayTitle,
+                    ref: update.item.media.ref,
                     playthrough: playthrough,
                     onSave: { await update.saveGame(playthrough, $0) },
                     onAction: { update.performGameAction($0) },

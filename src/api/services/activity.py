@@ -302,7 +302,7 @@ def _day_payload(day, actors, titles, request):
 
 
 def progress_words(day, media_type):
-    """Say what a day's progress was, whole and short: "read 40 pages", "40 pages"."""
+    """Say what a day's progress was, in short: "read 40 pages", "40 pages", "2.25%"."""
     unit, amount = next(
         (unit, day[f"amount_{unit}"])
         for unit in UNITS
@@ -328,7 +328,7 @@ def progress_words(day, media_type):
 
 
 def _number(amount):
-    rounded = round(amount, 1)
+    rounded = round(amount, 2)
     return str(int(rounded)) if rounded == int(rounded) else str(rounded)
 
 

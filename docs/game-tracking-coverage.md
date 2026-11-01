@@ -1,7 +1,7 @@
 # Game tracking coverage
 
 This matrix records automated checks and observed native results. Each result names its evidence and limits.
-The approved contract remains unchanged in `game-tracking-contract.md`.
+The approved contract is in `game-tracking-contract.md`. GM-105 changed after these runs to allow two decimals, covered by `test_gm105_*`, the Swift tests, and a Simulator pass on Update Progress and Log Completion.
 
 ## Evidence key
 
@@ -37,7 +37,7 @@ The approved contract remains unchanged in `game-tracking-contract.md`.
 | GM-102 | Hours are a playthrough total | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | Pass: R4 replaces 750 minutes with 780, rather than adding them; input label also checked in T. |
 | GM-103 | Display only supplied progress | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | Pass: R1, R4, R15 and T show status-only, supplied progress, zero, and separate lifetime playtime. |
 | GM-104 | Users can correct progress in either direction | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | Pass: R4 lowers percentage; R16 lowers hours without changing the completion snapshot or attempt. |
-| GM-105 | Percentage uses whole numbers from zero to 100 | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | API/Swift pass for all limits. R4 and T reject 101; zero/100 observed. Negative/decimal UI entry was not achieved by the tool (R22). |
+| GM-105 | Percentage runs from zero to 100, with up to two decimals | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | API/Swift pass for all limits. R4 and T reject 101; zero/100 observed. Negative/decimal UI entry was not achieved by the tool (R22). |
 | GM-106 | Playtime uses hours and optional minutes | GameSession progress; API serializers; native progress editor | Domain/API validation; Swift payload tests; live field updates | Pass: R4/T verify hour-minute totals, blank, and explicit zero. Negative input rejection is verified by API/Swift tests, not native typing. |
 | GM-200 | Completion is an explicit user decision | game_tracking completion/deletion; DiaryEntry snapshots; native log editor | Domain/API history tests; Swift draft tests; live completion/edit/delete flows | Pass: R4 keeps 100% Playing; R1/R8 finish only after explicit completion save, without forced progress. |
 | GM-201 | Users define completion, including games without an ending | game_tracking completion/deletion; DiaryEntry snapshots; native log editor | Domain/API history tests; Swift draft tests; live completion/edit/delete flows | Pass: status-only and 65% completion observed in R1/R8; domain accepts completion without an ending or achievement prerequisite. |

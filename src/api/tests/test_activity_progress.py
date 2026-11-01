@@ -212,6 +212,7 @@ class DailyProgressTests(TestCase):
             (self.item(MediaTypes.BOOK.value, "percent"), 12.5, 27.5, "percent", "read 15%"),
             (self.item(MediaTypes.GAME.value, "time"), 30, 180, "minute", "played 2h 30m"),
             (self.item(MediaTypes.GAME.value, "percent"), 40, 55, "percent", "progressed 15%"),
+            (self.item(MediaTypes.GAME.value, "decimal"), 40, 42.25, "percent", "progressed 2.25%"),
         ]
         for hour, (item, previous, current, unit, _) in enumerate(cases):
             self.change(item, previous, current, at(24, hour), unit=unit)

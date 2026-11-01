@@ -323,26 +323,55 @@ def delete_undated_completion(user, item):
     return _sync_state(game)
 
 
-def _integer(value, *, maximum=None):
+def _integer(value):
     if value is None:
         return None
     try:
         number = Decimal(str(value))
         if (
             isinstance(value, bool)
-            or (maximum is not None and (isinstance(value, float) or "." in str(value)))
             or not number.is_finite()
             or number < 0
             or number != number.to_integral_value()
-            or number > (maximum if maximum is not None else 2_147_483_647)
+            or number > 2_147_483_647
         ):
             raise ValueError
         return int(number)
     except (ValueError, TypeError, InvalidOperation) as error:
+        raise ValidationError("Enter a non-negative whole number.") from error
+
+
+def _percentage(value):
+    """Return a percentage from 0 to 100, whole or with up to two decimals (GM-105)."""
+    if value is None:
+        return None
+    try:
+        number = Decimal(str(value))
+        if (
+            isinstance(value, bool)
+            or not number.is_finite()
+            or not 0 <= number <= 100
+            or number != number.quantize(Decimal("0.01"))
+        ):
+            raise ValueError
+        return number
+    except (ValueError, TypeError, InvalidOperation) as error:
         raise ValidationError(
-            "Enter a non-negative whole number"
-            + (f" up to {maximum}." if maximum is not None else ".")
+            "Enter a percentage from 0 to 100, with up to 2 decimals."
         ) from error
+
+
+def whole_percentage(value):
+    """Return a log's percentage for installed builds, which read a whole number."""
+    return None if value is None else int(value)
+
+
+def exact_percentage(value):
+    """Return a percentage as a JSON number: 65, or 42.5."""
+    if value is None:
+        return None
+    number = Decimal(str(value))
+    return int(number) if number == number.to_integral_value() else float(number)
 
 
 def _validate_dates(session, *, start_date=UNSET, end_date=UNSET):
@@ -388,18 +417,18 @@ def update_progress(
     if not session:
         raise ValidationError("Playthrough not found.")
     minutes = _integer(total_minutes) if total_minutes is not UNSET else UNSET
-    percent = _integer(percentage, maximum=100) if percentage is not UNSET else UNSET
+    percent = _percentage(percentage) if percentage is not UNSET else UNSET
     day = _day(progressed_on or timezone.localdate())
     if session.start_date and day < session.start_date:
         raise ValidationError("Progress cannot predate the start date.")
     _record_progress_change(user, item, session, "minute", session.total_minutes, minutes)
-    _record_progress_change(user, item, session, "percent", session.percentage, percent)
+    _record_progress_change(user, item, session, "percent", session.completion, percent)
     if minutes is not UNSET:
         session.total_minutes = minutes
         session.minutes_updated_on = day
         session.minutes_linked = False
     if percent is not UNSET:
-        session.percentage = percent
+        session.set_completion(percent)
         session.percentage_updated_on = day
         session.percentage_linked = False
     if minutes is not UNSET or percent is not UNSET:
@@ -417,7 +446,8 @@ def _record_progress_change(user, item, session, unit, previous, current):
     kind, maximum = ("minutes", None) if unit == "minute" else ("percentage", 100)
 
     def snapshot(value):
-        return {"kind": kind, "value": value, "max": maximum, "unit": unit, "playthrough_id": session.pk}
+        number = exact_percentage(value) if unit == "percent" else value
+        return {"kind": kind, "value": number, "max": maximum, "unit": unit, "playthrough_id": session.pk}
 
     ProgressChange.objects.create(
         actor=user,
@@ -547,7 +577,7 @@ def complete(
         session.total_minutes if total_minutes is UNSET else _integer(total_minutes)
     )
     percent = (
-        session.percentage if percentage is UNSET else _integer(percentage, maximum=100)
+        session.completion if percentage is UNSET else _percentage(percentage)
     )
     rating = (
         game.score if rating is UNSET else single_weight.validate_storage_rating(rating)
@@ -568,7 +598,7 @@ def complete(
         review_title=review_title,
         contains_spoilers=contains_spoilers,
         is_rewatch=bool(replay),
-        progress_snapshot={"total_minutes": minutes, "percentage": percent},
+        progress_snapshot={"total_minutes": minutes, "percentage": exact_percentage(percent)},
         visibility="public",
         import_source=import_source,
         import_source_id=import_source_id,
@@ -583,7 +613,7 @@ def complete(
     if session.minutes_linked:
         session.total_minutes = minutes
     if session.percentage_linked:
-        session.percentage = percent
+        session.set_completion(percent)
     session.status = Status.COMPLETED
     session.end_date = day
     session.completion_diary_entry = entry
@@ -624,12 +654,15 @@ def update_completion(entry, data, *, tags=UNSET):
         ("percentage", "percentage_linked"),
     ):
         if field in data:
-            value = _integer(
-                data[field], maximum=100 if field == "percentage" else None
-            )
-            snapshot[field] = value
-            if session and getattr(session, linked):
-                setattr(session, field, value)
+            if field == "percentage":
+                value = _percentage(data[field])
+                snapshot[field] = exact_percentage(value)
+                if session and getattr(session, linked):
+                    session.set_completion(value)
+            else:
+                value = snapshot[field] = _integer(data[field])
+                if session and getattr(session, linked):
+                    setattr(session, field, value)
     entry.progress_snapshot = snapshot
     if "rating" in data:
         entry.rating = single_weight.validate_storage_rating(data["rating"])
@@ -905,6 +938,7 @@ def playthrough_payload(session):
         "end_date": session.end_date.isoformat() if session.end_date else None,
         "total_minutes": session.total_minutes,
         "percentage": session.percentage,
+        "percentage_exact": exact_percentage(session.completion),
         "completion_diary_entry_id": session.completion_diary_entry_id,
         "is_replay": is_replay(session),
     }

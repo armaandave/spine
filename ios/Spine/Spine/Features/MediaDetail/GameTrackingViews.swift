@@ -7,11 +7,12 @@ struct GameProgressFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             field("Hours played", text: hours, unit: "h")
+                .keyboardType(.numberPad)
             field("Percent complete", text: $draft.percentage, unit: "%")
+                .keyboardType(.decimalPad)
             Text("Leave either blank if you don't know.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .keyboardType(.numberPad)
         .focused($focused)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -66,7 +67,7 @@ struct GamePlaythroughEditor: View {
         self.onDelete = onDelete
         self.onFinish = onFinish
         self.errorMessage = errorMessage
-        let draft = GameProgressDraft(totalMinutes: playthrough.totalMinutes, percentage: playthrough.percentage)
+        let draft = GameProgressDraft(totalMinutes: playthrough.totalMinutes, percentage: playthrough.completion)
         initialDraft = draft
         _draft = State(initialValue: draft)
         _startDate = State(initialValue: CalendarDateCodec.date(from: playthrough.startDate) ?? Date())
@@ -280,12 +281,6 @@ struct GameActionSheet: View {
 /// Update Progress for a game, laid out like the book's sheet (`ProgressSheetForm`): hours played or percent
 /// complete against the last saved value, and Finished Playing. Pause, Edit Dates, Drop, Restart and Delete sit in ⋯.
 struct GameProgressSheet: View {
-    private enum Mode: String, CaseIterable, Identifiable {
-        case hours = "Hours"
-        case percent = "Percent"
-        var id: String { rawValue }
-    }
-
     private enum PendingAction: Identifiable {
         case drop, restart, delete
         var id: Self { self }
@@ -293,6 +288,7 @@ struct GameProgressSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     let title: String
+    let ref: MediaRef
     let playthrough: GamePlaythroughState
     let onSave: (GamePlaythroughWriteRequest) async -> Bool
     let onAction: (String) -> Void
@@ -300,18 +296,19 @@ struct GameProgressSheet: View {
     let onFinish: () -> Void
     let onEditDates: () -> Void
     let errorMessage: () -> String?
-    @State private var mode: Mode
+    @State private var mode: GameProgressMode
     @State private var input = ""
     @State private var saving = false
     @State private var isClosing = false
     @State private var error: String?
     @State private var pending: PendingAction?
 
-    init(title: String, playthrough: GamePlaythroughState,
+    init(title: String, ref: MediaRef, playthrough: GamePlaythroughState,
          onSave: @escaping (GamePlaythroughWriteRequest) async -> Bool, onAction: @escaping (String) -> Void,
          onDelete: @escaping () -> Void, onFinish: @escaping () -> Void, onEditDates: @escaping () -> Void,
          errorMessage: @escaping () -> String?) {
         self.title = title
+        self.ref = ref
         self.playthrough = playthrough
         self.onSave = onSave
         self.onAction = onAction
@@ -319,25 +316,27 @@ struct GameProgressSheet: View {
         self.onFinish = onFinish
         self.onEditDates = onEditDates
         self.errorMessage = errorMessage
-        let startsWithPercent = playthrough.totalMinutes == nil && playthrough.percentage != nil
-        _mode = State(initialValue: startsWithPercent ? .percent : .hours)
+        _mode = State(initialValue: GameProgressMode.initial(for: ref, playthrough: playthrough))
     }
 
-    private var lastValue: Int? {
-        mode == .hours ? playthrough.totalMinutes.map { $0 / 60 } : playthrough.percentage
+    private var lastValue: String? {
+        mode == .hours
+            ? playthrough.totalMinutes.map { String($0 / 60) }
+            : playthrough.completion.map(ProgressPercent.text)
     }
 
     private var lastSaved: String? {
         switch mode {
         case .hours: playthrough.totalMinutes.map { "Last saved at \(GameProgressValues.timeLabel($0))" }
-        case .percent: playthrough.percentage.map { "Last saved at \($0)%" }
+        case .percent: playthrough.completion.map { "Last saved at \(ProgressPercent.text($0))%" }
         }
     }
 
-    private var newValue: Int? { Int(input) }
+    private var newHours: Int? { mode == .hours ? Int(input) : nil }
+    private var newPercent: Decimal? { mode == .percent ? ProgressPercent.value(input) : nil }
 
     private var validation: String? {
-        guard let newValue, mode == .percent, newValue > 100 else { return nil }
+        guard let newPercent, newPercent > 100 else { return nil }
         return "Enter a percentage from 0 to 100."
     }
 
@@ -348,18 +347,19 @@ struct GameProgressSheet: View {
             subtitle: playthrough.status == "Paused" ? "Paused" : nil,
             numberLabel: mode == .hours ? "Hours played" : "Percent complete",
             number: $input,
-            placeholder: lastValue.map(String.init) ?? "0",
+            placeholder: lastValue ?? "0",
+            allowsDecimal: mode == .percent,
             unit: mode == .hours ? "h" : "%",
             footer: warning ?? lastSaved,
             footerIsWarning: warning != nil,
             finishTitle: playthrough.isUnfinished ? "Finished Playing" : nil,
-            canSave: newValue != nil && validation == nil && !isClosing,
+            canSave: (newHours != nil || newPercent != nil) && validation == nil && !isClosing,
             isSaving: saving,
             onSave: save,
             onFinish: { finish() }
         ) {
             Picker("Track by", selection: $mode) {
-                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(GameProgressMode.allCases) { Text($0.rawValue).tag($0) }
             }
         } moreActions: {
             if playthrough.isUnfinished {
@@ -379,8 +379,8 @@ struct GameProgressSheet: View {
         }
         .onChange(of: mode) { input = "" }
         .onChange(of: input) { _, value in
-            let digits = String(value.filter(\.isNumber).prefix(mode == .hours ? 5 : 3))
-            if digits != value { input = digits }
+            let text = mode == .hours ? String(value.filter(\.isNumber).prefix(5)) : ProgressPercent.sanitized(value)
+            if text != value { input = text }
         }
         .confirmationDialog(confirmationTitle, isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
                             titleVisibility: .visible) {
@@ -399,17 +399,23 @@ struct GameProgressSheet: View {
     }
 
     private func save() {
-        guard let value = newValue, validation == nil else { return }
+        guard validation == nil else { return }
         var request = GamePlaythroughWriteRequest(progressedOn: CalendarDateCodec.string(from: Date()))
-        switch mode {
-        case .hours:
-            request.totalMinutes = value * 60
+        if let newHours {
+            request.totalMinutes = newHours * 60
             request.includesMinutes = true
-        case .percent:
-            request.percentage = value
+        } else if let newPercent {
+            request.percentage = newPercent
             request.includesPercentage = true
+        } else {
+            return
         }
-        run { await onSave(request) }
+        let savedMode = mode
+        run {
+            let saved = await onSave(request)
+            if saved { ProgressDisplayPreferences.setGameMode(savedMode, for: ref) }
+            return saved
+        }
     }
 
     private var confirmationTitle: String {
