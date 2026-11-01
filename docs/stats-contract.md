@@ -345,6 +345,9 @@ Each row counts its titles, its visible logs in the range, how many of those log
 A season or episode row uses its show's year.
 Titles with no release year are left out of the rows and counted in `coverage`.
 
+**Logs by year** counts the tab's visible logs by the year of their log day (STAT-100), not by release year.
+It covers every year whatever the range, so a year pill can show its year among the others; that year's row equals the header's `logs`.
+
 **New vs older** sorts the scope's logged titles by how old they were when first logged in the range:
 
 - `new`: released the same calendar year as that log day, or later;
@@ -898,11 +901,16 @@ The fallback, as the owner sees it:
     { "year": 2024, "titles": 31, "logs": 33, "rated": 30, "average_stars": "3.45", "by_type": { "movie": 25, "anime": 6 } }
   ],
   "coverage": { "known": 110, "total": 120 },
-  "new_vs_older": { "new": 12, "recent": 40, "older": 58 }
+  "new_vs_older": { "new": 12, "recent": 40, "older": 58 },
+  "logs_by_year": [
+    { "year": 2024, "logs": 41 },
+    { "year": 2025, "logs": 57 }
+  ]
 }
 ```
 
 `rows[]` are sorted by year, oldest first, one per year with titles (STAT-209); `by_type` counts titles.
+`logs_by_year[]` are sorted by year, oldest first, one per year with logs, whatever the range.
 `coverage.known` counts the scope's titles with a release year, out of `coverage.total`.
 The app folds years into decades itself.
 

@@ -93,7 +93,19 @@ def build_release_years(scope):
         "rows": rows,
         "coverage": {"known": known, "total": total},
         "new_vs_older": _new_vs_older(scope),
+        "logs_by_year": _logs_by_year(scope),
     }
+
+
+def _logs_by_year(scope):
+    """Count the tab's visible logs by the year they were made, over every year."""
+    rows = (
+        scope.all_entries.annotate(log_year=ExtractYear(scope.log_day()))
+        .values("log_year")
+        .annotate(logs=Count("id"))
+        .order_by("log_year")
+    )
+    return [{"year": row["log_year"], "logs": row["logs"]} for row in rows]
 
 
 def _new_vs_older(scope):
