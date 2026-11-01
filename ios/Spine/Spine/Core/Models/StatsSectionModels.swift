@@ -483,8 +483,15 @@ struct StatsReleaseYears: Decodable, Hashable {
     let rows: [StatsReleaseYearRow]
     let coverage: StatsCoverage?
     let newVsOlder: StatsNewVsOlder?
+    /// Oldest first, one per year the logs were made, whatever the pill.
+    let logsByYear: [StatsLogYearRow]
 
     var isEmpty: Bool { rows.isEmpty }
+}
+
+struct StatsLogYearRow: Decodable, Hashable {
+    let year: Int
+    let logs: Int
 }
 
 struct StatsReleaseYearRow: Decodable, Hashable, Identifiable {
@@ -1005,13 +1012,24 @@ extension StatsComparedTitle {
 }
 
 extension StatsReleaseYears {
-    private enum CodingKeys: String, CodingKey { case rows, coverage, newVsOlder }
+    private enum CodingKeys: String, CodingKey { case rows, coverage, newVsOlder, logsByYear }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         rows = c.statsArray(StatsReleaseYearRow.self, forKey: .rows)
         coverage = c.statsValue(StatsCoverage.self, forKey: .coverage)
         newVsOlder = c.statsValue(StatsNewVsOlder.self, forKey: .newVsOlder)
+        logsByYear = c.statsArray(StatsLogYearRow.self, forKey: .logsByYear)
+    }
+}
+
+extension StatsLogYearRow {
+    private enum CodingKeys: String, CodingKey { case year, logs }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        year = try c.decode(Int.self, forKey: .year)
+        logs = c.statsInt(forKey: .logs)
     }
 }
 

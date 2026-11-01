@@ -79,6 +79,7 @@ final class StatsSectionsChartTests: XCTestCase {
         let before = years[0]
         XCTAssertTrue(before.isEarlier)
         XCTAssertEqual(before.label, "Before 1876")
+        XCTAssertEqual(StatsReleaseYearsChartData.selectionTitle(before, mode: .titles), "Released before 1876")
         XCTAssertEqual([before.titles, before.logs, before.rated], [3, 4, 1])
         XCTAssertEqual(before.byType, ["book": 3])
         XCTAssertEqual(before.averageText, "5.0")
@@ -145,14 +146,14 @@ final class StatsSectionsChartTests: XCTestCase {
         )
 
         XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .titles), "Most titles from 2010")
-        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .logs), "Most logs from 2015")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .logs), "Most logs in 2015")
         XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(points, mode: .ratings), "Highest rated: 2015")
 
         let decades = StatsReleaseYearsChartData.decadeSeries(
             [year(2012, titles: 2, logs: 9), year(1995, titles: 4, logs: 4)],
             currentYear: 2018
         )
-        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(decades, mode: .logs), "Most logs from the 2010s")
+        XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(decades, mode: .logs), "Most logs in the 2010s")
         XCTAssertEqual(StatsReleaseYearsChartData.summaryTitle(decades, mode: .titles), "Most titles from the 1990s")
 
         let unrated = StatsReleaseYearsChartData.yearSeries([year(2018, titles: 2)], currentYear: 2018)
@@ -210,6 +211,20 @@ final class StatsSectionsChartTests: XCTestCase {
         XCTAssertEqual(StatsChartAxis.anchor(index: 0, count: 1), .top)
     }
 
+    func testOnlyEdgeLabelsDrawWhenEveryBarAsksForALabel() {
+        // iOS 27 asks for a label on every bar, whatever list the axis was given.
+        let bars = ["Before 1876", "1876", "1877", "1878"]
+        let labels = ["1876", "1878"]
+
+        XCTAssertEqual(
+            bars.map { StatsChartAxis.anchor(for: $0, in: labels) },
+            [nil, .topLeading, nil, .topTrailing],
+            "The Before bar has no label, and the first label still runs right from its bar"
+        )
+        XCTAssertEqual(StatsChartAxis.anchor(for: "1876", in: ["1876"]), .top)
+        XCTAssertNil(StatsChartAxis.anchor(for: nil, in: labels))
+    }
+
     func testAPickedReleaseYearOpensItsLogsAndOnGlobalEachTypes() {
         let points = StatsReleaseYearsChartData.yearSeries(
             [year(1999, titles: 3, logs: 4, byType: ["movie": 2, "tv": 1]), year(2001, titles: 1, logs: 0)],
@@ -217,13 +232,73 @@ final class StatsSectionsChartTests: XCTestCase {
         )
 
         let global = StatsReleaseYearsChartData.selection(for: points[0], stacked: true)
-        XCTAssertEqual(global.title, "1999")
-        XCTAssertEqual(global.detail, "3 titles · 4 logs")
+        XCTAssertEqual(global.title, "Released in 1999")
+        XCTAssertEqual(global.detail, "3 titles")
         XCTAssertEqual(global.drillOptions.map(\.label), ["All logs", "Movies", "TV"])
         XCTAssertEqual(global.drillOptions.map(\.drillDown), [.releaseYear(1999), .releaseYear(1999, mediaType: "movie"), .releaseYear(1999, mediaType: "tv")])
 
         XCTAssertEqual(StatsReleaseYearsChartData.selection(for: points[0], stacked: false).drillOptions.map(\.drillDown), [.releaseYear(1999)])
         XCTAssertTrue(StatsReleaseYearsChartData.selection(for: points[2], stacked: true).drillOptions.isEmpty, "No logs, nothing to open")
+    }
+
+    func testLogsGoByTheYearTheLogsWereMade() throws {
+        let section = try JSONDecoder.api.decode(
+            StatsReleaseYears.self,
+            from: Data(#"{"rows": [], "logs_by_year": [{"year": 2023, "logs": 55}, {"year": 2026, "logs": 38}]}"#.utf8)
+        )
+        XCTAssertEqual(section.logsByYear, [StatsLogYearRow(year: 2023, logs: 55), StatsLogYearRow(year: 2026, logs: 38)])
+
+        let points = StatsReleaseYearsChartData.logSeries(section.logsByYear, grouping: .years, currentYear: 2026)
+        XCTAssertEqual(points.map(\.label), ["2023", "2024", "2025", "2026"])
+        XCTAssertEqual(StatsReleaseYearsChartData.parts(points, mode: .logs, stacked: true).map(\.value), [55, 38])
+
+        let picked = StatsReleaseYearsChartData.selection(for: points[3], stacked: true, mode: .logs)
+        XCTAssertEqual(picked.title, "Logged in 2026")
+        XCTAssertEqual(picked.detail, "38 logs")
+        XCTAssertEqual(picked.drillOptions.map(\.drillDown), [.loggedYears(2026, 2026)], "Logs never split by type")
+        XCTAssertTrue(StatsReleaseYearsChartData.selection(for: points[1], stacked: true, mode: .logs).drillOptions.isEmpty)
+
+        let decades = StatsReleaseYearsChartData.logSeries(
+            [StatsLogYearRow(year: 2019, logs: 2), StatsLogYearRow(year: 2026, logs: 38)],
+            grouping: .decades,
+            currentYear: 2026
+        )
+        XCTAssertEqual(decades.map(\.logs), [2, 38])
+        XCTAssertEqual(StatsReleaseYearsChartData.selectionTitle(decades[1], mode: .logs), "Logged in the 2020s")
+        XCTAssertEqual(StatsReleaseYearsChartData.selectionTitle(decades[1], mode: .ratings), "Released in the 2020s")
+        XCTAssertEqual(StatsReleaseYearsChartData.drillDown(for: decades[1], mode: .logs), .loggedYears(2020, 2029))
+        XCTAssertEqual(StatsReleaseYearsChartData.emptyTitle(mode: .logs), "No logs yet")
+    }
+
+    func testLogsPickThePillsYearUntilABarIsPicked() {
+        let rows = [StatsLogYearRow(year: 2019, logs: 2), StatsLogYearRow(year: 2026, logs: 38)]
+        let points = StatsReleaseYearsChartData.logSeries(rows, grouping: .years, currentYear: 2026)
+        let decades = StatsReleaseYearsChartData.logSeries(rows, grouping: .decades, currentYear: 2026)
+
+        XCTAssertEqual(StatsReleaseYearsChartData.highlighted(points, label: nil, mode: .logs, period: .year(2026))?.label, "2026")
+        XCTAssertEqual(StatsReleaseYearsChartData.highlighted(decades, label: nil, mode: .logs, period: .year(2026))?.label, "2020s")
+        XCTAssertEqual(StatsReleaseYearsChartData.highlighted(points, label: "2019", mode: .logs, period: .year(2026))?.label, "2019")
+        XCTAssertNil(StatsReleaseYearsChartData.highlighted(points, label: nil, mode: .logs, period: .allTime))
+        XCTAssertNil(StatsReleaseYearsChartData.highlighted(points, label: nil, mode: .logs, period: .year(2010)), "No bar for that year")
+        XCTAssertNil(StatsReleaseYearsChartData.highlighted(points, label: nil, mode: .titles, period: .year(2026)), "Only Logs goes by the pill's year")
+    }
+
+    func testLoggedYearsOpenTheirOwnDaysWhateverThePill() {
+        let own2026 = StatsDrillDownContext(period: .year(2026), mediaType: "music", isOwnStats: true)
+
+        let year = StatsDrillDown.loggedYears(2023, 2023)
+        let filter = year.diaryFilter(in: own2026)
+        XCTAssertEqual(filter.watchedFrom, MediaFilterState.date(fromDay: "2023-01-01"))
+        XCTAssertEqual(filter.watchedTo, MediaFilterState.date(fromDay: "2023-12-31"))
+        XCTAssertEqual(filter.mediaTypes, ["music"])
+        XCTAssertEqual(year.diaryTitle(in: own2026), "Logged in 2023")
+
+        let decade = StatsDrillDown.loggedYears(2020, 2029)
+        XCTAssertEqual(decade.diaryFilter(in: own2026).watchedTo, MediaFilterState.date(fromDay: "2029-12-31"))
+        XCTAssertEqual(decade.diaryTitle(in: own2026), "Logged in the 2020s")
+
+        let someoneElse = StatsDrillDownContext(period: .year(2026), mediaType: "music", isOwnStats: false)
+        XCTAssertNil(year.route(in: someoneElse))
     }
 
     func testPeakPrefersTheMostRecentOnATie() {
@@ -249,7 +324,7 @@ final class StatsSectionsChartTests: XCTestCase {
             currentYear: 1999
         )[0]
 
-        XCTAssertEqual(StatsReleaseYearsChartData.detail(point), "4 titles · 5 logs · 4.0 average")
+        XCTAssertEqual(StatsReleaseYearsChartData.detail(point), "4 titles · 4.0 average")
         XCTAssertTrue(StatsReleaseYearsChartData.newVsOlderItems(StatsNewVsOlder(new: 0, recent: 0, older: 0)).isEmpty)
         XCTAssertEqual(
             StatsReleaseYearsChartData.newVsOlderItems(StatsNewVsOlder(new: 12, recent: 40, older: 58)).map(\.value),

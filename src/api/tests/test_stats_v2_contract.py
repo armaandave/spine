@@ -661,9 +661,15 @@ class StatsV2ContractConformanceTests(StatsV2Base):
                 self.assertIn(row["source"], {source for _type, source in used})
 
     def check_release_years(self, section):
-        self.check_keys(section, {"rows", "coverage", "new_vs_older"}, "release_years")
+        self.check_keys(section, {"rows", "coverage", "new_vs_older", "logs_by_year"}, "release_years")
         years = [row["year"] for row in section["rows"]]
         self.assertEqual(years, sorted(set(years)))
+        log_years = [row["year"] for row in section["logs_by_year"]]
+        self.assertEqual(log_years, sorted(set(log_years)))
+        for row in section["logs_by_year"]:
+            self.check_keys(row, {"year", "logs"}, "release_years.logs_by_year[]")
+            self.assertTrue(_is_int(row["year"]), "year")
+            self.assertTrue(_is_int(row["logs"]), "logs")
         for row in section["rows"]:
             self.check_keys(row, {"year", "titles", "logs", "rated", "average_stars", "by_type"}, "release_years.rows[]")
             for key in ("year", "titles", "logs", "rated"):

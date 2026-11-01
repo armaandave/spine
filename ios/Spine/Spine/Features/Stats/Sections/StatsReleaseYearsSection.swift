@@ -1,11 +1,12 @@
 import Charts
 import SwiftUI
 
-// Release years (STAT-209): one fixed-width chart from the first year with titles to this year,
-// never scrolling sideways, labelled only at its two ends. Years or decades (folded here, on the
-// phone), and Titles (stacked by type on Global), Ratings (average stars, only years with
-// ratings) or Logs, as Letterboxd's Films / Ratings / Diary. Scrubbing picks a year; "Show logs"
-// opens the diary.
+// Release years (STAT-209), titled "By year": one fixed-width chart from the first year with
+// titles to this year, never scrolling sideways, labelled only at its two ends. Years or decades
+// (folded here, on the phone), and Titles (stacked by type on Global), Ratings (average stars,
+// only years with ratings) or Logs. Titles and Ratings go by the year a title came out; Logs goes by the year the
+// logs were made, every year whatever the pill, with the pill's year picked. Scrubbing picks a
+// year; "Show logs" opens the diary.
 
 enum StatsReleaseGrouping: String, CaseIterable, Identifiable, Hashable {
     case years
@@ -32,19 +33,22 @@ enum StatsReleaseMode: String, CaseIterable, Identifiable, Hashable {
 }
 
 /// The Release years section's rows. `onDrillDown` is nil on someone else's stats; it opens a
-/// year's logs (`year=1999`) or a decade's (`year_min=1990&year_max=1999`).
+/// year's logs (`year=1999`) or a decade's (`year_min=1990&year_max=1999`), or on Logs, the logs
+/// made in that year or decade (`watched_from`, `watched_to`).
 struct StatsReleaseYearsChartSection: View {
     let releaseYears: StatsReleaseYears
     /// The tab: nil on Global, where Titles stack by type.
     let mediaType: String?
     /// This year on the owner's calendar (`years.current`); the chart runs up to it.
     let currentYear: Int
+    let period: StatsPeriod
     var onDrillDown: ((StatsDrillDown) -> Void)?
 
     @State private var grouping: StatsReleaseGrouping = .years
+    @State private var mode: StatsReleaseMode = .titles
 
     var body: some View {
-        StatsSectionTitle("Release years") {
+        StatsSectionTitle("By year") {
             Picker("Group by", selection: $grouping) {
                 ForEach(StatsReleaseGrouping.allCases) { grouping in
                     Text(grouping.title).tag(grouping)
@@ -58,12 +62,15 @@ struct StatsReleaseYearsChartSection: View {
         StatsReleaseYearsChartCard(
             releaseYears: releaseYears,
             grouping: grouping,
+            mode: $mode,
             mediaType: mediaType,
             currentYear: currentYear,
+            period: period,
             onDrillDown: onDrillDown
         )
 
-        if let note = StatsChartCopy.coverageNote(releaseYears.coverage, qualifier: "with a release year") {
+        // Logs don't go by release year, so a title without one leaves nothing out of them.
+        if mode != .logs, let note = StatsChartCopy.coverageNote(releaseYears.coverage, qualifier: "with a release year") {
             StatsChartFootnote(text: note)
         }
 
@@ -162,6 +169,22 @@ enum StatsReleaseYearsChartData {
         grouping == .years ? yearSeries(rows, currentYear: currentYear) : decadeSeries(rows, currentYear: currentYear)
     }
 
+    /// The Logs switch's bars: logs by the year they were made, with only `logs` filled in.
+    static func logSeries(_ rows: [StatsLogYearRow], grouping: StatsReleaseGrouping, currentYear: Int) -> [StatsReleasePoint] {
+        let years = rows.map {
+            StatsReleaseYearRow(year: $0.year, titles: 0, logs: $0.logs, rated: 0, averageStars: nil, byType: [:])
+        }
+        return series(years, grouping: grouping, currentYear: currentYear)
+    }
+
+    /// The bar to highlight: the one under the finger or last picked; failing that, on Logs, the
+    /// year pill's year.
+    static func highlighted(_ points: [StatsReleasePoint], label: String?, mode: StatsReleaseMode, period: StatsPeriod) -> StatsReleasePoint? {
+        if let point = points.first(where: { $0.label == label }) { return point }
+        guard mode == .logs, case let .year(year) = period else { return nil }
+        return points.first { !$0.isEarlier && $0.start <= year && year <= $0.end }
+    }
+
     /// The bars' parts. Titles stack by type when `stacked`; Logs and Ratings are one part.
     static func parts(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles, stacked: Bool) -> [StatsReleaseBarPart] {
         points.flatMap { point -> [StatsReleaseBarPart] in
@@ -190,19 +213,18 @@ enum StatsReleaseYearsChartData {
             .max { ($0.value(for: mode) ?? 0, $0.start) < ($1.value(for: mode) ?? 0, $1.start) }
     }
 
-    /// "4 titles · 5 logs · 4.0 average".
-    static func detail(_ point: StatsReleasePoint) -> String {
-        var parts = [
-            StatsChartCopy.count(point.titles, "title", "titles"),
-            StatsChartCopy.count(point.logs, "log", "logs"),
-        ]
+    /// "4 titles · 4.0 average"; on Logs, "38 logs". A count of logs by release year would read
+    /// as a different number from the Logs switch's, so it isn't shown.
+    static func detail(_ point: StatsReleasePoint, mode: StatsReleaseMode = .titles) -> String {
+        if mode == .logs { return StatsChartCopy.count(point.logs, "log", "logs") }
+        var parts = [StatsChartCopy.count(point.titles, "title", "titles")]
         if point.rated > 0, let average = point.averageText {
             parts.append("\(average) average")
         }
         return parts.joined(separator: " · ")
     }
 
-    /// The line over the chart when nothing is picked: "Most titles from 2024", "Most logs from
+    /// The line over the chart when nothing is picked: "Most titles from 2024", "Most logs in
     /// the 2010s". Ratings with bars but none rated 3 times says what the chart shows instead.
     static func summaryTitle(_ points: [StatsReleasePoint], mode: StatsReleaseMode = .titles) -> String? {
         guard let peak = peak(points, mode: mode) else {
@@ -212,36 +234,49 @@ enum StatsReleaseYearsChartData {
         let label = peak.isDecade ? "the \(peak.label)" : peak.label
         switch mode {
         case .titles: return "Most titles from \(label)"
-        case .logs: return "Most logs from \(label)"
+        case .logs: return "Most logs in \(label)"
         case .ratings: return "Highest rated: \(peak.label)"
         }
     }
 
     /// The line when a mode has nothing to draw.
     static func emptyTitle(mode: StatsReleaseMode) -> String {
-        mode == .ratings ? "Nothing rated yet" : "No release years yet"
+        switch mode {
+        case .titles: "No release years yet"
+        case .ratings: "Nothing rated yet"
+        case .logs: "No logs yet"
+        }
     }
 
-    /// A year's logs, or a decade's; with `mediaType`, one type's. The "Before" bar has no
-    /// single range to open.
-    static func drillDown(for point: StatsReleasePoint, mediaType: String? = nil) -> StatsDrillDown? {
+    /// A year's logs, or a decade's; with `mediaType`, one type's. On Logs, the logs made in that
+    /// year or decade. The "Before" bar has no single range to open.
+    static func drillDown(for point: StatsReleasePoint, mode: StatsReleaseMode = .titles, mediaType: String? = nil) -> StatsDrillDown? {
         if point.isEarlier { return nil }
+        if mode == .logs { return .loggedYears(point.start, point.end) }
         return point.isDecade ? .releaseDecade(point.start, mediaType: mediaType) : .releaseYear(point.start, mediaType: mediaType)
     }
 
-    /// The picked bar's readout: "1999", "4 titles · 5 logs · 4.0 average", and its logs (each
-    /// type's too on Global) when it has any.
-    static func selection(for point: StatsReleasePoint, stacked: Bool) -> StatsChartSelection {
+    /// The picked bar's readout: "Released in 1999", "4 titles · 4.0 average", and its logs (each
+    /// type's too on Global) when it has any. Logs: "Logged in 2026", "38 logs", never split by type.
+    static func selection(for point: StatsReleasePoint, stacked: Bool, mode: StatsReleaseMode = .titles) -> StatsChartSelection {
         var options: [StatsChartDrillOption] = []
-        if point.logs > 0, let whole = drillDown(for: point) {
-            let parts = stacked
+        if point.logs > 0, let whole = drillDown(for: point, mode: mode) {
+            let parts = stacked && mode != .logs
                 ? StatsChartStyle.orderedTypes(point.byType).compactMap { part in
                     drillDown(for: point, mediaType: part.mediaType).map { (mediaType: part.mediaType, drillDown: $0) }
                 }
                 : []
             options = StatsChartDrillOption.options(whole: whole, parts: parts)
         }
-        return StatsChartSelection(title: point.label, detail: detail(point), drillOptions: options)
+        return StatsChartSelection(title: selectionTitle(point, mode: mode), detail: detail(point, mode: mode), drillOptions: options)
+    }
+
+    /// What the picked bar's year means, which the section's name doesn't say: "Released in 1999",
+    /// "Released before 1876", "Logged in the 2020s".
+    static func selectionTitle(_ point: StatsReleasePoint, mode: StatsReleaseMode) -> String {
+        let verb = mode == .logs ? "Logged" : "Released"
+        if point.isEarlier { return "\(verb) before \(point.end + 1)" }
+        return point.isDecade ? "\(verb) in the \(point.label)" : "\(verb) in \(point.label)"
     }
 
     /// The new-vs-older counts with their labels; empty when all three are 0.
@@ -311,11 +346,12 @@ enum StatsReleaseYearsChartData {
 private struct StatsReleaseYearsChartCard: View {
     let releaseYears: StatsReleaseYears
     let grouping: StatsReleaseGrouping
+    @Binding var mode: StatsReleaseMode
     let mediaType: String?
     let currentYear: Int
+    let period: StatsPeriod
     let onDrillDown: ((StatsDrillDown) -> Void)?
 
-    @State private var mode: StatsReleaseMode = .titles
     /// The label under the finger while scrubbing.
     @State private var scrubbed: String?
     /// The last picked bar, kept after the finger lifts.
@@ -324,7 +360,9 @@ private struct StatsReleaseYearsChartCard: View {
     private var isStacked: Bool { mediaType == nil }
 
     var body: some View {
-        let points = StatsReleaseYearsChartData.series(releaseYears.rows, grouping: grouping, currentYear: currentYear)
+        let points = mode == .logs
+            ? StatsReleaseYearsChartData.logSeries(releaseYears.logsByYear, grouping: grouping, currentYear: currentYear)
+            : StatsReleaseYearsChartData.series(releaseYears.rows, grouping: grouping, currentYear: currentYear)
         let parts = StatsReleaseYearsChartData.parts(points, mode: mode, stacked: isStacked)
         let legendTypes = mode == .titles && isStacked ? StatsChartStyle.types(in: points.map(\.byType)) : []
         let seriesNames = Set(parts.map(\.seriesName))
@@ -332,7 +370,7 @@ private struct StatsReleaseYearsChartCard: View {
         let range = domain.map { name in
             name == "all" ? allColor : StatsChartStyle.color(for: name)
         }
-        let pickedPoint = points.first { $0.label == (scrubbed ?? picked) }
+        let pickedPoint = StatsReleaseYearsChartData.highlighted(points, label: scrubbed ?? picked, mode: mode, period: period)
         let summary = StatsReleaseYearsChartData.summaryTitle(points, mode: mode)
 
         VStack(alignment: .leading, spacing: 14) {
@@ -345,7 +383,7 @@ private struct StatsReleaseYearsChartCard: View {
             .sensoryFeedback(.selection, trigger: mode)
 
             StatsChartReadout(
-                selection: pickedPoint.map { StatsReleaseYearsChartData.selection(for: $0, stacked: isStacked) },
+                selection: pickedPoint.map { StatsReleaseYearsChartData.selection(for: $0, stacked: isStacked, mode: mode) },
                 onDrillDown: onDrillDown
             ) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -375,11 +413,11 @@ private struct StatsReleaseYearsChartCard: View {
             .modifier(StatsReleaseYAxis(mode: mode, points: points))
             .chartXSelection(value: $scrubbed)
             .frame(height: 160)
-            .accessibilityLabel("Release years")
+            .accessibilityLabel("By year")
             .accessibilityValue(summary ?? "")
             .accessibilityChartDescriptor(
                 StatsChartDescriptor(
-                    title: "Release years, \(mode.title.lowercased())",
+                    title: "By year, \(mode.title.lowercased())",
                     summary: summary,
                     categoryTitle: grouping == .years ? "Year" : "Decade",
                     valueTitle: mode == .ratings ? "Average stars" : mode.title,
@@ -390,7 +428,7 @@ private struct StatsReleaseYearsChartCard: View {
                 // VoiceOver can't scrub, so each bar with logs gets an action.
                 if let onDrillDown {
                     ForEach(points.filter { $0.logs > 0 }) { point in
-                        if let drillDown = StatsReleaseYearsChartData.drillDown(for: point) {
+                        if let drillDown = StatsReleaseYearsChartData.drillDown(for: point, mode: mode) {
                             Button("Show logs from \(point.label)") {
                                 onDrillDown(drillDown)
                             }
@@ -410,6 +448,9 @@ private struct StatsReleaseYearsChartCard: View {
             if let new { picked = new }
         }
         .onChange(of: grouping) {
+            picked = nil
+        }
+        .onChange(of: period) {
             picked = nil
         }
     }

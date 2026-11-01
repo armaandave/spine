@@ -23,6 +23,8 @@ enum StatsDrillDown: Hashable {
     case releaseYear(Int, mediaType: String? = nil)
     /// A decade, by its first year: 1990 is 1990–1999.
     case releaseDecade(Int, mediaType: String? = nil)
+    /// Logs made from the first year to the last, whatever the pill: one year, or a decade.
+    case loggedYears(Int, Int)
     /// A ratings bar, with the stored bounds the payload sends (STAT-204).
     case rating(StatsRatingsBucket, mediaType: String? = nil)
     /// An activity month, "YYYY-MM".
@@ -82,7 +84,7 @@ enum StatsDrillDown: Hashable {
             }
             // Someone else's: a TMDB person has a page to open; anyone else opens nothing.
             return person.ref.source == "tmdb" ? .person(person.ref) : nil
-        case .genre, .genreGroup, .language, .releaseYear, .releaseDecade, .rating, .month, .day, .liked, .tag:
+        case .genre, .genreGroup, .language, .releaseYear, .releaseDecade, .loggedYears, .rating, .month, .day, .liked, .tag:
             return context.isOwnStats ? .diary(self, context) : nil
         }
     }
@@ -93,7 +95,8 @@ enum StatsDrillDown: Hashable {
     }
 
     /// The diary filter for this drill-down: always `skip_backfill`, `tv_rollup` and the range's
-    /// dates, plus the tab's or the part's media types and the row's own filter (STAT-401).
+    /// dates, plus the tab's or the part's media types and the row's own filter (STAT-401). A
+    /// month, a day or logged years replace the range's dates with their own.
     func diaryFilter(in context: StatsDrillDownContext) -> MediaFilterState {
         var filter = MediaFilterState()
         filter.skipBackfill = true
@@ -116,6 +119,9 @@ enum StatsDrillDown: Hashable {
         case let .releaseDecade(start, _):
             filter.yearMin = start
             filter.yearMax = start + 9
+        case let .loggedYears(first, last):
+            filter.watchedFrom = MediaFilterState.date(fromDay: String(format: "%04d-01-01", first))
+            filter.watchedTo = MediaFilterState.date(fromDay: String(format: "%04d-12-31", last))
         case let .rating(bucket, _):
             filter.ratingMin = Self.storedRating(bucket.ratingMin)
             filter.ratingMax = Self.storedRating(bucket.ratingMax)
@@ -154,8 +160,8 @@ enum StatsDrillDown: Hashable {
             parts.append(MediaTypeTheme.theme(for: partMediaType).displayName)
         }
         switch self {
-        case .month, .day:
-            break // The month or day already names its year.
+        case .month, .day, .loggedYears:
+            break // The month, day or years already name their year.
         default:
             parts.append(context.period.title)
         }
@@ -170,6 +176,8 @@ enum StatsDrillDown: Hashable {
             return "Released in \(year)"
         case let .releaseDecade(start, _):
             return "Released in the \(start)s"
+        case let .loggedYears(first, last):
+            return first == last ? "Logged in \(first)" : "Logged in the \(first)s"
         case let .rating(bucket, _):
             return Self.starsLabel(bucket.stars)
         case let .month(month, _):
