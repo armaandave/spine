@@ -26,6 +26,11 @@ class Command(BaseCommand):
         genres.add_argument("--apply", action="store_true", help="Fetch Apple labels and update genre facets")
         map_step = steps.add_parser("map", help="Match MusicBrainz albums to Apple Music albums (link rows only)")
         map_step.add_argument("--limit", type=int, default=None, help="Look at this many albums at most")
+        map_step.add_argument(
+            "--recheck-unmatched",
+            action="store_true",
+            help="Try unmatched albums now, not 30 days after their last try",
+        )
         report = steps.add_parser("report", help="Count every album; --csv writes each one's row")
         report.add_argument(
             "--csv",
@@ -54,7 +59,7 @@ class Command(BaseCommand):
 
                 counts = refresh_stored_genres(apply=options["apply"])
             elif step == "map":
-                counts = music_move.map_albums(limit=options["limit"])
+                counts = music_move.map_albums(limit=options["limit"], recheck_unmatched=options["recheck_unmatched"])
             elif step == "report":
                 counts, counts_out = self._report(options["csv_path"])
             elif step == "link":
