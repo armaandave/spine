@@ -92,7 +92,7 @@ final class MediaLogViewModel {
         self.onUnauthorized = onUnauthorized
         self.onResult = onResult
         self.onSaved = onSaved
-        favoriteDraft = LogFavoriteDraft(detail: detail, mediaRepository: mediaRepository)
+        favoriteDraft = LogFavoriteDraft(ref: detail.ref, detail: detail, mediaRepository: mediaRepository)
         if detail.ref.isTVFamily {
             // The server works out every default when the composer opens (TV-404); the user's own picks win.
             tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap { TVComposerDraft(composer: $0) }
@@ -165,11 +165,7 @@ final class MediaLogViewModel {
     // MARK: Favorite
 
     var favoriteKind: LogFavorite.Kind? {
-        .of(selectedRef, discs: favoriteDiscs, seasons: favoriteSeasons)
-    }
-
-    var favoriteDiscs: [MusicMedium] {
-        detail.favoriteDiscs
+        favoriteDraft.kind(for: selectedRef, seasons: favoriteSeasons)
     }
 
     /// The TV composer's seasons, or the page's when the server sent no composer.
@@ -767,7 +763,6 @@ struct MediaLogView: View {
             LogFavoriteSection(
                 draft: viewModel.favoriteDraft,
                 kind: kind,
-                discs: viewModel.favoriteDiscs,
                 seasons: viewModel.favoriteSeasons
             )
         }

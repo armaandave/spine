@@ -724,7 +724,6 @@ final class DiaryLogEditViewModel {
     var containsSpoilers: Bool
     var visibility: String
     let favoriteDraft: LogFavoriteDraft
-    let favoriteDiscs: [MusicMedium]
     let favoriteSeasons: [LogFavoriteSeason]
     var isSaving = false
     var errorMessage: String?
@@ -734,8 +733,12 @@ final class DiaryLogEditViewModel {
     init(entry: DiaryEntry, diaryRepository: DiaryRepository, mediaDetail: MediaDetail? = nil, mediaRepository: MediaRepository? = nil) {
         self.entry = entry
         self.diaryRepository = diaryRepository
-        favoriteDraft = LogFavoriteDraft(favorite: entry.favorite, detail: mediaDetail, mediaRepository: mediaRepository)
-        favoriteDiscs = mediaDetail?.favoriteDiscs ?? []
+        favoriteDraft = LogFavoriteDraft(
+            favorite: entry.favorite,
+            ref: mediaDetail?.ref ?? entry.media.ref,
+            detail: mediaDetail,
+            mediaRepository: mediaRepository
+        )
         favoriteSeasons = favoriteDraft.seasons(
             for: entry.media.ref,
             showSeasons: LogFavoriteSeason.from(mediaDetail?.seasons ?? [])
@@ -758,7 +761,7 @@ final class DiaryLogEditViewModel {
     }
 
     var favoriteKind: LogFavorite.Kind? {
-        .of(entry.media.ref, discs: favoriteDiscs, seasons: favoriteSeasons)
+        favoriteDraft.kind(for: entry.media.ref, seasons: favoriteSeasons)
     }
 
     func ratingLabel() -> String {
@@ -878,7 +881,6 @@ private struct DiaryLogEditSheet: View {
                         LogFavoriteSection(
                             draft: viewModel.favoriteDraft,
                             kind: kind,
-                            discs: viewModel.favoriteDiscs,
                             seasons: viewModel.favoriteSeasons
                         )
                     }

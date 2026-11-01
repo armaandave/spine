@@ -567,20 +567,6 @@ struct LogFavoriteSeason: Hashable, Identifiable {
     }
 }
 
-extension LogFavorite.Kind {
-    /// Album logs pick a favorite song, show and season logs a favorite episode, when there's one to pick.
-    static func of(_ ref: MediaRef, discs: [MusicMedium], seasons: [LogFavoriteSeason]) -> Self? {
-        switch ref.mediaType {
-        case "music":
-            discs.isEmpty ? nil : .song
-        case "tv", "season":
-            seasons.isEmpty ? nil : .episode
-        default:
-            nil
-        }
-    }
-}
-
 extension MediaDetail {
     /// The album's discs that list songs.
     var favoriteDiscs: [MusicMedium] {
@@ -588,7 +574,9 @@ extension MediaDetail {
     }
 }
 
-/// A log's favorite song or episode. Episodes load a season at a time, when the list first shows it.
+/// A log's favorite song or episode. The pages a log opens from may not have the album's songs yet (a MusicBrainz
+/// album's first payload has none), so the draft loads them itself when needed; episodes load a season at a time,
+/// when the list first shows it.
 @MainActor
 @Observable
 final class LogFavoriteDraft {
@@ -596,42 +584,90 @@ final class LogFavoriteDraft {
     var isExpanded = false
     /// The season whose episodes are listed.
     var season: Int?
+    private(set) var discs: [MusicMedium]
+    private(set) var discsFailed = false
+    private(set) var songsLoaded = false
+    private var isLoadingSongs = false
     private(set) var episodes: [Int: [EpisodeSummary]]
     private(set) var failedSeasons: Set<Int> = []
+    private let loadDiscs: (() async throws -> [MusicMedium])?
     private let loadSeason: ((Int) async throws -> [EpisodeSummary])?
 
     init(
         favorite: LogFavorite? = nil,
+        discs: [MusicMedium] = [],
+        loadDiscs: (() async throws -> [MusicMedium])? = nil,
         episodes: [Int: [EpisodeSummary]] = [:],
         loadSeason: ((Int) async throws -> [EpisodeSummary])? = nil
     ) {
         self.favorite = favorite
+        self.discs = discs
+        self.loadDiscs = loadDiscs
         self.episodes = episodes
         self.loadSeason = loadSeason
         season = favorite?.seasonNumber
     }
 
-    /// A season page already has its episodes; other seasons load from the media repository when listed.
-    convenience init(favorite: LogFavorite? = nil, detail: MediaDetail?, mediaRepository: MediaRepository?) {
+    /// Starts from what the page already has; the rest loads from the media repository: an album's songs from its
+    /// full page (a MusicBrainz album's enrichment), a season's episodes from its season page.
+    convenience init(favorite: LogFavorite? = nil, ref: MediaRef, detail: MediaDetail?, mediaRepository: MediaRepository?) {
         var episodes: [Int: [EpisodeSummary]] = [:]
         if let detail, detail.ref.mediaType == "season", let number = detail.ref.seasonNumber, let listed = detail.episodes {
             episodes[number] = listed
         }
-        let ref = detail?.ref
-        self.init(favorite: favorite, episodes: episodes, loadSeason: ref.flatMap { ref in
-            mediaRepository.map { repository in
-                { number in
-                    try await repository.detail(ref: MediaRef(
-                        itemId: nil,
-                        source: ref.source,
-                        mediaType: "season",
-                        mediaId: ref.mediaId,
-                        seasonNumber: number,
-                        episodeNumber: nil
-                    )).episodes ?? []
-                }
+        let loadDiscs: (() async throws -> [MusicMedium])? = ref.mediaType != "music" ? nil : mediaRepository.map { repository in
+            {
+                let album = ref.source == "musicbrainz"
+                    ? try await repository.enrichedMusicDetail(ref: ref)
+                    : try await repository.detail(ref: ref)
+                return album.favoriteDiscs
             }
-        })
+        }
+        let loadSeason: ((Int) async throws -> [EpisodeSummary])? = mediaRepository.map { repository in
+            { number in
+                try await repository.detail(ref: MediaRef(
+                    itemId: nil,
+                    source: ref.source,
+                    mediaType: "season",
+                    mediaId: ref.mediaId,
+                    seasonNumber: number,
+                    episodeNumber: nil
+                )).episodes ?? []
+            }
+        }
+        self.init(
+            favorite: favorite,
+            discs: detail?.favoriteDiscs ?? [],
+            loadDiscs: loadDiscs,
+            episodes: episodes,
+            loadSeason: loadSeason
+        )
+    }
+
+    /// Album logs pick a favorite song, show and season logs a favorite episode, when there's one to pick.
+    func kind(for ref: MediaRef, seasons: [LogFavoriteSeason]) -> LogFavorite.Kind? {
+        switch ref.mediaType {
+        case "music":
+            discs.isEmpty && loadDiscs == nil ? nil : .song
+        case "tv", "season":
+            seasons.isEmpty ? nil : .episode
+        default:
+            nil
+        }
+    }
+
+    /// Loads the album's songs once, when the page didn't have them.
+    func loadSongs() async {
+        guard discs.isEmpty, !isLoadingSongs, !songsLoaded, let loadDiscs else { return }
+        isLoadingSongs = true
+        discsFailed = false
+        defer { isLoadingSongs = false }
+        do {
+            discs = try await loadDiscs()
+            songsLoaded = true
+        } catch {
+            discsFailed = true
+        }
     }
 
     /// A season log's own season, or a show log's seasons; only those whose episodes can be listed.
@@ -684,8 +720,6 @@ final class LogFavoriteDraft {
 struct LogFavoriteSection: View {
     @Bindable var draft: LogFavoriteDraft
     let kind: LogFavorite.Kind
-    /// Album logs: the tracklist's discs.
-    var discs: [MusicMedium] = []
     /// Show and season logs: the seasons to pick from.
     var seasons: [LogFavoriteSeason] = []
 
@@ -731,6 +765,12 @@ struct LogFavoriteSection: View {
                 await draft.load(season: season)
             }
         }
+        .task {
+            // As the sheet opens, so the songs are usually there by the time the row is tapped.
+            if kind == .song {
+                await draft.loadSongs()
+            }
+        }
         .sensoryFeedback(trigger: draft.favorite) { _, favorite in
             favorite == nil ? SensoryFeedback.selection : .impact(weight: .light)
         }
@@ -738,15 +778,28 @@ struct LogFavoriteSection: View {
 
     @ViewBuilder
     private var songRows: some View {
-        ForEach(discs, id: \.position) { disc in
-            if discs.count > 1 {
-                Text(disc.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Disc \(disc.position)")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+        let discs = draft.discs
+        if !discs.isEmpty {
+            ForEach(discs, id: \.position) { disc in
+                if discs.count > 1 {
+                    Text(disc.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Disc \(disc.position)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(disc.tracks) { track in
+                    choiceRow(number: track.number, choice: .song(track))
+                }
             }
-            ForEach(disc.tracks) { track in
-                choiceRow(number: track.number, choice: .song(track))
+        } else if draft.discsFailed {
+            Button("Couldn't load songs. Try Again") {
+                Task { await draft.loadSongs() }
             }
+        } else if draft.songsLoaded {
+            Text("This album lists no songs.")
+                .foregroundStyle(.secondary)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
         }
     }
 

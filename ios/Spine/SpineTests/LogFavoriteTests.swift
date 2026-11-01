@@ -87,7 +87,46 @@ final class LogFavoriteTests: XCTestCase {
     }
 
     func testOnlyAlbumShowAndSeasonLogsOfferAFavorite() throws {
-        let disc = try JSONDecoder.api.decode(MusicMedium.self, from: Data("""
+        let disc = try Self.disc()
+        XCTAssertEqual(LogFavorite.song(disc.tracks[0]), Self.song)
+
+        let seasons = [LogFavoriteSeason(number: 1, title: "Season 1")]
+        let listed = LogFavoriteDraft(discs: [disc])
+        XCTAssertEqual(listed.kind(for: TVTrackingSurfacesTests.ref("music"), seasons: []), .song)
+        XCTAssertNil(LogFavoriteDraft().kind(for: TVTrackingSurfacesTests.ref("music"), seasons: []),
+                     "No songs and nowhere to load them from")
+        XCTAssertEqual(listed.kind(for: TVTrackingSurfacesTests.ref("tv"), seasons: seasons), .episode)
+        XCTAssertEqual(listed.kind(for: Self.seasonRef(1), seasons: seasons), .episode)
+        XCTAssertNil(listed.kind(for: TVTrackingSurfacesTests.ref("episode"), seasons: seasons))
+        XCTAssertNil(listed.kind(for: TVTrackingSurfacesTests.ref("movie"), seasons: seasons))
+    }
+
+    /// A MusicBrainz album page opens without its songs (they come with its enrichment), and the log page only ever
+    /// loads that first payload: the log and Edit Log sheets offer the favorite anyway and load the songs themselves.
+    func testAnAlbumThatOpenedWithoutSongsStillOffersAFavoriteAndLoadsThem() async throws {
+        let disc = try Self.disc()
+        var loads = 0
+        let draft = LogFavoriteDraft(loadDiscs: {
+            loads += 1
+            return [disc]
+        })
+        XCTAssertEqual(draft.kind(for: TVTrackingSurfacesTests.ref("music"), seasons: []), .song)
+        XCTAssertTrue(draft.discs.isEmpty)
+
+        await draft.loadSongs()
+        await draft.loadSongs()
+        XCTAssertEqual(draft.discs.map(\.position), [1])
+        XCTAssertEqual(loads, 1, "Loaded once")
+
+        struct Offline: Error {}
+        let failing = LogFavoriteDraft(loadDiscs: { throw Offline() })
+        await failing.loadSongs()
+        XCTAssertTrue(failing.discsFailed)
+        XCTAssertEqual(failing.kind(for: TVTrackingSurfacesTests.ref("music"), seasons: []), .song, "The row stays to retry")
+    }
+
+    private static func disc() throws -> MusicMedium {
+        try JSONDecoder.api.decode(MusicMedium.self, from: Data("""
         {"medium_mbid": null, "position": 1, "title": null, "format": null, "track_count": 1, "tracks": [{
           "track_mbid": "track-1", "disc_number": 1, "position": 1, "number": "A1", "title": "First", "length_ms": null,
           "artist_credit": [],
@@ -95,15 +134,6 @@ final class LogFavoriteTests: XCTestCase {
                         "first_release_date": null, "is_video": false, "isrcs": []}
         }]}
         """.utf8))
-        XCTAssertEqual(LogFavorite.song(disc.tracks[0]), Self.song)
-
-        let seasons = [LogFavoriteSeason(number: 1, title: "Season 1")]
-        XCTAssertEqual(LogFavorite.Kind.of(TVTrackingSurfacesTests.ref("music"), discs: [disc], seasons: []), .song)
-        XCTAssertNil(LogFavorite.Kind.of(TVTrackingSurfacesTests.ref("music"), discs: [], seasons: []), "No tracklist")
-        XCTAssertEqual(LogFavorite.Kind.of(TVTrackingSurfacesTests.ref("tv"), discs: [], seasons: seasons), .episode)
-        XCTAssertEqual(LogFavorite.Kind.of(Self.seasonRef(1), discs: [], seasons: seasons), .episode)
-        XCTAssertNil(LogFavorite.Kind.of(TVTrackingSurfacesTests.ref("episode"), discs: [], seasons: seasons))
-        XCTAssertNil(LogFavorite.Kind.of(TVTrackingSurfacesTests.ref("movie"), discs: [disc], seasons: seasons))
     }
 
     private static func seasonRef(_ number: Int) -> MediaRef {
