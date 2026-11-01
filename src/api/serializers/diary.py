@@ -13,6 +13,34 @@ class CalendarOrDateTimeField(serializers.Field):
         return serializers.DateField().run_validation(data)
 
 
+class DiaryFavoriteSerializer(serializers.Serializer):
+    """A log's favorite: a song on its album, or an episode of its show or season."""
+
+    kind = serializers.ChoiceField(choices=["song", "episode"])
+    # Roomy limits: these are providers' titles, and a long one mustn't block the log.
+    title = serializers.CharField(max_length=1000)
+    # Songs: the tracklist's recording ID, and its number on the album ("3", "A3").
+    id = serializers.CharField(required=False, max_length=64)
+    number = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    # Episodes.
+    season_number = serializers.IntegerField(required=False, min_value=0)
+    episode_number = serializers.IntegerField(required=False, min_value=0)
+
+    def validate(self, attrs):
+        # A PATCH's partial=True reaches this nested serializer and skips its required
+        # fields, but a favorite is always written whole.
+        for field in ("kind", "title"):
+            if not attrs.get(field):
+                raise serializers.ValidationError({field: "This field is required."})
+        if attrs["kind"] == "song" and not attrs.get("id"):
+            raise serializers.ValidationError({"id": "A favorite song needs its ID."})
+        if attrs["kind"] == "episode" and (
+            attrs.get("season_number") is None or attrs.get("episode_number") is None
+        ):
+            raise serializers.ValidationError("A favorite episode needs its season and episode numbers.")
+        return attrs
+
+
 class DiaryEntryWriteSerializer(serializers.Serializer):
     """Validate diary entry create/update payloads."""
 
@@ -47,6 +75,7 @@ class DiaryEntryWriteSerializer(serializers.Serializer):
         required=False,
         default=list,
     )
+    favorite = DiaryFavoriteSerializer(required=False, allow_null=True)
     # A TV log saved from a season or episode page names that page, so the response's
     # `tv` carries the page's state and composer (TV-404, TV-705).
     page_season_number = GameIntegerField(required=False, min_value=0, allow_null=True)
