@@ -33,7 +33,8 @@ enum StatsReleaseMode: String, CaseIterable, Identifiable, Hashable {
 }
 
 /// The Release years section's rows. `onDrillDown` is nil on someone else's stats; it opens a
-/// year's logs (`year=1999`) or a decade's (`year_min=1990&year_max=1999`).
+/// year's logs (`year=1999`) or a decade's (`year_min=1990&year_max=1999`), or on Logs, the logs
+/// made in that year or decade (`watched_from`, `watched_to`).
 struct StatsReleaseYearsChartSection: View {
     let releaseYears: StatsReleaseYears
     /// The tab: nil on Global, where Titles stack by type.
@@ -44,6 +45,7 @@ struct StatsReleaseYearsChartSection: View {
     var onDrillDown: ((StatsDrillDown) -> Void)?
 
     @State private var grouping: StatsReleaseGrouping = .years
+    @State private var mode: StatsReleaseMode = .titles
 
     var body: some View {
         StatsSectionTitle("By year") {
@@ -60,13 +62,15 @@ struct StatsReleaseYearsChartSection: View {
         StatsReleaseYearsChartCard(
             releaseYears: releaseYears,
             grouping: grouping,
+            mode: $mode,
             mediaType: mediaType,
             currentYear: currentYear,
             period: period,
             onDrillDown: onDrillDown
         )
 
-        if let note = StatsChartCopy.coverageNote(releaseYears.coverage, qualifier: "with a release year") {
+        // Logs don't go by release year, so a title without one leaves nothing out of them.
+        if mode != .logs, let note = StatsChartCopy.coverageNote(releaseYears.coverage, qualifier: "with a release year") {
             StatsChartFootnote(text: note)
         }
 
@@ -252,8 +256,8 @@ enum StatsReleaseYearsChartData {
         return point.isDecade ? .releaseDecade(point.start, mediaType: mediaType) : .releaseYear(point.start, mediaType: mediaType)
     }
 
-    /// The picked bar's readout: "1999", "4 titles · 4.0 average", and its logs (each type's too
-    /// on Global) when it has any.
+    /// The picked bar's readout: "Released in 1999", "4 titles · 4.0 average", and its logs (each
+    /// type's too on Global) when it has any. Logs: "Logged in 2026", "38 logs", never split by type.
     static func selection(for point: StatsReleasePoint, stacked: Bool, mode: StatsReleaseMode = .titles) -> StatsChartSelection {
         var options: [StatsChartDrillOption] = []
         if point.logs > 0, let whole = drillDown(for: point, mode: mode) {
@@ -342,12 +346,12 @@ enum StatsReleaseYearsChartData {
 private struct StatsReleaseYearsChartCard: View {
     let releaseYears: StatsReleaseYears
     let grouping: StatsReleaseGrouping
+    @Binding var mode: StatsReleaseMode
     let mediaType: String?
     let currentYear: Int
     let period: StatsPeriod
     let onDrillDown: ((StatsDrillDown) -> Void)?
 
-    @State private var mode: StatsReleaseMode = .titles
     /// The label under the finger while scrubbing.
     @State private var scrubbed: String?
     /// The last picked bar, kept after the finger lifts.

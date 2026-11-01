@@ -95,7 +95,8 @@ enum StatsDrillDown: Hashable {
     }
 
     /// The diary filter for this drill-down: always `skip_backfill`, `tv_rollup` and the range's
-    /// dates, plus the tab's or the part's media types and the row's own filter (STAT-401).
+    /// dates, plus the tab's or the part's media types and the row's own filter (STAT-401). A
+    /// month, a day or logged years replace the range's dates with their own.
     func diaryFilter(in context: StatsDrillDownContext) -> MediaFilterState {
         var filter = MediaFilterState()
         filter.skipBackfill = true
