@@ -1839,7 +1839,8 @@ final class SpineTests: XCTestCase {
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "music", page: nil, status: "In progress"),
         ])
-        XCTAssertEqual(activity.requests, [ActivityRequest(username: "mobile", limit: 6)])
+        XCTAssertEqual(activity.feedRequests, [6], "Home's activity is the people you follow")
+        XCTAssertTrue(activity.requests.isEmpty)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.profileErrorMessage)
         XCTAssertNil(viewModel.inProgressErrorMessage)
@@ -8515,6 +8516,8 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
     let items: [ActivityItem]
     let error: Error?
     var requests: [ActivityRequest] = []
+    /// Page sizes of Home's requests for the people the user follows.
+    var feedRequests: [Int] = []
     var onRequest: (@MainActor () -> Void)?
 
     init(items: [ActivityItem], error: Error? = nil) {
@@ -8527,6 +8530,13 @@ private final class ScriptedHomeActivityRepository: ActivityRepository {
         await onRequest?()
         if let error { throw error }
         return Array(items.prefix(limit))
+    }
+
+    func feedPage(pageSize: Int, cursorLink _: String?) async throws -> ActivityCursorResponse {
+        feedRequests.append(pageSize)
+        await onRequest?()
+        if let error { throw error }
+        return ActivityCursorResponse(nextCursor: nil, previousCursor: nil, results: Array(items.prefix(pageSize)))
     }
 }
 

@@ -94,6 +94,12 @@ struct MediaTypeTheme: Equatable {
                 displayName: "Music",
                 symbolName: "music.note.list"
             )
+        case "users":
+            return MediaTypeTheme(
+                slug: normalized,
+                displayName: "Users",
+                symbolName: "person.2.fill"
+            )
         case "boardgame":
             return MediaTypeTheme(
                 slug: normalized,

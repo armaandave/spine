@@ -88,10 +88,14 @@ from api.views.profile import (
 from api.views.social import (
     BlockView,
     FeedView,
+    FollowListView,
     FollowRequestActionView,
     FollowRequestsView,
     FollowView,
     GenericLikeView,
+    PushDeviceView,
+    RemoveFollowerView,
+    ReportView,
     UserActivityView,
 )
 from api.views.stats import (
@@ -126,6 +130,13 @@ from api.views.tracking import (
     TrackingListView,
     TVStartView,
 )
+from api.views.user_content import (
+    UserDiaryListView,
+    UserDiaryTagsView,
+    UserLikedMediaView,
+    UserListsView,
+    UserTrackingListView,
+)
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="api-health"),
@@ -142,6 +153,9 @@ urlpatterns = [
     path("me/avatar/", AvatarView.as_view(), name="api-me-avatar"),
     path("me/profile-backdrop/", ProfileBackdropView.as_view(), name="api-me-profile-backdrop"),
     path("me/liked-media/", LikedMediaView.as_view(), name="api-me-liked-media"),
+    path("me/followers/<str:username>/", RemoveFollowerView.as_view(), name="api-me-follower"),
+    path("me/push-devices/", PushDeviceView.as_view(), name="api-me-push-devices"),
+    path("me/push-devices/<str:token>/", PushDeviceView.as_view(), name="api-me-push-device"),
     path("me/password/", PasswordChangeView.as_view(), name="api-me-password"),
     path("me/preferences/", PreferencesView.as_view(), name="api-me-preferences"),
     path("me/streaming/", MeStreamingView.as_view(), name="api-me-streaming"),
@@ -300,6 +314,22 @@ urlpatterns = [
         name="api-user-stats-people",
     ),
     path("users/<str:username>/activity/", UserActivityView.as_view(), name="api-user-activity"),
+    path("users/<str:username>/diary/", UserDiaryListView.as_view(), name="api-user-diary"),
+    path("users/<str:username>/diary/tags/", UserDiaryTagsView.as_view(), name="api-user-diary-tags"),
+    path("users/<str:username>/liked-media/", UserLikedMediaView.as_view(), name="api-user-liked-media"),
+    path("users/<str:username>/lists/", UserListsView.as_view(), name="api-user-lists"),
+    path("users/<str:username>/tracking/", UserTrackingListView.as_view(), name="api-user-tracking"),
     path("users/<str:username>/follow/", FollowView.as_view(), name="api-user-follow"),
     path("users/<str:username>/block/", BlockView.as_view(), name="api-user-block"),
+    path(
+        "users/<str:username>/followers/",
+        FollowListView.as_view(direction="followers"),
+        name="api-user-followers",
+    ),
+    path(
+        "users/<str:username>/following/",
+        FollowListView.as_view(direction="following"),
+        name="api-user-following",
+    ),
+    path("users/<str:username>/report/", ReportView.as_view(), name="api-user-report"),
 ]

@@ -424,14 +424,21 @@ def _stored_rating(value, media_type):
         raise serializers.ValidationError({"detail": error.messages[0]}) from error
 
 
-def tag_results(query, user=None, *, limit=10):
-    """Return tag search results."""
+def tag_results(query, user=None, *, limit=10, entries=None):
+    """Return tag search results.
+
+    With ``user``, only that user's tags, counted on their logs; ``entries`` narrows
+    those to the logs a viewer may see.
+    """
     queryset = Tag.objects.all()
     ordering = ["-usage_count", "name"]
     if user is not None:
+        logs = Q(diary_entries__user=user)
+        if entries is not None:
+            logs &= Q(diary_entries__in=entries)
         queryset = (
-            queryset.filter(diary_entries__user=user)
-            .annotate(user_usage_count=Count("diary_entries", filter=Q(diary_entries__user=user)))
+            queryset.filter(logs)
+            .annotate(user_usage_count=Count("diary_entries", filter=logs))
             .distinct()
         )
         ordering = ["-user_usage_count", "name"]

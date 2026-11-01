@@ -10,9 +10,10 @@ from api.permissions import can_view_user_profile
 from api.serializers.diary import DiaryEntryWriteSerializer
 from api.services import diary as diary_service
 from api.services import filters as filter_service
+from api.services import stats as stats_service
 from api.services import tracking as tracking_service
 from api.services.social import set_like
-from app import exposure, single_weight, tv_tracking
+from app import exposure, tv_tracking
 from app.curation import curated_prefetches
 from app.models import CustomBackdropPreference, CustomPosterPreference, DiaryEntry
 from app.services import delete_diary_entry
@@ -26,13 +27,14 @@ class DiaryListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        return self.list_response(request, request.user, DiaryEntry.objects.filter(user=request.user))
+
+    def list_response(self, request, owner, entries):
+        """Return a filtered page of ``entries``, owner's logs the viewer may see."""
         viewer_posters = CustomPosterPreference.objects.filter(user=request.user)
         viewer_backdrops = CustomBackdropPreference.objects.filter(user=request.user)
         entries = (
-            DiaryEntry.objects.filter(
-                user=request.user,
-                item__media_type__in=exposure.media_types(),
-            )
+            entries.filter(item__media_type__in=exposure.media_types())
             .select_related("item", "user")
             .prefetch_related(
                 "tags",
@@ -75,14 +77,19 @@ class DiaryListView(APIView):
         entries = filter_service.apply_diary_drilldown_filters(
             entries,
             request.query_params,
-            owner=request.user,
+            owner=owner,
         )
-        entries = filter_service.apply_stats_count_filters(entries, request.query_params, owner=request.user)
+        entries = filter_service.apply_stats_count_filters(
+            entries,
+            request.query_params,
+            owner=owner,
+            viewer=request.user,
+        )
         entries = filter_service.apply_rating_range(entries, request.query_params, "rating")
-        entries = filter_service.apply_diary_date_range(entries, request.query_params, owner=request.user)
+        entries = filter_service.apply_diary_date_range(entries, request.query_params, owner=owner)
         entries = filter_service.apply_user_status_filter(
             entries,
-            request.user,
+            owner,
             request.query_params.get("status"),
         )
         entries, streaming = streaming_filters.apply_service_filter(
@@ -147,7 +154,9 @@ class DiaryDetailView(APIView):
         if entry.user != request.user:
             if not can_view_user_profile(request.user, entry.user):
                 return Response(status=status.HTTP_404_NOT_FOUND)
-            if not single_weight.uses_half_star_rating(entry.item) and entry.visibility == "private":
+            # The diary list's rule: a followers-only log needs an accepted follow.
+            visible = stats_service.visible_diary_entries(user=entry.user, viewer=request.user)
+            if not visible.filter(id=entry.id).exists():
                 return Response(status=status.HTTP_404_NOT_FOUND)
         exposure.require_media_type(entry.item.media_type)
         return Response(diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True))

@@ -1,6 +1,7 @@
 import logging
 
 from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.db.models import Case, Q, When
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -9,13 +10,14 @@ from rest_framework.views import APIView
 
 from api.exceptions import BookTrackingConflict as APIBookTrackingConflict
 from api.pagination import StandardResultsSetPagination
-from api.permissions import can_view_user_profile
+from api.permissions import can_view_user_profile, user_blocks
 from api.serializers.common import (
     MediaRefSerializer,
     find_item,
     get_or_create_item_from_metadata,
     image_url,
     media_summary_from_item,
+    user_summary,
 )
 from api.serializers.profile import (
     PasswordChangeSerializer,
@@ -293,32 +295,46 @@ class PublicProfileView(APIView):
     def get(self, request, username):
         User = get_user_model()
         user = get_object_or_404(User, username=username)
-        if not can_view_user_profile(request.user, user):
+        # Someone who blocks you is gone. A private account you don't follow, or one you
+        # block, shows only its header.
+        if user_blocks(user, request.user):
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(profile_payload(user, request=request, viewer=request.user))
+        restricted = not can_view_user_profile(request.user, user)
+        return Response(profile_payload(user, request=request, viewer=request.user, restricted=restricted))
 
 
 class UserSearchView(APIView):
-    """Search users by username/display name."""
+    """Search users by username/display name.
+
+    Private accounts show up, so they can be asked to follow. Someone who blocks you
+    never does.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         User = get_user_model()
-        query = request.query_params.get("q", "").strip()
-        users = User.objects.all()
-        if query:
-            users = users.filter(username__icontains=query)
-        users = [user for user in users[:25] if can_view_user_profile(request.user, user)]
+        query = request.query_params.get("q", "").strip().removeprefix("@")
+        if not query:
+            return Response({"results": []})
+        users = (
+            User.objects.filter(is_active=True)
+            .filter(Q(username__icontains=query) | Q(display_name__icontains=query))
+            .exclude(id=request.user.id)
+            .exclude(blocks_sent__blocked=request.user)
+            .annotate(
+                rank=Case(
+                    When(username__iexact=query, then=0),
+                    When(Q(username__istartswith=query) | Q(display_name__istartswith=query), then=1),
+                    default=2,
+                ),
+            )
+            .order_by("rank", "username")[:25]
+        )
         return Response(
             {
                 "results": [
-                    {
-                        "id": user.id,
-                        "username": user.username,
-                        "display_name": user.display_name or user.username,
-                        "avatar_url": image_url(request, user.profile_picture) if user.profile_picture else None,
-                    }
+                    {**user_summary(user, request=request), "is_private": user.profile_private}
                     for user in users
                 ],
             },

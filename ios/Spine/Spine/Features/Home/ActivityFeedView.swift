@@ -10,7 +10,8 @@ final class ActivityFeedViewModel {
     var errorMessage: String?
     var nextPageErrorMessage: String?
 
-    private let username: String
+    /// A profile's username, or nil for the activity of the people the signed-in user follows (Home).
+    private let username: String?
     private let pageSize: Int
     private let activityRepository: ActivityRepository
     private let onUnauthorized: () -> Void
@@ -19,7 +20,7 @@ final class ActivityFeedViewModel {
     private var isLoadingFirstPage = false
 
     init(
-        username: String,
+        username: String?,
         pageSize: Int = 25,
         activityRepository: ActivityRepository,
         onUnauthorized: @escaping () -> Void
@@ -59,11 +60,7 @@ final class ActivityFeedViewModel {
         defer { isLoadingNextPage = false }
 
         do {
-            let response = try await activityRepository.userActivityPage(
-                username: username,
-                pageSize: pageSize,
-                cursorLink: nextCursorLink
-            )
+            let response = try await page(cursorLink: nextCursorLink)
             var seen = Set(items.map(\.id))
             items += response.results.filter { seen.insert($0.id).inserted }
             self.nextCursorLink = response.nextCursor
@@ -87,11 +84,7 @@ final class ActivityFeedViewModel {
         }
 
         do {
-            let response = try await activityRepository.userActivityPage(
-                username: username,
-                pageSize: pageSize,
-                cursorLink: nil
-            )
+            let response = try await page(cursorLink: nil)
             items = Self.deduplicated(response.results)
             nextCursorLink = response.nextCursor
             didLoad = true
@@ -101,6 +94,17 @@ final class ActivityFeedViewModel {
             errorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
+    }
+
+    private func page(cursorLink: String?) async throws -> ActivityCursorResponse {
+        if let username {
+            return try await activityRepository.userActivityPage(
+                username: username,
+                pageSize: pageSize,
+                cursorLink: cursorLink
+            )
+        }
+        return try await activityRepository.feedPage(pageSize: pageSize, cursorLink: cursorLink)
     }
 
     private func handleUnauthorized(_ error: Error) {
@@ -119,14 +123,19 @@ struct ActivityFeedView: View {
     @State private var viewModel: ActivityFeedViewModel
 
     private let onSelectActivity: (ActivityItem) -> Void
+    private let emptyMessage: String
 
+    /// A profile's activity, or with no username the people the signed-in user follows.
     init(
-        username: String,
+        username: String?,
         activityRepository: ActivityRepository,
         onUnauthorized: @escaping () -> Void,
         onSelectActivity: @escaping (ActivityItem) -> Void
     ) {
         self.onSelectActivity = onSelectActivity
+        emptyMessage = username == nil
+            ? "Logs and progress from people you follow will appear here."
+            : "Diary logs and progress updates will appear here."
         _viewModel = State(initialValue: ActivityFeedViewModel(
             username: username,
             activityRepository: activityRepository,
@@ -177,7 +186,7 @@ struct ActivityFeedView: View {
             ActivityFeedState(
                 title: "No activity yet",
                 systemImage: "clock.arrow.circlepath",
-                message: "Diary logs and progress updates will appear here."
+                message: emptyMessage
             )
             .frame(minHeight: 360)
         } else {

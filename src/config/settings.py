@@ -377,6 +377,10 @@ LISTENBRAINZ_TOKEN = config(
 APPLE_MUSIC_TEAM_ID = config("APPLE_MUSIC_TEAM_ID", default="")
 APPLE_MUSIC_KEY_ID = config("APPLE_MUSIC_KEY_ID", default="")
 APPLE_MUSIC_PRIVATE_KEY = config("APPLE_MUSIC_PRIVATE_KEY", default="")  # base64 of the .p8, one line
+# Apple push key, used to send follow notifications. Unset, nothing is sent.
+APNS_TEAM_ID = config("APNS_TEAM_ID", default="")
+APNS_KEY_ID = config("APNS_KEY_ID", default="")
+APNS_PRIVATE_KEY = config("APNS_PRIVATE_KEY", default="")  # base64 of the .p8, one line
 # Where new music albums come from: "apple_music", or anything else for MusicBrainz.
 MUSIC_CATALOG_DEFAULT = "apple_music"
 MUSIC_CATALOG_SOURCE = config("MUSIC_CATALOG_SOURCE", default=MUSIC_CATALOG_DEFAULT)

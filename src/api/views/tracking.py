@@ -41,6 +41,10 @@ class TrackingListView(MediaExposureMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        return self.list_response(request, request.user)
+
+    def list_response(self, request, owner):
+        """Return one page of ``owner``'s tracked media of the requested type."""
         media_type = request.query_params.get("media_type")
         if not media_type:
             return Response({"media_type": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
@@ -57,7 +61,7 @@ class TrackingListView(MediaExposureMixin, APIView):
         search = request.query_params.get("q")
         manager_sort = ordering if ordering in {"score", "progress", "start_date", "end_date", "title"} else None
         queryset = BasicMedia.objects.get_media_list(
-            request.user,
+            owner,
             media_type,
             manager_status_filter,
             manager_sort,
@@ -110,15 +114,23 @@ class TrackingListView(MediaExposureMixin, APIView):
         if continue_watching:
             # One query: up next's title and still, for the hold preview (TV-701).
             tv_tracking.prime_up_next_episodes(page)
+        # The rows are the owner's, as the owner sees them. Another user's leave out
+        # media.user_state, which would be the owner's too: their lists and latest log,
+        # hidden ones included.
         prime_collection_items(
             [media.item for media in page],
-            request.user,
+            owner,
             media_by_item={media.item_id: media for media in page},
         )
         response = paginator.get_paginated_response(
             [
                 {
-                    "media": media_summary_from_item(media.item, request=request, user=request.user),
+                    "media": media_summary_from_item(
+                        media.item,
+                        request=request,
+                        user=owner,
+                        include_user_state=owner == request.user,
+                    ),
                     "tracking": tracking_service.serialize_tracking(media),
                 }
                 for media in page

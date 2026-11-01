@@ -37,6 +37,62 @@ private final class ProfileDiaryFilterViewModel {
 struct ProfileReviewsView: View {
     @State private var viewModel: ProfileDiaryFilterViewModel
 
+    private let isOwnProfile: Bool
+    private let diaryRepository: DiaryRepository
+    private let mediaRepository: MediaRepository
+    private let trackingRepository: TrackingRepository
+    private let currentUserId: Int?
+    private let selectedTab: AppTab
+    private let onSelectTab: (AppTab) -> Void
+    private let onUnauthorized: () -> Void
+
+    /// Your reviews, or with a username someone else's.
+    init(
+        username: String? = nil,
+        diaryRepository: DiaryRepository,
+        mediaRepository: MediaRepository,
+        trackingRepository: TrackingRepository,
+        currentUserId: Int? = nil,
+        selectedTab: AppTab,
+        onSelectTab: @escaping (AppTab) -> Void,
+        onUnauthorized: @escaping () -> Void
+    ) {
+        let scopedDiaryRepository = username.map(diaryRepository.owned(by:)) ?? diaryRepository
+        isOwnProfile = username == nil
+        self.diaryRepository = scopedDiaryRepository
+        self.mediaRepository = mediaRepository
+        self.trackingRepository = trackingRepository
+        self.currentUserId = currentUserId
+        self.selectedTab = selectedTab
+        self.onSelectTab = onSelectTab
+        self.onUnauthorized = onUnauthorized
+        _viewModel = State(initialValue: ProfileDiaryFilterViewModel(
+            filter: DiaryFilter(hasReview: true),
+            diaryRepository: scopedDiaryRepository,
+            onUnauthorized: onUnauthorized
+        ))
+    }
+
+    var body: some View {
+        ProfileDiaryEntriesScreen(
+            title: "Reviews",
+            emptyTitle: "No reviews yet",
+            emptyMessage: isOwnProfile ? "Reviews you write from media pages will appear here." : "Their reviews will appear here.",
+            viewModel: viewModel,
+            diaryRepository: diaryRepository,
+            mediaRepository: mediaRepository,
+            trackingRepository: trackingRepository,
+            currentUserId: currentUserId,
+            selectedTab: selectedTab,
+            onSelectTab: onSelectTab,
+            onUnauthorized: onUnauthorized
+        )
+    }
+}
+
+struct ProfileLogsView: View {
+    @State private var viewModel: ProfileDiaryFilterViewModel
+
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -46,6 +102,7 @@ struct ProfileReviewsView: View {
     private let onUnauthorized: () -> Void
 
     init(
+        username: String,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
@@ -54,7 +111,8 @@ struct ProfileReviewsView: View {
         onSelectTab: @escaping (AppTab) -> Void,
         onUnauthorized: @escaping () -> Void
     ) {
-        self.diaryRepository = diaryRepository
+        let scopedDiaryRepository = diaryRepository.owned(by: username)
+        self.diaryRepository = scopedDiaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.currentUserId = currentUserId
@@ -62,17 +120,17 @@ struct ProfileReviewsView: View {
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
         _viewModel = State(initialValue: ProfileDiaryFilterViewModel(
-            filter: DiaryFilter(hasReview: true),
-            diaryRepository: diaryRepository,
+            filter: DiaryFilter(),
+            diaryRepository: scopedDiaryRepository,
             onUnauthorized: onUnauthorized
         ))
     }
 
     var body: some View {
         ProfileDiaryEntriesScreen(
-            title: "Reviews",
-            emptyTitle: "No reviews yet",
-            emptyMessage: "Reviews you write from media pages will appear here.",
+            title: "Diary",
+            emptyTitle: "No logs yet",
+            emptyMessage: "Their logs will appear here.",
             viewModel: viewModel,
             diaryRepository: diaryRepository,
             mediaRepository: mediaRepository,
@@ -95,8 +153,11 @@ struct ProfileLikesView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    private let isOwnProfile: Bool
 
+    /// Your liked media, or with a username someone else's.
     init(
+        username: String? = nil,
         profileRepository: ProfileRepository,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
@@ -106,6 +167,7 @@ struct ProfileLikesView: View {
         onSelectTab: @escaping (AppTab) -> Void,
         onUnauthorized: @escaping () -> Void
     ) {
+        isOwnProfile = username == nil
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -115,6 +177,7 @@ struct ProfileLikesView: View {
         self.onUnauthorized = onUnauthorized
         _viewModel = State(initialValue: ProfileLikesViewModel(
             profileRepository: profileRepository,
+            username: username,
             onUnauthorized: onUnauthorized
         ))
     }
@@ -133,7 +196,11 @@ struct ProfileLikesView: View {
                         } else if let error = viewModel.errorMessage, viewModel.media.isEmpty {
                             DiaryStateCard(title: "Could not load likes", systemImage: "exclamationmark.triangle", message: error)
                         } else if viewModel.media.isEmpty {
-                            DiaryStateCard(title: "No liked media yet", systemImage: "heart", message: "Media you like while logging will appear here.")
+                            DiaryStateCard(
+                                title: "No liked media yet",
+                                systemImage: "heart",
+                                message: isOwnProfile ? "Media you like while logging will appear here." : "Media they like will appear here."
+                            )
                         } else {
                             mediaGrid(viewModel.media)
                         }
@@ -213,10 +280,12 @@ private final class ProfileLikesViewModel {
     var errorMessage: String?
 
     private let profileRepository: ProfileRepository
+    private let username: String?
     private let onUnauthorized: () -> Void
 
-    init(profileRepository: ProfileRepository, onUnauthorized: @escaping () -> Void) {
+    init(profileRepository: ProfileRepository, username: String?, onUnauthorized: @escaping () -> Void) {
         self.profileRepository = profileRepository
+        self.username = username
         self.onUnauthorized = onUnauthorized
     }
 
@@ -226,7 +295,7 @@ private final class ProfileLikesViewModel {
         defer { isLoading = false }
 
         do {
-            media = try await profileRepository.likedMedia()
+            media = try await profileRepository.likedMedia(username: username)
         } catch {
             errorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
@@ -366,8 +435,11 @@ struct ProfileTagsView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    private let isOwnProfile: Bool
 
+    /// Your tags, or with a username someone else's.
     init(
+        username: String? = nil,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
@@ -376,14 +448,16 @@ struct ProfileTagsView: View {
         onSelectTab: @escaping (AppTab) -> Void,
         onUnauthorized: @escaping () -> Void
     ) {
-        self.diaryRepository = diaryRepository
+        let scopedDiaryRepository = username.map(diaryRepository.owned(by:)) ?? diaryRepository
+        isOwnProfile = username == nil
+        self.diaryRepository = scopedDiaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
         self.currentUserId = currentUserId
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
-        _viewModel = State(initialValue: ProfileTagsViewModel(diaryRepository: diaryRepository, onUnauthorized: onUnauthorized))
+        _viewModel = State(initialValue: ProfileTagsViewModel(diaryRepository: scopedDiaryRepository, onUnauthorized: onUnauthorized))
     }
 
     var body: some View {
@@ -400,7 +474,11 @@ struct ProfileTagsView: View {
                         } else if let error = viewModel.errorMessage, viewModel.tags.isEmpty {
                             DiaryStateCard(title: "Could not load tags", systemImage: "exclamationmark.triangle", message: error)
                         } else if viewModel.tags.isEmpty {
-                            DiaryStateCard(title: "No tags yet", systemImage: "tag", message: "Tags you add while logging will appear here.")
+                            DiaryStateCard(
+                                title: "No tags yet",
+                                systemImage: "tag",
+                                message: isOwnProfile ? "Tags you add while logging will appear here." : "Tags on their logs will appear here."
+                            )
                         } else {
                             tagsContent
                         }
@@ -570,12 +648,14 @@ private final class ProfileListsViewModel {
     var errorMessage: String?
 
     private let listRepository: ListRepository
+    private let username: String?
     private let onUnauthorized: () -> Void
     private var hasLoaded = false
     private var requestGeneration = 0
 
-    init(listRepository: ListRepository, onUnauthorized: @escaping () -> Void) {
+    init(listRepository: ListRepository, username: String?, onUnauthorized: @escaping () -> Void) {
         self.listRepository = listRepository
+        self.username = username
         self.onUnauthorized = onUnauthorized
     }
 
@@ -591,7 +671,11 @@ private final class ProfileListsViewModel {
         }
 
         do {
-            let loadedLists = try await listRepository.list()
+            let loadedLists = if let username {
+                try await listRepository.lists(ownedBy: username)
+            } else {
+                try await listRepository.list()
+            }
             guard generation == requestGeneration else { return }
             lists = loadedLists
             hasLoaded = true
@@ -651,7 +735,9 @@ struct ProfileListsView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    private let isOwnProfile: Bool
 
+    /// Your lists, or with a username someone else's, read-only.
     init(
         profileRepository: ProfileRepository,
         listRepository: ListRepository,
@@ -671,8 +757,10 @@ struct ProfileListsView: View {
         onOpenLibrary: @escaping (LibraryShelf) -> Void = { _ in },
         selectedTab: AppTab,
         onSelectTab: @escaping (AppTab) -> Void,
+        username: String? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
+        isOwnProfile = username == nil
         self.profileRepository = profileRepository
         self.listRepository = listRepository
         self.peopleRepository = peopleRepository
@@ -692,7 +780,11 @@ struct ProfileListsView: View {
         self.selectedTab = selectedTab
         self.onSelectTab = onSelectTab
         self.onUnauthorized = onUnauthorized
-        _viewModel = State(initialValue: ProfileListsViewModel(listRepository: listRepository, onUnauthorized: onUnauthorized))
+        _viewModel = State(initialValue: ProfileListsViewModel(
+            listRepository: listRepository,
+            username: username,
+            onUnauthorized: onUnauthorized
+        ))
     }
 
     var body: some View {
@@ -709,7 +801,11 @@ struct ProfileListsView: View {
                         } else if let error = viewModel.errorMessage, viewModel.lists.isEmpty {
                             DiaryStateCard(title: "Could not load lists", systemImage: "exclamationmark.triangle", message: error)
                         } else if viewModel.lists.isEmpty {
-                            DiaryStateCard(title: "No lists yet", systemImage: "list.bullet.rectangle", message: "Custom lists you create will appear here.")
+                            DiaryStateCard(
+                                title: "No lists yet",
+                                systemImage: "list.bullet.rectangle",
+                                message: isOwnProfile ? "Custom lists you create will appear here." : "Their lists will appear here."
+                            )
                         } else {
                             listsContent
                         }
@@ -729,19 +825,21 @@ struct ProfileListsView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("Media List", systemImage: "rectangle.stack") {
-                        presentedForm = .create(.media)
+            if isOwnProfile {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Media List", systemImage: "rectangle.stack") {
+                            presentedForm = .create(.media)
+                        }
+                        Button("People List", systemImage: "person.2") {
+                            presentedForm = .create(.people)
+                        }
+                    } label: {
+                        Image(systemName: "plus")
                     }
-                    Button("People List", systemImage: "person.2") {
-                        presentedForm = .create(.people)
-                    }
-                } label: {
-                    Image(systemName: "plus")
+                    .accessibilityLabel("Create list")
+                    .disabled(viewModel.isLoading)
                 }
-                .accessibilityLabel("Create list")
-                .disabled(viewModel.isLoading)
             }
         }
         .fullScreenCover(item: $presentedForm, onDismiss: openCreatedListIfNeeded) { mode in

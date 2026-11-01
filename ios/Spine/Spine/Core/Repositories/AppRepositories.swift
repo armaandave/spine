@@ -140,6 +140,8 @@ extension MediaRepository {
 }
 
 protocol TrackingRepository {
+    /// The same list reads for someone else's titles (`/users/<username>/tracking/`), for their In Progress rail.
+    func owned(by username: String) -> TrackingRepository
     func list(mediaType: String, page: String?, status: String?, query: String?) async throws -> PagedResponse<LibraryItem>
     func list(mediaType: String, page: String?, filter: MediaFilterState) async throws -> PagedResponse<LibraryItem>
     func detail(ref: MediaRef) async throws -> TrackingState
@@ -256,11 +258,15 @@ protocol DiaryRepository {
     func tags(query: String, mine: Bool) async throws -> [DiaryTagSuggestion]
     func tags(query: String) async throws -> [DiaryTagSuggestion]
     func allTags(mine: Bool) async throws -> [DiaryTagSuggestion]
+    /// The same reads for someone else's diary (`/users/<username>/diary/`), for their profile pages.
+    func owned(by username: String) -> DiaryRepository
 }
 
 protocol ActivityRepository {
     func userActivity(username: String, limit: Int) async throws -> [ActivityItem]
     func userActivityPage(username: String, pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
+    /// The activity of the people the signed-in user follows, newest first.
+    func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
 }
 
 extension ActivityRepository {
@@ -270,6 +276,10 @@ extension ActivityRepository {
             previousCursor: nil,
             results: try await userActivity(username: username, limit: pageSize)
         )
+    }
+
+    func feedPage(pageSize _: Int, cursorLink _: String?) async throws -> ActivityCursorResponse {
+        ActivityCursorResponse(nextCursor: nil, previousCursor: nil, results: [])
     }
 }
 
@@ -334,6 +344,35 @@ extension DiaryRepository {
     func allTags(mine: Bool) async throws -> [DiaryTagSuggestion] {
         try await tags(query: "", mine: mine)
     }
+
+    func owned(by _: String) -> DiaryRepository {
+        self
+    }
+}
+
+extension TrackingRepository {
+    func owned(by _: String) -> TrackingRepository {
+        self
+    }
+}
+
+extension ProfileRepository {
+    func likedMedia(username _: String?) async throws -> [MediaSummary] {
+        try await likedMedia()
+    }
+}
+
+extension ListRepository {
+    func lists(ownedBy _: String) async throws -> [CustomListSummary] {
+        try await list()
+    }
+}
+
+/// `/users/<username>/<path>`, or `/<path>` for the signed-in user.
+func userScopedPath(_ path: String, username: String?) -> String {
+    guard let username else { return "/\(path)" }
+    let escaped = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+    return "/users/\(escaped)/\(path)"
 }
 
 struct DiaryFilter: Equatable {
@@ -394,6 +433,8 @@ protocol ProfileRepository {
         pageSize: Int
     ) async throws -> PagedResponse<StatsPersonRow>
     func likedMedia() async throws -> [MediaSummary]
+    /// Someone else's liked media; nil is your own.
+    func likedMedia(username: String?) async throws -> [MediaSummary]
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> UserProfile
     func uploadAvatar(imageData: Data, fileName: String, mimeType: String) async throws -> String?
     func deleteAvatar() async throws -> String?
@@ -493,6 +534,8 @@ extension ProfileRepository {
 protocol ListRepository {
     func list(membershipFor ref: MediaRef?) async throws -> [CustomListSummary]
     func list() async throws -> [CustomListSummary]
+    /// The lists of `username` that you may see.
+    func lists(ownedBy username: String) async throws -> [CustomListSummary]
     func peopleLists(membershipFor ref: PersonRef) async throws -> [CustomListSummary]
     func featured() async throws -> [CustomListSummary]
     /// The Search landing's featured shelves.
@@ -604,6 +647,7 @@ struct AppRepositories {
     let filterOptions: FilterOptionsRepository
     let imports: ImportRepository
     let streaming: StreamingRepository
+    let social: SocialRepository
 
     init(
         auth: AuthRepository,
@@ -618,7 +662,8 @@ struct AppRepositories {
         lists: ListRepository,
         filterOptions: FilterOptionsRepository = APIFilterOptionsRepository(client: AppEnvironment.apiClient),
         imports: ImportRepository,
-        streaming: StreamingRepository = APIStreamingRepository(client: AppEnvironment.apiClient)
+        streaming: StreamingRepository = APIStreamingRepository(client: AppEnvironment.apiClient),
+        social: SocialRepository = APISocialRepository(client: AppEnvironment.apiClient)
     ) {
         self.auth = auth
         self.media = media
@@ -633,6 +678,7 @@ struct AppRepositories {
         self.filterOptions = filterOptions
         self.imports = imports
         self.streaming = streaming
+        self.social = social
     }
 
     static func current() -> AppRepositories {
@@ -653,7 +699,8 @@ struct AppRepositories {
             lists: APIListRepository(client: client),
             filterOptions: APIFilterOptionsRepository(client: client),
             imports: APIImportRepository(client: client),
-            streaming: APIStreamingRepository(client: client)
+            streaming: APIStreamingRepository(client: client),
+            social: APISocialRepository(client: client)
         )
     }
 }
@@ -1012,6 +1059,12 @@ struct APICompanyRepository: CompanyRepository {
 
 struct APITrackingRepository: TrackingRepository {
     let client: APIClient
+    /// Someone else's titles, read-only; nil is your own.
+    var username: String? = nil
+
+    func owned(by username: String) -> TrackingRepository {
+        APITrackingRepository(client: client, username: username)
+    }
 
     func list(mediaType: String, page: String?, status: String? = nil, query searchQuery: String? = nil) async throws -> PagedResponse<LibraryItem> {
         var filter = MediaFilterState(q: searchQuery ?? "")
@@ -1021,7 +1074,7 @@ struct APITrackingRepository: TrackingRepository {
 
     func list(mediaType: String, page: String?, filter: MediaFilterState) async throws -> PagedResponse<LibraryItem> {
         return try await client.get(
-            "/tracking/",
+            userScopedPath("tracking/", username: username),
             query: filter.queryItems(page: page, mediaType: mediaType),
             authenticated: true
         )
@@ -1119,7 +1172,7 @@ struct APITrackingRepository: TrackingRepository {
         if let page {
             query.append(URLQueryItem(name: "page", value: page))
         }
-        return try await client.get("/tracking/", query: query, authenticated: true)
+        return try await client.get(userScopedPath("tracking/", username: username), query: query, authenticated: true)
     }
 
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState {
@@ -1180,6 +1233,12 @@ struct APITrackingRepository: TrackingRepository {
 
 struct APIDiaryRepository: DiaryRepository {
     let client: APIClient
+    /// Someone else's diary; nil is your own. Their entries open and like through the usual `/diary/<id>/`.
+    var username: String? = nil
+
+    func owned(by username: String) -> DiaryRepository {
+        APIDiaryRepository(client: client, username: username)
+    }
 
     func list(tag: String? = nil) async throws -> [DiaryEntry] {
         try await list(filter: DiaryFilter(tag: tag))
@@ -1197,12 +1256,15 @@ struct APIDiaryRepository: DiaryRepository {
     func page(filter: MediaFilterState, page: String?) async throws -> PagedResponse<DiaryEntry> {
         var query = filter.queryItems(page: page)
         query.append(URLQueryItem(name: "page_size", value: "100"))
-        return try await client.get("/diary/", query: query, authenticated: true)
+        return try await client.get(userScopedPath("diary/", username: username), query: query, authenticated: true)
     }
 
     func recent(limit: Int) async throws -> [DiaryEntry] {
         guard limit > 0 else { return [] }
-        let response: PagedResponse<DiaryEntry> = try await client.get("/diary/", authenticated: true)
+        let response: PagedResponse<DiaryEntry> = try await client.get(
+            userScopedPath("diary/", username: username),
+            authenticated: true
+        )
         return Array(response.results.prefix(limit))
     }
 
@@ -1276,7 +1338,7 @@ struct APIDiaryRepository: DiaryRepository {
             queryItems.append(URLQueryItem(name: "mine", value: "true"))
         }
         let response: DiaryTagSuggestionsResponse = try await client.get(
-            "/diary/tags/",
+            userScopedPath("diary/tags/", username: username),
             query: queryItems,
             authenticated: true
         )
@@ -1345,6 +1407,14 @@ struct APIActivityRepository: ActivityRepository {
             authenticated: true
         )
         return response
+    }
+
+    func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse {
+        var query = [URLQueryItem(name: "page_size", value: String(pageSize))]
+        if let cursor = Self.cursorValue(from: cursorLink) {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return try await client.get("/feed/", query: query, authenticated: true)
     }
 
     private static func cursorValue(from cursorLink: String?) -> String? {
@@ -1494,13 +1564,17 @@ struct APIProfileRepository: ProfileRepository {
     }
 
     func likedMedia() async throws -> [MediaSummary] {
+        try await likedMedia(username: nil)
+    }
+
+    func likedMedia(username: String?) async throws -> [MediaSummary] {
         var page: String?
         var media: [MediaSummary] = []
 
         repeat {
             let query = page.map { [URLQueryItem(name: "page", value: $0)] } ?? []
             let response: PagedResponse<MediaSummary> = try await client.get(
-                "/me/liked-media/",
+                username == nil ? "/me/liked-media/" : userScopedPath("liked-media/", username: username),
                 query: query,
                 authenticated: true
             )
@@ -1577,6 +1651,15 @@ struct APIListRepository: ListRepository {
     func list() async throws -> [CustomListSummary] {
         let response: PagedResponse<CustomListSummary> = try await client.get(
             "/lists/",
+            query: [URLQueryItem(name: "list_type", value: "all")],
+            authenticated: true
+        )
+        return response.results
+    }
+
+    func lists(ownedBy username: String) async throws -> [CustomListSummary] {
+        let response: PagedResponse<CustomListSummary> = try await client.get(
+            userScopedPath("lists/", username: username),
             query: [URLQueryItem(name: "list_type", value: "all")],
             authenticated: true
         )

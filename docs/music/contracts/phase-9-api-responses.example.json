@@ -980,6 +980,7 @@
     "profile_backdrop_item": null,
     "profile_backdrop_url": null,
     "pronouns": "",
+    "restricted": false,
     "username": "phase9",
     "viewer_relationship": {
       "blocked": false,
