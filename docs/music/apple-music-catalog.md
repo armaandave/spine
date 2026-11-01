@@ -531,16 +531,17 @@ deleted, and every move can be undone.
 3. **Other albums,** with no user data at all.
 
 Groups 2 and 3 are matched through their link row, else through Apple search with the
-artist the genre table or a cached MusicBrainz album knows. They make no MusicBrainz
-requests, so one whose artist isn't known is left and counted. Moving them keeps an
-unused MusicBrainz Item from holding on to its album's old ref.
+artist the genre table or a cached MusicBrainz album knows, else the same way as group
+1, which needs no known artist. Moving them keeps an unused MusicBrainz Item from
+holding on to its album's old ref, and moves its featured-list rows with it.
 
 ### Matching (`map`)
 
 `map` matches group-1 albums again on every run, whatever their row says, except a
 manual pick or a moved album, and copies the Item's genre filters (MusicBrainz's genre
 names) into the row. It looks at albums it has never checked first, then the longest
-unchecked. A group-2 or group-3 album is matched again only after 30 days unmatched.
+unchecked. A group-2 or group-3 album is matched again only after 30 days unmatched, or now with
+`--recheck-unmatched`.
 
 For a group-1 album:
 

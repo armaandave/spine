@@ -4,7 +4,7 @@
 # Usage: scripts/music-catalog-production.sh <step> [args...] [--confirm]
 #   check [--repair]               test the Apple Music key and count what needs attention
 #   genres [--apply]              refresh stored Apple genre labels (dry run by default)
-#   map [--limit N]                match albums (link rows only); run it at night
+#   map [--limit N] [--recheck-unmatched]   match albums (link rows only); run it at night
 #   report                         counts here; every album's row to a private CSV
 #   link --mbid M --apple A        record a manual pick
 #   apply [--limit N]              move matched albums
