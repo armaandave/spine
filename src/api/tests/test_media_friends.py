@@ -338,3 +338,110 @@ class MediaFriendsTests(TestCase):
         self.log(item, self.friend("older"), datetime(2020, 1, 1, tzinfo=UTC))
         names = [friend["user"]["username"] for friend in self.get(item)["results"]]
         self.assertEqual(names, ["heart", "older"])
+
+    def test_a_private_log_beside_a_public_one_keeps_the_title_taste_hidden(self):
+        item = self.item(MediaTypes.TV.value)
+        mixed = self.friend("mixed")
+        public = self.log(item, mixed, datetime(2026, 1, 1, tzinfo=UTC), visibility="public")
+        self.log(item, mixed, datetime(2026, 2, 1, tzinfo=UTC), visibility="private", rating=Decimal(2), liked=True)
+        TV.objects.create(user=mixed, item=item, status=Status.COMPLETED.value, score=Decimal(2))
+        MediaLike.objects.create(user=mixed, item=item)
+        friend = self.only_friend(item)
+        self.assertEqual(friend["diary_entry_id"], public.id)
+        self.assertIsNone(friend["rating"])
+        self.assertFalse(friend["liked"])
+
+    def test_a_private_log_does_not_hide_what_a_public_log_says(self):
+        item = self.item(MediaTypes.TV.value)
+        mixed = self.friend("mixed")
+        self.log(item, mixed, datetime(2026, 1, 1, tzinfo=UTC), visibility="public", rating=Decimal(8), liked=True)
+        self.log(item, mixed, datetime(2026, 2, 1, tzinfo=UTC), visibility="private", rating=Decimal(2))
+        friend = self.only_friend(item)
+        self.assertEqual(friend["rating"], "8.0")
+        self.assertTrue(friend["liked"])
+
+    def test_sorts_by_the_newest_log_even_when_an_older_one_is_shown(self):
+        item = self.item()
+        maya = self.friend("maya")
+        reviewed = self.log(item, maya, datetime(2020, 1, 1, tzinfo=UTC), review="Loved it.")
+        self.log(item, maya, datetime(2026, 1, 1, tzinfo=UTC))
+        self.log(item, self.friend("middle"), datetime(2024, 1, 1, tzinfo=UTC))
+        results = self.get(item)["results"]
+        self.assertEqual([friend["user"]["username"] for friend in results], ["maya", "middle"])
+        self.assertEqual(results[0]["diary_entry_id"], reviewed.id)
+
+    def test_a_new_heart_on_an_old_tracking_row_sorts_by_the_heart(self):
+        item = self.item()
+        hearted = self.friend("hearted")
+        Movie.objects.create(user=hearted, item=item, status=Status.COMPLETED.value)
+        Movie.objects.filter(user=hearted).update(
+            created_at=datetime(2021, 1, 1, tzinfo=UTC),
+            progressed_at=datetime(2021, 1, 1, tzinfo=UTC),
+        )
+        MediaLike.objects.create(user=hearted, item=item)
+        self.log(item, self.friend("middle"), datetime(2024, 1, 1, tzinfo=UTC))
+        names = [friend["user"]["username"] for friend in self.get(item)["results"]]
+        self.assertEqual(names, ["hearted", "middle"])
+
+    def test_a_rewatched_episode_sorts_by_its_newest_viewing(self):
+        tv_item = self.item(MediaTypes.TV.value)
+        season_item = Item.objects.create(
+            source=tv_item.source,
+            media_type=MediaTypes.SEASON.value,
+            media_id=tv_item.media_id,
+            season_number=1,
+            title="Title",
+            image="https://example.com/poster.jpg",
+        )
+        episode_item = Item.objects.create(
+            source=tv_item.source,
+            media_type=MediaTypes.EPISODE.value,
+            media_id=tv_item.media_id,
+            season_number=1,
+            episode_number=2,
+            title="Title",
+            image="https://example.com/poster.jpg",
+        )
+        person = self.friend("watcher")
+        tv = TV.objects.create(user=person, item=tv_item, status=Status.IN_PROGRESS.value)
+        season = Season.objects.create(user=person, item=season_item, related_tv=tv, status=Status.IN_PROGRESS.value)
+        Episode.objects.create(item=episode_item, related_season=season, end_date=datetime(2015, 1, 1, tzinfo=UTC))
+        Episode.objects.create(item=episode_item, related_season=season, end_date=datetime(2026, 1, 1, tzinfo=UTC))
+        self.log(episode_item, self.friend("middle"), datetime(2024, 1, 1, tzinfo=UTC))
+        response = self.client.get(
+            f"/api/v1/media/{episode_item.source}/episode/{episode_item.media_id}/friends/",
+            {"season_number": 1, "episode_number": 2},
+        )
+        self.assertEqual([friend["user"]["username"] for friend in response.data["results"]], ["watcher", "middle"])
+
+    def test_malformed_numbers_are_a_400(self):
+        response = self.client.get("/api/v1/media/manual/season/1/friends/", {"season_number": "abc"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def reading_friend(self, item, username):
+        person = self.friend(username)
+        book = Book.objects.create(user=person, item=item, status=Status.IN_PROGRESS.value)
+        session = BookSession.objects.create(related_book=book, status=Status.IN_PROGRESS.value, pages_read=10)
+        Book.objects.filter(pk=book.pk).update(current_session=session)
+
+    def test_queries_do_not_grow_with_friends_reading_a_book(self):
+        item = self.item(MediaTypes.BOOK.value, total_pages=476)
+        self.reading_friend(item, "one")
+        with CaptureQueriesContext(connection) as one:
+            self.get(item)
+        for index in range(5):
+            self.reading_friend(item, f"more{index}")
+        with CaptureQueriesContext(connection) as six:
+            self.assertEqual(self.get(item)["count"], 6)
+        self.assertEqual(len(six), len(one))
+
+    def test_queries_do_not_grow_with_friends_watching_a_show(self):
+        item = self.item(MediaTypes.TV.value)
+        TV.objects.create(user=self.friend("one"), item=item, status=Status.IN_PROGRESS.value)
+        with CaptureQueriesContext(connection) as one:
+            self.get(item)
+        for index in range(5):
+            TV.objects.create(user=self.friend(f"more{index}"), item=item, status=Status.IN_PROGRESS.value)
+        with CaptureQueriesContext(connection) as six:
+            self.assertEqual(self.get(item)["count"], 6)
+        self.assertEqual(len(six), len(one))

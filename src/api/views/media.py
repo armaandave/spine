@@ -24,6 +24,7 @@ from api.services import completion as completion_service
 from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import media as media_service
+from api.services import tracking as tracking_service
 from api.throttling import SearchRateThrottle
 from api.views.mixins import MediaExposureMixin
 from app import config, exposure, music_catalog, single_weight
@@ -828,8 +829,8 @@ class MediaFriendsView(MediaExposureMixin, APIView):
             source=source,
             media_type=media_type,
             media_id=media_id,
-            season_number=request.query_params.get("season_number"),
-            episode_number=request.query_params.get("episode_number"),
+            season_number=tracking_service.int_param(request.query_params.get("season_number"), "season_number"),
+            episode_number=tracking_service.int_param(request.query_params.get("episode_number"), "episode_number"),
         ).first()
         friends = [] if item is None else activity_service.media_friends(request.user, item, request=request)
         return Response({"count": len(friends), "results": friends})

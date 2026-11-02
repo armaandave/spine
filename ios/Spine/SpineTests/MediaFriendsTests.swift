@@ -116,7 +116,6 @@ final class MediaFriendsTests: XCTestCase {
     func testLoadFriendsFillsTheSection() async {
         let viewModel = makeViewModel(FriendsRepository(result: .success(MediaFriendsResponse(count: 1, results: [friend(status: "Paused")]))))
         await viewModel.loadFriends()
-        XCTAssertEqual(viewModel.friendCount, 1)
         XCTAssertEqual(viewModel.friends.map(\.id), [7])
     }
 
@@ -124,7 +123,6 @@ final class MediaFriendsTests: XCTestCase {
         var signedOut = false
         let viewModel = makeViewModel(FriendsRepository(result: .failure(APIError.httpStatus(500, nil)))) { signedOut = true }
         await viewModel.loadFriends()
-        XCTAssertEqual(viewModel.friendCount, 0)
         XCTAssertTrue(viewModel.friends.isEmpty)
         XCTAssertFalse(signedOut)
     }

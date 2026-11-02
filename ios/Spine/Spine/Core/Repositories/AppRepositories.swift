@@ -915,7 +915,7 @@ struct APIMediaRepository: MediaRepository {
             return try await client.get(
                 "/media/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/friends/",
                 query: query,
-                authenticated: client.tokenProvider.accessToken != nil
+                authenticated: true
             )
         } catch APIError.httpStatus(404, _), APIError.httpStatus(501, _) {
             return MediaFriendsResponse(count: 0, results: [])

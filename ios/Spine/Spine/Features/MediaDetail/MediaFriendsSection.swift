@@ -51,7 +51,6 @@ extension [MediaFriend] {
 
 struct MediaFriendsSection: View {
     let ref: MediaRef
-    let count: Int
     let friends: [MediaFriend]
     let onSeeAll: () -> Void
     let onSelect: (MediaFriend) -> Void
@@ -81,6 +80,7 @@ struct MediaFriendsSection: View {
 
     @ViewBuilder
     private var header: some View {
+        let count = friends.count
         let title = "Friends (\(count.formatted()))"
         if Self.linksToFullList(count: count) {
             Button(action: onSeeAll) {
@@ -107,11 +107,10 @@ struct MediaFriendsSection: View {
 /// Every friend on one page, under the chart of their ratings.
 struct MediaFriendsListView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var presentedLog: PresentedFriendLog?
+    @State private var presentedLog: PresentedDiaryEntry?
     @State private var presentedFriend: UserSummary?
 
     let detail: MediaDetail
-    let count: Int
     let friends: [MediaFriend]
     let diaryRepository: DiaryRepository
     let mediaRepository: MediaRepository
@@ -120,6 +119,7 @@ struct MediaFriendsListView: View {
     let selectedTab: AppTab
     let onSelectTab: (AppTab) -> Void
     let onUnauthorized: () -> Void
+    let onProfileClosed: () -> Void
 
     var body: some View {
         ZStack {
@@ -133,7 +133,7 @@ struct MediaFriendsListView: View {
                     ForEach(friends) { friend in
                         MediaFriendCard(friend: friend, ref: detail.ref, isCompact: false) {
                             if let entryId = friend.diaryEntryId {
-                                presentedLog = PresentedFriendLog(id: entryId)
+                                presentedLog = PresentedDiaryEntry(id: entryId)
                             } else {
                                 presentedFriend = friend.user
                             }
@@ -160,7 +160,7 @@ struct MediaFriendsListView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedFriend) { friend in
+        .fullScreenCover(item: $presentedFriend, onDismiss: onProfileClosed) { friend in
             NavigationStack {
                 UserProfileDestination(username: friend.username)
             }
@@ -175,7 +175,7 @@ struct MediaFriendsListView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(count.formatted()) friends on…")
+                Text("\(friends.count.formatted()) \(friends.count == 1 ? "friend" : "friends") on…")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.56))
                 Text(detail.displayTitle)
@@ -221,10 +221,6 @@ struct MediaFriendsListView: View {
         }
         .accessibilityHidden(true)
     }
-}
-
-private struct PresentedFriendLog: Identifiable {
-    let id: Int
 }
 
 /// One layout for everyone: name, then their rating and status on the line below it, then what they wrote or how far

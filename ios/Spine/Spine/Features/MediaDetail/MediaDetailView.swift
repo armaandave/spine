@@ -15,7 +15,6 @@ final class MediaDetailViewModel {
     var reviews: [MediaReview] = []
     var reviewCount = 0
     var friends: [MediaFriend] = []
-    var friendCount = 0
     var isLoading = true
     var isLoadingReviews = false
     var isSavingProgress = false
@@ -128,7 +127,9 @@ final class MediaDetailViewModel {
     func load() async {
         if detail != nil {
             isLoading = false
-            await refreshFully()
+            async let refresh: Void = refreshFully()
+            async let friendLoad: Void = loadFriends()
+            _ = await (refresh, friendLoad)
             return
         }
         isLoading = true
@@ -262,9 +263,7 @@ final class MediaDetailViewModel {
     /// The section is an extra: when this fails it stays as it was, or stays away.
     func loadFriends() async {
         do {
-            let response = try await mediaRepository.friends(ref: ref)
-            friends = response.results
-            friendCount = response.count
+            friends = try await mediaRepository.friends(ref: ref).results
         } catch {
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -397,9 +396,7 @@ final class MediaDetailViewModel {
             }
             errorMessage = nil
             if lostRace { scheduleRefresh(.full, after: .zero) }
-            async let reviewLoad: Void = loadReviews()
-            async let friendLoad: Void = loadFriends()
-            _ = await (reviewLoad, friendLoad)
+            await loadReviews()
         } catch is CancellationError {
             return
         } catch {
@@ -1439,7 +1436,7 @@ private enum MediaDetailSheet: Identifiable {
     }
 }
 
-private struct PresentedDiaryEntry: Identifiable {
+struct PresentedDiaryEntry: Identifiable {
     let id: Int
 }
 
@@ -2630,7 +2627,8 @@ private struct MediaDetailPageView: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .fullScreenCover(item: $presentedFriend) { friend in
+        // A profile can unfollow or block, which takes them off this page.
+        .fullScreenCover(item: $presentedFriend, onDismiss: reloadFriends) { friend in
             NavigationStack {
                 UserProfileDestination(username: friend.username)
             }
@@ -2639,7 +2637,6 @@ private struct MediaDetailPageView: View {
             if let detail = viewModel.detail {
                 MediaFriendsListView(
                     detail: detail,
-                    count: viewModel.friendCount,
                     friends: viewModel.friends,
                     diaryRepository: diaryRepository,
                     mediaRepository: mediaRepository,
@@ -2647,7 +2644,8 @@ private struct MediaDetailPageView: View {
                     currentUserId: currentUserId,
                     selectedTab: selectedTab,
                     onSelectTab: onSelectTab,
-                    onUnauthorized: onUnauthorized
+                    onUnauthorized: onUnauthorized,
+                    onProfileClosed: reloadFriends
                 )
             }
         }
@@ -4094,10 +4092,13 @@ private struct MediaDetailPageView: View {
         .padding(.top, 8)
     }
 
+    private func reloadFriends() {
+        Task { await viewModel.loadFriends() }
+    }
+
     private func friendsSection(_ detail: MediaDetail) -> some View {
         MediaFriendsSection(
             ref: detail.ref,
-            count: viewModel.friendCount,
             friends: viewModel.friends,
             onSeeAll: { isFriendsListPresented = true }
         ) { friend in

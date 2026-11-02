@@ -43,9 +43,10 @@ from api.serializers.common import (
     user_summary,
 )
 from api.services import diary as diary_service
-from app import single_weight
+from app import single_weight, tv_tracking
 from app.curation import prime_curated_artwork
 from app.models import (
+    TV,
     BasicMedia,
     DiaryEntry,
     Episode,
@@ -110,24 +111,27 @@ def media_friends(viewer, item, request=None):
         ).values_list("to_user", flat=True),
     )
     logs, _ = feed_sources(viewer)
+    visible_logs = logs.filter(item=item)
     logged = {}
-    for entry in logs.filter(item=item).annotate(log_day=_log_day()).order_by("-log_day", "-created_at", "-id"):
+    newest_log = {}
+    for entry in visible_logs.annotate(log_day=_log_day()).order_by("-log_day", "-created_at", "-id"):
+        newest_log.setdefault(entry.user_id, (entry.log_day, entry.created_at))
         shown = logged.get(entry.user_id)
         if shown is None or (entry.review and not shown.review):
             logged[entry.user_id] = entry
-    # A private log can set the title's rating and heart, so someone with only private
-    # logs shows neither.
+    # A private log can set the title's rating and heart, so someone with one shows
+    # only what their visible logs say.
     private_loggers = set(
         DiaryEntry.objects.filter(user__in=following, item=item)
-        .exclude(user__in=logged)
+        .exclude(pk__in=visible_logs.values("pk"))
         .values_list("user_id", flat=True),
     )
     rows = _tracking_rows(following, item)
-    if item.media_type not in TV_TYPES:
-        BasicMedia.objects.annotate_max_progress(
-            [row for user_id, row in rows.items() if user_id not in logged],
-            item.media_type,
-        )
+    without_log = [row for user_id, row in rows.items() if user_id not in logged]
+    if item.media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
+        tv_tracking.prime_progress(without_log)
+    elif item.media_type != MediaTypes.EPISODE.value:
+        BasicMedia.objects.annotate_max_progress(without_log, item.media_type)
     liked = dict(
         MediaLike.objects.filter(user__in=following, item=item).values_list("user_id", "created_at"),
     )
@@ -137,10 +141,12 @@ def media_friends(viewer, item, request=None):
         entry = logged.get(user_id)
         row = rows.get(user_id)
         standing = _standing(row)
-        shows_taste = user_id not in private_loggers
-        stored_rating = entry.rating if entry and entry.rating is not None else getattr(row, "score", None)
-        rating = single_weight.rating_to_api(stored_rating, item) if shows_taste else None
-        is_liked = shows_taste and (user_id in liked or bool(entry and entry.liked))
+        shows_title_taste = user_id not in private_loggers
+        stored_rating = entry.rating if entry else None
+        if stored_rating is None and shows_title_taste:
+            stored_rating = getattr(row, "score", None)
+        rating = single_weight.rating_to_api(stored_rating, item)
+        is_liked = bool(entry and entry.liked) or (shows_title_taste and user_id in liked)
         if not (entry or standing or rating or is_liked):
             continue
         payload = {
@@ -156,7 +162,7 @@ def media_friends(viewer, item, request=None):
             "status": standing,
             "progress_label": _progress_label(row) if not entry and standing in UNFINISHED else None,
         }
-        friends.append((_friend_sort_key(entry, row, liked.get(user_id)), user_id, payload))
+        friends.append((_friend_sort_key(newest_log.get(user_id), row, liked.get(user_id)), user_id, payload))
     friends.sort(key=lambda friend: friend[:2], reverse=True)
     return [payload for _, _, payload in friends]
 
@@ -164,10 +170,17 @@ def media_friends(viewer, item, request=None):
 def _tracking_rows(user_ids, item):
     """Return each person's tracking row for a title, by user id."""
     if item.media_type == MediaTypes.EPISODE.value:
-        viewings = Episode.objects.filter(related_season__user__in=user_ids, item=item).select_related("related_season")
+        viewings = (
+            Episode.objects.filter(related_season__user__in=user_ids, item=item)
+            .select_related("related_season")
+            .order_by("created_at")
+        )
+        # The newest viewing wins.
         return {viewing.related_season.user_id: viewing for viewing in viewings}
-    model = apps.get_model("app", item.media_type)
-    return {row.user_id: row for row in model.objects.filter(user__in=user_ids, item=item).select_related("item")}
+    rows = apps.get_model("app", item.media_type).objects.filter(user__in=user_ids, item=item).select_related("item")
+    if item.media_type in (MediaTypes.BOOK.value, MediaTypes.GAME.value):
+        rows = rows.select_related("current_session")
+    return {row.user_id: row for row in rows}
 
 
 def _standing(row):
@@ -196,14 +209,23 @@ def _progress_label(row):
     return f"{_number(value)} {progress['unit']}{'' if value == 1 else 's'}"
 
 
-def _friend_sort_key(entry, row, liked_at):
+def _friend_sort_key(newest_log, row, liked_at):
     """Sort by calendar day, then by when it was written, as activity does (AC-3)."""
-    if entry:
-        return (entry.log_day, entry.created_at)
-    moment = liked_at
-    if row is not None:
-        moment = getattr(row, "last_activity_at", None) or getattr(row, "progressed_at", None) or row.created_at
+    if newest_log:
+        return newest_log
+    moment = max(filter(None, (liked_at, _row_moved_at(row))))
     return (timezone.localtime(moment).date(), moment)
+
+
+def _row_moved_at(row):
+    """Return when a tracking row last moved, without loading a show's episodes."""
+    if row is None:
+        return None
+    if isinstance(row, Episode):
+        return row.end_date or row.created_at
+    if isinstance(row, (TV, Season)):
+        return getattr(row, "last_activity_at", None) or row.created_at
+    return row.progressed_at or row.created_at
 
 
 def media_type_family(media_type):

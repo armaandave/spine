@@ -76,8 +76,9 @@ Wanting to get to a title doesn't count.
 - Someone with a log you can see (AC-5) shows it: their newest, or their newest with a
   review when one has one.
 - Someone without one shows their status and how far they got.
-- Someone with only private logs still shows their status and progress, but no rating
-  or heart, since a private log can set both.
+- Someone with a private log shows their status and progress, and whatever their
+  visible logs say, but not the title's rating or heart, since a private log can set
+  both.
 - The count is how many people show.
 - From three people, the section opens a page listing them all, under a chart of
   the ratings they show.
