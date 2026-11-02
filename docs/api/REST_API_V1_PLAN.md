@@ -85,6 +85,7 @@ Important files:
 | GET | `/api/v1/media/{source}/{media_type}/{media_id}/` | Optional |
 | GET | `/api/v1/media/{source}/{media_type}/{media_id}/community/` | No |
 | GET | `/api/v1/media/{source}/{media_type}/{media_id}/reviews/` | Optional |
+| GET | `/api/v1/media/{source}/{media_type}/{media_id}/friends/` | Yes |
 | GET | `/api/v1/media/{source}/{media_type}/{media_id}/posters/` | Yes |
 | PUT | `/api/v1/media/{source}/{media_type}/{media_id}/poster/` | Yes |
 | GET | `/api/v1/media/{source}/{media_type}/{media_id}/backdrops/` | Yes |

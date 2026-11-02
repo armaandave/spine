@@ -41,6 +41,7 @@ protocol MediaRepository {
     func reviews(ref: MediaRef) async throws -> [MediaReview]
     func reviewPage(ref: MediaRef, page: String?) async throws -> PagedResponse<MediaReview>
     func community(ref: MediaRef) async throws -> CommunityStats
+    func friends(ref: MediaRef) async throws -> MediaFriendsResponse
     func anilistReviews(ref: MediaRef, page: Int) async throws -> AniListReviewPage
     func posters(ref: MediaRef) async throws -> [PosterOption]
     func savePoster(ref: MediaRef, posterURL: String) async throws -> PosterSaveResponse
@@ -136,6 +137,10 @@ extension MediaRepository {
 
     func community(ref _: MediaRef) async throws -> CommunityStats {
         throw APIError.httpStatus(501, nil)
+    }
+
+    func friends(ref _: MediaRef) async throws -> MediaFriendsResponse {
+        MediaFriendsResponse(count: 0, results: [])
     }
 }
 
@@ -896,6 +901,25 @@ struct APIMediaRepository: MediaRepository {
             query: query,
             authenticated: client.tokenProvider.accessToken != nil
         )
+    }
+
+    func friends(ref: MediaRef) async throws -> MediaFriendsResponse {
+        var query: [URLQueryItem] = []
+        if let seasonNumber = ref.seasonNumber {
+            query.append(URLQueryItem(name: "season_number", value: String(seasonNumber)))
+        }
+        if let episodeNumber = ref.episodeNumber {
+            query.append(URLQueryItem(name: "episode_number", value: String(episodeNumber)))
+        }
+        do {
+            return try await client.get(
+                "/media/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/friends/",
+                query: query,
+                authenticated: true
+            )
+        } catch APIError.httpStatus(404, _), APIError.httpStatus(501, _) {
+            return MediaFriendsResponse(count: 0, results: [])
+        }
     }
 
     func anilistReviews(ref: MediaRef, page: Int) async throws -> AniListReviewPage {

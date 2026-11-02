@@ -66,6 +66,23 @@ or deletion shows everywhere at once.
 - A private profile shows nothing to someone who doesn't follow it. A block in
   either direction shows nothing.
 
+## AC-6: Friends on a title's page
+
+A title's page shows the people you follow who've done something with it, newest
+first. It says where each person stands, so it reaches past activity: a rating or a
+heart without a log counts, and so does a title marked finished, paused, or stopped.
+Wanting to get to a title doesn't count.
+
+- Someone with a log you can see (AC-5) shows it: their newest, or their newest with a
+  review when one has one.
+- Someone without one shows their status and how far they got.
+- Someone with a private log shows their status and progress, and whatever their
+  visible logs say, but not the title's rating or heart, since a private log can set
+  both.
+- The count is how many people show.
+- From three people, the section opens a page listing them all, under a chart of
+  the ratings they show.
+
 ## Wire shape
 
 `/api/v1/users/<username>/activity/` and `/api/v1/feed/` return cursor pages in
@@ -81,3 +98,10 @@ the shape installed apps read. `consumed_at` is the item's calendar day
 
 The `social.Activity` rows that tracking, rating, and list code still write are
 not read by these endpoints.
+
+`/api/v1/media/<source>/<media_type>/<media_id>/friends/` takes `season_number` and
+`episode_number`, and returns `{"count", "results"}`, each result
+`{"user", "diary_entry_id", "consumed_at", "rating", "liked", "is_rewatch",
+"review_title", "review", "contains_spoilers", "status", "progress_label"}`.
+`status` is the tracking status, and `progress_label` says how far they got, for
+example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log.

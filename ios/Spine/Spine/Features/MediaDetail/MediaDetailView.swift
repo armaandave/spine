@@ -14,6 +14,7 @@ final class MediaDetailViewModel {
     var detail: MediaDetail?
     var reviews: [MediaReview] = []
     var reviewCount = 0
+    var friends: [MediaFriend] = []
     var isLoading = true
     var isLoadingReviews = false
     var isSavingProgress = false
@@ -126,7 +127,9 @@ final class MediaDetailViewModel {
     func load() async {
         if detail != nil {
             isLoading = false
-            await refreshFully()
+            async let refresh: Void = refreshFully()
+            async let friendLoad: Void = loadFriends()
+            _ = await (refresh, friendLoad)
             return
         }
         isLoading = true
@@ -148,7 +151,8 @@ final class MediaDetailViewModel {
             async let enrichment: Void = loadMusicEnrichmentIfNeeded(for: loaded)
             async let tracking: Void = mergeTrackingIfNeeded(for: loaded)
             async let reviewLoad: Void = loadReviews()
-            _ = await (enrichment, tracking, reviewLoad)
+            async let friendLoad: Void = loadFriends()
+            _ = await (enrichment, tracking, reviewLoad, friendLoad)
         } catch is CancellationError {
             return
         } catch {
@@ -250,6 +254,17 @@ final class MediaDetailViewModel {
             reviewCount = page.count
         } catch {
             reviewsErrorMessage = error.localizedDescription
+            if case APIError.unauthorized = error {
+                onUnauthorized()
+            }
+        }
+    }
+
+    /// The section is an extra: when this fails it stays as it was, or stays away.
+    func loadFriends() async {
+        do {
+            friends = try await mediaRepository.friends(ref: ref).results
+        } catch {
             if case APIError.unauthorized = error {
                 onUnauthorized()
             }
@@ -1421,7 +1436,7 @@ private enum MediaDetailSheet: Identifiable {
     }
 }
 
-private struct PresentedDiaryEntry: Identifiable {
+struct PresentedDiaryEntry: Identifiable {
     let id: Int
 }
 
@@ -2055,10 +2070,12 @@ private struct MediaDetailPageView: View {
     @State private var presentedPerson: PersonRef?
     @State private var presentedCompany: CompanyRef?
     @State private var presentedSong: MusicSongSelection?
+    @State private var presentedFriend: UserSummary?
     @State private var isPosterPickerPresented = false
     @State private var isBackdropPickerPresented = false
     @State private var isLogoPickerPresented = false
     @State private var isReviewsPresented = false
+    @State private var isFriendsListPresented = false
     @State private var isAniListReviewsPresented = false
     @State private var pendingPosterSave: PosterSaveResponse?
     @State private var pendingBackdropSave: BackdropSaveResponse?
@@ -2609,6 +2626,28 @@ private struct MediaDetailPageView: View {
                 onSelectTab: onSelectTab,
                 onUnauthorized: onUnauthorized
             )
+        }
+        // A profile can unfollow or block, which takes them off this page.
+        .fullScreenCover(item: $presentedFriend, onDismiss: reloadFriends) { friend in
+            NavigationStack {
+                UserProfileDestination(username: friend.username)
+            }
+        }
+        .fullScreenCover(isPresented: $isFriendsListPresented) {
+            if let detail = viewModel.detail {
+                MediaFriendsListView(
+                    detail: detail,
+                    friends: viewModel.friends,
+                    diaryRepository: diaryRepository,
+                    mediaRepository: mediaRepository,
+                    trackingRepository: trackingRepository,
+                    currentUserId: currentUserId,
+                    selectedTab: selectedTab,
+                    onSelectTab: onSelectTab,
+                    onUnauthorized: onUnauthorized,
+                    onProfileClosed: reloadFriends
+                )
+            }
         }
         .fullScreenCover(item: $presentedMediaDiary) { diary in
             if let itemId = diary.detail.ref.itemId {
@@ -3924,6 +3963,7 @@ private struct MediaDetailPageView: View {
                         isReviewsPresented = true
                     }
                 }
+                friendsSection(detail)
                 if let rating = AniListRatingSummary(detail: detail) {
                     AniListRatingCard(summary: rating) {
                         isAniListReviewsPresented = true
@@ -4016,6 +4056,7 @@ private struct MediaDetailPageView: View {
             ) {
                 isReviewsPresented = true
             }
+            friendsSection(detail)
             MusicAlbumTracklistSection(
                 release: detail.music?.representativeRelease,
                 albumCredits: detail.music?.artistCredit ?? [],
@@ -4049,6 +4090,24 @@ private struct MediaDetailPageView: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 8)
+    }
+
+    private func reloadFriends() {
+        Task { await viewModel.loadFriends() }
+    }
+
+    private func friendsSection(_ detail: MediaDetail) -> some View {
+        MediaFriendsSection(
+            ref: detail.ref,
+            friends: viewModel.friends,
+            onSeeAll: { isFriendsListPresented = true }
+        ) { friend in
+            if let entryId = friend.diaryEntryId {
+                presentedDiaryEntry = PresentedDiaryEntry(id: entryId)
+            } else {
+                presentedFriend = friend.user
+            }
+        }
     }
 
     private func presentEpisode(_ episode: EpisodeSummary, from season: MediaDetail) {
@@ -8182,7 +8241,7 @@ private func aniListDestination(_ rawValue: String?) -> URL? {
     return url
 }
 
-private struct SpineRatingDistributionSection: View {
+struct SpineRatingDistributionSection: View {
     let community: CommunityStats?
     let reviewCount: Int
     let onSeeReviews: () -> Void
@@ -8196,7 +8255,7 @@ private struct SpineRatingDistributionSection: View {
                         .foregroundStyle(.white)
                 }
                 Spacer()
-                Text("\((community?.ratingCount ?? 0).formatted()) ratings")
+                Text("\((community?.ratingCount ?? 0).formatted()) \(community?.ratingCount == 1 ? "rating" : "ratings")")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white.opacity(0.52))
             }
