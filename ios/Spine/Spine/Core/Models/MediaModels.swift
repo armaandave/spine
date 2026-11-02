@@ -1850,6 +1850,28 @@ struct MediaReview: Codable, Identifiable, Hashable {
     let createdAt: String?
 }
 
+/// Someone the viewer follows, on a title's page: their log, or where they stand without one.
+struct MediaFriend: Codable, Identifiable, Hashable {
+    let user: UserSummary
+    let diaryEntryId: Int?
+    let consumedAt: String?
+    let rating: String?
+    let liked: Bool
+    let isRewatch: Bool
+    let reviewTitle: String?
+    let review: String
+    let containsSpoilers: Bool
+    let status: String?
+    let progressLabel: String?
+
+    var id: Int { user.id }
+}
+
+struct MediaFriendsResponse: Codable, Equatable {
+    let count: Int
+    let results: [MediaFriend]
+}
+
 struct AniListReviewPage: Codable, Equatable {
     let currentPage: Int
     let nextPage: Int?

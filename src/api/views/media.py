@@ -19,6 +19,7 @@ from api.exceptions import (
 )
 from api.pagination import StandardResultsSetPagination
 from api.serializers.common import PersonCompletionResponseSerializer
+from api.services import activity as activity_service
 from api.services import completion as completion_service
 from api.services import diary as diary_service
 from api.services import filters as filter_service
@@ -813,6 +814,25 @@ class MediaReviewsView(MediaExposureMixin, APIView):
         return paginator.get_paginated_response(
             [diary_service.diary_payload(entry, request=request, viewer=viewer) for entry in page],
         )
+
+
+class MediaFriendsView(MediaExposureMixin, APIView):
+    """The people the viewer follows who've done something with a media identity."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, source, media_type, media_id):
+        from app.models import Item
+
+        item = Item.objects.filter(
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            season_number=request.query_params.get("season_number"),
+            episode_number=request.query_params.get("episode_number"),
+        ).first()
+        friends = [] if item is None else activity_service.media_friends(request.user, item, request=request)
+        return Response({"count": len(friends), "results": friends})
 
 
 class AniListReviewsView(MediaExposureMixin, APIView):
