@@ -51,7 +51,12 @@
         "viewer": {
           "can_view": true,
           "has_liked": false
-        }
+        },
+        "like_count": 0,
+        "comment_count": 0,
+        "review_title": "A loud future",
+        "review": "Still sounds dangerous.",
+        "contains_spoilers": false
       }
     ]
   },
@@ -287,7 +292,8 @@
       "username": "phase9"
     },
     "viewer_has_liked": false,
-    "visibility": "public"
+    "visibility": "public",
+    "comment_count": 0
   },
   "diary_detail": {
     "consumed_at": "2026-07-16",
@@ -341,7 +347,8 @@
       "username": "phase9"
     },
     "viewer_has_liked": false,
-    "visibility": "public"
+    "visibility": "public",
+    "comment_count": 0
   },
   "diary_list": {
     "count": 1,
@@ -400,7 +407,8 @@
           "username": "phase9"
         },
         "viewer_has_liked": false,
-        "visibility": "public"
+        "visibility": "public",
+        "comment_count": 0
       }
     ]
   },

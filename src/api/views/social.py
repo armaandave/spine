@@ -8,11 +8,15 @@ from rest_framework.views import APIView
 from api.pagination import StandardResultsSetPagination
 from api.permissions import can_view_user_profile
 from api.serializers.common import user_summary
-from api.serializers.social import LikeSerializer, PushDeviceSerializer
+from api.serializers.social import (
+    CommentWriteSerializer,
+    LikeSerializer,
+    PushDeviceSerializer,
+)
 from api.services import activity as activity_service
 from api.services import social as social_service
 from app import exposure
-from social.models import Follow, FollowStatus, PushDevice
+from social.models import Comment, ContentLike, Follow, FollowStatus, PushDevice
 
 
 class FeedView(APIView):
@@ -51,6 +55,108 @@ class UserActivityView(APIView):
             logs.filter(item__media_type__in=media_types),
             progress.filter(item__media_type__in=media_types),
         )
+
+
+class ProgressPostView(APIView):
+    """A day's progress, as its own page reads it."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, progress_id):
+        return activity_service.progress_post_response(request, progress_id)
+
+
+class ProgressPostLikeView(APIView):
+    """Like/unlike a day's progress."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, progress_id):
+        return self.set_like(request, progress_id, liked=True)
+
+    def delete(self, request, progress_id):
+        return self.set_like(request, progress_id, liked=False)
+
+    def set_like(self, request, progress_id, *, liked):
+        post = activity_service.progress_post(request.user, progress_id)
+        return Response(
+            social_service.set_like(
+                request.user,
+                target_type=ContentLike.PROGRESS_POST,
+                target_id=post.id,
+                liked=liked,
+            ),
+        )
+
+
+class PostCommentsView(APIView):
+    """List or add comments on one post, oldest first."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, **target):
+        comments = (
+            Comment.objects.visible_to(request.user)
+            .filter(**self.comment_filter(request, **target))
+            .select_related("user", "diary_entry", "progress_post")
+        )
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(comments, request, view=self)
+        return paginator.get_paginated_response([_comment_payload(comment, request) for comment in page])
+
+    def post(self, request, **target):
+        serializer = CommentWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        comment = social_service.add_comment(
+            request.user,
+            serializer.validated_data["body"],
+            **self.write_target(request, **target),
+        )
+        return Response(_comment_payload(comment, request), status=status.HTTP_201_CREATED)
+
+    def comment_filter(self, request, **target):
+        raise NotImplementedError
+
+    def write_target(self, request, **target):
+        raise NotImplementedError
+
+
+class DiaryCommentsView(PostCommentsView):
+    """Comments on a log."""
+
+    def comment_filter(self, request, entry_id):
+        return {"diary_entry": self.write_target(request, entry_id)["entry"]}
+
+    def write_target(self, request, entry_id):
+        entry = social_service.viewable_diary_entry(request.user, entry_id)
+        exposure.require_media_type(entry.item.media_type)
+        return {"entry": entry}
+
+
+class ProgressPostCommentsView(PostCommentsView):
+    """Comments on a day's progress."""
+
+    def comment_filter(self, request, progress_id):
+        # Reading saves nothing: a day nobody has reacted to has no post yet.
+        day = activity_service.progress_day(request.user, progress_id)
+        return {
+            "progress_post__actor_id": day["actor_id"],
+            "progress_post__title_key": day["title_key"],
+            "progress_post__day": day["day"],
+        }
+
+    def write_target(self, request, progress_id):
+        return {"post": activity_service.progress_post(request.user, progress_id)}
+
+
+class CommentDetailView(APIView):
+    """Delete a comment."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, comment_id):
+        social_service.delete_comment(request.user, comment_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class FollowView(APIView):
@@ -171,6 +277,16 @@ class PushDeviceView(APIView):
     def delete(self, request, token):
         PushDevice.objects.filter(user=request.user, token=token).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _comment_payload(comment, request):
+    return {
+        "id": comment.id,
+        "user": user_summary(comment.user, request=request),
+        "body": comment.body,
+        "created_at": comment.created_at,
+        "can_delete": social_service.can_delete_comment(request.user, comment),
+    }
 
 
 def _user_rows(request, users):

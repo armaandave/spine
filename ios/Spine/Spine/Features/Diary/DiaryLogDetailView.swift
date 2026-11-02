@@ -26,6 +26,8 @@ final class DiaryLogDetailViewModel {
     var deleteErrorMessage: String?
     var errorMessage: String?
     var isReviewRevealed = false
+    /// The log's likes and comments.
+    let engagement: PostEngagementModel
     /// Counts the times the show changed after the delete confirmation: the page reloaded and asks again with the
     /// new count (TV-406, TV-705).
     private(set) var deleteReconfirmations = 0
@@ -41,12 +43,19 @@ final class DiaryLogDetailViewModel {
         entryId: Int,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
+        activityRepository: ActivityRepository? = nil,
         onUnauthorized: @escaping () -> Void
     ) {
         self.entryId = entryId
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.onUnauthorized = onUnauthorized
+        // The app's own repository unless given: looked up here, on the main actor, not in a default argument.
+        engagement = PostEngagementModel(
+            post: .log(entryId),
+            repository: activityRepository ?? AppRepositories.current().activity,
+            onUnauthorized: onUnauthorized
+        )
     }
 
     func load() async {
@@ -58,6 +67,11 @@ final class DiaryLogDetailViewModel {
             let loadedEntry = try await diaryRepository.detail(id: entryId)
             await loadMediaDetail(for: loadedEntry.media.ref)
             entry = loadedEntry
+            engagement.seed(PostEngagement(
+                hasLiked: loadedEntry.viewerHasLiked,
+                likeCount: loadedEntry.likeCount,
+                commentCount: loadedEntry.commentCount ?? 0
+            ))
         } catch {
             errorMessage = error.localizedDescription
             if case APIError.unauthorized = error {
@@ -164,7 +178,9 @@ struct DiaryLogDetailView: View {
     @State private var isDeleteConfirmationPresented = false
     @State private var edgeDragOffset: CGFloat = 0
     @State private var topSafeAreaInset: CGFloat = 0
+    @FocusState private var isCommentFocused: Bool
 
+    private let focusesComment: Bool
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -175,6 +191,7 @@ struct DiaryLogDetailView: View {
 
     init(
         entryId: Int,
+        focusesComment: Bool = false,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
@@ -183,6 +200,7 @@ struct DiaryLogDetailView: View {
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
+        self.focusesComment = focusesComment
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -202,25 +220,32 @@ struct DiaryLogDetailView: View {
         ZStack(alignment: .top) {
             SpinePageBackground()
 
-            ScrollView(showsIndicators: false) {
-                Group {
-                    if viewModel.isLoading, viewModel.entry == nil {
-                        ProgressView()
-                            .tint(.white)
-                            .frame(maxWidth: .infinity, minHeight: 520)
-                    } else if let entry = viewModel.entry {
-                        content(entry)
-                    } else if let error = viewModel.errorMessage {
-                        ContentUnavailableView("Could not load log", systemImage: "exclamationmark.triangle", description: Text(error))
-                            .foregroundStyle(.white)
-                            .padding()
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    Group {
+                        if viewModel.isLoading, viewModel.entry == nil {
+                            ProgressView()
+                                .tint(.white)
+                                .frame(maxWidth: .infinity, minHeight: 520)
+                        } else if let entry = viewModel.entry {
+                            content(entry)
+                        } else if let error = viewModel.errorMessage {
+                            ContentUnavailableView("Could not load log", systemImage: "exclamationmark.triangle", description: Text(error))
+                                .foregroundStyle(.white)
+                                .padding()
+                        }
                     }
+                    .spineContentTransition(value: contentPhase)
+                    .padding(.bottom, 24)
                 }
-                .spineContentTransition(value: contentPhase)
-                .padding(.bottom, 38)
+                .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .scrollEdgeEffectStyle(.hard, for: .bottom)
+                .ignoresSafeArea(edges: .top)
+                .onChange(of: viewModel.engagement.sentCount) {
+                    withAnimation { proxy.scrollTo("post-end", anchor: .bottom) }
+                }
             }
-            .scrollContentBackground(.hidden)
-            .ignoresSafeArea(edges: .top)
 
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
@@ -270,6 +295,11 @@ struct DiaryLogDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
+        .safeAreaBar(edge: .bottom) {
+            if viewModel.entry != nil {
+                PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
+            }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeAreaInset = $0 }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .tabBar)
@@ -284,6 +314,12 @@ struct DiaryLogDetailView: View {
         .task {
             if viewModel.entry == nil {
                 await viewModel.load()
+                if focusesComment {
+                    isCommentFocused = true
+                }
+            }
+            if viewModel.entry != nil {
+                await viewModel.engagement.loadCommentsIfNeeded()
             }
         }
         .fullScreenCover(item: $presentedRef) { ref in
@@ -450,13 +486,19 @@ struct DiaryLogDetailView: View {
         .padding(.top, topSafeAreaInset + 68)
         .padding(.bottom, 22)
         .background {
-            DiaryLogHeroArtwork(entry: entry, detail: viewModel.mediaDetail)
-                .offset(y: BackdropLayout.topOffset)
+            LogHeroArtwork(
+                mediaType: entry.media.ref.mediaType,
+                posterURL: entry.media.displayPosterURL,
+                detail: viewModel.mediaDetail
+            )
+            .offset(y: BackdropLayout.topOffset)
         }
     }
 
     private func logSection(_ entry: DiaryEntry) -> some View {
         VStack(alignment: .leading, spacing: 18) {
+            PostAuthorLink(user: entry.user)
+
             if hasRatingOrLike(entry) {
                 ratingLikeLine(entry)
             }
@@ -477,7 +519,7 @@ struct DiaryLogDetailView: View {
             if !entry.tags.isEmpty {
                 DiaryLogTagsView(
                     tags: entry.tags,
-                    diaryRepository: diaryRepository,
+                    diaryRepository: Self.tagRepository(for: entry.user, base: diaryRepository, currentUserId: currentUserId),
                     mediaRepository: mediaRepository,
                     trackingRepository: trackingRepository,
                     currentUserId: currentUserId,
@@ -486,8 +528,21 @@ struct DiaryLogDetailView: View {
                     onUnauthorized: onUnauthorized
                 )
             }
+
+            PostEngagementSection(model: viewModel.engagement, hidesComments: hidesComments(entry)) {
+                isCommentFocused = true
+            }
+
+            Color.clear
+                .frame(height: 1)
+                .id("post-end")
         }
         .padding(.horizontal, 16)
+    }
+
+    /// A tag page shows its owner's logs, so a tag on someone else's log opens theirs.
+    static func tagRepository(for owner: UserSummary, base: DiaryRepository, currentUserId: Int?) -> DiaryRepository {
+        owner.id == currentUserId ? base : base.owned(by: owner.username)
     }
 
     private func hasRatingOrLike(_ entry: DiaryEntry) -> Bool {
@@ -541,14 +596,22 @@ struct DiaryLogDetailView: View {
         entry.favorite?.isHidden(containsSpoilers: entry.containsSpoilers, revealed: viewModel.isReviewRevealed) == true
     }
 
+    /// Comments on a spoiler log can spoil it too, so they wait for the same reveal.
+    private func hidesComments(_ entry: DiaryEntry) -> Bool {
+        entry.containsSpoilers && !viewModel.isReviewRevealed
+    }
+
     @ViewBuilder
     private func reviewBody(_ entry: DiaryEntry) -> some View {
         let review = clean(entry.review)
-        if hidesFavorite(entry) || (review != nil && entry.containsSpoilers && !viewModel.isReviewRevealed) {
+        let hidesReview = review != nil && entry.containsSpoilers && !viewModel.isReviewRevealed
+        let hidesAnyComment = hidesComments(entry)
+            && viewModel.engagement.engagement.commentCount > viewModel.engagement.visibleComments(hidingOthers: true).count
+        if hidesFavorite(entry) || hidesReview || hidesAnyComment {
             Button {
                 viewModel.isReviewRevealed = true
             } label: {
-                Label(hidesFavorite(entry) ? "Reveal spoilers" : "Reveal spoiler review", systemImage: "eye.slash")
+                Label(hidesFavorite(entry) || hidesAnyComment ? "Reveal spoilers" : "Reveal spoiler review", systemImage: "eye.slash")
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -627,6 +690,7 @@ struct DiaryLogDetailView: View {
 
 struct DiaryLogDetailNavigationCover: View {
     let entryId: Int
+    var focusesComment = false
     let diaryRepository: DiaryRepository
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
@@ -639,6 +703,7 @@ struct DiaryLogDetailNavigationCover: View {
         NavigationStack {
             DiaryLogDetailView(
                 entryId: entryId,
+                focusesComment: focusesComment,
                 diaryRepository: diaryRepository,
                 mediaRepository: mediaRepository,
                 trackingRepository: trackingRepository,
@@ -651,8 +716,10 @@ struct DiaryLogDetailNavigationCover: View {
     }
 }
 
-private struct DiaryLogHeroArtwork: View {
-    let entry: DiaryEntry
+/// The blurred artwork behind the top of a log's or a day's progress page.
+struct LogHeroArtwork: View {
+    let mediaType: String
+    let posterURL: String?
     let detail: MediaDetail?
 
     var body: some View {
@@ -672,7 +739,7 @@ private struct DiaryLogHeroArtwork: View {
                             .opacity(0.62)
                     default:
                         LinearGradient(
-                            colors: MediaTypeTheme.theme(for: entry.media.ref.mediaType).gradientColors,
+                            colors: MediaTypeTheme.theme(for: mediaType).gradientColors,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -698,11 +765,11 @@ private struct DiaryLogHeroArtwork: View {
     }
 
     private var artworkURL: URL? {
-        URL(string: backdropURL ?? detail?.displayPosterURL ?? entry.media.displayPosterURL ?? "")
+        URL(string: backdropURL ?? detail?.displayPosterURL ?? posterURL ?? "")
     }
 
     private var backdropURL: String? {
-        guard ["movie", "tv"].contains(entry.media.ref.mediaType) else { return nil }
+        guard ["movie", "tv"].contains(mediaType) else { return nil }
         return detail?.displayBackdropURL
     }
 

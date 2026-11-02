@@ -16,12 +16,11 @@ from django.contrib.auth import get_user_model
 from django.db.models import (
     Case,
     CharField,
+    Count,
     DateField,
-    Exists,
     FloatField,
     Max,
     Min,
-    OuterRef,
     Q,
     Sum,
     Value,
@@ -29,6 +28,8 @@ from django.db.models import (
 )
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Concat, TruncDate, TruncDay
+from django.http import Http404
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -37,10 +38,18 @@ from rest_framework.utils.urls import replace_query_param
 from api.permissions import can_view_user_profile
 from api.serializers.common import media_summary_from_item, user_summary
 from api.services import diary as diary_service
-from app import single_weight
+from app import exposure, single_weight
 from app.curation import prime_curated_artwork
 from app.models import DiaryEntry, Item, MediaTypes
-from social.models import ContentLike, Follow, FollowStatus, ProgressChange, Visibility
+from social.models import (
+    Comment,
+    ContentLike,
+    Follow,
+    FollowStatus,
+    ProgressChange,
+    ProgressPost,
+    Visibility,
+)
 
 PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
@@ -50,6 +59,7 @@ MAX_PAGE_SIZE = 100
 # day without progress.
 UNITS = ("episode", "chapter", "issue", "page", "minute", "percent", ProgressChange.START)
 TV_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
+SHOW_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value)
 
 # Within one date and write time, logs sort before progress.
 PROGRESS, LOG = 0, 1
@@ -89,8 +99,7 @@ def page_response(request, logs, progress):
     """Return one cursor page of activity in the shape installed apps read."""
     size = _page_size(request)
     after = _decode_cursor(request)
-    # Only logs this viewer can see replace that day's progress.
-    days = _progress_days(progress, logs).order_by("-day", "-last_at", "-progress_id")
+    days = _progress_days(progress).order_by("-day", "-last_at", "-progress_id")
     logs = (
         logs.select_related("user", "item")
         .annotate(log_day=_log_day())
@@ -109,10 +118,11 @@ def page_response(request, logs, progress):
     actors, titles = _day_people_and_titles(progress_days)
     prime_curated_artwork([entry.item for entry in entries] + list(titles.values()))
     diary_service.prime_diary_likes(entries, request.user)
+    engagement = _day_engagement(progress_days, request.user)
     results = [
         _log_payload(row, request)
         if key[2] == LOG
-        else _day_payload(row, actors, titles, request)
+        else _day_payload(row, actors, titles, request, engagement)
         for key, row in page
     ]
     next_cursor = None
@@ -138,25 +148,18 @@ def _visible_logs(queryset, *, follows):
     )
 
 
-def _progress_days(changes, logs):
+def _progress_days(changes):
     """Group progress changes into one row per person, title, and day.
 
     A show's and its seasons' changes count toward the show. Each unit's net change is
-    summed, and a day that didn't move forward is left out, as is a title the person
-    logged that day in one of the given (visible) logs.
+    summed, and a day that didn't move forward is left out.
     """
-    show_types = [MediaTypes.TV.value, MediaTypes.SEASON.value]
-    logs_that_day = (
-        logs.filter(user=OuterRef("actor"))
-        .annotate(log_day=_log_day())
-        .filter(log_day=OuterRef("day"))
-    )
     return (
         changes.annotate(
             day=TruncDate("created_at", tzinfo=timezone.get_current_timezone()),
             title_key=Case(
                 When(
-                    item__media_type__in=show_types,
+                    item__media_type__in=SHOW_TYPES,
                     then=Concat(Value("tv:"), "item__source", Value(":"), "item__media_id"),
                 ),
                 default=Concat(Value("item:"), Cast("item_id", CharField())),
@@ -164,17 +167,7 @@ def _progress_days(changes, logs):
             ),
             delta=Cast(KT("current_progress__value"), FloatField())
             - Cast(KT("previous_progress__value"), FloatField()),
-            logged=Exists(logs_that_day.filter(item_id=OuterRef("item_id"))),
-            show_logged=Exists(
-                logs_that_day.filter(
-                    item__media_type__in=TV_TYPES,
-                    item__source=OuterRef("item__source"),
-                    item__media_id=OuterRef("item__media_id"),
-                ),
-            ),
         )
-        .filter(logged=False)
-        .exclude(item__media_type__in=show_types, show_logged=True)
         .values("actor_id", "title_key", "day")
         .annotate(
             progress_id=Min("id"),
@@ -258,6 +251,89 @@ def _day_people_and_titles(days):
     return actors, titles
 
 
+def progress_post(viewer, progress_id):
+    """Return the saved post of a day's progress the viewer may see, creating it if new.
+
+    Any of the day's changes finds it, as ``object.id`` on the feed does.
+    """
+    day = progress_day(viewer, progress_id)
+    post, _ = ProgressPost.objects.get_or_create(
+        actor_id=day["actor_id"],
+        title_key=day["title_key"],
+        day=day["day"],
+    )
+    return post
+
+
+def progress_day(viewer, progress_id):
+    """Return the day's progress one of its changes belongs to, or 404."""
+    change = get_object_or_404(ProgressChange.objects.select_related("actor", "item"), id=progress_id)
+    if not can_view_user_profile(viewer, change.actor):
+        raise Http404
+    day = (
+        _progress_days(
+            ProgressChange.objects.filter(actor=change.actor, item__media_type__in=exposure.media_types()),
+        )
+        .filter(
+            title_key=_title_key(change.item),
+            day=timezone.localtime(change.created_at).date(),
+        )
+        .order_by("day")
+        .first()
+    )
+    if day is None:
+        raise Http404
+    return day
+
+
+def progress_post_response(request, progress_id):
+    """Return a day's progress in the shape the feed gives it."""
+    day = progress_day(request.user, progress_id)
+    actors, titles = _day_people_and_titles([day])
+    prime_curated_artwork(list(titles.values()))
+    return Response(_day_payload(day, actors, titles, request, _day_engagement([day], request.user)))
+
+
+def _title_key(item):
+    """Return the key that groups a title's changes, as ``_progress_days`` builds it."""
+    if item.media_type in SHOW_TYPES:
+        return f"tv:{item.source}:{item.media_id}"
+    return f"item:{item.id}"
+
+
+def _day_engagement(days, viewer):
+    """Return likes and comments of progress days, by person, title, and day."""
+    if not days:
+        return {}
+    posts = ProgressPost.objects.filter(
+        actor_id__in={day["actor_id"] for day in days},
+        title_key__in={day["title_key"] for day in days},
+        day__in={day["day"] for day in days},
+    )
+    keys = {post.id: (post.actor_id, post.title_key, post.day) for post in posts}
+    likes = ContentLike.objects.filter(target_type=ContentLike.PROGRESS_POST, target_id__in=keys)
+    like_counts = dict(likes.values("target_id").annotate(count=Count("id")).values_list("target_id", "count"))
+    liked = (
+        set(likes.filter(user=viewer).values_list("target_id", flat=True)) if viewer.is_authenticated else set()
+    )
+    comment_counts = dict(
+        Comment.objects.visible_to(viewer)
+        .filter(progress_post_id__in=keys)
+        .order_by()
+        .values("progress_post_id")
+        .annotate(count=Count("id"))
+        .values_list("progress_post_id", "count"),
+    )
+    return {
+        key: {
+            "like_count": like_counts.get(post_id, 0),
+            "comment_count": comment_counts.get(post_id, 0),
+            "has_liked": post_id in liked,
+        }
+        for post_id, key in keys.items()
+    }
+
+
 def _log_payload(entry, request):
     return {
         "id": entry.id,
@@ -276,12 +352,19 @@ def _log_payload(entry, request):
             "is_rewatch": entry.is_rewatch,
         },
         "viewer": {"can_view": True, "has_liked": entry.viewer_has_liked},
+        "like_count": entry.viewer_like_count,
+        "comment_count": entry.viewer_comment_count,
+        "review_title": entry.review_title,
+        "review": entry.review,
+        "contains_spoilers": entry.contains_spoilers,
     }
 
 
-def _day_payload(day, actors, titles, request):
-    title = titles[(day["actor_id"], day["title_key"], day["day"])]
+def _day_payload(day, actors, titles, request, engagement):
+    key = (day["actor_id"], day["title_key"], day["day"])
+    title = titles[key]
     summary, label = progress_words(day, title.media_type)
+    counts = engagement.get(key, {})
     return {
         # Negative, so ids stay unique across logs and progress days.
         "id": -day["progress_id"],
@@ -297,7 +380,9 @@ def _day_payload(day, actors, titles, request):
             "summary": summary,
             "label": label,
         },
-        "viewer": {"can_view": True, "has_liked": False},
+        "viewer": {"can_view": True, "has_liked": counts.get("has_liked", False)},
+        "like_count": counts.get("like_count", 0),
+        "comment_count": counts.get("comment_count", 0),
     }
 
 

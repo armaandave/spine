@@ -21,6 +21,8 @@ enum PosterSlot {
     case featuredSquare
     /// Stats' Top from a tagged list: two rows of five on the narrowest phone.
     case statsTopGrid
+    /// A log's card in the activity feed.
+    case activityPost
 
     var size: CGSize {
         switch self {
@@ -54,6 +56,8 @@ enum PosterSlot {
             CGSize(width: 60, height: 60)
         case .statsTopGrid:
             CGSize(width: 62, height: 93)
+        case .activityPost:
+            CGSize(width: 96, height: 144)
         }
     }
 

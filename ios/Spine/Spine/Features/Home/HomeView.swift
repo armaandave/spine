@@ -5,13 +5,15 @@ import SwiftUI
 final class HomeViewModel {
     var profile: UserProfile?
     var inProgressItems: [LibraryItem] = []
-    var activityItems: [ActivityItem] = []
     var isLoading = true
     var isLoadingInProgress = false
-    var isLoadingActivity = false
     var profileErrorMessage: String?
     var inProgressErrorMessage: String?
-    var activityErrorMessage: String?
+
+    /// The activity of the people you follow; your own is on your profile.
+    let feed: ActivityFeedViewModel
+    var activityItems: [ActivityItem] { feed.items }
+    var activityErrorMessage: String? { feed.errorMessage }
 
     /// Continue Watching's episode sheet (TV-100, TV-701).
     let continueWatching: ContinueWatchingTicks
@@ -21,7 +23,6 @@ final class HomeViewModel {
 
     private let profileRepository: ProfileRepository
     private let trackingRepository: TrackingRepository
-    private let activityRepository: ActivityRepository
     private let onUnauthorized: () -> Void
 
     init(
@@ -34,8 +35,12 @@ final class HomeViewModel {
     ) {
         self.profileRepository = profileRepository
         self.trackingRepository = trackingRepository
-        self.activityRepository = activityRepository
         self.onUnauthorized = onUnauthorized
+        feed = ActivityFeedViewModel(
+            username: nil,
+            activityRepository: activityRepository,
+            onUnauthorized: onUnauthorized
+        )
         // The app's own repositories unless given: looked up here, on the main actor, not in a default argument.
         let mediaRepository = mediaRepository ?? AppRepositories.current().media
         let diaryRepository = diaryRepository ?? AppRepositories.current().diary
@@ -65,6 +70,12 @@ final class HomeViewModel {
     }
 
     func load() async {
+        guard await loadProfileAndInProgress() else { return }
+        await loadActivity()
+    }
+
+    /// Returns whether the profile loaded.
+    private func loadProfileAndInProgress() async -> Bool {
         isLoading = true
         profileErrorMessage = nil
         defer { isLoading = false }
@@ -72,26 +83,22 @@ final class HomeViewModel {
         do {
             profile = try await profileRepository.me()
         } catch is CancellationError {
-            return
+            return false
         } catch {
             profileErrorMessage = error.localizedDescription
             handleUnauthorized(error)
-            return
+            return false
         }
 
         isLoadingInProgress = inProgressItems.isEmpty
-        isLoadingActivity = activityItems.isEmpty
         await loadInProgress()
-        await loadActivity()
+        return true
     }
 
     func reload() async {
         await load()
     }
 
-    /// A write changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's
-    /// or game's progress) keeps its card where it is (TV-701) but still reloads activity, where it is the day's
-    /// progress (activity contract AC-4); any other write reloads Home.
     /// You followed, unfollowed or blocked someone: the people in your activity, and the empty state's count, changed.
     func followsDidChange() async {
         guard let refreshed = try? await profileRepository.me() else { return }
@@ -99,12 +106,13 @@ final class HomeViewModel {
         await loadActivity()
     }
 
+    /// You changed a title. A write from a card's own progress UI (a tick in Continue Watching's sheet, or a book's or
+    /// game's progress) keeps its card where it is (TV-701); any other write reloads the rail. The feed is only the
+    /// people you follow, so your own writes can't change it, and it keeps its place however far down you are.
     func mediaStateDidChange(origin: UUID?) async {
-        if origin == continueWatching.changeOrigin {
-            await loadActivity()
-        } else {
-            await reload()
-        }
+        guard origin != continueWatching.changeOrigin else { return }
+        guard await loadProfileAndInProgress() else { return }
+        await feed.loadIfNeeded()
     }
 
     func loadInProgress() async {
@@ -141,27 +149,9 @@ final class HomeViewModel {
         continueWatching.needsReload || progressUpdates.needsReload
     }
 
-    /// The activity of the people you follow; your own is on your profile.
     func loadActivity() async {
-        guard profile != nil else {
-            activityItems = []
-            activityErrorMessage = nil
-            isLoadingActivity = false
-            return
-        }
-        isLoadingActivity = true
-        activityErrorMessage = nil
-        defer { isLoadingActivity = false }
-
-        do {
-            let page = try await activityRepository.feedPage(pageSize: 6, cursorLink: nil)
-            activityItems = Array(page.results.prefix(6))
-        } catch is CancellationError {
-            return
-        } catch {
-            activityErrorMessage = error.localizedDescription
-            handleUnauthorized(error)
-        }
+        guard profile != nil else { return }
+        await feed.load()
     }
 
     private func handleUnauthorized(_ error: Error) {
@@ -179,8 +169,8 @@ struct HomeView: View {
     /// The season's episodes, when Continue Watching's sheet opened one of them: its page pages through them.
     @State private var selectedEpisodes: MediaBrowsingContext?
     @State private var selectedPerson: PersonRef?
-    @State private var selectedActivityEntry: ActivityEntrySelection?
-    @State private var scrollOffset: CGFloat = 0
+    @State private var selectedPost: ActivityPostSelection?
+    @State private var scrollPosition = HomeScrollPosition()
 
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -233,21 +223,22 @@ struct HomeView: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 SpinePageBackground()
-                HomeArtworkAtmosphere(media: viewModel.inProgressItems.first?.media)
-                    .offset(y: BackdropLayout.topOffset - scrollOffset)
-                    // Fade the flattened backdrop: opacity on the layers alone also thins the gradient that hides
-                    // the artwork's bottom edge, which then shows as a hard line while scrolling.
-                    .compositingGroup()
-                    .opacity(HomeBackdropMotion.opacity(for: scrollOffset))
+                HomeScrollingAtmosphere(
+                    media: viewModel.inProgressItems.first?.media,
+                    scrollPosition: scrollPosition
+                )
 
                 ScrollView(showsIndicators: false) {
-                    // Plain stacks, here and in Activity: the page has three sections and at most six activity
-                    // rows. A frozen Home was sampled looping in the nested lazy stacks' placement of the activity
-                    // rows, which lazy stacks size from estimated heights (TV-705).
-                    VStack(alignment: .leading, spacing: 22) {
-                        header
-                        content
-                            .spineContentTransition(value: contentPhase)
+                    // One lazy stack, with the top of the page as one plain item and then one item per post. A frozen
+                    // Home was sampled looping in nested lazy stacks' placement of the activity rows, which lazy
+                    // stacks size from estimated heights (TV-705).
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 22) {
+                            header
+                            content
+                                .spineContentTransition(value: contentPhase)
+                        }
+                        feedPosts
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 18)
@@ -259,8 +250,10 @@ struct HomeView: View {
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     max(0, geometry.contentOffset.y)
                 } action: { _, offset in
-                    scrollOffset = offset
+                    scrollPosition.offset = offset
                 }
+
+                HomeStatusBarFade(scrollPosition: scrollPosition)
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -286,6 +279,11 @@ struct HomeView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .mediaStateDidChange)) { notification in
                 Task { await viewModel.mediaStateDidChange(origin: notification.userInfo?["origin"] as? UUID) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .activityPostDidChange)) { notification in
+                if let change = ActivityPostChange.parse(notification) {
+                    viewModel.feed.apply(change.engagement, to: change.post)
+                }
             }
             .onChange(of: selectedTab) { _, tab in
                 // Back on Home after a card's progress changed: the rail re-sorts now, not under the user's finger
@@ -350,24 +348,41 @@ struct HomeView: View {
             }
             .inProgressUpdatePresentations(
                 viewModel.progressUpdates,
-                screenOpenedOther: selectedRef != nil || selectedPerson != nil || selectedActivityEntry != nil,
+                screenOpenedOther: selectedRef != nil || selectedPerson != nil || selectedPost != nil,
                 trackingRepository: trackingRepository,
                 diaryRepository: diaryRepository,
                 onUnauthorized: onUnauthorized
             ) { ref in
                 selectedRef = ref
             }
-            .fullScreenCover(item: $selectedActivityEntry, onDismiss: { selectedActivityEntry = nil }) { selection in
-                DiaryLogDetailNavigationCover(
-                    entryId: selection.id,
-                    diaryRepository: diaryRepository,
-                    mediaRepository: mediaRepository,
-                    trackingRepository: trackingRepository,
-                    currentUserId: currentUserId,
-                    selectedTab: selectedTab,
-                    onSelectTab: onSelectTab,
-                    onUnauthorized: onUnauthorized
-                )
+            .fullScreenCover(item: $selectedPost, onDismiss: { selectedPost = nil }) { selection in
+                switch selection.post {
+                case let .log(id):
+                    DiaryLogDetailNavigationCover(
+                        entryId: id,
+                        focusesComment: selection.focusesComment,
+                        diaryRepository: diaryRepository,
+                        mediaRepository: mediaRepository,
+                        trackingRepository: trackingRepository,
+                        currentUserId: currentUserId,
+                        selectedTab: selectedTab,
+                        onSelectTab: onSelectTab,
+                        onUnauthorized: onUnauthorized
+                    )
+                case let .progress(id):
+                    ProgressPostNavigationCover(
+                        progressId: id,
+                        focusesComment: selection.focusesComment,
+                        activityRepository: activityRepository,
+                        diaryRepository: diaryRepository,
+                        mediaRepository: mediaRepository,
+                        trackingRepository: trackingRepository,
+                        currentUserId: currentUserId,
+                        selectedTab: selectedTab,
+                        onSelectTab: onSelectTab,
+                        onUnauthorized: onUnauthorized
+                    )
+                }
             }
         }
     }
@@ -455,10 +470,11 @@ struct HomeView: View {
         }
     }
 
+    /// The section's title and any state in place of posts; the posts follow it as their own lazy items.
     private var activitySection: some View {
         SpineSection(title: "Activity") {
             Group {
-                if viewModel.isLoadingActivity, viewModel.activityItems.isEmpty {
+                if viewModel.feed.isLoadingInitial, viewModel.activityItems.isEmpty {
                     ActivityFeedSkeleton()
                 } else if let error = viewModel.activityErrorMessage, viewModel.activityItems.isEmpty {
                     HomeInlineState(
@@ -483,50 +499,46 @@ struct HomeView: View {
                         systemImage: "clock.arrow.circlepath",
                         message: "Logs and progress from people you follow will appear here."
                     )
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(viewModel.activityItems) { activity in
-                            Button {
-                                handleActivityTap(activity)
-                            } label: {
-                                ActivityFeedRow(activity: activity)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint(ActivityFeedPresentation.destinationHint(for: activity))
-
-                            if activity.id != viewModel.activityItems.last?.id {
-                                ActivityFeedDivider()
-                            }
-                        }
-
-                        if viewModel.profile != nil {
-                            ActivityFeedDivider()
-
-                            NavigationLink {
-                                ActivityFeedView(
-                                    username: nil,
-                                    activityRepository: activityRepository,
-                                    onUnauthorized: onUnauthorized,
-                                    onSelectActivity: handleActivityTap
-                                )
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Text("View all activity")
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.bold))
-                                }
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.74))
-                                .padding(.vertical, 15)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
                 }
             }
             .spineContentTransition(value: activityPhase)
+        }
+    }
+
+    @ViewBuilder
+    private var feedPosts: some View {
+        if viewModel.profile != nil {
+            ForEach(viewModel.activityItems) { activity in
+                ActivityPostCard(
+                    activity: activity,
+                    onOpen: { open(activity) },
+                    onToggleLike: { Task { await viewModel.feed.toggleLike(activity) } },
+                    onComment: { open(activity, focusesComment: true) }
+                )
+                .task {
+                    await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
+                }
+            }
+
+            if viewModel.feed.isLoadingNextPage {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+            } else if let error = viewModel.feed.nextPageErrorMessage {
+                VStack(spacing: 8) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.52))
+                        .multilineTextAlignment(.center)
+
+                    Button("Retry") {
+                        Task { await viewModel.feed.loadNextPage() }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.86))
+                }
+                .frame(maxWidth: .infinity, minHeight: 60)
+            }
         }
     }
 
@@ -548,7 +560,7 @@ struct HomeView: View {
 
     private var activityPhase: SpineContentPhase {
         .resolve(
-            isLoading: viewModel.isLoadingActivity,
+            isLoading: viewModel.feed.isLoadingInitial,
             hasContent: !viewModel.activityItems.isEmpty,
             hasError: viewModel.activityErrorMessage != nil
         )
@@ -563,10 +575,12 @@ struct HomeView: View {
         }
     }
 
-    private func handleActivityTap(_ activity: ActivityItem) {
+    private func open(_ activity: ActivityItem, focusesComment: Bool = false) {
         switch ActivityDestination.resolve(activity) {
         case let .diary(id):
-            selectedActivityEntry = ActivityEntrySelection(id: id)
+            selectedPost = ActivityPostSelection(post: .log(id), focusesComment: focusesComment)
+        case let .progress(id):
+            selectedPost = ActivityPostSelection(post: .progress(id), focusesComment: focusesComment)
         case let .person(ref):
             selectedPerson = ref
         case let .media(ref):
@@ -585,8 +599,56 @@ enum HomeBackdropMotion {
     }
 }
 
-private struct ActivityEntrySelection: Identifiable {
-    let id: Int
+private struct ActivityPostSelection: Identifiable {
+    let post: ActivityPostRef
+    let focusesComment: Bool
+
+    var id: String { post.id }
+}
+
+/// Home's scroll position. Only the backdrop reads it, so scrolling doesn't redraw the feed.
+@MainActor
+@Observable
+private final class HomeScrollPosition {
+    var offset: CGFloat = 0
+}
+
+/// Fades posts out under the clock once the page has scrolled, leaving the backdrop alone at the top of the page.
+private struct HomeStatusBarFade: View {
+    let scrollPosition: HomeScrollPosition
+
+    var body: some View {
+        GeometryReader { proxy in
+            LinearGradient(
+                stops: [
+                    .init(color: SpinePalette.pageBackground, location: 0.6),
+                    .init(color: SpinePalette.pageBackground.opacity(0), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: proxy.safeAreaInsets.top + 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+        }
+        .opacity(min(1, scrollPosition.offset / 40))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HomeScrollingAtmosphere: View {
+    let media: MediaSummary?
+    let scrollPosition: HomeScrollPosition
+
+    var body: some View {
+        HomeArtworkAtmosphere(media: media)
+            .offset(y: BackdropLayout.topOffset - scrollPosition.offset)
+            // Fade the flattened backdrop: opacity on the layers alone also thins the gradient that hides
+            // the artwork's bottom edge, which then shows as a hard line while scrolling.
+            .compositingGroup()
+            .opacity(HomeBackdropMotion.opacity(for: scrollPosition.offset))
+    }
 }
 
 private struct HomeArtworkAtmosphere: View {

@@ -10,6 +10,12 @@ class LikeSerializer(serializers.Serializer):
     target_id = serializers.IntegerField(min_value=1)
 
 
+class CommentWriteSerializer(serializers.Serializer):
+    """Validate a new comment: trimmed, and not empty."""
+
+    body = serializers.CharField(max_length=2000)
+
+
 class PushDeviceSerializer(serializers.Serializer):
     """Validate a phone's Apple push token registration."""
 
