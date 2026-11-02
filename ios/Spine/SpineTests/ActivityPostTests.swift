@@ -1,4 +1,3 @@
-import CoreGraphics
 import XCTest
 @testable import Spine
 
@@ -7,14 +6,21 @@ final class ActivityPostTests: XCTestCase {
         try JSONDecoder.api.decode(ActivityItem.self, from: Data(json.utf8))
     }
 
-    private func log(id: Int = 7, hasLiked: Bool = false, likeCount: Int = 2, commentCount: Int = 1) throws -> ActivityItem {
+    private func log(
+        id: Int = 7,
+        day: String = "2026-11-01",
+        hasLiked: Bool = false,
+        likeCount: Int = 2,
+        commentCount: Int = 1,
+        isRewatch: Bool = false
+    ) throws -> ActivityItem {
         try activity("""
         {
-          "id": \(id), "type": "diary_created", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "2026-11-01",
+          "id": \(id), "type": "diary_created", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "\(day)",
           "actor": {"id": 2, "username": "maya", "display_name": "Maya", "avatar_url": null},
           "media": {"ref": {"source": "tmdb", "media_type": "movie", "media_id": "1"}, "title": "Past Lives"},
           "person": null,
-          "object": {"type": "diary", "id": \(id), "rating": "4.5", "liked": true, "is_rewatch": false},
+          "object": {"type": "diary", "id": \(id), "rating": "4.5", "liked": true, "is_rewatch": \(isRewatch)},
           "viewer": {"can_view": true, "has_liked": \(hasLiked)},
           "like_count": \(likeCount), "comment_count": \(commentCount),
           "review_title": "", "review": "Wrecked me.", "contains_spoilers": true
@@ -22,12 +28,12 @@ final class ActivityPostTests: XCTestCase {
         """)
     }
 
-    private func progress(id: Int = 9, summary: String = "watched 4 episodes", title: String = "Severance") throws -> ActivityItem {
+    private func progress(id: Int = 9, day: String = "2026-11-01", summary: String = "watched 4 episodes") throws -> ActivityItem {
         try activity("""
         {
-          "id": -\(id), "type": "progress_updated", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "2026-11-01",
+          "id": -\(id), "type": "progress_updated", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "\(day)",
           "actor": {"id": 3, "username": "jonah", "display_name": "Jonah", "avatar_url": null},
-          "media": {"ref": {"source": "tmdb", "media_type": "tv", "media_id": "2"}, "title": "\(title)"},
+          "media": {"ref": {"source": "tmdb", "media_type": "tv", "media_id": "2"}, "title": "Severance"},
           "person": null,
           "object": {"type": "progress_day", "id": \(id), "summary": "\(summary)", "label": "4 episodes"},
           "viewer": {"can_view": true, "has_liked": false},
@@ -72,19 +78,71 @@ final class ActivityPostTests: XCTestCase {
         XCTAssertEqual(ActivityFeedPresentation.destinationHint(for: item), "Opens this progress")
     }
 
-    func testAProgressPostReadsAsASentence() throws {
-        let cases = [
-            ("watched 4 episodes", "Severance", "Watched 4 episodes of Severance"),
-            ("read 40 pages", "Dune", "Read 40 pages of Dune"),
-            ("played 2h 30m", "Hades", "Played 2h 30m of Hades"),
-            ("started reading", "Dune", "Started reading Dune"),
-            ("started playing", "Hades", "Started playing Hades"),
-            ("progressed 5%", "Hades", "Progressed 5% in Hades"),
-        ]
-        for (summary, title, sentence) in cases {
-            XCTAssertEqual(ActivityFeedPresentation.progressSentence(for: try progress(summary: summary, title: title)), sentence)
-        }
+    func testAProgressPostsDetailIsItsSummary() throws {
         XCTAssertEqual(ActivityFeedPresentation.progressHeadline(for: try progress()), "Watched 4 episodes")
+        XCTAssertEqual(
+            ActivityFeedPresentation.progressHeadline(for: try progress(summary: "started reading")),
+            "Started reading"
+        )
+    }
+
+    // MARK: Rows
+
+    func testALogsMarksAreItsStarsAndHeartWithNoReviewMark() throws {
+        let summary = ActivityFeedPresentation.ratingSummary(for: try log())
+
+        XCTAssertEqual(summary.starSymbols.count, 5)
+        XCTAssertEqual(summary.starSymbols.last, "star.leadinghalf.filled")
+        XCTAssertTrue(summary.liked)
+        XCTAssertFalse(summary.hasReview, "The review has its own line")
+    }
+
+    func testTheRewatchMarkShowsOnlyOnARewatch() throws {
+        XCTAssertFalse(ActivityFeedPresentation.isRewatch(try log()))
+        XCTAssertTrue(ActivityFeedPresentation.isRewatch(try log(isRewatch: true)))
+        XCTAssertFalse(ActivityFeedPresentation.isRewatch(try progress()))
+    }
+
+    // MARK: Day groups
+
+    private func describe(_ entries: [ActivityFeedEntry]) -> [String] {
+        entries.map { entry in
+            switch entry {
+            case let .day(_, title, isFirst):
+                "\(title)\(isFirst ? " first" : "")"
+            case let .post(activity, isFirst, isLast):
+                "\(activity.id)\(isFirst ? " top" : "")\(isLast ? " bottom" : "")"
+            }
+        }
+    }
+
+    func testPostsGroupUnderTheirDayAsOnePanel() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 12)))
+
+        let entries = ActivityFeedEntry.entries(
+            from: [
+                try log(id: 1, day: "2026-11-02"),
+                try progress(id: 9, day: "2026-11-02"),
+                try log(id: 2, day: "2026-11-02"),
+                try log(id: 3, day: "2026-11-01"),
+                try log(id: 4, day: "2026-10-30"),
+                try progress(id: 8, day: "2026-10-30"),
+            ],
+            now: now
+        )
+
+        XCTAssertEqual(describe(entries), [
+            "Today first", "1 top", "-9", "2 bottom",
+            "Yesterday", "3 top bottom",
+            "Oct 30", "4 top", "-8 bottom",
+        ])
+        XCTAssertEqual(Set(entries.map(\.id)).count, entries.count, "Every lazy item has its own identity")
+    }
+
+    func testAnEmptyFeedHasNoHeaders() {
+        XCTAssertTrue(ActivityFeedEntry.entries(from: []).isEmpty)
     }
 
     // MARK: The feed
@@ -339,80 +397,6 @@ final class ActivityPostTests: XCTestCase {
         _ = DiaryLogDetailView.tagRepository(for: me, base: repository, currentUserId: 1)
 
         XCTAssertTrue(repository.owners.isEmpty)
-    }
-
-    // MARK: The gradient
-
-    /// A poster with one color over another; green and blue here, 0-1 RGB.
-    private func poster(top: (Double, Double, Double), bottom: (Double, Double, Double)) throws -> CGImage {
-        let context = try XCTUnwrap(CGContext(
-            data: nil,
-            width: 40,
-            height: 60,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
-        context.setFillColor(red: top.0, green: top.1, blue: top.2, alpha: 1)
-        context.fill(CGRect(x: 0, y: 30, width: 40, height: 30))
-        context.setFillColor(red: bottom.0, green: bottom.1, blue: bottom.2, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
-        return try XCTUnwrap(context.makeImage())
-    }
-
-    func testATwoColorPosterGivesATwoColorGradient() throws {
-        let image = try poster(top: (0.1, 0.3, 0.9), bottom: (0.1, 0.8, 0.3))
-
-        let colors = try XCTUnwrap(PosterGradientColors.colors(in: image))
-
-        XCTAssertGreaterThan(abs(colors.lead.hue - colors.trail.hue), 0.1)
-    }
-
-    func testAOneColorPosterStaysOneHue() throws {
-        let image = try poster(top: (0.9, 0.2, 0.1), bottom: (0.9, 0.2, 0.1))
-
-        let colors = try XCTUnwrap(PosterGradientColors.colors(in: image))
-
-        XCTAssertEqual(colors.lead.hue, colors.trail.hue, accuracy: 0.02)
-    }
-
-    func testTheGradientStaysDarkEnoughForWhiteText() throws {
-        let brightest = try poster(top: (1, 0.9, 0.2), bottom: (1, 1, 1))
-
-        let colors = try XCTUnwrap(PosterGradientColors.colors(in: brightest))
-
-        XCTAssertLessThanOrEqual(colors.lead.brightness, 0.56)
-        XCTAssertLessThanOrEqual(colors.trail.brightness, 0.25)
-    }
-
-    func testAMostlyGrayPosterTakesItsColorFromItsVividPart() throws {
-        let context = try XCTUnwrap(CGContext(
-            data: nil,
-            width: 40,
-            height: 60,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
-        context.setFillColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: 40, height: 60))
-        context.setFillColor(red: 0.9, green: 0.4, blue: 0.1, alpha: 1)
-        context.fill(CGRect(x: 10, y: 15, width: 20, height: 30))
-
-        let colors = try XCTUnwrap(PosterGradientColors.colors(in: try XCTUnwrap(context.makeImage())))
-
-        XCTAssertGreaterThan(colors.lead.saturation, 0.3)
-    }
-
-    func testAGrayPosterStaysNeutral() throws {
-        let image = try poster(top: (0.5, 0.5, 0.5), bottom: (0.2, 0.2, 0.2))
-
-        let colors = try XCTUnwrap(PosterGradientColors.colors(in: image))
-
-        XCTAssertLessThanOrEqual(colors.lead.saturation, 0.2)
-        XCTAssertLessThanOrEqual(colors.trail.saturation, 0.2)
     }
 }
 

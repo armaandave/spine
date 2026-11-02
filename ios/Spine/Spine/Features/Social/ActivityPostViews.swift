@@ -138,13 +138,14 @@ final class PostEngagementModel {
 struct PostAuthorLink: View {
     let user: UserSummary
     var avatarSize: CGFloat = 34
+    var spacing: CGFloat = 10
     var font: Font = .system(size: 15, weight: .bold)
 
     var body: some View {
         NavigationLink {
             UserProfileDestination(username: user.username)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: spacing) {
                 UserAvatar(urlString: user.avatarUrl, size: avatarSize)
                 Text(user.username)
                     .font(font)
@@ -159,11 +160,14 @@ struct PostAuthorLink: View {
     }
 }
 
-/// The heart and comment bubble, with their counts. A count of zero shows just the icon.
+/// The heart and comment bubble, with their counts. A count of zero shows just the icon. Each sits in a slot of the
+/// same width, so the icons line up from row to row.
 struct PostActions: View {
     let engagement: PostEngagement
-    var iconSize: CGFloat = 20
-    var spacing: CGFloat = 12
+    var iconSize: CGFloat = 22
+    var slotWidth: CGFloat = 40
+    var spacing: CGFloat = 6
+    var countSize: CGFloat = 14
     let onToggleLike: () -> Void
     let onComment: () -> Void
 
@@ -193,19 +197,19 @@ struct PostActions: View {
     }
 
     private func label(systemName: String, count: Int, iconStyle: AnyShapeStyle) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: systemName)
                 .font(.system(size: iconSize, weight: .medium))
                 .foregroundStyle(iconStyle)
                 .contentTransition(.symbolEffect(.replace))
             if count > 0 {
                 Text(count.formatted())
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: countSize, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
             }
         }
-        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+        .frame(minWidth: slotWidth, minHeight: 44, alignment: .leading)
         .contentShape(Rectangle())
     }
 }
@@ -223,8 +227,6 @@ struct PostEngagementSection: View {
                 Divider().overlay(.white.opacity(0.1))
                 PostActions(
                     engagement: model.engagement,
-                    iconSize: 22,
-                    spacing: 18,
                     onToggleLike: { Task { await model.toggleLike() } },
                     onComment: onComment
                 )

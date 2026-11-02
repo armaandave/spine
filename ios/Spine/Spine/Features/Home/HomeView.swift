@@ -222,7 +222,6 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                SpinePageBackground()
                 HomeScrollingAtmosphere(
                     media: viewModel.inProgressItems.first?.media,
                     scrollPosition: scrollPosition
@@ -232,7 +231,7 @@ struct HomeView: View {
                     // One lazy stack, with the top of the page as one plain item and then one item per post. A frozen
                     // Home was sampled looping in nested lazy stacks' placement of the activity rows, which lazy
                     // stacks size from estimated heights (TV-705).
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 22) {
                             header
                             content
@@ -254,6 +253,16 @@ struct HomeView: View {
                 }
 
                 HomeStatusBarFade(scrollPosition: scrollPosition)
+            }
+            .background {
+                // A faint wash the day panels' glass shows, all the way down the feed, like the Diary tab's. It's
+                // dimmed further here, so a bright cover doesn't overpower the posts.
+                LogBackdrop(url: washURL)
+                    .overlay {
+                        SpinePalette.pageBackground
+                            .opacity(0.45)
+                            .ignoresSafeArea()
+                    }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -508,15 +517,29 @@ struct HomeView: View {
     @ViewBuilder
     private var feedPosts: some View {
         if viewModel.profile != nil {
-            ForEach(viewModel.activityItems) { activity in
-                ActivityPostCard(
-                    activity: activity,
-                    onOpen: { open(activity) },
-                    onToggleLike: { Task { await viewModel.feed.toggleLike(activity) } },
-                    onComment: { open(activity, focusesComment: true) }
-                )
-                .task {
-                    await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
+            ForEach(ActivityFeedEntry.entries(from: viewModel.activityItems)) { entry in
+                switch entry {
+                case let .day(_, title, isFirst):
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .accessibilityAddTraits(.isHeader)
+                        .padding(.leading, 4)
+                        .padding(.top, isFirst ? 8 : 18)
+                        .padding(.bottom, 6)
+                case let .post(activity, isFirst, isLast):
+                    // Each post is its own lazy item, drawn as a slice of its day's panel.
+                    ActivityPostRow(
+                        activity: activity,
+                        showsSeparator: !isLast,
+                        onOpen: { open(activity) },
+                        onToggleLike: { Task { await viewModel.feed.toggleLike(activity) } },
+                        onComment: { open(activity, focusesComment: true) }
+                    )
+                    .diaryCard(roundsTop: isFirst, roundsBottom: isLast)
+                    .task {
+                        await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
+                    }
                 }
             }
 
@@ -540,6 +563,12 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, minHeight: 60)
             }
         }
+    }
+
+    /// The artwork you're on now, or the newest post's when nothing is in progress.
+    private var washURL: URL? {
+        HomeArtworkAtmosphereModel.url(for: viewModel.inProgressItems.first?.media)
+            ?? URL(string: viewModel.activityItems.first?.media?.displayPosterURL ?? "")
     }
 
     private var contentPhase: SpineContentPhase {
@@ -613,27 +642,13 @@ private final class HomeScrollPosition {
     var offset: CGFloat = 0
 }
 
-/// Fades posts out under the clock once the page has scrolled, leaving the backdrop alone at the top of the page.
+/// Blurs posts under the clock once the page has scrolled, leaving the backdrop alone at the top of the page.
 private struct HomeStatusBarFade: View {
     let scrollPosition: HomeScrollPosition
 
     var body: some View {
-        GeometryReader { proxy in
-            LinearGradient(
-                stops: [
-                    .init(color: SpinePalette.pageBackground, location: 0.6),
-                    .init(color: SpinePalette.pageBackground.opacity(0), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: proxy.safeAreaInsets.top + 14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(edges: .top)
-        }
-        .opacity(min(1, scrollPosition.offset / 40))
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        DiaryTopSoftScrim()
+            .opacity(min(1, scrollPosition.offset / 40))
     }
 }
 
@@ -684,17 +699,20 @@ private struct HomeArtworkAtmosphere: View {
                     endPoint: .bottom
                 )
 
+            }
+            .frame(width: proxy.size.width, height: 420)
+            // Fades out instead of painting the page's color over itself, so the wash shows through below.
+            .mask {
                 LinearGradient(
                     stops: [
-                        .init(color: .clear, location: 0.32),
-                        .init(color: SpinePalette.pageBackground.opacity(0.72), location: 0.72),
-                        .init(color: SpinePalette.pageBackground, location: 1),
+                        .init(color: .black, location: 0.32),
+                        .init(color: .black.opacity(0.28), location: 0.72),
+                        .init(color: .clear, location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             }
-            .frame(width: proxy.size.width, height: 420)
         }
         .frame(height: 420)
         .clipped()

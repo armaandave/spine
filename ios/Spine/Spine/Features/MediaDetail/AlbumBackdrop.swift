@@ -17,11 +17,6 @@ nonisolated enum AlbumBackdropColor {
         var green = 0.0
         var blue = 0.0
         var weight = 0.0
-
-        var color: HSB {
-            guard weight > 0 else { return HSB(hue: 0, saturation: 0, brightness: 0) }
-            return HSB(red: red / weight, green: green / weight, blue: blue / weight)
-        }
     }
 
     private static let sampleSide = 32
@@ -43,43 +38,6 @@ nonisolated enum AlbumBackdropColor {
     /// The cover's main color: the most common hue family among its vivid pixels, or the average of its grays
     /// when those outweigh every hue.
     static func dominant(in image: CGImage) -> HSB? {
-        guard let buckets = hueBuckets(in: image) else { return nil }
-        guard let index = buckets.indices.max(by: { score($0, in: buckets) < score($1, in: buckets) }),
-              buckets[index].weight > 0
-        else { return nil }
-        return buckets[index].color
-    }
-
-    /// The two colors a poster reads as: its strongest hue, and the strongest one clearly apart from that, so a teal
-    /// and orange poster stays teal and orange. A mostly gray poster still takes its color from its vivid part, if
-    /// there's enough of one to notice. A poster with one hue gives it twice; one with none gives its gray twice.
-    static func mainColors(in image: CGImage) -> (first: HSB, second: HSB)? {
-        guard let buckets = hueBuckets(in: image) else { return nil }
-        let total = buckets.reduce(0) { $0 + $1.weight }
-        guard total > 0 else { return nil }
-        let hues = 0 ..< 12
-        guard let first = hues.max(by: { score($0, in: buckets) < score($1, in: buckets) }),
-              buckets[first].weight >= total * 0.08
-        else {
-            return (buckets[12].color, buckets[12].color)
-        }
-        // At least two families away: 60° of hue. Neighbours would read as one color.
-        let apart = hues.filter { index in
-            let distance = abs(index - first)
-            return min(distance, 12 - distance) >= 2 && buckets[index].weight >= total * 0.04
-        }
-        let second = apart.max { buckets[$0].weight < buckets[$1].weight } ?? first
-        return (buckets[first].color, buckets[second].color)
-    }
-
-    /// A cover whose blues run from azure to indigo is a blue cover, so each hue also counts half of its two
-    /// neighbours when picking the winner; the color itself comes from the winning hue's pixels alone.
-    private static func score(_ index: Int, in buckets: [Bucket]) -> Double {
-        guard index < 12 else { return buckets[index].weight }
-        return buckets[index].weight + (buckets[(index + 11) % 12].weight + buckets[(index + 1) % 12].weight) / 2
-    }
-
-    private static func hueBuckets(in image: CGImage) -> [Bucket]? {
         let side = sampleSide
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -117,7 +75,21 @@ nonisolated enum AlbumBackdropColor {
             buckets[index].blue += blue * weight
             buckets[index].weight += weight
         }
-        return buckets
+        // A cover whose blues run from azure to indigo is a blue cover, so each hue also counts half of its two
+        // neighbours when picking the winner; the color itself comes from the winning hue's pixels alone.
+        func score(_ index: Int) -> Double {
+            guard index < 12 else { return buckets[index].weight }
+            return buckets[index].weight + (buckets[(index + 11) % 12].weight + buckets[(index + 1) % 12].weight) / 2
+        }
+        guard let index = buckets.indices.max(by: { score($0) < score($1) }), buckets[index].weight > 0 else {
+            return nil
+        }
+        let winner = buckets[index]
+        return HSB(
+            red: winner.red / winner.weight,
+            green: winner.green / winner.weight,
+            blue: winner.blue / winner.weight
+        )
     }
 
     /// Apple Music darkens the cover color to about a third of full brightness and keeps it saturated. This

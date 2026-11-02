@@ -163,14 +163,10 @@ struct ActivityFeedSkeleton: View {
     var rowCount = 3
 
     var body: some View {
-        VStack(spacing: 12) {
-            ForEach(0 ..< rowCount, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.white.opacity(0.06))
-                    .frame(height: PosterSlot.activityPost.size.height + 22)
-            }
-        }
-        .accessibilityHidden(true)
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(.white.opacity(0.06))
+            .frame(height: CGFloat(rowCount) * 84)
+            .accessibilityHidden(true)
     }
 }
 
@@ -219,23 +215,22 @@ enum ActivityFeedPresentation {
         return summary.prefix(1).uppercased() + summary.dropFirst()
     }
 
-    /// "Watched 4 episodes of Severance", "Started reading Dune", "Progressed 5% in Hades".
-    static func progressSentence(for activity: ActivityItem) -> String {
-        let headline = progressHeadline(for: activity)
-        guard let title = activity.media?.displayTitle else { return headline }
-        let joiner = if headline.hasPrefix("Started") {
-            " "
-        } else if headline.hasPrefix("Progressed") {
-            " in "
-        } else {
-            " of "
-        }
-        return headline + joiner + title
-    }
-
-    /// What a log's card quotes: the review, or its title when that's all there is.
+    /// What a log's row quotes: the review, or its title when that's all there is.
     static func reviewText(for activity: ActivityItem) -> String? {
         clean(activity.review) ?? clean(activity.reviewTitle)
+    }
+
+    /// The stars and heart beside a log's title. The review has its own line, so there's no mark for one.
+    static func ratingSummary(for activity: ActivityItem) -> DiaryEntrySummary {
+        DiaryEntrySummary(
+            stars: rating(for: activity)?.starCount,
+            liked: activity.object.liked == true,
+            hasReview: false
+        )
+    }
+
+    static func isRewatch(_ activity: ActivityItem) -> Bool {
+        activity.object.isRewatch == true
     }
 
     static func rating(for activity: ActivityItem) -> String? {

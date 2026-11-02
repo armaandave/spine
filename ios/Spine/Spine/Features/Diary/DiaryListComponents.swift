@@ -426,38 +426,8 @@ struct DiaryEntryRow: View {
 
     private var isRepeat: Bool { entry.isTrueReread ?? entry.isRewatch }
 
-    /// "★★★½ ♥", then marks for a rewatch and a review.
     private var summaryLine: some View {
-        HStack(spacing: 6) {
-            if !summary.starSymbols.isEmpty {
-                HStack(spacing: 1) {
-                    ForEach(Array(summary.starSymbols.enumerated()), id: \.offset) { _, symbol in
-                        Image(systemName: symbol)
-                    }
-                }
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(LogComposerStyle.starGold)
-            }
-            if summary.liked {
-                Image(systemName: "heart.fill")
-                    .foregroundStyle(.pink)
-            }
-            if isRepeat {
-                Image(systemName: "arrow.clockwise")
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-            if summary.hasReview {
-                Image(systemName: "text.alignleft")
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-        }
-        .font(.system(size: 12, weight: .bold))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            [summary.isEmpty ? nil : summary.accessibilityLabel, isRepeat ? entry.media.ref.repeatLabel : nil]
-                .compactMap { $0 }
-                .joined(separator: ", ")
-        )
+        LogRatingMarks(summary: summary, isRepeat: isRepeat, repeatLabel: entry.media.ref.repeatLabel)
     }
 
     private var titleText: AttributedString {
@@ -500,11 +470,57 @@ struct DiaryEntryRow: View {
     }
 }
 
+/// "★★★½ ♥", then marks for a rewatch and a review: a diary row's line, and an activity post's beside its title.
+struct LogRatingMarks: View {
+    let summary: DiaryEntrySummary
+    let isRepeat: Bool
+    let repeatLabel: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if !summary.starSymbols.isEmpty {
+                HStack(spacing: 1) {
+                    ForEach(Array(summary.starSymbols.enumerated()), id: \.offset) { _, symbol in
+                        Image(systemName: symbol)
+                    }
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(LogComposerStyle.starGold)
+            }
+            if summary.liked {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink)
+            }
+            if isRepeat {
+                Image(systemName: "arrow.clockwise")
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            if summary.hasReview {
+                Image(systemName: "text.alignleft")
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .font(.system(size: 12, weight: .bold))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [summary.isEmpty ? nil : summary.accessibilityLabel, isRepeat ? repeatLabel : nil]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+    }
+}
+
 /// What a diary row shows under its title: the star count, a heart, and whether there's a review.
 struct DiaryEntrySummary: Equatable {
     let stars: String?
     let liked: Bool
     let hasReview: Bool
+
+    init(stars: String?, liked: Bool, hasReview: Bool) {
+        self.stars = stars
+        self.liked = liked
+        self.hasReview = hasReview
+    }
 
     init(entry: DiaryEntry) {
         stars = entry.rating?.starCount
