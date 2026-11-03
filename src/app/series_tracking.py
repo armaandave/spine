@@ -44,6 +44,7 @@ from app.models import (
 )
 from app.providers import comicvine
 from app.tasks import update_daily_statistics
+from social.models import ProgressChange
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +384,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
             current.status = Status.IN_PROGRESS.value
             current.save(update_fields=["status"])
             _set_row_from_attempt(row, current)
+            _record_status(user, item, current, ProgressChange.PICKED_BACK_UP)
         return row
     if row.status == Status.COMPLETED.value:
         if has_more(row):
@@ -392,6 +394,10 @@ def start(user, item, *, start_date=None, mutation_id=None):
     # stays as it is, and a read that was carrying on goes on carrying on.
     stopped = row.current_attempt if row.status == Status.DROPPED.value else None
     place = row.progress if row.status in {*OPEN_STATUSES, Status.DROPPED.value} else 0
+    # Paused or Did Not Finish on a series never started has nothing to pick back up.
+    picks_back_up = row.status in {Status.PAUSED.value, Status.DROPPED.value} and (
+        bool(row.progress) or row.attempts.filter(status=Status.DROPPED.value).exists()
+    )
     attempt = _begin(
         row,
         created=created,
@@ -403,6 +409,8 @@ def start(user, item, *, start_date=None, mutation_id=None):
     )
     _set_row_from_attempt(row, attempt)
     _record_start(user, item, attempt)
+    if picks_back_up:
+        _record_status(user, item, attempt, ProgressChange.PICKED_BACK_UP)
     return row
 
 
@@ -472,6 +480,7 @@ def pause(user, item):
     if attempt.status == Status.IN_PROGRESS.value:
         attempt.status = Status.PAUSED.value
         attempt.save(update_fields=["status"])
+        _record_status(user, item, attempt, ProgressChange.PAUSED)
     _set_row_from_attempt(row, attempt)
     return row
 
@@ -487,6 +496,7 @@ def drop(user, item, *, end_date=None):
     attempt.status = Status.DROPPED.value
     attempt.save(update_fields=["status", "end_date"])
     _set_row_from_attempt(row, attempt)
+    _record_status(user, item, attempt, ProgressChange.STOPPED)
     return row
 
 
@@ -1179,7 +1189,7 @@ def _splice(row, attempt):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     changes = ProgressChange.objects.filter(
         actor=user,
@@ -1345,8 +1355,6 @@ def remove_tracking(user, item):
         return None
     if any(_is_real_history(attempt) for attempt in row.attempts.all()) or _has_logs(row):
         raise HistoryExists(HISTORY_MESSAGE)
-    from social.models import ProgressChange
-
     MediaLike.objects.filter(user=user, item=item).delete()
     ProgressChange.objects.filter(actor=user, item=item).delete()
     row.delete()
@@ -1603,7 +1611,7 @@ def clear_for_import(user, media_type, source, media_ids):
 
 def forget_progress(user, item_ids):
     """The attempts these numbers belonged to are gone, so the feed drops them too."""
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     changes = ProgressChange.objects.filter(actor=user, item_id__in=item_ids)
     Activity.objects.filter(target_type="progress_change", target_id__in=changes.values("id")).delete()
@@ -1666,7 +1674,7 @@ def new_issue_out(item, *, start_date=None, previous_total=None):
 
 
 def _record_progress_change(user, item, previous, current):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     change = ProgressChange.objects.create(
         actor=user,
@@ -1687,9 +1695,16 @@ def _record_progress_change(user, item, previous, current):
 
 def _record_start(user, item, attempt):
     """Record a new attempt; deleting the attempt drops it with its numbers."""
-    from social.models import ProgressChange
-
     ProgressChange.record_start(user, item, journey_id=attempt.pk)
+
+
+def _record_status(user, item, attempt, move):
+    """Record a status move the person chose.
+
+    Keep Reading and a new issue record none (MC-200, MC-202). Nor do imports, marks,
+    restores or Restart (AC-1).
+    """
+    ProgressChange.record_status(user, item, move, journey_id=attempt.pk)
 
 
 # What the app reads

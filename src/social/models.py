@@ -171,6 +171,10 @@ class ProgressChange(models.Model):
     PLANNING = "planning"
     # What installed builds must never get as their latest progress change.
     NOT_PROGRESS = (START, STATUS, TOUCH, PLANNING)
+    # What a status row says (AC-1).
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    PICKED_BACK_UP = "picked back up"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -215,6 +219,21 @@ class ProgressChange(models.Model):
             item=item,
             previous_progress=snapshot(0),
             current_progress=snapshot(1),
+            saved_on=user_calendar.today(actor),
+        )
+
+    @classmethod
+    def record_status(cls, actor, item, move, **context):
+        """Record a status move the person chose; context such as a journey id rides along.
+
+        It holds value 0 in previous and current and adds nothing to any number.
+        """
+        snapshot = {"kind": cls.STATUS, "value": 0, "max": None, "unit": cls.STATUS, "move": move, **context}
+        return cls.objects.create(
+            actor=actor,
+            item=item,
+            previous_progress=snapshot,
+            current_progress=snapshot,
             saved_on=user_calendar.today(actor),
         )
 

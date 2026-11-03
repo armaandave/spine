@@ -178,7 +178,7 @@ These defaults are now agent guidance:
 4. Block behavior:
    - Blocked users cannot view blocker profile content or follow.
 5. Interactions:
-   - Likes and comments on activity: diary logs and each day's progress (`docs/activity-contract.md`, AC-6).
+   - Likes and comments on activity: diary logs and each day's progress (`docs/activity-contract.md`, AC-7).
    - Comments have no replies.
 6. Moderation/control:
    - Content edit/delete by author and project owner/admin only.

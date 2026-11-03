@@ -35,7 +35,13 @@ hearts, follows, or adding to a list.
 - Starts are recorded in `social.ProgressChange` as a step of kind `start`; they
   never count as a title's latest progress. Deleting a book journey, a manga or comic
   attempt, or a game playthrough deletes its start and progress with it.
-- The day is the local day the progress was recorded.
+- A status move the person chooses is recorded the same way, as a step of kind
+  `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
+  or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
+  never from an import, a mark, a restore or Restart. It adds nothing to any number,
+  and nothing shows it yet (AC-1). Restart's start row carries `began_over`.
+- The day is the local day the progress was recorded. Each save also stores
+  `saved_on`, the phone's date when saved, which nothing reads yet.
 
 ## AC-3: Newest date first
 
@@ -108,7 +114,7 @@ not read by these endpoints.
 `status` is the tracking status, and `progress_label` says how far they got, for
 example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log.
 
-## AC-6: Likes and comments
+## AC-7: Likes and comments
 
 - Anyone who can see an item can like it and comment on it. Comments have no replies.
 - A comment's author, the item's owner, and admins can delete a comment. Nobody across

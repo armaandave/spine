@@ -21,6 +21,7 @@ from app.models import (
     Tag,
 )
 from app.tasks import update_daily_statistics
+from social.models import ProgressChange
 
 UNSET = object()
 OPEN_STATUSES = {Status.IN_PROGRESS.value, Status.PAUSED.value}
@@ -348,8 +349,10 @@ def start(user, item, *, start_date=None, mutation_id=None):
             current.status = Status.IN_PROGRESS.value
             current.save(update_fields=["status"])
             _set_book_from_session(book, current)
+            _record_status(user, item, current, ProgressChange.PICKED_BACK_UP)
         return book
 
+    picks_back_up = _picks_back_up(book)
     started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
     session = BookSession.objects.create(
         related_book=book,
@@ -364,6 +367,8 @@ def start(user, item, *, start_date=None, mutation_id=None):
     )
     _set_book_from_session(book, session)
     _record_start(user, item, session)
+    if picks_back_up:
+        _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
 
 
@@ -407,6 +412,7 @@ def pause(user, item):
     if session.status == Status.IN_PROGRESS.value:
         session.status = Status.PAUSED.value
         session.save(update_fields=["status"])
+        _record_status(user, item, session, ProgressChange.PAUSED)
     _set_book_from_session(book, session)
     return book
 
@@ -418,6 +424,8 @@ def resume(user, item, *, start_date=None, mutation_id=None):
         raise ValidationError("Only a paused book can be resumed.")
     session = _open_session(book)
     if session:
+        if session.status == Status.PAUSED.value:
+            _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
         session.status = Status.IN_PROGRESS.value
         session.save(update_fields=["status"])
         _set_book_from_session(book, session)
@@ -442,6 +450,7 @@ def drop(user, item, *, end_date=None):
     )
     session.save(update_fields=["status", "end_date"])
     _set_book_from_session(book, session)
+    _record_status(user, item, session, ProgressChange.STOPPED)
     return book
 
 
@@ -481,7 +490,8 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, new)
-    _record_start(user, item, new)
+    # Only Restart begins at zero, and its row says so (decision 8).
+    _record_start(user, item, new, began_over=True)
     return book
 
 
@@ -1127,7 +1137,7 @@ def _splice_session(book, session):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     changes = ProgressChange.objects.filter(
         actor=user,
@@ -1305,7 +1315,7 @@ def remove_tracking(user, item):
 
 
 def _record_progress_change(user, item, previous, current):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     change = ProgressChange.objects.create(
         actor=user,
@@ -1330,11 +1340,29 @@ def _record_progress_change(user, item, previous, current):
     )
 
 
-def _record_start(user, item, session):
+def _record_start(user, item, session, **context):
     """Record a new journey; deleting the journey drops it with its progress."""
-    from social.models import ProgressChange
+    ProgressChange.record_start(user, item, journey_id=session.pk, **context)
 
-    ProgressChange.record_start(user, item, journey_id=session.pk)
+
+def _record_status(user, item, session, move):
+    """Record a status move the person chose.
+
+    Imports, marks, restores and Restart record none (AC-1).
+    """
+    ProgressChange.record_status(user, item, move, journey_id=session.pk)
+
+
+def _picks_back_up(book):
+    """Return whether a new journey carries on from a read that was stopped (AC-1).
+
+    Paused or Did Not Finish on a book never started has nothing to pick back up. Nor has
+    one finished, whose next journey is a new read.
+    """
+    if book.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+        return False
+    last = book.reading_sessions.order_by("-id").first()
+    return last.status == Status.DROPPED.value if last else bool(book.progress)
 
 
 def is_true_reread(session):

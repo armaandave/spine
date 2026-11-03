@@ -41,7 +41,7 @@ The following rules are inherited without another approval step.
 | Opinions and diary fields | BK-202, SW-100 to SW-108, SW-202, SW-203, SW-300 to SW-303 | Each log keeps its own stars and heart. A new log becomes the current source. The same editor is used everywhere. |
 | Dates | SW-005 to SW-007 | Local calendar dates. Distinct same-day logs are allowed. |
 | Saves and retries | BK-500, BK-501 | The backend enforces transitions. Related changes succeed together. Retries and double taps create no duplicates. All screens agree. |
-| Activity and visibility | AC-1 to AC-6 | "started reading", "read 5 chapters", "read 2 issues". Marks are never activity. A log and that day's progress are separate items, and both take likes and comments. Another person's list shows where a series stands, never what a log they can't see set. |
+| Activity and visibility | AC-1 to AC-7 | "started reading", "read 5 chapters", "read 2 issues". Marks are never activity. A log and that day's progress are separate items, and both take likes and comments. Another person's list shows where a series stands, never what a log they can't see set. |
 
 **Do not inherit:**
 

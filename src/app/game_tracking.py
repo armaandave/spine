@@ -8,6 +8,7 @@ from django.db import transaction
 from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
 from app.models import DiaryEntry, Game, GameSession, Item, MediaLike, Status
+from social.models import ProgressChange
 
 UNSET = single_weight.UNSET
 OPEN_STATUSES = {Status.IN_PROGRESS.value, Status.PAUSED.value}
@@ -207,6 +208,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
             session.status = Status.IN_PROGRESS
             session.save(update_fields=["status"])
             _push(game, session.status, "playthrough", session)
+            _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
         return _sync_state(game)
     session = GameSession.objects.create(
         related_game=game,
@@ -215,8 +217,6 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _push(game, session.status, "playthrough", session)
-    from social.models import ProgressChange
-
     ProgressChange.record_start(user, item, playthrough_id=session.pk)
     return _sync_state(game)
 
@@ -236,11 +236,14 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
             raise ValidationError(
                 "Pause, drop, or delete this playthrough before choosing Planning."
             )
+        changed = session.status != status
         session.status = status
         if status == Status.DROPPED:
             session.end_date = _closing_day(user, session)
         session.save(update_fields=["status", "end_date"])
         _push(game, status, "playthrough", session)
+        if changed:
+            _record_status(user, item, session, ProgressChange.STOPPED if status == Status.DROPPED else ProgressChange.PAUSED)
     elif game.status != status or not game.status_history:
         _push(game, status, "direct_status")
     return _sync_state(game)
@@ -255,7 +258,7 @@ def resume(user, item, **kwargs):
 
 
 @transaction.atomic
-def drop(user, item, *, end_date=None):
+def drop(user, item, *, end_date=None, record_status=True):
     game, _ = _ensure_game(user, item)
     session = _open_session(game)
     if not session:
@@ -266,6 +269,8 @@ def drop(user, item, *, end_date=None):
     session.end_date = end
     session.save(update_fields=["status", "end_date"])
     _push(game, session.status, "playthrough", session)
+    if record_status:
+        _record_status(user, item, session, ProgressChange.STOPPED)
     return _sync_state(game)
 
 
@@ -283,7 +288,7 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
         return game
     if not game or not _open_session(game):
         raise ValidationError("Only a Playing or Paused playthrough can restart.")
-    drop(user, item, end_date=end_date)
+    drop(user, item, end_date=end_date, record_status=False)
     # A phone's Restart sends its own date for both; a day ahead caps at today.
     if start_date:
         start_date = single_weight.sent_day(start_date, user_calendar.today(user))
@@ -468,8 +473,6 @@ def update_progress(
 
 def _record_progress_change(user, item, session, unit, previous, current, saved_on):
     """Record playtime or percentage moving, the history daily activity reads."""
-    from social.models import ProgressChange
-
     if current is UNSET or current is None or current == (previous or 0):
         return
     kind, maximum = ("minutes", None) if unit == "minute" else ("percentage", 100)
@@ -487,10 +490,17 @@ def _record_progress_change(user, item, session, unit, previous, current, saved_
     )
 
 
+def _record_status(user, item, session, move):
+    """Record a status move the person chose.
+
+    A Drop then Playing is a new playthrough, which says "started playing" (decision 44).
+    Imports, marks, restores and Restart record none (AC-1).
+    """
+    ProgressChange.record_status(user, item, move, playthrough_id=session.pk)
+
+
 def _delete_progress_history(user, item, playthrough_id):
     """Drop a deleted playthrough's recorded start and progress, as books do."""
-    from social.models import ProgressChange
-
     ProgressChange.objects.filter(
         actor=user,
         item=item,

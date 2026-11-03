@@ -377,7 +377,8 @@ class InheritedRulesTests(SeriesContractBase):
         self.action(item, "pause")
         again = self.write(item, status=READING)
         self.assertEqual(again.data["series"]["current_journey"]["id"], journey_id)
-        self.assertEqual(ProgressChange.objects.filter(actor=self.user, item=item).count(), 1, "One start")
+        starts = ProgressChange.objects.filter(actor=self.user, item=item, current_progress__kind=ProgressChange.START)
+        self.assertEqual(starts.count(), 1, "One start")
 
     # MC-000 (BK-303): retrospective Paused resumes as a new attempt at zero.
     def test_resuming_a_retrospective_pause_starts_at_zero(self):
@@ -740,7 +741,7 @@ class InheritedRulesTests(SeriesContractBase):
             ],
         )
 
-    # MC-000 (AC-6): a day's progress and a log both take likes and comments.
+    # MC-000 (AC-7): a day's progress and a log both take likes and comments.
     def test_progress_and_logs_take_likes_and_comments(self):
         friend = get_user_model().objects.create_user(username="friend", password="strong-password-123")
         Follow.objects.create(from_user=friend, to_user=self.user, status=FollowStatus.ACCEPTED)

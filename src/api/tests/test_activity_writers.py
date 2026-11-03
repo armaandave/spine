@@ -38,7 +38,7 @@ WRITERS = {
     "app/series_tracking.py": ["ProgressChange.objects.create"],
     "app/tv_tracking.py": ["ProgressChange(", "ProgressChange.objects.bulk_create"],
     # The class statement matches too.
-    "social/models.py": ["ProgressChange(", "cls.objects.create"],
+    "social/models.py": ["ProgressChange(", "cls.objects.create", "cls.objects.create"],
 }
 
 
@@ -91,6 +91,13 @@ class WriterDayTests(TestCase):
             item = self.item(MediaTypes.BOOK.value, total_pages=400)
             book_tracking.start(user, item)
             book_tracking.update_progress(user, item, progress_type="pages", value=40)
+            self.assertEqual(self.days(user, item), [day, day])
+
+    def test_a_status_move(self):
+        for user, day in ((self.new_york, DEC_31), (self.tokyo, JAN_1)):
+            item = self.item(MediaTypes.BOOK.value, total_pages=400)
+            book_tracking.start(user, item)
+            book_tracking.pause(user, item)
             self.assertEqual(self.days(user, item), [day, day])
 
     def test_a_game_start_and_save(self):

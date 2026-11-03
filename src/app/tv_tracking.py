@@ -1575,6 +1575,27 @@ def _record_start(ctx):
         ProgressChange.record_start(ctx.user, ctx.show_item)
 
 
+def _record_status_move(ctx, status, *, recorded):
+    """Record the person choosing Paused, Dropped or picking the show back up (AC-1).
+
+    A show never started has nothing to stop or pick back up. A tick that ends a pause is
+    just the tick. Webhooks, imports and jobs choose nothing here.
+    """
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    if not recorded or ctx.entry_point not in (APP, LEGACY_APP, WEB) or status == ctx.status_before:
+        return
+    if status == PAUSED:
+        move = ProgressChange.PAUSED
+    elif status == DROPPED:
+        move = ProgressChange.STOPPED
+    elif status == WATCHING and ctx.status_before in (PAUSED, DROPPED):
+        move = ProgressChange.PICKED_BACK_UP
+    else:
+        return
+    ProgressChange.record_status(ctx.user, ctx.show_item, move)
+
+
 def _forget_progress(ctx, season_numbers=None):
     """Delete the show's recorded starts and progress, or only some seasons' (AC-2)."""
     from social.models import ProgressChange  # noqa: PLC0415
@@ -1596,13 +1617,13 @@ def _forget_progress(ctx, season_numbers=None):
 
 
 def _forget_starts_since(ctx, since):
-    """Delete the show's starts recorded since `since`."""
+    """Delete the show's starts recorded since `since`, and any pick-up with them (TV-208)."""
     from social.models import ProgressChange  # noqa: PLC0415
 
     ProgressChange.objects.filter(
+        Q(current_progress__kind=ProgressChange.START) | Q(current_progress__move=ProgressChange.PICKED_BACK_UP),
         actor=ctx.user,
         item=ctx.show_item,
-        current_progress__kind=ProgressChange.START,
         created_at__gte=since,
     ).delete()
 
@@ -3087,6 +3108,7 @@ def _do_choose(ctx, status, *, quiet=False):
     ctx.set_tv(**values)
     ctx.changed = True
     ctx.may_start = status == WATCHING
+    _record_status_move(ctx, status, recorded=calc.recorded)
     return {"changed": True}
 
 
