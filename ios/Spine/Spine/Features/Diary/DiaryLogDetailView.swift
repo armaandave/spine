@@ -172,6 +172,7 @@ final class DiaryLogDetailViewModel {
 
 struct DiaryLogDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: DiaryLogDetailViewModel
     @State private var presentedRef: MediaRef?
     @State private var isEditing = false
@@ -187,6 +188,7 @@ struct DiaryLogDetailView: View {
     private let selectedTab: AppTab
     private let onSelectTab: (AppTab) -> Void
     private let onUnauthorized: () -> Void
+    private let songPreview = SongPreviewPlayer.shared
 
     init(
         entryId: Int,
@@ -292,10 +294,11 @@ struct DiaryLogDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
+        // Inside the bar's inset, so the swipe's edge doesn't cover the heart, and it ends where the favorite's play
+        // circle starts: 16 of page inset and 8 of button padding.
         .overlay(alignment: .leading) {
             Color.clear
-                .frame(width: 28)
+                .frame(width: 24)
                 .contentShape(Rectangle())
                 .gesture(edgeSwipeBackGesture)
         }
@@ -316,6 +319,16 @@ struct DiaryLogDetailView: View {
             if viewModel.entry != nil {
                 await viewModel.engagement.loadCommentsIfNeeded()
             }
+        }
+        // A cover or sheet over the page doesn't count as disappearing, and takes the stop button out of reach.
+        .onChange(of: presentedRef != nil || isEditing) { _, isCovered in
+            if isCovered { songPreview.stop() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { songPreview.stop() }
+        }
+        .onDisappear {
+            songPreview.close()
         }
         .fullScreenCover(item: $presentedRef) { ref in
             mediaDestination(ref)
@@ -560,29 +573,47 @@ struct DiaryLogDetailView: View {
         }
     }
 
-    /// "FAVORITE SONG" over "3  Song Title"; episodes read "S1 E4  Title".
+    /// "Favorite song" over a slim glass bar: a play button when the song has a preview, then its name. Episodes read
+    /// "S1 E4  Title". Touch and hold opens a song in Apple Music.
     private func favoriteLine(_ favorite: LogFavorite) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let recording = favorite.recording(in: viewModel.mediaDetail)
+        let previewURL = recording?.previewURL.flatMap { $0 == songPreview.failedURL ? nil : $0 }
+        return VStack(alignment: .leading, spacing: 8) {
             Text(favorite.kind.label)
-                .font(.system(size: 11, weight: .heavy))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.56))
-                .textCase(.uppercase)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if let number = favorite.numberLabel {
-                    Text(number)
-                        .font(.system(size: 15, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.56))
+            HStack(spacing: 0) {
+                if let previewURL {
+                    SongPreviewButton(url: previewURL, title: favorite.title, player: songPreview)
                 }
-                Text(favorite.title)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let number = favorite.numberLabel {
+                        Text(number)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Text(favorite.title)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                .font(.system(size: 15, weight: .medium))
+                .padding(.leading, previewURL == nil ? 14 : 2)
+                .padding(.trailing, 14)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("diary-log.favorite")
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .glassEffect(.regular.tint(PostCommentBar.glassTint), in: .rect(cornerRadius: 14))
+            .contentShape([.interaction, .contextMenuPreview], .rect(cornerRadius: 14))
+            .contextMenu {
+                if let appleMusicURL = recording?.appleMusicURL {
+                    Link(destination: appleMusicURL) {
+                        Label("Open in Apple Music", systemImage: "arrow.up.right")
+                    }
+                }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("diary-log.favorite")
     }
 
     private func hidesFavorite(_ entry: DiaryEntry) -> Bool {

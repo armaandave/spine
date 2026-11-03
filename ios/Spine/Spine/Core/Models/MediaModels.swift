@@ -672,6 +672,9 @@ struct MusicRecording: Decodable {
     let firstReleaseDate: String?
     let isVideo: Bool
     let isrcs: [String]
+    /// Apple Music songs: the song's page and its 30-second preview. MusicBrainz recordings send neither.
+    let sourceUrl: String?
+    let previewUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case recordingMbid
@@ -681,6 +684,8 @@ struct MusicRecording: Decodable {
         case firstReleaseDate
         case isVideo
         case isrcs
+        case sourceUrl
+        case previewUrl
     }
 
     init(from decoder: Decoder) throws {
@@ -692,6 +697,23 @@ struct MusicRecording: Decodable {
         firstReleaseDate = try container.decodeIfPresent(String.self, forKey: .firstReleaseDate)
         isVideo = try container.decode(Bool.self, forKey: .isVideo)
         isrcs = try container.decodeIfPresent([String].self, forKey: .isrcs) ?? []
+        sourceUrl = try container.decodeIfPresent(String.self, forKey: .sourceUrl)
+        previewUrl = try container.decodeIfPresent(String.self, forKey: .previewUrl)
+    }
+
+    var appleMusicURL: URL? {
+        Self.secureURL(sourceUrl)
+    }
+
+    var previewURL: URL? {
+        Self.secureURL(previewUrl)
+    }
+
+    private static func secureURL(_ value: String?) -> URL? {
+        guard let url = value.flatMap({ URL(string: $0) }), url.scheme?.lowercased() == "https", url.host() != nil else {
+            return nil
+        }
+        return url
     }
 }
 

@@ -757,6 +757,7 @@ class AlbumPageTests(AppleMusicTestCase):
                     "isrcs": ["USRC12204584"],
                     "composer_name": "SZA, Rob Bisel & Carter Lang",
                     "source_url": "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393",
+                    "preview_url": None,
                 },
             },
         )
@@ -874,6 +875,23 @@ class AlbumPageTests(AppleMusicTestCase):
         self.apple((200, page("page_sos.json", artwork=too_long)))
 
         self.assertEqual(apple_music.music("1657869377")["image"], settings.IMG_NONE)
+
+    def test_a_song_carries_its_preview_and_a_song_without_one_has_none(self):
+        data = fixture("page_sos.json")
+        songs = data["data"][0]["relationships"]["tracks"]["data"]
+        songs[1]["attributes"]["previews"] = []
+        songs[2]["attributes"]["previews"] = [{}]
+        songs[3]["attributes"]["previews"] = [{"url": "https://example.com/video.m4v"}]
+        songs[3]["type"] = "music-videos"
+        self.apple((200, data))
+
+        tracks = apple_music.music("1657869377")["music"]["representative_release"]["media"][0]["tracks"]
+
+        self.assertTrue(tracks[0]["recording"]["preview_url"].startswith("https://audio-ssl.itunes.apple.com/"))
+        self.assertIsNone(tracks[1]["recording"]["preview_url"], "Apple lists no previews")
+        self.assertIsNone(tracks[2]["recording"]["preview_url"], "Apple's preview has no link")
+        self.assertIsNone(tracks[3]["recording"]["preview_url"], "A music video isn't a song")
+        self.assertIsNone(tracks[4]["recording"]["preview_url"], "Apple left previews out")
 
     def test_the_album_page_is_cached(self):
         fake = self.apple((200, fixture("page_sos.json")))
