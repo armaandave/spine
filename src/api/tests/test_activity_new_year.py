@@ -17,7 +17,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from app import book_tracking, game_tracking, series_tracking, tv_tracking, user_calendar
-from app.models import Book, BookSession, Comic, Game, GameSession, Item, Manga, MediaTypes, Sources, Status
+from app.models import Anime, Book, BookSession, Comic, Game, GameSession, Item, Manga, MediaTypes, Sources, Status
 from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now
 from integrations.imports.margins.importer import MarginsImporter
 from social.models import ProgressChange
@@ -119,6 +119,20 @@ class SavesAtMidnightTests(NewYearBase):
                 self.post(self.phone(), item, "progress/", value=next(values))
                 return self.latest_day(item)
 
+            self.saves_at_the_edge(save)
+
+    def test_an_anime_typed_save(self):
+        item = self.item(MediaTypes.ANIME.value)
+        row = Anime.objects.create(user=self.user, item=item, status=Status.IN_PROGRESS.value, progress=0)
+        values = iter((1, 2))
+
+        def save():
+            response = self.phone().patch(self.url(item), {"progress": next(values)}, format="json")
+            self.assertEqual(response.status_code, 200, response.data)
+            newest = Anime.history.filter(id=row.pk).order_by("-history_id").first()
+            return date.fromisoformat(newest.history_change_reason.removeprefix("day:"))
+
+        with mock.patch("app.providers.services.get_media_metadata", return_value={"max_progress": 12}):
             self.saves_at_the_edge(save)
 
     def test_a_show_start_row(self):

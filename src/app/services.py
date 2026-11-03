@@ -302,7 +302,12 @@ def create_diary_entry(
                         "end_date": consumed_at,
                     }
                 )
-                if not created:
+                # Every row this write makes names its log (Anime's change reason).
+                reason = f"log:{entry.pk}"
+                if created:
+                    media_instance.history.update(history_change_reason=reason)
+                else:
+                    media_instance._change_reason = reason
                     media_instance.mark_consumed()
                     media_instance.end_date = consumed_at
                     media_instance.save(update_fields=["end_date"])
