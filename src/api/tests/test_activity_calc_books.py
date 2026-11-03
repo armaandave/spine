@@ -910,6 +910,18 @@ class SheetTests(SheetBase):
         days = list_rows(self.calc().rows, start_date=d(2025, 11, 15), end_date=d(2025, 11, 15), counts=activity_rows.DAYS)
         self.assertEqual(days, [])
 
+    def test_weeks_list_the_rows_days_do(self):
+        rows = self.calc().rows
+        self.assertEqual(
+            list_rows(rows, counts=activity_rows.WEEKS),
+            list_rows(rows, counts=activity_rows.DAYS),
+        )
+
+    def test_books_have_no_hours_or_episodes_to_list(self):
+        rows = self.calc().rows
+        self.assertEqual(list_rows(rows, counts=activity_rows.HOURS), [])
+        self.assertEqual(list_rows(rows, counts=activity_rows.EPISODES), [])
+
     def test_the_multi_title_days_list(self):
         self.save(self.sheet["A"], 210, d(2026, 5, 11))
         rows = list_rows(self.calc().rows, counts=activity_rows.MULTI_TITLE_DAYS)

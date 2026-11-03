@@ -360,6 +360,7 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
             )
         ):
             media_instance.end_date = entry.consumed_at
+            media_instance._change_reason = f"log:{entry.pk}"
             media_instance.save(update_fields=["end_date"])
 
     transaction.on_commit(lambda: update_daily_statistics.delay(

@@ -716,6 +716,8 @@ Check the media page, progress editor, diary editor, library sections, and profi
 
 ## Review status
 
+GM-013's rule for the phone's own date is provisional until the phone test of Activity's first phase accepts it.
+
 The product interview is complete for this scope.
 Shared behavior is inherited under GM-000; game-specific decisions and their acceptance cases are recorded above.
 No known product questions remain from this review.

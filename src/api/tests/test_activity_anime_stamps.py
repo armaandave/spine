@@ -6,7 +6,7 @@ anime progress, so these reach anime through the API, the web form and imports.
 
 import io
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -17,7 +17,7 @@ from django.utils import timezone
 from api.services import tracking as tracking_service
 from app.forms import AnimeForm
 from app.models import Anime, DiaryEntry, Item, MediaTypes, Sources, Status
-from app.services import create_diary_entry
+from app.services import create_diary_entry, update_diary_entry
 from app.tests.tv_fixtures import make_user, patch_now
 from integrations.imports import anilist, kitsu, mal, yamtrack
 from integrations.imports.mal_export.importer import MALExportImporter
@@ -206,6 +206,12 @@ class LogWriteTests(AnimeBase):
         item = self.item()
         entry = self.log(item)
         self.assertEqual(self.reasons(Anime.objects.get(item=item)), [f"log:{entry.pk}"])
+
+    def test_a_logs_date_edit_names_it(self):
+        row = self.tracked(progress=3)
+        entry = self.log(row.item)
+        update_diary_entry(entry, {"consumed_at": timezone.now() - timedelta(days=1)})
+        self.assertEqual(self.reasons(row)[-1], f"log:{entry.pk}")
 
     def test_a_later_save_is_its_own_again(self):
         row = self.tracked(progress=3)
