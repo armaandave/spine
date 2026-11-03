@@ -2082,7 +2082,7 @@ class ProviderDownTests(SeriesContractBase):
 
 
 class PageDetailsTests(SimpleTestCase):
-    """MC-102, MC-003: a page tells the app a series' total, whichever provider lists it."""
+    """MC-102, MC-003: a page tells the app a total, whichever provider lists it."""
 
     def test_a_finished_series_with_no_chapter_detail_gets_its_total(self):
         details = details_for_api({"media_type": "manga", "max_progress": 162, "details": {"format": "Manga"}})
