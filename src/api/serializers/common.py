@@ -590,6 +590,13 @@ def details_for_api(metadata):
         details["time_to_beat"] = metadata["time_to_beat"]
     if metadata.get("revenue") and "revenue" not in details:
         details["revenue"] = metadata["revenue"]
+    # Only some providers list a finished series' count here, and the app reads it (MC-102).
+    if (
+        metadata.get("media_type") == MediaTypes.MANGA.value
+        and metadata.get("max_progress")
+        and "number_of_chapters" not in details
+    ):
+        details["number_of_chapters"] = metadata["max_progress"]
     return details
 
 

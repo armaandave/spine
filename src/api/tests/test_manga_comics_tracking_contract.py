@@ -14,12 +14,13 @@ import requests
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.serializers.common import details_for_api
 from api.services import stats_time, stats_v2_activity
 from api.services.item_metadata import store_item_metadata, store_series_total
 from api.services.stats_scope import build_scope
@@ -2036,3 +2037,17 @@ class ProviderDownTests(SeriesContractBase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(self.row(item).status, READ)
         self.provider.assert_not_called()
+
+
+class PageDetailsTests(SimpleTestCase):
+    """MC-102, MC-003: a page tells the app a series' total, whichever provider lists it."""
+
+    def test_a_finished_series_with_no_chapter_detail_gets_its_total(self):
+        details = details_for_api({"media_type": "manga", "max_progress": 162, "details": {"format": "Manga"}})
+        self.assertEqual(details["number_of_chapters"], 162)
+
+    def test_a_providers_own_count_stays_and_no_total_adds_nothing(self):
+        kept = details_for_api({"media_type": "manga", "max_progress": 162, "details": {"number_of_chapters": 150}})
+        self.assertEqual(kept["number_of_chapters"], 150)
+        self.assertNotIn("number_of_chapters", details_for_api({"media_type": "manga", "max_progress": None}))
+        self.assertNotIn("number_of_chapters", details_for_api({"media_type": "book", "max_progress": 300}))
