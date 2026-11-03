@@ -657,6 +657,7 @@ The user can change all of them before saving.
 The date defaults to today on the user's calendar.
 An episode log that will claim a tick defaults to that tick's calendar day instead.
 The season-finish composer defaults to the calendar day of the tick or log that finished the season.
+The app opens any other episode log on the day the episode started: before 6 AM on the user's clock, the day before when the episode's runtime reaches back past midnight (SW-006).
 
 **Stars and heart**
 
@@ -841,6 +842,7 @@ A tick on an episode that is already watched does nothing (TV-101).
 
 Counts follow TV-104, and the card's stars are the show's own (TV-500).
 A Paused or Dropped show with nothing watched, or with no up next, names no episode: it reads "Paused" or "Dropped".
+A grid poster's badge names up next, as "S2 E4", only once an episode has been watched in the current pass, while the show is Watching, Paused or Dropped and not caught up. Every other poster has no badge.
 Each empty TV section's text describes what appears there correctly.
 
 ### TV-701: Continue Watching lists shows
@@ -851,8 +853,9 @@ That order goes by the latest calendar day of a tick or log under the show, then
 
 On Home, each card shows the show's poster and title, then one line, "Update progress ›", in the app's normal width.
 Profile's In progress row shows posters only, with no title and no line: tapping a poster opens the title's page, and nothing opens over Profile. Progress is updated from Home.
-Every card in the In progress row reads the same, whatever its media type, and shows no counts (see "Update progress on other media" below).
+Every card in the In progress row reads the same, whatever its media type, and its line shows no counts (see "Update progress on other media" below).
 On Home, a thin bar along each poster's bottom fills, in the app's tint, to how far along the title is (a show's watched over aired regular episodes, TV-104), moves where it is after a save, and doesn't show without a known total or before any progress; VoiceOver skips it and Profile's posters have none.
+On Home, the poster also carries the Library grid's badge just above the bar, by the same rule (TV-700, BK-001, GM-002), or where the bar would be when there's no bar. It moves where it is after a save, a poster with no badge text shows only its bar, and Profile's posters have no badge.
 The card has no tick of its own and no touch-and-hold menu.
 
 Tapping the poster opens the show.

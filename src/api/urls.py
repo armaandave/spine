@@ -55,6 +55,7 @@ from api.views.media import (
     MediaDetailView,
     MediaDiscoverView,
     MediaExternalRatingsView,
+    MediaFriendsView,
     MediaLogoPreferenceView,
     MediaLogosView,
     MediaPosterPreferenceView,
@@ -184,6 +185,7 @@ urlpatterns = [
     path("media/<str:source>/<str:media_type>/<str:media_id>/logo/", MediaLogoPreferenceView.as_view(), name="api-media-logo"),
     path("media/<str:source>/<str:media_type>/<str:media_id>/community/", CommunityStatsView.as_view(), name="api-media-community"),
     path("media/<str:source>/<str:media_type>/<str:media_id>/reviews/", MediaReviewsView.as_view(), name="api-media-reviews"),
+    path("media/<str:source>/<str:media_type>/<str:media_id>/friends/", MediaFriendsView.as_view(), name="api-media-friends"),
     path(
         "media/<str:source>/<str:media_type>/<str:media_id>/anilist-reviews/",
         AniListReviewsView.as_view(),

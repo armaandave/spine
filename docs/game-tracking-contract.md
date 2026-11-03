@@ -81,6 +81,9 @@ Each tracked game appears in exactly one section, based on its current status.
 Changing status moves the same game between sections.
 Percentage and hours never determine its section.
 
+A grid poster shows the playthrough's saved percentage and time, leaving out a saved 0, only while the game is Playing, Paused or Dropped.
+A Planning or Completed poster has no badge.
+
 Starting another playthrough moves a completed game to Playing.
 Its earlier completion remains in history.
 

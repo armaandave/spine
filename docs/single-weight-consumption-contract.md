@@ -120,6 +120,13 @@ behavior does not require an exact consumption time.
 The date is mandatory and defaults to the current calendar date in the user's
 timezone when the new-log composer opens.
 
+The exception is a title finished in the small hours, which defaults to the day
+it started. Before 6 AM on the user's clock, the composer opens on the day
+before when the title's length reaches back past midnight: a three-hour movie
+at 12:10 AM takes the day before, and a 14-minute short at 1:00 AM stays today.
+A title with no known length, such as an album whose songs haven't loaded, stays
+today. The app works this out; the server only sees the date it's sent.
+
 Future consumption dates are invalid. Planning future media belongs to planning
 or release features, not the diary.
 

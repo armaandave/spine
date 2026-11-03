@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 from functools import reduce
 from operator import or_
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db.models import (
     Case,
@@ -36,11 +37,26 @@ from rest_framework.response import Response
 from rest_framework.utils.urls import replace_query_param
 
 from api.permissions import can_view_user_profile
-from api.serializers.common import media_summary_from_item, user_summary
+from api.serializers.common import (
+    media_summary_from_item,
+    progress_for_media,
+    tv_season_started,
+    user_summary,
+)
 from api.services import diary as diary_service
-from app import exposure, single_weight
+from app import exposure, single_weight, tv_tracking
 from app.curation import prime_curated_artwork
-from app.models import DiaryEntry, Item, MediaTypes
+from app.models import (
+    TV,
+    BasicMedia,
+    DiaryEntry,
+    Episode,
+    Item,
+    MediaLike,
+    MediaTypes,
+    Season,
+    Status,
+)
 from social.models import (
     Comment,
     ContentLike,
@@ -60,6 +76,8 @@ MAX_PAGE_SIZE = 100
 UNITS = ("episode", "chapter", "issue", "page", "minute", "percent", ProgressChange.START)
 TV_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
 SHOW_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value)
+# The statuses with progress worth telling: finishing a title says it all.
+UNFINISHED = (Status.IN_PROGRESS.value, Status.PAUSED.value, Status.DROPPED.value)
 
 # Within one date and write time, logs sort before progress.
 PROGRESS, LOG = 0, 1
@@ -88,6 +106,136 @@ def feed_sources(user):
     ).values("to_user")
     logs = _visible_logs(DiaryEntry.objects.filter(user__in=following), follows=True)
     return logs, ProgressChange.objects.filter(actor__in=following)
+
+
+def media_friends(viewer, item, request=None):
+    """Return the people a user follows who've done something with a title (AC-6).
+
+    Newest first. Each shows their newest log, or their newest with a review when one
+    has one. Someone without a log shows where they stand instead.
+    """
+    following = list(
+        Follow.objects.filter(
+            from_user=viewer,
+            status=FollowStatus.ACCEPTED,
+        ).values_list("to_user", flat=True),
+    )
+    logs, _ = feed_sources(viewer)
+    visible_logs = logs.filter(item=item)
+    logged = {}
+    newest_log = {}
+    for entry in visible_logs.annotate(log_day=_log_day()).order_by("-log_day", "-created_at", "-id"):
+        newest_log.setdefault(entry.user_id, (entry.log_day, entry.created_at))
+        shown = logged.get(entry.user_id)
+        if shown is None or (entry.review and not shown.review):
+            logged[entry.user_id] = entry
+    # A private log can set the title's rating and heart, so someone with one shows
+    # only what their visible logs say.
+    private_loggers = set(
+        DiaryEntry.objects.filter(user__in=following, item=item)
+        .exclude(pk__in=visible_logs.values("pk"))
+        .values_list("user_id", flat=True),
+    )
+    rows = _tracking_rows(following, item)
+    without_log = [row for user_id, row in rows.items() if user_id not in logged]
+    if item.media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
+        tv_tracking.prime_progress(without_log)
+    elif item.media_type != MediaTypes.EPISODE.value:
+        BasicMedia.objects.annotate_max_progress(without_log, item.media_type)
+    liked = dict(
+        MediaLike.objects.filter(user__in=following, item=item).values_list("user_id", "created_at"),
+    )
+    people = get_user_model().objects.in_bulk({*logged, *rows, *liked})
+    friends = []
+    for user_id, person in people.items():
+        entry = logged.get(user_id)
+        row = rows.get(user_id)
+        standing = _standing(row)
+        shows_title_taste = user_id not in private_loggers
+        stored_rating = entry.rating if entry else None
+        if stored_rating is None and shows_title_taste:
+            stored_rating = getattr(row, "score", None)
+        rating = single_weight.rating_to_api(stored_rating, item)
+        is_liked = bool(entry and entry.liked) or (shows_title_taste and user_id in liked)
+        if not (entry or standing or rating or is_liked):
+            continue
+        payload = {
+            "user": user_summary(person, request=request),
+            "diary_entry_id": entry.id if entry else None,
+            "consumed_at": entry.log_day.isoformat() if entry else None,
+            "rating": rating,
+            "liked": is_liked,
+            "is_rewatch": bool(entry and entry.is_rewatch),
+            "review_title": entry.review_title if entry else "",
+            "review": entry.review if entry else "",
+            "contains_spoilers": bool(entry and entry.contains_spoilers),
+            "status": standing,
+            "progress_label": _progress_label(row) if not entry and standing in UNFINISHED else None,
+        }
+        friends.append((_friend_sort_key(newest_log.get(user_id), row, liked.get(user_id)), user_id, payload))
+    friends.sort(key=lambda friend: friend[:2], reverse=True)
+    return [payload for _, _, payload in friends]
+
+
+def _tracking_rows(user_ids, item):
+    """Return each person's tracking row for a title, by user id."""
+    if item.media_type == MediaTypes.EPISODE.value:
+        viewings = (
+            Episode.objects.filter(related_season__user__in=user_ids, item=item)
+            .select_related("related_season")
+            .order_by("created_at")
+        )
+        # The newest viewing wins.
+        return {viewing.related_season.user_id: viewing for viewing in viewings}
+    rows = apps.get_model("app", item.media_type).objects.filter(user__in=user_ids, item=item).select_related("item")
+    if item.media_type in (MediaTypes.BOOK.value, MediaTypes.GAME.value):
+        rows = rows.select_related("current_session")
+    return {row.user_id: row for row in rows}
+
+
+def _standing(row):
+    """Return the status someone's tracking row gives them on a title, if any."""
+    if row is None:
+        return None
+    if isinstance(row, Episode):
+        return Status.COMPLETED.value
+    if isinstance(row, Season) and not tv_season_started(row):
+        return None
+    return None if row.status == Status.PLANNING.value else row.status
+
+
+def _progress_label(row):
+    """Say how far someone got: "212 of 476 pages", "45%", "2h 30m", or None."""
+    progress = progress_for_media(row)
+    value, maximum = progress["value"], progress["max"]
+    if not value or progress["kind"] == "binary":
+        return None
+    if progress["kind"] == "percentage":
+        return f"{_number(value)}%"
+    if progress["kind"] == "minutes":
+        return _minutes_label(value)
+    if maximum:
+        return f"{_number(value)} of {_number(maximum)} {progress['unit']}{'' if maximum == 1 else 's'}"
+    return f"{_number(value)} {progress['unit']}{'' if value == 1 else 's'}"
+
+
+def _friend_sort_key(newest_log, row, liked_at):
+    """Sort by calendar day, then by when it was written, as activity does (AC-3)."""
+    if newest_log:
+        return newest_log
+    moment = max(filter(None, (liked_at, _row_moved_at(row))))
+    return (timezone.localtime(moment).date(), moment)
+
+
+def _row_moved_at(row):
+    """Return when a tracking row last moved, without loading a show's episodes."""
+    if row is None:
+        return None
+    if isinstance(row, Episode):
+        return row.end_date or row.created_at
+    if isinstance(row, (TV, Season)):
+        return getattr(row, "last_activity_at", None) or row.created_at
+    return row.progressed_at or row.created_at
 
 
 def media_type_family(media_type):
@@ -402,14 +550,18 @@ def progress_words(day, media_type):
         }.get(media_type, "reading")
         return f"started {verb}", "Started"
     if unit == "minute":
-        hours, minutes = divmod(round(amount), 60)
-        label = " ".join(part for part in (f"{hours}h" if hours else "", f"{minutes}m" if minutes else "") if part)
+        label = _minutes_label(amount)
         return f"played {label}", label
     if unit == "percent":
         label = f"{_number(amount)}%"
         return (f"progressed {label}" if media_type == MediaTypes.GAME.value else f"read {label}"), label
     label = f"{_number(amount)} {unit if amount == 1 else unit + 's'}"
     return f"{'watched' if unit == 'episode' else 'read'} {label}", label
+
+
+def _minutes_label(amount):
+    hours, minutes = divmod(round(amount), 60)
+    return " ".join(part for part in (f"{hours}h" if hours else "", f"{minutes}m" if minutes else "") if part)
 
 
 def _number(amount):
