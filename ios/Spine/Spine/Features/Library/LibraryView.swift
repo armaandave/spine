@@ -911,12 +911,7 @@ struct LibraryView: View {
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
                         if let progressText = LibraryPosterBadge.text(for: item) {
-                            Text(progressText)
-                                .font(.system(size: 9, weight: .black))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.76), in: Capsule())
+                            PosterBadgeLabel(text: progressText)
                                 .padding(5)
                         }
                     }
@@ -1019,8 +1014,23 @@ struct LibraryView: View {
     }
 }
 
-/// The short badge on a grid poster: where you stopped on a book, game or show you've started and haven't finished.
-/// Anything planned or finished has none, and anime, manga and comics have none until they have tracking contracts.
+/// The capsule a poster's badge reads in, on Library's grid and Home's In progress cards.
+struct PosterBadgeLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 9, weight: .black))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.76), in: Capsule())
+    }
+}
+
+/// The short badge on a Library grid poster and a Home In progress card: where you stopped on a book, game or show
+/// you've started and haven't finished. Anything planned or finished has none, and anime, manga and comics have none
+/// until they have tracking contracts.
 enum LibraryPosterBadge {
     static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
 

@@ -127,7 +127,7 @@ nonisolated enum TVTrackingPresentation {
 
     // MARK: Continue Watching (TV-701)
 
-    /// Where a show on an In progress card stands, which its card no longer shows but VoiceOver reads: "S2 E5 next ·
+    /// Where a show on an In progress card stands, which its line doesn't show but VoiceOver reads: "S2 E5 next ·
     /// 4 of 10", or "S3 E1 · New · 20 of 21" when up next aired after the user's latest viewing of the show. A card
     /// that a tick has just caught up or finished stays put until Home loads again, and reads as the show's Library
     /// card does ("Caught up · E7 on Thu"), else its count.
