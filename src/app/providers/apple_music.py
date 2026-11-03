@@ -1576,6 +1576,7 @@ def _media(album, credits):
                     "isrcs": [isrc] if isrc else [],
                     "composer_name": attributes.get("composerName") or None,
                     "source_url": attributes.get("url") or None,
+                    "preview_url": _preview_url(song),
                 },
             },
         )
@@ -1590,6 +1591,14 @@ def _media(album, credits):
         }
         for disc, disc_tracks in sorted(discs.items())
     ]
+
+
+def _preview_url(song):
+    """Return a song's 30-second preview link, or None. Music videos have none."""
+    if song.get("type") == "music-videos":
+        return None
+    previews = (song.get("attributes") or {}).get("previews") or []
+    return (previews[0].get("url") or None) if previews else None
 
 
 def _bridge(identity, content_id):

@@ -12,8 +12,10 @@ import os
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -34,6 +36,7 @@ from app.models import (
     Sources,
     Status,
 )
+from app.providers import apple_music
 from app.templatetags.app_tags import get_user_poster_image
 from app.tests.providers.test_apple_music import (
     AppleMusicTestCase,
@@ -200,6 +203,30 @@ class AppleMusicContractTests(AppleMusicTestCase):
         self.assertEqual(song["context_release"]["track"]["recording"]["recording_mbid"], SONG_ID)
         self.assert_contract(ALBUM_CONTRACT, album)
         self.assert_contract(SONG_CONTRACT, song)
+
+    def test_an_album_page_cached_before_previews_gets_them(self):
+        # Pages stay cached for a week, so the version change is what brings
+        # previews to existing albums.
+        self.apple((200, fixture("page_sos.json")), *related_answers())
+        old_page = apple_music.music(ALBUM_ID)
+        for track in old_page["music"]["representative_release"]["media"][0]["tracks"]:
+            del track["recording"]["preview_url"]
+        with patch.object(media_service, "MUSIC_DETAIL_CACHE_VERSION", "v3"):
+            old_key = media_service._detail_cache_key(
+                source=Sources.APPLE_MUSIC.value,
+                media_type=MediaTypes.MUSIC.value,
+                media_id=ALBUM_ID,
+                season_number=None,
+                episode_number=None,
+                include_music_enrichment=True,
+            )
+        cache.set(old_key, old_page, media_service.MUSIC_CACHE_STALE_TTL)
+
+        response = self.client.get(f"/api/v1/media/apple_music/music/{ALBUM_ID}/")
+
+        self.assertEqual(response.status_code, 200)
+        recording = response.json()["music"]["representative_release"]["media"][0]["tracks"][0]["recording"]
+        self.assertTrue(recording["preview_url"].startswith("https://audio-ssl.itunes.apple.com/"))
 
     def test_a_song_not_on_the_album_is_not_found(self):
         self.apple((200, fixture("page_sos.json")), *related_answers())

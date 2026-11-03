@@ -55,9 +55,9 @@ struct LogFavorite: Codable, Hashable {
         case song
         case episode
 
-        /// "Favorite Song" or "Favorite Episode".
+        /// "Favorite song" or "Favorite episode".
         var label: String {
-            self == .song ? "Favorite Song" : "Favorite Episode"
+            self == .song ? "Favorite song" : "Favorite episode"
         }
     }
 
@@ -79,6 +79,13 @@ struct LogFavorite: Codable, Hashable {
     /// A song can't.
     func isHidden(containsSpoilers: Bool, revealed: Bool) -> Bool {
         kind == .episode && containsSpoilers && !revealed
+    }
+
+    /// The favorite song in its album's tracklist. Nil for an episode, an album that sent no songs, and a favorite
+    /// saved before its album moved from MusicBrainz, whose ID is an old recording ID.
+    func recording(in detail: MediaDetail?) -> MusicRecording? {
+        guard kind == .song, let id, let media = detail?.music?.representativeRelease?.media else { return nil }
+        return media.lazy.flatMap(\.tracks).first { $0.recording.recordingMbid == id }?.recording
     }
 
     /// "S1 E4" for an episode; a song's own number.
