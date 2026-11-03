@@ -41,7 +41,7 @@ The following rules are inherited without another approval step.
 | Opinions and diary fields | BK-202, SW-100 to SW-108, SW-202, SW-203, SW-300 to SW-303 | Each log keeps its own stars and heart. A new log becomes the current source. The same editor is used everywhere. |
 | Dates | SW-005 to SW-007 | Local calendar dates. Distinct same-day logs are allowed. |
 | Saves and retries | BK-500, BK-501 | The backend enforces transitions. Related changes succeed together. Retries and double taps create no duplicates. All screens agree. |
-| Activity and visibility | AC-1 to AC-6 | "started reading", "read 5 chapters", "read 2 issues". Marks are never activity. A log and that day's progress are separate items, and both take likes and comments. |
+| Activity and visibility | AC-1 to AC-6 | "started reading", "read 5 chapters", "read 2 issues". Marks are never activity. A log and that day's progress are separate items, and both take likes and comments. Another person's list shows where a series stands, never what a log they can't see set. |
 
 **Do not inherit:**
 
@@ -93,6 +93,7 @@ A one-issue comic or a one-chapter manga has status actions and no number field.
 
 As BK-001: only while a series is started and unfinished (Currently Reading, Paused or Did Not Finish), leaving out a place of zero.
 The badge reads "120/380 chapters", "120 chapters" with no total, or "12/54 issues".
+On the Library's small grid poster it leaves out the unit, on one line: "120/380", "12/54", or "Ch. 120" and "Iss. 12" with no total. Library rows and Home keep the full words.
 The progress bar needs a total.
 Profile's In progress row stays posters only.
 
@@ -103,8 +104,9 @@ These are the maintainer's counting decisions of 2026-11-02, and the same as boo
 - Each save counts on the day it was saved.
 - Lowering a number fixes a typo. It is not a new read.
 - The first save on an attempt counts whole on that day, even if it is catch-up.
-- A log adds only what is left.
-- A reread counts again.
+- A log adds only what is left, on the log's day. Editing its date moves that count.
+- A reread counts again, by a direct log too.
+- What is undone counts on no day: an undone eye, a deleted attempt, a deleted log.
 
 There is no undated "already read up to" option, because books have none.
 Typing 1,100 counts 1,100 that day.
@@ -154,7 +156,7 @@ Once it is finished, stars and the heart can change at any time.
 A Read series has more when it has no total, or when its place is below its total.
 Its plus menu offers both Keep Reading and Reread.
 
-- **Keep Reading** starts a new attempt at the old place. It is not a reread and records no start. Earlier logs stay. The next log is another diary entry, not marked as a reread.
+- **Keep Reading** starts a new attempt at the old place. It is not a reread and records no start. Earlier logs stay. The next log is another diary entry, not marked as a reread, and carrying on doesn't add a lifetime read.
 - **Reread** starts a new attempt at zero, and counts again.
 
 A Read series with nothing more offers Reread only.
@@ -167,8 +169,11 @@ Restart from Beginning starts at zero.
 
 ### MC-202: A new issue moves a finished comic back to Currently Reading
 
-When the daily calendar job finds a newer last issue for a comic on the Read shelf, the comic continues as under MC-200, by itself.
+When the daily calendar job finds a newer last issue for a comic on the Read shelf, the comic continues as under MC-200, by itself, once the issue is out: a store date still to come waits for that day. A cover date never holds an issue back.
+The attempt starts on the issue's store date.
 It adds no activity, its logs stay, and its eye empties (BK-103).
+A comic already read up to the new total stays Read.
+A comic marked Read with the eye had every issue so far, so it continues from the previous total, and only what comes next counts (MC-007).
 Paused, Did Not Finish and To Read comics don't move.
 The calendar job only checks comics with an issue in the past year, so a run that returns after a longer gap moves only when the user chooses Keep Reading.
 Manga don't do this, because no provider says when a running series has a new chapter.
@@ -178,6 +183,7 @@ Manga don't do this, because no provider says when a running series has a new ch
 ### MC-300: The progress sheet is the book's
 
 "Update Progress" opens the same native sheet as books (BK-301): a number field ready to type in, "of 380" when there is a total, Pause, Did Not Finish, Finished, Restart from Beginning and Delete.
+It needs an attempt to update, so a series imported as Paused has Resume on the plus menu instead. While an attempt is paused the sheet has no number: it offers Resume, and the number follows.
 The "Update progress ›" line on a series' In progress card on Home opens this sheet over Home (TV-701).
 With no attempt to update, the line opens the page.
 
@@ -200,6 +206,7 @@ MyAnimeList, AniList, Kitsu and Yamtrack imports create one tracking record per 
 
 Every field installed builds read keeps its meaning. New fields are additions.
 What installed builds send still works: a tracking write with status and progress, a diary entry with `auto_mark_consumed`, and tracking removal go through these same rules.
+Every new NOT NULL column has a database default, so code from before these columns keeps saving after a rollback.
 
 ### MC-501: There is no data to repair
 

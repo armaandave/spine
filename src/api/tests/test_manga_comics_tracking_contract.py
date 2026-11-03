@@ -14,6 +14,7 @@ import requests
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -38,6 +39,7 @@ from app.models import (
     Status,
 )
 from app.providers import comicvine
+from app.tests.test_tv_schema import insert_like_old_code
 from events.models import Event
 from lists.models import CustomList
 from social.models import Activity, Follow, FollowStatus, ProgressChange
@@ -1537,6 +1539,46 @@ class InstalledBuildTests(SeriesContractBase):
             self.write(self.manga(title=f"s{number}"), status=Status.PLANNING.value)
         six = self.page_queries(Status.PLANNING.value)
         self.assertEqual(len(six), len(three), six)
+
+    # MC-500: code from before 0094 (a rollback) keeps saving these rows. It names only
+    # the columns it knows, here and in their history; the database fills in the rest.
+    def test_mc_500_old_inserts_read_back_with_database_defaults(self):
+        old = MigrationExecutor(connection).loader.project_state([("app", "0093_game_percentage_exact")]).apps
+        moment = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
+        defaults = (False, False, False, False, False, False, 0, 0)
+        for model_name, model, item in (("Manga", Manga, self.manga()), ("Comic", Comic, self.comic())):
+            with self.subTest(model=model_name):
+                insert_like_old_code(
+                    old.get_model("app", model_name),
+                    item_id=item.pk,
+                    user_id=self.user.pk,
+                    status=READING,
+                    notes="",
+                )
+                row = model.objects.get(item=item, user=self.user)
+                insert_like_old_code(
+                    old.get_model("app", f"Historical{model_name}"),
+                    id=row.pk,
+                    status=READING,
+                    notes="",
+                    history_date=moment,
+                    history_type="~",
+                )
+                history = row.history.get(history_date=moment)
+                for read_back in (row, history):
+                    self.assertEqual(
+                        (
+                            read_back.completed_manually,
+                            read_back.like_is_independent,
+                            read_back.undated_read_previous_tracked,
+                            read_back.undated_read_previous_override,
+                            read_back.read_override_active,
+                            read_back.read_override_previous_tracked,
+                            read_back.undated_read_previous_place,
+                            read_back.read_override_previous_place,
+                        ),
+                        defaults,
+                    )
 
     # MC-501: no data to repair.
     def test_the_migration_is_additive_with_no_repair(self):

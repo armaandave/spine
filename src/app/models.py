@@ -2510,9 +2510,12 @@ class SeriesMedia(Media):
     One row per user and series. `progress` is the current place; an attempt holds it
     while one is under way. A status change still refreshes the calendar, as it always
     did; nothing else happens on save: reaching the total never finishes a read (MC-100).
+
+    Every NOT NULL column has a database default, so code from before these columns keeps
+    saving these rows and their history after a rollback (MC-500).
     """
 
-    completed_manually = models.BooleanField(default=False)
+    completed_manually = models.BooleanField(default=False, db_default=False)
     rating_source = models.ForeignKey(
         "DiaryEntry",
         null=True,
@@ -2527,26 +2530,26 @@ class SeriesMedia(Media):
         on_delete=models.SET_NULL,
         related_name="+",
     )
-    like_is_independent = models.BooleanField(default=False)
-    undated_read_previous_tracked = models.BooleanField(default=False)
+    like_is_independent = models.BooleanField(default=False, db_default=False)
+    undated_read_previous_tracked = models.BooleanField(default=False, db_default=False)
     undated_read_previous_status = models.CharField(
         max_length=20,
         choices=Status,
         null=True,
         blank=True,
     )
-    undated_read_previous_override = models.BooleanField(default=False)
+    undated_read_previous_override = models.BooleanField(default=False, db_default=False)
     # The number a mark replaced, which an imported row can hold with no attempt.
-    undated_read_previous_place = models.PositiveIntegerField(default=0)
-    read_override_active = models.BooleanField(default=False)
-    read_override_previous_tracked = models.BooleanField(default=False)
+    undated_read_previous_place = models.PositiveIntegerField(default=0, db_default=0)
+    read_override_active = models.BooleanField(default=False, db_default=False)
+    read_override_previous_tracked = models.BooleanField(default=False, db_default=False)
     read_override_previous_status = models.CharField(
         max_length=20,
         choices=Status,
         null=True,
         blank=True,
     )
-    read_override_previous_place = models.PositiveIntegerField(default=0)
+    read_override_previous_place = models.PositiveIntegerField(default=0, db_default=0)
 
     class Meta(Media.Meta):
         """Meta options for the model."""
