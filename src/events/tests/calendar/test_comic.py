@@ -367,3 +367,40 @@ class NewIssueMovesFinishedComicsTests(TestCase):
         self.assertTrue(series_tracking.state_payload(row)["offers_keep_reading"])
         series_tracking.keep_reading(self.user, self.item)
         self.assertEqual(self.comic().progress, 54)
+
+
+class OneCalendarJobPerWriteTests(TestCase):
+    """A status write queues one calendar job: two at once race to save the same event."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="reader", password="strong-password-123")
+        self.item = Item.objects.create(
+            media_id="46568",
+            source=Sources.COMICVINE.value,
+            media_type=MediaTypes.COMIC.value,
+            title="Saga",
+            image="http://example.com/saga.jpg",
+            series_total=54,
+        )
+
+    def jobs_queued_by(self, write, **kwargs):
+        with patch("events.tasks.reload_calendar.delay") as delay, self.captureOnCommitCallbacks(execute=True):
+            write(self.user, self.item, **kwargs)
+        return delay.call_count
+
+    # A first write saves twice, the new row and then its status, in one commit.
+    def test_starting_a_new_series_queues_one_job(self):
+        self.assertEqual(self.jobs_queued_by(series_tracking.start), 1)
+
+    def test_a_first_log_queues_one_job(self):
+        self.assertEqual(self.jobs_queued_by(series_tracking.complete, completion_date=timezone.localdate()), 1)
+
+    def test_adding_a_new_series_to_read_later_queues_one_job(self):
+        self.assertEqual(self.jobs_queued_by(series_tracking.assign_status, status=Status.PLANNING.value), 1)
+
+    # A later write is its own commit, so it still gets its own job.
+    def test_each_later_status_change_queues_one_job(self):
+        series_tracking.start(self.user, self.item)
+        self.assertEqual(self.jobs_queued_by(series_tracking.pause), 1)
+        self.assertEqual(self.jobs_queued_by(series_tracking.start), 1)
+        self.assertEqual(self.jobs_queued_by(series_tracking.complete, completion_date=timezone.localdate()), 1)

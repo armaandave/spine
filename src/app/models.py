@@ -2562,8 +2562,12 @@ class SeriesMedia(Media):
             ),
         ]
 
+    # Set by series_tracking on a row just inserted in this transaction: the insert's job
+    # runs after the commit and sees the final status, so that write needs no second one.
+    calendar_job_queued = False
+
     def _save_series(self, *args, **kwargs):
-        status_changed = self.tracker.has_changed("status")
+        status_changed = self.tracker.has_changed("status") and not self.calendar_job_queued
         super(Media, self).save(*args, **kwargs)
         if status_changed:
             transaction.on_commit(lambda: self.item.fetch_releases(delay=True), robust=True)

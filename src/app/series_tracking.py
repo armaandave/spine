@@ -191,7 +191,9 @@ def _ensure_row(user, item, *, history_date=None):
     except IntegrityError:
         # A retried first write got here first (BK-501).
         return _locked_row(user, item), False
-    return _locked_row(user, item), True
+    row = _locked_row(user, item)
+    row.calendar_job_queued = True
+    return row, True
 
 
 def _open_attempt(row):
