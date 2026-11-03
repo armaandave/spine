@@ -269,6 +269,22 @@ class SeriesMoveTests(StatusRowBase):
         series_tracking.start(self.user, manga)
         self.assertEqual(self.moves(manga), [])
 
+    def test_a_new_read_after_a_finish_is_no_pick_up(self):
+        manga = self.item(MediaTypes.MANGA.value, series_total=100)
+        series_tracking.start(self.user, manga)
+        series_tracking.drop(self.user, manga)
+        series_tracking.complete(self.user, manga, completion_date=NOON.date())
+        series_tracking.assign_status(self.user, manga, Status.PAUSED.value)
+        series_tracking.start(self.user, manga)
+        self.assertEqual(self.moves(manga), [STOPPED])
+
+    def test_an_import_writes_no_status_row(self):
+        manga = self.item(MediaTypes.MANGA.value, series_total=100)
+        series_tracking.import_title(self.user, manga, status=Status.DROPPED.value, place=5)
+        comic = self.item(MediaTypes.COMIC.value, series_total=100)
+        series_tracking.import_title(self.user, comic, status=Status.IN_PROGRESS.value, place=5)
+        self.assertEqual(self.moves(manga) + self.moves(comic), [])
+
     def test_a_status_row_goes_with_its_attempt(self):
         manga = self.item(MediaTypes.MANGA.value, series_total=100)
         series_tracking.start(self.user, manga)
@@ -322,6 +338,19 @@ class ShowMoveTests(StatusRowBase):
         tv_tracking.mark_watched(self.user, self.show)
         self.assertEqual(self.moves(self.show), [])
 
+    def test_undoing_the_tick_that_ended_a_stop_takes_its_pick_up_too(self):
+        tv_tracking.tick(self.user, self.show, 1, 1)
+        self.later()
+        tv_tracking.choose(self.user, self.show, tv_tracking.DROPPED)
+        self.later()
+        tv_tracking.tick(self.user, self.show, 1, 2)
+        ProgressChange.record_status(self.user, self.show, BACK)
+        self.later()
+        tv_tracking.untick(self.user, self.show, 1, 2)
+        self.assertEqual(self.moves(self.show), [STOPPED])
+        starts = ProgressChange.objects.filter(item=self.show, current_progress__kind=ProgressChange.START)
+        self.assertEqual(starts.count(), 1)
+
 
 class NothingMovesTests(StatusRowBase):
     """Deleting only the status rows changes nothing any page says."""
@@ -358,6 +387,10 @@ class NothingMovesTests(StatusRowBase):
                 (tv_tracking.choose, show, tv_tracking.PAUSED),
                 (tv_tracking.choose, show, tv_tracking.WATCHING),
                 (book_tracking.restart, book),
+                (game_tracking.start, game),
+                (game_tracking.restart, game, {"mutation_id": uuid4()}),
+                (series_tracking.restart, manga),
+                (series_tracking.restart, comic),
             ):
                 self.later()
                 keywords = args.pop() if isinstance(args[-1], dict) else {}

@@ -26,9 +26,8 @@ JAN_1 = date(2027, 1, 1)
 # 23:50 on Dec 31 in New York, already Jan 1 in Tokyo.
 LATE = datetime(2026, 12, 31, 23, 50, tzinfo=NEW_YORK)
 
-WRITES = re.compile(
-    r"ProgressChange\(|ProgressChange\.objects\.create|ProgressChange\.objects\.bulk_create|cls\.objects\.create",
-)
+WRITES = re.compile(r"ProgressChange\(|ProgressChange\.objects\.create|ProgressChange\.objects\.bulk_create")
+CLASS_WRITES = re.compile(r"cls\.objects\.create")
 # Every place a progress change is written. A new one needs its day, a behavior test
 # here and a line on this list.
 WRITERS = {
@@ -52,9 +51,13 @@ class WriterScanTests(SimpleTestCase):
             parts = path.relative_to(root).parts
             if "tests" in parts or "migrations" in parts or parts[0] == ".venv" or path.name.startswith("test_"):
                 continue
-            calls = WRITES.findall(path.read_text())
+            source = path.read_text()
+            calls = WRITES.findall(source)
+            name = path.relative_to(root).as_posix()
+            if name == "social/models.py":
+                calls += CLASS_WRITES.findall(source)
             if calls:
-                found[path.relative_to(root).as_posix()] = sorted(calls)
+                found[name] = sorted(calls)
         self.assertEqual(found, {path: sorted(calls) for path, calls in WRITERS.items()})
 
 

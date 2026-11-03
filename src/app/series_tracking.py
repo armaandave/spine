@@ -394,10 +394,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
     # stays as it is, and a read that was carrying on goes on carrying on.
     stopped = row.current_attempt if row.status == Status.DROPPED.value else None
     place = row.progress if row.status in {*OPEN_STATUSES, Status.DROPPED.value} else 0
-    # Paused or Did Not Finish on a series never started has nothing to pick back up.
-    picks_back_up = row.status in {Status.PAUSED.value, Status.DROPPED.value} and (
-        bool(row.progress) or row.attempts.filter(status=Status.DROPPED.value).exists()
-    )
+    picks_back_up = _picks_back_up(row)
     attempt = _begin(
         row,
         created=created,
@@ -1696,6 +1693,18 @@ def _record_progress_change(user, item, previous, current):
 def _record_start(user, item, attempt):
     """Record a new attempt; deleting the attempt drops it with its numbers."""
     ProgressChange.record_start(user, item, journey_id=attempt.pk)
+
+
+def _picks_back_up(row):
+    """Return whether a new attempt carries on from a read that was stopped.
+
+    Paused or Did Not Finish on a series never started has nothing to pick back up. Nor
+    has one finished, whose next attempt is a new read.
+    """
+    if row.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+        return False
+    last = row.attempts.order_by("-id").first()
+    return last.status == Status.DROPPED.value if last else bool(row.progress)
 
 
 def _record_status(user, item, attempt, move):
