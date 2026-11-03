@@ -190,6 +190,11 @@ stored (TV-103).
 | GET/PATCH/DELETE | `/api/v1/diary/{id}/` | Yes |
 | GET | `/api/v1/diary/tags/` | Yes |
 | POST/DELETE | `/api/v1/diary/{id}/like/` | Yes |
+| GET/POST | `/api/v1/diary/{id}/comments/` | Yes |
+| GET | `/api/v1/progress/{id}/` | Yes |
+| POST/DELETE | `/api/v1/progress/{id}/like/` | Yes |
+| GET/POST | `/api/v1/progress/{id}/comments/` | Yes |
+| DELETE | `/api/v1/comments/{id}/` | Yes |
 | GET/POST | `/api/v1/lists/` | Yes |
 | GET | `/api/v1/lists/tagged/` | Yes |
 | GET/PATCH/DELETE | `/api/v1/lists/{id}/` | Yes |

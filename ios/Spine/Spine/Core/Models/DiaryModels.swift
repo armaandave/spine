@@ -25,6 +25,7 @@ struct DiaryEntry: Codable, Identifiable {
     var favorite: LogFavorite? = nil
     let visibility: String
     let likeCount: Int
+    var commentCount: Int? = nil
     let viewerHasLiked: Bool
     let createdAt: String?
     let updatedAt: String?
@@ -410,6 +411,14 @@ struct ActivityItem: Codable, Identifiable {
     let media: MediaSummary?
     let person: ActivityPersonSnapshot?
     let object: ActivityObject
+    /// Whether the viewer liked this post, and how many people did. Older servers don't send them.
+    var viewer: ActivityViewer? = nil
+    var likeCount: Int? = nil
+    var commentCount: Int? = nil
+    /// A log's review, which older servers don't send either.
+    var reviewTitle: String? = nil
+    var review: String? = nil
+    var containsSpoilers: Bool? = nil
 
     init(
         id: Int,
@@ -430,6 +439,10 @@ struct ActivityItem: Codable, Identifiable {
         self.person = person
         self.object = object
     }
+}
+
+struct ActivityViewer: Codable {
+    let hasLiked: Bool
 }
 
 struct ActivityPersonSnapshot: Codable, Hashable {

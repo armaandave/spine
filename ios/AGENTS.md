@@ -168,11 +168,11 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
 5. Diary list + log entry
 6. Profile (self) — stats, recent activity placeholder
 7. Settings — base URL for dev, about/attribution (TMDB etc.)
-8. Social — find and follow people (Search's Users lens), follow requests, followers lists, other people's profiles read-only, Home activity from the people you follow, friends on a title's page, and follow pushes (`Features/Social/`)
+8. Social — find and follow people (Search's Users lens), follow requests, followers lists, other people's profiles read-only, Home activity from the people you follow, likes and comments on it, friends on a title's page, and follow pushes (`Features/Social/`)
 
 **Out of scope for v1:**
 
-- Likes, comments and other push notifications
+- Like, comment and other push notifications
 - Offline sync queue
 - iPad-optimized layouts (iPhone first)
 - Widgets, Share extension

@@ -142,7 +142,7 @@ class DailyProgressTests(TestCase):
             ],
         )
 
-    def test_a_log_the_viewer_cant_see_doesnt_hide_that_days_progress(self):
+    def test_a_log_the_viewer_cant_see_leaves_only_that_days_progress(self):
         anime = self.item(MediaTypes.ANIME.value)
         self.change(anime, 1, 3, at(24))
         self.log(anime, at(24, 20), visibility="followers")
@@ -151,7 +151,10 @@ class DailyProgressTests(TestCase):
             [activity["object"].get("summary", "log") for activity in self.activity(viewer=self.viewer)],
             ["watched 2 episodes"],
         )
-        self.assertEqual([activity["type"] for activity in self.activity()], ["diary_created"])
+        self.assertEqual(
+            [activity["type"] for activity in self.activity()],
+            ["diary_created", "progress_updated"],
+        )
 
     def test_removing_a_title_removes_its_progress(self):
         anime_item = Item.objects.create(
@@ -179,7 +182,7 @@ class DailyProgressTests(TestCase):
 
         self.assertEqual(self.activity(), [])
 
-    def test_logging_the_title_that_day_replaces_its_progress(self):
+    def test_logging_the_title_that_day_keeps_its_progress_as_its_own_item(self):
         book = self.item(MediaTypes.BOOK.value)
         self.change(book, 10, 30, at(24), unit="percent")
         book_log = self.log(book, single_weight.calendar_datetime(date(2026, 10, 24)))
@@ -193,15 +196,20 @@ class DailyProgressTests(TestCase):
         )
         self.change(self.seasons[1], 2, 3, at(24, 20))
         episode_log = self.log(episode, at(24, 20))
-        self.change(self.seasons[1], 3, 4, at(25))
 
-        results = self.activity()
+        logs = {
+            activity["object"]["id"]
+            for activity in self.activity()
+            if activity["type"] == "diary_created"
+        }
+        summaries = {
+            activity["object"]["summary"]
+            for activity in self.activity()
+            if activity["type"] == "progress_updated"
+        }
 
-        self.assertEqual(
-            [(activity["type"], activity["object"]["id"]) for activity in results[1:]],
-            [("diary_created", episode_log.id), ("diary_created", book_log.id)],
-        )
-        self.assertEqual(results[0]["object"]["summary"], "watched 1 episode")
+        self.assertEqual(logs, {book_log.id, episode_log.id})
+        self.assertEqual(summaries, {"read 20%", "watched 1 episode"})
 
     def test_each_kind_of_progress_reads_naturally(self):
         cases = [
@@ -416,7 +424,7 @@ class StartedActivityTests(TestCase):
         self.assertEqual(self.starts(anime_item), 1)
         self.assertEqual(self.activity(), [("anime one", "started watching")])
 
-    def test_a_days_progress_or_log_replaces_its_start(self):
+    def test_a_days_progress_replaces_its_start_but_a_log_doesnt(self):
         book = self.item(MediaTypes.BOOK.value, "progressed")
         game = self.item(MediaTypes.GAME.value, "logged")
         book_tracking.start(self.user, book)
@@ -426,7 +434,7 @@ class StartedActivityTests(TestCase):
 
         self.assertEqual(
             sorted(self.activity()),
-            [("book progressed", "read 10%"), ("game logged", "log")],
+            [("book progressed", "read 10%"), ("game logged", "log"), ("game logged", "started playing")],
         )
 
     def test_a_shows_start_and_its_seasons_progress_are_one_item(self):

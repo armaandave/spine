@@ -272,9 +272,36 @@ protocol ActivityRepository {
     func userActivityPage(username: String, pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
     /// The activity of the people the signed-in user follows, newest first.
     func feedPage(pageSize: Int, cursorLink: String?) async throws -> ActivityCursorResponse
+    /// A day's progress, as its own page reads it.
+    func progressPost(id: Int) async throws -> ActivityItem
+    func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState
+    /// All of a post's comments, oldest first.
+    func comments(post: ActivityPostRef) async throws -> [PostComment]
+    func addComment(post: ActivityPostRef, body: String) async throws -> PostComment
+    func deleteComment(id: Int) async throws
 }
 
 extension ActivityRepository {
+    func progressPost(id _: Int) async throws -> ActivityItem {
+        fatalError("Not implemented")
+    }
+
+    func setLike(post _: ActivityPostRef, liked _: Bool) async throws -> LikeState {
+        fatalError("Not implemented")
+    }
+
+    func comments(post _: ActivityPostRef) async throws -> [PostComment] {
+        []
+    }
+
+    func addComment(post _: ActivityPostRef, body _: String) async throws -> PostComment {
+        fatalError("Not implemented")
+    }
+
+    func deleteComment(id _: Int) async throws {
+        fatalError("Not implemented")
+    }
+
     func userActivityPage(username: String, pageSize: Int, cursorLink _: String?) async throws -> ActivityCursorResponse {
         ActivityCursorResponse(
             nextCursor: nil,
@@ -1439,6 +1466,52 @@ struct APIActivityRepository: ActivityRepository {
             query.append(URLQueryItem(name: "cursor", value: cursor))
         }
         return try await client.get("/feed/", query: query, authenticated: true)
+    }
+
+    func progressPost(id: Int) async throws -> ActivityItem {
+        try await client.get("/progress/\(id)/", authenticated: true)
+    }
+
+    func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState {
+        let path = "\(Self.path(for: post))like/"
+        if liked {
+            return try await client.post(path, body: EmptyResponse(), authenticated: true)
+        }
+        return try await client.delete(path, authenticated: true)
+    }
+
+    func comments(post: ActivityPostRef) async throws -> [PostComment] {
+        var comments: [PostComment] = []
+        var page = 1
+        while true {
+            let response: PagedResponse<PostComment> = try await client.get(
+                "\(Self.path(for: post))comments/",
+                query: [URLQueryItem(name: "page", value: String(page))],
+                authenticated: true
+            )
+            comments += response.results
+            guard response.next != nil else { return comments }
+            page += 1
+        }
+    }
+
+    func addComment(post: ActivityPostRef, body: String) async throws -> PostComment {
+        try await client.post(
+            "\(Self.path(for: post))comments/",
+            body: PostCommentRequest(body: body),
+            authenticated: true
+        )
+    }
+
+    func deleteComment(id: Int) async throws {
+        let _: EmptyResponse = try await client.delete("/comments/\(id)/", authenticated: true)
+    }
+
+    private static func path(for post: ActivityPostRef) -> String {
+        switch post {
+        case let .log(id): "/diary/\(id)/"
+        case let .progress(id): "/progress/\(id)/"
+        }
     }
 
     private static func cursorValue(from cursorLink: String?) -> String? {

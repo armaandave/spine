@@ -2134,18 +2134,33 @@ struct ProfileRecentActivityRailItem: Identifiable {
 
 enum ProfileRecentActivityRailModel {
     /// Each title once, at its newest activity, so a show watched every day fills one poster, not the rail. A show's
-    /// season and episode logs count as the show (activity contract AC-1).
+    /// season and episode logs count as the show (activity contract AC-1). A log takes the place of that day's progress,
+    /// since its stars say more than a count.
     static func items(from activities: [ActivityItem]) -> [ProfileRecentActivityRailItem] {
-        var seenTitles = Set<String>()
-        return activities.compactMap { activity in
+        var items: [ProfileRecentActivityRailItem] = []
+        var titleIndexes: [String: Int] = [:]
+        for activity in activities {
             if let person = activity.person {
-                return ProfileRecentActivityRailItem(activity: activity, subject: .person(person))
+                items.append(ProfileRecentActivityRailItem(activity: activity, subject: .person(person)))
+            } else if let media = activity.media {
+                let title = (media.ref.parentTVRef ?? media.ref).id
+                let item = ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
+                if let index = titleIndexes[title] {
+                    if isLog(activity, replacingProgress: items[index].activity) {
+                        items[index] = item
+                    }
+                } else {
+                    titleIndexes[title] = items.count
+                    items.append(item)
+                }
             }
-            if let media = activity.media, seenTitles.insert((media.ref.parentTVRef ?? media.ref).id).inserted {
-                return ProfileRecentActivityRailItem(activity: activity, subject: .media(media))
-            }
-            return nil
         }
+        return items
+    }
+
+    private static func isLog(_ activity: ActivityItem, replacingProgress kept: ActivityItem) -> Bool {
+        guard case .log = activity.post, case .progress = kept.post else { return false }
+        return activity.consumedAt?.prefix(10) == kept.consumedAt?.prefix(10)
     }
 
     /// Activity the rail asks for: more than it shows, so repeated titles still leave it full.

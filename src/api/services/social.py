@@ -10,9 +10,11 @@ from lists.models import CustomList
 from social import push
 from social.models import (
     Block,
+    Comment,
     ContentLike,
     Follow,
     FollowStatus,
+    ProgressPost,
     SocialAuditLog,
     UserReport,
     Visibility,
@@ -145,6 +147,10 @@ def set_like(user, *, target_type, target_id, liked):
             and not custom_list.user_can_view(user)
         ):
             raise Http404
+    elif target_type == ContentLike.PROGRESS_POST:
+        post = get_object_or_404(ProgressPost.objects.select_related("actor"), id=target_id)
+        if not can_view_user_profile(user, post.actor):
+            raise Http404
     if liked:
         ContentLike.objects.get_or_create(
             user=user,
@@ -172,6 +178,50 @@ def set_like(user, *, target_type, target_id, liked):
             target_id=target_id,
         ).count(),
     }
+
+
+def viewable_diary_entry(viewer, entry_id):
+    """Return a log the viewer may see, or 404."""
+    entry = get_object_or_404(DiaryEntry.objects.select_related("user", "item"), id=entry_id)
+    if not _can_view_diary_entry(viewer, entry):
+        raise Http404
+    return entry
+
+
+def add_comment(user, body, *, entry=None, post=None):
+    """Comment on a log or on a day's progress the user can already see."""
+    comment = Comment.objects.create(user=user, body=body, diary_entry=entry, progress_post=post)
+    SocialAuditLog.objects.create(
+        actor=user,
+        action="comment",
+        target_type=ContentLike.DIARY_ENTRY if entry else ContentLike.PROGRESS_POST,
+        target_id=entry.id if entry else post.id,
+    )
+    return comment
+
+
+def can_delete_comment(user, comment):
+    """Let a comment's author, the post's owner, and admins delete it."""
+    owner_id = comment.diary_entry.user_id if comment.diary_entry_id else comment.progress_post.actor_id
+    return user.is_staff or user.id in {comment.user_id, owner_id}
+
+
+def delete_comment(user, comment_id):
+    """Delete a comment the user can see and is allowed to remove."""
+    comment = get_object_or_404(
+        Comment.objects.visible_to(user).select_related("diary_entry", "progress_post"),
+        id=comment_id,
+    )
+    if not can_delete_comment(user, comment):
+        raise Http404
+    SocialAuditLog.objects.create(
+        actor=user,
+        action="comment_delete",
+        target_user=comment.user,
+        target_type=ContentLike.DIARY_ENTRY if comment.diary_entry_id else ContentLike.PROGRESS_POST,
+        target_id=comment.diary_entry_id or comment.progress_post_id,
+    )
+    comment.delete()
 
 
 def _can_view_diary_entry(viewer, entry):

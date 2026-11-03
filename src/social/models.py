@@ -94,10 +94,12 @@ class ContentLike(models.Model):
 
     DIARY_ENTRY = "diary"
     CUSTOM_LIST = "list"
+    PROGRESS_POST = "progress"
 
     TARGET_CHOICES = [
         (DIARY_ENTRY, "Diary entry"),
         (CUSTOM_LIST, "Custom list"),
+        (PROGRESS_POST, "Progress post"),
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -200,6 +202,84 @@ class ProgressChange(models.Model):
             previous_progress=snapshot(0),
             current_progress=snapshot(1),
         )
+
+
+class ProgressPost(models.Model):
+    """What likes and comments on a day's progress attach to.
+
+    A day's progress is computed from ``ProgressChange`` (docs/activity-contract.md),
+    so it has no row of its own until someone first likes or comments on it.
+    """
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="progress_posts",
+    )
+    # "tv:<source>:<media_id>" for a show, "item:<id>" for anything else.
+    title_key = models.CharField(max_length=120)
+    day = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["actor", "title_key", "day"],
+                name="social_progresspost_unique_actor_title_day",
+            ),
+        ]
+
+
+class CommentQuerySet(models.QuerySet):
+    """Comments as a given person sees them."""
+
+    def visible_to(self, viewer):
+        """Leave out comments from anyone across a block from the viewer."""
+        if not viewer or not viewer.is_authenticated:
+            return self
+        return self.exclude(user__blocks_sent__blocked=viewer).exclude(
+            user__blocks_received__blocker=viewer,
+        )
+
+
+class Comment(models.Model):
+    """A comment on a log or on a day's progress."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    diary_entry = models.ForeignKey(
+        "app.DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    progress_post = models.ForeignKey(
+        ProgressPost,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = CommentQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(diary_entry__isnull=False, progress_post__isnull=True)
+                    | Q(diary_entry__isnull=True, progress_post__isnull=False)
+                ),
+                name="social_comment_on_one_post",
+            ),
+        ]
 
 
 class PushDevice(models.Model):
