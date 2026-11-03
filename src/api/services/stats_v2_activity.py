@@ -31,8 +31,8 @@ from django.db.models import (
 )
 from django.db.models.functions import RowNumber
 
+from api.services import activity_rows, stats_time
 from api.services import filters as filter_service
-from api.services import stats_time
 from api.services.stats_scope import day_string, media_type_bucket, union_ids
 from app import exposure
 from app.models import (
@@ -182,7 +182,9 @@ def _type_details(scope):
     """Return the tab's own facts, after the shared rows (STAT-200)."""
     media_type = scope.media_type
     if media_type == MediaTypes.TV.value:
-        details = [_detail("episodes", "Episodes watched", scope.viewings.count())]
+        calculated = media_type in activity_rows.CALCULATED_TYPES
+        episodes = stats_time.type_time(scope, media_type).progress if calculated else scope.viewings.count()
+        details = [_detail("episodes", "Episodes watched", episodes)]
         if scope.is_all_time:
             seasons = Season.objects.filter(user=scope.owner, status=Status.COMPLETED.value)
             shows = TV.objects.filter(user=scope.owner, finished=True)

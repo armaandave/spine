@@ -19,6 +19,9 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
 change or with progress, sessions, undated completions) with a length, out of all.
+
+A type in api.services.activity_rows.CALCULATED_TYPES reads the calculation's rows
+instead.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from django.db.models import (
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce, NullIf
 
+from api.services import activity_rows
 from app import exposure
 from app.models import Book, Game, GameSession, Item, MediaTypes
 
@@ -96,7 +100,8 @@ def type_time(scope, media_type):
     """Return one type's TypeTime in the scope's range, computed once per scope."""
     cache = scope.__dict__.setdefault(_CACHE_KEY, {})
     if media_type not in cache:
-        cache[media_type] = _COUNTERS[media_type](scope, media_type)
+        counter = _from_rows if media_type in activity_rows.CALCULATED_TYPES else _COUNTERS[media_type]
+        cache[media_type] = counter(scope, media_type)
     return cache[media_type]
 
 
@@ -119,6 +124,29 @@ def hours_total(rows):
         "leaves_out": [media_type for media_type in exposed if media_type not in HOURS_TYPES],
         "approximate": any(row.approximate for row in parts),
     }
+
+
+def _from_rows(scope, media_type):
+    """Add up the calculation's rows in the range, plus the undated pile in All Time.
+
+    Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
+    """
+    calculation = scope.calculation()
+    rows = activity_rows.in_range(
+        calculation.rows,
+        media_type=media_type,
+        start_date=scope.start_date,
+        end_date=scope.end_date,
+    )
+    pile = activity_rows.piled(calculation.piles if scope.is_all_time else [], media_type)
+    titles = {row.title_id for row in rows if row.counts_title} | pile.titles
+    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known)
+    result = TypeTime(media_type)
+    result.value = int(sum((row.amount for row in rows), pile.amount))
+    result.known = len(titles - unknown)
+    result.total = len(titles)
+    result.progress = int(sum((row.told for row in rows if row.told_unit == activity_rows.EPISODE), pile.told))
+    return result
 
 
 # Counters, one per type.
