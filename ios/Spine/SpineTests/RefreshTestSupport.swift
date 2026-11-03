@@ -758,6 +758,8 @@ struct StubImportRepository: ImportRepository {
 
     var upload: Behavior = .fail(URLError(.notConnectedToInternet))
     var status: Behavior = .fail(URLError(.notConnectedToInternet))
+    /// Answers each status check by its number, from 1, instead of `status`.
+    var statusAnswer: (@MainActor (Int) throws -> ImportTaskStatus)?
     /// How many uploads and status checks have reached this repository, so a test can wait for them.
     let uploadCalls = RefreshCounter()
     let statusCalls = RefreshCounter()
@@ -823,7 +825,10 @@ struct StubImportRepository: ImportRepository {
     }
 
     func importTaskStatus(taskId _: String) async throws -> ImportTaskStatus {
-        statusCalls.increment()
+        let call = statusCalls.increment()
+        if let statusAnswer {
+            return try await statusAnswer(call)
+        }
         try await run(status)
     }
 }

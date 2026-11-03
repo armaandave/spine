@@ -1381,6 +1381,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
         let clear: () -> Void
         let isIdle: () -> Bool
         let isFailed: () -> Bool
+        let isSucceeded: () -> Bool
+        let failureMessage: () -> String?
         let isUploading: () -> Bool
         let isProcessing: () -> Bool
         let isChecking: () -> Bool
@@ -1403,11 +1405,11 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
     }
 
     private func harnesses(_ repository: ImportRepository) -> [Harness] {
-        let letterboxd = LetterboxdImportCoordinator(importRepository: repository, defaults: defaults)
-        let storyGraph = StoryGraphImportCoordinator(importRepository: repository, defaults: defaults)
-        let goodreads = GoodreadsImportCoordinator(importRepository: repository, defaults: defaults)
-        let margins = MarginsImportCoordinator(importRepository: repository, defaults: defaults)
-        let myAnimeList = MyAnimeListImportCoordinator(importRepository: repository, defaults: defaults)
+        let letterboxd = LetterboxdImportCoordinator(importRepository: repository, defaults: defaults, pollInterval: .milliseconds(10))
+        let storyGraph = StoryGraphImportCoordinator(importRepository: repository, defaults: defaults, pollInterval: .milliseconds(10))
+        let goodreads = GoodreadsImportCoordinator(importRepository: repository, defaults: defaults, pollInterval: .milliseconds(10))
+        let margins = MarginsImportCoordinator(importRepository: repository, defaults: defaults, pollInterval: .milliseconds(10))
+        let myAnimeList = MyAnimeListImportCoordinator(importRepository: repository, defaults: defaults, pollInterval: .milliseconds(10))
         return [
             Harness(
                 name: "letterboxd",
@@ -1419,6 +1421,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 clear: { letterboxd.clearFinishedJob() },
                 isIdle: { letterboxd.phase == .idle },
                 isFailed: { if case .failed = letterboxd.phase { true } else { false } },
+                isSucceeded: { if case .succeeded = letterboxd.phase { true } else { false } },
+                failureMessage: { if case let .failed(message) = letterboxd.phase { message } else { nil } },
                 isUploading: { if case .uploading = letterboxd.phase { true } else { false } },
                 isProcessing: { letterboxd.hasProcessingJob },
                 isChecking: { letterboxd.isCheckingStatus }
@@ -1433,6 +1437,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 clear: { storyGraph.clearFinishedJob() },
                 isIdle: { storyGraph.phase == .idle },
                 isFailed: { if case .failed = storyGraph.phase { true } else { false } },
+                isSucceeded: { if case .succeeded = storyGraph.phase { true } else { false } },
+                failureMessage: { if case let .failed(message) = storyGraph.phase { message } else { nil } },
                 isUploading: { if case .uploading = storyGraph.phase { true } else { false } },
                 isProcessing: { storyGraph.hasProcessingJob },
                 isChecking: { storyGraph.isCheckingStatus }
@@ -1447,6 +1453,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 clear: { goodreads.clearFinishedJob() },
                 isIdle: { goodreads.phase == .idle },
                 isFailed: { if case .failed = goodreads.phase { true } else { false } },
+                isSucceeded: { if case .succeeded = goodreads.phase { true } else { false } },
+                failureMessage: { if case let .failed(message) = goodreads.phase { message } else { nil } },
                 isUploading: { if case .uploading = goodreads.phase { true } else { false } },
                 isProcessing: { goodreads.hasProcessingJob },
                 isChecking: { goodreads.isCheckingStatus }
@@ -1461,6 +1469,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 clear: { margins.clearFinishedJob() },
                 isIdle: { margins.phase == .idle },
                 isFailed: { if case .failed = margins.phase { true } else { false } },
+                isSucceeded: { if case .succeeded = margins.phase { true } else { false } },
+                failureMessage: { if case let .failed(message) = margins.phase { message } else { nil } },
                 isUploading: { if case .uploading = margins.phase { true } else { false } },
                 isProcessing: { margins.hasProcessingJob },
                 isChecking: { margins.isCheckingStatus }
@@ -1475,6 +1485,8 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
                 clear: { myAnimeList.clearFinishedJob() },
                 isIdle: { myAnimeList.phase == .idle },
                 isFailed: { if case .failed = myAnimeList.phase { true } else { false } },
+                isSucceeded: { if case .succeeded = myAnimeList.phase { true } else { false } },
+                failureMessage: { if case let .failed(message) = myAnimeList.phase { message } else { nil } },
                 isUploading: { if case .uploading = myAnimeList.phase { true } else { false } },
                 isProcessing: { myAnimeList.hasProcessingJob },
                 isChecking: { myAnimeList.isCheckingStatus }
@@ -1491,10 +1503,20 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
         }
     }
 
-    private func seedRunningJob(_ harness: Harness) {
+    private func seedRunningJob(_ harness: Harness, startedAgo: TimeInterval = 0) {
         defaults.set("task-1", forKey: "\(harness.name)Import.taskId")
         defaults.set(ImportMode.new.rawValue, forKey: "\(harness.name)Import.mode")
-        defaults.set(Date().timeIntervalSince1970, forKey: "\(harness.name)Import.startedAt")
+        defaults.set(Date().timeIntervalSince1970 - startedAgo, forKey: "\(harness.name)Import.startedAt")
+    }
+
+    private func jobIsSaved(_ harness: Harness) -> Bool {
+        defaults.string(forKey: "\(harness.name)Import.taskId") != nil
+    }
+
+    private static let twoHours: TimeInterval = 2 * 60 * 60
+
+    private static func taskStatus(_ status: String) -> ImportTaskStatus {
+        ImportTaskStatus(taskId: "task-1", taskName: nil, status: status, dateCreated: nil, dateDone: nil, result: nil)
     }
 
     private func makeFile(_ harness: Harness) throws -> URL {
@@ -1560,13 +1582,141 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
         }
     }
 
-    func testARealFailureStillShowsAsFailed() async {
+    func testAStatusCheckYouAskedForShowsARealFailure() async {
         for harness in harnesses(StubImportRepository(status: .fail(URLError(.notConnectedToInternet)))) {
+            seedRunningJob(harness)
+            harness.checkStatus()
+
+            await waitUntil("\(harness.name) to fail") { harness.isFailed() }
+
+            harness.clear()
+        }
+    }
+
+    func testABriefNetworkErrorDoesNotFailTheImport() async {
+        let repository = StubImportRepository(statusAnswer: { call in
+            if call % 2 == 1 { throw URLError(.networkConnectionLost) }
+            return Self.taskStatus("SUCCESS")
+        })
+        for harness in harnesses(repository) {
+            seedRunningJob(harness)
+            harness.resume()
+
+            await waitUntil("\(harness.name) to succeed") { harness.isSucceeded() }
+
+            XCTAssertFalse(jobIsSaved(harness), "\(harness.name): it's finished")
+        }
+    }
+
+    func testNetworkErrorsKeepChecking() async {
+        let repository = StubImportRepository(status: .fail(URLError(.notConnectedToInternet)))
+        for harness in harnesses(repository) {
+            seedRunningJob(harness)
+            let polls = repository.statusCalls.value
+            harness.resume()
+
+            await waitUntil("\(harness.name) to check again") { repository.statusCalls.value >= polls + 3 }
+
+            XCTAssertTrue(harness.isProcessing(), "\(harness.name): the import is still running on the server")
+            harness.clear()
+        }
+    }
+
+    func testComingBackLongAfterAnImportFinishedShowsTheRealResult() async {
+        let repository = StubImportRepository(statusAnswer: { _ in Self.taskStatus("SUCCESS") })
+        for harness in harnesses(repository) {
+            seedRunningJob(harness, startedAgo: Self.twoHours)
+            harness.resume()
+
+            await waitUntil("\(harness.name) to succeed") { harness.isSucceeded() }
+        }
+    }
+
+    func testComingBackToAnImportThatIsStillRunningKeepsCheckingNextTime() async {
+        let repository = StubImportRepository(statusAnswer: { _ in Self.taskStatus("STARTED") })
+        for harness in harnesses(repository) {
+            seedRunningJob(harness, startedAgo: Self.twoHours)
+            harness.resume()
+
+            await waitUntil("\(harness.name) to say it's taking long") { harness.isFailed() }
+            XCTAssertEqual(harness.failureMessage()?.contains("longer than expected"), true, harness.name)
+            XCTAssertTrue(jobIsSaved(harness), harness.name)
+
+            let polls = repository.statusCalls.value
+            harness.resume()
+            await waitUntil("\(harness.name) to ask again") { repository.statusCalls.value > polls }
+            harness.clear()
+        }
+    }
+
+    func testComingBackOfflineAfterTheTimeoutKeepsTheImportToCheckLater() async {
+        for harness in harnesses(StubImportRepository(status: .fail(URLError(.notConnectedToInternet)))) {
+            seedRunningJob(harness, startedAgo: Self.twoHours)
+            harness.resume()
+
+            await waitUntil("\(harness.name) to say it's taking long") { harness.isFailed() }
+
+            XCTAssertEqual(harness.failureMessage()?.contains("longer than expected"), true, harness.name)
+            XCTAssertTrue(jobIsSaved(harness), harness.name)
+            harness.clear()
+        }
+    }
+
+    func testAnImportTheServerHasNoRecordOfIsForgotten() async {
+        let repository = StubImportRepository(status: .fail(APIError.httpStatus(404, nil)))
+        for harness in harnesses(repository) {
+            seedRunningJob(harness)
+            harness.resume()
+
+            await waitUntil("\(harness.name) to give up") { harness.isFailed() }
+
+            XCTAssertEqual(harness.failureMessage()?.contains("can't find this import"), true, harness.name)
+            XCTAssertFalse(jobIsSaved(harness), harness.name)
+
+            let polls = repository.statusCalls.value
+            harness.resume()
+            try? await Task.sleep(for: .milliseconds(50))
+            XCTAssertEqual(repository.statusCalls.value, polls, "\(harness.name): there's nothing left to ask about")
+            harness.clear()
+        }
+    }
+
+    func testAStatusCheckYouAskedForForgetsAnImportTheServerHasNoRecordOf() async {
+        for harness in harnesses(StubImportRepository(status: .fail(APIError.httpStatus(404, nil)))) {
+            seedRunningJob(harness)
+            harness.checkStatus()
+
+            await waitUntil("\(harness.name) to give up") { harness.isFailed() }
+
+            XCTAssertEqual(harness.failureMessage()?.contains("can't find this import"), true, harness.name)
+            XCTAssertFalse(jobIsSaved(harness), harness.name)
+            harness.clear()
+        }
+    }
+
+    func testAnExpiredSessionStillStopsChecking() async {
+        let repository = StubImportRepository(status: .fail(APIError.unauthorized))
+        for harness in harnesses(repository) {
             seedRunningJob(harness)
             harness.resume()
 
             await waitUntil("\(harness.name) to fail") { harness.isFailed() }
 
+            let polls = repository.statusCalls.value
+            try? await Task.sleep(for: .milliseconds(50))
+            XCTAssertEqual(repository.statusCalls.value, polls, harness.name)
+            harness.clear()
+        }
+    }
+
+    func testStartingAnImportReplacesAnEarlierOne() async throws {
+        for harness in harnesses(StubImportRepository(upload: .hang)) {
+            seedRunningJob(harness, startedAgo: Self.twoHours)
+
+            harness.startImport(try makeFile(harness))
+            await waitUntil("\(harness.name) to be uploading") { harness.isUploading() }
+
+            XCTAssertFalse(jobIsSaved(harness), harness.name)
             harness.clear()
         }
     }
