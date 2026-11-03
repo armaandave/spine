@@ -340,6 +340,39 @@ struct DiaryEntryUpdateRequest: Encodable {
     }
 }
 
+/// The day a log opens on. A movie, episode or album finished in the small hours belongs to the day it started:
+/// logged before 6 AM, it takes the day before when its length reaches back past midnight. With no length it stays
+/// today, and the log screen can always change the date.
+nonisolated enum LogStartDay {
+    private static let cutoffHour = 6
+
+    static func date(lengthMinutes: Int?, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> Date {
+        guard
+            let lengthMinutes, lengthMinutes > 0,
+            calendar.component(.hour, from: now) < cutoffHour,
+            let started = calendar.date(byAdding: .minute, value: -lengthMinutes, to: now),
+            started < calendar.startOfDay(for: now),
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: now)
+        else { return now }
+        return yesterday
+    }
+
+    /// Minutes from the text the API sends: "2h 7m", "48m", "58 min", "120". Nil when there's no usable length.
+    static func minutes(runtime: String?) -> Int? {
+        guard let text = runtime?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let hours = amount(in: text, unit: "h")
+        let minutes = amount(in: text, unit: "m")
+        let total = hours == nil && minutes == nil ? Double(text) : (hours ?? 0) * 60 + (minutes ?? 0)
+        guard let total, let rounded = Int(exactly: total.rounded()), rounded > 0 else { return nil }
+        return rounded
+    }
+
+    private static func amount(in text: String, unit: String) -> Double? {
+        guard let match = text.range(of: #"\d+(\.\d+)?\s*"# + unit, options: .regularExpression) else { return nil }
+        return Double(text[match].dropLast(unit.count).trimmingCharacters(in: .whitespaces))
+    }
+}
+
 enum CalendarDateCodec {
     static func string(from date: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)

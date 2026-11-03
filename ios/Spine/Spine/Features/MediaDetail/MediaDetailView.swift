@@ -1721,12 +1721,16 @@ enum MusicAlbumPresentation {
         return count == 1 ? "1 song" : "\(count) songs"
     }
 
-    /// The album's length, only when every song has one: a partial sum would understate it.
     static func totalLength(_ release: MusicRepresentativeRelease) -> String? {
+        totalMinutes(release).map { "\($0) min" }
+    }
+
+    /// The album's length, only when every song has one: a partial sum would understate it.
+    static func totalMinutes(_ release: MusicRepresentativeRelease) -> Int? {
         let lengths = songs(release).map { $0.lengthMs ?? $0.recording.lengthMs }
         guard !lengths.isEmpty, !lengths.contains(nil) else { return nil }
         let minutes = Int((Double(lengths.compactMap { $0 }.reduce(0, +)) / 60_000).rounded())
-        return "\(max(minutes, 1)) min"
+        return max(minutes, 1)
     }
 
     private static func songs(_ release: MusicRepresentativeRelease) -> [MusicTrack] {
@@ -9054,6 +9058,20 @@ private struct RecommendationsSection: View {
         }
     }
 
+}
+
+extension MediaDetail {
+    /// How long one sitting takes, for the media a log dates by when it started (`LogStartDay`); nil for the rest.
+    var sittingMinutes: Int? {
+        switch ref.mediaType {
+        case "movie", "episode":
+            LogStartDay.minutes(runtime: details?["runtime"]?.displayString)
+        case "music":
+            music?.representativeRelease.flatMap(MusicAlbumPresentation.totalMinutes)
+        default:
+            nil
+        }
+    }
 }
 
 private extension JSONValue {
