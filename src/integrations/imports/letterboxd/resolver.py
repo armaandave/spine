@@ -1,5 +1,7 @@
 import logging
 import re
+import unicodedata
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -8,7 +10,7 @@ from django.utils import timezone
 from requests_ratelimiter import LimiterSession
 
 from app.models import MediaTypes
-from app.providers import tmdb
+from app.providers import services, tmdb
 from integrations.models import LetterboxdUriCache
 
 logger = logging.getLogger(__name__)
@@ -31,9 +33,12 @@ class LetterboxdResolver:
         self.session.headers.update({"User-Agent": USER_AGENT})
 
     def resolve_rows(self, rows):
-        """Resolve all unique row URIs and return uri -> result."""
-        uris = sorted({row.get("uri") for row in rows if row.get("uri")})
-        return self.resolve_many(uris, rows)
+        """Resolve each film once and return uri -> result for all of its links."""
+        uris = {row.get("uri") for row in rows if row.get("uri")}
+        cached = set(LetterboxdUriCache.objects.filter(uri__in=uris).values_list("uri", flat=True))
+        lookups = _lookups_by_uri(rows, cached)
+        resolved = self.resolve_many(sorted(set(lookups.values())), rows)
+        return {uri: resolved[lookups[uri]] for uri in uris if lookups[uri] in resolved}
 
     def resolve_many(self, uris, rows=()):
         """Resolve unique URIs through cache, scrape, IMDb fallback, then search."""
@@ -59,11 +64,14 @@ class LetterboxdResolver:
                 uri = futures[future]
                 try:
                     result = future.result()
-                except requests.RequestException as error:
+                except (requests.RequestException, services.ProviderAPIError) as error:
                     logger.warning("Could not resolve Letterboxd URI %s: %s", uri, error)
                     result = None
                 if result:
                     resolved[uri] = result
+                    # A title search can be wrong, so a later import gets to try the film's page.
+                    if result.get("confidence") == "search":
+                        continue
                     LetterboxdUriCache.objects.update_or_create(
                         uri=uri,
                         defaults={
@@ -78,6 +86,17 @@ class LetterboxdResolver:
 
     def resolve_one(self, uri, row=None):
         """Resolve one URI."""
+        try:
+            result = self._resolve_from_page(uri)
+        except requests.RequestException as error:
+            # Letterboxd may be blocking us; the title search doesn't need it.
+            logger.warning("Could not read Letterboxd page %s: %s", uri, error)
+            result = None
+        if result:
+            return result
+        return _search_by_name_year(row) if row else None
+
+    def _resolve_from_page(self, uri):
         response = self.session.get(uri, allow_redirects=True, timeout=20)
         response.raise_for_status()
         canonical = _canonical_film_url(getattr(response, "url", ""))
@@ -100,12 +119,44 @@ class LetterboxdResolver:
                     "imdb_id": imdb_id,
                     "confidence": "imdb",
                 }
-
-        if row:
-            searched = _search_by_name_year(row)
-            if searched:
-                return searched
         return None
+
+
+def film_key(row):
+    """Identify a film by its name and year, for rows whose links differ."""
+    name = (row.get("name") or "").strip().casefold()
+    if not name:
+        return None
+    return (name, row.get("year"))
+
+
+def _lookups_by_uri(rows, cached):
+    """Map each link to the one link looked up for it.
+
+    A film can have many links, one per log or review, and they all share a lookup: one
+    already cached, or else the film's own link. Two film links under the same name and
+    year are different films, so those look up every link separately.
+    """
+    lookups = {}
+    rows_by_film = defaultdict(list)
+    for row in rows:
+        uri = row.get("uri")
+        if not uri:
+            continue
+        lookups[uri] = uri
+        key = film_key(row)
+        if key:
+            rows_by_film[key].append(row)
+
+    for film_rows in rows_by_film.values():
+        film_links = {row["uri"] for row in film_rows if not row.get("entry_link")}
+        if len(film_links) > 1:
+            continue
+        links = {row["uri"] for row in film_rows}
+        chosen = min(links & cached or film_links or links)
+        for link in links:
+            lookups[link] = chosen
+    return lookups
 
 
 def _canonical_film_url(url):
@@ -145,13 +196,17 @@ def _imdb_id_from_html(soup):
 
 
 def _search_by_name_year(row):
-    results = tmdb.search("movie", row.get("name", ""), page=1).get("results", [])
-    if not results:
-        return None
+    name = row.get("name", "")
     year = row.get("year")
-    for result in results:
-        if year and str(result.get("release_date", ""))[:4] == str(year):
+    for result in tmdb.search("movie", name, page=1).get("results", []):
+        if _title_key(result.get("title", "")) != _title_key(name):
+            continue
+        if not year or str(result.get("release_date", ""))[:4] == str(year):
             return {"tmdb_id": str(result["media_id"]), "confidence": "search"}
-    if not year:
-        return {"tmdb_id": str(results[0]["media_id"]), "confidence": "search"}
     return None
+
+
+def _title_key(title):
+    """Compare titles without case, accents or punctuation."""
+    letters = "".join(char for char in unicodedata.normalize("NFKD", title) if char.isalnum())
+    return letters.casefold() or title.casefold()

@@ -10,7 +10,7 @@ from app import single_weight
 from app.models import DiaryEntry, Item, MediaLike, MediaTypes, Movie, Sources, Status
 from app.providers import tmdb
 from integrations.imports.letterboxd.parser import parse_export
-from integrations.imports.letterboxd.resolver import LetterboxdResolver
+from integrations.imports.letterboxd.resolver import LetterboxdResolver, film_key
 from lists.models import CustomList, CustomListItem
 
 logger = logging.getLogger(__name__)
@@ -211,19 +211,13 @@ class LetterboxdImporter:
                 already_liked.add(item.id)
                 self.counts["likes"] += 1
 
-    def _film_key(self, row):
-        name = (row.get("name") or "").strip().casefold()
-        if not name:
-            return None
-        return (name, row.get("year"))
-
     def _film_key_index(self, rows, resolved):
         index = {}
         for row in rows:
             result = resolved.get(row.get("uri"))
             if not result:
                 continue
-            key = self._film_key(row)
+            key = film_key(row)
             if key:
                 index[key] = result
         return index
@@ -231,7 +225,7 @@ class LetterboxdImporter:
     def _item_for(self, row, resolved):
         result = resolved.get(row.get("uri"))
         if not result:
-            result = self.resolved_by_film.get(self._film_key(row))
+            result = self.resolved_by_film.get(film_key(row))
         if not result:
             self._warn_unresolved(row)
             return None
