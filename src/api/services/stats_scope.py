@@ -416,7 +416,7 @@ class StatsScope:
         return has_day | Q(id__in=list(moved)) if moved else has_day
 
     def viewing_day(self):
-        """Return a viewing's day: its move, watched_on, a non-fill's end_date, a log."""
+        """Return a viewing's day: moved, watched_on, a non-fill's end_date, a log."""
         day = Coalesce(
             F("watched_on"),
             Case(
