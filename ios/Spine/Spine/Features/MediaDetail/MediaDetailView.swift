@@ -2542,7 +2542,9 @@ private struct MediaDetailPageView: View {
                     onUnauthorized: onUnauthorized) {}
             }
         }
+        // The capture list reads these as the cover opens: read only inside the closure, they'd keep their old values.
         .fullScreenCover(isPresented: $isLogPresented, onDismiss: logComposerDismissed) {
+            [completionJourneyId, completionLiked, completionRatingSteps, completionOpenedByTotal] in
             if let detail = viewModel.detail {
                 MediaLogView(
                     detail: detail,

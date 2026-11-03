@@ -537,6 +537,13 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertTrue(source.contains("detail.ref.readsLikeBook || detail.ref.mediaType == \"game\""), "The rail's + opens the book's menu")
     }
 
+    // MC-104: the cover reads the stars and heart as it opens. Read only inside its closure, they'd keep their old values,
+    // and the log screen would open empty (seen in the simulator).
+    func testTheLogScreenIsBuiltWithTheValuesJustPicked() throws {
+        let source = try Self.source("MediaDetail/MediaDetailView.swift")
+        XCTAssertTrue(source.contains("[completionJourneyId, completionLiked, completionRatingSteps, completionOpenedByTotal] in"))
+    }
+
     func testTheSheetLeavesOutTheNumberForATotalOfOne() throws {
         let source = try Self.source("MediaDetail/ProgressUpdateSheet.swift")
         XCTAssertTrue(source.contains("showsNumber: !(title.ref.isSeries && title.totalPages == 1)"))
