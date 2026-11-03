@@ -876,6 +876,11 @@ struct LibraryView: View {
         }
     }
 
+    /// A manga's or a comic's reads aren't journeys, as a book's are (MC-000).
+    private var seriesNoun: String? {
+        viewModel.mediaType == "book" ? nil : readingNoun
+    }
+
     private var emptyMessage: String {
         if viewModel.filter.service.isActive {
             return StreamingFilterCopy.emptyMessage
@@ -891,13 +896,16 @@ struct LibraryView: View {
         case .planning:
             return readingNoun.map { "\($0.capitalized) saved for later will appear here." } ?? "Planning items stay separate from the rest of your library."
         case .currentlyReading:
-            return "Start a reading journey to see its progress here."
+            return seriesNoun.map { "\($0.capitalized) you're reading will appear here." }
+                ?? "Start a reading journey to see its progress here."
         case .paused:
-            return "Paused reading journeys will appear here."
+            return seriesNoun.map { "\($0.capitalized) you pause will appear here." }
+                ?? "Paused reading journeys will appear here."
         case .didNotFinish:
             return "\((readingNoun ?? "books").capitalized) you stop reading will appear here."
         case .read:
-            return "Completed reading journeys will appear here."
+            return seriesNoun.map { "\($0.capitalized) you finish will appear here." }
+                ?? "Completed reading journeys will appear here."
         }
     }
 
