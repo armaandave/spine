@@ -366,8 +366,12 @@ def _create_series_entry(user, data):
     MC-103, MC-500.
     """
     ref = data["ref"]
-    metadata = provider_services.get_media_metadata(ref["media_type"], ref["media_id"], ref["source"])
-    item = get_or_create_item_from_metadata(ref, metadata)
+    item = tracking_service._series_item(
+        user,
+        source=ref["source"],
+        media_type=ref["media_type"],
+        media_id=ref["media_id"],
+    )
     _, entry = tracking_service._call_book(
         series_tracking.complete,
         user,

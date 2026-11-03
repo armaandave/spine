@@ -19,6 +19,7 @@ headers = {
 }
 
 COMIC_SEARCH_CACHE_VERSION = "v3"
+ISSUE_COUNT_TIMEOUT_SECONDS = 5
 # Comic Vine's search endpoint gives every volume this stand-in cover.
 PLACEHOLDER_IMAGE_SUFFIX = "-blank.png"
 LOCALIZED_EDITION_PENALTY = 50
@@ -271,13 +272,31 @@ def _search_subtitle(item, issue_count):
     return " · ".join(parts) or None
 
 
-def comic(media_id, *, refresh=False):
-    """Return the metadata for the selected comic volume from Comic Vine.
+def fresh_issue_count(media_id):
+    """Ask Comic Vine how many issues a volume has now, within what the app waits (MC-004).
 
-    `refresh` asks Comic Vine again instead of reading the cached copy (MC-004).
+    One short call with no retries, so a save never sits through a rate limit.
     """
+    response = services.api_request(
+        Sources.COMICVINE.value,
+        "GET",
+        f"{base_url}/volume/4050-{media_id}/",
+        params={
+            "api_key": settings.COMICVINE_API,
+            "format": "json",
+            "field_list": "count_of_issues",
+        },
+        headers=headers,
+        timeout=ISSUE_COUNT_TIMEOUT_SECONDS,
+        retry_rate_limits=False,
+    )
+    return response["results"]["count_of_issues"]
+
+
+def comic(media_id):
+    """Return the metadata for the selected comic volume from Comic Vine."""
     cache_key = f"{Sources.COMICVINE.value}_{MediaTypes.COMIC.value}_{media_id}"
-    data = None if refresh else cache.get(cache_key)
+    data = cache.get(cache_key)
 
     if data is None:
         params = {
@@ -310,7 +329,7 @@ def comic(media_id, *, refresh=False):
                 "comic",
             )
 
-        publisher_id = response.get("publisher", {}).get("id")
+        publisher_id = (response.get("publisher") or {}).get("id")
         publisher_comics = []
         if publisher_id:
             publisher_comics = get_publisher_comics(publisher_id, media_id)

@@ -120,6 +120,9 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
     previous_progress = _progress_snapshot(media) if existing_media and "progress" in data else None
     if media is None and media_type == MediaTypes.GAME.value:
         media = apps.get_model("app", media_type)(item=_game_item(user, source, media_id), user=user)
+    elif media is None and series_tracking.supports(media_type):
+        item = _series_item(user, source=source, media_type=media_type, media_id=media_id)
+        media = apps.get_model("app", media_type)(item=item, user=user)
     elif media is None:
         metadata = provider_services.get_media_metadata(
             media_type,
@@ -545,10 +548,10 @@ def _series_item(user, *, source, media_type, media_id):
     )
 
 
-def log_series_progress(user, *, source, media_type, media_id, value, progressed_on=None):
+def log_series_progress(user, *, source, media_type, media_id, **data):
     """Save how many chapters or issues this attempt has read (MC-001, MC-002)."""
     item = _series_item(user, source=source, media_type=media_type, media_id=media_id)
-    return _call_book(series_tracking.update_progress, user, item, value=value, progressed_on=progressed_on)
+    return _call_book(series_tracking.update_progress, user, item, **data)
 
 
 def perform_series_action(user, *, source, media_type, media_id, action, data):

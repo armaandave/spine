@@ -17,13 +17,14 @@ same way as before.
 """
 
 import logging
-from datetime import UTC, date, datetime, time
+from contextlib import contextmanager
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
-import requests
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q
+from django.utils import timezone
 
 from api.services import stats_cache
 from api.services.item_metadata import store_series_total
@@ -42,7 +43,6 @@ from app.models import (
     Tag,
 )
 from app.providers import comicvine
-from app.providers import services as provider_services
 from app.tasks import update_daily_statistics
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ OVERRIDE_FIELDS = [
     "read_override_previous_tracked",
     "read_override_previous_status",
     "read_override_previous_attempt",
+    "read_override_previous_place",
 ]
 UNDATED_FIELDS = [
     "completed_manually",
@@ -75,6 +76,7 @@ UNDATED_FIELDS = [
     "undated_read_previous_status",
     "undated_read_previous_attempt",
     "undated_read_previous_override",
+    "undated_read_previous_place",
 ]
 HISTORY_MESSAGE = "Delete reading attempts and logs before removing this series."
 
@@ -220,6 +222,29 @@ def _clear_override(row):
     row.read_override_previous_tracked = False
     row.read_override_previous_status = None
     row.read_override_previous_attempt = None
+    row.read_override_previous_place = 0
+
+
+@contextmanager
+def _unrecorded(row):
+    """Save a restored state with no history row: stats count every rise they read (MC-007)."""
+    row.skip_history_when_saving = True
+    try:
+        yield
+    finally:
+        del row.skip_history_when_saving
+
+
+def _forget_attempt_history(row, attempt):
+    """An attempt undone counts on no day: stats read these rows (MC-007)."""
+    row.history.filter(current_attempt_id=attempt.pk).delete()
+
+
+def _forget_mark_history(row):
+    """A mark undone leaves no row whose number the restored place would rise from."""
+    row.history.filter(status=Status.COMPLETED.value, current_attempt_id__isnull=True).filter(
+        Q(completed_manually=True) | Q(read_override_active=True),
+    ).delete()
 
 
 def _deactivate_override(row):
@@ -236,6 +261,7 @@ def _begin(row, *, created, status=Status.IN_PROGRESS.value, **fields):
         previous_status=None if created else row.status,
         previous_attempt=None if created else row.current_attempt,
         previous_read_override=_deactivate_override(row),
+        previous_place=0 if created else row.progress,
         **fields,
     )
 
@@ -259,6 +285,10 @@ def _completed(row):
 
 
 def _latest_completed(row):
+    """Return the read the row stands on: its current one, whatever the logs' dates."""
+    current = row.current_attempt
+    if current and current.status == Status.COMPLETED.value:
+        return current
     return _completed(row).order_by(F("end_date").desc(nulls_last=True), "-created_at", "-id").first()
 
 
@@ -307,13 +337,17 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
         return pause(user, item)
     if status == Status.DROPPED.value and attempt:
         return drop(user, item)
-    if row.status == status and row.current_attempt_id:
+    if row.status == status:
         return row
 
     _clear_override(row)
+    # A stopped series keeps its place, which an imported one holds with no attempt
+    # (MC-201). Anywhere else there is nothing to pick up from.
+    stopped = {Status.PAUSED.value, Status.DROPPED.value}
+    if not (status in stopped and row.status in stopped):
+        row.progress = 0
     row.status = status
     row.current_attempt = None
-    row.progress = 0
     row.start_date = None
     row.end_date = None
     row.save(update_fields=[*ROW_STATE_FIELDS, *OVERRIDE_FIELDS])
@@ -466,6 +500,7 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
         previous_tracked=True,
         previous_status=Status.DROPPED.value,
         previous_attempt=old,
+        previous_place=old.place,
         mutation_id=mutation_id,
     )
     _set_row_from_attempt(row, new)
@@ -486,16 +521,17 @@ def _reread_comic_total(item, place):
     ):
         return
     try:
-        store_series_total(item, comicvine.comic(item.media_id, refresh=True))
-    except (provider_services.ProviderAPIError, requests.RequestException):
+        store_series_total(item, {"max_progress": comicvine.fresh_issue_count(item.media_id)})
+    except Exception:
+        # Whatever went wrong, the number is judged against the count Spine has.
         logger.warning("Could not re-read Comic Vine's issue count for %s", item, exc_info=True)
 
 
-def update_progress(user, item, *, value, progressed_on=None):
+def update_progress(user, item, *, value, progressed_on=None, mutation_id=None):
     """Save the current attempt's place: a number, never a finish (MC-100, MC-101)."""
     place = _whole_number(value)
     _reread_comic_total(item, place)
-    return _save_place(user, item, place, progressed_on)
+    return _save_place(user, item, place, progressed_on, mutation_id=mutation_id)
 
 
 def _refuse_past_total(place, item):
@@ -507,7 +543,7 @@ def _refuse_past_total(place, item):
 
 
 @transaction.atomic
-def _save_place(user, item, place, progressed_on):
+def _save_place(user, item, place, progressed_on, *, mutation_id=None):
     row = _locked_row(user, item)
     if row is None:
         row = start(user, item)
@@ -519,6 +555,11 @@ def _save_place(user, item, place, progressed_on):
     if attempt is None or attempt.status != Status.IN_PROGRESS.value:
         raise ValidationError("Progress can only be updated while Currently Reading.")
     _refuse_past_total(place, row.item)
+    mutation_id = _mutation(mutation_id)
+    if mutation_id and mutation_id == attempt.log_offer_mutation_id and place == attempt.place:
+        # A retry after a lost answer: that save's log screen still opens (MC-100).
+        row.opens_log = True
+        return row
     day = _user_day(user, progressed_on or _today(user))
     if attempt.start_date and day < attempt.start_date:
         raise ValidationError("Progress updates can't be before the attempt's start date.")
@@ -528,8 +569,10 @@ def _save_place(user, item, place, progressed_on):
     # MC-100, MC-101: reaching the total opens the log screen, once per attempt.
     reached = total(row.item) and place == total(row.item)
     opens_log = bool(reached and not attempt.log_offered)
-    attempt.log_offered = attempt.log_offered or opens_log
-    attempt.save(update_fields=["place", "progressed_on", "log_offered"])
+    if opens_log:
+        attempt.log_offered = True
+        attempt.log_offer_mutation_id = mutation_id
+    attempt.save(update_fields=["place", "progressed_on", "log_offered", "log_offer_mutation_id"])
     _set_row_from_attempt(row, attempt)
     current = _attempt_progress(attempt, row.item)
     if previous != current:
@@ -555,12 +598,14 @@ def mark_read(user, item):
         row.read_override_previous_tracked = not created
         row.read_override_previous_status = row.status
         row.read_override_previous_attempt = row.current_attempt
+        row.read_override_previous_place = row.progress
     else:
         row.completed_manually = True
         row.undated_read_previous_tracked = not created
         row.undated_read_previous_status = None if created else row.status
         row.undated_read_previous_attempt = None if created else row.current_attempt
         row.undated_read_previous_override = _deactivate_override(row)
+        row.undated_read_previous_place = row.progress
     row.status = Status.COMPLETED.value
     row.current_attempt = None
     row.progress = 0
@@ -576,7 +621,7 @@ def _restore_marker_state(row):
     attempt = row.undated_read_previous_attempt
     row.status = row.undated_read_previous_status or Status.PLANNING.value
     row.current_attempt = attempt
-    row.progress = attempt.place if attempt else 0
+    row.progress = row.undated_read_previous_place
     row.start_date = _carrier(attempt.start_date) if attempt else None
     row.end_date = _carrier(attempt.end_date) if attempt else None
     row.read_override_active = row.undated_read_previous_override
@@ -595,13 +640,16 @@ def undo_read(user, item):
     if row.read_override_active:
         previous_tracked = row.read_override_previous_tracked
         attempt = row.read_override_previous_attempt
+        place = row.read_override_previous_place
+        _forget_mark_history(row)
         row.status = row.read_override_previous_status or Status.PLANNING.value
         row.current_attempt = attempt
         _clear_override(row)
-        row.progress = attempt.place if attempt else 0
+        row.progress = place
         row.start_date = _carrier(attempt.start_date) if attempt else None
         row.end_date = _carrier(attempt.end_date) if attempt else None
-        row.save(update_fields=[*ROW_STATE_FIELDS, *OVERRIDE_FIELDS])
+        with _unrecorded(row):
+            row.save(update_fields=[*ROW_STATE_FIELDS, *OVERRIDE_FIELDS])
         if not previous_tracked and not _other_history(row):
             MediaLike.objects.filter(user=user, item=item).delete()
             row.delete()
@@ -623,12 +671,15 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         and row.current_attempt_id is None
         and not row.read_override_active
     )
+    if marker_is_current:
+        _forget_mark_history(row)
     restored = _restore_marker_state(row) if marker_is_current else row
     row.completed_manually = False
     row.undated_read_previous_tracked = False
     row.undated_read_previous_status = None
     row.undated_read_previous_attempt = None
     row.undated_read_previous_override = False
+    row.undated_read_previous_place = 0
     if marker_is_current and clear_current_state:
         row.score = None
         row.rating_source = None
@@ -641,12 +692,19 @@ def delete_undated_read(user, item, *, clear_current_state=True):
             row.delete()
             return None
         row.status = Status.PLANNING.value
+        row.progress = 0
+        row.start_date = None
+        row.end_date = None
     fields = list(UNDATED_FIELDS)
     if marker_is_current:
         fields.extend(ROW_STATE_FIELDS)
     if clear_current_state:
         fields.extend(["score", "rating_source", "like_source", "like_is_independent"])
-    row.save(update_fields=list(dict.fromkeys(fields)))
+    if marker_is_current:
+        with _unrecorded(row):
+            row.save(update_fields=list(dict.fromkeys(fields)))
+    else:
+        row.save(update_fields=list(dict.fromkeys(fields)))
     return row
 
 
@@ -744,19 +802,56 @@ def _has_prior_completion(row, day, *, exclude):
     )
 
 
+def _log_moment(day, user):
+    """Return when a log's day counts: noon on the user's calendar, or now for today."""
+    if day >= _today(user):
+        return None
+    return datetime.combine(day, time(12), tzinfo=user_calendar.calendar_tz(user))
+
+
 def _dated_rise(row, day, user):
     """Date a log's rise in place on its own day (MC-007), keeping history in order.
 
-    Stats read each rise against the history row before it, so a backdated log can't
-    land before a row already written.
+    Stats read each rise against the history row before it. Later rows that all hold 0
+    say nothing stats read, so they move to just before the log; a number saved later
+    stays first, and the rise follows it.
     """
-    if day >= _today(user):
-        return None
-    moment = datetime.combine(day, time(12), tzinfo=user_calendar.calendar_tz(user))
-    if row is None:
+    moment = _log_moment(day, user)
+    if moment is None or row is None:
         return moment
-    latest = row.history.order_by("-history_date").values_list("history_date", flat=True).first()
-    return max(moment, latest) if latest else moment
+    later = row.history.filter(history_date__gte=moment)
+    latest = later.order_by("-history_date").values_list("history_date", flat=True).first()
+    if latest is None:
+        return moment
+    if later.filter(progress__gt=0).exists():
+        return latest
+    later.update(history_date=moment - timedelta(seconds=1))
+    return moment
+
+
+def _move_log_rise(row, attempt, day, user):
+    """Move a log's count to its new date (MC-007), in order with the rows around it."""
+    own = row.history.filter(current_attempt_id=attempt.pk, status=Status.COMPLETED.value)
+    first = own.order_by("history_date", "history_id").first()
+    if first is None:
+        return
+    rise = own.filter(progress__gt=0).order_by("history_date", "history_id").first() or first
+    others = row.history.exclude(history_id__in=own.values("history_id"))
+    moment = _log_moment(day, user) or timezone.now()
+    before_first = Q(history_date__lt=first.history_date) | Q(
+        history_date=first.history_date,
+        history_id__lt=first.history_id,
+    )
+    between = others.filter(before_first, history_date__gte=moment)
+    ahead = others.exclude(before_first).filter(history_date__lte=moment)
+    if between.filter(progress__gt=0).exists():
+        moment = between.order_by("-history_date").first().history_date
+    else:
+        between.update(history_date=moment - timedelta(seconds=1))
+    next_row = ahead.order_by("history_date").first()
+    if next_row is not None:
+        moment = next_row.history_date - timedelta(seconds=1)
+    own.filter(Q(history_date__lt=moment) | Q(history_id__lte=rise.history_id)).update(history_date=moment)
 
 
 def _write_log(user, item, attempt, day, **fields):
@@ -822,17 +917,17 @@ def complete(
             return row, prior.completion_diary_entry
 
     if journey_id:
-        attempt = row.attempts.select_for_update().filter(pk=journey_id).first()
-        if attempt is None:
+        named = row.attempts.select_for_update().filter(pk=journey_id).first()
+        if named is None:
             raise ValidationError("Attempt not found.")
-        if attempt.status == Status.COMPLETED.value:
-            if attempt.completion_diary_entry_id:
-                return row, attempt.completion_diary_entry
+        if named.status == Status.COMPLETED.value:
+            if named.completion_diary_entry_id:
+                return row, named.completion_diary_entry
             raise ValidationError("This attempt is already finished.")
-        if attempt.status not in OPEN_STATUSES:
-            attempt = None
-    else:
-        attempt = _open_attempt(row)
+    # What is under way is what a log finishes, whichever closed attempt a stale screen
+    # named (BK-300).
+    attempt = _open_attempt(row)
+    is_direct = attempt is None
 
     fallback_place = row.progress
     if attempt:
@@ -898,7 +993,14 @@ def complete(
         ],
     )
     if update_current:
+        history_date = _dated_rise(row, day, user)
+        if history_date is not None:
+            row._history_date = history_date  # noqa: SLF001
         row.current_attempt = attempt
+        if is_direct and derived_reread and row.progress:
+            # A reread counts again (MC-007), and stats count only rises.
+            row.progress = 0
+            row.save(update_fields=["current_attempt", "progress"])
         row.status = Status.COMPLETED.value
         row.progress = attempt.place
         row.start_date = _carrier(attempt.start_date)
@@ -908,9 +1010,6 @@ def complete(
             row.rating_source = entry
         row.like_source = entry
         row.like_is_independent = False
-        history_date = _dated_rise(row, day, user)
-        if history_date is not None:
-            row._history_date = history_date  # noqa: SLF001
         row.save(update_fields=[*ROW_STATE_FIELDS, "score", "rating_source", "like_source", "like_is_independent"])
         _set_like_row(user, item, bool(liked))
     if emit_activity:
@@ -935,6 +1034,8 @@ def update_completion(entry, data, *, tags=UNSET):
             _validate_end(attempt, day)
             attempt.end_date = day
             attempt.save(update_fields=["end_date"])
+            if entry.consumed_at != _carrier(day):
+                _move_log_rise(row, attempt, day, entry.user)
         entry.consumed_at = _carrier(day)
         fields.append("consumed_at")
     if "rating" in data:
@@ -980,6 +1081,23 @@ def update_completion(entry, data, *, tags=UNSET):
     return entry
 
 
+def _is_real_history(attempt):
+    """An imported read with no log is no reason to keep a series, as a book's isn't (BK-002)."""
+    return (
+        attempt.origin != SeriesAttempt.Origin.IMPORTED
+        or attempt.completion_diary_entry_id is not None
+        or attempt.status != Status.COMPLETED.value
+    )
+
+
+def _has_logs(row):
+    """Return whether the row's owner has logs of it, from a list page's primed count."""
+    primed = getattr(row.item, "viewer_diary_count", None)
+    if primed is not None:
+        return primed > 0
+    return DiaryEntry.objects.filter(user_id=row.user_id, item_id=row.item_id).exists()
+
+
 def _other_history(row, *, excluding=None):
     attempts = row.attempts.all()
     if excluding is not None:
@@ -997,11 +1115,12 @@ def _restore_previous(row, attempt):
     if attempt.previous_tracked:
         row.status = attempt.previous_status or Status.PLANNING.value
         row.current_attempt = previous
-        row.progress = previous.place if previous else 0
+        row.progress = attempt.previous_place
         row.start_date = _carrier(previous.start_date) if previous else None
         row.end_date = _carrier(previous.end_date) if previous else None
         row.read_override_active = attempt.previous_read_override
-        row.save(update_fields=ROW_STATE_FIELDS)
+        with _unrecorded(row):
+            row.save(update_fields=ROW_STATE_FIELDS)
         return row
     if _other_history(row, excluding=attempt):
         row.current_attempt = None
@@ -1009,7 +1128,8 @@ def _restore_previous(row, attempt):
         row.progress = 0
         row.start_date = None
         row.end_date = None
-        row.save(update_fields=ROW_STATE_FIELDS)
+        with _unrecorded(row):
+            row.save(update_fields=ROW_STATE_FIELDS)
         return row
     MediaLike.objects.filter(user_id=row.user_id, item_id=row.item_id).delete()
     row.delete()
@@ -1023,6 +1143,7 @@ def _splice(row, attempt):
         previous_status=attempt.previous_status,
         previous_tracked=attempt.previous_tracked,
         previous_read_override=attempt.previous_read_override,
+        previous_place=attempt.previous_place,
     )
     stats_cache.bump_user(row.user_id)
     fields = []
@@ -1031,10 +1152,12 @@ def _splice(row, attempt):
         row.undated_read_previous_status = attempt.previous_status
         row.undated_read_previous_tracked = attempt.previous_tracked
         row.undated_read_previous_override = attempt.previous_read_override
+        row.undated_read_previous_place = attempt.previous_place
         fields.extend(UNDATED_FIELDS)
     if row.read_override_previous_attempt_id == attempt.pk:
         row.read_override_previous_attempt = attempt.previous_attempt
         row.read_override_previous_status = attempt.previous_status
+        row.read_override_previous_place = attempt.previous_place
         fields.extend(OVERRIDE_FIELDS)
     if fields:
         row.save(update_fields=fields)
@@ -1080,6 +1203,8 @@ def delete_completion(user, entry):
             row.save(update_fields=fields)
         return row
     if row.current_attempt_id == attempt.pk and attempt.pre_completion_status:
+        # The attempt's own saves stand; only what the log added is undone (MC-007).
+        row.history.filter(current_attempt_id=attempt.pk, status=Status.COMPLETED.value).delete()
         snapshot = attempt.pre_completion or {}
         attempt.status = attempt.pre_completion_status
         attempt.place = snapshot.get("place", attempt.place)
@@ -1091,15 +1216,17 @@ def delete_completion(user, entry):
         attempt.pre_completion_status = None
         attempt.pre_completion = None
         attempt.save()
-        _set_row_from_attempt(row, attempt)
         score = snapshot.get("row_score")
         row.score = Decimal(score) if score is not None else None
         row.rating_source_id = _still_there(snapshot.get("rating_source_id"))
         row.like_source_id = _still_there(snapshot.get("like_source_id"))
         row.like_is_independent = bool(snapshot.get("like_is_independent"))
-        row.save(update_fields=["score", "rating_source", "like_source", "like_is_independent"])
+        with _unrecorded(row):
+            _set_row_from_attempt(row, attempt)
+            row.save(update_fields=["score", "rating_source", "like_source", "like_is_independent"])
         _set_like_row(user, item, bool(snapshot.get("title_liked")))
         return row
+    _forget_attempt_history(row, attempt)
     if row.current_attempt_id == attempt.pk:
         restored = _restore_previous(row, attempt)
     else:
@@ -1146,6 +1273,13 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
         raise ValidationError("Attempt not found.")
     if attempt.completion_diary_entry_id and end_date is not UNSET:
         raise ValidationError("Edit a finished attempt's date through its log.")
+    if attempt.status in OPEN_STATUSES:
+        if start_date is None and attempt.start_date:
+            raise ValidationError("An attempt under way keeps its start date.")
+        if end_date is not UNSET:
+            raise ValidationError("An attempt under way has no end date yet.")
+    elif end_date is None and attempt.end_date:
+        raise ValidationError("A closed attempt keeps its end date.")
     fields = []
     if start_date is not UNSET:
         day = _user_day(user, start_date) if start_date is not None else None
@@ -1179,6 +1313,7 @@ def delete_journey(user, item, journey_id):
         return row
     if attempt.completion_diary_entry_id:
         raise HistoryExists("Delete the log instead of the finished attempt.")
+    _forget_attempt_history(row, attempt)
     restored = _restore_previous(row, attempt) if row.current_attempt_id == attempt.pk else row
     if restored:
         _splice(restored, attempt)
@@ -1193,7 +1328,7 @@ def remove_tracking(user, item):
     row = _locked_row(user, item)
     if row is None:
         return None
-    if row.attempts.exists() or DiaryEntry.objects.filter(user=user, item=item).exists():
+    if any(_is_real_history(attempt) for attempt in row.attempts.all()) or _has_logs(row):
         raise HistoryExists(HISTORY_MESSAGE)
     from social.models import ProgressChange
 
@@ -1254,7 +1389,10 @@ def _import_day(user, value):
     if single_weight.is_calendar_datetime(value):
         day = value.date()
     elif isinstance(value, datetime):
-        day = user_calendar.day_of(value, user)
+        # A source's date arrives as midnight on the server's zone: that is the date,
+        # on any reader's calendar (SW-006). A real moment is read on theirs.
+        server_time = timezone.localtime(value) if timezone.is_aware(value) else value
+        day = server_time.date() if server_time.time() == time.min else user_calendar.day_of(value, user)
     else:
         day = value
     return day if day <= _today(user) else None
@@ -1298,10 +1436,9 @@ def import_title(
     rating = _storage_rating(score)
     start_day = _import_day(user, start_date)
     end_day = _import_day(user, end_date)
-    log_days = {
-        single_weight.calendar_date(consumed_at)
-        for consumed_at in DiaryEntry.objects.filter(user=user, item=item).values_list("consumed_at", flat=True)
-    }
+    # Logs an overwrite kept: hand-made ones, with no read of their own any more.
+    kept_logs = list(DiaryEntry.objects.filter(user=user, item=item).order_by("consumed_at", "id"))
+    log_days = {single_weight.calendar_date(entry.consumed_at) for entry in kept_logs}
 
     # A source can repeat one finish date for all its reads of a title: the latest read
     # with that date holds it.
@@ -1327,7 +1464,8 @@ def import_title(
         notes=notes or "",
         start_date=_carrier(start_day if status in OPEN_STATUSES else _ordered(start_day, end_day)),
         end_date=_carrier(end_day) if status in {Status.COMPLETED.value, Status.DROPPED.value} else None,
-        completed_manually=status == Status.COMPLETED.value and current_log_day is None,
+        # A kept log is already this read: an undated one on top would count it twice.
+        completed_manually=status == Status.COMPLETED.value and current_log_day is None and not kept_logs,
     )
     if status == Status.PLANNING.value:
         row.start_date = None
@@ -1344,9 +1482,20 @@ def import_title(
             previous_tracked=previous is not None,
             previous_status=previous.status if previous is not None else None,
             previous_attempt=previous,
+            previous_place=previous.place if previous is not None else 0,
             **fields,
         )
         return previous
+
+    def add_kept_log(entry):
+        day = single_weight.calendar_date(entry.consumed_at)
+        return add_attempt(
+            status=Status.COMPLETED.value,
+            origin=SeriesAttempt.Origin.DIRECT_LOG,
+            end_date=day,
+            place=series_total or (entry.progress_snapshot or {}).get("value") or place or 0,
+            completion_diary_entry=entry,
+        )
 
     def add_logged_read(read_place, read_start, day, read_rating, *, source_id=""):
         attempt = add_attempt(
@@ -1371,7 +1520,17 @@ def import_title(
         attempt.save(update_fields=["completion_diary_entry"])
         return attempt, entry
 
+    latest_kept = None
+
+    def add_kept_logs(until=None):
+        """Link kept logs in date order among the reads: a deletion restores what came before."""
+        nonlocal latest_kept
+        while kept_logs and (until is None or single_weight.calendar_date(kept_logs[0].consumed_at) <= until):
+            latest_kept = add_kept_log(kept_logs.pop(0))
+
     for read, day in reads:
+        if day:
+            add_kept_logs(day)
         read_start = _import_day(user, read.get("start_date"))
         if read["status"] == Status.COMPLETED.value:
             read_place = read.get("place") or series_total or 0
@@ -1389,6 +1548,8 @@ def import_title(
                 place=read.get("place") or 0,
             )
 
+    add_kept_logs()
+
     pointers = {}
     if current_log_day:
         attempt, entry = add_logged_read(place, start_day, current_log_day, rating, source_id=import_source_id)
@@ -1397,6 +1558,8 @@ def import_title(
             "like_source": entry,
             "rating_source": entry if rating is not None else None,
         }
+    elif status == Status.COMPLETED.value and latest_kept:
+        pointers = {"current_attempt": latest_kept, "progress": latest_kept.place}
     elif status == Status.IN_PROGRESS.value:
         pointers = {
             "current_attempt": add_attempt(
@@ -1420,6 +1583,16 @@ def clear_for_import(user, media_type, source, media_ids):
     item_ids = list(rows.values_list("item_id", flat=True))
     rows.delete()
     DiaryEntry.objects.filter(user=user, item_id__in=item_ids).exclude(import_source="").delete()
+    forget_progress(user, item_ids)
+
+
+def forget_progress(user, item_ids):
+    """The attempts these numbers belonged to are gone, so the feed drops them too."""
+    from social.models import Activity, ProgressChange
+
+    changes = ProgressChange.objects.filter(actor=user, item_id__in=item_ids)
+    Activity.objects.filter(target_type="progress_change", target_id__in=changes.values("id")).delete()
+    changes.delete()
 
 
 # A comic's new issue
@@ -1547,12 +1720,16 @@ def state_payload(row):
         if attempt.status == Status.DROPPED.value or (attempt in completed and attempt not in logged)
     ]
     history.sort(key=lambda attempt: (attempt.end_date or date.min, attempt.created_at, attempt.pk), reverse=True)
-    latest = max(
-        completed,
-        key=lambda attempt: (attempt.end_date or date.min, attempt.created_at, attempt.pk),
-        default=None,
+    latest = (
+        current
+        if current and current.status == Status.COMPLETED.value
+        else max(
+            completed,
+            key=lambda attempt: (attempt.end_date or date.min, attempt.created_at, attempt.pk),
+            default=None,
+        )
     )
-    can_remove = not attempts and not DiaryEntry.objects.filter(user_id=row.user_id, item_id=row.item_id).exists()
+    can_remove = not any(_is_real_history(attempt) for attempt in attempts) and not _has_logs(row)
     open_attempt = current if current and current.status in OPEN_STATUSES else None
     series_total = total(row.item)
 
@@ -1604,7 +1781,9 @@ def state_payload(row):
         "status_source": source,
         "completion_dates": sorted(_date_string(attempt.end_date) for attempt in logged),
         "completed_journey_count": len(completed),
-        "lifetime_read_count": len(completed) + int(row.completed_manually),
+        # A read that carried on is the same read (MC-200).
+        "lifetime_read_count": len([attempt for attempt in completed if not attempt.continues])
+        + int(row.completed_manually),
         "is_rereading": bool(
             open_attempt and not open_attempt.continues and (row.completed_manually or completed),
         ),

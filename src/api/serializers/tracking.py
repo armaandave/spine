@@ -213,6 +213,7 @@ class SeriesProgressSerializer(serializers.Serializer):
 
     value = GameIntegerField(min_value=0, max_value=2147483647)
     progressed_on = serializers.DateField(required=False)
+    mutation_id = serializers.UUIDField(required=False)
 
 
 class SeriesCompletionSerializer(BookCompletionSerializer):

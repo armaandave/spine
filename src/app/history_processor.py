@@ -19,10 +19,12 @@ SERIES_FACT_FIELDS = {
     "undated_read_previous_status",
     "undated_read_previous_attempt",
     "undated_read_previous_override",
+    "undated_read_previous_place",
     "read_override_active",
     "read_override_previous_tracked",
     "read_override_previous_status",
     "read_override_previous_attempt",
+    "read_override_previous_place",
 }
 
 

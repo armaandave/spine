@@ -2536,6 +2536,8 @@ class SeriesMedia(Media):
         blank=True,
     )
     undated_read_previous_override = models.BooleanField(default=False)
+    # The number a mark replaced, which an imported row can hold with no attempt.
+    undated_read_previous_place = models.PositiveIntegerField(default=0)
     read_override_active = models.BooleanField(default=False)
     read_override_previous_tracked = models.BooleanField(default=False)
     read_override_previous_status = models.CharField(
@@ -2544,6 +2546,7 @@ class SeriesMedia(Media):
         null=True,
         blank=True,
     )
+    read_override_previous_place = models.PositiveIntegerField(default=0)
 
     class Meta(Media.Meta):
         """Meta options for the model."""
@@ -3090,8 +3093,10 @@ class SeriesAttempt(models.Model):
     progressed_on = models.DateField(null=True, blank=True)
     # Carries on from an earlier read, so its log isn't a reread (MC-200).
     continues = models.BooleanField(default=False)
-    # The log screen has opened by itself for this attempt (MC-101).
+    # The log screen has opened by itself for this attempt (MC-101), by this save, so a
+    # retry after a lost answer still opens it.
     log_offered = models.BooleanField(default=False)
+    log_offer_mutation_id = models.UUIDField(null=True, blank=True)
     completion_diary_entry = models.OneToOneField(
         "DiaryEntry",
         null=True,
@@ -3100,6 +3105,8 @@ class SeriesAttempt(models.Model):
         related_name="%(class)s",
     )
     previous_tracked = models.BooleanField(default=False)
+    # The number this attempt replaced, which an imported row can hold with no attempt.
+    previous_place = models.PositiveIntegerField(default=0)
     previous_status = models.CharField(
         max_length=20,
         choices=Status,

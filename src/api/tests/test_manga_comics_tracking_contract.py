@@ -10,7 +10,9 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
+import requests
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -18,7 +20,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from api.services import stats_time
+from api.services import stats_time, stats_v2_activity
 from api.services.item_metadata import store_item_metadata, store_series_total
 from api.services.stats_scope import build_scope
 from app import series_tracking
@@ -828,7 +830,8 @@ class CountingTests(SeriesContractBase):
                 "date_last_updated": "2026-10-01 00:00:00",
             },
         }
-        data = comicvine.comic("mc-002", refresh=True)
+        cache.delete("comicvine_comic_mc-002")
+        data = comicvine.comic("mc-002")
         self.assertEqual(data["max_progress"], 54)
         self.assertEqual(data["max_issue_number"], 66)
         item = self.comic(total=None)
@@ -867,8 +870,8 @@ class CountingTests(SeriesContractBase):
         self.assertFalse(ProgressChange.objects.filter(actor=self.user, item=item, current_progress__unit="chapter").exists())
 
     # MC-004: a comic re-reads Comic Vine's count once, finding the new issue.
-    @patch("app.series_tracking.comicvine.comic")
-    def test_a_comic_rereads_the_count_before_refusing(self, comic):
+    @patch("app.series_tracking.comicvine.fresh_issue_count")
+    def test_a_comic_rereads_the_count_before_refusing(self, count):
         item = Item.objects.create(
             source=Sources.COMICVINE.value,
             media_type="comic",
@@ -879,15 +882,15 @@ class CountingTests(SeriesContractBase):
         )
         Comic.objects.create(user=self.user, item=item, status=Status.PLANNING.value)
         self.action(item, "start")
-        comic.return_value = {"max_progress": 55, "details": {"issues_count": 55}}
+        count.return_value = 55
         accepted = self.save(item, 55)
-        comic.assert_called_once_with("46568", refresh=True)
+        count.assert_called_once_with("46568")
         self.assertEqual(accepted.data["progress"]["value"], 55)
         self.assertEqual(accepted.data["progress"]["max"], 55)
 
     # MC-004: only past the count, and still refused when there's no new issue.
-    @patch("app.series_tracking.comicvine.comic")
-    def test_a_comic_past_the_fresh_count_is_refused_and_a_failed_read_refuses_too(self, comic):
+    @patch("app.series_tracking.comicvine.fresh_issue_count")
+    def test_a_comic_past_the_fresh_count_is_refused_and_a_failed_read_refuses_too(self, count):
         item = Item.objects.create(
             source=Sources.COMICVINE.value,
             media_type="comic",
@@ -899,12 +902,12 @@ class CountingTests(SeriesContractBase):
         Comic.objects.create(user=self.user, item=item, status=Status.PLANNING.value)
         self.action(item, "start")
         self.save(item, 54)
-        comic.assert_not_called()
-        comic.return_value = {"max_progress": 54}
+        count.assert_not_called()
+        count.return_value = 54
         refused = self.save(item, 60, expected=status.HTTP_400_BAD_REQUEST)
         self.assertEqual(refused.data["error"]["message"], "This comic has 54 issues so far.")
-        self.assertEqual(comic.call_count, 1)
-        comic.side_effect = comicvine.services.ProviderAPIError("comicvine", None)
+        self.assertEqual(count.call_count, 1)
+        count.side_effect = comicvine.services.ProviderAPIError("comicvine", None)
         self.save(item, 60, expected=status.HTTP_400_BAD_REQUEST)
 
     # MC-005: a one-issue comic has status actions and no number.
@@ -937,8 +940,8 @@ class CountingTests(SeriesContractBase):
 
 
 @override_settings(TIME_ZONE="America/New_York")
-class CountingDaysTests(SeriesContractBase):
-    """MC-007, on the server's calendar: America/New_York."""
+class CountingDaysBase(SeriesContractBase):
+    """Writes at a chosen moment on the server's calendar: America/New_York."""
 
     def at(self, day, hour):
         return datetime(2026, 10, day, hour, tzinfo=UTC)
@@ -958,6 +961,10 @@ class CountingDaysTests(SeriesContractBase):
     def write_at(self, moment, call, *args, **kwargs):
         with patch("django.utils.timezone.now", return_value=moment):
             return call(*args, **kwargs)
+
+
+class CountingDaysTests(CountingDaysBase):
+    """MC-007, on the server's calendar: America/New_York."""
 
     # MC-007: each save counts on the day it was saved, the local day.
     def test_a_save_counts_on_its_local_day(self):
@@ -1105,6 +1112,17 @@ class FinishingTests(SeriesContractBase):
         self.assertFalse(self.save(item, 11).data["series"]["opens_log"], "A monthly run opens it once")
         self.assertIn("finish", self.client.get(self.url(item)).data["series"]["available_actions"])
 
+    # MC-100, MC-101: a retry after a lost answer still opens the log screen.
+    def test_a_retried_save_at_the_total_still_opens_the_log_screen(self):
+        item = self.comic(total=10)
+        self.action(item, "start")
+        mutation_id = str(uuid4())
+        self.assertTrue(self.save(item, 10, mutation_id=mutation_id).data["series"]["opens_log"])
+        changes = ProgressChange.objects.filter(actor=self.user, item=item).count()
+        self.assertTrue(self.save(item, 10, mutation_id=mutation_id).data["series"]["opens_log"], "The retry")
+        self.assertEqual(ProgressChange.objects.filter(actor=self.user, item=item).count(), changes)
+        self.assertFalse(self.save(item, 10, mutation_id=str(uuid4())).data["series"]["opens_log"], "Another save")
+
     # MC-101: a new attempt can open it again.
     def test_a_new_attempt_opens_it_again(self):
         item = self.comic(total=10)
@@ -1241,6 +1259,8 @@ class ContinuingTests(SeriesContractBase):
         running = self.manga(total=None)
         state = self.action(running, "mark_read").data["series"]
         self.assertTrue(state["offers_keep_reading"])
+        self.action(running, "keep_reading")
+        self.assertEqual(self.row(running).progress, 0, "With no total there is no place to carry on from")
 
     # MC-200: Keep Reading.
     def test_keep_reading_starts_at_the_old_place_with_no_start_and_is_not_a_reread(self):
@@ -1483,23 +1503,39 @@ class InstalledBuildTests(SeriesContractBase):
             self.assertIn(response.status_code, (status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED), suffix)
         self.assertEqual(self.client.post(self.url(item, "progress/"), {"value": 1}, format="json").status_code, status.HTTP_404_NOT_FOUND)
 
+    def page_queries(self, status_filter):
+        """Return a list page's queries, its caches warm, in a list that stays put."""
+        params = {"media_type": "manga", "status": status_filter}
+        self.client.get("/api/v1/tracking/", params)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get("/api/v1/tracking/", params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [query["sql"] for query in queries]
+
     # MC-500: a list page stays bounded.
     def test_a_library_page_does_not_query_per_attempt(self):
+        def add_rows(prefix):
+            for number in range(3):
+                item = self.manga(title=f"{prefix}{number}")
+                self.action(item, "start")
+                self.save(item, 5)
+
+        add_rows("a")
+        three = self.page_queries(READING)
+        add_rows("b")
+        six = self.page_queries(READING)
+        self.assertLessEqual(len([sql for sql in six if "app_mangaattempt" in sql]), 1, "One prefetch for the page")
+        self.assertEqual(len(six), len(three), six)
+
+    # MC-500: rows with no attempts cost no query each either.
+    def test_a_to_read_page_does_not_query_per_row(self):
         for number in range(3):
-            item = self.manga(title=f"m{number}")
-            self.action(item, "start")
-            self.save(item, 5)
-        with CaptureQueriesContext(connection) as three:
-            self.client.get("/api/v1/tracking/", {"media_type": "manga", "status": READING})
+            self.write(self.manga(title=f"t{number}"), status=Status.PLANNING.value)
+        three = self.page_queries(Status.PLANNING.value)
         for number in range(3):
-            item = self.manga(title=f"n{number}")
-            self.action(item, "start")
-            self.save(item, 5)
-        with CaptureQueriesContext(connection) as six:
-            self.client.get("/api/v1/tracking/", {"media_type": "manga", "status": READING})
-        attempts = [query for query in six if "app_mangaattempt" in query["sql"]]
-        self.assertLessEqual(len(attempts), 1, "One prefetch for the page")
-        self.assertLess(len(six), len(three) * 2 + 1)
+            self.write(self.manga(title=f"s{number}"), status=Status.PLANNING.value)
+        six = self.page_queries(Status.PLANNING.value)
+        self.assertEqual(len(six), len(three), six)
 
     # MC-501: no data to repair.
     def test_the_migration_is_additive_with_no_repair(self):
@@ -1521,3 +1557,482 @@ class InstalledBuildTests(SeriesContractBase):
         self.assertEqual(Manga.objects.filter(user=self.user, item=item).count(), 1)
         self.assertEqual(MangaAttempt.objects.filter(tracking__user=self.user).count(), 1)
         self.assertEqual(ComicAttempt.objects.count(), 0)
+
+
+class OtherPeoplesListsTests(SeriesContractBase):
+    """AC-5, AC-6: another's list tells nothing a log the viewer can't see set."""
+
+    def setUp(self):
+        super().setUp()
+        self.stranger = get_user_model().objects.create_user(username="stranger", password="strong-password-123")
+        self.other = APIClient()
+        self.other.force_authenticate(self.stranger)
+
+    def their_row(self, status_filter=READ):
+        results = self.other.get(
+            "/api/v1/users/reader/tracking/",
+            {"media_type": "manga", "status": status_filter},
+        ).data["results"]
+        self.assertEqual(len(results), 1)
+        return results[0]["tracking"]
+
+    def assert_no_log_facts(self, tracking):
+        for key in ("series", "liked", "diary_count", "rating_source_diary_entry_id", "like_source_diary_entry_id"):
+            self.assertNotIn(key, tracking)
+
+    def test_a_private_log_leaves_no_trace(self):
+        self.log(self.manga(), rating=5, liked=True, visibility="private")
+        tracking = self.their_row()
+        self.assert_no_log_facts(tracking)
+        self.assertIsNone(tracking["rating"])
+        self.assertIsNone(tracking["end_date"])
+        self.assertEqual(tracking["status"], READ, "Where they stand still shows (AC-6)")
+
+    def test_a_followers_log_shows_only_to_a_follower(self):
+        self.log(self.manga(), rating=4, visibility="followers")
+        self.assertIsNone(self.their_row()["rating"])
+        Follow.objects.create(from_user=self.stranger, to_user=self.user, status=FollowStatus.ACCEPTED)
+        tracking = self.their_row()
+        self.assert_no_log_facts(tracking)
+        self.assertIsNotNone(tracking["rating"])
+        self.assertIsNotNone(tracking["end_date"])
+
+    def test_a_public_log_keeps_its_rating_and_date(self):
+        self.log(self.manga(), rating=4)
+        tracking = self.their_row()
+        self.assert_no_log_facts(tracking)
+        self.assertIsNotNone(tracking["rating"])
+        self.assertIsNotNone(tracking["end_date"])
+
+    def test_the_owner_sees_everything(self):
+        self.log(self.manga(), rating=5, liked=True, visibility="private")
+        tracking = self.client.get("/api/v1/tracking/", {"media_type": "manga", "status": READ}).data["results"][0]["tracking"]
+        self.assertTrue(tracking["liked"])
+        self.assertEqual(tracking["diary_count"], 1)
+        self.assertIn("series", tracking)
+        self.assertIsNotNone(tracking["rating"])
+
+
+class UndoneWritesTests(CountingDaysBase):
+    """MC-007: what is undone counts on no day, and what stands counts once."""
+
+    def test_undoing_the_eye_counts_nothing(self):
+        self.write_at(self.at(20, 12), self.action, self.item, "start")
+        self.write_at(self.at(20, 13), self.save, self.item, 30)
+        self.write_at(self.at(20, 14), self.action, self.item, "drop")
+        self.write_at(self.at(20, 15), self.action, self.item, "mark_read")
+        self.write_at(self.at(20, 16), self.action, self.item, "undo_read")
+        self.assertEqual(self.row(self.item).progress, 30)
+        self.assertEqual(self.counted("2026-10-20"), 30)
+
+    def test_undoing_the_eye_over_older_reads_counts_nothing(self):
+        self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 20))
+        self.write_at(self.at(21, 12), self.action, self.item, "reread")
+        self.write_at(self.at(21, 13), self.save, self.item, 30)
+        self.write_at(self.at(21, 14), self.action, self.item, "drop")
+        self.write_at(self.at(21, 15), self.action, self.item, "mark_read")
+        self.write_at(self.at(21, 16), self.action, self.item, "undo_read")
+        self.assertEqual(self.row(self.item).progress, 30)
+        self.assertEqual(self.counted("2026-10-21"), 30)
+
+    def test_deleting_a_reread_leaves_the_first_reads_count(self):
+        self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 20))
+        attempt_id = self.write_at(self.at(21, 12), self.action, self.item, "reread").data["series"]["current_journey"]["id"]
+        self.write_at(self.at(21, 13), self.client.delete, self.url(self.item, f"journeys/{attempt_id}/"))
+        self.assertEqual(self.row(self.item).progress, 380)
+        self.assertEqual(self.counted("2026-10-20"), 380)
+        self.assertEqual(self.counted("2026-10-21"), 0)
+
+    def test_deleting_a_log_and_logging_again_counts_once(self):
+        self.write_at(self.at(20, 12), self.action, self.item, "start")
+        self.write_at(self.at(20, 13), self.save, self.item, 120)
+        entry_id = self.write_at(self.at(20, 14), self.log, self.item, day=date(2026, 10, 20)).data["diary_entry"]["id"]
+        self.write_at(self.at(20, 15), self.client.delete, f"/api/v1/diary/{entry_id}/")
+        self.assertEqual(self.row(self.item).progress, 120)
+        self.assertEqual(self.counted("2026-10-20"), 120)
+        self.write_at(self.at(20, 16), self.log, self.item, day=date(2026, 10, 20))
+        self.assertEqual(self.counted("2026-10-20"), 380)
+
+    def test_deleting_an_attempt_removes_its_count(self):
+        self.write_at(self.at(20, 12), self.write, self.item, status=Status.PLANNING.value)
+        attempt_id = self.write_at(self.at(20, 13), self.action, self.item, "start").data["series"]["current_journey"]["id"]
+        self.write_at(self.at(20, 14), self.save, self.item, 120)
+        self.write_at(self.at(20, 15), self.client.delete, self.url(self.item, f"journeys/{attempt_id}/"))
+        self.assertEqual(self.row(self.item).status, Status.PLANNING.value)
+        self.assertEqual(self.counted("2026-10-20"), 0)
+
+    def test_deleting_a_direct_log_removes_its_count(self):
+        entry_id = self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 20)).data["diary_entry"]["id"]
+        self.assertEqual(self.counted("2026-10-20"), 380)
+        self.write_at(self.at(21, 12), self.write, self.item, status=Status.PLANNING.value)
+        self.write_at(self.at(21, 13), self.client.delete, f"/api/v1/diary/{entry_id}/")
+        self.assertEqual(self.counted("2026-10-20"), 0)
+
+    def test_a_save_after_an_undo_counts_from_the_place(self):
+        self.write_at(self.at(20, 12), self.action, self.item, "start")
+        self.write_at(self.at(20, 13), self.save, self.item, 30)
+        self.write_at(self.at(20, 14), self.action, self.item, "drop")
+        self.write_at(self.at(20, 15), self.action, self.item, "mark_read")
+        self.write_at(self.at(20, 16), self.action, self.item, "undo_read")
+        self.write_at(self.at(21, 12), self.action, self.item, "start")
+        self.write_at(self.at(21, 13), self.save, self.item, 35)
+        self.assertEqual(self.counted("2026-10-21"), 5)
+
+    # MC-007: a reread by a direct log counts again, on its day.
+    def test_a_direct_log_reread_counts_again(self):
+        self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 20))
+        logged = self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 10, 21))
+        self.assertTrue(logged.data["diary_entry"]["is_rewatch"])
+        self.assertEqual(self.counted("2026-10-20"), 380)
+        self.assertEqual(self.counted("2026-10-21"), 380)
+        self.assertEqual(self.row(self.item).progress, 380)
+
+    def test_a_backdated_direct_log_reread_counts_on_its_day(self):
+        self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 15))
+        self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 10, 18))
+        self.assertEqual(self.counted("2026-10-15"), 380)
+        self.assertEqual(self.counted("2026-10-18"), 380)
+        self.assertEqual(self.counted("2026-10-21"), 0)
+
+    def test_deleting_a_direct_log_reread_counts_nothing(self):
+        self.write_at(self.at(20, 12), self.log, self.item, day=date(2026, 10, 20))
+        entry_id = self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 10, 21)).data["diary_entry"]["id"]
+        self.write_at(self.at(21, 13), self.client.delete, f"/api/v1/diary/{entry_id}/")
+        self.assertEqual(self.row(self.item).progress, 380)
+        self.assertEqual(self.counted("2026-10-21"), 0)
+        self.assertEqual(self.counted("2026-10-20"), 380)
+
+    def test_a_direct_log_after_the_eye_counts_once(self):
+        self.write_at(self.at(20, 12), self.action, self.item, "mark_read")
+        logged = self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 10, 21))
+        self.assertTrue(logged.data["diary_entry"]["is_rewatch"], "BK-400: a read came first")
+        self.assertEqual(self.counted("2026-10-21"), 380)
+
+    # MC-007: a log counts on its own day, whatever the series was doing since.
+    def test_a_backdated_log_on_a_to_read_series_counts_on_its_day(self):
+        self.write_at(self.at(21, 12), self.write, self.item, status=Status.PLANNING.value)
+        self.write_at(self.at(22, 12), self.log, self.item, day=date(2026, 3, 1))
+        self.assertEqual(self.counted("2026-03-01"), 380)
+        self.assertEqual(self.counted("2026-10-21"), 0)
+        self.assertEqual(self.counted("2026-10-22"), 0)
+
+    def test_a_log_from_last_year_counts_last_year(self):
+        self.write_at(self.at(21, 12), self.write, self.item, status=Status.PLANNING.value)
+        self.write_at(self.at(22, 12), self.log, self.item, day=date(2025, 3, 1))
+        self.assertEqual(self.counted("2025-03-01"), 380)
+        scope = build_scope(self.user, self.user, {"start_date": "2026-01-01", "end_date": "2026-12-31", "schema": "2"})
+        self.assertEqual(stats_time.type_time(scope, "manga").value, 0)
+
+    def test_a_log_dated_before_a_saved_number_still_counts_after_it(self):
+        self.write_at(self.at(20, 12), self.action, self.item, "start")
+        self.write_at(self.at(20, 13), self.save, self.item, 30)
+        self.write_at(self.at(20, 14), self.action, self.item, "drop")
+        self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 3, 1))
+        self.assertEqual(self.counted("2026-10-20"), 380, "What the log adds follows the number, on its day")
+        self.assertEqual(self.counted("2026-03-01"), 0)
+        self.assertEqual(self.counted("2026-10-21"), 0)
+
+    def test_editing_a_logs_date_moves_its_count(self):
+        entry_id = self.write_at(self.at(22, 12), self.log, self.item, day=date(2026, 10, 22)).data["diary_entry"]["id"]
+        self.assertEqual(self.counted("2026-10-22"), 380)
+        self.write_at(self.at(22, 13), self.client.patch, f"/api/v1/diary/{entry_id}/", {"consumed_at": "2026-10-10"}, format="json")
+        self.assertEqual(self.counted("2026-10-10"), 380)
+        self.assertEqual(self.counted("2026-10-22"), 0)
+        self.write_at(self.at(22, 14), self.client.patch, f"/api/v1/diary/{entry_id}/", {"consumed_at": "2026-10-15"}, format="json")
+        self.assertEqual(self.counted("2026-10-15"), 380)
+        self.assertEqual(self.counted("2026-10-10"), 0)
+
+    def test_editing_a_live_reads_log_moves_only_what_the_log_added(self):
+        self.write_at(self.at(10, 12), self.action, self.item, "start")
+        self.write_at(self.at(10, 13), self.save, self.item, 300)
+        entry_id = self.write_at(self.at(22, 12), self.log, self.item, day=date(2026, 10, 22)).data["diary_entry"]["id"]
+        self.write_at(self.at(22, 13), self.client.patch, f"/api/v1/diary/{entry_id}/", {"consumed_at": "2026-10-15"}, format="json")
+        self.assertEqual(self.counted("2026-10-10"), 300)
+        self.assertEqual(self.counted("2026-10-15"), 80)
+        self.assertEqual(self.counted("2026-10-22"), 0)
+
+
+class ImportedNumberTests(SeriesContractBase):
+    """MC-201, BK-102, BK-404: an imported number stays through what is undone."""
+
+    def imported(self, status_value, place, **fields):
+        item = self.manga(title=f"imported {status_value}")
+        series_tracking.import_title(self.user, item, status=status_value, place=place, import_source="test", **fields)
+        return item
+
+    def test_deleting_a_picked_up_attempt_keeps_the_number(self):
+        item = self.imported(Status.DROPPED.value, 20)
+        attempt_id = self.action(item, "start").data["series"]["current_journey"]["id"]
+        self.assertEqual(self.row(item).progress, 20)
+        self.client.delete(self.url(item, f"journeys/{attempt_id}/"))
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (Status.DROPPED.value, 20))
+
+    def test_writing_the_same_status_keeps_the_number(self):
+        for status_value in (Status.DROPPED.value, Status.PAUSED.value):
+            with self.subTest(status=status_value):
+                item = self.imported(status_value, 20)
+                self.write(item, status=status_value)
+                self.assertEqual(self.row(item).progress, 20)
+
+    def test_dropping_an_imported_paused_series_keeps_the_number(self):
+        item = self.imported(Status.PAUSED.value, 50)
+        self.action(item, "drop")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (Status.DROPPED.value, 50))
+        self.assertFalse(row.attempts.exists())
+
+    def test_the_eye_and_its_undo_keep_the_number(self):
+        item = self.imported(Status.PAUSED.value, 50)
+        self.action(item, "mark_read")
+        self.action(item, "undo_read")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (Status.PAUSED.value, 50))
+
+    def test_the_eye_over_an_older_read_and_its_undo_keep_the_number(self):
+        item = self.manga(title="older read")
+        series_tracking.import_title(
+            self.user,
+            item,
+            status=Status.PAUSED.value,
+            place=50,
+            earlier=[{"status": READ, "place": 380}],
+            import_source="test",
+        )
+        self.action(item, "mark_read")
+        self.action(item, "undo_read")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (Status.PAUSED.value, 50))
+
+    def test_deleting_a_log_on_an_imported_read_keeps_the_number(self):
+        item = self.imported(READ, 200)
+        entry_id = self.log(item).data["diary_entry"]["id"]
+        self.client.delete(f"/api/v1/diary/{entry_id}/")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (READ, 200))
+
+    def test_going_to_read_clears_the_number(self):
+        item = self.imported(Status.PAUSED.value, 50)
+        self.write(item, status=Status.PLANNING.value)
+        self.assertEqual(self.row(item).progress, 0)
+
+    # BK-001: undoing the eye on an imported Read with an earlier undated attempt.
+    def test_undoing_the_eye_over_an_imported_read_zeroes_the_row(self):
+        item = self.manga(title="undated")
+        series_tracking.import_title(
+            self.user,
+            item,
+            status=READ,
+            place=380,
+            earlier=[{"status": READ, "place": 380}],
+            import_source="test",
+        )
+        self.action(item, "undo_read")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), (Status.PLANNING.value, 0))
+
+    # BK-002: an imported undated read is no real history, as a book's isn't.
+    def test_an_imported_undated_read_doesnt_block_removal(self):
+        item = self.manga(title="undated")
+        series_tracking.import_title(
+            self.user,
+            item,
+            status=Status.PLANNING.value,
+            earlier=[{"status": READ, "place": 380}],
+            import_source="test",
+        )
+        state = self.client.get(self.url(item)).data["series"]
+        self.assertTrue(state["can_remove_tracking"])
+        self.assertEqual(self.client.delete(self.url(item)).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Manga.objects.filter(user=self.user, item=item).exists())
+
+
+class AttemptEdgeTests(SeriesContractBase):
+    """Stale ids, dates and places on an attempt."""
+
+    # BK-300, BK-501: a stale journey id finishes what is under way.
+    def test_a_log_naming_a_closed_attempt_finishes_the_one_under_way(self):
+        item = self.manga()
+        closed_id = self.action(item, "start").data["series"]["current_journey"]["id"]
+        self.save(item, 30)
+        self.action(item, "drop")
+        self.action(item, "start")
+        self.save(item, 40)
+        self.log(item, journey_id=closed_id)
+        row = self.row(item)
+        self.assertEqual(row.status, READ)
+        self.assertFalse(row.attempts.filter(status__in=[READING, Status.PAUSED.value]).exists())
+        self.assertEqual(row.attempts.count(), 2)
+        self.assertEqual(row.attempts.get(pk=closed_id).status, Status.DROPPED.value)
+        self.assertEqual(self.client.post(self.url(item, "actions/start/"), {}, format="json").status_code, status.HTTP_200_OK)
+        self.assertEqual(self.row(item).status, READING, "Nothing is stuck")
+
+    # BK-306: dates stay in order, and a live attempt's stay what they are.
+    def test_a_live_attempts_start_cant_be_cleared(self):
+        item = self.manga()
+        attempt_id = self.action(item, "start").data["series"]["current_journey"]["id"]
+        response = self.client.patch(self.url(item, f"journeys/{attempt_id}/"), {"start_date": None}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(self.row(item).current_attempt.start_date, self.today)
+
+    def test_a_live_attempt_takes_no_end_date(self):
+        item = self.manga()
+        attempt_id = self.action(item, "start").data["series"]["current_journey"]["id"]
+        response = self.client.patch(self.url(item, f"journeys/{attempt_id}/"), {"end_date": str(self.today)}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIsNone(self.row(item).current_attempt.end_date)
+
+    def test_a_did_not_finish_end_date_cant_be_cleared(self):
+        item = self.manga()
+        attempt_id = self.action(item, "start").data["series"]["current_journey"]["id"]
+        self.action(item, "drop")
+        response = self.client.patch(self.url(item, f"journeys/{attempt_id}/"), {"end_date": None}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertEqual(self.row(item).current_attempt.end_date, self.today)
+
+    # MC-200: Keep Reading starts where the row says, whatever the logs' dates.
+    def test_keep_reading_starts_at_the_current_read_not_the_latest_dated(self):
+        item = self.manga(total=None, title="One Piece")
+        self.log(item, place=100, day=self.today)
+        self.action(item, "keep_reading", start_date=str(self.today - timedelta(days=5)))
+        self.log(item, place=110, day=self.today - timedelta(days=3))
+        self.assertEqual(self.row(item).progress, 110)
+        state = self.client.get(self.url(item)).data["series"]
+        self.assertTrue(state["offers_keep_reading"])
+        kept = self.action(item, "keep_reading")
+        self.assertEqual(kept.data["series"]["current_journey"]["progress"]["value"], 110)
+        self.assertEqual(self.row(item).progress, 110)
+
+    # MC-200: a read that carried on is the same read: no lifetime read, no Reread.
+    def test_carrying_on_is_not_another_read(self):
+        item = self.manga(total=None, title="One Piece")
+        first = self.log(item, place=100).data["diary_entry"]["id"]
+        self.action(item, "keep_reading")
+        second = self.log(item, place=110).data["diary_entry"]["id"]
+        self.action(item, "keep_reading")
+        third = self.log(item, place=120).data["diary_entry"]["id"]
+        state = self.client.get(self.url(item)).data["series"]
+        self.assertEqual(state["lifetime_read_count"], 1)
+        scope = build_scope(self.user, self.user, {"schema": "2"})
+        self.assertEqual(stats_v2_activity.rewatch_ids(scope), set())
+        repeats = self.client.get("/api/v1/diary/", {"repeat": "true"}).data["results"]
+        self.assertEqual(repeats, [])
+        self.action(item, "reread")
+        fourth = self.log(item, place=5).data["diary_entry"]["id"]
+        self.assertEqual(self.client.get(self.url(item)).data["series"]["lifetime_read_count"], 2)
+        self.assertEqual(stats_v2_activity.rewatch_ids(build_scope(self.user, self.user, {"schema": "2"})), {fourth})
+        self.assertLess(first, second)
+        self.assertLess(second, third)
+
+    def test_an_eye_mark_carried_on_by_a_new_issue_is_one_read(self):
+        item = self.comic()
+        self.action(item, "mark_read")
+        Item.objects.filter(pk=item.pk).update(series_total=55)
+        item.refresh_from_db()
+        series_tracking.new_issue_out(item, previous_total=54)
+        entry_id = self.log(item).data["diary_entry"]["id"]
+        self.assertEqual(self.client.get(self.url(item)).data["series"]["lifetime_read_count"], 1)
+        self.assertNotIn(entry_id, stats_v2_activity.rewatch_ids(build_scope(self.user, self.user, {"schema": "2"})))
+
+
+class ComicVineRereadTests(SeriesContractBase):
+    """MC-004: the re-read answers in time, and never costs a right number."""
+
+    def comic_vine_comic(self):
+        item = Item.objects.create(
+            source=Sources.COMICVINE.value,
+            media_type=MediaTypes.COMIC.value,
+            media_id="46568",
+            title="Saga",
+            image="https://example.com/saga.jpg",
+            series_total=54,
+        )
+        Comic.objects.create(user=self.user, item=item, status=Status.PLANNING.value)
+        self.action(item, "start")
+        return item
+
+    def test_it_asks_once_quickly_with_no_retries_and_no_publisher_list(self):
+        item = self.comic_vine_comic()
+        with patch(
+            "app.providers.comicvine.services.api_request",
+            return_value={"results": {"count_of_issues": 55}},
+        ) as request:
+            self.save(item, 55)
+        self.assertEqual(request.call_count, 1, "No publisher list")
+        kwargs = request.call_args.kwargs
+        self.assertLessEqual(kwargs["timeout"], 5)
+        self.assertFalse(kwargs["retry_rate_limits"])
+        self.assertEqual(self.row(item).progress, 55)
+        self.assertEqual(Item.objects.get(pk=item.pk).series_total, 55)
+
+    def test_a_null_publisher_on_a_page_is_no_error(self):
+        volume = {
+            "results": {
+                "publisher": None,
+                "site_detail_url": "https://example.com/saga",
+                "name": "Saga",
+                "last_issue": {"id": 9, "issue_number": "55", "name": "Last"},
+                "image": {"medium_url": "https://example.com/saga.jpg"},
+                "description": "",
+                "concepts": [],
+                "start_year": "2012",
+                "count_of_issues": 55,
+                "people": [],
+                "date_last_updated": "2026-01-01 00:00:00",
+            },
+        }
+        cache.delete("comicvine_comic_99999")
+        with patch("app.providers.comicvine.services.api_request", return_value=volume):
+            metadata = comicvine.comic("99999")
+        self.assertEqual(metadata["max_progress"], 55)
+
+    def test_a_re_read_leaves_the_pages_cached_copy(self):
+        cache.set("comicvine_comic_46570", {"max_progress": 54, "related": {"recommendations": ["kept"]}})
+        with patch(
+            "app.providers.comicvine.services.api_request",
+            return_value={"results": {"count_of_issues": 55}},
+        ):
+            comicvine.fresh_issue_count("46570")
+        self.assertEqual(cache.get("comicvine_comic_46570")["related"], {"recommendations": ["kept"]})
+
+    def test_any_failure_refuses_cleanly(self):
+        item = self.comic_vine_comic()
+        for error in (ValueError("bad json"), KeyError("results"), requests.exceptions.ReadTimeout()):
+            with self.subTest(error=error), patch("app.providers.comicvine.services.api_request", side_effect=error):
+                refused = self.save(item, 60, expected=status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(refused.data["error"]["message"], "This comic has 54 issues so far.")
+
+
+class ProviderDownTests(SeriesContractBase):
+    """With the provider down, a series Spine already knows still takes writes."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = patch(
+            "app.providers.services.get_media_metadata",
+            side_effect=comicvine.services.ProviderAPIError("mal", None),
+        )
+        self.provider = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_status_write_with_no_row_uses_the_item(self):
+        item = self.manga()
+        self.write(item, status=Status.PLANNING.value)
+        self.assertEqual(self.row(item).status, Status.PLANNING.value)
+        self.provider.assert_not_called()
+
+    def test_a_diary_entry_with_a_row_uses_the_item(self):
+        item = self.manga()
+        self.write(item, status=Status.PLANNING.value)
+        response = self.client.post(
+            "/api/v1/diary/",
+            {
+                "ref": {"source": item.source, "media_type": item.media_type, "media_id": item.media_id},
+                "consumed_at": str(self.today),
+                "auto_mark_consumed": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(self.row(item).status, READ)
+        self.provider.assert_not_called()

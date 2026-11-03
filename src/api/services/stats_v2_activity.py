@@ -39,9 +39,11 @@ from app.models import (
     TV,
     Book,
     BookSession,
+    ComicAttempt,
     Episode,
     Game,
     Item,
+    MangaAttempt,
     MediaLike,
     MediaTypes,
     Movie,
@@ -273,7 +275,21 @@ def rewatch_ids(scope):
             .values_list("id", flat=True)
         )
         rewatches |= first_ids.intersection(matched)
-    return rewatches
+    return rewatches - _carried_on_ids(scope)
+
+
+def _carried_on_ids(scope):
+    """Return the logs of a manga or comic that carried on: the same read (MC-200)."""
+    ids = set()
+    for media_type, model in (("manga", MangaAttempt), ("comic", ComicAttempt)):
+        if media_type in scope.item_types:
+            ids.update(
+                model.objects.filter(
+                    continues=True,
+                    completion_diary_entry__in=scope.entries.values("id"),
+                ).values_list("completion_diary_entry_id", flat=True),
+            )
+    return ids
 
 
 def _undated_fact_rule(scope):

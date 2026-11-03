@@ -69,6 +69,8 @@ SERIES_TRACKING_FIELD_NAMES = frozenset(
         "read_override_previous_status",
     },
 )
+# Bookkeeping only these rows have. No column at all, so the CSV keeps today's columns.
+SERIES_NOT_EXPORTED = frozenset({"undated_read_previous_place", "read_override_previous_place"})
 # The metadata fill's bookkeeping on Item. It isn't exported, so the CSV keeps today's
 # columns.
 ITEM_METADATA_FILL_FIELD_NAMES = frozenset({"metadata_version", "metadata_attempted_at"})
@@ -195,6 +197,7 @@ def get_track_fields():
         for field in get_model_fields(model):
             if (
                 field in TV_TRACKING_FIELD_NAMES
+                or field in SERIES_NOT_EXPORTED
                 or (media_type in TV_MEDIA_TYPES and field in TV_EMPTY_COLUMNS)
                 or (media_type in SERIES_MEDIA_TYPES and field in SERIES_TRACKING_FIELD_NAMES)
             ):
