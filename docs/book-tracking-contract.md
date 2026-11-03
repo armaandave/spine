@@ -59,12 +59,17 @@ Library cards display progress as follows:
 - Currently Reading shows current page or percentage;
 - Paused shows preserved page or percentage;
 - Did Not Finish shows the final progress reached before DNF;
-- Read shows complete or 100 percent as a visual completion indicator; and
+- Read shows complete or 100 percent as a visual completion indicator in list
+  view; and
 - To Read shows no progress.
+
+A grid poster shows this progress only while the book is started and unfinished:
+Currently Reading, Paused or Did Not Finish. A To Read or Read poster has no
+badge.
 
 A retrospectively assigned Paused or DNF book with no journey shows no invented
 progress. An undated Mark as Read likewise stores no progress despite the Read
-card's visual completion indicator.
+row's visual completion indicator.
 
 Custom lists, ownership, favorites, and other organization are independent of
 the status sections.

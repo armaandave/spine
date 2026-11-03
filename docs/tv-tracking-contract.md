@@ -841,6 +841,7 @@ A tick on an episode that is already watched does nothing (TV-101).
 
 Counts follow TV-104, and the card's stars are the show's own (TV-500).
 A Paused or Dropped show with nothing watched, or with no up next, names no episode: it reads "Paused" or "Dropped".
+A grid poster's badge names up next, as "S2 E4", only once an episode has been watched in the current pass, while the show is Watching, Paused or Dropped and not caught up. Every other poster has no badge.
 Each empty TV section's text describes what appears there correctly.
 
 ### TV-701: Continue Watching lists shows
