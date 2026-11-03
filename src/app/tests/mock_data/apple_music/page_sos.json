@@ -46,7 +46,12 @@
                 "durationInMillis": 117773,
                 "contentRating": "explicit",
                 "releaseDate": "2022-12-09",
-                "url": "https://music.apple.com/us/album/sos/1657869377?i=1657869385"
+                "url": "https://music.apple.com/us/album/sos/1657869377?i=1657869385",
+                "previews": [
+                  {
+                    "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ae/2a/fe/ae2afe3d-5e0e-927a-41ab-0ab714c76dd5/mzaf_2267592440848495923.plus.aac.p.m4a"
+                  }
+                ]
               }
             },
             {

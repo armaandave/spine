@@ -322,7 +322,7 @@ private struct PostCommentRow: View {
 /// The bar pinned under a post's page: the heart and the comment box side by side in glass, in reach of the thumb.
 struct PostCommentBar: View {
     /// A little light in the glass: the page behind it is too dark and plain to show any of its own.
-    private static let glassTint = Color.white.opacity(0.1)
+    static let glassTint = Color.white.opacity(0.1)
 
     @Bindable var model: PostEngagementModel
     let isFocused: FocusState<Bool>.Binding
