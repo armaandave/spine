@@ -37,7 +37,7 @@ from app.models import (
 from app.providers import comicvine
 from events.models import Event
 from lists.models import CustomList
-from social.models import Activity, ProgressChange
+from social.models import Activity, Follow, FollowStatus, ProgressChange
 
 STARS = {"HTTP_X_SPINE_RATING_SCALE": "stars"}
 READING = Status.IN_PROGRESS.value
@@ -716,13 +716,59 @@ class InheritedRulesTests(SeriesContractBase):
         self.assertEqual(self.activity(), [])
         self.assertFalse(ProgressChange.objects.filter(actor=self.user).exists())
 
-    # MC-000 (AC-2): a log replaces that day's start and progress.
-    def test_a_log_replaces_that_days_progress(self):
+    # MC-000 (AC-2): progress replaces that day's start, and a log replaces neither.
+    def test_a_log_and_that_days_progress_are_separate_items(self):
+        saved = self.manga(title="Saved")
+        self.action(saved, "start")
+        self.save(saved, 5)
+        self.log(saved)
+        started = self.comic(title="Started")
+        self.action(started, "start")
+        self.log(started)
+        self.assertCountEqual(
+            self.activity(),
+            [
+                ("Saved", "log"),
+                ("Saved", "read 5 chapters"),
+                ("Started", "log"),
+                ("Started", "started reading"),
+            ],
+        )
+
+    # MC-000 (AC-6): a day's progress and a log both take likes and comments.
+    def test_progress_and_logs_take_likes_and_comments(self):
+        friend = get_user_model().objects.create_user(username="friend", password="strong-password-123")
+        Follow.objects.create(from_user=friend, to_user=self.user, status=FollowStatus.ACCEPTED)
+        other = APIClient()
+        other.force_authenticate(friend)
         item = self.manga()
         self.action(item, "start")
         self.save(item, 5)
-        self.log(item)
-        self.assertEqual(self.activity(), [("Berserk", "log")])
+        [day] = other.get("/api/v1/feed/").data["results"]
+        self.assertEqual(day["object"]["summary"], "read 5 chapters")
+        path = f"/api/v1/progress/{day['object']['id']}/"
+        self.assertEqual(other.post(f"{path}like/").status_code, status.HTTP_200_OK)
+        commented = other.post(f"{path}comments/", {"body": "Keep going"})
+        self.assertEqual(commented.status_code, status.HTTP_201_CREATED)
+        # Later progress that day keeps them.
+        self.save(item, 9)
+        [day] = other.get("/api/v1/feed/").data["results"]
+        self.assertEqual(day["object"]["summary"], "read 9 chapters")
+        self.assertEqual((day["like_count"], day["comment_count"]), (1, 1))
+        self.assertTrue(day["viewer"]["has_liked"])
+        # A log has its own, and deleting it takes only its own.
+        entry_id = self.log(item).data["diary_entry"]["id"]
+        path = f"/api/v1/diary/{entry_id}/"
+        self.assertEqual(other.post(f"{path}like/").status_code, status.HTTP_200_OK)
+        self.assertEqual(other.post(f"{path}comments/", {"body": "Done!"}).status_code, status.HTTP_201_CREATED)
+        results = other.get("/api/v1/feed/").data["results"]
+        self.assertEqual(
+            sorted((result["type"], result["like_count"], result["comment_count"]) for result in results),
+            [("diary_created", 1, 1), ("progress_updated", 1, 1)],
+        )
+        self.assertEqual(self.client.delete(path).status_code, status.HTTP_204_NO_CONTENT)
+        [day] = other.get("/api/v1/feed/").data["results"]
+        self.assertEqual((day["type"], day["like_count"], day["comment_count"]), ("progress_updated", 1, 1))
 
     # MC-000 (AC-5): manga and comic logs keep their own visibility.
     def test_logs_keep_their_own_visibility(self):
