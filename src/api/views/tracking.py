@@ -1,6 +1,9 @@
+from functools import partial
+
 from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,6 +25,8 @@ from api.serializers.tracking import (
     GameCompletionSerializer,
     GamePlaythroughSerializer,
     GameProgressSerializer,
+    SeriesCompletionSerializer,
+    SeriesProgressSerializer,
     TrackingWriteSerializer,
     TVActionSerializer,
 )
@@ -30,7 +35,7 @@ from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
-from app import tv_tracking
+from app import series_tracking, tv_tracking
 from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
 from streaming import filters as streaming_filters
 
@@ -218,14 +223,11 @@ class TrackingActionView(MediaExposureMixin, APIView):
             return self._tv_action(request, source, media_id, action)
         if tv_tracking.supports(media_type):
             return self._tv_part_action(request, source, media_type, media_id, action)
-        if media_type == MediaTypes.GAME.value:
+        perform = _domain_action(media_type)
+        if perform is not None:
             serializer = BookActionSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            media = tracking_service.perform_game_action(request.user, source=source, media_id=media_id, action=action, data=serializer.validated_data)
-        elif media_type == MediaTypes.BOOK.value:
-            serializer = BookActionSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            media = tracking_service.perform_book_action(
+            media = perform(
                 request.user,
                 source=source,
                 media_id=media_id,
@@ -329,6 +331,17 @@ class TrackingActionView(MediaExposureMixin, APIView):
         return Response(
             tracking_service.tv_tracking_response(result, row=tracking_service.tv_season_row(result)),
         )
+
+
+def _domain_action(media_type):
+    """Return what applies this type's status and attempt actions, if it has its own."""
+    if media_type == MediaTypes.GAME.value:
+        return tracking_service.perform_game_action
+    if media_type == MediaTypes.BOOK.value:
+        return tracking_service.perform_book_action
+    if series_tracking.supports(media_type):
+        return partial(tracking_service.perform_series_action, media_type=media_type)
+    return None
 
 
 def _tv_list_filters(queryset, media_type, *, continue_watching):
@@ -577,6 +590,89 @@ class BookJourneyView(APIView):
         if book is None:
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(tracking_service.serialize_tracking(book))
+
+
+def _series_type(media_type):
+    """Answer 404 for anything but a manga or a comic."""
+    if not series_tracking.supports(media_type):
+        raise NotFound
+
+
+class SeriesProgressView(APIView):
+    """Save a manga's or comic's number."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, source, media_type, media_id):
+        _series_type(media_type)
+        serializer = SeriesProgressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        media = tracking_service.log_series_progress(
+            request.user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            **serializer.validated_data,
+        )
+        return Response(tracking_service.serialize_tracking(media))
+
+
+class SeriesCompleteView(APIView):
+    """Save a manga's or comic's log and its finished attempt together."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, source, media_type, media_id):
+        _series_type(media_type)
+        serializer = SeriesCompletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        media, entry = tracking_service.complete_series(
+            request.user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            data=serializer.validated_data,
+        )
+        return Response(
+            {
+                "tracking": tracking_service.serialize_tracking(media),
+                "diary_entry": diary_service.diary_payload(entry, request=request, viewer=request.user),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SeriesAttemptView(APIView):
+    """Edit or delete one attempt at a manga or comic."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, source, media_type, media_id, attempt_id):
+        _series_type(media_type)
+        serializer = BookJourneyWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        media = tracking_service.update_series_attempt(
+            request.user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            attempt_id=attempt_id,
+            data=serializer.validated_data,
+        )
+        return Response(tracking_service.serialize_tracking(media))
+
+    def delete(self, request, source, media_type, media_id, attempt_id):
+        _series_type(media_type)
+        media = tracking_service.delete_series_attempt(
+            request.user,
+            source=source,
+            media_type=media_type,
+            media_id=media_id,
+            attempt_id=attempt_id,
+        )
+        if media is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(tracking_service.serialize_tracking(media))
 
 
 class GameProgressView(APIView):

@@ -20,7 +20,7 @@ from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from api.services.item_metadata import store_item_metadata
-from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, single_weight
+from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
 from app import tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
@@ -111,8 +111,14 @@ def progress_edit(request, media_type, instance_id):
                 tv_tracking.untick(request.user, show_item, *target, entry_point=tv_tracking.WEB)
         except TV_WRITE_ERRORS as error:
             return _tv_error_response(error)
+    elif series_tracking.supports(media_type) and media.status != Status.IN_PROGRESS.value:
+        return HttpResponseBadRequest("Progress can only be updated while Currently Reading")
     elif operation == "increase":
-        media.increase_progress()
+        try:
+            media.increase_progress()
+        except ValidationError as error:
+            # A number past a known total (MC-004).
+            return HttpResponseBadRequest(error.messages[0])
     elif operation == "decrease":
         media.decrease_progress()
 
@@ -944,6 +950,12 @@ def media_delete(request):
         elif game_tracking.supports(media_type):
             try:
                 game_tracking.remove_tracking(request.user, media.item)
+            except BookTrackingConflict as error:
+                messages.error(request, str(error))
+                return helpers.redirect_back(request)
+        elif series_tracking.supports(media_type):
+            try:
+                series_tracking.remove_tracking(request.user, media.item)
             except BookTrackingConflict as error:
                 messages.error(request, str(error))
                 return helpers.redirect_back(request)

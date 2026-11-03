@@ -66,6 +66,7 @@ MAX_PAGE_SIZE = 100
 # day without progress.
 UNITS = ("episode", "chapter", "issue", "page", "minute", "percent", ProgressChange.START)
 TV_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.EPISODE.value)
+CALENDAR_LOG_TYPES = (*TV_TYPES, MediaTypes.MANGA.value, MediaTypes.COMIC.value)
 # The statuses with progress worth telling: finishing a title says it all.
 UNFINISHED = (Status.IN_PROGRESS.value, Status.PAUSED.value, Status.DROPPED.value)
 
@@ -337,13 +338,14 @@ def _progress_days(changes, logs):
 def _log_day():
     """Return a log's calendar day, as the diary shows it.
 
-    Half-star media logs, and TV logs saved as calendar dates (TV-407), store their day
-    as UTC midnight; any other log is read on the server's local day.
+    Half-star media logs, and TV, manga and comic logs saved as calendar dates (TV-407,
+    MC-000), store their day as UTC midnight; any other log is read on the server's
+    local day.
     """
     return Case(
         When(
             Q(item__media_type__in=list(single_weight.HALF_STAR_MEDIA_TYPES))
-            | Q(item__media_type__in=TV_TYPES, consumed_at=TruncDay("consumed_at", tzinfo=UTC)),
+            | Q(item__media_type__in=CALENDAR_LOG_TYPES, consumed_at=TruncDay("consumed_at", tzinfo=UTC)),
             then=TruncDate("consumed_at", tzinfo=UTC),
         ),
         default=TruncDate("consumed_at", tzinfo=timezone.get_current_timezone()),

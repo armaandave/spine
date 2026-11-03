@@ -21,7 +21,14 @@ from api.serializers.common import (
     tracking_state,
 )
 from api.serializers.tracking import validate_tv_rating
-from app import book_tracking, game_tracking, single_weight, tv_listing, tv_tracking
+from app import (
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    single_weight,
+    tv_listing,
+    tv_tracking,
+)
 from app.models import TV, BasicMedia, Book, Item, MediaTypes, Season, Sources, Status
 from app.providers import services as provider_services
 from social.models import Activity, ProgressChange
@@ -64,6 +71,13 @@ TV_CHOICE_ACTIONS = {
     "drop": Status.DROPPED.value,
 }
 TV_EPISODE_ACTIONS = frozenset({"tick", "untick", "mark_up_to"})
+# What marks each of these read or played, undated.
+UNDATED_MARKS = {
+    MediaTypes.GAME.value: game_tracking.mark_completed,
+    MediaTypes.BOOK.value: book_tracking.mark_read,
+    MediaTypes.MANGA.value: series_tracking.mark_read,
+    MediaTypes.COMIC.value: series_tracking.mark_read,
+}
 
 
 def get_tracking(user, *, source, media_type, media_id, season_number=None, episode_number=None):
@@ -143,6 +157,9 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             media.item,
             data,
         )
+
+    if series_tracking.supports(media_type):
+        return _write_series_tracking(user, media.item, data)
 
     previous_status = media.status if existing_media else None
     _set_tracking_fields(media, media_type, data)
@@ -228,6 +245,8 @@ def delete_tracking(
             return _call_book(game_tracking.remove_tracking, user, media.item)
         if media_type == MediaTypes.BOOK.value:
             return _call_book(book_tracking.remove_tracking, user, media.item)
+        if series_tracking.supports(media_type):
+            return _call_book(series_tracking.remove_tracking, user, media.item)
         if single_weight.supports(media_type):
             try:
                 single_weight.unwatch(user, media.item)
@@ -301,12 +320,10 @@ def consume_media(
             media_id=media_id,
             data={"status": Status.COMPLETED.value},
         )
-    if media_type == MediaTypes.GAME.value:
-        return _call_book(game_tracking.mark_completed, user, media.item)
     if single_weight.supports(media_type):
         return single_weight.mark_consumed(user, media.item)
-    if media_type == MediaTypes.BOOK.value:
-        return _call_book(book_tracking.mark_read, user, media.item)
+    if media_type in UNDATED_MARKS:
+        return _call_book(UNDATED_MARKS[media_type], user, media.item)
     media.end_date = consumed_at or timezone.now()
     media.mark_consumed()
     return media
@@ -500,6 +517,99 @@ def delete_book_journey(user, *, source, media_id, journey_id):
     if book is None:
         raise serializers.ValidationError({"journey": "Book tracking does not exist."})
     return _call_book(book_tracking.delete_journey, user, book.item, journey_id)
+
+
+def _series_item(user, *, source, media_type, media_id):
+    """Return a manga's or comic's Item, from the provider only when it has none yet."""
+    media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
+    if media is not None:
+        return media.item
+    item = Item.objects.filter(
+        source=source,
+        media_type=media_type,
+        media_id=media_id,
+        season_number=None,
+        episode_number=None,
+    ).first()
+    if item is not None:
+        return item
+    return get_or_create_item_from_metadata(
+        {
+            "source": source,
+            "media_type": media_type,
+            "media_id": media_id,
+            "season_number": None,
+            "episode_number": None,
+        },
+        provider_services.get_media_metadata(media_type, media_id, source),
+    )
+
+
+def log_series_progress(user, *, source, media_type, media_id, value, progressed_on=None):
+    """Save how many chapters or issues this attempt has read (MC-001, MC-002)."""
+    item = _series_item(user, source=source, media_type=media_type, media_id=media_id)
+    return _call_book(series_tracking.update_progress, user, item, value=value, progressed_on=progressed_on)
+
+
+def perform_series_action(user, *, source, media_type, media_id, action, data):
+    """Apply one status or attempt action to a manga or comic."""
+    functions = {
+        "start": (series_tracking.start, {"start_date", "mutation_id"}),
+        "resume": (series_tracking.resume, {"start_date", "mutation_id"}),
+        "keep_reading": (series_tracking.keep_reading, {"start_date", "mutation_id"}),
+        "reread": (series_tracking.reread, {"start_date", "mutation_id"}),
+        "pause": (series_tracking.pause, set()),
+        "drop": (series_tracking.drop, {"end_date"}),
+        "restart": (series_tracking.restart, {"start_date", "end_date", "mutation_id"}),
+        "mark_read": (series_tracking.mark_read, set()),
+        "consume": (series_tracking.mark_read, set()),
+        "undo_read": (series_tracking.undo_read, set()),
+        "delete_undated_read": (series_tracking.delete_undated_read, set()),
+    }
+    if action not in functions:
+        raise NotFound
+    function, accepted = functions[action]
+    item = _series_item(user, source=source, media_type=media_type, media_id=media_id)
+    kwargs = {key: value for key, value in data.items() if key in accepted and value is not None}
+    return _call_book(function, user, item, **kwargs)
+
+
+def complete_series(user, *, source, media_type, media_id, data):
+    """Save a log and the finished attempt together (BK-400, MC-103)."""
+    item = _series_item(user, source=source, media_type=media_type, media_id=media_id)
+    payload = dict(data)
+    payload["rating"] = _call_book(single_weight.rating_from_wire, payload.get("rating"))
+    if "place" not in payload:
+        payload["place"] = series_tracking.UNSET
+    return _call_book(series_tracking.complete, user, item, **payload)
+
+
+def update_series_attempt(user, *, source, media_type, media_id, attempt_id, data):
+    """Edit an attempt's dates."""
+    media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
+    if media is None:
+        raise serializers.ValidationError({"journey": "This series isn't tracked."})
+    return _call_book(series_tracking.update_journey, user, media.item, attempt_id, **dict(data))
+
+
+def delete_series_attempt(user, *, source, media_type, media_id, attempt_id):
+    """Delete one attempt without touching unrelated history."""
+    media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
+    if media is None:
+        raise serializers.ValidationError({"journey": "This series isn't tracked."})
+    return _call_book(series_tracking.delete_journey, user, media.item, attempt_id)
+
+
+def _write_series_tracking(user, item, data):
+    """Route generic tracking writes through the same rules (MC-500)."""
+    payload = {
+        key: data[key]
+        for key in ("status", "start_date", "notes", "progress", "mutation_id")
+        if key in data
+    }
+    if "rating" in data:
+        payload["rating"] = _stored_rating(data["rating"], item.media_type)
+    return _call_book(series_tracking.apply_tracking_state, user, item, **payload)
 
 
 def serialize_tracking(media, *, tv=None, tv_detail=False):

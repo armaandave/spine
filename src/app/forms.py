@@ -274,7 +274,28 @@ class MediaForm(forms.ModelForm):
         return score
 
 
-class MangaForm(MediaForm):
+class SeriesForm(MediaForm):
+    """Form for manga and comics: a save goes through the same rules as the app's."""
+
+    def save(self, commit=True):
+        """Apply only what the form changed, so saving notes changes nothing else."""
+        if not commit:
+            return super().save(commit=False)
+        from app import series_tracking
+
+        is_new = self.instance.pk is None
+        payload = {"notes": self.cleaned_data.get("notes", "")}
+        if is_new or "status" in self.changed_data:
+            payload["status"] = self.cleaned_data["status"]
+        if "score" in self.changed_data:
+            payload["rating"] = self.cleaned_data.get("score")
+        if "progress" in self.changed_data:
+            payload["progress"] = self.cleaned_data.get("progress") or 0
+        self.instance = series_tracking.apply_tracking_state(self.instance.user, self.instance.item, **payload)
+        return self.instance
+
+
+class MangaForm(SeriesForm):
     """Form for manga."""
 
     class Meta(MediaForm.Meta):
@@ -368,7 +389,7 @@ class BookForm(MediaForm):
         }
 
 
-class ComicForm(MediaForm):
+class ComicForm(SeriesForm):
     """Form for comics."""
 
     class Meta(MediaForm.Meta):
