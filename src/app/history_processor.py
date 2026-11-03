@@ -8,9 +8,27 @@ from app.templatetags import app_tags
 # Episode facts kept in history for the TV contract (a viewing's kind, calendar day and
 # owning log); they aren't user edits, so the history modal doesn't list them.
 EPISODE_FACT_FIELDS = {"kind", "watched_on", "diary_entry"}
+# What app.series_tracking keeps on a manga or comic to undo a read; not user edits either.
+SERIES_FACT_FIELDS = {
+    "current_attempt",
+    "completed_manually",
+    "rating_source",
+    "like_source",
+    "like_is_independent",
+    "undated_read_previous_tracked",
+    "undated_read_previous_status",
+    "undated_read_previous_attempt",
+    "undated_read_previous_override",
+    "read_override_active",
+    "read_override_previous_tracked",
+    "read_override_previous_status",
+    "read_override_previous_attempt",
+}
 
 
 def _is_hidden_field(field_name, media_type):
+    if media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+        return field_name in SERIES_FACT_FIELDS
     return media_type == MediaTypes.EPISODE.value and field_name in EPISODE_FACT_FIELDS
 
 

@@ -271,10 +271,13 @@ def _search_subtitle(item, issue_count):
     return " · ".join(parts) or None
 
 
-def comic(media_id):
-    """Return the metadata for the selected comic volume from Comic Vine."""
+def comic(media_id, *, refresh=False):
+    """Return the metadata for the selected comic volume from Comic Vine.
+
+    `refresh` asks Comic Vine again instead of reading the cached copy (MC-004).
+    """
     cache_key = f"{Sources.COMICVINE.value}_{MediaTypes.COMIC.value}_{media_id}"
-    data = cache.get(cache_key)
+    data = None if refresh else cache.get(cache_key)
 
     if data is None:
         params = {
@@ -318,7 +321,8 @@ def comic(media_id):
             "source_url": response["site_detail_url"],
             "media_type": MediaTypes.COMIC.value,
             "title": response["name"],
-            "max_progress": None,
+            # How many issues there are, never the last issue's number (MC-002).
+            "max_progress": get_issues_count(response),
             "max_issue_number": get_issue_number(
                 response["last_issue"]["issue_number"],
             ),

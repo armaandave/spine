@@ -59,8 +59,9 @@ CURRENT_METADATA_VERSION = {
     MediaTypes.EPISODE.value: 2,
     # 2: runtime text, details.start_date, first_publish_year, album length, themes.
     MediaTypes.ANIME.value: 2,
-    MediaTypes.MANGA.value: 2,
-    MediaTypes.COMIC.value: 2,
+    # 3: the chapter or issue total (MC-002, MC-003).
+    MediaTypes.MANGA.value: 3,
+    MediaTypes.COMIC.value: 3,
     # 3: album artists.
     MediaTypes.MUSIC.value: 3,
     # 3: the page count, which Goodreads imports left blank. 4: authors.
@@ -108,6 +109,7 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
     update_item_filter_metadata(item, metadata)
     if item.media_type == MediaTypes.BOOK.value:
         _store_book_pages(item, metadata)
+    store_series_total(item, metadata)
     if item.media_type in CREDIT_TYPES:
         store_item_credits(item, metadata)
     if persist_series:
@@ -141,6 +143,32 @@ def _store_book_pages(item, metadata):
             item.total_pages = pages
             item.save(update_fields=["total_pages"])
             return
+
+
+def store_series_total(item, metadata):
+    """Store a manga's chapters or a comic's issues so far (MC-002, MC-003).
+
+    A provider that lists none leaves what is stored. A comic's count only grows: a
+    copy cached before its re-read (MC-004) must not take back a newer one.
+    """
+    if item.media_type not in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+        return
+    details = metadata.get("details") or {}
+    candidates = [metadata.get("max_progress")]
+    if item.media_type == MediaTypes.COMIC.value:
+        candidates.append(details.get("issues_count"))
+    for value in candidates:
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count <= 0 or count == item.series_total:
+            return
+        if item.media_type == MediaTypes.COMIC.value and count < (item.series_total or 0):
+            return
+        item.series_total = count
+        item.save(update_fields=["series_total"])
+        return
 
 
 def store_item_credits(item, metadata):
