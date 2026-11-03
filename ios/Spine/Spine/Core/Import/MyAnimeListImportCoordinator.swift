@@ -22,7 +22,7 @@ final class MyAnimeListImportCoordinator {
 
     @ObservationIgnored var onUnauthorized: (() -> Void)?
     /// Consulted before a running import is resumed. The session says no until a request has got through, because
-    /// a resumed import that polls an unreachable server would just flip to failed. nil means always.
+    /// there's no point polling a server the app can't reach yet. nil means always.
     @ObservationIgnored var canResume: (() -> Bool)?
 
     @ObservationIgnored private let importRepository: ImportRepository
@@ -63,6 +63,7 @@ final class MyAnimeListImportCoordinator {
     func startImport(fileURL: URL, mode: ImportMode) {
         uploadTask?.cancel()
         pollingTask?.cancel()
+        clearPersistedJob() // this import replaces any earlier one
         lastFileURL = fileURL
         lastMode = mode
         uploadTask = Task { [weak self] in
@@ -77,6 +78,8 @@ final class MyAnimeListImportCoordinator {
 
     func cancelUploadFailure() {
         uploadTask?.cancel()
+        pollingTask?.cancel()
+        pollingTask = nil
         clearPersistedJob()
         uploadFileSize = nil
         phase = .idle
@@ -92,12 +95,12 @@ final class MyAnimeListImportCoordinator {
         guard let job = persistedJob else { return }
         guard !hasProcessingJob else { return }
 
-        if Date().timeIntervalSince(job.startedAt) >= timeout {
-            phase = .failed(message: Self.timeoutMessage)
-            return
+        // However long it has been, only the server knows how the import went. `poll` asks it first, and
+        // a failure already on screen stays there until it answers.
+        let isShowingFailure = if case .failed = phase { true } else { false }
+        if !isShowingFailure {
+            phase = .processing(taskId: job.taskId, statusLabel: Self.statusLabel(for: "PENDING"), startedAt: job.startedAt)
         }
-
-        phase = .processing(taskId: job.taskId, statusLabel: Self.statusLabel(for: "PENDING"), startedAt: job.startedAt)
         startPolling(taskId: job.taskId, startedAt: job.startedAt)
     }
 
@@ -113,9 +116,18 @@ final class MyAnimeListImportCoordinator {
                 // Not a failure of the import: the request was cancelled, or belonged to a session that has ended.
                 return
             } catch {
-                phase = .failed(message: error.localizedDescription)
+                if Self.isUnknownJob(error) {
+                    forgetUnknownJob()
+                    return
+                }
                 if case APIError.unauthorized = error {
+                    phase = .failed(message: error.localizedDescription)
                     onUnauthorized?()
+                    return
+                }
+                // A running poll keeps asking, so one check that didn't work doesn't end the import.
+                if pollingTask == nil {
+                    phase = .failed(message: error.localizedDescription)
                 }
             }
         }
@@ -177,12 +189,6 @@ final class MyAnimeListImportCoordinator {
 
     private func poll(taskId: String, startedAt: Date) async {
         while !Task.isCancelled {
-            if Date().timeIntervalSince(startedAt) >= timeout {
-                phase = .failed(message: Self.timeoutMessage)
-                pollingTask = nil
-                return
-            }
-
             do {
                 let task = try await importRepository.importTaskStatus(taskId: taskId)
                 if handle(task: task, taskId: taskId, startedAt: startedAt) {
@@ -193,11 +199,22 @@ final class MyAnimeListImportCoordinator {
                 // Cancelled by `clearFinishedJob` or a newer poll: the phase and `pollingTask` are theirs now.
                 return
             } catch {
-                phase = .failed(message: error.localizedDescription)
-                pollingTask = nil
                 if case APIError.unauthorized = error {
+                    phase = .failed(message: error.localizedDescription)
+                    pollingTask = nil
                     onUnauthorized?()
+                    return
                 }
+                if Self.isUnknownJob(error) {
+                    forgetUnknownJob()
+                    return
+                }
+                // A status check that didn't work says nothing about the import, which keeps running on the server.
+            }
+
+            if Date().timeIntervalSince(startedAt) >= timeout {
+                phase = .failed(message: Self.timeoutMessage)
+                pollingTask = nil
                 return
             }
 
@@ -251,6 +268,23 @@ final class MyAnimeListImportCoordinator {
     }
 
     private static let timeoutMessage = "Import is taking longer than expected. Check back later - it may still complete on the server."
+    private static let unknownJobMessage = "We can't find this import anymore. If your diary doesn't show it, try again."
+
+    /// The server records every import when it's queued and keeps the record for a week, so a 404 is a definite
+    /// answer: asking again won't help, and it doesn't mean the import failed.
+    private static func isUnknownJob(_ error: Error) -> Bool {
+        if case APIError.httpStatus(404, _) = error {
+            return true
+        }
+        return false
+    }
+
+    private func forgetUnknownJob() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        clearPersistedJob()
+        phase = .failed(message: Self.unknownJobMessage)
+    }
 
     static let unsupportedFileMessage = "Please upload the .xml or .xml.gz export from MyAnimeList."
     private nonisolated static let defaultFileName = "animelist.xml"

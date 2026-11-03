@@ -6,6 +6,11 @@ struct LetterboxdImportView: View {
     @State private var isFileImporterPresented = false
     @State private var isOverwriteConfirmationPresented = false
     @State private var isUploadScreenPresented = false
+    @State private var isSignInSheetPresented = false
+    @State private var isSignInFailurePresented = false
+    @State private var startsWithSignIn = false
+    @State private var downloadedExport: URL?
+    @State private var didSignInFail = false
 
     let coordinator: LetterboxdImportCoordinator
 
@@ -22,13 +27,14 @@ struct LetterboxdImportView: View {
         SettingsImportLandingPage(
             source: "Letterboxd",
             headline: "Bring your film life with you.",
-            instructions: "Export your data from Letterboxd settings, then upload the ZIP file here.",
+            instructions: "Sign in to Letterboxd and we'll get your data for you. Or export it from Letterboxd settings and upload the ZIP file here.",
             linkTitle: "Open Letterboxd Data Settings",
             linkURL: URL(string: "https://letterboxd.com/settings/data/")!,
             mode: $mode,
             modeDetail: mode.detail,
             isBusy: isBusy,
-            chooseFile: chooseFile
+            chooseFile: chooseFile,
+            getDataNow: getDataNow
         )
         .navigationTitle("Letterboxd Import")
         .navigationBarTitleDisplayMode(.inline)
@@ -40,9 +46,30 @@ struct LetterboxdImportView: View {
         ) {
             Button("Replace Existing", role: .destructive) {
                 isOverwriteConfirmationPresented = false
-                isFileImporterPresented = true
+                if startsWithSignIn {
+                    isSignInSheetPresented = true
+                } else {
+                    isFileImporterPresented = true
+                }
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $isSignInSheetPresented, onDismiss: finishSignIn) {
+            LetterboxdSignInSheet(
+                onExport: { fileURL in
+                    downloadedExport = fileURL
+                    isSignInSheetPresented = false
+                },
+                onFailure: {
+                    didSignInFail = true
+                    isSignInSheetPresented = false
+                }
+            )
+        }
+        .alert("Couldn't get your data", isPresented: $isSignInFailurePresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Letterboxd didn't send your data. Try again, or export it yourself and upload the ZIP file.")
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
@@ -59,10 +86,31 @@ struct LetterboxdImportView: View {
     }
 
     private func chooseFile() {
+        startsWithSignIn = false
         if mode == .overwrite {
             isOverwriteConfirmationPresented = true
         } else {
             isFileImporterPresented = true
+        }
+    }
+
+    private func getDataNow() {
+        startsWithSignIn = true
+        if mode == .overwrite {
+            isOverwriteConfirmationPresented = true
+        } else {
+            isSignInSheetPresented = true
+        }
+    }
+
+    private func finishSignIn() {
+        if let downloadedExport {
+            self.downloadedExport = nil
+            isUploadScreenPresented = true
+            coordinator.startImport(fileURL: downloadedExport, mode: mode)
+        } else if didSignInFail {
+            didSignInFail = false
+            isSignInFailurePresented = true
         }
     }
 
@@ -89,6 +137,8 @@ struct SettingsImportLandingPage: View {
     let modeDetail: String
     let isBusy: Bool
     let chooseFile: () -> Void
+    /// Fetches the file for them. Without it, Upload is the only button.
+    var getDataNow: (() -> Void)?
 
     var body: some View {
         ZStack {
@@ -100,22 +150,43 @@ struct SettingsImportLandingPage: View {
                     instructionsCard
                     modeCard
 
-                    Button(action: chooseFile) {
-                        Label("Upload", systemImage: "square.and.arrow.up")
-                            .font(.headline)
-                            .foregroundStyle(isBusy ? .white.opacity(0.38) : .black)
-                            .frame(maxWidth: .infinity, minHeight: 24)
+                    VStack(spacing: 12) {
+                        if let getDataNow {
+                            mainButton("Get your data now", systemImage: "person.crop.circle", action: getDataNow)
+
+                            Button(action: chooseFile) {
+                                Label("Upload", systemImage: "square.and.arrow.up")
+                                    .font(.headline)
+                                    .foregroundStyle(.white.opacity(isBusy ? 0.38 : 1))
+                                    .frame(maxWidth: .infinity, minHeight: 24)
+                            }
+                            .tint(.white)
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .disabled(isBusy)
+                        } else {
+                            mainButton("Upload", systemImage: "square.and.arrow.up", action: chooseFile)
+                        }
                     }
-                    .tint(isBusy ? .white.opacity(0.08) : .white)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(isBusy)
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
                 .padding(.bottom, 36)
             }
         }
+    }
+
+    private func mainButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+                .foregroundStyle(isBusy ? .white.opacity(0.38) : .black)
+                .frame(maxWidth: .infinity, minHeight: 24)
+        }
+        .tint(isBusy ? .white.opacity(0.08) : .white)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(isBusy)
     }
 
     private var header: some View {

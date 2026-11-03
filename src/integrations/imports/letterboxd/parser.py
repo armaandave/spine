@@ -23,6 +23,8 @@ STANDARD_FILES = {
     "reviews.csv",
     "likes/films.csv",
 }
+# Links in these open one log or review; links everywhere else open the film.
+ENTRY_LINK_FILES = {"diary.csv", "reviews.csv"}
 SKIP_PREFIXES = ("deleted/", "orphaned/", "__MACOSX/")
 SKIP_FILES = {"profile.csv", "comments.csv", "likes/lists.csv", "likes/reviews.csv"}
 LIST_HEADER = ["Position", "Name", "Year", "URL", "Description"]
@@ -74,7 +76,10 @@ def parse_export(file_or_bytes):
         if not path or member.is_dir() or _skip_path(path):
             continue
         if path in STANDARD_FILES:
-            rows = [_normalize_row(row) for row in _read_dicts(archive, member)]
+            rows = [
+                {**_normalize_row(row), "entry_link": path in ENTRY_LINK_FILES}
+                for row in _read_dicts(archive, member)
+            ]
             _add_source_identity(rows)
             setattr(export, _attr_for_path(path), rows)
         elif path.startswith("lists/") and path.endswith(".csv"):
