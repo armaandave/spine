@@ -124,6 +124,13 @@ def _user_day(user, value):
     return single_weight.calendar_datetime(value, today=_today(user)).date()
 
 
+def _sent_day(user, value):
+    """Return the date a phone sent for a save or a Stop; a day ahead caps at today."""
+    if isinstance(value, datetime) and not single_weight.is_calendar_datetime(value):
+        value = user_calendar.day_of(value, user)
+    return single_weight.sent_day(value, _today(user))
+
+
 def _carrier(day):
     """Return a calendar day as the UTC midnight the diary stores it at (STAT-100)."""
     return datetime.combine(day, time.min, tzinfo=UTC) if day else None
@@ -268,12 +275,19 @@ def _begin(row, *, created, status=Status.IN_PROGRESS.value, **fields):
     )
 
 
-def _validate_end(attempt, day):
-    """BK-306: an end can't predate the attempt's start or latest saved number."""
+def _closing_day(user, attempt, day):
+    """BK-306: return an end, which can't predate the attempt's start or latest saved number.
+
+    The phone's own date is never refused: after a flight west today can be before them,
+    so the stored date stays no earlier than those.
+    """
+    if day == _today(user):
+        return max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
     if attempt.start_date and day < attempt.start_date:
         raise ValidationError("An end date can't be before the attempt's start date.")
     if attempt.progressed_on and day < attempt.progressed_on:
         raise ValidationError("An end date can't be before the latest progress update.")
+    return day
 
 
 def _queue_statistics(user_id, day):
@@ -469,10 +483,8 @@ def drop(user, item, *, end_date=None):
     attempt = _open_attempt(row) if row else None
     if attempt is None:
         return assign_status(user, item, Status.DROPPED.value)
-    day = _user_day(user, end_date or _today(user))
-    _validate_end(attempt, day)
+    attempt.end_date = _closing_day(user, attempt, _sent_day(user, end_date or _today(user)))
     attempt.status = Status.DROPPED.value
-    attempt.end_date = day
     attempt.save(update_fields=["status", "end_date"])
     _set_row_from_attempt(row, attempt)
     return row
@@ -490,14 +502,12 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     old = _open_attempt(row)
     if old is None:
         raise ValidationError("Only a current or paused attempt can be restarted.")
-    day = _user_day(user, end_date or _today(user))
-    _validate_end(old, day)
+    old.end_date = _closing_day(user, old, _sent_day(user, end_date or _today(user)))
     old.status = Status.DROPPED.value
-    old.end_date = day
     old.save(update_fields=["status", "end_date"])
     new = row.attempts.create(
         status=Status.IN_PROGRESS.value,
-        start_date=_user_day(user, start_date or _today(user)),
+        start_date=_sent_day(user, start_date or _today(user)),
         origin=SeriesAttempt.Origin.LIVE,
         previous_tracked=True,
         previous_status=Status.DROPPED.value,
@@ -562,8 +572,11 @@ def _save_place(user, item, place, progressed_on, *, mutation_id=None):
         # A retry after a lost answer: that save's log screen still opens (MC-100).
         row.opens_log = True
         return row
-    day = _user_day(user, progressed_on or _today(user))
-    if attempt.start_date and day < attempt.start_date:
+    day = _sent_day(user, progressed_on or _today(user))
+    if day == _today(user):
+        # Never refused: after a flight west today can be before the start or last save.
+        day = max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
+    elif attempt.start_date and day < attempt.start_date:
         raise ValidationError("Progress updates can't be before the attempt's start date.")
     previous = _attempt_progress(attempt, row.item)
     attempt.place = place
@@ -933,7 +946,7 @@ def complete(
 
     fallback_place = row.progress
     if attempt:
-        _validate_end(attempt, day)
+        day = _closing_day(user, attempt, day)
         attempt.pre_completion_status = attempt.status
         attempt.pre_completion = {
             "place": attempt.place,
@@ -1033,7 +1046,7 @@ def update_completion(entry, data, *, tags=UNSET):
     if "consumed_at" in data:
         day = _user_day(entry.user, data["consumed_at"])
         if attempt:
-            _validate_end(attempt, day)
+            day = _closing_day(entry.user, attempt, day)
             attempt.end_date = day
             attempt.save(update_fields=["end_date"])
             if entry.consumed_at != _carrier(day):
@@ -1294,7 +1307,7 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
     if end_date is not UNSET:
         day = _user_day(user, end_date) if end_date is not None else None
         if day:
-            _validate_end(attempt, day)
+            day = _closing_day(user, attempt, day)
         attempt.end_date = day
         fields.append("end_date")
     if fields:

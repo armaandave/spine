@@ -191,6 +191,7 @@ Dropping a tracked playthrough records today in the user's local timezone as its
 Show that date in Play History and allow users to edit it later.
 The date cannot be in the future or before the playthrough's start date, if known.
 Use the same date limits when Restart from Beginning closes the previous attempt as Dropped.
+A sent date equal to the phone's today is never refused: after a flight west today can fall before the start or the latest save, so the stored date stays no earlier than those. A date one day ahead caps at today. A different date keeps the refusal. A save's own date follows the same rule, and the save keeps the phone's date as its day.
 
 A directly assigned Dropped status without a playthrough remains undated under GM-009.
 

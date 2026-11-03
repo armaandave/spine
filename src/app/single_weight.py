@@ -127,6 +127,15 @@ def calendar_datetime(value, *, today=None):
     return datetime.combine(day, time.min, tzinfo=UTC)
 
 
+def sent_day(value, today):
+    """Return the day a phone sent, where up to one day ahead of its owner's today is today.
+
+    A clock a few seconds ahead sends tomorrow just after midnight. Further ahead is
+    refused (BK-304, BK-305, GM-013).
+    """
+    return min(calendar_datetime(value, today=today + timedelta(days=1)).date(), today)
+
+
 def is_calendar_datetime(value):
     """Whether a value is already a normalized UTC-midnight date carrier."""
     return (

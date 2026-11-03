@@ -1,13 +1,12 @@
 """Authoritative book tracking and reading-journey transitions."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from django.utils import timezone
 
 from api.services import stats_cache
 from app import single_weight, user_calendar
@@ -70,10 +69,20 @@ def supports(value):
     return getattr(value, "media_type", value) == "book"
 
 
-def _calendar_datetime(value, *, required=True):
+def _calendar_datetime(value, user, *, required=True):
     if value is None and not required:
         return None
-    return single_weight.calendar_datetime(value)
+    return single_weight.calendar_datetime(value, today=user_calendar.today(user))
+
+
+def _carrier(day):
+    return datetime.combine(day, time.min, tzinfo=UTC)
+
+
+def _sent_carrier(value, user):
+    """Return the date a phone sent for a Stop or Restart; a day ahead caps at today."""
+    today = user_calendar.today(user)
+    return _carrier(single_weight.sent_day(value or today, today))
 
 
 def _day(value):
@@ -228,9 +237,16 @@ def _has_prior_completion(book, completed_at, *, exclude_session=None):
     return sessions.exists()
 
 
-def _validate_journey_date(session, value, *, ending=False):
-    moment = _calendar_datetime(value)
+def _validate_journey_date(session, value, user, *, ending=False):
+    """Return a journey's date as a carrier, in order with its start and saves (BK-306).
+
+    The phone's own date is never refused: after a flight west today can be before the
+    start or the last save, so the stored date stays no earlier than those.
+    """
+    moment = _calendar_datetime(value, user)
     day = _day(moment)
+    if day == user_calendar.today(user):
+        return _carrier(max(filter(None, (day, _day(session.start_date), session.progressed_on if ending else None))))
     if session.start_date and day < _day(session.start_date):
         raise ValidationError("Journey end dates cannot predate the start date.")
     if ending and session.progressed_on and day < session.progressed_on:
@@ -334,7 +350,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
             _set_book_from_session(book, current)
         return book
 
-    started_at = _calendar_datetime(start_date or timezone.localdate())
+    started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
     session = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
@@ -366,8 +382,8 @@ def import_journey(user, item, *, status, start_date=None, end_date=None):
     session = BookSession.objects.create(
         related_book=book,
         status=status,
-        start_date=_calendar_datetime(start_date, required=False),
-        end_date=_calendar_datetime(end_date, required=False),
+        start_date=_calendar_datetime(start_date, user, required=False),
+        end_date=_calendar_datetime(end_date, user, required=False),
         origin=BookSession.Origin.LIVE,
         previous_tracked=not created,
         previous_status=None if created else book.status,
@@ -420,7 +436,8 @@ def drop(user, item, *, end_date=None):
     session.status = Status.DROPPED.value
     session.end_date = _validate_journey_date(
         session,
-        end_date or timezone.localdate(),
+        _sent_carrier(end_date, user),
+        user,
         ending=True,
     )
     session.save(update_fields=["status", "end_date"])
@@ -446,11 +463,12 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     old.status = Status.DROPPED.value
     old.end_date = _validate_journey_date(
         old,
-        end_date or timezone.localdate(),
+        _sent_carrier(end_date, user),
+        user,
         ending=True,
     )
     old.save(update_fields=["status", "end_date"])
-    started_at = _calendar_datetime(start_date or timezone.localdate())
+    started_at = _sent_carrier(start_date, user)
     new = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
@@ -522,8 +540,12 @@ def update_progress(
     else:
         raise ValidationError("progress_type must be pages or percentage.")
 
-    progress_day = _day(_calendar_datetime(progressed_on or timezone.localdate()))
-    if session.start_date and progress_day < _day(session.start_date):
+    today = user_calendar.today(user)
+    progress_day = single_weight.sent_day(progressed_on or today, today)
+    if progress_day == today:
+        # Never refused: after a flight west today can be before the start or last save.
+        progress_day = max(filter(None, (today, _day(session.start_date), session.progressed_on)))
+    elif session.start_date and progress_day < _day(session.start_date):
         raise ValidationError("Progress updates cannot predate the journey start.")
     previous = _journey_progress(session)
     session.pages_read = pages
@@ -808,7 +830,7 @@ def complete(
 ):
     """Atomically create one completion log and complete its journey."""
     rating = single_weight.validate_storage_rating(rating)
-    completed_at = _calendar_datetime(completion_date)
+    completed_at = _calendar_datetime(completion_date, user)
     mutation_id = _mutation(mutation_id)
     if import_source and import_source_id:
         existing_entry = DiaryEntry.objects.select_for_update().filter(
@@ -845,7 +867,7 @@ def complete(
         exclude_session=session,
     )
     if session:
-        completed_at = _validate_journey_date(session, completed_at, ending=True)
+        completed_at = _validate_journey_date(session, completed_at, user, ending=True)
         session.pre_completion_status = session.status
         session.pre_completion_progress = {
             "pages_read": session.pages_read,
@@ -968,6 +990,7 @@ def update_completion(entry, data, *, tags=UNSET):
         entry.consumed_at = _validate_journey_date(
             session,
             data["consumed_at"],
+            entry.user,
             ending=True,
         )
         session.end_date = entry.consumed_at
@@ -1223,7 +1246,7 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
         raise ValidationError("Edit a completed journey's date through its diary log.")
     fields = []
     if start_date is not UNSET:
-        started_at = _calendar_datetime(start_date)
+        started_at = _calendar_datetime(start_date, user)
         if session.progressed_on and _day(started_at) > session.progressed_on:
             raise ValidationError("Journey starts cannot follow their latest progress update.")
         if session.end_date and _day(started_at) > _day(session.end_date):
@@ -1231,7 +1254,7 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
         session.start_date = started_at
         fields.append("start_date")
     if end_date is not UNSET:
-        session.end_date = _validate_journey_date(session, end_date, ending=True)
+        session.end_date = _validate_journey_date(session, end_date, user, ending=True)
         fields.append("end_date")
     if fields:
         session.save(update_fields=fields)

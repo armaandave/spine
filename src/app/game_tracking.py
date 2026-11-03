@@ -4,7 +4,6 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.utils import timezone
 
 from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
@@ -31,8 +30,29 @@ def supports(value):
     return getattr(value, "media_type", value) == "game"
 
 
-def _day(value):
-    return single_weight.calendar_date(single_weight.calendar_datetime(value))
+def _day(value, user):
+    today = user_calendar.today(user)
+    return single_weight.calendar_date(single_weight.calendar_datetime(value, today=today))
+
+
+def _carrier(day):
+    """Return an already valid calendar day as the UTC midnight the diary stores it at."""
+    return single_weight.calendar_datetime(day, today=day)
+
+
+def _closing_day(user, session, value=None):
+    """Return the day a Stop lands on (GM-013).
+
+    The phone's own date, or none, is never refused: after a flight west today can be
+    before the start or last save, so the day stays no earlier than those. A day ahead
+    caps at today. Any other date is the caller's to check.
+    """
+    today = user_calendar.today(user)
+    day = single_weight.sent_day(value or today, today)
+    if day != today:
+        return day
+    saves = (session.start_date, session.minutes_updated_on, session.percentage_updated_on)
+    return max(filter(None, (today, *saves)))
 
 
 def _locked_game(user, item):
@@ -147,7 +167,7 @@ def _sync_state(game):
         )
     game.current_session = selected
     game.start_date = (
-        single_weight.calendar_datetime(selected.start_date)
+        _carrier(selected.start_date)
         if selected and selected.start_date
         else None
     )
@@ -191,7 +211,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
     session = GameSession.objects.create(
         related_game=game,
         status=Status.IN_PROGRESS,
-        start_date=_day(start_date or timezone.localdate()),
+        start_date=_day(start_date or user_calendar.today(user), user),
         mutation_id=mutation_id,
     )
     _push(game, session.status, "playthrough", session)
@@ -218,7 +238,7 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
             )
         session.status = status
         if status == Status.DROPPED:
-            session.end_date = _day(timezone.localdate())
+            session.end_date = _closing_day(user, session)
         session.save(update_fields=["status", "end_date"])
         _push(game, status, "playthrough", session)
     elif game.status != status or not game.status_history:
@@ -240,7 +260,7 @@ def drop(user, item, *, end_date=None):
     session = _open_session(game)
     if not session:
         return assign_status(user, item, Status.DROPPED)
-    end = _day(end_date or timezone.localdate())
+    end = _closing_day(user, session, end_date)
     _validate_dates(session, end_date=end)
     session.status = Status.DROPPED
     session.end_date = end
@@ -264,6 +284,9 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     if not game or not _open_session(game):
         raise ValidationError("Only a Playing or Paused playthrough can restart.")
     drop(user, item, end_date=end_date)
+    # A phone's Restart sends its own date for both; a day ahead caps at today.
+    if start_date:
+        start_date = single_weight.sent_day(start_date, user_calendar.today(user))
     return start(user, item, start_date=start_date, mutation_id=mutation_id)
 
 
@@ -418,11 +441,17 @@ def update_progress(
         raise ValidationError("Playthrough not found.")
     minutes = _integer(total_minutes) if total_minutes is not UNSET else UNSET
     percent = _percentage(percentage) if percentage is not UNSET else UNSET
-    day = _day(progressed_on or timezone.localdate())
-    if session.start_date and day < session.start_date:
+    today = user_calendar.today(user)
+    saved_on = single_weight.sent_day(progressed_on or today, today)
+    day = saved_on
+    if saved_on == today:
+        # Never refused: after a flight west today can be before the start. The save
+        # keeps the phone's date, and the session's stays in order.
+        day = max(filter(None, (today, session.start_date)))
+    elif session.start_date and day < session.start_date:
         raise ValidationError("Progress cannot predate the start date.")
-    _record_progress_change(user, item, session, "minute", session.total_minutes, minutes)
-    _record_progress_change(user, item, session, "percent", session.completion, percent)
+    _record_progress_change(user, item, session, "minute", session.total_minutes, minutes, saved_on)
+    _record_progress_change(user, item, session, "percent", session.completion, percent, saved_on)
     if minutes is not UNSET:
         session.total_minutes = minutes
         session.minutes_updated_on = day
@@ -437,7 +466,7 @@ def update_progress(
     return _sync_state(game)
 
 
-def _record_progress_change(user, item, session, unit, previous, current):
+def _record_progress_change(user, item, session, unit, previous, current, saved_on):
     """Record playtime or percentage moving, the history daily activity reads."""
     from social.models import ProgressChange
 
@@ -454,7 +483,7 @@ def _record_progress_change(user, item, session, unit, previous, current):
         item=item,
         previous_progress=snapshot(previous or 0),
         current_progress=snapshot(current),
-        saved_on=user_calendar.today(user),
+        saved_on=saved_on,
     )
 
 
@@ -494,9 +523,9 @@ def update_playthrough(
     if end_date is not UNSET and session.status != Status.DROPPED:
         raise ValidationError("Only a dropped playthrough has an editable drop date.")
     if start_date is not UNSET:
-        session.start_date = _day(start_date) if start_date is not None else None
+        session.start_date = _day(start_date, user) if start_date is not None else None
     if end_date is not UNSET:
-        session.end_date = _day(end_date)
+        session.end_date = _day(end_date, user)
     _validate_dates(session)
     session.save()
     if total_minutes is not UNSET or percentage is not UNSET:
@@ -564,7 +593,7 @@ def complete(
         if selected.status not in OPEN_STATUSES:
             raise ValidationError("Only Playing or Paused playthroughs can finish.")
         session = selected
-    day = _day(completion_date)
+    day = _day(completion_date, user)
     if session is None:
         session = GameSession(
             related_game=game,
@@ -572,7 +601,7 @@ def complete(
             origin=GameSession.Origin.DIRECT_LOG,
         )
     if start_date is not UNSET:
-        session.start_date = _day(start_date) if start_date is not None else None
+        session.start_date = _day(start_date, user) if start_date is not None else None
     _validate_completion_date(session, day)
     minutes = (
         session.total_minutes if total_minutes is UNSET else _integer(total_minutes)
@@ -592,7 +621,7 @@ def complete(
     entry = DiaryEntry.objects.create(
         user=user,
         item=item,
-        consumed_at=single_weight.calendar_datetime(day),
+        consumed_at=_carrier(day),
         rating=rating,
         liked=liked,
         review=review,
@@ -644,11 +673,11 @@ def update_completion(entry, data, *, tags=UNSET):
     old_date = entry.consumed_at
     old_rating = entry.rating
     if "consumed_at" in data:
-        day = _day(data["consumed_at"])
+        day = _day(data["consumed_at"], entry.user)
         if session:
             _validate_completion_date(session, day)
             session.end_date = day
-        entry.consumed_at = single_weight.calendar_datetime(day)
+        entry.consumed_at = _carrier(day)
     snapshot = dict(entry.progress_snapshot or {})
     for field, linked in (
         ("total_minutes", "minutes_linked"),

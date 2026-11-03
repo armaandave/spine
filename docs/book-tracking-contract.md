@@ -354,6 +354,9 @@ will remain as a previous attempt. Saving the action atomically:
 - defaults the new start date to the user's current local date; and
 - keeps the book in the Currently Reading library section.
 
+A date the phone sends here follows BK-306's rule for the phone's own date, and a
+date one day ahead caps at today.
+
 The new journey is a reread only if an earlier journey was Completed. The
 abandoned journey remains a historical DNF.
 
@@ -366,8 +369,9 @@ button and is unavailable for retrospective status without a journey.
 Marking a live journey Did Not Finish moves the book to the DNF library section
 and preserves the progress reached before it was dropped.
 
-The action closes the journey using the user's current local date. That DNF end
-date may be edited later under BK-306. A retrospectively assigned DNF status
+The action closes the journey using the user's current local date. A date the
+phone sends follows BK-306's rule for the phone's own date, and a date one day
+ahead caps at today. That DNF end date may be edited later under BK-306. A retrospectively assigned DNF status
 without a journey remains undated.
 
 DNF permanently closes that journey. Choosing Currently Reading later creates a
@@ -387,6 +391,9 @@ Completed.
 - Editing dates must preserve the same ordering.
 - Direct retrospective statuses remain undated.
 - Direct Log requires a completion date but no start date.
+- A sent date equal to the phone's today is never refused: after a flight west
+  today can fall before the start or the latest update, so the stored date stays
+  no earlier than those. A different date keeps these refusals.
 
 ### BK-307: DNF attempts remain visible as reading history
 

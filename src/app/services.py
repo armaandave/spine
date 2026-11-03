@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db import transaction
 
 from api.services import stats_cache
+from app import user_calendar
 from app.models import DiaryEntry, Item, Media, MediaLike, MediaTypes, Status
 from app.tasks import update_daily_statistics
 
@@ -184,7 +185,7 @@ def create_diary_entry(
         _, entry = book_tracking.complete(
             user,
             item,
-            completion_date=consumed_at or timezone.localdate(),
+            completion_date=consumed_at or user_calendar.today(user),
             rating=rating,
             review=review,
             liked=liked,
@@ -206,7 +207,7 @@ def create_diary_entry(
         _, entry = series_tracking.complete(
             user,
             item,
-            completion_date=consumed_at or timezone.localdate(),
+            completion_date=consumed_at or user_calendar.today(user),
             rating=rating,
             review=review,
             liked=liked,

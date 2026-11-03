@@ -2105,7 +2105,7 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                 item.save(update_fields=["total_pages"])
         
     # Determine default date for logging
-    default_date = timezone.localdate()
+    default_date = user_calendar.today(request.user)
     tv_defaults = None
     if tv_tracking.supports(item):
         # The server's composer defaults for this target: date and Rewatch (TV-404).
@@ -2964,7 +2964,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
             if (single_weight.supports(media_type) or game_tracking.supports(media_type)):
                 return JsonResponse({"error": "A consumption date is required."}, status=400)
             consumed_at = timezone.now()
-        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > timezone.localdate():
+        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.today(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3178,7 +3178,7 @@ def update_diary_entry(request, entry_id):
         elif not consumed_at:
             # Keep the original datetime to preserve ordering.
             consumed_at = entry.consumed_at
-        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > timezone.localdate():
+        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > user_calendar.today(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3511,7 +3511,7 @@ def log_book_completed(request, source, media_id):
         book_instance, _ = book_tracking.complete(
             request.user,
             item,
-            completion_date=form.cleaned_data.get('end_date') or timezone.localdate(),
+            completion_date=form.cleaned_data.get('end_date') or user_calendar.today(request.user),
             rating=form.cleaned_data.get('score'),
             review=form.cleaned_data.get('notes', ''),
             mutation_id=uuid4(),
