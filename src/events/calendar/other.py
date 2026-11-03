@@ -28,6 +28,11 @@ def process_other(item, events_bulk):
         )
         return
 
+    from api.services.item_metadata import store_series_total  # noqa: PLC0415
+
+    # A manga's total applies as soon as a provider lists one (MC-003).
+    store_series_total(item, metadata)
+
     date_key = config.get_date_key(item.media_type)
     content_number = metadata["max_progress"]
 

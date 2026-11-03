@@ -5,12 +5,15 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from api.services import stats_time
+from api.services.stats_scope import build_scope
 from app import series_tracking
 from app.models import Comic, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.providers import services
 from events.calendar.comic import process_comic
 from events.calendar.helpers import date_parser
 from events.models import Event
+from events.tasks import reload_calendar
 from events.tests.calendar.utils import CalendarFixturesMixin
 from social.models import Activity, ProgressChange
 
@@ -192,6 +195,15 @@ class NewIssueMovesFinishedComicsTests(TestCase):
     def comic(self):
         return Comic.objects.get(user=self.user, item=self.item)
 
+    def counted(self):
+        """Return the issues stats count over this year, in which every write here falls."""
+        scope = build_scope(
+            self.user,
+            self.user,
+            {"start_date": str(self.today - timedelta(days=60)), "end_date": str(self.today), "schema": "2"},
+        )
+        return stats_time.type_time(scope, "comic").value
+
     # MC-202: a Read comic carries on at its place, adding no activity, keeping its logs.
     def test_a_read_comic_carries_on_by_itself(self, _issue):
         series_tracking.complete(self.user, self.item, completion_date=self.today)
@@ -223,13 +235,87 @@ class NewIssueMovesFinishedComicsTests(TestCase):
         self.assertFalse(entry.is_rewatch)
         self.assertEqual(self.comic().progress, 55)
 
-    # MC-202: a comic marked Read with the eye moves too, with no number to carry.
-    def test_an_eye_marked_comic_moves_at_zero(self, _issue):
+    # MC-202, MC-007: a comic marked Read with the eye moves at the issues it had, and
+    # only what comes next counts.
+    def test_an_eye_marked_comic_moves_at_the_previous_total(self, _issue):
         series_tracking.mark_read(self.user, self.item)
         self.run_job()
         row = self.comic()
         self.assertEqual(row.status, Status.IN_PROGRESS.value)
-        self.assertEqual(row.progress, 0)
+        self.assertEqual(row.progress, 54)
+        self.assertEqual(row.current_attempt.place, 54)
+        self.assertTrue(row.current_attempt.continues)
+        self.assertEqual(self.counted(), 0, "The eye counts on no day")
+        series_tracking.update_progress(self.user, self.item, value=55)
+        self.assertEqual(self.counted(), 1)
+
+    # MC-202: a count an earlier pass or the page already raised still leaves the new issue.
+    def test_an_eye_marked_comic_with_the_count_already_raised_moves_one_short(self, _issue):
+        series_tracking.mark_read(self.user, self.item)
+        Item.objects.filter(pk=self.item.pk).update(series_total=55)
+        self.item.refresh_from_db()
+        self.run_job()
+        self.assertEqual(self.comic().progress, 54)
+        self.assertEqual(self.counted(), 0)
+
+    # MC-202, MC-200: reading up to the new total before the job sees it stays Read: the
+    # log's own commit runs the job.
+    def test_a_log_at_the_new_total_stays_read_when_its_commit_runs_the_job(self, _issue):
+        series_tracking.start(self.user, self.item)
+        Item.objects.filter(pk=self.item.pk).update(series_total=55)
+        self.item.refresh_from_db()
+        series_tracking.update_progress(self.user, self.item, value=55)
+        metadata = {"max_issue_number": 55, "last_issue_id": "4000-1", "details": {"issues_count": 55}}
+        with (
+            patch("events.calendar.comic.services.get_media_metadata", return_value=metadata),
+            patch("events.tasks.reload_calendar.delay", side_effect=lambda **kwargs: reload_calendar(**kwargs)),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            series_tracking.complete(self.user, self.item, completion_date=self.today)
+        self.assertTrue(Event.objects.filter(item=self.item, content_number=55).exists(), "The log's commit ran the job")
+        row = self.comic()
+        self.assertEqual((row.status, row.progress), (Status.COMPLETED.value, 55))
+        self.assertEqual(row.attempts.count(), 1)
+
+    # MC-202: a plain log at the new total, and a job killed before it saved its event.
+    def test_a_read_at_the_total_never_moves(self, _issue):
+        Item.objects.filter(pk=self.item.pk).update(series_total=55)
+        self.item.refresh_from_db()
+        series_tracking.complete(self.user, self.item, completion_date=self.today)
+        self.run_job()
+        self.assertEqual(self.comic().status, Status.COMPLETED.value)
+        self.assertEqual(self.comic().attempts.count(), 1)
+
+    # MC-202: an issue with a store date still to come moves nothing until it is out, and
+    # the next run checks again.
+    def test_a_future_store_date_waits_for_its_day(self, issue):
+        series_tracking.complete(self.user, self.item, completion_date=self.today)
+        issue.return_value = {"store_date": str(self.today + timedelta(days=40)), "cover_date": None}
+        self.assertEqual(self.run_job(), [])
+        self.assertEqual(self.comic().status, Status.COMPLETED.value)
+        self.assertFalse(Event.objects.filter(item=self.item, content_number=55).exists())
+        issue.return_value = {"store_date": str(self.today), "cover_date": None}
+        self.assertEqual(len(self.run_job()), 1)
+        self.assertEqual(self.comic().status, Status.IN_PROGRESS.value)
+
+    # MC-202: a cover date runs weeks ahead, so it never holds an issue back.
+    def test_a_future_cover_date_moves_as_before(self, issue):
+        series_tracking.complete(self.user, self.item, completion_date=self.today)
+        issue.return_value = {"store_date": None, "cover_date": str(self.today + timedelta(days=35))}
+        self.assertEqual(len(self.run_job()), 1)
+        self.assertEqual(self.comic().status, Status.IN_PROGRESS.value)
+        self.assertEqual(self.comic().current_attempt.start_date, self.today, "Never a future start")
+
+    # MC-202, BK-306: the attempt starts on the issue's day, so a log since then is fine.
+    def test_the_move_starts_on_the_issues_store_date(self, issue):
+        earlier = self.today - timedelta(days=9)
+        store_date = self.today - timedelta(days=5)
+        series_tracking.complete(self.user, self.item, completion_date=earlier)
+        issue.return_value = {"store_date": str(store_date), "cover_date": None}
+        self.run_job()
+        self.assertEqual(self.comic().current_attempt.start_date, store_date)
+        series_tracking.complete(self.user, self.item, completion_date=store_date + timedelta(days=2))
+        self.assertEqual(self.comic().status, Status.COMPLETED.value)
 
     # MC-202: Paused, Did Not Finish and To Read comics don't move.
     def test_other_shelves_do_not_move(self, _issue):

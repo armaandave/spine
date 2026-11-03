@@ -360,8 +360,8 @@ resume = start
 
 
 @transaction.atomic
-def keep_reading(user, item, *, start_date=None, mutation_id=None, automatic=False):
-    """Continue a Read series at its old place (MC-200).
+def keep_reading(user, item, *, start_date=None, mutation_id=None, automatic=False, place=None):
+    """Continue a Read series at its old place, or at `place` (MC-200).
 
     It isn't a reread and records no start. A new comic issue does this by itself
     (`automatic`, MC-202).
@@ -378,7 +378,7 @@ def keep_reading(user, item, *, start_date=None, mutation_id=None, automatic=Fal
         row,
         created=False,
         start_date=_user_day(user, start_date or _today(user)),
-        place=_read_place(row),
+        place=_read_place(row) if place is None else place,
         continues=True,
         origin=SeriesAttempt.Origin.LIVE,
         mutation_id=mutation_id,
@@ -1425,12 +1425,51 @@ def clear_for_import(user, media_type, source, media_ids):
 # A comic's new issue
 
 
-def new_issue_out(item):
-    """MC-202: a comic on the Read shelf continues by itself, adding no activity."""
+def _carry_mark_place(row, place):
+    """Give a marked Read's history the place it carries on from, so no rise shows (MC-007).
+
+    Stats count each history row's rise against the row before it. The rows after the
+    last number saved move up together; a number saved before the mark leaves only the
+    difference, on the mark's day.
+    """
+    moved = []
+    for history_id, progress in row.history.order_by("-history_date", "-history_id").values_list(
+        "history_id",
+        "progress",
+    ):
+        if progress:
+            break
+        moved.append(history_id)
+    row.history.filter(history_id__in=moved).update(progress=place)
+
+
+def new_issue_out(item, *, start_date=None, previous_total=None):
+    """MC-202: a comic on the Read shelf continues by itself, adding no activity.
+
+    A comic already read to the total stays: its own log can be what ran this job. The
+    attempt starts on the issue's day, so a log since then is fine (BK-306). A comic
+    marked with the eye had every issue so far, so only what comes next counts (MC-007).
+    """
+    series_total = total(item)
     rows = Comic.objects.filter(item=item, status=Status.COMPLETED.value).select_related("user")
     for row in rows:
+        read_place = _read_place(row)
+        if series_total and read_place >= series_total:
+            continue
+        place = read_place
+        if series_total and not read_place:
+            place = previous_total if previous_total and previous_total < series_total else series_total - 1
         try:
-            keep_reading(row.user, item, automatic=True)
+            with transaction.atomic():
+                if place != read_place:
+                    _carry_mark_place(row, place)
+                keep_reading(
+                    row.user,
+                    item,
+                    start_date=min(start_date, _today(row.user)) if start_date else None,
+                    automatic=True,
+                    place=place,
+                )
         except (ValidationError, BookTrackingConflict, IntegrityError):
             logger.warning("Could not move %s back to Currently Reading for %s", item, row.user, exc_info=True)
 

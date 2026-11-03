@@ -203,3 +203,34 @@ class CalendarOtherTests(CalendarFixturesMixin, TestCase):
         process_other(self.movie_item, events_bulk)
 
         self.assertEqual(len(events_bulk), 0)
+
+
+class MangaTotalFromTheJobTests(TestCase):
+    """MC-003: the daily job stores a total as soon as a provider lists one."""
+
+    def setUp(self):
+        self.item = Item.objects.create(
+            media_id="13",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.MANGA.value,
+            title="One Piece",
+            image="http://example.com/one-piece.jpg",
+        )
+
+    @patch("events.calendar.other.services.get_media_metadata")
+    def test_a_finished_mangas_total_is_stored(self, metadata):
+        metadata.return_value = {"max_progress": 1200, "details": {"end_date": "2030-01-01"}}
+        events = []
+        process_other(self.item, events)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.series_total, 1200)
+        self.assertEqual(len(events), 1, "Its event as before")
+
+    @patch("events.calendar.other.services.get_media_metadata")
+    def test_a_running_manga_keeps_what_is_stored(self, metadata):
+        Item.objects.filter(pk=self.item.pk).update(series_total=1200)
+        self.item.refresh_from_db()
+        metadata.return_value = {"max_progress": None, "details": {"end_date": None}}
+        process_other(self.item, [])
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.series_total, 1200)
