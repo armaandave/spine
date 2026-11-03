@@ -20,7 +20,7 @@ from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from api.services.item_metadata import store_item_metadata
-from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, single_weight
+from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
 from app import tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
@@ -111,10 +111,20 @@ def progress_edit(request, media_type, instance_id):
                 tv_tracking.untick(request.user, show_item, *target, entry_point=tv_tracking.WEB)
         except TV_WRITE_ERRORS as error:
             return _tv_error_response(error)
+    elif series_tracking.supports(media_type) and media.status != Status.IN_PROGRESS.value:
+        return HttpResponseBadRequest("Progress can only be updated while Currently Reading")
     elif operation == "increase":
-        media.increase_progress()
+        try:
+            media.increase_progress()
+        except ValidationError as error:
+            # A number past a known total (MC-004).
+            return HttpResponseBadRequest(error.messages[0])
     elif operation == "decrease":
-        media.decrease_progress()
+        try:
+            media.decrease_progress()
+        except ValidationError as error:
+            # Still past a known total, which can shrink under a number (MC-004).
+            return HttpResponseBadRequest(error.messages[0])
 
     if media_type == MediaTypes.SEASON.value:
         # clear prefetch cache to get the updated episodes; an untick can remove a
@@ -944,6 +954,12 @@ def media_delete(request):
         elif game_tracking.supports(media_type):
             try:
                 game_tracking.remove_tracking(request.user, media.item)
+            except BookTrackingConflict as error:
+                messages.error(request, str(error))
+                return helpers.redirect_back(request)
+        elif series_tracking.supports(media_type):
+            try:
+                series_tracking.remove_tracking(request.user, media.item)
             except BookTrackingConflict as error:
                 messages.error(request, str(error))
                 return helpers.redirect_back(request)
@@ -2237,12 +2253,12 @@ def unmark_movie_watched(request, source, media_id):
         return render(request, "app/components/media_actions.html", context)
 
 
-def _game_action_response(request, source, media_id, action):
-    """Retain legacy game URLs and HTMX fragments with canonical transitions."""
-    exposure.require_media_type(MediaTypes.GAME.value)
-    metadata = services.get_media_metadata(MediaTypes.GAME.value, media_id, source)
+def _game_action_response(request, source, media_id, action, media_type=MediaTypes.GAME.value):
+    """Retain legacy game, manga and comic URLs and HTMX fragments with canonical transitions."""
+    exposure.require_media_type(media_type)
+    metadata = services.get_media_metadata(media_type, media_id, source)
     item, _ = Item.objects.get_or_create(
-        media_id=media_id, source=source, media_type=MediaTypes.GAME.value,
+        media_id=media_id, source=source, media_type=media_type,
         defaults={"title": metadata["title"], "image": metadata["image"]},
     )
     store_item_metadata(item, metadata)
@@ -2257,13 +2273,22 @@ def _game_action_response(request, source, media_id, action):
         return JsonResponse(error.as_dict(), status=409)
     except ValidationError as error:
         return JsonResponse({"error": error.messages[0]}, status=400)
-    metadata.update(media_type=MediaTypes.GAME.value, source=source, media_id=media_id)
+    metadata.update(media_type=media_type, source=source, media_id=media_id)
     return render(request, "app/components/media_actions.html", {
         "media": metadata,
-        "media_type": MediaTypes.GAME.value,
+        "media_type": media_type,
         "current_instance": current,
         "diary_entries": DiaryEntry.objects.filter(user=request.user, item=item).order_by("-consumed_at"),
     })
+
+
+def _series_action_response(request, source, media_type, media_id, action, message):
+    """Pause, Resume and Drop a manga or comic through its attempt, as the app does (BK-300)."""
+    response = _game_action_response(request, source, media_id, action, media_type=media_type)
+    if response.status_code == 200:
+        response["X-Notification-Message"] = message
+        response["X-Notification-Type"] = "success"
+    return response
 
 
 # ---------------------------------------------------------------------------------
@@ -3572,6 +3597,8 @@ def pause_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.pause)
+    if series_tracking.supports(media_type):
+        return _series_action_response(request, source, media_type, media_id, series_tracking.pause, "Media paused")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         return _tv_choice_response(
             request, source, media_type, media_id, Status.PAUSED.value, "Media paused",
@@ -3656,6 +3683,8 @@ def resume_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.resume)
+    if series_tracking.supports(media_type):
+        return _series_action_response(request, source, media_type, media_id, series_tracking.start, "Media resumed")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         return _tv_choice_response(
             request, source, media_type, media_id, Status.IN_PROGRESS.value, "Media resumed",
@@ -3748,6 +3777,8 @@ def drop_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.drop)
+    if series_tracking.supports(media_type):
+        return _series_action_response(request, source, media_type, media_id, series_tracking.drop, "Media dropped")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         return _tv_choice_response(
             request, source, media_type, media_id, Status.DROPPED.value, "Media dropped",

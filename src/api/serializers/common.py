@@ -463,6 +463,7 @@ def synopsis_from_payload(payload):
 
 
 _UNRESOLVED_ITEM = object()
+SERIES_TYPES = (MediaTypes.MANGA.value, MediaTypes.COMIC.value)
 COMPLETABLE_RELATED_SECTION_IDS = {
     "collection",
     "dlcs",
@@ -589,6 +590,13 @@ def details_for_api(metadata):
         details["time_to_beat"] = metadata["time_to_beat"]
     if metadata.get("revenue") and "revenue" not in details:
         details["revenue"] = metadata["revenue"]
+    # Only some providers list a finished series' count here; the app reads it (MC-102).
+    if (
+        metadata.get("media_type") == MediaTypes.MANGA.value
+        and metadata.get("max_progress")
+        and "number_of_chapters" not in details
+    ):
+        details["number_of_chapters"] = metadata["max_progress"]
     return details
 
 
@@ -1127,7 +1135,7 @@ def user_state_for_item(user, item):
         diary_count = diary_entries.count()
         has_liked = MediaLike.objects.filter(user=user, item=item).exists()
     uses_half_star = single_weight.uses_half_star_rating(item)
-    has_provenance = uses_half_star
+    has_provenance = uses_half_star or media_type in SERIES_TYPES
     diary_state = {
         "diary_entry_id": latest_diary.id if latest_diary else None,
         "diary_count": diary_count,
@@ -1171,10 +1179,7 @@ def user_state_for_item(user, item):
                 "like_is_independent": getattr(media, "like_is_independent", None),
             },
         )
-    if item.media_type == MediaTypes.BOOK.value:
-        from app import book_tracking
-
-        state["book"] = book_tracking.state_payload(media)
+    state.update(_reading_state(media))
     if media.item.media_type == MediaTypes.GAME.value:
         from app import game_tracking
 
@@ -1184,6 +1189,20 @@ def user_state_for_item(user, item):
         # pages and TV like responses replace it with the detail variant.
         state["tv"] = tv_tracking.list_payload(media)
     return state
+
+
+def _reading_state(media):
+    """Return a book's `book` object, or a manga's or comic's additive `series` one."""
+    media_type = media.item.media_type
+    if media_type == MediaTypes.BOOK.value:
+        from app import book_tracking
+
+        return {"book": book_tracking.state_payload(media)}
+    if media_type in SERIES_TYPES:
+        from app import series_tracking
+
+        return {"series": series_tracking.state_payload(media)}
+    return {}
 
 
 def tv_season_started(season):
@@ -1370,7 +1389,7 @@ def tracking_state(media, *, tv=None, tv_detail=False):
             state["tv"] = tv_tracking.state_payload(owner, media.item)
         elif isinstance(media, TV):
             state["tv"] = tv_tracking.list_payload(media)
-    if uses_half_star:
+    if uses_half_star or media.item.media_type in SERIES_TYPES:
         primed = hasattr(media.item, "viewer_has_liked")
         state.update(
             {
@@ -1393,10 +1412,7 @@ def tracking_state(media, *, tv=None, tv_detail=False):
                 ),
             },
         )
-    if media.item.media_type == MediaTypes.BOOK.value:
-        from app import book_tracking
-
-        state["book"] = book_tracking.state_payload(media)
+    state.update(_reading_state(media))
     if media.item.media_type == MediaTypes.GAME.value:
         from app import game_tracking
 

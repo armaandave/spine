@@ -12,7 +12,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.pagination import StandardResultsSetPagination
-from api.serializers.common import media_summary_from_item
+from api.serializers.common import SERIES_TYPES, media_summary_from_item
+from api.services import activity as activity_service
 from api.services import diary as diary_service
 from api.services import stats as stats_service
 from api.views.diary import DiaryListView
@@ -21,7 +22,16 @@ from api.views.stats import visible_profile_owner
 from api.views.tracking import TrackingListView
 from app import exposure
 from app.curation import prime_curated_artwork
-from app.models import MediaLike
+from app.models import DiaryEntry, MediaLike
+
+# What a manga's or comic's tracking row says about its logs.
+SERIES_LOG_FACTS = (
+    "series",
+    "liked",
+    "diary_count",
+    "rating_source_diary_entry_id",
+    "like_source_diary_entry_id",
+)
 
 
 class UserDiaryListView(DiaryListView):
@@ -119,4 +129,29 @@ class UserTrackingListView(TrackingListView):
             # Tracking notes are the owner's own jottings, which no profile page shows.
             for row in response.data.get("results", ()):
                 row["tracking"]["notes"] = ""
+            _hide_series_logs(response.data.get("results", ()), request.user, owner)
         return response
+
+
+def _hide_series_logs(rows, viewer, owner):
+    """Tell another person nothing of a manga's or comic's logs they can't see (AC-5).
+
+    Those logs can set the rating and the end date. The attempts and log counts say the
+    rest, so another person gets where the series stands, as AC-6 has it.
+    """
+    series = [row for row in rows if row["media"]["ref"]["media_type"] in SERIES_TYPES]
+    if not series:
+        return
+    visible, _ = activity_service.profile_sources(viewer, owner)
+    hidden = set(
+        DiaryEntry.objects.filter(user=owner, item_id__in=[row["media"]["ref"]["item_id"] for row in series])
+        .exclude(pk__in=visible.values("pk"))
+        .values_list("item_id", flat=True),
+    )
+    for row in series:
+        tracking = row["tracking"]
+        for key in SERIES_LOG_FACTS:
+            tracking.pop(key, None)
+        if row["media"]["ref"]["item_id"] in hidden:
+            tracking["rating"] = None
+            tracking["end_date"] = None

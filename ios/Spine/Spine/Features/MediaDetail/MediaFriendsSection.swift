@@ -9,10 +9,9 @@ extension MediaFriend {
     func standingLabel(for ref: MediaRef) -> String? {
         guard diaryEntryId == nil, let status else { return nil }
         switch (status, ref.mediaType) {
-        case ("In progress", "book"), ("In progress", "game"), ("In progress", "music"):
+        case ("In progress", "book"), ("In progress", "manga"), ("In progress", "comic"), ("In progress", "game"),
+             ("In progress", "music"):
             return ref.trackingStatusLabel(status)
-        case ("In progress", "manga"), ("In progress", "comic"):
-            return "Reading"
         case ("In progress", _):
             return "Watching"
         case ("Completed", "season"), ("Completed", "episode"):

@@ -294,6 +294,9 @@ def _only_needs_stamp(item):
         return False
     if item.media_type == MediaTypes.BOOK.value and not item.total_pages:
         return False
+    # A comic's issue count is new (MC-002), so one without it still needs its fetch.
+    if item.media_type == MediaTypes.COMIC.value and not item.series_total:
+        return False
     # Credits are new for albums and books, so one without them still needs its fetch.
     if item.media_type in CREDIT_TYPES and not item.has_credit:
         return False

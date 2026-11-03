@@ -1,5 +1,7 @@
 import logging
 
+from django.utils import timezone
+
 from app.providers import comicvine, services
 from events.models import Event
 
@@ -24,6 +26,10 @@ def process_comic(item, events_bulk):
         )
         return
 
+    from api.services.item_metadata import store_series_total  # noqa: PLC0415
+
+    previous_total = item.series_total
+    store_series_total(item, metadata)
     latest_event = Event.objects.filter(item=item).order_by("-datetime").first()
     last_issue_event_number = latest_event.content_number if latest_event else 0
     last_published_issue_number = metadata["max_issue_number"]
@@ -41,6 +47,10 @@ def process_comic(item, events_bulk):
 
     if issue_metadata["store_date"]:
         issue_datetime = date_parser(issue_metadata["store_date"])
+        # Not out yet: the next run checks again. An issue moves comics when it comes
+        # out (MC-202). A cover date runs weeks ahead, so it holds nothing back.
+        if issue_datetime.date() > timezone.localdate():
+            return
     elif issue_metadata["cover_date"]:
         issue_datetime = date_parser(issue_metadata["cover_date"])
     else:
@@ -53,3 +63,16 @@ def process_comic(item, events_bulk):
             datetime=issue_datetime,
         ),
     )
+    if (
+        last_issue_event_number
+        and last_published_issue_number
+        and last_published_issue_number > last_issue_event_number
+    ):
+        # A newer last issue than the one known: Read comics carry on (MC-202).
+        from app import series_tracking  # noqa: PLC0415
+
+        series_tracking.new_issue_out(
+            item,
+            start_date=issue_datetime.date(),
+            previous_total=previous_total,
+        )

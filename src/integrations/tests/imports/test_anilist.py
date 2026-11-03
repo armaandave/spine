@@ -41,7 +41,8 @@ class ImportAniList(TestCase):
         anilist.importer(None, self.user, "new", "bloodthirstiness")
 
         self.assertEqual(Anime.objects.filter(user=self.user).count(), 4)
-        self.assertEqual(Manga.objects.filter(user=self.user).count(), 3)
+        # One record per series; a reread is a finished attempt (MC-400).
+        self.assertEqual(Manga.objects.filter(user=self.user).count(), 2)
         self.assertEqual(
             Anime.objects.get(user=self.user, item__title="FLCL").status,
             Status.PAUSED.value,
@@ -74,7 +75,8 @@ class ImportAniList(TestCase):
         )
 
         self.assertEqual(Anime.objects.filter(user=self.user).count(), 4)
-        self.assertEqual(Manga.objects.filter(user=self.user).count(), 3)
+        # One record per series; a reread is a finished attempt (MC-400).
+        self.assertEqual(Manga.objects.filter(user=self.user).count(), 2)
         self.assertEqual(
             Anime.objects.get(user=self.user, item__title="FLCL").status,
             Status.PAUSED.value,

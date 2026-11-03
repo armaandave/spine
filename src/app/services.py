@@ -61,7 +61,7 @@ def update_diary_entry_tags(entry, tag_names):
 
 def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True):
     """Set the canonical user/title like."""
-    from app import book_tracking, game_tracking, single_weight, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(item):
         # TV-303 to TV-305: a heart can mark an unstarted show, season or episode watched;
@@ -74,6 +74,9 @@ def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True
 
     if book_tracking.supports(item):
         return book_tracking.set_like(user, item, liked)
+
+    if series_tracking.supports(item):
+        return series_tracking.set_like(user, item, liked)
 
     if single_weight.supports(item):
         return single_weight.set_like(user, item, liked, audit=audit)
@@ -144,7 +147,7 @@ def create_diary_entry(
     """
     from uuid import uuid4
 
-    from app import book_tracking, game_tracking, single_weight, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(item):
         # TV-400 to TV-407: the log puts the show in the library, counts its target
@@ -190,6 +193,29 @@ def create_diary_entry(
             review_title=review_title,
             contains_spoilers=contains_spoilers,
             mutation_id=uuid4(),
+            import_source=import_source,
+            import_source_id=import_source_id,
+            import_source_order=import_source_order,
+            emit_activity=emit_activity,
+            update_current=update_current,
+        )
+        return entry
+
+    if series_tracking.supports(item):
+        # A log always means finished, whatever auto_mark_consumed says (MC-103, MC-500).
+        _, entry = series_tracking.complete(
+            user,
+            item,
+            completion_date=consumed_at or timezone.localdate(),
+            rating=rating,
+            review=review,
+            liked=liked,
+            is_rewatch=is_rewatch,
+            tags=tags,
+            review_title=review_title,
+            contains_spoilers=contains_spoilers,
+            visibility=visibility,
+            mutation_id=mutation_id,
             import_source=import_source,
             import_source_id=import_source_id,
             import_source_order=import_source_order,
@@ -298,13 +324,17 @@ def create_diary_entry(
 
 def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
     """Sync completed tracking dates from a diary entry date edit."""
-    from app import book_tracking, game_tracking, single_weight, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(entry.item):
         # TV-405: a log's date moves only its own viewing, in tv_tracking.update_log.
         return
 
-    if game_tracking.supports(entry.item) or book_tracking.supports(entry.item):
+    if (
+        game_tracking.supports(entry.item)
+        or book_tracking.supports(entry.item)
+        or series_tracking.supports(entry.item)
+    ):
         return
 
     if single_weight.supports(entry.item):
@@ -334,7 +364,7 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
 
 def update_diary_entry(entry, data, *, tags=None):
     """Update a diary entry and keep title-level state in sync."""
-    from app import book_tracking, game_tracking, single_weight, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(entry.item):
         # TV-405, TV-407, TV-501, TV-502.
@@ -350,6 +380,11 @@ def update_diary_entry(entry, data, *, tags=None):
         if tags is None:
             return book_tracking.update_completion(entry, data)
         return book_tracking.update_completion(entry, data, tags=tags)
+
+    if series_tracking.supports(entry.item):
+        if tags is None:
+            return series_tracking.update_completion(entry, data)
+        return series_tracking.update_completion(entry, data, tags=tags)
 
     if single_weight.supports(entry.item):
         return single_weight.update_log(entry, data, tags=tags)
@@ -410,7 +445,7 @@ def update_diary_entry(entry, data, *, tags=None):
 
 def delete_diary_entry(user, entry):
     """Delete a diary entry and mirror web tracking side effects."""
-    from app import book_tracking, game_tracking, single_weight, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(entry.item):
         # TV-406: only the log's own viewing and fills go; TV-208 then applies.
@@ -421,6 +456,9 @@ def delete_diary_entry(user, entry):
 
     if book_tracking.supports(entry.item):
         return book_tracking.delete_completion(user, entry)
+
+    if series_tracking.supports(entry.item):
+        return series_tracking.delete_completion(user, entry)
 
     if single_weight.supports(entry.item):
         return single_weight.delete_log(user, entry)
@@ -476,7 +514,7 @@ def mark_consumed(user, media_instance: Media, when=None):
         media_instance: The Media instance to mark
         when: Optional datetime for when it was consumed (defaults to now)
     """
-    from app import book_tracking, game_tracking, single_weight, tv_listing, tv_tracking
+    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_listing, tv_tracking
 
     if tv_tracking.supports(media_instance.item):
         # TV-300: every aired episode under the eye watched, undated, as one mark.
@@ -495,6 +533,9 @@ def mark_consumed(user, media_instance: Media, when=None):
 
     if book_tracking.supports(media_instance.item):
         return book_tracking.mark_read(user, media_instance.item)
+
+    if series_tracking.supports(media_instance.item):
+        return series_tracking.mark_read(user, media_instance.item)
 
     if single_weight.supports(media_instance.item):
         return single_weight.mark_consumed(user, media_instance.item)

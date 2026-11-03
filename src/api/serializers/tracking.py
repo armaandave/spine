@@ -208,6 +208,28 @@ class BookCompletionSerializer(serializers.Serializer):
 
 
 
+class SeriesProgressSerializer(serializers.Serializer):
+    """Validate a manga's or comic's number: a whole count (MC-001, MC-002)."""
+
+    value = GameIntegerField(min_value=0, max_value=2147483647)
+    progressed_on = serializers.DateField(required=False)
+    mutation_id = serializers.UUIDField(required=False)
+
+
+class SeriesCompletionSerializer(BookCompletionSerializer):
+    """Validate a manga's or comic's log, which keeps its own visibility (AC-5)."""
+
+    visibility = serializers.ChoiceField(
+        choices=["public", "followers", "private"],
+        required=False,
+        default="public",
+    )
+    # The optional number on a log with no total (MC-102).
+    place = GameIntegerField(min_value=0, max_value=2147483647, required=False, allow_null=True)
+    # Left out, it is derived from the reads before it (BK-400, MC-200).
+    is_rewatch = serializers.BooleanField(required=False)
+
+
 class GameProgressSerializer(serializers.Serializer):
     """Validate and expose canonical game playthrough state."""
 

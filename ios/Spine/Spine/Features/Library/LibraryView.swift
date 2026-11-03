@@ -35,13 +35,13 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
             default: return rawValue
             }
         }
-        if mediaType == "book", self == .planning { return "To Read" }
+        if ["book", "manga", "comic"].contains(mediaType), self == .planning { return "To Read" }
         return rawValue
     }
 
     static func available(for mediaType: String) -> [LibraryShelf] {
         switch mediaType {
-        case "book", "game":
+        case "book", "manga", "comic", "game":
             [.planning, .currentlyReading, .paused, .didNotFinish, .read]
         case "tv":
             // TV-002: Watching, Planning, Paused, Dropped and Completed, one card per show (TV-001).
@@ -53,7 +53,7 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
 
     /// Whether the type's library is split by status, one section per status, with a section picker.
     static func usesStatusShelves(_ mediaType: String) -> Bool {
-        ["book", "game", "tv"].contains(mediaType)
+        ["book", "manga", "comic", "game", "tv"].contains(mediaType)
     }
 
     /// The section a media type opens on when the current one isn't one of its sections.
@@ -61,11 +61,10 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
         usesStatusShelves(mediaType) ? .currentlyReading : .tracked
     }
 
-    /// A section another screen asked for, for the current type. TV has no Tracked section, so the Library link
-    /// opens Watching.
+    /// A section another screen asked for, for the current type. A type without that section opens its first one: the
+    /// Library link asks for Tracked, which TV, books, manga, comics and games don't have (BK-001).
     static func resolved(_ requested: LibraryShelf, for mediaType: String) -> LibraryShelf {
-        guard mediaType == "tv", !available(for: mediaType).contains(requested) else { return requested }
-        return defaultShelf(for: mediaType)
+        available(for: mediaType).contains(requested) ? requested : defaultShelf(for: mediaType)
     }
 
     /// TV-700: each empty TV section says what appears there.
@@ -854,16 +853,31 @@ struct LibraryView: View {
         case .tracked:
             return "No tracked \(mediaName)"
         case .planning:
-            return viewModel.mediaType == "book" ? "No books to read" : "No planned \(mediaName)"
+            return readingNoun.map { "No \($0) to read" } ?? "No planned \(mediaName)"
         case .currentlyReading:
-            return viewModel.mediaType == "game" ? "No games currently playing" : "No books currently reading"
+            return viewModel.mediaType == "game" ? "No games currently playing" : "No \(readingNoun ?? "books") currently reading"
         case .paused:
             return "No paused \(mediaName)"
         case .didNotFinish:
-            return viewModel.mediaType == "game" ? "No dropped games" : "No books marked Did Not Finish"
+            return viewModel.mediaType == "game" ? "No dropped games" : "No \(readingNoun ?? "books") marked Did Not Finish"
         case .read:
-            return viewModel.mediaType == "game" ? "No completed games" : "No read books"
+            return viewModel.mediaType == "game" ? "No completed games" : "No read \(readingNoun ?? "books")"
         }
+    }
+
+    /// What a type tracked like a book is called in its empty sections.
+    private var readingNoun: String? {
+        switch viewModel.mediaType {
+        case "book": "books"
+        case "manga": "manga"
+        case "comic": "comics"
+        default: nil
+        }
+    }
+
+    /// A manga's or a comic's reads aren't journeys, as a book's are (MC-000).
+    private var seriesNoun: String? {
+        viewModel.mediaType == "book" ? nil : readingNoun
     }
 
     private var emptyMessage: String {
@@ -879,15 +893,18 @@ struct LibraryView: View {
         case .tracked:
             return "Consumed, logged, watched, read, or played media will appear here."
         case .planning:
-            return viewModel.mediaType == "book" ? "Books saved for later will appear here." : "Planning items stay separate from the rest of your library."
+            return readingNoun.map { "\($0.capitalized) saved for later will appear here." } ?? "Planning items stay separate from the rest of your library."
         case .currentlyReading:
-            return "Start a reading journey to see its progress here."
+            return seriesNoun.map { "\($0.capitalized) you're reading will appear here." }
+                ?? "Start a reading journey to see its progress here."
         case .paused:
-            return "Paused reading journeys will appear here."
+            return seriesNoun.map { "\($0.capitalized) you pause will appear here." }
+                ?? "Paused reading journeys will appear here."
         case .didNotFinish:
-            return "Books you stop reading will appear here."
+            return "\((readingNoun ?? "books").capitalized) you stop reading will appear here."
         case .read:
-            return "Completed reading journeys will appear here."
+            return seriesNoun.map { "\($0.capitalized) you finish will appear here." }
+                ?? "Completed reading journeys will appear here."
         }
     }
 
@@ -910,8 +927,9 @@ struct LibraryView: View {
                         )
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
-                        if let progressText = LibraryPosterBadge.text(for: item) {
+                        if let progressText = LibraryPosterBadge.gridText(for: item) {
                             PosterBadgeLabel(text: progressText)
+                                .lineLimit(item.media.ref.isSeries ? 1 : nil)
                                 .padding(5)
                         }
                     }
@@ -1028,17 +1046,28 @@ struct PosterBadgeLabel: View {
     }
 }
 
-/// The short badge on a Library grid poster and a Home In progress card: where you stopped on a book, game or show
-/// you've started and haven't finished. Anything planned or finished has none, and anime, manga and comics have none
-/// until they have tracking contracts.
+/// The short badge on a Library grid poster and a Home In progress card: where you stopped on a book, manga, comic,
+/// game or show you've started and haven't finished (BK-001, MC-006). Anything planned or finished has none, and anime
+/// has none until it has a tracking contract.
 enum LibraryPosterBadge {
     static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
+
+    /// The badge on the Library grid's small poster, which has about 58 pt of room. A manga's or a comic's leaves out
+    /// the unit, so it stays on one line at full size: "120/380", "12/54", "Ch. 120" (MC-006). Rows and Home have room
+    /// for the words, and a book's badge stays as it is.
+    static func gridText(for item: LibraryItem) -> String? {
+        guard item.media.ref.isSeries else { return text(for: item) }
+        guard text(for: item) != nil, let progress = item.tracking.progress, let value = progress.value else { return nil }
+        let place = ProgressPercent.text(value)
+        if let total = progress.max { return "\(place)/\(ProgressPercent.text(total))" }
+        return item.media.ref.mediaType == "comic" ? "Iss. \(place)" : "Ch. \(place)"
+    }
 
     static func text(for item: LibraryItem) -> String? {
         switch item.media.ref.mediaType {
         case "tv":
             return TVLibraryCard.gridBadge(for: item)
-        case "book":
+        case "book", "manga", "comic":
             guard unfinishedStatuses.contains(item.tracking.status ?? "") else { return nil }
             return item.tracking.progress?.compactDisplayText(
                 preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
@@ -1216,6 +1245,9 @@ private struct LibraryListRow: View {
         } else if let progress = item.tracking.progress {
             if let progressText = progress.compactDisplayText(preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)) {
                 parts.append(progressText)
+            } else if item.media.ref.isSeries, LibraryViewModel.hasStatus(item, "Completed") {
+                // The eye marks a series Read with no number (BK-001).
+                parts.append("Complete")
             }
         } else if item.media.ref.mediaType == "book", LibraryViewModel.hasStatus(item, "Completed") {
             parts.append("Complete")

@@ -43,7 +43,7 @@ nonisolated extension UserMediaState {
         state.status = tracking.status
         state.rating = tracking.rating
         state.progress = tracking.progress
-        state.book = tracking.book
+        state.book = tracking.reading
         state.game = tracking.game
         if let tv = tracking.tv {
             state.tv = tv.keepingPageScope(of: self.tv)
@@ -318,6 +318,66 @@ enum TrackingProjection {
                 state.startDate = today
                 state.progress = nil
             }
+            state.book = book
+        }
+    }
+
+    /// Currently Reading on a manga or a comic (BK-104, MC-201): a paused attempt carries on, a stopped one picks up
+    /// at its place, and anything else starts at zero.
+    static func startSeries(today: String) -> Projection {
+        { state in
+            state.isTracked = true
+            let stopped = state.status == "Dropped"
+            state.status = "In progress"
+            var book = state.book ?? BookTrackingState()
+            if book.currentJourney?.status == "Paused" {
+                book.currentJourney?.status = "In progress"
+            } else if book.currentJourney?.status != "In progress" {
+                let isReread = book.lifetimeReadCount > 0 && book.currentJourney?.continues != true
+                var journey = BookJourneyState.pending(startDate: today, isReread: isReread)
+                if stopped {
+                    journey.progress = state.progress
+                    journey.continues = book.currentJourney?.continues
+                } else {
+                    state.progress = nil
+                }
+                book.currentJourney = journey
+                book.canRemoveTracking = false
+                book.isRereading = isReread
+                state.startDate = today
+            }
+            state.book = book
+        }
+    }
+
+    /// Keep Reading: a new attempt at the old place, not a reread (MC-200).
+    static func keepReading(today: String) -> Projection {
+        { state in
+            state.isTracked = true
+            state.status = "In progress"
+            var book = state.book ?? BookTrackingState()
+            var journey = BookJourneyState.pending(startDate: today)
+            journey.progress = state.progress
+            journey.continues = true
+            book.currentJourney = journey
+            book.canRemoveTracking = false
+            book.isRereading = false
+            state.startDate = today
+            state.book = book
+        }
+    }
+
+    /// Reread: a new attempt at zero (MC-200).
+    static func reread(today: String) -> Projection {
+        { state in
+            state.isTracked = true
+            state.status = "In progress"
+            var book = state.book ?? BookTrackingState()
+            book.currentJourney = .pending(startDate: today, isReread: true)
+            book.canRemoveTracking = false
+            book.isRereading = true
+            state.startDate = today
+            state.progress = nil
             state.book = book
         }
     }

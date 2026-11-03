@@ -143,7 +143,7 @@ class SelectionAndDryRunTests(FillTestCase):
         self.item(track=False)  # nobody tracks or logged it
         logged = self.item(track=False)
         DiaryEntry.objects.bulk_create([DiaryEntry(item=logged, user=self.user, consumed_at=now)])
-        comic = self.item(MediaTypes.COMIC.value, Sources.COMICVINE.value, release_year=2004)
+        comic = self.item(MediaTypes.COMIC.value, Sources.COMICVINE.value, release_year=2004, series_total=54)
         self.genre(comic, "Superhero")  # has what ComicVine gives: stamp only
         self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value, release_year=1997)  # no album length
         self.item(MediaTypes.ANIME.value, Sources.MAL.value, metadata_attempted_at=now - timedelta(days=8))
@@ -244,7 +244,7 @@ class ApplyTests(FillTestCase):
         fetch.assert_not_called()
 
     def test_expensive_providers_with_what_they_give_are_only_stamped(self):
-        comic = self.item(MediaTypes.COMIC.value, Sources.COMICVINE.value, release_year=2004)
+        comic = self.item(MediaTypes.COMIC.value, Sources.COMICVINE.value, release_year=2004, series_total=54)
         self.genre(comic, "Superhero")
         album = self.item(MediaTypes.MUSIC.value, Sources.MUSICBRAINZ.value, release_year=1997, runtime_minutes=53)
         self.genre(album, "Rock")
@@ -264,8 +264,19 @@ class ApplyTests(FillTestCase):
         self.refresh(comic, album, themed, unthemed)
         self.assertEqual(
             [comic.metadata_version, album.metadata_version, themed.metadata_version, unthemed.metadata_version],
-            [CURRENT, ALBUM, CURRENT, CURRENT],
+            [CURRENT_METADATA_VERSION[MediaTypes.COMIC.value], ALBUM, CURRENT, CURRENT],
         )
+
+    def test_a_comic_with_no_issue_count_is_fetched(self):
+        comic = self.item(MediaTypes.COMIC.value, Sources.COMICVINE.value, release_year=2004)
+        self.genre(comic, "Superhero")
+        fetch = self.patch_metadata(lambda *args, **kwargs: {"details": {"issues_count": 54}})
+
+        metadata_fill.fill_in_process()
+
+        fetch.assert_called_once_with(MediaTypes.COMIC.value, comic.media_id, Sources.COMICVINE.value)
+        self.refresh(comic)
+        self.assertEqual(comic.series_total, 54)
 
     def test_limit_stops_the_in_process_fill(self):
         films = [self.item() for _ in range(3)]

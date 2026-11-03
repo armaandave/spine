@@ -53,9 +53,29 @@ TV_MEDIA_TYPES = frozenset(
 # books and games fill. TV and Season rows keep it empty, as before, and its position
 # stays where those models put it.
 TV_EMPTY_COLUMNS = frozenset({"like_is_independent"})
+# What the manga and comic contract added to their rows, under names books and games
+# already export. Manga and comic rows keep those columns empty, as before, and the
+# columns stay where books and games put them (MC-500).
+SERIES_MEDIA_TYPES = frozenset({MediaTypes.MANGA.value, MediaTypes.COMIC.value})
+SERIES_TRACKING_FIELD_NAMES = frozenset(
+    {
+        "completed_manually",
+        "like_is_independent",
+        "undated_read_previous_tracked",
+        "undated_read_previous_status",
+        "undated_read_previous_override",
+        "read_override_active",
+        "read_override_previous_tracked",
+        "read_override_previous_status",
+    },
+)
+# Bookkeeping only these rows have. No column at all, so the CSV keeps today's columns.
+SERIES_NOT_EXPORTED = frozenset({"undated_read_previous_place", "read_override_previous_place"})
 # The metadata fill's bookkeeping on Item. It isn't exported, so the CSV keeps today's
 # columns.
 ITEM_METADATA_FILL_FIELD_NAMES = frozenset({"metadata_version", "metadata_attempted_at"})
+# A manga's or comic's total comes from its provider, so the CSV keeps today's columns.
+ITEM_NOT_EXPORTED = ITEM_METADATA_FILL_FIELD_NAMES | {"series_total"}
 
 
 class Echo:
@@ -74,7 +94,7 @@ def generate_rows(user):
     # Get fields
     fields = {
         "item": [
-            field for field in get_model_fields(Item) if field not in ITEM_METADATA_FILL_FIELD_NAMES
+            field for field in get_model_fields(Item) if field not in ITEM_NOT_EXPORTED
         ],
         "track": get_track_fields(),
     }
@@ -134,6 +154,8 @@ def generate_rows(user):
 
 def track_value(media, media_type, field):
     """Return one tracking column's value for a row."""
+    if media_type in SERIES_MEDIA_TYPES and field in SERIES_TRACKING_FIELD_NAMES:
+        return ""
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         if field in TV_EMPTY_COLUMNS:
             return ""
@@ -173,8 +195,11 @@ def get_track_fields():
     for media_type in MediaTypes.values:
         model = apps.get_model("app", media_type)
         for field in get_model_fields(model):
-            if field in TV_TRACKING_FIELD_NAMES or (
-                media_type in TV_MEDIA_TYPES and field in TV_EMPTY_COLUMNS
+            if (
+                field in TV_TRACKING_FIELD_NAMES
+                or field in SERIES_NOT_EXPORTED
+                or (media_type in TV_MEDIA_TYPES and field in TV_EMPTY_COLUMNS)
+                or (media_type in SERIES_MEDIA_TYPES and field in SERIES_TRACKING_FIELD_NAMES)
             ):
                 continue
             if field not in all_fields:

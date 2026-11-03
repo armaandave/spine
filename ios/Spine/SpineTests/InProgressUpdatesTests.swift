@@ -495,52 +495,52 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(update.composer?.completionJourneyId, playthrough.id, "The log finishes the live playthrough")
     }
 
-    // MARK: A card still waiting for its page (a manga or a comic)
+    // MARK: A card still waiting for its page (a board game)
 
     func testAnotherCardTappedWhileAPageLoadsOpensInsteadOfIt() async throws {
-        let manga = Self.item("manga", "2", "Berserk")
+        let boardGame = Self.item("boardgame", "2", "Catan")
         let show = Self.item("tv", "1396", "Breaking Bad", tracking: Self.tracking(
             tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 8, aired: 62, upNext: (2, 2))
         ))
-        media.details[manga.media.ref.id] = MediaDetail(
-            ref: manga.media.ref,
-            title: "Berserk",
+        media.details[boardGame.media.ref.id] = MediaDetail(
+            ref: boardGame.media.ref,
+            title: "Catan",
             userState: UserMediaState(isTracked: true, status: "In progress")
         )
         let gate = RefreshGate()
         media.detailGate = gate
-        let home = homeViewModel(items: [manga, show])
+        let home = homeViewModel(items: [boardGame, show])
 
-        let mangaTap = Task { await home.progressUpdates.updateProgress(for: manga) == nil }
-        await waitUntil { home.progressUpdates.loadingItemID == manga.id }
+        let tap = Task { await home.progressUpdates.updateProgress(for: boardGame) == nil }
+        await waitUntil { home.progressUpdates.loadingItemID == boardGame.id }
         let showOpensPage = await home.progressUpdates.updateProgress(for: show)
 
         XCTAssertNil(showOpensPage)
         XCTAssertNotNil(home.continueWatching.episodes, "The show's sheet opens")
-        XCTAssertNil(home.progressUpdates.loadingItemID, "The manga's card no longer waits")
+        XCTAssertNil(home.progressUpdates.loadingItemID, "The board game's card no longer waits")
         await gate.open()
-        let mangaOpensNothing = await mangaTap.value
-        XCTAssertTrue(mangaOpensNothing, "Nor the manga's page")
-        XCTAssertNil(home.progressUpdates.update, "The manga's composer doesn't open over the sheet")
+        let opensNothing = await tap.value
+        XCTAssertTrue(opensNothing, "Nor the board game's page")
+        XCTAssertNil(home.progressUpdates.update, "Its composer doesn't open over the sheet")
         XCTAssertEqual(home.progressUpdates.openings, 0)
     }
 
     func testSomethingElseTheScreenOpensCancelsACardStillWaitingForItsPage() async throws {
-        let comic = Self.item("comic", "113112", "Saga")
-        media.details[comic.media.ref.id] = MediaDetail(
-            ref: comic.media.ref,
-            title: "Saga",
+        let boardGame = Self.item("boardgame", "113112", "Catan")
+        media.details[boardGame.media.ref.id] = MediaDetail(
+            ref: boardGame.media.ref,
+            title: "Catan",
             userState: UserMediaState(isTracked: true, status: "In progress")
         )
         // A page that doesn't load would open itself, saying why.
-        let unloadable = Self.item("manga", "1", "Berserk")
+        let unloadable = Self.item("boardgame", "1", "Azul")
         let gate = RefreshGate()
         media.detailGate = gate
-        let home = homeViewModel(items: [comic, unloadable])
+        let home = homeViewModel(items: [boardGame, unloadable])
 
-        // The comic's line, then its poster (or anything else Home opens, or leaving Home).
-        let comicTap = Task { await home.progressUpdates.updateProgress(for: comic) == nil }
-        await waitUntil { home.progressUpdates.loadingItemID == comic.id }
+        // The card's line, then its poster (or anything else Home opens, or leaving Home).
+        let tap = Task { await home.progressUpdates.updateProgress(for: boardGame) == nil }
+        await waitUntil { home.progressUpdates.loadingItemID == boardGame.id }
         home.progressUpdates.cancelPendingOpen()
         XCTAssertNil(home.progressUpdates.loadingItemID)
         let unloadableTap = Task { await home.progressUpdates.updateProgress(for: unloadable) == nil }
@@ -549,26 +549,26 @@ final class InProgressUpdatesTests: XCTestCase {
         media.detailError = URLError(.notConnectedToInternet)
         await gate.open()
 
-        let comicOpensNothing = await comicTap.value
+        let opensNothing = await tap.value
         let unloadableOpensNothing = await unloadableTap.value
-        XCTAssertTrue(comicOpensNothing)
+        XCTAssertTrue(opensNothing)
         XCTAssertTrue(unloadableOpensNothing, "Not even the page")
-        XCTAssertNil(home.progressUpdates.update, "The comic's composer doesn't open over its page")
+        XCTAssertNil(home.progressUpdates.update, "Its composer doesn't open over its page")
         XCTAssertEqual(home.progressUpdates.openings, 0)
     }
 
-    // MARK: Manga and comics: the page's log composer, on Progress
+    // MARK: A board game: the page's log composer, on Progress
 
-    func testAMangaCardOpensThePagesComposerOnProgress() async throws {
-        let manga = Self.item("manga", "2", "Berserk")
-        media.details[manga.media.ref.id] = MediaDetail(
-            ref: manga.media.ref,
-            title: "Berserk",
+    func testABoardGameCardOpensThePagesComposerOnProgress() async throws {
+        let boardGame = Self.item("boardgame", "2", "Catan")
+        media.details[boardGame.media.ref.id] = MediaDetail(
+            ref: boardGame.media.ref,
+            title: "Catan",
             userState: UserMediaState(isTracked: true, status: "In progress")
         )
-        let home = homeViewModel(items: [manga])
+        let home = homeViewModel(items: [boardGame])
 
-        let opensPage = await home.progressUpdates.updateProgress(for: manga)
+        let opensPage = await home.progressUpdates.updateProgress(for: boardGame)
 
         XCTAssertNil(opensPage)
         let update = try XCTUnwrap(home.progressUpdates.update)

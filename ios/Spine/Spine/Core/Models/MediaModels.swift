@@ -36,10 +36,21 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         isSingleWeight || ["book", "game"].contains(mediaType)
     }
 
-    /// Logs dated by calendar day: the single-weight, book and game types, plus TV logs at every level (TV-407).
-    /// Separate from `usesCalendarConsumptionDate`, which also hides the per-entry visibility picker that TV keeps.
+    /// Logs dated by calendar day: the single-weight, book and game types, plus TV, manga and comic logs (TV-407,
+    /// MC-000). Separate from `usesCalendarConsumptionDate`, which also hides the per-entry visibility picker that
+    /// these keep (AC-5).
     var usesCalendarLogDate: Bool {
-        usesCalendarConsumptionDate || isTVFamily
+        usesCalendarConsumptionDate || isTVFamily || isSeries
+    }
+
+    /// A manga or a comic: a book counted in chapters or issues (MC-000).
+    var isSeries: Bool {
+        ["manga", "comic"].contains(mediaType)
+    }
+
+    /// Tracked the way a book is: the five shelves, the + menu, reading attempts and the progress sheet.
+    var readsLikeBook: Bool {
+        mediaType == "book" || isSeries
     }
 
     var isTVFamily: Bool {
@@ -99,7 +110,7 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
 
     func trackingStatusLabel(_ status: String) -> String {
         if mediaType == "game" { return status.lowercased() == "in progress" ? "Playing" : status }
-        if mediaType == "book" {
+        if readsLikeBook {
             switch status {
             case "Planning": return "To Read"
             case "In progress": return "Currently Reading"
@@ -1641,6 +1652,9 @@ nonisolated struct UserMediaState: Codable, Hashable {
         case likeSourceDiaryEntryId
         case likeIsIndependent
         case book
+        /// A manga's or a comic's reading state: the book's shape, kept apart on the wire from installed builds' book
+        /// decoder (MC-500). It decodes into `book`.
+        case series
         case game
         case tv
     }
@@ -1705,6 +1719,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         likeSourceDiaryEntryId = try container.decodeIfPresent(Int.self, forKey: .likeSourceDiaryEntryId)
         likeIsIndependent = try container.decodeIfPresent(Bool.self, forKey: .likeIsIndependent)
         book = try container.decodeIfPresent(BookTrackingState.self, forKey: .book)
+            ?? container.decodeIfPresent(BookTrackingState.self, forKey: .series)
         game = try container.decodeIfPresent(GameTrackingState.self, forKey: .game)
         tv = try container.decodeIfPresent(TVShowState.self, forKey: .tv)
     }

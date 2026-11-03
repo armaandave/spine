@@ -57,7 +57,7 @@ final class LibraryPosterBadgeTests: XCTestCase {
     }
 
     func testTypesWithoutTrackingContractsHaveNoBadge() {
-        for mediaType in ["movie", "anime", "manga", "comic", "music"] {
+        for mediaType in ["movie", "anime", "music"] {
             let item = Spine.LibraryItem(
                 media: summary(mediaType),
                 tracking: TrackingState(
@@ -74,6 +74,52 @@ final class LibraryPosterBadgeTests: XCTestCase {
             )
             XCTAssertNil(badge(item), mediaType)
         }
+    }
+
+    // MC-006: the place, with the total when there is one, only while started and unfinished.
+    func testAMangaOrAComicShowsWhereYouStoppedOnlyWhileStartedAndUnfinished() {
+        for status in ["In progress", "Paused", "Dropped"] {
+            XCTAssertEqual(badge(series("manga", status: status, value: 120, max: 380, unit: "chapter")), "120/380 chapters", status)
+            XCTAssertEqual(badge(series("manga", status: status, value: 120, max: nil, unit: "chapter")), "120 chapters", status)
+            XCTAssertEqual(badge(series("comic", status: status, value: 12, max: 54, unit: "issue")), "12/54 issues", status)
+            XCTAssertNil(badge(series("manga", status: status, value: 0, max: 380, unit: "chapter")), "A place of zero: \(status)")
+        }
+        XCTAssertEqual(badge(series("manga", status: "In progress", value: 1, max: nil, unit: "chapter")), "1 chapter")
+        for status in ["Planning", "Completed"] {
+            XCTAssertNil(badge(series("manga", status: status, value: 380, max: 380, unit: "chapter")), status)
+            XCTAssertNil(badge(series("comic", status: status, value: 54, max: 54, unit: "issue")), status)
+        }
+    }
+
+    // MC-006: the grid's small poster leaves out the unit, on one line. Books and Home keep their words.
+    func testTheGridBadgeOfAMangaOrAComicHasNoUnit() {
+        func grid(_ item: Spine.LibraryItem) -> String? { LibraryPosterBadge.gridText(for: item) }
+        XCTAssertEqual(grid(series("manga", status: "In progress", value: 120, max: 380, unit: "chapter")), "120/380")
+        XCTAssertEqual(grid(series("comic", status: "Paused", value: 12, max: 54, unit: "issue")), "12/54")
+        XCTAssertEqual(grid(series("manga", status: "Dropped", value: 120, max: nil, unit: "chapter")), "Ch. 120")
+        XCTAssertEqual(grid(series("comic", status: "In progress", value: 12, max: nil, unit: "issue")), "Iss. 12")
+        XCTAssertNil(grid(series("manga", status: "In progress", value: 0, max: 380, unit: "chapter")), "A place of zero")
+        XCTAssertNil(grid(series("manga", status: "Completed", value: 380, max: 380, unit: "chapter")), "Finished")
+        let book = series("book", status: "In progress", value: 120, max: 380, unit: "page")
+        XCTAssertEqual(grid(book), badge(book))
+        XCTAssertEqual(badge(series("manga", status: "In progress", value: 120, max: 380, unit: "chapter")), "120/380 chapters")
+    }
+
+    private func series(_ mediaType: String, status: String, value: Decimal, max: Decimal?, unit: String) -> Spine.LibraryItem {
+        Spine.LibraryItem(
+            media: summary(mediaType),
+            tracking: TrackingState(
+                trackingId: 1,
+                status: status,
+                rating: nil,
+                progress: ProgressState(kind: "count", value: value, max: max, unit: unit),
+                repeats: nil,
+                startDate: nil,
+                endDate: nil,
+                notes: nil,
+                updatedAt: nil
+            )
+        )
     }
 
     private func badge(_ item: Spine.LibraryItem) -> String? {

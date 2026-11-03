@@ -109,7 +109,7 @@ Changes that come from elsewhere, such as the metadata fill or a featured list s
 If a log's `consumed_at` is exactly 00:00:00 UTC, its day is that UTC date.
 Otherwise its day is `consumed_at` on the owner's calendar.
 
-The first case covers logs whose time carries a calendar date: movie, music, book and game logs, TV logs (TV-407), MAL-export anime and manga, and TV logs the repair hasn't converted yet.
+The first case covers logs whose time carries a calendar date: movie, music, book, manga, comic and game logs, TV logs (TV-407), MAL-export anime, and TV logs the repair hasn't converted yet.
 The second covers logs that record a real moment, such as anime finished in the app.
 The rule applies to stats ranges, events, streaks and milestones, and to the diary's date filters (STAT-400).
 
@@ -176,7 +176,7 @@ DNF reading journeys and dropped playthroughs never count as reads or completion
 
 A log is a rewatch when one of these holds:
 
-1. **An earlier log.** Its target has an earlier visible log, ordered by log day, then by ID.
+1. **An earlier log.** Its target has an earlier visible log, ordered by log day, then by ID. A log that carried on a finished manga or comic (MC-200) is never a rewatch, under either rule: it is the same read.
 2. **An undated fact before the first log.** It is its target's first visible log, the target was consumed before it without a date, and the type's rule agrees:
    - **Books and games:** `completed_manually` always counts, because an undated completion is earlier than every dated one (BK-406, GM-216). The saved reread or replay toggle is never read (BK-405, GM-217).
    - **Movies and music:** the direct-consumption marker counts only when the log was saved as a rewatch (`DiaryEntry.is_rewatch`, SW-010, SW-503). The saved value is the user's or the import's own statement; the marker alone can't say whether it came first, because imports set it after importing the diary.

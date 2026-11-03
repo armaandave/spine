@@ -255,6 +255,8 @@ SpecialModels = [
     "DiaryEntryTag",
     "BookSession",
     "GameSession",
+    "MangaAttempt",
+    "ComicAttempt",
     "MediaLike",
     "MediaSeries",
     "MediaSeriesItem",

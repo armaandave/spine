@@ -15,7 +15,7 @@ from api.serializers.common import (
     user_summary,
 )
 from api.services import tracking as tracking_service
-from app import single_weight, tv_tracking
+from app import series_tracking, single_weight, tv_tracking, user_calendar
 from app.models import Item, MediaLike, MediaTypes, Sources, Tag, TVListing
 from app.providers import services as provider_services
 from app.services import create_diary_entry, update_diary_entry
@@ -273,7 +273,8 @@ def create_entry(user, data):
     """Create a diary entry from API payload, checking its favorite first."""
     ref = data["ref"]
     favorite = favorite_payload(data.get("favorite"), ref["media_type"], ref.get("season_number"))
-    entry = _create_entry(user, data)
+    create = _create_series_entry if series_tracking.supports(ref["media_type"]) else _create_entry
+    entry = create(user, data)
     if favorite:
         _save_favorite(entry, favorite)
     return entry
@@ -356,6 +357,40 @@ def _create_entry(user, data):
                     "liked": bool(entry.liked),
                 },
             )
+    return entry
+
+
+def _create_series_entry(user, data):
+    """Finish a manga or comic through its log, whatever auto_mark_consumed says.
+
+    MC-103, MC-500.
+    """
+    ref = data["ref"]
+    item = tracking_service._series_item(
+        user,
+        source=ref["source"],
+        media_type=ref["media_type"],
+        media_id=ref["media_id"],
+    )
+    _, entry = tracking_service._call_book(
+        series_tracking.complete,
+        user,
+        item,
+        completion_date=data.get("consumed_at") or user_calendar.today(user),
+        rating=_stored_rating(data.get("rating"), ref["media_type"]),
+        review=data.get("review", ""),
+        liked=(
+            data["liked"]
+            if "liked" in data
+            else MediaLike.objects.filter(user=user, item=item).exists()
+        ),
+        is_rewatch=data.get("is_rewatch"),
+        tags=data.get("tags", []),
+        review_title=data.get("review_title", ""),
+        contains_spoilers=data.get("contains_spoilers", False),
+        visibility=data.get("visibility", "public"),
+        mutation_id=data.get("mutation_id"),
+    )
     return entry
 
 

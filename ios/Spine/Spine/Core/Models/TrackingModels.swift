@@ -103,6 +103,8 @@ struct TrackingState: Codable, Equatable {
     /// The show's TV state (detail variant on `GET tracking/{source}/{tv|season|episode}/{id}/` and in TV write
     /// responses, list variant in `GET tracking/?media_type=tv` rows). Nil for other media types.
     var tv: TVShowState? = nil
+    /// A manga's or a comic's reading state: the book's shape, plus its total (MC-000). Read it through `reading`.
+    var series: BookTrackingState? = nil
 
     init(
         trackingId: Int,
@@ -123,7 +125,8 @@ struct TrackingState: Codable, Equatable {
         diaryCount: Int? = nil,
         book: BookTrackingState? = nil,
         game: GameTrackingState? = nil,
-        tv: TVShowState? = nil
+        tv: TVShowState? = nil,
+        series: BookTrackingState? = nil
     ) {
         self.trackingId = trackingId
         self.status = status
@@ -144,6 +147,12 @@ struct TrackingState: Codable, Equatable {
         self.book = book
         self.game = game
         self.tv = tv
+        self.series = series
+    }
+
+    /// The reading state of a book, a manga or a comic.
+    nonisolated var reading: BookTrackingState? {
+        book ?? series
     }
 
     func replacingProgress(_ progress: ProgressState?) -> TrackingState {
@@ -166,7 +175,8 @@ struct TrackingState: Codable, Equatable {
             diaryCount: diaryCount,
             book: book,
             game: game,
-            tv: tv
+            tv: tv,
+            series: series
         )
     }
 }
@@ -180,6 +190,8 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
     var progress: ProgressState?
     var completionDiaryEntryId: Int?
     var isReread: Bool
+    /// A manga or comic read that carries on from an earlier one, so it isn't a reread (MC-200).
+    var continues: Bool? = nil
 
     init(
         id: Int,
@@ -189,7 +201,8 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
         endDate: String? = nil,
         progress: ProgressState? = nil,
         completionDiaryEntryId: Int? = nil,
-        isReread: Bool = false
+        isReread: Bool = false,
+        continues: Bool? = nil
     ) {
         self.id = id
         self.status = status
@@ -199,6 +212,7 @@ nonisolated struct BookJourneyState: Codable, Equatable, Hashable, Identifiable 
         self.progress = progress
         self.completionDiaryEntryId = completionDiaryEntryId
         self.isReread = isReread
+        self.continues = continues
     }
 }
 
@@ -228,6 +242,14 @@ nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
     var removeTrackingReason: String?
     var availableActions: [String]
     var actionReasons: [String: String]
+    /// A manga's chapters or a comic's issues so far, when the provider lists them (MC-002, MC-003).
+    var total: Int? = nil
+    /// "chapter" or "issue".
+    var unit: String? = nil
+    /// A Read series with more to read offers Keep Reading (MC-200).
+    var offersKeepReading: Bool? = nil
+    /// This save reached the total for the first time in the attempt: the log screen follows (MC-100, MC-101).
+    var opensLog: Bool? = nil
 
     init(
         currentJourney: BookJourneyState? = nil,
@@ -242,7 +264,11 @@ nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
         canRemoveTracking: Bool = true,
         removeTrackingReason: String? = nil,
         availableActions: [String] = [],
-        actionReasons: [String: String] = [:]
+        actionReasons: [String: String] = [:],
+        total: Int? = nil,
+        unit: String? = nil,
+        offersKeepReading: Bool? = nil,
+        opensLog: Bool? = nil
     ) {
         self.currentJourney = currentJourney
         self.readingHistory = readingHistory
@@ -257,6 +283,10 @@ nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
         self.removeTrackingReason = removeTrackingReason
         self.availableActions = availableActions
         self.actionReasons = actionReasons
+        self.total = total
+        self.unit = unit
+        self.offersKeepReading = offersKeepReading
+        self.opensLog = opensLog
     }
 
     var hasLiveJourney: Bool {
@@ -281,6 +311,10 @@ nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
         hasher.combine(canRemoveTracking)
         hasher.combine(removeTrackingReason)
         hasher.combine(availableActions)
+        hasher.combine(total)
+        hasher.combine(unit)
+        hasher.combine(offersKeepReading)
+        hasher.combine(opensLog)
         for key in actionReasons.keys.sorted() {
             hasher.combine(key)
             hasher.combine(actionReasons[key])
@@ -566,6 +600,29 @@ struct BookActionRequest: Encodable, Equatable {
         self.startDate = startDate
         self.endDate = endDate
     }
+}
+
+struct SeriesProgressRequest: Encodable, Equatable {
+    let value: Int
+    /// The same on a retry, so a lost answer at the total still opens the log screen (MC-100, MC-101).
+    let mutationId: UUID
+}
+
+/// A manga's or a comic's log: the book's, with its own visibility (AC-5) and the optional number a log with no total
+/// has (MC-102). A nil `isRewatch` lets the server work it out from the reads before it.
+struct SeriesCompletionWriteRequest: Encodable, Equatable {
+    let journeyId: Int?
+    let completionDate: String
+    let rating: Decimal?
+    let review: String
+    let reviewTitle: String
+    let liked: Bool
+    let isRewatch: Bool?
+    let containsSpoilers: Bool
+    let tags: [String]
+    let visibility: String
+    let place: Int?
+    let mutationId: UUID
 }
 
 struct BookJourneyWriteRequest: Encodable, Equatable {

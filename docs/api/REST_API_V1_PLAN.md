@@ -121,6 +121,9 @@ Important files:
 | POST/DELETE | `/api/v1/tracking/{source}/tv/{media_id}/seasons/{season_number}/episodes/{episode_number}/watch/` | Yes |
 | POST | `/api/v1/tracking/{source}/book/{media_id}/progress/` | Yes |
 | POST | `/api/v1/tracking/{source}/book/{media_id}/complete/` | Yes |
+| POST | `/api/v1/tracking/{source}/{manga,comic}/{media_id}/progress/` | Yes |
+| POST | `/api/v1/tracking/{source}/{manga,comic}/{media_id}/complete/` | Yes |
+| PATCH, DELETE | `/api/v1/tracking/{source}/{manga,comic}/{media_id}/journeys/{id}/` | Yes |
 
 `GET /api/v1/tracking/` requires `media_type` and returns the standard paged shape:
 `count`, `next`, `previous`, `results`. Supported query params are `media_type`,

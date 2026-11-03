@@ -13,10 +13,11 @@ Two things are activity:
   episodes across seasons count toward the show. Each later change that day updates
   the same item rather than adding another.
 - **Starting a title**, on a day with no progress on it: "started reading",
-  "started watching", "started playing". Starting is a new reading journey or game
-  playthrough, or a show, season, anime, manga, or comic set to In progress.
+  "started watching", "started playing". Starting is a new reading journey, manga or
+  comic attempt, or game playthrough, or a show, season, or anime set to In progress.
   Resuming something paused isn't starting it; starting again after finishing or
-  dropping is.
+  dropping is. Carrying on with a finished manga or comic isn't (Keep Reading, or a
+  comic's new issue: MC-200, MC-202).
 
 Nothing else is activity: not rating a title without a log, not marking something
 watched, read, played, or completed without a log, not other status changes,
@@ -32,8 +33,8 @@ hearts, follows, or adding to a list.
 - Progress that day replaces a start, as the same item. A log doesn't replace either:
   a log and that day's progress or start on the same title are separate items.
 - Starts are recorded in `social.ProgressChange` as a step of kind `start`; they
-  never count as a title's latest progress. Deleting a book journey or a game
-  playthrough deletes its start and progress with it.
+  never count as a title's latest progress. Deleting a book journey, a manga or comic
+  attempt, or a game playthrough deletes its start and progress with it.
 - The day is the local day the progress was recorded.
 
 ## AC-3: Newest date first

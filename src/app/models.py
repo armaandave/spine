@@ -9,7 +9,7 @@ from django.core.validators import (
     MaxValueValidator,
     MinValueValidator,
 )
-from django.db import models
+from django.db import models, transaction
 from django.db.models import (
     CheckConstraint,
     Count,
@@ -111,6 +111,9 @@ class Item(CalendarTriggerMixin, models.Model):
     episode_number = models.PositiveIntegerField(null=True, blank=True)
     poster_accent_color = models.CharField(max_length=8, blank=True, default="")
     total_pages = models.PositiveIntegerField(null=True, blank=True)  # For books
+    # A manga's chapters or a comic's issues so far, from the provider; null when it
+    # lists none (docs/manga-comics-tracking-contract.md, MC-002, MC-003).
+    series_total = models.PositiveIntegerField(null=True, blank=True)
     release_date = models.DateField(null=True, blank=True)
     release_year = models.PositiveIntegerField(null=True, blank=True)
     runtime_minutes = models.PositiveIntegerField(null=True, blank=True)
@@ -747,6 +750,10 @@ class MediaManager(models.Manager):
                 ),
             )
 
+        if media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+            # Each row's `series` state reads its attempts.
+            return base_queryset.prefetch_related("attempts")
+
         return base_queryset
 
     def _sort_media_list(self, queryset, sort_filter, media_type=None):
@@ -1003,6 +1010,12 @@ class MediaManager(models.Manager):
         if media_type == MediaTypes.BOOK.value:
             for media in media_list:
                 media.max_progress = media.item.total_pages
+            return
+
+        if media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+            # The provider's total, never calendar events (MC-002, MC-003).
+            for media in media_list:
+                media.max_progress = media.item.series_total
             return
 
         # For other media types, calculate max_progress from events
@@ -2491,10 +2504,125 @@ class TVMutation(models.Model):
         return f"{self.action} {self.mutation_id}"
 
 
-class Manga(Media):
+class SeriesMedia(Media):
+    """A manga or comic: a book counted in chapters or issues (app.series_tracking).
+
+    One row per user and series. `progress` is the current place; an attempt holds it
+    while one is under way. A status change still refreshes the calendar, as it always
+    did; nothing else happens on save: reaching the total never finishes a read (MC-100).
+
+    Every NOT NULL column has a database default, so code from before these columns keeps
+    saving these rows and their history after a rollback (MC-500).
+    """
+
+    completed_manually = models.BooleanField(default=False, db_default=False)
+    rating_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    like_is_independent = models.BooleanField(default=False, db_default=False)
+    undated_read_previous_tracked = models.BooleanField(default=False, db_default=False)
+    undated_read_previous_status = models.CharField(
+        max_length=20,
+        choices=Status,
+        null=True,
+        blank=True,
+    )
+    undated_read_previous_override = models.BooleanField(default=False, db_default=False)
+    # The number a mark replaced, which an imported row can hold with no attempt.
+    undated_read_previous_place = models.PositiveIntegerField(default=0, db_default=0)
+    read_override_active = models.BooleanField(default=False, db_default=False)
+    read_override_previous_tracked = models.BooleanField(default=False, db_default=False)
+    read_override_previous_status = models.CharField(
+        max_length=20,
+        choices=Status,
+        null=True,
+        blank=True,
+    )
+    read_override_previous_place = models.PositiveIntegerField(default=0, db_default=0)
+
+    class Meta(Media.Meta):
+        """Meta options for the model."""
+
+        abstract = True
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "item"],
+                name="%(app_label)s_%(class)s_unique_item_user",
+            ),
+        ]
+
+    # Set by series_tracking on a row just inserted in this transaction: the insert's job
+    # runs after the commit and sees the final status, so that write needs no second one.
+    calendar_job_queued = False
+
+    def _save_series(self, *args, **kwargs):
+        status_changed = self.tracker.has_changed("status") and not self.calendar_job_queued
+        super(Media, self).save(*args, **kwargs)
+        if status_changed:
+            transaction.on_commit(lambda: self.item.fetch_releases(delay=True), robust=True)
+
+    def mark_consumed(self):
+        """Route compatibility callers through the series rules (BK-102)."""
+        from app.series_tracking import mark_read
+
+        return mark_read(self.user, self.item)
+
+    def increase_progress(self):
+        """Move the current attempt's place on by one."""
+        return self._move_place(self.progress + 1)
+
+    def decrease_progress(self):
+        """Move the current attempt's place back by one."""
+        return self._move_place(max(self.progress - 1, 0))
+
+    def _move_place(self, place):
+        from app.series_tracking import update_progress
+
+        update_progress(self.user, self.item, value=place)
+        self.refresh_from_db()
+
+
+class Manga(SeriesMedia):
     """Model for manga."""
 
     tracker = FieldTracker()
+    current_attempt = models.ForeignKey(
+        "MangaAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    undated_read_previous_attempt = models.ForeignKey(
+        "MangaAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    read_override_previous_attempt = models.ForeignKey(
+        "MangaAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    @tracker  # postpone field reset until after the save
+    def save(self, *args, **kwargs):
+        """Save without finishing anything by itself (MC-100)."""
+        self._save_series(*args, **kwargs)
 
 
 class Anime(Media):
@@ -2918,10 +3046,142 @@ class BookSession(models.Model):
         self.related_book._invalidate_progress_cache()
 
 
-class Comic(Media):
+class Comic(SeriesMedia):
     """Model for comics."""
 
     tracker = FieldTracker()
+    current_attempt = models.ForeignKey(
+        "ComicAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    undated_read_previous_attempt = models.ForeignKey(
+        "ComicAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    read_override_previous_attempt = models.ForeignKey(
+        "ComicAttempt",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    @tracker  # postpone field reset until after the save
+    def save(self, *args, **kwargs):
+        """Save without finishing anything by itself (MC-100)."""
+        self._save_series(*args, **kwargs)
+
+
+class SeriesAttempt(models.Model):
+    """One read of a manga or comic: its status, dates and place (MC-000)."""
+
+    class Origin(models.TextChoices):
+        LIVE = "live", "Tracked attempt"
+        DIRECT_LOG = "direct_log", "Direct log"
+        IMPORTED = "imported", "Imported read"
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status,
+        default=Status.IN_PROGRESS.value,
+    )
+    origin = models.CharField(max_length=20, choices=Origin, default=Origin.LIVE)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    # How many chapters or issues have been read in this attempt (MC-001, MC-002).
+    place = models.PositiveIntegerField(default=0)
+    progressed_on = models.DateField(null=True, blank=True)
+    # Carries on from an earlier read, so its log isn't a reread (MC-200).
+    continues = models.BooleanField(default=False)
+    # The log screen has opened by itself for this attempt (MC-101), by this save, so a
+    # retry after a lost answer still opens it.
+    log_offered = models.BooleanField(default=False)
+    log_offer_mutation_id = models.UUIDField(null=True, blank=True)
+    completion_diary_entry = models.OneToOneField(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="%(class)s",
+    )
+    previous_tracked = models.BooleanField(default=False)
+    # The number this attempt replaced, which an imported row can hold with no attempt.
+    previous_place = models.PositiveIntegerField(default=0)
+    previous_status = models.CharField(
+        max_length=20,
+        choices=Status,
+        null=True,
+        blank=True,
+    )
+    previous_attempt = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    previous_read_override = models.BooleanField(default=False)
+    pre_completion_status = models.CharField(
+        max_length=20,
+        choices=Status,
+        null=True,
+        blank=True,
+    )
+    pre_completion = models.JSONField(null=True, blank=True)
+    mutation_id = models.UUIDField(null=True, blank=True)
+    completion_mutation_id = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        """Meta options for the model."""
+
+        abstract = True
+        ordering = ["tracking", "-created_at", "-id"]
+        constraints = [
+            UniqueConstraint(
+                fields=["tracking"],
+                condition=Q(status__in=[Status.IN_PROGRESS.value, Status.PAUSED.value]),
+                name="%(app_label)s_%(class)s_one_open",
+            ),
+            UniqueConstraint(
+                fields=["tracking", "mutation_id"],
+                condition=Q(mutation_id__isnull=False),
+                name="%(app_label)s_%(class)s_unique_mutation",
+            ),
+            UniqueConstraint(
+                fields=["tracking", "completion_mutation_id"],
+                condition=Q(completion_mutation_id__isnull=False),
+                name="%(app_label)s_%(class)s_unique_log_mutation",
+            ),
+            CheckConstraint(
+                condition=Q(start_date__isnull=True)
+                | Q(end_date__isnull=True)
+                | Q(end_date__gte=F("start_date")),
+                name="%(app_label)s_%(class)s_dates_ordered",
+            ),
+        ]
+
+    def __str__(self):
+        """Return the title and attempt number."""
+        return f"{self.tracking.item.title} - attempt {self.pk}"
+
+
+class MangaAttempt(SeriesAttempt):
+    """One read of a manga."""
+
+    tracking = models.ForeignKey(Manga, on_delete=models.CASCADE, related_name="attempts")
+
+
+class ComicAttempt(SeriesAttempt):
+    """One read of a comic."""
+
+    tracking = models.ForeignKey(Comic, on_delete=models.CASCADE, related_name="attempts")
 
 
 class Music(Media):

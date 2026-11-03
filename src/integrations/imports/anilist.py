@@ -184,6 +184,7 @@ class AniListImporter:
                                 large
                             }
                             idMal
+                            chapters
                             startDate {
                                 year
                                 month
@@ -246,15 +247,10 @@ class AniListImporter:
         self._process_media_data(response["data"]["manga"], MediaTypes.MANGA.value)
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user)
-
-        imported_counts = {
-            media_type: len(media_list)
-            for media_type, media_list in self.bulk_media.items()
-        }
+        helpers.bulk_create_media(self.bulk_media, self.user, source="anilist")
 
         deduplicated_messages = "\n".join(dict.fromkeys(self.warnings))
-        return imported_counts, deduplicated_messages
+        return helpers.imported_counts(self.bulk_media), deduplicated_messages
 
     def _process_media_data(self, media_data, media_type):
         """Process media data for a specific type (anime/manga)."""
@@ -281,7 +277,11 @@ class AniListImporter:
             start_date = f"{year:04d}-{month:02d}"
         else:
             start_date = f"{year:04d}-{month:02d}-{day:02d}"
-        return {"start_date": start_date, "runtime": media.get("duration")}
+        return {
+            "start_date": start_date,
+            "runtime": media.get("duration"),
+            "max_progress": media.get("chapters"),
+        }
 
     def _process_entry(self, content, media_type):
         """Process a single entry from AniList."""
