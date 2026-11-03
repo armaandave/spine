@@ -294,10 +294,11 @@ struct DiaryLogDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
-        // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
+        // Inside the bar's inset, so the swipe's edge doesn't cover the heart, and it ends where the favorite's play
+        // circle starts: 16 of page inset and 8 of button padding.
         .overlay(alignment: .leading) {
             Color.clear
-                .frame(width: 28)
+                .frame(width: 24)
                 .contentShape(Rectangle())
                 .gesture(edgeSwipeBackGesture)
         }
@@ -318,9 +319,6 @@ struct DiaryLogDetailView: View {
             if viewModel.entry != nil {
                 await viewModel.engagement.loadCommentsIfNeeded()
             }
-        }
-        .onChange(of: favoritePreviewURL) {
-            songPreview.stop()
         }
         // A cover or sheet over the page doesn't count as disappearing, and takes the stop button out of reach.
         .onChange(of: presentedRef != nil || isEditing) { _, isCovered in
@@ -590,7 +588,7 @@ struct DiaryLogDetailView: View {
                     SongPreviewButton(url: previewURL, title: favorite.title, player: songPreview)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if favorite.kind == .episode, let number = favorite.numberLabel {
+                    if let number = favorite.numberLabel {
                         Text(number)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -616,11 +614,6 @@ struct DiaryLogDetailView: View {
                 }
             }
         }
-    }
-
-    /// The preview the page offers now, which an edit can change.
-    private var favoritePreviewURL: URL? {
-        viewModel.entry?.favorite?.recording(in: viewModel.mediaDetail)?.previewURL
     }
 
     private func hidesFavorite(_ entry: DiaryEntry) -> Bool {

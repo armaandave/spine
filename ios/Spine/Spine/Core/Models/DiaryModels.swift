@@ -88,14 +88,10 @@ struct LogFavorite: Codable, Hashable {
         return media.lazy.flatMap(\.tracks).first { $0.recording.recordingMbid == id }?.recording
     }
 
-    /// "S1 E4" for an episode; a song's own number.
+    /// An episode's "S1 E4". A song shows only its name.
     var numberLabel: String? {
-        switch kind {
-        case .song:
-            number.flatMap { $0.isEmpty ? nil : $0 }
-        case .episode:
-            seasonNumber.flatMap { season in episodeNumber.map { "S\(season) E\($0)" } }
-        }
+        guard kind == .episode, let seasonNumber, let episodeNumber else { return nil }
+        return "S\(seasonNumber) E\(episodeNumber)"
     }
 
     /// The same song or episode, whatever its stored title. A deluxe album can list one recording twice, so a song

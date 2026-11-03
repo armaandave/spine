@@ -56,7 +56,8 @@ final class SongPreviewPlayerTests: XCTestCase {
 
     func testAPreviewPlaysToItsEndAndGoesBackToPlay() async throws {
         let player = SongPreviewPlayer()
-        let silence = try writeSilence(named: "silence.caf", seconds: 1)
+        // Long enough that a busy Mac can't skip past the playing state between two looks.
+        let silence = try writeSilence(named: "silence.caf", seconds: 3)
 
         player.toggle(silence)
         try await waitUntil { player.currentURL == silence && !player.isLoading }

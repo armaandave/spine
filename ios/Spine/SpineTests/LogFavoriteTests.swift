@@ -16,7 +16,7 @@ final class LogFavoriteTests: XCTestCase {
         let episode = try JSONDecoder.api.decode(LogFavorite.self, from: Data(body.utf8))
         XCTAssertEqual(episode, LogFavorite(kind: .episode, title: "Cancer Man", seasonNumber: 1, episodeNumber: 4))
         XCTAssertEqual(episode.numberLabel, "S1 E4")
-        XCTAssertEqual(Self.song.numberLabel, "A1")
+        XCTAssertNil(Self.song.numberLabel, "A song shows only its name")
 
         var request = DiaryEntryWriteRequest(
             ref: TVTrackingSurfacesTests.ref("music"), consumedAt: nil, rating: nil, review: "", reviewTitle: "",

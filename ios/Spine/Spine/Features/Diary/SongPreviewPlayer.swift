@@ -29,8 +29,7 @@ final class SongPreviewPlayer {
     func stop() {
         guard player != nil else { return }
         release()
-        // Lets music the preview interrupted pick up again.
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        releaseSession()
     }
 
     /// The page closed: nothing keeps playing, and its next opening tries a failed preview again.
@@ -97,6 +96,21 @@ final class SongPreviewPlayer {
         failedURL = url
         stop()
         UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+
+    /// Lets music the preview interrupted pick up again. The player's audio ends a moment after it's released, and the
+    /// session refuses while audio is still running, so a refusal gets one more try.
+    private func releaseSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard self?.player == nil else { return }
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            }
+        }
     }
 
     private func release() {
