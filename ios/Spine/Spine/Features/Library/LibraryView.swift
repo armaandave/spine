@@ -910,7 +910,7 @@ struct LibraryView: View {
                         )
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
-                        if let progressText = bookProgressBadge(item) {
+                        if let progressText = LibraryPosterBadge.text(for: item) {
                             Text(progressText)
                                 .font(.system(size: 9, weight: .black))
                                 .foregroundStyle(.white)
@@ -930,21 +930,6 @@ struct LibraryView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func bookProgressBadge(_ item: LibraryItem) -> String? {
-        if item.media.ref.mediaType == "tv" { return TVLibraryCard.gridBadge(for: item) }
-        if item.media.ref.mediaType == "game" {
-            let text = item.tracking.game?.currentPlaythrough?.progress.summary ?? ""
-            return text.isEmpty ? nil : text
-        }
-        guard item.media.ref.mediaType == "book" else { return nil }
-        if let text = item.tracking.progress?.compactDisplayText(
-            preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
-        ) {
-            return text
-        }
-        return LibraryViewModel.hasStatus(item, "Completed") ? "Complete" : nil
     }
 
     private func gridAccessibilityLabel(_ item: LibraryItem) -> String {
@@ -1034,6 +1019,36 @@ struct LibraryView: View {
     }
 }
 
+/// The short badge on a grid poster: where you stopped on a book, game or show you've started and haven't finished.
+/// Anything planned or finished has none, and anime, manga and comics have none until they have tracking contracts.
+enum LibraryPosterBadge {
+    static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
+
+    static func text(for item: LibraryItem) -> String? {
+        switch item.media.ref.mediaType {
+        case "tv":
+            return TVLibraryCard.gridBadge(for: item)
+        case "book":
+            guard unfinishedStatuses.contains(item.tracking.status ?? "") else { return nil }
+            return item.tracking.progress?.compactDisplayText(
+                preferredMode: ProgressDisplayPreferences.mode(for: item.media.ref)
+            )
+        case "game":
+            guard unfinishedStatuses.contains(item.tracking.status ?? ""),
+                  let progress = item.tracking.game?.currentPlaythrough?.progress
+            else { return nil }
+            // A game can save an explicit 0, which isn't a place you stopped.
+            let text = GameProgressValues(
+                totalMinutes: progress.totalMinutes.flatMap { $0 > 0 ? $0 : nil },
+                percentage: progress.percentage.flatMap { $0 > 0 ? $0 : nil }
+            ).summary
+            return text.isEmpty ? nil : text
+        default:
+            return nil
+        }
+    }
+}
+
 /// What a show's Library card says (TV-700), from the list variant of its TV state.
 enum TVLibraryCard {
     /// The section's card line, such as "S2 E4 next · 13 of 20" or "Paused at S2 E3", else the section's name.
@@ -1049,13 +1064,13 @@ enum TVLibraryCard {
         return statusTitle(item.tracking.tv?.status ?? item.tracking.status)
     }
 
-    /// The short badge on a grid poster: the episode up next while the show is Watching, Paused or Dropped. A Paused
-    /// or Dropped show with nothing watched names no episode, as its card line doesn't (TV-700).
+    /// The short badge on a grid poster: the episode up next while the show is Watching, Paused or Dropped and not
+    /// caught up. It needs an episode watched in this pass: choosing Watching counts as started and sets an up next
+    /// (TV-005), but with nothing watched there's nowhere you stopped (TV-700).
     static func gridBadge(for item: LibraryItem) -> String? {
-        guard let tv = item.tracking.tv, !tv.caughtUp,
-              ["In progress", "Paused", "Dropped"].contains(tv.status ?? "")
+        guard let tv = item.tracking.tv, !tv.caughtUp, (tv.watchedCount ?? 0) > 0,
+              LibraryPosterBadge.unfinishedStatuses.contains(tv.status ?? "")
         else { return nil }
-        if tv.status != "In progress", !tv.started { return nil }
         return tv.upNextCode
     }
 

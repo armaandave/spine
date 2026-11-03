@@ -168,17 +168,18 @@ final class TVTrackingSurfacesTests: XCTestCase {
     func testTV700GridBadgeNamesUpNextWhileWatchingPausedOrDropped() {
         func badge(_ tv: TVShowState) -> String? { TVLibraryCard.gridBadge(for: Self.showItem("1", "Show", tv: tv)) }
 
-        XCTAssertEqual(badge(Self.showState(status: "In progress", upNext: (2, 4))), "S2 E4")
-        XCTAssertEqual(badge(Self.showState(status: "Paused", upNext: (2, 3))), "S2 E3")
-        XCTAssertEqual(badge(Self.showState(status: "Dropped", upNext: (2, 4))), "S2 E4")
-        XCTAssertNil(badge(Self.showState(status: "In progress", caughtUp: true)))
-        XCTAssertNil(badge(Self.showState(status: "Completed", finished: true)))
+        XCTAssertEqual(badge(Self.showState(status: "In progress", watched: 13, upNext: (2, 4))), "S2 E4")
+        XCTAssertEqual(badge(Self.showState(status: "Paused", watched: 12, upNext: (2, 3))), "S2 E3")
+        XCTAssertEqual(badge(Self.showState(status: "Dropped", watched: 13, upNext: (2, 4))), "S2 E4")
+        XCTAssertNil(badge(Self.showState(status: "In progress", watched: 20, caughtUp: true)))
+        XCTAssertNil(badge(Self.showState(status: "Completed", watched: 20, finished: true)))
+        XCTAssertNil(badge(Self.showState(status: "Completed", watched: 13, upNext: (2, 4))))
         XCTAssertNil(badge(Self.showState(status: "Planning", started: false)))
-        // A Paused or Dropped show with nothing watched names no episode, though the server stores an up next.
-        XCTAssertNil(badge(Self.showState(status: "Paused", started: false, upNext: (1, 1))))
-        XCTAssertNil(badge(Self.showState(status: "Dropped", started: false, upNext: (1, 1))))
-        XCTAssertEqual(badge(Self.showState(status: "In progress", upNext: (1, 1))), "S1 E1",
-                       "Watching with nothing watched still names the first episode (TV-005)")
+        // With nothing watched, no status names an episode, though the server stores an up next.
+        XCTAssertNil(badge(Self.showState(status: "Paused", started: false, watched: 0, upNext: (1, 1))))
+        XCTAssertNil(badge(Self.showState(status: "Dropped", started: false, watched: 0, upNext: (1, 1))))
+        XCTAssertNil(badge(Self.showState(status: "In progress", watched: 0, upNext: (1, 1))),
+                     "Choosing Watching counts as started (TV-005), but nothing has been watched yet")
     }
 
     func testTV700EmptySectionsDescribeWhatAppearsThere() {
