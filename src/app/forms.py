@@ -292,7 +292,21 @@ class SeriesForm(MediaForm):
         if "progress" in self.changed_data:
             payload["progress"] = self.cleaned_data.get("progress") or 0
         self.instance = series_tracking.apply_tracking_state(self.instance.user, self.instance.item, **payload)
+        self._save_attempt_dates()
         return self.instance
+
+    def _save_attempt_dates(self):
+        """The form's dates are the current attempt's (BK-306). A direct status has none (BK-101)."""
+        from app import series_tracking
+
+        attempt = self.instance.current_attempt if self.instance else None
+        dates = {
+            field: self.cleaned_data[field]
+            for field in ("start_date", "end_date")
+            if field in self.changed_data and self.cleaned_data.get(field)
+        }
+        if attempt and dates:
+            self.instance = series_tracking.update_journey(self.instance.user, self.instance.item, attempt.pk, **dates)
 
 
 class MangaForm(SeriesForm):

@@ -1,5 +1,8 @@
 """The web reaches the same manga and comic state as the app (MC-000, BK-500)."""
 
+from datetime import date
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -122,3 +125,65 @@ class SeriesWebContractTests(TestCase):
         self.assertEqual(self.row().status, Status.COMPLETED.value)
         self.assertTrue(self.row().completed_manually)
         self.assertFalse(DiaryEntry.objects.filter(user=self.user, item=self.item).exists())
+
+    def action(self, name):
+        with patch("app.views.services.get_media_metadata", return_value=self.metadata()):
+            return self.client.post(reverse(name, args=[self.item.source, self.item.media_type, self.item.media_id]))
+
+    def metadata(self):
+        return {"title": "Berserk", "image": "https://example.com/b.jpg", "max_progress": 10, "details": {}, "related": {}}
+
+    # BK-300, BK-303: Pause keeps the attempt with the row, and Resume continues it.
+    def test_pause_and_resume_move_the_attempt_with_the_row(self):
+        self.save(progress=4)
+        self.assertEqual(self.action("pause_media").status_code, 200)
+        row = self.row()
+        self.assertEqual((row.status, row.current_attempt.status), (Status.PAUSED.value, Status.PAUSED.value))
+        self.assertEqual(self.action("resume_media").status_code, 200)
+        row = self.row()
+        self.assertEqual((row.status, row.current_attempt.status), (READING, READING))
+        self.assertEqual(row.attempts.count(), 1)
+        self.assertEqual(row.progress, 4)
+
+    # BK-300, BK-500: Drop closes the attempt, keeping its place.
+    def test_drop_closes_the_attempt(self):
+        self.save(progress=4)
+        self.assertEqual(self.action("drop_media").status_code, 200)
+        row = self.row()
+        self.assertEqual((row.status, row.current_attempt.status), (Status.DROPPED.value, Status.DROPPED.value))
+        self.assertIsNotNone(row.current_attempt.end_date)
+        self.assertEqual(row.progress, 4)
+
+    # BK-300: Resume on a direct Paused begins an attempt, never a bare status.
+    def test_resuming_a_direct_pause_starts_an_attempt(self):
+        series_tracking.assign_status(self.user, self.item, Status.PAUSED.value)
+        self.assertEqual(self.action("resume_media").status_code, 200)
+        row = self.row()
+        self.assertEqual(row.status, READING)
+        self.assertEqual(row.current_attempt.status, READING)
+
+    # MC-004: lowering a number still past a total that shrank is refused, not a server error.
+    def test_decreasing_past_the_total_is_refused(self):
+        self.save(progress=4)
+        row = self.row()
+        Item.objects.filter(pk=self.item.pk).update(series_total=2)
+        response = self.client.post(
+            reverse("progress_edit", args=[MediaTypes.MANGA.value, row.pk]),
+            {"operation": "decrease"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    # BK-306: the form's dates reach the attempt.
+    def test_the_forms_start_date_reaches_the_attempt(self):
+        self.save(progress=4)
+        row = self.row()
+        self.save(instance_id=row.pk, progress=4, start_date="2026-10-01T10:00")
+        self.assertEqual(self.row().current_attempt.start_date, date(2026, 10, 1))
+
+    def test_the_forms_end_date_reaches_a_did_not_finish_attempt(self):
+        self.save()
+        row = self.row()
+        series_tracking.update_journey(self.user, self.item, row.current_attempt_id, start_date=date(2026, 9, 1))
+        series_tracking.drop(self.user, self.item)
+        self.save(instance_id=row.pk, status=Status.DROPPED.value, end_date="2026-10-01T10:00")
+        self.assertEqual(self.row().current_attempt.end_date, date(2026, 10, 1))
