@@ -61,15 +61,10 @@ class MyAnimeListImporter:
         self._process_media_type(MediaTypes.MANGA.value)
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user)
-
-        imported_counts = {
-            media_type: len(media_list)
-            for media_type, media_list in self.bulk_media.items()
-        }
+        helpers.bulk_create_media(self.bulk_media, self.user, source="myanimelist")
 
         deduplicated_messages = "\n".join(dict.fromkeys(self.warnings))
-        return imported_counts, deduplicated_messages
+        return helpers.imported_counts(self.bulk_media), deduplicated_messages
 
     def _process_media_type(self, media_type):
         """Process all media of a specific type from MyAnimeList."""
@@ -221,6 +216,7 @@ class MyAnimeListImporter:
             # MAL gives seconds; the details page shows whole minutes.
             "runtime": int(duration / 60) if duration else None,
             "genres": [genre["name"] for genre in node.get("genres") or []],
+            "max_progress": node.get("num_chapters"),
         }
 
     def _parse_mal_date(self, date_str):

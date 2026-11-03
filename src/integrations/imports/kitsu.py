@@ -73,15 +73,10 @@ class KitsuImporter:
         self._process_media_type(MediaTypes.MANGA.value)
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user)
-
-        imported_counts = {
-            media_type: len(media_list)
-            for media_type, media_list in self.bulk_media.items()
-        }
+        helpers.bulk_create_media(self.bulk_media, self.user, source="kitsu")
 
         deduplicated_messages = "\n".join(dict.fromkeys(self.warnings))
-        return imported_counts, deduplicated_messages
+        return helpers.imported_counts(self.bulk_media), deduplicated_messages
 
     def _get_kitsu_id(self, username):
         """Get the user ID from Kitsu."""
@@ -334,7 +329,11 @@ class KitsuImporter:
         attributes = kitsu_metadata["attributes"]
         helpers.store_free_metadata(
             item,
-            {"start_date": attributes.get("startDate"), "runtime": attributes.get("episodeLength")},
+            {
+                "start_date": attributes.get("startDate"),
+                "runtime": attributes.get("episodeLength"),
+                "max_progress": attributes.get("chapterCount"),
+            },
         )
         return item
 

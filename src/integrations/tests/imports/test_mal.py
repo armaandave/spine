@@ -48,7 +48,8 @@ class ImportMAL(TestCase):
 
         mal.importer("bloodthirstiness", self.user, "new")
         self.assertEqual(Anime.objects.filter(user=self.user).count(), 5)
-        self.assertEqual(Manga.objects.filter(user=self.user).count(), 3)
+        # One record per series; One Punch-Man's reread is a finished attempt (MC-400).
+        self.assertEqual(Manga.objects.filter(user=self.user).count(), 2)
 
         self.assertEqual(
             Anime.objects.filter(

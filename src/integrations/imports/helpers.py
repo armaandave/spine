@@ -15,7 +15,7 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 
 import app
 from api.services.item_metadata import is_metadata_current, store_item_metadata
-from app import single_weight, tv_tracking
+from app import series_tracking, single_weight, tv_tracking
 from app.models import MediaTypes
 
 logger = logging.getLogger(__name__)
@@ -109,6 +109,11 @@ def cleanup_existing_media(to_delete, user):
         # tracking here could violate the universal diary-history guard and is
         # unnecessary because canonical tracking is unique per user/title.
         if single_weight.supports(media_type) or media_type == MediaTypes.GAME.value:
+            continue
+
+        if series_tracking.supports(media_type):
+            for source, media_ids in sources.items():
+                series_tracking.clear_for_import(user, media_type, source, media_ids)
             continue
 
         for source, media_ids in sources.items():
@@ -239,13 +244,23 @@ def reconcile_imported_tv(bulk_media_list, user):
     )
 
 
-def bulk_create_media(bulk_media_list, user):
-    """Bulk create all media objects."""
-    _bulk_create_media(bulk_media_list, user)
+def bulk_create_media(bulk_media_list, user, *, source=""):
+    """Bulk create all media objects; `source` names the import on any logs it writes."""
+    _bulk_create_media(bulk_media_list, user, source)
     reconcile_imported_tv(bulk_media_list, user)
 
 
-def _bulk_create_media(bulk_media_list, user):
+def imported_counts(bulk_media_list):
+    """Count what an import brought in: a series once, however many reads it has (MC-400)."""
+    return {
+        media_type: (
+            len({row.item_id for row in rows}) if series_tracking.supports(media_type) else len(rows)
+        )
+        for media_type, rows in bulk_media_list.items()
+    }
+
+
+def _bulk_create_media(bulk_media_list, user, source=""):
     """Bulk create each media type's rows as the importer built them."""
     for media_type, bulk_media in bulk_media_list.items():
         if not bulk_media:
@@ -261,6 +276,10 @@ def _bulk_create_media(bulk_media_list, user):
 
         if media_type == MediaTypes.GAME.value:
             _import_game_rows(bulk_media, user)
+            continue
+
+        if series_tracking.supports(media_type):
+            _import_series_rows(bulk_media, user, source)
             continue
 
         # Update references for seasons and episodes
@@ -329,6 +348,39 @@ def _import_game_rows(rows, user):
             history_date=getattr(row, "_history_date", None),
             imported_lifetime_minutes=row.imported_lifetime_minutes,
             imported_lifetime_source=row.imported_lifetime_source,
+        )
+
+
+def _import_series_rows(rows, user, source):
+    """Keep one tracking record per series: a title's earlier rows are its reads (MC-400)."""
+    rows_by_item = defaultdict(list)
+    for row in rows:
+        rows_by_item[row.item_id].append(row)
+    for item_rows in rows_by_item.values():
+        *earlier, current = item_rows
+        series_tracking.import_title(
+            user,
+            current.item,
+            status=current.status,
+            place=current.progress,
+            score=current.score,
+            start_date=current.start_date,
+            end_date=current.end_date,
+            notes=current.notes,
+            earlier=[
+                {
+                    "status": row.status,
+                    "place": row.progress,
+                    "score": row.score,
+                    "start_date": row.start_date,
+                    "end_date": row.end_date,
+                }
+                for row in earlier
+            ],
+            history_date=getattr(current, "_history_date", None),
+            import_source=source,
+            import_source_id=getattr(current, "_import_source_id", ""),
+            tags=getattr(current, "_import_tags", None),
         )
 
 

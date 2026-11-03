@@ -13,7 +13,7 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
-from api.services.item_metadata import store_item_metadata
+from api.services.item_metadata import store_item_metadata, store_series_total
 from app import single_weight
 from app.models import (
     Anime,
@@ -246,32 +246,43 @@ class MALExportImporter:
                 progress = total
 
             model = TRACKING_MODELS[entry.media_type]
-            bulk_media[entry.media_type].append(
-                model(
-                    item=items[key],
-                    user=self.user,
-                    score=entry.score,
-                    progress=progress,
-                    status=entry.status,
-                    start_date=_date_carrier(entry.start_date),
-                    end_date=_date_carrier(entry.finish_date),
-                    notes=_notes(entry),
-                ),
+            row = model(
+                item=items[key],
+                user=self.user,
+                score=entry.score,
+                progress=progress,
+                status=entry.status,
+                start_date=_date_carrier(entry.start_date),
+                end_date=_date_carrier(entry.finish_date),
+                notes=_notes(entry),
             )
+            if entry.media_type == MediaTypes.MANGA.value:
+                store_series_total(items[key], {"max_progress": total})
+                row._import_tags = entry.tags  # noqa: SLF001
+                row._import_source_id = f"{entry.media_type}:{entry.media_id}:finish"  # noqa: SLF001
+                bulk_media[entry.media_type].extend(_earlier_reads(entry, model, items[key], self.user, total))
+            bulk_media[entry.media_type].append(row)
             self.counts[entry.media_type] += 1
             if entry.score is not None:
                 self.counts["ratings"] += 1
 
         # Bulk creation skips Media.save(), so no provider calls run in the
-        # transaction and history rows are still written.
-        helpers.bulk_create_media(bulk_media, self.user)
+        # transaction and history rows are still written. A manga's reads and its log
+        # are written with it (MC-400).
+        helpers.bulk_create_media(bulk_media, self.user, source=IMPORT_SOURCE)
+        self.counts["diary"] += DiaryEntry.objects.filter(
+            user=self.user,
+            import_source=IMPORT_SOURCE,
+            item__in=[row.item_id for row in bulk_media.get(MediaTypes.MANGA.value, [])],
+        ).count()
 
     def _create_diary_entries(self, entries, items):
         today = timezone.localdate()
         candidates = [
             entry
             for entry in entries
-            if entry.completed_once
+            if entry.media_type != MediaTypes.MANGA.value
+            and entry.completed_once
             and entry.finish_date is not None
             and entry.finish_date <= today
         ]
@@ -349,6 +360,25 @@ def backfill_metadata(item_ids, fetcher=fetch_mal_metadata):
             ).update(image=image)
         store_item_metadata(item, data)
     return failed
+
+
+def _earlier_reads(entry, model, item, user, total):
+    """Return a manga's earlier finished reads, each another row for one record (MC-400).
+
+    A reader on a reread has finished at least once, on the finish date the file gives.
+    """
+    rereads = entry.times_consumed
+    if entry.repeating:
+        rereads = max(rereads, 1)
+    rows = [
+        model(item=item, user=user, status=Status.COMPLETED.value, progress=total)
+        for _ in range(rereads)
+    ]
+    if entry.repeating and entry.completed_once:
+        rows[-1].start_date = _date_carrier(entry.start_date)
+        rows[-1].end_date = _date_carrier(entry.finish_date)
+        rows[-1].score = entry.score
+    return rows
 
 
 def _key(entry):
