@@ -29,8 +29,8 @@ LATE = datetime(2026, 12, 31, 23, 50, tzinfo=NEW_YORK)
 WRITES = re.compile(
     r"ProgressChange\(|ProgressChange\.objects\.create|ProgressChange\.objects\.bulk_create|cls\.objects\.create",
 )
-# Every place a progress change is written. A new one needs its day, a behavior test here
-# and a line on this list.
+# Every place a progress change is written. A new one needs its day, a behavior test
+# here and a line on this list.
 WRITERS = {
     "api/services/tracking.py": ["ProgressChange.objects.create"],
     "app/book_tracking.py": ["ProgressChange.objects.create"],
@@ -43,6 +43,8 @@ WRITERS = {
 
 
 class WriterScanTests(SimpleTestCase):
+    """A writer that forgets its day fails silently, so the list of them is closed."""
+
     def test_no_writer_is_missing_from_the_list(self):
         root = Path(settings.BASE_DIR)
         found = {}
@@ -58,6 +60,8 @@ class WriterScanTests(SimpleTestCase):
 
 @override_settings(TIME_ZONE="America/New_York")
 class WriterDayTests(TestCase):
+    """Each writer stores the owner's date: New York and Tokyo at 23:50 New York."""
+
     def setUp(self):
         for target in ("app.models.Item.fetch_releases", "app.tv_tracking._queue_external_ratings"):
             patcher = mock.patch(target)

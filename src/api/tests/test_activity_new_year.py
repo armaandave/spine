@@ -1,9 +1,9 @@
-"""AC-3 at the year's edge: a save lands on the phone's date, and the phone's date is never refused.
+"""AC-3 at the year's edge: a save lands on the phone's date, which is never refused.
 
-Production's server runs on New York. Saves go through the phone's real requests where it
-makes them. BK-304, BK-305, BK-306 and GM-013: a sent date equal to the phone's today is
-never refused and the stored date stays in order; a day ahead caps at today; any other date
-keeps its refusal.
+Production's server runs on New York. Saves go through the phone's real requests where
+it makes them. BK-304, BK-305, BK-306 and GM-013: a sent date equal to the phone's today
+is never refused and the stored date stays in order; a day ahead caps at today; any
+other date keeps its refusal.
 """
 
 from datetime import UTC, date, datetime
@@ -16,8 +16,26 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from app import book_tracking, game_tracking, series_tracking, tv_tracking, user_calendar
-from app.models import Anime, Book, BookSession, Comic, Game, GameSession, Item, Manga, MediaTypes, Sources, Status
+from app import (
+    book_tracking,
+    game_tracking,
+    series_tracking,
+    tv_tracking,
+    user_calendar,
+)
+from app.models import (
+    Anime,
+    Book,
+    BookSession,
+    Comic,
+    Game,
+    GameSession,
+    Item,
+    Manga,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now
 from integrations.imports.margins.importer import MarginsImporter
 from social.models import ProgressChange
@@ -38,6 +56,8 @@ AFTER_FLYING_WEST = datetime(2026, 12, 31, 17, 0, tzinfo=ZoneInfo(LOS_ANGELES))
 
 
 class NewYearBase(TestCase):
+    """A New York owner, a clock to move and the phone's own requests."""
+
     def setUp(self):
         for target in ("app.models.Item.fetch_releases", "app.tv_tracking._queue_external_ratings"):
             patcher = mock.patch(target)
@@ -85,6 +105,8 @@ class NewYearBase(TestCase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class SavesAtMidnightTests(NewYearBase):
+    """Each save lands on its own side of midnight."""
+
     def test_a_book_save(self):
         item = self.item(MediaTypes.BOOK.value, total_pages=400)
         book_tracking.start(self.user, item)
@@ -110,16 +132,19 @@ class SavesAtMidnightTests(NewYearBase):
 
     def test_a_manga_and_a_comic_save(self):
         for media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
-            self.clock.set(LATE)
-            item = self.item(media_type, series_total=100)
-            series_tracking.start(self.user, item)
-            values = iter((1, 2))
+            with self.subTest(media_type):
+                self.clock.set(LATE)
+                self.series_saves_at_the_edge(self.item(media_type, series_total=100))
 
-            def save():
-                self.post(self.phone(), item, "progress/", value=next(values))
-                return self.latest_day(item)
+    def series_saves_at_the_edge(self, item):
+        series_tracking.start(self.user, item)
+        values = iter((1, 2))
 
-            self.saves_at_the_edge(save)
+        def save():
+            self.post(self.phone(), item, "progress/", value=next(values))
+            return self.latest_day(item)
+
+        self.saves_at_the_edge(save)
 
     def test_an_anime_typed_save(self):
         item = self.item(MediaTypes.ANIME.value)

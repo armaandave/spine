@@ -1,12 +1,14 @@
 """AC-3: a progress change's fixed day (migration social.0005 and fill_progress_days).
 
 Rows from before the column take their save moment's day on the owner's calendar. New
-York is the server, as in production; a blank or bad zone falls back to it. A rollback's
-code writes rows naming only the old columns, so those stay empty until the command runs.
+York is the server, as in production; a blank or bad zone falls back to it. A
+rollback's code writes rows naming only the old columns, so those stay empty until the
+command runs.
 """
 
 import json
 from datetime import UTC, date, datetime
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -24,12 +26,13 @@ EARLY_TOKYO = datetime(2026, 3, 1, 15, 30, tzinfo=UTC)  # Mar 2 in Tokyo, Mar 1 
 
 
 def migrate(target):
+    """Run the migrations to this point, as a deploy does."""
     executor = MigrationExecutor(connection)
     executor.migrate([target])
 
 
 def insert_old_row(user, item, created_at):
-    """Write a row the way code from before the column does: naming only the old columns."""
+    """Write a row as code from before the column does: naming only the old columns."""
     snapshot = json.dumps({"kind": "pages", "value": 10, "max": 100, "unit": "page"})
     with connection.cursor() as cursor:
         cursor.execute(
@@ -41,6 +44,8 @@ def insert_old_row(user, item, created_at):
 
 @override_settings(TIME_ZONE="America/New_York")
 class SavedOnMigrationTests(TransactionTestCase):
+    """The fill, and the command for rows a rollback leaves empty."""
+
     def setUp(self):
         self.addCleanup(migrate, AFTER)
         users = get_user_model().objects
@@ -82,13 +87,13 @@ class SavedOnMigrationTests(TransactionTestCase):
         insert_old_row(self.tokyo, self.item, EARLY_TOKYO)
         insert_old_row(self.los_angeles, self.item, LATE_UTC)
         self.assertEqual(self.days(self.tokyo), [None])
-        call_command("fill_progress_days", verbosity=0)
+        call_command("fill_progress_days", stdout=StringIO())
         self.assertEqual(self.days(self.tokyo), [date(2026, 3, 2)])
         self.assertEqual(self.days(self.los_angeles), [date(2026, 2, 28)])
 
     def test_the_command_leaves_a_stored_day_alone(self):
         insert_old_row(self.tokyo, self.item, EARLY_TOKYO)
-        call_command("fill_progress_days", verbosity=0)
+        call_command("fill_progress_days", stdout=StringIO())
         ProgressChange.objects.filter(actor=self.tokyo).update(saved_on=date(2026, 1, 15))
-        call_command("fill_progress_days", verbosity=0)
+        call_command("fill_progress_days", stdout=StringIO())
         self.assertEqual(self.days(self.tokyo), [date(2026, 1, 15)])

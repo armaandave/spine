@@ -164,8 +164,8 @@ class ProgressChange(models.Model):
     # show "started reading" before any progress. It isn't progress itself.
     START = "start"
     # Rows that say what happened, not how far: a status move (paused, stopped, picked
-    # back up), a retype of the same number, a title added to Planning. They hold value 0
-    # in previous and current, so they add nothing to any number.
+    # back up), a retype of the same number, a title added to Planning. They hold value
+    # 0 in previous and current, so they add nothing to any number.
     STATUS = "status"
     TOUCH = "touch"
     PLANNING = "planning"
@@ -189,9 +189,9 @@ class ProgressChange(models.Model):
     previous_progress = models.JSONField()
     current_progress = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
-    # The phone's date when this was saved (docs/activity-contract.md, AC-3). Set by each
-    # writer, never in save(): fixtures create a row and then move its created_at. Empty
-    # only on rows written by code from before this column.
+    # The phone's date when this was saved (docs/activity-contract.md, AC-3). Set by
+    # each writer, never in save(): fixtures create a row and then move its created_at.
+    # Empty only on rows written by code from before this column.
     saved_on = models.DateField(null=True, blank=True)
 
     class Meta:
@@ -224,11 +224,18 @@ class ProgressChange(models.Model):
 
     @classmethod
     def record_status(cls, actor, item, move, **context):
-        """Record a status move the person chose; context such as a journey id rides along.
+        """Record a status move the person chose; a journey id or such rides along.
 
         It holds value 0 in previous and current and adds nothing to any number.
         """
-        snapshot = {"kind": cls.STATUS, "value": 0, "max": None, "unit": cls.STATUS, "move": move, **context}
+        snapshot = {
+            "kind": cls.STATUS,
+            "value": 0,
+            "max": None,
+            "unit": cls.STATUS,
+            "move": move,
+            **context,
+        }
         return cls.objects.create(
             actor=actor,
             item=item,

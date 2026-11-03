@@ -1,8 +1,9 @@
 """AC-1: status moves get recorded, and recording them changes nothing anyone sees.
 
-Pause, resume, stop, pick-up and Restart on a book, game, show, manga and comic. Deleting
-only the status rows leaves Stats, Home, the profile list and the post page byte-identical,
-same-day order included. latest_progress_change never reports one, on either path.
+Pause, resume, stop, pick-up and Restart on a book, game, show, manga and comic.
+Deleting only the status rows leaves Stats, Home, the profile list and the post page
+byte-identical, same-day order included. latest_progress_change never reports one, on
+either path.
 """
 
 import json
@@ -33,11 +34,14 @@ BACK = ProgressChange.PICKED_BACK_UP
 
 
 def rendered(response):
+    """Return a response as the phone reads it."""
     return json.loads(JSONRenderer().render(response.data))
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class StatusRowBase(TestCase):
+    """A reader at a pinned time, and a friend who follows them."""
+
     def setUp(self):
         for target in ("app.models.Item.fetch_releases", "app.tv_tracking._queue_external_ratings"):
             patcher = mock.patch(target)
@@ -78,7 +82,7 @@ class StatusRowBase(TestCase):
         return rendered(response)
 
     def everything(self):
-        """What Stats, Home, the profile list and the post page say, as JSON."""
+        """Return what Stats, Home, the profile list and the post page say, as JSON."""
         pages = {}
         for name, params in (("all_time", ALL_TIME), ("year", YEAR)):
             pages[f"stats_{name}"] = self.get("/api/v1/stats/me/summary/", params)
@@ -100,6 +104,8 @@ class StatusRowBase(TestCase):
 
 
 class BookMoveTests(StatusRowBase):
+    """Books record the moves the person chose, and no others."""
+
     def setUp(self):
         super().setUp()
         self.book = self.item(MediaTypes.BOOK.value, total_pages=400)
@@ -184,6 +190,8 @@ class BookMoveTests(StatusRowBase):
 
 
 class GameMoveTests(StatusRowBase):
+    """Games too; a stopped game picked back up is a new playthrough (decision 44)."""
+
     def setUp(self):
         super().setUp()
         self.game = self.item(MediaTypes.GAME.value)
@@ -227,6 +235,8 @@ class GameMoveTests(StatusRowBase):
 
 
 class SeriesMoveTests(StatusRowBase):
+    """Manga and comics too; carrying on writes none (MC-200, MC-202)."""
+
     def test_pause_resume_stop_and_pick_up_on_a_manga_and_a_comic(self):
         for media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
             item = self.item(media_type, series_total=100)
@@ -268,6 +278,8 @@ class SeriesMoveTests(StatusRowBase):
 
 
 class ShowMoveTests(StatusRowBase):
+    """Shows too, once started; a tick that ends a pause is just the tick."""
+
     def setUp(self):
         super().setUp()
         self.fake = FakeTVProvider().__enter__()
@@ -322,51 +334,34 @@ class NothingMovesTests(StatusRowBase):
         with FakeTVProvider() as fake:
             show = make_show(fake, title="Severance", seasons={1: 3})
             # Saves first, then each move, so a status row is newest on its day.
-            book_tracking.start(self.user, book)
-            self.later()
-            book_tracking.update_progress(self.user, book, progress_type="pages", value=40)
-            self.later()
-            game_tracking.start(self.user, game)
-            self.later()
-            game_tracking.update_progress(self.user, game, total_minutes=120)
-            self.later()
-            series_tracking.start(self.user, manga)
-            self.later()
-            series_tracking.update_progress(self.user, manga, value=5)
-            self.later()
-            series_tracking.start(self.user, comic)
-            self.later()
-            series_tracking.update_progress(self.user, comic, value=3)
-            self.later()
-            tv_tracking.tick(self.user, show, 1, 1)
-            self.later()
-            book_tracking.pause(self.user, book)
-            self.later()
-            book_tracking.resume(self.user, book)
-            self.later()
-            book_tracking.drop(self.user, book)
-            self.later()
-            book_tracking.start(self.user, book)
-            self.later()
-            game_tracking.pause(self.user, game)
-            self.later()
-            game_tracking.resume(self.user, game)
-            self.later()
-            game_tracking.drop(self.user, game)
-            self.later()
-            series_tracking.pause(self.user, manga)
-            self.later()
-            series_tracking.start(self.user, manga)
-            self.later()
-            series_tracking.drop(self.user, comic)
-            self.later()
-            series_tracking.start(self.user, comic)
-            self.later()
-            tv_tracking.choose(self.user, show, tv_tracking.PAUSED)
-            self.later()
-            tv_tracking.choose(self.user, show, tv_tracking.WATCHING)
-            self.later()
-            book_tracking.restart(self.user, book)
+            for step, *args in (
+                (book_tracking.start, book),
+                (book_tracking.update_progress, book, {"progress_type": "pages", "value": 40}),
+                (game_tracking.start, game),
+                (game_tracking.update_progress, game, {"total_minutes": 120}),
+                (series_tracking.start, manga),
+                (series_tracking.update_progress, manga, {"value": 5}),
+                (series_tracking.start, comic),
+                (series_tracking.update_progress, comic, {"value": 3}),
+                (tv_tracking.tick, show, 1, 1),
+                (book_tracking.pause, book),
+                (book_tracking.resume, book),
+                (book_tracking.drop, book),
+                (book_tracking.start, book),
+                (game_tracking.pause, game),
+                (game_tracking.resume, game),
+                (game_tracking.drop, game),
+                (series_tracking.pause, manga),
+                (series_tracking.start, manga),
+                (series_tracking.drop, comic),
+                (series_tracking.start, comic),
+                (tv_tracking.choose, show, tv_tracking.PAUSED),
+                (tv_tracking.choose, show, tv_tracking.WATCHING),
+                (book_tracking.restart, book),
+            ):
+                self.later()
+                keywords = args.pop() if isinstance(args[-1], dict) else {}
+                step(self.user, *args, **keywords)
             self.assert_status_rows_change_nothing()
 
     def test_a_move_on_another_day_leaves_no_row(self):
@@ -382,7 +377,7 @@ class NothingMovesTests(StatusRowBase):
 
 
 class LatestProgressChangeTests(StatusRowBase):
-    """Installed builds read the newest real progress, on the primed path and the fallback."""
+    """Installed builds read the newest real progress, on either path."""
 
     def both_paths(self, media):
         media = type(media).objects.select_related("item").get(pk=media.pk)

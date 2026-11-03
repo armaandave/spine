@@ -1,7 +1,7 @@
-"""AC-3 for anime: each history row says what the save was, on the day it can't be recovered.
+"""AC-3 for anime: each history row says what the save was, which nothing can recover.
 
-`day:<date>`, `log:<id>` or `mark`. Old code ignores the reason. The phone can't save anime
-progress, so these reach anime through the API, the web form and imports.
+`day:<date>`, `log:<id>` or `mark`. Old code ignores the reason. The phone can't save
+anime progress, so these reach anime through the API, the web form and imports.
 """
 
 import io
@@ -35,6 +35,8 @@ ANIME_METADATA = {
 
 
 class AnimeBase(TestCase):
+    """A New York owner at a pinned time, with a provider that answers 12 episodes."""
+
     def setUp(self):
         for patcher in (
             mock.patch("app.models.Item.fetch_releases"),
@@ -69,6 +71,8 @@ class AnimeBase(TestCase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class SaveReasonTests(AnimeBase):
+    """What a plain save says it was."""
+
     def test_a_typed_number_counts_today(self):
         row = self.tracked()
         row.progress = 3
@@ -221,7 +225,7 @@ class LogWriteTests(AnimeBase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class ImportTests(TestCase):
-    """Only a Completed row's end date dates a number. progressed_at and updated_at never do."""
+    """Only a Completed row's end date dates a number; written-at moments never do."""
 
     def setUp(self):
         self.user = make_user(calendar=NEW_YORK)
