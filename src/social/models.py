@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
+from app import user_calendar
+
 
 class FollowStatus(models.TextChoices):
     """Status values for one-way follow relationships."""
@@ -161,6 +163,14 @@ class ProgressChange(models.Model):
     # Starting a title is recorded as a step from 0 to 1 of this kind, so activity can
     # show "started reading" before any progress. It isn't progress itself.
     START = "start"
+    # Rows that say what happened, not how far: a status move (paused, stopped, picked
+    # back up), a retype of the same number, a title added to Planning. They hold value 0
+    # in previous and current, so they add nothing to any number.
+    STATUS = "status"
+    TOUCH = "touch"
+    PLANNING = "planning"
+    # What installed builds must never get as their latest progress change.
+    NOT_PROGRESS = (START, STATUS, TOUCH, PLANNING)
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -205,6 +215,7 @@ class ProgressChange(models.Model):
             item=item,
             previous_progress=snapshot(0),
             current_progress=snapshot(1),
+            saved_on=user_calendar.today(actor),
         )
 
 

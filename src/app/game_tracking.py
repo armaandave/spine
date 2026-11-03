@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from app import single_weight
+from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
 from app.models import DiaryEntry, Game, GameSession, Item, MediaLike, Status
 
@@ -454,6 +454,7 @@ def _record_progress_change(user, item, session, unit, previous, current):
         item=item,
         previous_progress=snapshot(previous or 0),
         current_progress=snapshot(current),
+        saved_on=user_calendar.today(user),
     )
 
 

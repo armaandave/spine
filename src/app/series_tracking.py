@@ -1660,6 +1660,7 @@ def _record_progress_change(user, item, previous, current):
         item=item,
         previous_progress=previous,
         current_progress=current,
+        saved_on=_today(user),
     )
     Activity.objects.create(
         actor=user,

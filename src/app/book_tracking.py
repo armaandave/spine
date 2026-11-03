@@ -10,7 +10,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from api.services import stats_cache
-from app import single_weight
+from app import single_weight, user_calendar
 from app.models import (
     Book,
     BookSession,
@@ -1295,6 +1295,7 @@ def _record_progress_change(user, item, previous, current):
             "journey_id": current["journey_id"],
         },
         current_progress=current,
+        saved_on=user_calendar.today(user),
     )
     Activity.objects.create(
         actor=user,

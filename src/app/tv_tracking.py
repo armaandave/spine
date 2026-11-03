@@ -1554,6 +1554,7 @@ def _progress_change(ctx, item_id, *, previous, current):
         item_id=item_id,
         previous_progress=snapshot(*previous),
         current_progress=snapshot(*current),
+        saved_on=user_calendar.day_of(ctx.now, ctx.user),
     )
 
 
