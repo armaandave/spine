@@ -78,6 +78,8 @@ final class GoodreadsImportCoordinator {
 
     func cancelUploadFailure() {
         uploadTask?.cancel()
+        pollingTask?.cancel()
+        pollingTask = nil
         clearPersistedJob()
         uploadFileSize = nil
         phase = .idle
@@ -93,8 +95,12 @@ final class GoodreadsImportCoordinator {
         guard let job = persistedJob else { return }
         guard !hasProcessingJob else { return }
 
-        // However long it has been, only the server knows how the import went. `poll` asks it first.
-        phase = .processing(taskId: job.taskId, statusLabel: Self.statusLabel(for: "PENDING"), startedAt: job.startedAt)
+        // However long it has been, only the server knows how the import went. `poll` asks it first, and
+        // a failure already on screen stays there until it answers.
+        let isShowingFailure = if case .failed = phase { true } else { false }
+        if !isShowingFailure {
+            phase = .processing(taskId: job.taskId, statusLabel: Self.statusLabel(for: "PENDING"), startedAt: job.startedAt)
+        }
         startPolling(taskId: job.taskId, startedAt: job.startedAt)
     }
 
@@ -114,9 +120,14 @@ final class GoodreadsImportCoordinator {
                     forgetUnknownJob()
                     return
                 }
-                phase = .failed(message: error.localizedDescription)
                 if case APIError.unauthorized = error {
+                    phase = .failed(message: error.localizedDescription)
                     onUnauthorized?()
+                    return
+                }
+                // A running poll keeps asking, so one check that didn't work doesn't end the import.
+                if pollingTask == nil {
+                    phase = .failed(message: error.localizedDescription)
                 }
             }
         }
@@ -196,10 +207,9 @@ final class GoodreadsImportCoordinator {
                 }
                 if Self.isUnknownJob(error) {
                     forgetUnknownJob()
-                    pollingTask = nil
                     return
                 }
-                // A dropped connection says nothing about the import, which keeps running on the server.
+                // A status check that didn't work says nothing about the import, which keeps running on the server.
             }
 
             if Date().timeIntervalSince(startedAt) >= timeout {
@@ -270,6 +280,8 @@ final class GoodreadsImportCoordinator {
     }
 
     private func forgetUnknownJob() {
+        pollingTask?.cancel()
+        pollingTask = nil
         clearPersistedJob()
         phase = .failed(message: Self.unknownJobMessage)
     }

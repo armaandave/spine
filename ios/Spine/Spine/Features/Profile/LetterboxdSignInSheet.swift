@@ -14,10 +14,11 @@ struct LetterboxdSignInSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var phase: Phase = .loading
+    @State private var isClosing = false
 
     var body: some View {
         NavigationStack {
-            LetterboxdExportWebView(phase: $phase, onExport: onExport, onFailure: onFailure)
+            LetterboxdExportWebView(phase: $phase, isClosing: isClosing, onExport: onExport, onFailure: onFailure)
                 .ignoresSafeArea(edges: .bottom)
                 .overlay {
                     switch phase {
@@ -34,6 +35,7 @@ struct LetterboxdSignInSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(role: .close) {
+                            isClosing = true
                             dismiss()
                         } label: {
                             Label("Close", systemImage: "xmark")
@@ -41,6 +43,8 @@ struct LetterboxdSignInSheet: View {
                     }
                 }
         }
+        // Closing is a choice to cancel, so it takes the button while the file is on its way.
+        .interactiveDismissDisabled(phase == .gettingExport)
     }
 
     private var gettingExport: some View {
@@ -59,6 +63,7 @@ struct LetterboxdSignInSheet: View {
 
 private struct LetterboxdExportWebView: UIViewRepresentable {
     @Binding var phase: LetterboxdSignInSheet.Phase
+    let isClosing: Bool
     let onExport: (URL) -> Void
     let onFailure: () -> Void
 
@@ -79,6 +84,9 @@ private struct LetterboxdExportWebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         context.coordinator.parent = self
+        if isClosing {
+            context.coordinator.stop() // before the dismissal ends, so a finishing download can't start an import
+        }
     }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
@@ -106,8 +114,14 @@ private struct LetterboxdExportWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-            guard navigationAction.targetFrame?.isMainFrame == true else { return .allow }
-            return LetterboxdExport.isLetterboxd(navigationAction.request.url) ? .allow : .cancel
+            guard navigationAction.targetFrame?.isMainFrame == true,
+                  !LetterboxdExport.isLetterboxd(navigationAction.request.url)
+            else { return .allow }
+            // With the page hidden behind "Getting your data...", nothing else would ever end the wait.
+            if parent.phase == .gettingExport {
+                fail()
+            }
+            return .cancel
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse) async -> WKNavigationResponsePolicy {
@@ -134,6 +148,18 @@ private struct LetterboxdExportWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            pageDidFail(error)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            pageDidFail(error)
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            fail()
+        }
+
+        private func pageDidFail(_ error: Error) {
             let error = error as NSError
             // A newer page or the switch to a download interrupts the page that was loading (WebKit's error 102).
             let isCancellation = error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
@@ -170,6 +196,7 @@ private struct LetterboxdExportWebView: UIViewRepresentable {
 
         func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
             activeDownload = nil
+            LetterboxdExport.removeFile()
             fail()
         }
 

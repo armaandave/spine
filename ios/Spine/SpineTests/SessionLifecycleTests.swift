@@ -1644,8 +1644,43 @@ final class ImportCoordinatorCancellationTests: XCTestCase {
 
             let polls = repository.statusCalls.value
             harness.resume()
+            XCTAssertTrue(harness.isFailed(), "\(harness.name): the failure stays on screen until the server answers")
             await waitUntil("\(harness.name) to ask again") { repository.statusCalls.value > polls }
             harness.clear()
+        }
+    }
+
+    func testAFailedStatusCheckDoesNotEndARunningPoll() async {
+        let repository = StubImportRepository(status: .fail(URLError(.notConnectedToInternet)))
+        for harness in harnesses(repository) {
+            seedRunningJob(harness)
+            harness.resume()
+            let polls = repository.statusCalls.value
+
+            harness.checkStatus()
+            await waitUntil("\(harness.name) to check again") { repository.statusCalls.value >= polls + 3 }
+
+            XCTAssertFalse(harness.isFailed(), harness.name)
+            XCTAssertTrue(harness.isProcessing(), harness.name)
+            harness.clear()
+        }
+    }
+
+    func testCancellingAFailedImportStopsChecking() async {
+        let repository = StubImportRepository(status: .fail(URLError(.notConnectedToInternet)))
+        for harness in harnesses(repository) {
+            seedRunningJob(harness)
+            let polls = repository.statusCalls.value
+            harness.resume()
+            await waitUntil("\(harness.name) to start checking") { repository.statusCalls.value > polls }
+
+            harness.cancelUpload()
+            try? await Task.sleep(for: .milliseconds(30))
+            let afterCancel = repository.statusCalls.value
+            try? await Task.sleep(for: .milliseconds(60))
+
+            XCTAssertEqual(repository.statusCalls.value, afterCancel, harness.name)
+            XCTAssertTrue(harness.isIdle(), harness.name)
         }
     }
 

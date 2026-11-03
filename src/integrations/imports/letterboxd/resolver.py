@@ -1,6 +1,5 @@
 import logging
 import re
-import unicodedata
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -11,6 +10,7 @@ from requests_ratelimiter import LimiterSession
 
 from app.models import MediaTypes
 from app.providers import services, tmdb
+from app.providers.search_rank import normalize_search_text
 from integrations.models import LetterboxdUriCache
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,20 @@ class LetterboxdResolver:
     def resolve_rows(self, rows):
         """Resolve each film once and return uri -> result for all of its links."""
         uris = {row.get("uri") for row in rows if row.get("uri")}
-        cached = set(LetterboxdUriCache.objects.filter(uri__in=uris).values_list("uri", flat=True))
+        cached = set(_exact_matches(uris).values_list("uri", flat=True))
         lookups = _lookups_by_uri(rows, cached)
         resolved = self.resolve_many(sorted(set(lookups.values())), rows)
+
+        # One link failing shouldn't lose the film: try one of its other links.
+        spares = {}
+        for uri in sorted(uris):
+            if lookups[uri] not in resolved and uri != lookups[uri]:
+                spares.setdefault(lookups[uri], uri)
+        from_spares = self.resolve_many(sorted(spares.values()), rows)
+        for lookup, spare in spares.items():
+            if spare in from_spares:
+                resolved[lookup] = from_spares[spare]
+
         return {uri: resolved[lookups[uri]] for uri in uris if lookups[uri] in resolved}
 
     def resolve_many(self, uris, rows=()):
@@ -49,7 +60,7 @@ class LetterboxdResolver:
                 "imdb_id": cache.imdb_id,
                 "confidence": cache.confidence,
             }
-            for cache in LetterboxdUriCache.objects.filter(uri__in=uris)
+            for cache in _exact_matches(uris)
         }
         by_uri = {row.get("uri"): row for row in rows if row.get("uri")}
         missing = [uri for uri in uris if uri not in cached]
@@ -120,6 +131,11 @@ class LetterboxdResolver:
                     "confidence": "imdb",
                 }
         return None
+
+
+def _exact_matches(uris):
+    """Cached links, leaving out old title-search guesses so the film's page gets read instead."""
+    return LetterboxdUriCache.objects.filter(uri__in=uris).exclude(confidence="search")
 
 
 def film_key(row):
@@ -208,5 +224,4 @@ def _search_by_name_year(row):
 
 def _title_key(title):
     """Compare titles without case, accents or punctuation."""
-    letters = "".join(char for char in unicodedata.normalize("NFKD", title) if char.isalnum())
-    return letters.casefold() or title.casefold()
+    return normalize_search_text(title) or title.casefold()

@@ -9,6 +9,7 @@ from api.services.item_metadata import store_item_metadata
 from app import single_weight
 from app.models import DiaryEntry, Item, MediaLike, MediaTypes, Movie, Sources, Status
 from app.providers import tmdb
+from integrations.imports.helpers import MediaImportError
 from integrations.imports.letterboxd.parser import parse_export
 from integrations.imports.letterboxd.resolver import LetterboxdResolver, film_key
 from lists.models import CustomList, CustomListItem
@@ -40,6 +41,7 @@ class LetterboxdImporter:
         rows = list(export.rows_with_uris())
         resolved = self.resolver.resolve_rows(rows)
         self.resolved_by_film = self._film_key_index(rows, resolved)
+        self._check_safe_to_replace(rows, resolved)
 
         with transaction.atomic():
             if self.mode == "overwrite":
@@ -57,6 +59,15 @@ class LetterboxdImporter:
 
         warnings = "\n".join(dict.fromkeys(self.warnings))
         return dict(self.counts), warnings if warnings else None
+
+    def _check_safe_to_replace(self, rows, resolved):
+        """Replacing deletes what's there first, so most of the export has to have matched."""
+        if self.mode != "overwrite":
+            return
+        matched = [row.get("uri") in resolved or film_key(row) in self.resolved_by_film for row in rows]
+        if sum(matched) < len(matched) / 2:
+            msg = "Couldn't look up enough of your films right now, so nothing was replaced. Please try again later."
+            raise MediaImportError(msg)
 
     def _cleanup(self):
         imported_entries = list(DiaryEntry.objects.filter(

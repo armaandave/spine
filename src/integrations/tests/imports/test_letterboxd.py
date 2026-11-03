@@ -18,6 +18,7 @@ from rest_framework.test import APIClient
 
 from app.models import DiaryEntry, Item, MediaLike, MediaTypes, Movie, Sources, Status
 from app.providers.services import ProviderAPIError
+from integrations.imports.helpers import MediaImportError
 from integrations.imports.letterboxd.importer import LetterboxdImporter
 from integrations.imports.letterboxd.parser import parse_export
 from integrations.imports.letterboxd.resolver import LetterboxdResolver
@@ -126,6 +127,20 @@ class ImportLetterboxdTests(TestCase):
         self.assertEqual(entry.item.media_id, "101")
         # The log and film links are one film, so the film's link is the only page asked for.
         self.assertEqual([call.args[0] for call in get_mock.call_args_list], ["https://boxd.it/film-one"])
+
+    def test_replacing_keeps_everything_when_most_films_cannot_be_looked_up(self):
+        self._import()
+        entries = DiaryEntry.objects.filter(user=self.user).count()
+        self.assertGreater(entries, 0)
+        lists = CustomList.objects.filter(owner=self.user).count()
+
+        with FIXTURE.open("rb") as file:
+            payload = file.read()
+        with self.assertRaisesMessage(MediaImportError, "nothing was replaced"):
+            self._import_bytes(payload, mode="overwrite", resolver=SimpleNamespace(resolve_rows=lambda rows: {}))
+
+        self.assertEqual(DiaryEntry.objects.filter(user=self.user).count(), entries)
+        self.assertEqual(CustomList.objects.filter(owner=self.user).count(), lists)
 
     def test_parse_zip_and_list_csv(self):
         with FIXTURE.open("rb") as file:
@@ -699,6 +714,42 @@ class LetterboxdResolverTests(TestCase):
 
         get_mock.assert_not_called()
         self.assertEqual(resolved["https://boxd.it/film"]["tmdb_id"], "550")
+
+    def test_old_search_guess_in_the_cache_gets_replaced_by_the_film_page(self):
+        LetterboxdUriCache.objects.create(uri="https://boxd.it/log", tmdb_id="9", confidence="search")
+        resolver = LetterboxdResolver()
+        film = {"name": "Fight Club", "year": 1999}
+        rows = [
+            {**film, "uri": "https://boxd.it/log", "entry_link": True},
+            {**film, "uri": "https://boxd.it/film", "entry_link": False},
+        ]
+
+        with patch.object(resolver.session, "get", return_value=film_page(550)):
+            resolved = resolver.resolve_rows(rows)
+
+        self.assertEqual(resolved["https://boxd.it/log"]["tmdb_id"], "550")
+        self.assertEqual(resolved["https://boxd.it/film"]["tmdb_id"], "550")
+
+    def test_a_failed_link_tries_another_link_to_the_same_film(self):
+        resolver = LetterboxdResolver()
+        film = {"name": "Fight Club", "year": 1999}
+        rows = [
+            {**film, "uri": "https://boxd.it/film", "entry_link": False},
+            {**film, "uri": "https://boxd.it/log-one", "entry_link": True},
+            {**film, "uri": "https://boxd.it/log-two", "entry_link": True},
+        ]
+
+        def fake_get(uri, **kwargs):
+            if uri == "https://boxd.it/film":
+                raise requests.ConnectionError
+            return film_page(550)
+
+        with patch.object(resolver.session, "get", side_effect=fake_get) as get_mock, tmdb_results():
+            resolved = resolver.resolve_rows(rows)
+
+        self.assertEqual(get_mock.call_count, 2, "the film's link, then one spare")
+        self.assertEqual({result["tmdb_id"] for result in resolved.values()}, {"550"})
+        self.assertEqual(len(resolved), 3)
 
     def test_parser_marks_only_diary_and_review_links_as_log_links(self):
         header = "Date,Name,Year,Letterboxd URI\n"
