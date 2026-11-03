@@ -175,6 +175,10 @@ class ProgressChange(models.Model):
     previous_progress = models.JSONField()
     current_progress = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+    # The phone's date when this was saved (docs/activity-contract.md, AC-3). Set by each
+    # writer, never in save(): fixtures create a row and then move its created_at. Empty
+    # only on rows written by code from before this column.
+    saved_on = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
