@@ -24,6 +24,9 @@ def process_comic(item, events_bulk):
         )
         return
 
+    from api.services.item_metadata import store_series_total  # noqa: PLC0415
+
+    store_series_total(item, metadata)
     latest_event = Event.objects.filter(item=item).order_by("-datetime").first()
     last_issue_event_number = latest_event.content_number if latest_event else 0
     last_published_issue_number = metadata["max_issue_number"]
@@ -53,3 +56,12 @@ def process_comic(item, events_bulk):
             datetime=issue_datetime,
         ),
     )
+    if (
+        last_issue_event_number
+        and last_published_issue_number
+        and last_published_issue_number > last_issue_event_number
+    ):
+        # A newer last issue than the one known: Read comics carry on (MC-202).
+        from app import series_tracking  # noqa: PLC0415
+
+        series_tracking.new_issue_out(item)
