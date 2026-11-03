@@ -657,6 +657,7 @@ The user can change all of them before saving.
 The date defaults to today on the user's calendar.
 An episode log that will claim a tick defaults to that tick's calendar day instead.
 The season-finish composer defaults to the calendar day of the tick or log that finished the season.
+The app opens any other episode log on the day the episode started: before 6 AM on the user's clock, the day before when the episode's runtime reaches back past midnight (SW-006).
 
 **Stars and heart**
 

@@ -457,3 +457,23 @@ nonisolated struct TVComposerDraft: Hashable {
         rating?.ratingHalfSteps ?? 0
     }
 }
+
+extension TVComposer {
+    /// This composer with an episode target on the day the episode started (`LogStartDay`). The server sends today;
+    /// a target it dated to a tick keeps the tick's day.
+    func datedByStart(lengthMinutes: Int?, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> TVComposer {
+        let today = TVTrackingPresentation.calendarString(now, calendar: calendar)
+        let day = TVTrackingPresentation.calendarString(
+            LogStartDay.date(lengthMinutes: lengthMinutes, now: now, calendar: calendar),
+            calendar: calendar
+        )
+        var composer = self
+        composer.targets = targets.map { target in
+            guard target.level == .episode, target.claimsViewingId == nil, target.date == today else { return target }
+            var target = target
+            target.date = day
+            return target
+        }
+        return composer
+    }
+}

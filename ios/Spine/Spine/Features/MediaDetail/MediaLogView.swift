@@ -80,7 +80,8 @@ final class MediaLogViewModel {
         onSaved: @escaping () -> Void,
         tvComposer: TVComposer? = nil,
         tvPage: MediaRef? = nil,
-        mode: MediaLogMode = .finished
+        mode: MediaLogMode = .finished,
+        now: Date = Date()
     ) {
         self.detail = detail
         self.tvPage = tvPage
@@ -95,9 +96,14 @@ final class MediaLogViewModel {
         self.onResult = onResult
         self.onSaved = onSaved
         favoriteDraft = LogFavoriteDraft(ref: detail.ref, detail: detail, mediaRepository: mediaRepository)
+        let sittingMinutes = detail.sittingMinutes
+        storedConsumedAt = LogStartDay.date(lengthMinutes: sittingMinutes, now: now)
         if detail.ref.isTVFamily {
-            // The server works out every default when the composer opens (TV-404); the user's own picks win.
-            tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap { TVComposerDraft(composer: $0) }
+            // The server works out every default when the composer opens (TV-404), apart from an episode's start day;
+            // the user's own picks win.
+            tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap {
+                TVComposerDraft(composer: $0.datedByStart(lengthMinutes: sittingMinutes, now: now))
+            }
             if tvDraft == nil {
                 liked = detail.userState?.hasLiked ?? false
             }
