@@ -2596,6 +2596,75 @@ final class SpineTests: XCTestCase {
     }
 
     @MainActor
+    func testLetterboxdImportDeletesDownloadedExportOnceItSucceeds() async throws {
+        let coordinator = LetterboxdImportCoordinator(
+            importRepository: ScriptedLetterboxdImportRepository(statuses: [
+                ImportTaskStatus(taskId: "task-1", taskName: nil, status: "SUCCESS", dateCreated: nil, dateDone: nil, result: "Imported 1 movie.")
+            ]),
+            defaults: isolatedDefaults("LetterboxdImportDeletesExportOnSuccess"),
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        try Data("PK".utf8).write(to: LetterboxdExport.fileURL)
+
+        coordinator.startImport(fileURL: LetterboxdExport.fileURL, mode: .new)
+        try await waitUntil { coordinator.phase == .succeeded(message: "Imported 1 movie.") }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+    }
+
+    @MainActor
+    func testLetterboxdImportKeepsDownloadedExportForTryAgain() async throws {
+        let coordinator = LetterboxdImportCoordinator(
+            importRepository: ScriptedLetterboxdImportRepository(statuses: [
+                ImportTaskStatus(taskId: "task-1", taskName: nil, status: "FAILURE", dateCreated: nil, dateDone: nil, result: "It failed.")
+            ]),
+            defaults: isolatedDefaults("LetterboxdImportKeepsExportOnFailure"),
+            pollInterval: .milliseconds(10),
+            timeout: 5
+        )
+        try Data("PK".utf8).write(to: LetterboxdExport.fileURL)
+
+        coordinator.startImport(fileURL: LetterboxdExport.fileURL, mode: .new)
+        try await waitUntil { coordinator.phase == .failed(message: "It failed.") }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+
+        coordinator.cancelUploadFailure()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+    }
+
+    @MainActor
+    func testClearingLetterboxdImportDeletesDownloadedExport() throws {
+        let coordinator = LetterboxdImportCoordinator(
+            importRepository: ScriptedLetterboxdImportRepository(statuses: []),
+            defaults: isolatedDefaults("LetterboxdImportClearDeletesExport")
+        )
+        try Data("PK".utf8).write(to: LetterboxdExport.fileURL)
+
+        coordinator.clearFinishedJob()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+    }
+
+    @MainActor
+    func testRelaunchingDeletesALeftoverExportUnlessAnImportIsRunning() throws {
+        try Data("PK".utf8).write(to: LetterboxdExport.fileURL)
+        let running = isolatedDefaults("LetterboxdImportRelaunchWithJob")
+        running.set("task-1", forKey: "letterboxdImport.taskId")
+        running.set(ImportMode.new.rawValue, forKey: "letterboxdImport.mode")
+        running.set(Date().timeIntervalSince1970, forKey: "letterboxdImport.startedAt")
+
+        _ = LetterboxdImportCoordinator(importRepository: ScriptedLetterboxdImportRepository(statuses: []), defaults: running)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+
+        _ = LetterboxdImportCoordinator(
+            importRepository: ScriptedLetterboxdImportRepository(statuses: []),
+            defaults: isolatedDefaults("LetterboxdImportRelaunchWithoutJob")
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: LetterboxdExport.fileURL.path()))
+    }
+
+    @MainActor
     func testLetterboxdImportCoordinatorPersistsAndResumesTask() async throws {
         let defaults = isolatedDefaults("LetterboxdImportCoordinatorPersistence")
         let repository = ScriptedLetterboxdImportRepository(statuses: [
