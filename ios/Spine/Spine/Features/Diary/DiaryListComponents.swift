@@ -470,7 +470,7 @@ struct DiaryEntryRow: View {
     }
 }
 
-/// "★★★½ ♥", then marks for a rewatch and a review: a diary row's line, and an activity post's beside its title.
+/// "★★★½ ♥", then marks for a rewatch and a review: the line under the title on a diary row and on an activity post.
 struct LogRatingMarks: View {
     let summary: DiaryEntrySummary
     let isRepeat: Bool

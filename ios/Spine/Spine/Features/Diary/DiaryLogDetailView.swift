@@ -180,7 +180,6 @@ struct DiaryLogDetailView: View {
     @State private var topSafeAreaInset: CGFloat = 0
     @FocusState private var isCommentFocused: Bool
 
-    private let focusesComment: Bool
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -191,7 +190,6 @@ struct DiaryLogDetailView: View {
 
     init(
         entryId: Int,
-        focusesComment: Bool = false,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
         trackingRepository: TrackingRepository,
@@ -200,7 +198,6 @@ struct DiaryLogDetailView: View {
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
-        self.focusesComment = focusesComment
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -239,7 +236,7 @@ struct DiaryLogDetailView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.immediately)
                 .scrollEdgeEffectStyle(.hard, for: .bottom)
                 .ignoresSafeArea(edges: .top)
                 .onChange(of: viewModel.engagement.sentCount) {
@@ -314,9 +311,6 @@ struct DiaryLogDetailView: View {
         .task {
             if viewModel.entry == nil {
                 await viewModel.load()
-                if focusesComment {
-                    isCommentFocused = true
-                }
             }
             if viewModel.entry != nil {
                 await viewModel.engagement.loadCommentsIfNeeded()
@@ -414,6 +408,8 @@ struct DiaryLogDetailView: View {
             .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
             VStack(alignment: .leading, spacing: 10) {
+                PostAuthorLink(user: entry.user, avatarSize: 24, spacing: 7, font: .system(size: 14, weight: .semibold))
+
                 Text(mediaTypeLabel(entry.media.ref.mediaType))
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.56))
@@ -497,8 +493,6 @@ struct DiaryLogDetailView: View {
 
     private func logSection(_ entry: DiaryEntry) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            PostAuthorLink(user: entry.user)
-
             if hasRatingOrLike(entry) {
                 ratingLikeLine(entry)
             }
@@ -529,9 +523,7 @@ struct DiaryLogDetailView: View {
                 )
             }
 
-            PostEngagementSection(model: viewModel.engagement, hidesComments: hidesComments(entry)) {
-                isCommentFocused = true
-            }
+            PostCommentsSection(model: viewModel.engagement, hidesComments: hidesComments(entry))
 
             Color.clear
                 .frame(height: 1)
@@ -690,7 +682,6 @@ struct DiaryLogDetailView: View {
 
 struct DiaryLogDetailNavigationCover: View {
     let entryId: Int
-    var focusesComment = false
     let diaryRepository: DiaryRepository
     let mediaRepository: MediaRepository
     let trackingRepository: TrackingRepository
@@ -703,7 +694,6 @@ struct DiaryLogDetailNavigationCover: View {
         NavigationStack {
             DiaryLogDetailView(
                 entryId: entryId,
-                focusesComment: focusesComment,
                 diaryRepository: diaryRepository,
                 mediaRepository: mediaRepository,
                 trackingRepository: trackingRepository,

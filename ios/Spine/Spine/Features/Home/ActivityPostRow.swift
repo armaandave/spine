@@ -1,135 +1,115 @@
 import SwiftUI
 
-/// One post in the activity feed, the same size whatever it is: a log, a day's progress, or a start. The title always
-/// sits on the second line, so the feed reads as one even list. A post's full review and spoilers are on its own page.
+/// One post in the activity feed, the same size whatever it is: a log, a day's progress, or a start. The artwork opens
+/// the row and the text beside it is as tall as the artwork, so a post with no review keeps its height and the like and
+/// comment row lines up from post to post. A post's full review is on its page.
 struct ActivityPostRow: View {
+    private static let artwork = PosterSlot.activityPost
+    private static let artworkSpacing: CGFloat = 12
+
     let activity: ActivityItem
-    let showsSeparator: Bool
     let onOpen: () -> Void
-    let onToggleLike: () -> Void
-    let onComment: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            MediaArtwork(
-                url: activity.media?.displayPosterURL,
-                title: activity.media?.title ?? "",
-                slot: .listPreview,
-                mediaType: activity.media?.ref.mediaType,
-                orientation: activity.media?.posterOrientation
-            )
+        HStack(alignment: .top, spacing: Self.artworkSpacing) {
+            artwork
 
             VStack(alignment: .leading, spacing: 3) {
                 authorLine
-                titleLine
-                detailLine
+                Text(activity.media?.displayTitle ?? "")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                summaryLine
+                reviewLine
+                Spacer(minLength: 0)
+                PostEngagementSummary(engagement: activity.engagement)
             }
-            .frame(maxWidth: .infinity, minHeight: PosterSlot.listPreview.size.height, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: Self.artwork.size.height)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
         .overlay(alignment: .bottom) {
-            if showsSeparator {
-                DiarySeparator()
-                    .padding(.leading, 65)
-            }
+            // Starts under the text and runs past the page's margin to the screen's edge.
+            DiarySeparator()
+                .padding(.leading, Self.artwork.size.width + Self.artworkSpacing)
+                .padding(.trailing, -14)
         }
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: "Open", onOpen)
         .accessibilityHint(ActivityFeedPresentation.destinationHint(for: activity))
     }
 
+    /// The name gives way to the date, which is never cut off.
     private var authorLine: some View {
-        HStack(spacing: 6) {
-            PostAuthorLink(user: activity.actor, avatarSize: 20, spacing: 6, font: .system(size: 13, weight: .semibold))
+        HStack(spacing: 5) {
+            PostAuthorLink(user: activity.actor, avatarSize: 20, spacing: 6, font: .system(size: 14, weight: .semibold))
 
-            Spacer(minLength: 4)
-
-            PostActions(
-                engagement: activity.engagement,
-                iconSize: 18,
-                slotWidth: 35,
-                spacing: 4,
-                countSize: 13,
-                onToggleLike: onToggleLike,
-                onComment: onComment
-            )
-            // The buttons keep their full height to tap without making the line any taller.
-            .padding(.vertical, -12)
+            if let date = ActivityTimestampFormatter.text(for: activity) {
+                Text(date)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .fixedSize()
+                    .accessibilityLabel(ActivityTimestampFormatter.accessibilityText(for: activity) ?? date)
+            }
         }
     }
 
-    /// The title gives way to the marks: a long title cuts off, and the stars always show.
-    private var titleLine: some View {
-        HStack(spacing: 6) {
-            Text(activity.media?.displayTitle ?? "")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-
+    /// Directly under the title: a log's stars and marks, or in words what the post is when it has none.
+    @ViewBuilder
+    private var summaryLine: some View {
+        if let status = ActivityFeedPresentation.statusText(for: activity) {
+            detailText(status)
+        } else {
             LogRatingMarks(
                 summary: ActivityFeedPresentation.ratingSummary(for: activity),
                 isRepeat: ActivityFeedPresentation.isRewatch(activity),
                 repeatLabel: activity.media?.ref.repeatLabel ?? "Rewatch"
             )
-            .fixedSize()
+            .frame(height: 17)
         }
     }
 
     @ViewBuilder
-    private var detailLine: some View {
-        Group {
-            if case .progress = activity.post {
-                Text(ActivityFeedPresentation.progressHeadline(for: activity))
-            } else if let review = ActivityFeedPresentation.reviewText(for: activity) {
-                if activity.containsSpoilers == true {
-                    HStack(spacing: 5) {
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Contains spoilers")
-                    }
-                } else {
-                    Text(review)
+    private var reviewLine: some View {
+        if let review = ActivityFeedPresentation.reviewText(for: activity) {
+            if activity.containsSpoilers == true {
+                HStack(spacing: 5) {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .accessibilityHidden(true)
+                    detailText("Contains spoilers")
                 }
+            } else {
+                detailText(review)
             }
         }
-        .font(.system(size: 13))
-        .foregroundStyle(.white.opacity(0.74))
-        .lineLimit(1)
     }
-}
 
-/// The feed as Home draws it: a header for each day, then that day's posts as one glass panel.
-enum ActivityFeedEntry: Identifiable {
-    case day(key: String, title: String, isFirst: Bool)
-    case post(ActivityItem, isFirst: Bool, isLast: Bool)
+    private func detailText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 14))
+            .foregroundStyle(.white.opacity(0.7))
+            .lineLimit(1)
+    }
 
-    var id: String {
-        switch self {
-        case let .day(key, _, _): "day-\(key)"
-        case let .post(activity, _, _): "post-\(activity.id)"
+    private var artwork: some View {
+        MediaArtwork(
+            url: activity.media?.displayPosterURL,
+            title: activity.media?.title ?? "",
+            slot: Self.artwork,
+            mediaType: activity.media?.ref.mediaType,
+            orientation: activity.media?.posterOrientation
+        )
+        // So a dark cover keeps its edge on the dark page.
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.artwork.cornerRadius, style: .continuous)
+                .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
         }
-    }
-
-    static func entries(from items: [ActivityItem], now: Date = Date()) -> [ActivityFeedEntry] {
-        let days = Dictionary(grouping: items) { dayKey(for: $0) }
-        var seen = Set<String>()
-        var entries: [ActivityFeedEntry] = []
-        for key in items.map({ dayKey(for: $0) }) where seen.insert(key).inserted {
-            let title = ActivityTimestampFormatter.logDateText(from: key, now: now) ?? key
-            entries.append(.day(key: key, title: title, isFirst: seen.count == 1))
-            let posts = days[key] ?? []
-            for (index, post) in posts.enumerated() {
-                entries.append(.post(post, isFirst: index == 0, isLast: index == posts.count - 1))
-            }
-        }
-        return entries
-    }
-
-    /// The post's calendar day; older servers only send when it was written.
-    private static func dayKey(for activity: ActivityItem) -> String {
-        String((activity.consumedAt ?? activity.createdAt ?? "").prefix(10))
+        // Square album art sits at the top of the same column.
+        .frame(width: Self.artwork.size.width, height: Self.artwork.size.height, alignment: .top)
     }
 }

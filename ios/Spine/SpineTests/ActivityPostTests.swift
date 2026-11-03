@@ -12,15 +12,21 @@ final class ActivityPostTests: XCTestCase {
         hasLiked: Bool = false,
         likeCount: Int = 2,
         commentCount: Int = 1,
-        isRewatch: Bool = false
+        rating: String? = "4.5",
+        liked: Bool = true,
+        isRewatch: Bool = false,
+        mediaType: String = "movie"
     ) throws -> ActivityItem {
         try activity("""
         {
           "id": \(id), "type": "diary_created", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "\(day)",
           "actor": {"id": 2, "username": "maya", "display_name": "Maya", "avatar_url": null},
-          "media": {"ref": {"source": "tmdb", "media_type": "movie", "media_id": "1"}, "title": "Past Lives"},
+          "media": {"ref": {"source": "tmdb", "media_type": "\(mediaType)", "media_id": "1"}, "title": "Past Lives"},
           "person": null,
-          "object": {"type": "diary", "id": \(id), "rating": "4.5", "liked": true, "is_rewatch": \(isRewatch)},
+          "object": {
+            "type": "diary", "id": \(id), "rating": \(rating.map { "\"\($0)\"" } ?? "null"), "liked": \(liked),
+            "is_rewatch": \(isRewatch)
+          },
           "viewer": {"can_view": true, "has_liked": \(hasLiked)},
           "like_count": \(likeCount), "comment_count": \(commentCount),
           "review_title": "", "review": "Wrecked me.", "contains_spoilers": true
@@ -97,52 +103,42 @@ final class ActivityPostTests: XCTestCase {
         XCTAssertFalse(summary.hasReview, "The review has its own line")
     }
 
+    func testAPostsPageCountsItsComments() {
+        XCTAssertEqual(PostCommentsSection.countText(1), "1 comment")
+        XCTAssertEqual(PostCommentsSection.countText(3), "3 comments")
+    }
+
+    func testAFeedRowReadsOutItsCounts() {
+        XCTAssertEqual(
+            PostEngagementSummary.accessibilityText(for: PostEngagement(hasLiked: false, likeCount: 1, commentCount: 3)),
+            "1 like, 3 comments"
+        )
+        XCTAssertEqual(
+            PostEngagementSummary.accessibilityText(for: PostEngagement(hasLiked: false, likeCount: 0, commentCount: 1)),
+            "0 likes, 1 comment"
+        )
+    }
+
     func testTheRewatchMarkShowsOnlyOnARewatch() throws {
         XCTAssertFalse(ActivityFeedPresentation.isRewatch(try log()))
         XCTAssertTrue(ActivityFeedPresentation.isRewatch(try log(isRewatch: true)))
         XCTAssertFalse(ActivityFeedPresentation.isRewatch(try progress()))
     }
 
-    // MARK: Day groups
-
-    private func describe(_ entries: [ActivityFeedEntry]) -> [String] {
-        entries.map { entry in
-            switch entry {
-            case let .day(_, title, isFirst):
-                "\(title)\(isFirst ? " first" : "")"
-            case let .post(activity, isFirst, isLast):
-                "\(activity.id)\(isFirst ? " top" : "")\(isLast ? " bottom" : "")"
-            }
-        }
+    func testALogWithMarksShowsThemUnderItsTitle() throws {
+        XCTAssertNil(ActivityFeedPresentation.statusText(for: try log()))
+        XCTAssertNil(ActivityFeedPresentation.statusText(for: try log(rating: nil, liked: true)))
+        XCTAssertNil(ActivityFeedPresentation.statusText(for: try log(rating: nil, liked: false, isRewatch: true)))
     }
 
-    func testPostsGroupUnderTheirDayAsOnePanel() throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 12)))
-
-        let entries = ActivityFeedEntry.entries(
-            from: [
-                try log(id: 1, day: "2026-11-02"),
-                try progress(id: 9, day: "2026-11-02"),
-                try log(id: 2, day: "2026-11-02"),
-                try log(id: 3, day: "2026-11-01"),
-                try log(id: 4, day: "2026-10-30"),
-                try progress(id: 8, day: "2026-10-30"),
-            ],
-            now: now
+    func testAPostWithNoMarksSaysWhatItIsUnderItsTitle() throws {
+        XCTAssertEqual(ActivityFeedPresentation.statusText(for: try progress()), "Watched 4 episodes")
+        XCTAssertEqual(ActivityFeedPresentation.statusText(for: try progress(summary: "started reading")), "Started reading")
+        XCTAssertEqual(ActivityFeedPresentation.statusText(for: try log(rating: nil, liked: false)), "Logged a movie")
+        XCTAssertEqual(
+            ActivityFeedPresentation.statusText(for: try log(rating: nil, liked: false, mediaType: "music")),
+            "Listened to an album"
         )
-
-        XCTAssertEqual(describe(entries), [
-            "Today first", "1 top", "-9", "2 bottom",
-            "Yesterday", "3 top bottom",
-            "Oct 30", "4 top", "-8 bottom",
-        ])
-        XCTAssertEqual(Set(entries.map(\.id)).count, entries.count, "Every lazy item has its own identity")
-    }
-
-    func testAnEmptyFeedHasNoHeaders() {
-        XCTAssertTrue(ActivityFeedEntry.entries(from: []).isEmpty)
     }
 
     // MARK: The feed
@@ -153,33 +149,6 @@ final class ActivityPostTests: XCTestCase {
         let viewModel = ActivityFeedViewModel(username: nil, activityRepository: repository, onUnauthorized: {})
         await viewModel.load()
         return viewModel
-    }
-
-    @MainActor
-    func testLikingFromTheFeedSettlesOnTheServersCount() async throws {
-        let repository = FakePostRepository()
-        repository.likeResult = .success(LikeState(liked: true, likeCount: 5))
-        let item = try log(hasLiked: false, likeCount: 2)
-        let viewModel = await loadedFeed([item], repository: repository)
-
-        await viewModel.toggleLike(item)
-
-        XCTAssertEqual(repository.likes.first?.post, .log(7))
-        XCTAssertEqual(repository.likes.first?.liked, true)
-        XCTAssertEqual(viewModel.items[0].engagement, PostEngagement(hasLiked: true, likeCount: 5, commentCount: 1))
-    }
-
-    @MainActor
-    func testAFailedLikeGoesBack() async throws {
-        let repository = FakePostRepository()
-        repository.likeResult = .failure(URLError(.notConnectedToInternet))
-        let item = try log(hasLiked: true, likeCount: 2)
-        let viewModel = await loadedFeed([item], repository: repository)
-
-        await viewModel.toggleLike(item)
-
-        XCTAssertEqual(repository.likes.first?.liked, false)
-        XCTAssertEqual(viewModel.items[0].engagement, PostEngagement(hasLiked: true, likeCount: 2, commentCount: 1))
     }
 
     @MainActor

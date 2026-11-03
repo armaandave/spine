@@ -64,7 +64,6 @@ struct ProgressPostDetailView: View {
     @State private var topSafeAreaInset: CGFloat = 0
     @FocusState private var isCommentFocused: Bool
 
-    private let focusesComment: Bool
     private let diaryRepository: DiaryRepository
     private let mediaRepository: MediaRepository
     private let trackingRepository: TrackingRepository
@@ -75,7 +74,6 @@ struct ProgressPostDetailView: View {
 
     init(
         progressId: Int,
-        focusesComment: Bool = false,
         activityRepository: ActivityRepository,
         diaryRepository: DiaryRepository,
         mediaRepository: MediaRepository,
@@ -85,7 +83,6 @@ struct ProgressPostDetailView: View {
         onSelectTab: @escaping (AppTab) -> Void = { _ in },
         onUnauthorized: @escaping () -> Void = {}
     ) {
-        self.focusesComment = focusesComment
         self.diaryRepository = diaryRepository
         self.mediaRepository = mediaRepository
         self.trackingRepository = trackingRepository
@@ -127,7 +124,7 @@ struct ProgressPostDetailView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.immediately)
                 .scrollEdgeEffectStyle(.hard, for: .bottom)
                 .ignoresSafeArea(edges: .top)
                 .onChange(of: viewModel.engagement.sentCount) {
@@ -169,9 +166,6 @@ struct ProgressPostDetailView: View {
         .task {
             if viewModel.activity == nil {
                 await viewModel.load()
-                if focusesComment {
-                    isCommentFocused = true
-                }
             }
             if viewModel.activity != nil {
                 await viewModel.engagement.loadCommentsIfNeeded()
@@ -215,16 +209,12 @@ struct ProgressPostDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 18) {
-                PostAuthorLink(user: activity.actor)
-
                 Text(ActivityFeedPresentation.progressHeadline(for: activity))
                     .font(.system(size: 21, weight: .heavy))
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
 
-                PostEngagementSection(model: viewModel.engagement) {
-                    isCommentFocused = true
-                }
+                PostCommentsSection(model: viewModel.engagement)
 
                 Color.clear
                     .frame(height: 1)
@@ -246,6 +236,8 @@ struct ProgressPostDetailView: View {
             .shadow(color: .black.opacity(0.48), radius: 22, y: 12)
 
             VStack(alignment: .leading, spacing: 10) {
+                PostAuthorLink(user: activity.actor, avatarSize: 24, spacing: 7, font: .system(size: 14, weight: .semibold))
+
                 Text(media.ref.mediaType == "tv" ? "TV" : media.ref.mediaType.capitalized)
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.56))
@@ -286,7 +278,6 @@ struct ProgressPostDetailView: View {
 
 struct ProgressPostNavigationCover: View {
     let progressId: Int
-    var focusesComment = false
     let activityRepository: ActivityRepository
     let diaryRepository: DiaryRepository
     let mediaRepository: MediaRepository
@@ -300,7 +291,6 @@ struct ProgressPostNavigationCover: View {
         NavigationStack {
             ProgressPostDetailView(
                 progressId: progressId,
-                focusesComment: focusesComment,
                 activityRepository: activityRepository,
                 diaryRepository: diaryRepository,
                 mediaRepository: mediaRepository,

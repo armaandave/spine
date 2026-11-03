@@ -160,78 +160,83 @@ struct PostAuthorLink: View {
     }
 }
 
-/// The heart and comment bubble, with their counts. A count of zero shows just the icon. Each sits in a slot of the
-/// same width, so the icons line up from row to row.
-struct PostActions: View {
-    let engagement: PostEngagement
-    var iconSize: CGFloat = 22
-    var slotWidth: CGFloat = 40
-    var spacing: CGFloat = 6
-    var countSize: CGFloat = 14
-    let onToggleLike: () -> Void
-    let onComment: () -> Void
-
-    var body: some View {
-        HStack(spacing: spacing) {
-            Button(action: onToggleLike) {
-                label(
-                    systemName: engagement.hasLiked ? "heart.fill" : "heart",
-                    count: engagement.likeCount,
-                    iconStyle: engagement.hasLiked ? AnyShapeStyle(.pink) : AnyShapeStyle(.white)
-                )
-            }
-            .buttonStyle(.plain)
-            .sensoryFeedback(trigger: engagement.hasLiked) { _, isLiked in
-                isLiked ? SensoryFeedback.impact(weight: .medium) : .selection
-            }
-            .accessibilityLabel(engagement.hasLiked ? "Unlike" : "Like")
-            .accessibilityValue("\(engagement.likeCount) likes")
-
-            Button(action: onComment) {
-                label(systemName: "bubble.right", count: engagement.commentCount, iconStyle: AnyShapeStyle(.white))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Comment")
-            .accessibilityValue("\(engagement.commentCount) comments")
-        }
-    }
-
-    private func label(systemName: String, count: Int, iconStyle: AnyShapeStyle) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: systemName)
-                .font(.system(size: iconSize, weight: .medium))
-                .foregroundStyle(iconStyle)
-                .contentTransition(.symbolEffect(.replace))
-            if count > 0 {
-                Text(count.formatted())
-                    .font(.system(size: countSize, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-            }
-        }
-        .frame(minWidth: slotWidth, minHeight: 44, alignment: .leading)
-        .contentShape(Rectangle())
+/// A round speech bubble, drawn to match the heart: the system's bubbles are wider than its heart and read lighter.
+struct CommentBubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let radius = min(rect.width, rect.height) / 2
+        var path = Path()
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: rect.midY),
+            radius: radius,
+            startAngle: .degrees(150),
+            endAngle: .degrees(112),
+            clockwise: false
+        )
+        path.addLine(to: CGPoint(x: rect.midX - radius * 0.98, y: rect.midY + radius * 0.98))
+        path.closeSubpath()
+        return path
     }
 }
 
-/// The like and comment row and the comments under it, as a post's page shows them.
-struct PostEngagementSection: View {
+/// A post's like and comment counts on a feed row, just to read: liking and commenting happen on the post's page, which
+/// a tap anywhere on the row opens. A count of zero shows just the icon.
+struct PostEngagementSummary: View {
+    let engagement: PostEngagement
+
+    private let tint = Color.white.opacity(0.5)
+
+    static func accessibilityText(for engagement: PostEngagement) -> String {
+        let likes = engagement.likeCount == 1 ? "1 like" : "\(engagement.likeCount.formatted()) likes"
+        return "\(likes), \(PostCommentsSection.countText(engagement.commentCount))"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            item(count: engagement.likeCount) {
+                Image(systemName: engagement.hasLiked ? "heart.fill" : "heart")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+
+            item(count: engagement.commentCount) {
+                CommentBubbleShape()
+                    .stroke(tint, style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+                    .frame(width: 12.5, height: 12.5)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilityText(for: engagement))
+    }
+
+    private func item(count: Int, @ViewBuilder icon: () -> some View) -> some View {
+        HStack(spacing: 3) {
+            icon()
+            if count > 0 {
+                Text(count.formatted())
+                    .font(.system(size: 12, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+            }
+        }
+    }
+}
+
+/// The comments under a post, as its page shows them.
+struct PostCommentsSection: View {
     let model: PostEngagementModel
     /// Spoiler logs keep their comments hidden until the page's reveal.
     var hidesComments = false
-    let onComment: () -> Void
+
+    static func countText(_ count: Int) -> String {
+        count == 1 ? "1 comment" : "\(count.formatted()) comments"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(spacing: 0) {
-                Divider().overlay(.white.opacity(0.1))
-                PostActions(
-                    engagement: model.engagement,
-                    onToggleLike: { Task { await model.toggleLike() } },
-                    onComment: onComment
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Divider().overlay(.white.opacity(0.1))
+            if model.engagement.commentCount > 0 {
+                Text(Self.countText(model.engagement.commentCount))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.56))
             }
 
             comments
@@ -309,10 +314,17 @@ private struct PostCommentRow: View {
     }
 }
 
-/// The comment box pinned under a post's page.
+/// The bar pinned under a post's page: the heart and the comment box side by side in glass, in reach of the thumb.
 struct PostCommentBar: View {
+    /// A little light in the glass: the page behind it is too dark and plain to show any of its own.
+    private static let glassTint = Color.white.opacity(0.1)
+
     @Bindable var model: PostEngagementModel
     let isFocused: FocusState<Bool>.Binding
+
+    private var showsSend: Bool {
+        model.canSend || model.isSending
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -322,41 +334,84 @@ struct PostCommentBar: View {
                     .foregroundStyle(.red)
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Add a comment…", text: $model.draft, axis: .vertical)
-                    .lineLimit(1...5)
-                    .font(.system(size: 16))
-                    .focused(isFocused)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 11)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
-                    .accessibilityIdentifier("post.comment-field")
+            GlassEffectContainer(spacing: 8) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    likeButton
 
-                if model.canSend || model.isSending {
-                    Button {
-                        Task { await model.send() }
-                    } label: {
-                        Group {
-                            if model.isSending {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 17, weight: .bold))
-                            }
-                        }
-                        .frame(width: 44, height: 44)
+                    TextField("Add a comment…", text: $model.draft, axis: .vertical)
+                        .lineLimit(1...5)
+                        .font(.system(size: 16))
+                        .focused(isFocused)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                        .frame(minHeight: 44)
+                        .glassEffect(.regular.tint(Self.glassTint), in: .rect(cornerRadius: 22))
+                        .accessibilityIdentifier("post.comment-field")
+
+                    if showsSend {
+                        sendButton
                     }
-                    .buttonStyle(.plain)
-                    .contentShape(.circle)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .disabled(model.isSending)
-                    .accessibilityLabel("Send comment")
-                    .accessibilityIdentifier("post.comment-send")
                 }
             }
+            .animation(.smooth(duration: 0.25), value: showsSend)
+            .shadow(color: .black.opacity(0.4), radius: 14, y: 6)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .sensoryFeedback(.success, trigger: model.sentCount)
+    }
+
+    private var likeButton: some View {
+        let hasLiked = model.engagement.hasLiked
+        return Button {
+            // On the tap itself, so it never waits on the server.
+            UIImpactFeedbackGenerator(style: hasLiked ? .light : .medium).impactOccurred()
+            Task { await model.toggleLike() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: hasLiked ? "heart.fill" : "heart")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(hasLiked ? AnyShapeStyle(.pink) : AnyShapeStyle(.primary))
+                    .symbolEffect(.bounce, value: hasLiked)
+                if model.engagement.likeCount > 0 {
+                    Text(model.engagement.likeCount.formatted())
+                        .font(.system(size: 15, weight: .semibold))
+                        .monospacedDigit()
+                }
+            }
+            // With no count it's a circle.
+            .padding(.horizontal, model.engagement.likeCount > 0 ? 13 : 0)
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.capsule)
+        .glassEffect(.regular.tint(hasLiked ? .pink.opacity(0.22) : Self.glassTint).interactive(), in: .capsule)
+        .accessibilityLabel(hasLiked ? "Unlike" : "Like")
+        .accessibilityValue("\(model.engagement.likeCount) likes")
+        .accessibilityIdentifier("post.like")
+    }
+
+    private var sendButton: some View {
+        Button {
+            Task { await model.send() }
+        } label: {
+            Group {
+                if model.isSending {
+                    ProgressView()
+                        .tint(.black)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+            }
+            .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.circle)
+        .glassEffect(.regular.tint(.white).interactive(), in: .circle)
+        .disabled(model.isSending)
+        .accessibilityLabel("Send comment")
+        .accessibilityIdentifier("post.comment-send")
     }
 }

@@ -18,7 +18,6 @@ final class ActivityFeedViewModel {
     private var nextCursorLink: String?
     private var didLoad = false
     private var isLoadingFirstPage = false
-    private var likesInFlight = Set<ActivityPostRef>()
 
     init(
         username: String?,
@@ -75,34 +74,10 @@ final class ActivityFeedViewModel {
         }
     }
 
-    /// Shows the like at once, then settles on the server's count, or goes back if the request fails.
-    func toggleLike(_ activity: ActivityItem) async {
-        guard let post = activity.post,
-              let current = engagement(of: post),
-              likesInFlight.insert(post).inserted
-        else { return }
-        defer { likesInFlight.remove(post) }
-        apply(current.toggledLike, to: post)
-
-        do {
-            let state = try await activityRepository.setLike(post: post, liked: !current.hasLiked)
-            if let latest = engagement(of: post) {
-                apply(latest.applying(state), to: post)
-            }
-        } catch {
-            apply(current, to: post)
-            handleUnauthorized(error)
-        }
-    }
-
     /// A post's page changed its likes or comments.
     func apply(_ engagement: PostEngagement, to post: ActivityPostRef) {
         guard let index = items.firstIndex(where: { $0.post == post }) else { return }
         items[index].engagement = engagement
-    }
-
-    private func engagement(of post: ActivityPostRef) -> PostEngagement? {
-        items.first { $0.post == post }?.engagement
     }
 
     private func loadFirstPage(force: Bool) async {
@@ -163,10 +138,30 @@ struct ActivityFeedSkeleton: View {
     var rowCount = 3
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(.white.opacity(0.06))
-            .frame(height: CGFloat(rowCount) * 84)
-            .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            ForEach(0 ..< rowCount, id: \.self) { _ in
+                HStack(alignment: .top, spacing: 12) {
+                    RoundedRectangle(cornerRadius: PosterSlot.activityPost.cornerRadius, style: .continuous)
+                        .frame(width: PosterSlot.activityPost.size.width, height: PosterSlot.activityPost.size.height)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        bar(width: 90, height: 12)
+                        bar(width: 150, height: 16)
+                        bar(width: 80, height: 11)
+                        bar(width: 180, height: 12)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 14)
+            }
+        }
+        .foregroundStyle(.white.opacity(0.07))
+        .accessibilityHidden(true)
+    }
+
+    private func bar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .frame(width: width, height: height)
     }
 }
 
@@ -211,8 +206,17 @@ enum ActivityFeedPresentation {
 
     /// "Watched 4 episodes", capitalized for a line of its own.
     static func progressHeadline(for activity: ActivityItem) -> String {
-        let summary = clean(activity.object.summary) ?? "updated progress"
-        return summary.prefix(1).uppercased() + summary.dropFirst()
+        capitalizingFirstLetter(clean(activity.object.summary) ?? "updated progress")
+    }
+
+    /// The words under a post's title when it has no marks to show there: a day's progress, or what a log with no
+    /// rating, heart or rewatch is. Nil means the marks go there.
+    static func statusText(for activity: ActivityItem) -> String? {
+        if case .progress = activity.post {
+            return progressHeadline(for: activity)
+        }
+        guard ratingSummary(for: activity).isEmpty, !isRewatch(activity) else { return nil }
+        return capitalizingFirstLetter(actionText(for: activity))
     }
 
     /// What a log's row quotes: the review, or its title when that's all there is.
@@ -220,7 +224,7 @@ enum ActivityFeedPresentation {
         clean(activity.review) ?? clean(activity.reviewTitle)
     }
 
-    /// The stars and heart beside a log's title. The review has its own line, so there's no mark for one.
+    /// The stars and heart under a log's title. The review has its own line, so there's no mark for one.
     static func ratingSummary(for activity: ActivityItem) -> DiaryEntrySummary {
         DiaryEntrySummary(
             stars: rating(for: activity)?.starCount,
@@ -239,6 +243,10 @@ enum ActivityFeedPresentation {
 
     static func listName(for activity: ActivityItem) -> String? {
         activity.object.type == "list" ? clean(activity.object.name) : nil
+    }
+
+    private static func capitalizingFirstLetter(_ text: String) -> String {
+        text.prefix(1).uppercased() + text.dropFirst()
     }
 
     private static func mediaTypePhrase(for mediaType: String?) -> String {

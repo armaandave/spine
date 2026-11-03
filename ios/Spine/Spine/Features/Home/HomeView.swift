@@ -255,12 +255,12 @@ struct HomeView: View {
                 HomeStatusBarFade(scrollPosition: scrollPosition)
             }
             .background {
-                // A faint wash the day panels' glass shows, all the way down the feed, like the Diary tab's. It's
-                // dimmed further here, so a bright cover doesn't overpower the posts.
+                // A faint wash all the way down the feed, for the tab bar's glass to pick up. It's dimmed well past the
+                // Diary tab's: the posts sit directly on it, so their text and artwork have to stay crisp.
                 LogBackdrop(url: washURL)
                     .overlay {
                         SpinePalette.pageBackground
-                            .opacity(0.45)
+                            .opacity(0.7)
                             .ignoresSafeArea()
                     }
             }
@@ -369,7 +369,6 @@ struct HomeView: View {
                 case let .log(id):
                     DiaryLogDetailNavigationCover(
                         entryId: id,
-                        focusesComment: selection.focusesComment,
                         diaryRepository: diaryRepository,
                         mediaRepository: mediaRepository,
                         trackingRepository: trackingRepository,
@@ -381,7 +380,6 @@ struct HomeView: View {
                 case let .progress(id):
                     ProgressPostNavigationCover(
                         progressId: id,
-                        focusesComment: selection.focusesComment,
                         activityRepository: activityRepository,
                         diaryRepository: diaryRepository,
                         mediaRepository: mediaRepository,
@@ -517,29 +515,10 @@ struct HomeView: View {
     @ViewBuilder
     private var feedPosts: some View {
         if viewModel.profile != nil {
-            ForEach(ActivityFeedEntry.entries(from: viewModel.activityItems)) { entry in
-                switch entry {
-                case let .day(_, title, isFirst):
-                    Text(title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                        .accessibilityAddTraits(.isHeader)
-                        .padding(.leading, 4)
-                        .padding(.top, isFirst ? 8 : 18)
-                        .padding(.bottom, 6)
-                case let .post(activity, isFirst, isLast):
-                    // Each post is its own lazy item, drawn as a slice of its day's panel.
-                    ActivityPostRow(
-                        activity: activity,
-                        showsSeparator: !isLast,
-                        onOpen: { open(activity) },
-                        onToggleLike: { Task { await viewModel.feed.toggleLike(activity) } },
-                        onComment: { open(activity, focusesComment: true) }
-                    )
-                    .diaryCard(roundsTop: isFirst, roundsBottom: isLast)
-                    .task {
-                        await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
-                    }
+            ForEach(viewModel.activityItems) { activity in
+                ActivityPostRow(activity: activity, onOpen: { open(activity) })
+                .task {
+                    await viewModel.feed.loadNextPageIfNeeded(currentItem: activity)
                 }
             }
 
@@ -604,12 +583,12 @@ struct HomeView: View {
         }
     }
 
-    private func open(_ activity: ActivityItem, focusesComment: Bool = false) {
+    private func open(_ activity: ActivityItem) {
         switch ActivityDestination.resolve(activity) {
         case let .diary(id):
-            selectedPost = ActivityPostSelection(post: .log(id), focusesComment: focusesComment)
+            selectedPost = ActivityPostSelection(post: .log(id))
         case let .progress(id):
-            selectedPost = ActivityPostSelection(post: .progress(id), focusesComment: focusesComment)
+            selectedPost = ActivityPostSelection(post: .progress(id))
         case let .person(ref):
             selectedPerson = ref
         case let .media(ref):
@@ -630,7 +609,6 @@ enum HomeBackdropMotion {
 
 private struct ActivityPostSelection: Identifiable {
     let post: ActivityPostRef
-    let focusesComment: Bool
 
     var id: String { post.id }
 }
