@@ -127,7 +127,7 @@ Reaching the total alone never moves a series to Read (BK-302).
 ### MC-101: The log screen opens by itself once per attempt
 
 A comic's total grows, so someone following a monthly run reaches the latest issue every month.
-After the first time in an attempt, later saves don't open the log screen.
+After the first time in an attempt, later saves don't open the log screen. A retry of that first save is still the first time, so it opens it.
 Finished on the progress sheet and Log on the plus menu stay available.
 
 ### MC-102: With no total, the user decides what finished means
