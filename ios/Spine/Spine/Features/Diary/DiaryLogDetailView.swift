@@ -292,6 +292,13 @@ struct DiaryLogDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
+        // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 28)
+                .contentShape(Rectangle())
+                .gesture(edgeSwipeBackGesture)
+        }
         .safeAreaBar(edge: .bottom) {
             if viewModel.entry != nil {
                 PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
@@ -302,12 +309,6 @@ struct DiaryLogDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .dismissExplorationOnReturnHome()
         .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
         .task {
             if viewModel.entry == nil {
                 await viewModel.load()

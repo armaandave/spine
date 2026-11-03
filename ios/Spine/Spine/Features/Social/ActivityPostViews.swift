@@ -42,7 +42,7 @@ final class PostEngagementModel {
         await loadComments()
     }
 
-    /// The comments to show. A spoiler log hides everyone else's until it's revealed, but never your own.
+    /// The comments to show. A spoiler log hides them until it's revealed, except ones just sent from this page.
     func visibleComments(hidingOthers: Bool) -> [PostComment] {
         hidingOthers ? comments.filter { sentCommentIds.contains($0.id) } : comments
     }
@@ -79,7 +79,9 @@ final class PostEngagementModel {
             engagement = engagement.applying(state)
             ActivityPostChange.post(post, engagement: engagement)
         } catch {
-            engagement = before
+            // Only the like: a comment sent meanwhile still counts.
+            engagement.hasLiked = before.hasLiked
+            engagement.likeCount = before.likeCount
             actionErrorMessage = error.localizedDescription
             handleUnauthorized(error)
         }
@@ -98,7 +100,8 @@ final class PostEngagementModel {
             let comment = try await repository.addComment(post: post, body: body)
             sentCommentIds.insert(comment.id)
             comments.append(comment)
-            update(commentCount: comments.count)
+            // Counted from the post's total: the list is short if the others didn't load.
+            update(commentCount: engagement.commentCount + 1)
             sentCount += 1
         } catch {
             if draft.isEmpty {
@@ -114,7 +117,7 @@ final class PostEngagementModel {
         do {
             try await repository.deleteComment(id: comment.id)
             comments.removeAll { $0.id == comment.id }
-            update(commentCount: comments.count)
+            update(commentCount: max(0, engagement.commentCount - 1))
         } catch {
             actionErrorMessage = error.localizedDescription
             handleUnauthorized(error)
@@ -245,23 +248,25 @@ struct PostCommentsSection: View {
 
     @ViewBuilder
     private var comments: some View {
-        if !hidesComments, let error = model.commentsErrorMessage, model.comments.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.62))
-                Button("Retry") {
-                    Task { await model.loadComments() }
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.86))
-            }
-        } else if !hidesComments, model.isLoadingComments, model.comments.isEmpty, model.engagement.commentCount > 0 {
+        if !hidesComments, model.isLoadingComments, model.comments.isEmpty, model.engagement.commentCount > 0 {
             ProgressView()
                 .tint(.white)
                 .frame(maxWidth: .infinity)
         } else {
             VStack(alignment: .leading, spacing: 14) {
+                if !hidesComments, let error = model.commentsErrorMessage {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.62))
+                        Button("Retry") {
+                            Task { await model.loadComments() }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                    }
+                }
+
                 ForEach(model.visibleComments(hidingOthers: hidesComments)) { comment in
                     PostCommentRow(comment: comment) {
                         Task { await model.delete(comment) }

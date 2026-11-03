@@ -34,12 +34,17 @@ final class ActivityPostTests: XCTestCase {
         """)
     }
 
-    private func progress(id: Int = 9, day: String = "2026-11-01", summary: String = "watched 4 episodes") throws -> ActivityItem {
+    private func progress(
+        id: Int = 9,
+        day: String = "2026-11-01",
+        summary: String = "watched 4 episodes",
+        mediaId: String = "2"
+    ) throws -> ActivityItem {
         try activity("""
         {
           "id": -\(id), "type": "progress_updated", "created_at": "2026-11-01T12:00:00Z", "consumed_at": "\(day)",
           "actor": {"id": 3, "username": "jonah", "display_name": "Jonah", "avatar_url": null},
-          "media": {"ref": {"source": "tmdb", "media_type": "tv", "media_id": "2"}, "title": "Severance"},
+          "media": {"ref": {"source": "tmdb", "media_type": "tv", "media_id": "\(mediaId)"}, "title": "Severance"},
           "person": null,
           "object": {"type": "progress_day", "id": \(id), "summary": "\(summary)", "label": "4 episodes"},
           "viewer": {"can_view": true, "has_liked": false},
@@ -334,6 +339,52 @@ final class ActivityPostTests: XCTestCase {
     }
 
     @MainActor
+    func testSendingAfterAFailedLoadKeepsThePostsCount() async {
+        let repository = FakePostRepository()
+        repository.commentsError = URLError(.timedOut)
+        repository.nextComment = comment(9)
+        let model = model(repository)
+        model.seed(PostEngagement(hasLiked: false, likeCount: 0, commentCount: 5))
+        await model.loadComments()
+
+        model.draft = "Hi"
+        await model.send()
+
+        XCTAssertEqual(model.comments.map(\.id), [9])
+        XCTAssertEqual(model.engagement.commentCount, 6)
+        XCTAssertNotNil(model.commentsErrorMessage, "the retry stays until the others load")
+    }
+
+    @MainActor
+    func testAFailedLikeKeepsACommentSentMeanwhile() async {
+        let repository = FakePostRepository()
+        repository.nextComment = comment(9)
+        let model = model(repository)
+        model.seed(PostEngagement(hasLiked: false, likeCount: 3, commentCount: 2))
+        model.draft = "Hi"
+        repository.whileLiking = { await model.send() }
+        repository.likeResult = .failure(URLError(.timedOut))
+
+        await model.toggleLike()
+
+        XCTAssertEqual(model.engagement, PostEngagement(hasLiked: false, likeCount: 3, commentCount: 3))
+    }
+
+    func testTheProfileRailShowsADaysLogOverItsProgress() throws {
+        let newestProgress = try progress(mediaId: "1")
+        let log = try log(mediaType: "tv")
+
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: [newestProgress, log]).map(\.id), [log.id])
+    }
+
+    func testTheProfileRailKeepsANewerDaysProgressOverAnOlderLog() throws {
+        let newestProgress = try progress(day: "2026-11-02", mediaId: "1")
+        let log = try log(mediaType: "tv")
+
+        XCTAssertEqual(ProfileRecentActivityRailModel.items(from: [newestProgress, log]).map(\.id), [newestProgress.id])
+    }
+
+    @MainActor
     func testAFailedLikeOnThePageGoesBack() async {
         let repository = FakePostRepository()
         repository.likeResult = .failure(URLError(.timedOut))
@@ -376,6 +427,7 @@ private final class FakePostRepository: ActivityRepository {
     var beforeFeedResponse: (() async -> Void)?
     var commentsError: Error?
     var whileAdding: (() -> Void)?
+    var whileLiking: (() async -> Void)?
     var likeResult: Result<LikeState, Error> = .success(LikeState(liked: true, likeCount: 1))
     var likes: [(post: ActivityPostRef, liked: Bool)] = []
     var comments: [PostComment] = []
@@ -398,6 +450,7 @@ private final class FakePostRepository: ActivityRepository {
 
     func setLike(post: ActivityPostRef, liked: Bool) async throws -> LikeState {
         likes.append((post, liked))
+        await whileLiking?()
         return try likeResult.get()
     }
 

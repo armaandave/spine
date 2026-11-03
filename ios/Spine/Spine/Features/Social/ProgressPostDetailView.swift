@@ -38,11 +38,12 @@ final class ProgressPostDetailViewModel {
 
         do {
             let loaded = try await activityRepository.progressPost(id: progressId)
+            // Shown right away: the title's details only add artwork, and can be slow to arrive.
+            activity = loaded
+            engagement.seed(loaded.engagement)
             if let ref = loaded.media?.ref {
                 mediaDetail = try? await mediaRepository.detail(ref: ref)
             }
-            activity = loaded
-            engagement.seed(loaded.engagement)
         } catch is CancellationError {
             return
         } catch {
@@ -147,6 +148,13 @@ struct ProgressPostDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
         }
+        // Inside the bar's inset, so the swipe's edge doesn't cover the heart.
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 28)
+                .contentShape(Rectangle())
+                .gesture(edgeSwipeBackGesture)
+        }
         .safeAreaBar(edge: .bottom) {
             if viewModel.activity != nil {
                 PostCommentBar(model: viewModel.engagement, isFocused: $isCommentFocused)
@@ -157,12 +165,6 @@ struct ProgressPostDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .dismissExplorationOnReturnHome()
         .offset(x: edgeDragOffset)
-        .overlay(alignment: .leading) {
-            Color.clear
-                .frame(width: 28)
-                .contentShape(Rectangle())
-                .gesture(edgeSwipeBackGesture)
-        }
         .task {
             if viewModel.activity == nil {
                 await viewModel.load()

@@ -13,17 +13,26 @@ struct ActivityPostRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Self.artworkSpacing) {
             artwork
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 authorLine
-                Text(activity.media?.displayTitle ?? "")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                summaryLine
-                reviewLine
-                Spacer(minLength: 0)
-                PostEngagementSummary(engagement: activity.engagement)
+
+                // One element to VoiceOver, which opens the post from it.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(activity.media?.displayTitle ?? "")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    summaryLine
+                    reviewLine
+                    Spacer(minLength: 0)
+                    PostEngagementSummary(engagement: activity.engagement)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(ActivityFeedPresentation.destinationHint(for: activity))
+                .accessibilityAction(.default, onOpen)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: Self.artwork.size.height)
@@ -37,9 +46,6 @@ struct ActivityPostRow: View {
                 .padding(.leading, Self.artwork.size.width + Self.artworkSpacing)
                 .padding(.trailing, -14)
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityAction(named: "Open", onOpen)
-        .accessibilityHint(ActivityFeedPresentation.destinationHint(for: activity))
     }
 
     /// The name gives way to the date, which is never cut off.
