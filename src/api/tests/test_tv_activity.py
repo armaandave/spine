@@ -25,7 +25,7 @@ OCT_25 = date(2026, 10, 25)
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class TVActivityTests(TestCase):
-    """Ticks are the show's progress; marks and fills aren't; a log replaces its day."""
+    """Ticks are the show's progress; marks and fills aren't; a log is its own item."""
 
     def setUp(self):
         super().setUp()
@@ -156,8 +156,14 @@ class TVActivityTests(TestCase):
         tv_tracking.create_log(self.user, self.season_item(2, andor), consumed_at=OCT_25, visibility="followers")
 
         self.assertEqual(self.activity(viewer=self.friend), [self.progress("2026-10-25", "watched 1 episode", "Andor")])
-        # The owner sees the log, which replaces that day's progress.
-        self.assertEqual(self.activity(), [("2026-10-25", "diary_created", "season", "Andor", "log")])
+        # The owner also sees the log, beside that day's progress.
+        self.assertEqual(
+            self.activity(),
+            [
+                ("2026-10-25", "diary_created", "season", "Andor", "log"),
+                self.progress("2026-10-25", "watched 1 episode", "Andor"),
+            ],
+        )
         # Each change of season 1's count is recorded for installed builds' Home; only
         # the tick moved it.
         season_one = ProgressChange.objects.filter(item=self.season_item(1, andor)).order_by("id")
@@ -166,13 +172,16 @@ class TVActivityTests(TestCase):
             [(0, 1), (3, 3), (2, 2)],
         )
 
-    def test_a_season_log_that_day_replaces_the_days_progress(self):
+    def test_a_season_log_that_day_keeps_the_days_progress(self):
         self.tick(1, 1)
         self.tick(1, 2)
         self.clock.advance(minutes=1)
         tv_tracking.create_log(self.user, self.season_item(2), consumed_at=OCT_25)
 
-        expected = [("2026-10-25", "diary_created", "season", "Severance", "log")]
+        expected = [
+            ("2026-10-25", "diary_created", "season", "Severance", "log"),
+            self.progress("2026-10-25", "watched 2 episodes"),
+        ]
         self.assertEqual(self.activity(), expected)
         self.assertEqual(self.activity(viewer=self.friend), expected)
 
@@ -290,8 +299,14 @@ class TVActivityTests(TestCase):
         tv_tracking.create_log(self.user, self.episode_item(1, 3), consumed_at=OCT_25, is_rewatch=True)
         self.untick(1, 3)
 
-        # Oct 26 netted to nothing; the log replaces Oct 25's progress.
-        self.assertEqual(self.activity(), [("2026-10-25", "diary_created", "episode", "Episode 3", "log")])
+        # Oct 26 netted to nothing; Oct 25 has the log and that day's own two ticks.
+        self.assertEqual(
+            self.activity(),
+            [
+                ("2026-10-25", "diary_created", "episode", "Episode 3", "log"),
+                self.progress("2026-10-25", "watched 2 episodes"),
+            ],
+        )
         season_one = ProgressChange.objects.filter(item=self.season_item(1)).order_by("id")
         self.assertEqual(
             [(change.previous_progress["value"], change.current_progress["value"]) for change in season_one],

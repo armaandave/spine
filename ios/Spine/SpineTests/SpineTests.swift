@@ -1839,7 +1839,7 @@ final class SpineTests: XCTestCase {
             LibraryTrackingRequest(mediaType: "movie", page: nil, status: "In progress"),
             LibraryTrackingRequest(mediaType: "music", page: nil, status: "In progress"),
         ])
-        XCTAssertEqual(activity.feedRequests, [6], "Home's activity is the people you follow")
+        XCTAssertEqual(activity.feedRequests, [25], "Home's activity is the people you follow, a page at a time")
         XCTAssertTrue(activity.requests.isEmpty)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.profileErrorMessage)
@@ -5697,7 +5697,7 @@ final class SpineTests: XCTestCase {
         XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: today), "+4 eps.")
         XCTAssertEqual(ProfileRecentActivityRailModel.fallbackLabel(for: page.results[1]), "+1 ep.")
         XCTAssertNil(page.results[2].object.isRewatch)
-        XCTAssertEqual(ActivityDestination.resolve(today), .media(try XCTUnwrap(today.media).ref))
+        XCTAssertEqual(ActivityDestination.resolve(today), .progress(3))
         XCTAssertEqual(
             ActivityFeedPresentation.actionText(for: activityItem(id: 4, title: "Older server")),
             "updated progress"

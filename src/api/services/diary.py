@@ -19,7 +19,7 @@ from app import series_tracking, single_weight, tv_tracking, user_calendar
 from app.models import Item, MediaLike, MediaTypes, Sources, Tag, TVListing
 from app.providers import services as provider_services
 from app.services import create_diary_entry, update_diary_entry
-from social.models import Activity, ContentLike
+from social.models import Activity, Comment, ContentLike
 
 # Where a TV log was saved from; they shape the response, not the log (TV-404, TV-705).
 TV_PAGE_FIELDS = ("page_season_number", "page_episode_number")
@@ -58,6 +58,9 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
             target_type=ContentLike.DIARY_ENTRY,
             target_id=entry.id,
         ).count()
+    comment_count = getattr(entry, "viewer_comment_count", None)
+    if comment_count is None:
+        comment_count = entry.comments.visible_to(viewer).count()
     viewer_has_liked = getattr(entry, "viewer_has_liked", None)
     if viewer_has_liked is None:
         viewer_has_liked = (
@@ -97,6 +100,7 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
         "tags": [tag.name for tag in entry.tags.all()],
         "visibility": "public" if is_single_weight else entry.visibility,
         "like_count": like_count,
+        "comment_count": comment_count,
         "viewer_has_liked": bool(viewer_has_liked),
         "created_at": entry.created_at,
         "updated_at": entry.updated_at,
@@ -192,7 +196,7 @@ def _listed_episode_title(seasons, season_number, episode_number):
 
 
 def prime_diary_likes(entries, viewer):
-    """Attach like counts for a bounded diary page."""
+    """Attach like and comment counts for a bounded diary page."""
     entries = list(entries)
     entry_ids = [entry.pk for entry in entries]
     counts = dict(
@@ -203,6 +207,14 @@ def prime_diary_likes(entries, viewer):
         .values("target_id")
         .annotate(count=Count("id"))
         .values_list("target_id", "count"),
+    )
+    comment_counts = dict(
+        Comment.objects.visible_to(viewer)
+        .filter(diary_entry_id__in=entry_ids)
+        .order_by()
+        .values("diary_entry_id")
+        .annotate(count=Count("id"))
+        .values_list("diary_entry_id", "count"),
     )
     liked = set()
     if viewer and viewer.is_authenticated:
@@ -215,6 +227,7 @@ def prime_diary_likes(entries, viewer):
         )
     for entry in entries:
         entry.viewer_like_count = counts.get(entry.pk, 0)
+        entry.viewer_comment_count = comment_counts.get(entry.pk, 0)
         entry.viewer_has_liked = entry.pk in liked
 
 

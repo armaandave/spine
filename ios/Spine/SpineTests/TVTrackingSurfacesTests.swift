@@ -865,12 +865,15 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
         homeActivity.results = [progress]
         await home.mediaStateDidChange(origin: home.continueWatching.changeOrigin)
-        XCTAssertEqual(home.activityItems.map(\.id), [-7], "Home's activity reloads")
+        XCTAssertEqual(homeActivity.requestCount, 1, "Your own write can't change the people you follow's activity")
         XCTAssertEqual(tracking.continueWatchingPages.count, 1, "The rail doesn't reload")
-        // Any other screen's write reloads Home.
+        // Any other screen's write reloads the rail, and the feed keeps its place.
         await home.mediaStateDidChange(origin: UUID())
-        XCTAssertEqual(homeActivity.requestCount, 3)
+        XCTAssertEqual(homeActivity.requestCount, 1)
         XCTAssertEqual(tracking.continueWatchingPages.count, 2)
+        // Pulling to refresh still loads the feed.
+        await home.reload()
+        XCTAssertEqual(home.activityItems.map(\.id), [-7])
     }
 
     func testTV701TheCardsHaveNoTouchAndHoldMenu() throws {

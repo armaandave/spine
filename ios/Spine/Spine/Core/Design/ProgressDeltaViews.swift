@@ -1,23 +1,5 @@
 import SwiftUI
 
-struct ProgressDeltaInlineView: View {
-    let delta: ProgressChangeDisplay
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(delta.previous)
-            Image(systemName: "arrow.right")
-                .font(.system(size: 9, weight: .black))
-            Text(delta.current)
-        }
-        .font(.system(size: 11, weight: .bold))
-        .foregroundStyle(.white.opacity(0.54))
-        .lineLimit(1)
-        .minimumScaleFactor(0.65)
-        .accessibilityLabel("\(delta.previous) to \(delta.current)")
-    }
-}
-
 struct ProgressDeltaChipView: View {
     let delta: ProgressChangeDisplay
 
