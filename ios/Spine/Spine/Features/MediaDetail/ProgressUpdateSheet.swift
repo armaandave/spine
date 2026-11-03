@@ -39,6 +39,8 @@ final class ProgressUpdateViewModel {
     let progress: ProgressState?
     var mode: ProgressUpdateMode
     var input = ""
+    /// The number the server last refused.
+    var refusedValue: Decimal?
     private var hasEditedInput = false
 
     convenience init(detail: MediaDetail, progress: ProgressState?) {
@@ -124,6 +126,14 @@ final class ProgressUpdateViewModel {
             return "Enter a value from 0 to \(totalPages)."
         }
         return nil
+    }
+
+    /// The warning under the number. A manga's or a comic's refusal from the server goes with the number it refused,
+    /// so it doesn't sit beside a corrected one (MC-004).
+    func warning(serverMessage: String?) -> String? {
+        if let validationMessage { return validationMessage }
+        guard title.ref.isSeries else { return serverMessage }
+        return currentValue == refusedValue ? serverMessage : nil
     }
 
     var canSave: Bool {
@@ -276,7 +286,7 @@ struct ProgressUpdateSheet: View {
     }
 
     var body: some View {
-        let warning = viewModel.validationMessage ?? errorMessage
+        let warning = viewModel.warning(serverMessage: errorMessage)
         ProgressSheetForm(
             title: title.title,
             subtitle: journeyStatus == "Paused" ? "Paused" : nil,
@@ -344,7 +354,10 @@ struct ProgressUpdateSheet: View {
         Task {
             let saved = await onSave(request)
             isSubmitting = false
-            guard saved else { return }
+            guard saved else {
+                viewModel.refusedValue = request.value
+                return
+            }
             isClosing = true
             if title.ref.isSeries {
                 if opensLogAfterSave() { onReachedTotal() } else { dismiss() }

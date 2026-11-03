@@ -310,6 +310,22 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertEqual(page.progressErrorMessage, "This comic has 54 issues so far.")
     }
 
+    // MC-004: the refusal goes with the number it refused (seen in the simulator: it stayed beside a corrected number).
+    func testTheServersRefusalGoesWithItsNumber() {
+        let refusal = "This comic has 54 issues so far."
+        let sheet = ProgressUpdateViewModel(title: Self.title("comic", total: 54), progress: Self.count(12, max: 54, unit: "issue"))
+        sheet.updateInput("60")
+        sheet.refusedValue = sheet.currentValue
+        XCTAssertEqual(sheet.warning(serverMessage: refusal), refusal)
+
+        sheet.updateInput("54")
+        XCTAssertNil(sheet.warning(serverMessage: refusal))
+
+        let book = ProgressUpdateViewModel(title: Self.title("book", total: 300), progress: Self.count(12, max: 300, unit: "page"))
+        book.updateInput("20")
+        XCTAssertEqual(book.warning(serverMessage: "Could not save."), "Could not save.", "A book's stays as it was")
+    }
+
     // MC-005: a total of one has no number.
     func testATotalOfOneHasNoNumber() {
         XCTAssertTrue(BookTrackingState(total: 1).hasNoNumber)
