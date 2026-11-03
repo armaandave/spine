@@ -57,7 +57,7 @@ final class LibraryPosterBadgeTests: XCTestCase {
     }
 
     func testTypesWithoutTrackingContractsHaveNoBadge() {
-        for mediaType in ["movie", "anime", "manga", "comic", "music"] {
+        for mediaType in ["movie", "anime", "music"] {
             let item = Spine.LibraryItem(
                 media: summary(mediaType),
                 tracking: TrackingState(
@@ -74,6 +74,38 @@ final class LibraryPosterBadgeTests: XCTestCase {
             )
             XCTAssertNil(badge(item), mediaType)
         }
+    }
+
+    // MC-006: the place, with the total when there is one, only while started and unfinished.
+    func testAMangaOrAComicShowsWhereYouStoppedOnlyWhileStartedAndUnfinished() {
+        for status in ["In progress", "Paused", "Dropped"] {
+            XCTAssertEqual(badge(series("manga", status: status, value: 120, max: 380, unit: "chapter")), "120/380 chapters", status)
+            XCTAssertEqual(badge(series("manga", status: status, value: 120, max: nil, unit: "chapter")), "120 chapters", status)
+            XCTAssertEqual(badge(series("comic", status: status, value: 12, max: 54, unit: "issue")), "12/54 issues", status)
+            XCTAssertNil(badge(series("manga", status: status, value: 0, max: 380, unit: "chapter")), "A place of zero: \(status)")
+        }
+        XCTAssertEqual(badge(series("manga", status: "In progress", value: 1, max: nil, unit: "chapter")), "1 chapter")
+        for status in ["Planning", "Completed"] {
+            XCTAssertNil(badge(series("manga", status: status, value: 380, max: 380, unit: "chapter")), status)
+            XCTAssertNil(badge(series("comic", status: status, value: 54, max: 54, unit: "issue")), status)
+        }
+    }
+
+    private func series(_ mediaType: String, status: String, value: Decimal, max: Decimal?, unit: String) -> Spine.LibraryItem {
+        Spine.LibraryItem(
+            media: summary(mediaType),
+            tracking: TrackingState(
+                trackingId: 1,
+                status: status,
+                rating: nil,
+                progress: ProgressState(kind: "count", value: value, max: max, unit: unit),
+                repeats: nil,
+                startDate: nil,
+                endDate: nil,
+                notes: nil,
+                updatedAt: nil
+            )
+        )
     }
 
     private func badge(_ item: Spine.LibraryItem) -> String? {

@@ -160,8 +160,8 @@ final class DiaryCreateViewModel {
                 journeyId: selectedMedia.ref.mediaType == "book"
                     ? selectedMedia.userState?.book?.currentJourney?.id
                     : nil,
-                // A TV log from this build applies at most once (TV-705).
-                mutationId: selectedMedia.ref.mediaType == "book" || isTV ? mutationId : nil
+                // A TV log from this build applies at most once (TV-705), as a manga's or comic's does (BK-501).
+                mutationId: selectedMedia.ref.mediaType == "book" || isTV || selectedMedia.ref.isSeries ? mutationId : nil
             )
             if isTV {
                 request.includesIsRewatch = isRewatchForRequest != nil
@@ -209,6 +209,9 @@ final class DiaryCreateViewModel {
                     && state?.status == "Completed")
         } else if media.ref.mediaType == "book" {
             isRewatch = media.userState?.book?.isRereading ?? false
+        } else if media.ref.isSeries {
+            let series = media.userState?.book
+            isRewatch = series?.hasLiveJourney == true ? series?.isRereading == true : (series?.lifetimeReadCount ?? 0) > 0
         } else {
             isRewatch = (media.userState?.diaryCount ?? 0) > 0
         }

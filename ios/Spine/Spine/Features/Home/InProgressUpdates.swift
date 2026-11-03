@@ -4,12 +4,12 @@ import SwiftUI
 /// one button that opens the title's own progress UI over Home, as the title's page has it:
 ///
 /// - a show: its episode sheet, on up next's season (`ContinueWatchingTicks`);
-/// - a book: the page's progress sheet, with Finished Reading and the journey's other choices in ⋯;
-/// - a game: the page's progress sheet, with Finished Playing, and Edit Dates and the rest in ⋯;
-/// - a manga or a comic: the page's log composer, on Progress.
+/// - a book, a manga or a comic: the page's progress sheet, with Finished Reading and the read's other choices in ⋯
+///   (MC-300);
+/// - a game: the page's progress sheet, with Finished Playing, and Edit Dates and the rest in ⋯.
 ///
-/// A book's or a game's sheet opens at once from the card, as a show's does, while the page loads behind it; its
-/// writes wait for that load. A manga's or a comic's composer needs the loaded page, so it opens after it.
+/// Those sheets open at once from the card, as a show's does, while the page loads behind them; their writes wait for
+/// that load. A board game's composer needs the loaded page, so it opens after it.
 ///
 /// Each runs on the page's own model (`MediaDetailViewModel`) posting as Home, so the card stays where it is, Home
 /// reloads only its activity, and the rail re-sorts on the next visit. Finishing a book or a game opens
@@ -34,7 +34,7 @@ final class InProgressUpdates {
             // A show a tick just caught up or finished has no up next to open until the rail reloads.
             return item.tracking.tv?.upNext == nil ? .page : .episodes
         }
-        if ["book", "game"].contains(mediaType) || MediaLogViewModel.supportsProgress(mediaType: mediaType) {
+        if item.media.ref.readsLikeBook || mediaType == "game" || MediaLogViewModel.supportsProgress(mediaType: mediaType) {
             return .progress
         }
         return .page
@@ -43,7 +43,7 @@ final class InProgressUpdates {
     /// The title whose progress UI is on screen, or was last: kept until another card opens, so a write still on its
     /// way can say it failed.
     private(set) var update: InProgressUpdate?
-    /// The card whose page is loading before its composer opens (a manga or a comic).
+    /// The card whose page is loading before its composer opens (a board game).
     private(set) var loadingItemID: String?
     /// A write changed a card since the rail last loaded: the screen re-sorts the rail on its next visit.
     private(set) var needsReload = false
@@ -88,7 +88,7 @@ final class InProgressUpdates {
         case .page:
             return item.media.ref
         case .progress:
-            if ["book", "game"].contains(item.media.ref.mediaType) {
+            if item.media.ref.readsLikeBook || item.media.ref.mediaType == "game" {
                 return openSheet(for: item)
             }
             return await openComposer(for: item)
@@ -107,8 +107,8 @@ final class InProgressUpdates {
         needsReload = false
     }
 
-    /// A book's or a game's sheet, at once from the card, with its page loading behind it. Returns the page to open
-    /// instead when the card has nothing to update.
+    /// A progress sheet, at once from the card, with its page loading behind it. Returns the page to open instead when
+    /// the card has nothing to update.
     private func openSheet(for item: LibraryItem) -> MediaRef? {
         let update = makeUpdate(for: item)
         guard update.openSheet() else { return item.media.ref }
@@ -117,7 +117,7 @@ final class InProgressUpdates {
         return nil
     }
 
-    /// Loads a manga's or a comic's page, then opens its composer on Progress. Returns the page to open instead when
+    /// Loads a board game's page, then opens its composer on Progress. Returns the page to open instead when
     /// there's nothing to update there or the page didn't load: the page says why. Nothing opens when another tap, or
     /// something else on the screen, came first.
     private func openComposer(for item: LibraryItem) async -> MediaRef? {
@@ -184,12 +184,14 @@ final class InProgressUpdates {
 @MainActor
 @Observable
 final class InProgressUpdate {
-    /// The log composer over the screen: Progress for a manga or a comic, or the completion log.
+    /// The log composer over the screen: Progress for a board game, or the completion log.
     struct Composer: Identifiable {
         let id = UUID()
         let mode: MediaLogMode
-        /// The book journey or game playthrough a completion log finishes.
+        /// The book, manga or comic attempt, or game playthrough, a completion log finishes.
         let completionJourneyId: Int?
+        /// Reaching a series' total opened it: its close button reads Not now (MC-100).
+        var openedByTotal = false
     }
 
     private enum Next {
@@ -200,7 +202,7 @@ final class InProgressUpdate {
     let item: LibraryItem
     /// The title's page model: its writes, one request each through its queue, show at once and roll back on failure.
     let page: MediaDetailViewModel
-    /// The book's progress sheet, opened from the card.
+    /// The progress sheet of a book, a manga or a comic, opened from the card.
     var bookPanel: ProgressSheetTitle?
     /// The game's progress sheet, for its current playthrough.
     var gameProgress: GamePlaythroughState?
@@ -246,17 +248,20 @@ final class InProgressUpdate {
     /// The current journey's status, or the book's own when it has no journey (paused directly).
     var bookJourneyStatus: String? {
         page.viewer.map { $0.book?.currentJourney?.status ?? $0.status }
-            ?? item.tracking.book?.currentJourney?.status ?? item.tracking.status
+            ?? item.tracking.reading?.currentJourney?.status ?? item.tracking.status
     }
 
-    /// Opens a book's or a game's sheet from its card, as its page would, and loads the page behind it. False when the
-    /// card has nothing to update: a book that isn't being read, or a game without a playthrough.
+    /// Opens a progress sheet from its card, as its page would, and loads the page behind it. False when the card has
+    /// nothing to update: a book, manga or comic that isn't being read, or a game without a playthrough (MC-300).
     func openSheet() -> Bool {
         let tracking = item.tracking
         switch item.media.ref.mediaType {
-        case "book":
-            // The page's Update Progress shows while the book is being read or paused.
-            guard ["In progress", "Paused"].contains(tracking.status ?? "") else { return false }
+        case "book", "manga", "comic":
+            // The page's Update Progress shows while the book is being read or paused. A manga or a comic with no
+            // attempt to update opens its page instead (MC-300).
+            guard ["In progress", "Paused"].contains(tracking.status ?? ""),
+                  !item.media.ref.isSeries || tracking.reading?.hasLiveJourney != false
+            else { return false }
             bookPanel = ProgressSheetTitle(item: item)
         case "game":
             guard let game = tracking.game, game.canUpdateProgress, let playthrough = game.currentPlaythrough else {
@@ -273,8 +278,7 @@ final class InProgressUpdate {
         return true
     }
 
-    /// Opens a manga's or a comic's composer on Progress from its loaded page. False when the page has nothing to
-    /// update.
+    /// Opens a board game's composer on Progress from its loaded page. False when the page has nothing to update.
     func openComposer() -> Bool {
         guard let detail = page.detail, page.viewer != nil,
               MediaLogViewModel.supportsProgress(mediaType: detail.ref.mediaType) else { return false }
@@ -298,7 +302,7 @@ final class InProgressUpdate {
     /// is still the sheet's. A title changed elsewhere since the rail loaded doesn't, and takes no write.
     private func pageOffersUpdate(playthrough: GamePlaythroughState?) -> Bool {
         guard let viewer = page.viewer else { return false }
-        if item.media.ref.mediaType == "book" {
+        if item.media.ref.readsLikeBook {
             return ["In progress", "Paused"].contains(viewer.status ?? "")
         }
         guard let game = viewer.game, game.canUpdateProgress else { return false }
@@ -415,8 +419,9 @@ final class InProgressUpdate {
 
     /// Finished, or progress saved at the end: the completion log, which captures the journey or playthrough, so it
     /// opens once the page has loaded and its writes have settled, from confirmed state. A sheet still open closes
-    /// first, and the log follows its dismissal. Nothing opens when a write it waited for failed.
-    func openCompletion() {
+    /// first, and the log follows its dismissal. Nothing opens when a write it waited for failed. `openedByTotal`:
+    /// reaching a series' total opened it (MC-100).
+    func openCompletion(openedByTotal: Bool = false) {
         if bookPanel != nil || gameProgress != nil || gameDates != nil {
             isClosing = true
             bookPanel = nil
@@ -435,15 +440,18 @@ final class InProgressUpdate {
             if page.detail?.ref.mediaType == "game" {
                 let game = confirmed?.game
                 journeyId = game?.hasLivePlaythrough == true ? game?.currentPlaythrough?.id : nil
+            } else if page.detail?.ref.isSeries == true, confirmed?.book?.hasLiveJourney != true {
+                // A log with nothing under way makes its own attempt (BK-105).
+                journeyId = nil
             } else {
                 journeyId = confirmed?.book?.currentJourney?.id
             }
-            let composer = Composer(mode: .finished, completionJourneyId: journeyId)
+            let composer = Composer(mode: .finished, completionJourneyId: journeyId, openedByTotal: openedByTotal)
             if isClosing { next = .composer(composer) } else { self.composer = composer }
         }
     }
 
-    /// A saved log, from the completion log or a manga's or comic's Progress, folded into the page.
+    /// A saved log, from the completion log or a board game's Progress, folded into the page.
     func logSaved(_ result: MediaLogSaveResult) {
         page.applyLogSave(result)
         changed()
@@ -707,6 +715,8 @@ private struct InProgressUpdateSheets: ViewModifier {
                     journeyStatus: update.bookJourneyStatus,
                     onSave: { await update.saveBookProgress($0) },
                     onFinish: { update.openCompletion() },
+                    opensLogAfterSave: { page.viewer?.book?.opensLog == true },
+                    onReachedTotal: { update.openCompletion(openedByTotal: true) },
                     onAction: { update.performBookAction($0) },
                     onDelete: { update.deleteBookJourney() }
                 )
@@ -745,7 +755,8 @@ private struct InProgressUpdateSheets: ViewModifier {
                         onResult: { update.logSaved($0) },
                         onUnauthorized: onUnauthorized,
                         onSaved: {},
-                        mode: composer.mode
+                        mode: composer.mode,
+                        closeTitle: composer.openedByTotal ? "Not now" : nil
                     )
                 }
             }

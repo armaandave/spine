@@ -10,7 +10,8 @@ struct ProgressUpdateSaveRequest: Equatable {
 struct ProgressSheetTitle: Identifiable, Equatable {
     let ref: MediaRef
     let title: String
-    /// A book's page count: from its page, or from a card's page progress.
+    /// A book's page count: from its page, or from a card's page progress. A manga's chapters or a comic's issues so
+    /// far, when the provider lists them (MC-002, MC-003).
     let totalPages: Int?
 
     var id: String { ref.id }
@@ -18,7 +19,7 @@ struct ProgressSheetTitle: Identifiable, Equatable {
     init(detail: MediaDetail) {
         ref = detail.ref
         title = detail.displayTitle
-        totalPages = detail.progressTotalPages
+        totalPages = detail.ref.isSeries ? detail.userState?.book?.total : detail.progressTotalPages
     }
 
     init(item: LibraryItem) {
@@ -80,9 +81,26 @@ final class ProgressUpdateViewModel {
         hasEditedInput ? input : ""
     }
 
+    /// A manga's or a comic's unit: "chapter" or "issue" (MC-001).
+    private var countedUnit: String? {
+        guard title.ref.isSeries else { return nil }
+        return title.ref.mediaType == "comic" ? "issue" : "chapter"
+    }
+
+    private func counted(_ count: Decimal, unit: String) -> String {
+        "\(ProgressPercent.text(count)) \(unit)\(count == 1 ? "" : "s")"
+    }
+
     /// Under the number: where the last save left off, and how far this one moves from it. Nil before a first save.
     var summaryText: String? {
         guard let lastValue else { return nil }
+        if let countedUnit {
+            guard let currentValue, currentValue != lastValue else {
+                return "Last saved at \(counted(lastValue, unit: countedUnit))"
+            }
+            let amount = counted(abs(currentValue - lastValue), unit: countedUnit)
+            return "\(currentValue > lastValue ? "+" : "−")\(amount) since \(ProgressPercent.text(lastValue))"
+        }
         let lastText = ProgressPercent.text(lastValue)
         let last = mode == .percentage ? "\(lastText)%" : "page \(lastText)"
         guard let currentValue, currentValue != lastValue else { return "Last saved at \(last)" }
@@ -94,6 +112,11 @@ final class ProgressUpdateViewModel {
 
     var validationMessage: String? {
         guard let value = currentValue else { return nil }
+        if let countedUnit {
+            // A comic's number goes to the server, which asks Comic Vine again first (MC-004).
+            guard title.ref.mediaType == "manga", let totalPages, value > Decimal(totalPages) else { return nil }
+            return "This manga has \(counted(Decimal(totalPages), unit: countedUnit))."
+        }
         if mode == .percentage, value > 100 {
             return "Enter a value from 0 to 100."
         }
@@ -168,6 +191,8 @@ final class ProgressUpdateViewModel {
     }
 
     private static func defaultMode(for title: ProgressSheetTitle, progress: ProgressState?) -> ProgressUpdateMode {
+        // A manga or a comic counts one whole number (MC-001).
+        if title.ref.isSeries { return .pages }
         guard title.ref.mediaType == "book" else { return .percentage }
         if let preferredMode = ProgressDisplayPreferences.mode(for: title.ref) {
             return preferredMode
@@ -184,9 +209,10 @@ final class ProgressUpdateViewModel {
     }
 }
 
-/// Update Progress for a book, a native sheet like the TV episode sheet: the book in the bar with Close, ⋯ and Save,
-/// the page it's on against the last saved one, and Finished Reading. Pause, Did Not Finish, Restart and Delete
-/// Journey sit in ⋯. Its choices close it; their writes apply behind it.
+/// Update Progress for a book, a manga or a comic, a native sheet like the TV episode sheet: the title in the bar with
+/// Close, ⋯ and Save, the page or count against the last saved one, and Finished Reading. Pause, Did Not Finish, Restart
+/// and Delete sit in ⋯. Its choices close it; their writes apply behind it. A series with a total of one has no number
+/// (MC-005).
 struct ProgressUpdateSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ProgressUpdateViewModel
@@ -203,6 +229,10 @@ struct ProgressUpdateSheet: View {
     let onSave: (ProgressUpdateSaveRequest) async -> Bool
     /// Finished Reading, or progress saved at the last page: the completion log, which closes the sheet first.
     let onFinish: () -> Void
+    /// A manga or a comic: whether the save just made opens the log screen (MC-100, MC-101); the server says, once per
+    /// attempt, and `onReachedTotal` opens it.
+    let opensLogAfterSave: () -> Bool
+    let onReachedTotal: () -> Void
     /// "pause", "resume", "drop" or "restart".
     let onAction: (String) -> Void
     let onDelete: () -> Void
@@ -215,6 +245,8 @@ struct ProgressUpdateSheet: View {
         journeyStatus: String?,
         onSave: @escaping (ProgressUpdateSaveRequest) async -> Bool,
         onFinish: @escaping () -> Void,
+        opensLogAfterSave: @escaping () -> Bool = { false },
+        onReachedTotal: @escaping () -> Void = {},
         onAction: @escaping (String) -> Void,
         onDelete: @escaping () -> Void
     ) {
@@ -225,8 +257,22 @@ struct ProgressUpdateSheet: View {
         self.journeyStatus = journeyStatus
         self.onSave = onSave
         self.onFinish = onFinish
+        self.opensLogAfterSave = opensLogAfterSave
+        self.onReachedTotal = onReachedTotal
         self.onAction = onAction
         self.onDelete = onDelete
+    }
+
+    private var numberLabel: String {
+        if title.ref.isSeries { return title.ref.mediaType == "comic" ? "Issues" : "Chapters" }
+        return viewModel.mode == .pages ? "Page" : "Progress"
+    }
+
+    /// What ⋯ and its dialogs call the title and this read: "book" and "journey", or the type's noun and "attempt".
+    private var words: BookJourneyMenuAction.Words {
+        title.ref.isSeries
+            ? BookJourneyMenuAction.Words(noun: title.ref.mediaType, attempt: "attempt")
+            : BookJourneyMenuAction.Words(noun: "book", attempt: "journey")
     }
 
     var body: some View {
@@ -234,7 +280,8 @@ struct ProgressUpdateSheet: View {
         ProgressSheetForm(
             title: title.title,
             subtitle: journeyStatus == "Paused" ? "Paused" : nil,
-            numberLabel: viewModel.mode == .pages ? "Page" : "Progress",
+            showsNumber: !(title.ref.isSeries && title.totalPages == 1),
+            numberLabel: numberLabel,
             number: Binding(get: { viewModel.keyboardInputText }, set: { viewModel.updateInput($0) }),
             placeholder: viewModel.lastValue.map(ProgressPercent.text) ?? "0",
             allowsDecimal: viewModel.mode == .percentage,
@@ -247,8 +294,10 @@ struct ProgressUpdateSheet: View {
             onSave: save,
             onFinish: { perform(.finish) }
         ) {
-            Picker("Track by", selection: Binding(get: { viewModel.mode }, set: { viewModel.selectMode($0) })) {
-                ForEach(ProgressUpdateMode.allCases) { Text($0.title).tag($0) }
+            if title.ref.mediaType == "book" {
+                Picker("Track by", selection: Binding(get: { viewModel.mode }, set: { viewModel.selectMode($0) })) {
+                    ForEach(ProgressUpdateMode.allCases) { Text($0.title).tag($0) }
+                }
             }
         } moreActions: {
             menuButton(journeyStatus == "Paused" ? .resume : .pause)
@@ -260,7 +309,7 @@ struct ProgressUpdateSheet: View {
         // The page's copy, once it has loaded behind a sheet opened from Home, knows the book's page count.
         .onChange(of: title) { _, title in viewModel.title = title }
         .confirmationDialog(
-            pendingJourneyAction?.confirmationTitle ?? "",
+            pendingJourneyAction?.confirmationTitle(words) ?? "",
             isPresented: Binding(
                 get: { pendingJourneyAction != nil },
                 set: { if !$0 { pendingJourneyAction = nil } }
@@ -268,18 +317,18 @@ struct ProgressUpdateSheet: View {
             titleVisibility: .visible
         ) {
             if let action = pendingJourneyAction {
-                Button(action.confirmationButton, role: action.isDestructive ? .destructive : nil) {
+                Button(action.title(words), role: action.isDestructive ? .destructive : nil) {
                     perform(action)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(pendingJourneyAction?.confirmationMessage ?? "")
+            Text(pendingJourneyAction?.confirmationMessage(words) ?? "")
         }
     }
 
     private func menuButton(_ action: BookJourneyMenuAction) -> some View {
-        Button(action.title, systemImage: action.systemImage, role: action == .delete ? .destructive : nil) {
+        Button(action.title(words), systemImage: action.systemImage, role: action == .delete ? .destructive : nil) {
             if action.requiresConfirmation {
                 pendingJourneyAction = action
             } else {
@@ -297,7 +346,9 @@ struct ProgressUpdateSheet: View {
             isSubmitting = false
             guard saved else { return }
             isClosing = true
-            if finishes {
+            if title.ref.isSeries {
+                if opensLogAfterSave() { onReachedTotal() } else { dismiss() }
+            } else if finishes {
                 onFinish()
             } else {
                 dismiss()
@@ -333,6 +384,8 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
 
     let title: String
     let subtitle: String?
+    /// False leaves out the number and Save: a series with a total of one has only its status actions (MC-005).
+    let showsNumber: Bool
     let numberLabel: String
     @Binding var number: String
     let placeholder: String
@@ -353,6 +406,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     init(
         title: String,
         subtitle: String?,
+        showsNumber: Bool = true,
         numberLabel: String,
         number: Binding<String>,
         placeholder: String,
@@ -370,6 +424,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.showsNumber = showsNumber
         self.numberLabel = numberLabel
         _number = number
         self.placeholder = placeholder
@@ -389,33 +444,35 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack(spacing: 6) {
-                        Text(numberLabel)
-                        Spacer(minLength: 12)
-                        AutofocusNumberField(
-                            text: $number,
-                            placeholder: placeholder,
-                            accessibilityLabel: numberLabel,
-                            focusRequest: focusRequest,
-                            allowsDecimal: allowsDecimal
-                        )
-                        if !unit.isEmpty {
-                            Text(unit)
-                                .foregroundStyle(.secondary)
+                if showsNumber {
+                    Section {
+                        HStack(spacing: 6) {
+                            Text(numberLabel)
+                            Spacer(minLength: 12)
+                            AutofocusNumberField(
+                                text: $number,
+                                placeholder: placeholder,
+                                accessibilityLabel: numberLabel,
+                                focusRequest: focusRequest,
+                                allowsDecimal: allowsDecimal
+                            )
+                            if !unit.isEmpty {
+                                Text(unit)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { focusRequest += 1 }
+
+                        countOptions
+                    } footer: {
+                        if let footer {
+                            Text(footer)
+                                .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
                         }
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { focusRequest += 1 }
-
-                    countOptions
-                } footer: {
-                    if let footer {
-                        Text(footer)
-                            .foregroundStyle(footerIsWarning ? Color.red : Color.secondary)
-                    }
+                    .logRowBackground()
                 }
-                .logRowBackground()
 
                 if let finishTitle {
                     Section {
@@ -430,7 +487,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
             .scrollDismissesKeyboard(.never)
             // The sheet rides on the number pad, so the keyboard takes no room inside it.
             .ignoresSafeArea(.keyboard)
-            .fitsSheetToContent(aboveKeyboard: true)
+            .fitsSheetToContent(aboveKeyboard: showsNumber)
             .disabled(isSaving)
             .navigationTitle(title)
             .navigationSubtitle(subtitle ?? "")
@@ -455,7 +512,7 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if isSaving {
                         ProgressView()
-                    } else {
+                    } else if showsNumber {
                         Button(role: .confirm, action: onSave) {
                             Label("Save", systemImage: "checkmark")
                         }
@@ -486,15 +543,21 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     case restart
     case delete
 
+    /// A book has journeys; a manga or a comic has attempts (MC-000).
+    struct Words {
+        let noun: String
+        let attempt: String
+    }
+
     var id: String { rawValue }
-    var title: String {
+    func title(_ words: Words) -> String {
         switch self {
         case .pause: "Pause"
         case .resume: "Resume Reading"
         case .didNotFinish: "Mark as DNF"
         case .finish: "Finish & Log"
         case .restart: "Restart from Beginning"
-        case .delete: "Delete Journey"
+        case .delete: "Delete \(words.attempt.capitalized)"
         }
     }
     var systemImage: String {
@@ -509,20 +572,19 @@ private enum BookJourneyMenuAction: String, CaseIterable, Identifiable {
     }
     var requiresConfirmation: Bool { self == .didNotFinish || self == .restart || self == .delete }
     var isDestructive: Bool { self == .delete || self == .restart }
-    var confirmationTitle: String {
+    func confirmationTitle(_ words: Words) -> String {
         switch self {
-        case .didNotFinish: "Mark this book as Did Not Finish?"
+        case .didNotFinish: "Mark this \(words.noun) as Did Not Finish?"
         case .restart: "Restart from Beginning?"
-        case .delete: "Delete this reading journey?"
-        default: title
+        case .delete: "Delete this reading \(words.attempt)?"
+        default: title(words)
         }
     }
-    var confirmationButton: String { title }
-    var confirmationMessage: String {
+    func confirmationMessage(_ words: Words) -> String {
         switch self {
         case .didNotFinish: "Your current progress will remain in reading history."
-        case .restart: "The current journey will end and a new journey will begin today."
-        case .delete: "This journey and its progress will be removed. Completion diary logs are managed separately."
+        case .restart: "The current \(words.attempt) will end and a new \(words.attempt) will begin today."
+        case .delete: "This \(words.attempt) and its progress will be removed. Completion diary logs are managed separately."
         default: ""
         }
     }

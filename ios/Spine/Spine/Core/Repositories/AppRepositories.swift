@@ -169,6 +169,11 @@ protocol TrackingRepository {
     func updateBookJourney(source: String, mediaId: String, journeyId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
     func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState?
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse
+    func updateSeriesProgress(ref: MediaRef, value: Int) async throws -> TrackingState
+    func performSeriesAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState?
+    func updateSeriesAttempt(ref: MediaRef, attemptId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
+    func deleteSeriesAttempt(ref: MediaRef, attemptId: Int) async throws -> TrackingState?
+    func completeSeries(ref: MediaRef, request: SeriesCompletionWriteRequest) async throws -> BookCompletionResponse
     func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState?
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState
     func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState?
@@ -188,6 +193,11 @@ extension TrackingRepository {
         try await list(mediaType: "tv", page: page, status: InProgressLibraryLoader.status, query: nil)
     }
 
+    func updateSeriesProgress(ref _: MediaRef, value _: Int) async throws -> TrackingState { fatalError("Not implemented") }
+    func performSeriesAction(ref _: MediaRef, action _: String, request _: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
+    func updateSeriesAttempt(ref _: MediaRef, attemptId _: Int, request _: BookJourneyWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
+    func deleteSeriesAttempt(ref _: MediaRef, attemptId _: Int) async throws -> TrackingState? { fatalError("Not implemented") }
+    func completeSeries(ref _: MediaRef, request _: SeriesCompletionWriteRequest) async throws -> BookCompletionResponse { fatalError("Not implemented") }
     func performGameAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
     func updateGamePlaythrough(ref: MediaRef, playthroughId: Int, request: GamePlaythroughWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
     func deleteGamePlaythrough(ref: MediaRef, playthroughId: Int) async throws -> TrackingState? { fatalError("Not implemented") }
@@ -1249,6 +1259,45 @@ struct APITrackingRepository: TrackingRepository {
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse {
         try await client.post(
             "/tracking/\(source)/book/\(mediaId)/complete/",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    func updateSeriesProgress(ref: MediaRef, value: Int) async throws -> TrackingState {
+        try await client.post(
+            "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/progress/",
+            body: SeriesProgressRequest(value: value),
+            authenticated: true
+        )
+    }
+
+    func performSeriesAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState? {
+        try await client.post(
+            "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/actions/\(action)/",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    func updateSeriesAttempt(ref: MediaRef, attemptId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState {
+        try await client.patch(
+            "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/journeys/\(attemptId)/",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    func deleteSeriesAttempt(ref: MediaRef, attemptId: Int) async throws -> TrackingState? {
+        try await client.delete(
+            "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/journeys/\(attemptId)/",
+            authenticated: true
+        )
+    }
+
+    func completeSeries(ref: MediaRef, request: SeriesCompletionWriteRequest) async throws -> BookCompletionResponse {
+        try await client.post(
+            "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/complete/",
             body: request,
             authenticated: true
         )

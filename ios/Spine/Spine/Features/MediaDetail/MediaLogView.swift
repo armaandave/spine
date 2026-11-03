@@ -46,6 +46,8 @@ final class MediaLogViewModel {
     var gamePlaythrough: GamePlaythroughState?
     var progressText = ""
     var progressType = "pages"
+    /// A manga's or a comic's number on a log with no total, prefilled with the place (MC-102).
+    var seriesPlaceText = ""
     var isSaving = false
     var errorMessage: String?
     let completionJourneyId: Int?
@@ -127,6 +129,13 @@ final class MediaLogViewModel {
             }
         } else if detail.ref.mediaType == "book" {
             isRepeat = tracking?.book?.isRereading ?? detail.userState?.book?.isRereading ?? false
+        } else if detail.ref.isSeries {
+            // Under way, the server says whether this is a reread (Keep Reading's isn't, MC-200). With nothing under
+            // way, a log after an earlier read is one (BK-105).
+            let series = tracking?.reading ?? detail.userState?.book
+            isRepeat = series?.hasLiveJourney == true ? series?.isRereading == true : (series?.lifetimeReadCount ?? 0) > 0
+            let place = (tracking?.progress ?? detail.userState?.progress)?.value
+            seriesPlaceText = place.flatMap { $0 > 0 ? ProgressPercent.text($0) : nil } ?? ""
         } else {
             isRepeat = (detail.userState?.diaryCount ?? 0) > 0
         }
@@ -195,9 +204,23 @@ final class MediaLogViewModel {
         Self.supportsProgress(mediaType: detail.ref.mediaType)
     }
 
-    /// The media whose log composer has a Progress mode: their page's way to update progress.
+    /// The media whose log composer has a Progress mode: their page's way to update progress. A manga's or a comic's
+    /// log always means finished; its number lives on the progress sheet (MC-103).
     nonisolated static func supportsProgress(mediaType: String) -> Bool {
-        ["manga", "comic", "boardgame"].contains(mediaType)
+        mediaType == "boardgame"
+    }
+
+    /// A manga or a comic with no total takes its number on the log (MC-102); with a total, a log sets it to the total.
+    /// A series not tracked yet has its total on the page's details.
+    var showsSeriesPlace: Bool {
+        detail.ref.isSeries
+            && detail.userState?.book?.total == nil
+            && detail.detailInt("number_of_chapters") == nil
+            && detail.detailInt("issues_count") == nil
+    }
+
+    var seriesPlaceLabel: String {
+        detail.ref.mediaType == "comic" ? "Issues" : "Chapters"
     }
 
     /// The server-less fallback for a show log: Whole Show or one of its seasons.
@@ -309,10 +332,6 @@ final class MediaLogViewModel {
         switch detail.ref.mediaType {
         case "book":
             progressType == "percentage" ? "percent" : "pages"
-        case "manga":
-            "chapters"
-        case "comic":
-            "issues"
         case "game", "boardgame":
             "progress"
         default:
@@ -331,10 +350,6 @@ final class MediaLogViewModel {
         switch detail.ref.mediaType {
         case "book":
             return detail.detailInt("number_of_pages") ?? detail.detailInt("pages") ?? detail.detailInt("total_pages")
-        case "manga":
-            return detail.detailInt("number_of_chapters") ?? detail.detailInt("chapters")
-        case "comic":
-            return detail.detailInt("issues_count") ?? detail.detailInt("issues")
         default:
             return nil
         }
@@ -451,6 +466,25 @@ final class MediaLogViewModel {
                     )
                 )
                 return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
+            } else if selectedRef.isSeries {
+                let response = try await trackingRepository.completeSeries(
+                    ref: selectedRef,
+                    request: SeriesCompletionWriteRequest(
+                        journeyId: completionJourneyId,
+                        completionDate: CalendarDateCodec.string(from: consumedAt),
+                        rating: Self.ratingDecimal(for: ratingSteps),
+                        review: review,
+                        reviewTitle: reviewTitle,
+                        liked: liked,
+                        isRewatch: isRepeat,
+                        containsSpoilers: containsSpoilers,
+                        tags: tagDraft.tags,
+                        visibility: visibility,
+                        place: showsSeriesPlace ? Int(seriesPlaceText) : nil,
+                        mutationId: completionMutationId
+                    )
+                )
+                return result(tracking: response.tracking, diaryEntry: response.diaryEntry)
             }
             var request = DiaryEntryWriteRequest(
                 ref: selectedRef,
@@ -550,7 +584,7 @@ final class MediaLogViewModel {
             return true
         } catch {
             // TV errors carry user copy, including the retryable "TV details are unavailable right now".
-            let tvMessage = selectedRef.isTVFamily ? (error as? APIError)?.apiErrorMessage : nil
+            let tvMessage = selectedRef.isTVFamily || selectedRef.isSeries ? (error as? APIError)?.apiErrorMessage : nil
             errorMessage = tvMessage ?? error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()
@@ -593,7 +627,11 @@ struct MediaLogView: View {
         case gameHours
         case gameMinutes
         case gamePercentage
+        case seriesPlace
     }
+
+    /// What the close button reads when not simply "Close": Not now, when reaching the total opened this (MC-100).
+    private let closeTitle: String?
 
     init(
         detail: MediaDetail,
@@ -610,8 +648,10 @@ struct MediaLogView: View {
         onSaved: @escaping () -> Void,
         tvComposer: TVComposer? = nil,
         tvPage: MediaRef? = nil,
-        mode: MediaLogMode = .finished
+        mode: MediaLogMode = .finished,
+        closeTitle: String? = nil
     ) {
+        self.closeTitle = closeTitle
         _viewModel = State(initialValue: MediaLogViewModel(
             detail: detail,
             trackingRepository: trackingRepository,
@@ -674,13 +714,20 @@ struct MediaLogView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) {
-                        dismiss()
-                    } label: {
-                        Label("Close", systemImage: "xmark")
+                    if let closeTitle {
+                        Button(closeTitle) {
+                            dismiss()
+                        }
+                        .disabled(viewModel.isSaving)
+                    } else {
+                        Button(role: .close) {
+                            dismiss()
+                        } label: {
+                            Label("Close", systemImage: "xmark")
+                        }
+                        .disabled(viewModel.isSaving)
+                        .accessibilityLabel("Close log")
                     }
-                    .disabled(viewModel.isSaving)
-                    .accessibilityLabel("Close log")
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -802,6 +849,18 @@ struct MediaLogView: View {
                     minutesFocus: .gameMinutes,
                     percentageFocus: .gamePercentage
                 )
+            }
+
+            if viewModel.showsSeriesPlace {
+                LabeledContent(viewModel.seriesPlaceLabel) {
+                    TextField("Optional", text: $viewModel.seriesPlaceText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                        .focused($focusedField, equals: .seriesPlace)
+                        .accessibilityIdentifier("media-log.series-place")
+                }
             }
         } footer: {
             if viewModel.detail.ref.mediaType == "game" {
