@@ -61,11 +61,10 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
         usesStatusShelves(mediaType) ? .currentlyReading : .tracked
     }
 
-    /// A section another screen asked for, for the current type. TV has no Tracked section, so the Library link
-    /// opens Watching.
+    /// A section another screen asked for, for the current type. A type without that section opens its first one: the
+    /// Library link asks for Tracked, which TV, books, manga, comics and games don't have (BK-001).
     static func resolved(_ requested: LibraryShelf, for mediaType: String) -> LibraryShelf {
-        guard mediaType == "tv", !available(for: mediaType).contains(requested) else { return requested }
-        return defaultShelf(for: mediaType)
+        available(for: mediaType).contains(requested) ? requested : defaultShelf(for: mediaType)
     }
 
     /// TV-700: each empty TV section says what appears there.
@@ -928,8 +927,9 @@ struct LibraryView: View {
                         )
                         .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
 
-                        if let progressText = LibraryPosterBadge.text(for: item) {
+                        if let progressText = LibraryPosterBadge.gridText(for: item) {
                             PosterBadgeLabel(text: progressText)
+                                .lineLimit(item.media.ref.isSeries ? 1 : nil)
                                 .padding(5)
                         }
                     }
@@ -1051,6 +1051,17 @@ struct PosterBadgeLabel: View {
 /// has none until it has a tracking contract.
 enum LibraryPosterBadge {
     static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
+
+    /// The badge on the Library grid's small poster, which has about 58 pt of room. A manga's or a comic's leaves out
+    /// the unit, so it stays on one line at full size: "120/380", "12/54", "Ch. 120" (MC-006). Rows and Home have room
+    /// for the words, and a book's badge stays as it is.
+    static func gridText(for item: LibraryItem) -> String? {
+        guard item.media.ref.isSeries else { return text(for: item) }
+        guard text(for: item) != nil, let progress = item.tracking.progress, let value = progress.value else { return nil }
+        let place = ProgressPercent.text(value)
+        if let total = progress.max { return "\(place)/\(ProgressPercent.text(total))" }
+        return item.media.ref.mediaType == "comic" ? "Iss. \(place)" : "Ch. \(place)"
+    }
 
     static func text(for item: LibraryItem) -> String? {
         switch item.media.ref.mediaType {

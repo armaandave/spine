@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum ProgressSaveFollowUp: Equatable {
+    case openLog
+    case finish
+    case close
+}
+
 struct ProgressUpdateSaveRequest: Equatable {
     let mode: ProgressUpdateMode
     let value: Decimal
@@ -126,6 +132,19 @@ final class ProgressUpdateViewModel {
             return "Enter a value from 0 to \(totalPages)."
         }
         return nil
+    }
+
+    /// A series with a total of one has no number (MC-005), and a paused one takes none until it is resumed, as the
+    /// server says. A book's sheet keeps its number.
+    func showsNumber(journeyStatus: String?) -> Bool {
+        !(title.ref.isSeries && (title.totalPages == 1 || journeyStatus == "Paused"))
+    }
+
+    /// What follows a saved number. A manga's or a comic's log screen opens when the server says so, once per attempt
+    /// (MC-100, MC-101). A book's opens at its last page.
+    static func afterSave(isSeries: Bool, opensLog: Bool, reachedEnd: Bool) -> ProgressSaveFollowUp {
+        if isSeries { return opensLog ? .openLog : .close }
+        return reachedEnd ? .finish : .close
     }
 
     /// The warning under the number. A manga's or a comic's refusal from the server goes with the number it refused,
@@ -290,7 +309,7 @@ struct ProgressUpdateSheet: View {
         ProgressSheetForm(
             title: title.title,
             subtitle: journeyStatus == "Paused" ? "Paused" : nil,
-            showsNumber: !(title.ref.isSeries && title.totalPages == 1),
+            showsNumber: viewModel.showsNumber(journeyStatus: journeyStatus),
             numberLabel: numberLabel,
             number: Binding(get: { viewModel.keyboardInputText }, set: { viewModel.updateInput($0) }),
             placeholder: viewModel.lastValue.map(ProgressPercent.text) ?? "0",
@@ -359,12 +378,14 @@ struct ProgressUpdateSheet: View {
                 return
             }
             isClosing = true
-            if title.ref.isSeries {
-                if opensLogAfterSave() { onReachedTotal() } else { dismiss() }
-            } else if finishes {
-                onFinish()
-            } else {
-                dismiss()
+            switch ProgressUpdateViewModel.afterSave(
+                isSeries: title.ref.isSeries,
+                opensLog: opensLogAfterSave(),
+                reachedEnd: finishes
+            ) {
+            case .openLog: onReachedTotal()
+            case .finish: onFinish()
+            case .close: dismiss()
             }
         }
     }
@@ -502,6 +523,10 @@ struct ProgressSheetForm<CountOptions: View, MoreActions: View>: View {
             .ignoresSafeArea(.keyboard)
             .fitsSheetToContent(aboveKeyboard: showsNumber)
             .disabled(isSaving)
+            // Saving takes the number pad away. After a refusal the number still needs fixing, so it comes back.
+            .onChange(of: isSaving) { _, saving in
+                if !saving, footerIsWarning { focusRequest += 1 }
+            }
             .navigationTitle(title)
             .navigationSubtitle(subtitle ?? "")
             .navigationBarTitleDisplayMode(.inline)

@@ -68,11 +68,10 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertTrue(LibraryShelf.usesStatusShelves("tv"))
         XCTAssertEqual(LibraryShelf.defaultShelf(for: "tv"), .currentlyReading)
 
-        // The Profile's Library link asks for Tracked: TV opens Watching; other types keep what they had.
+        // The Profile's Library link asks for Tracked: TV, with no such section, opens Watching.
         XCTAssertEqual(LibraryShelf.resolved(.tracked, for: "tv"), .currentlyReading)
         XCTAssertEqual(LibraryShelf.resolved(.planning, for: "tv"), .planning)
         XCTAssertEqual(LibraryShelf.resolved(.tracked, for: "movie"), .tracked)
-        XCTAssertEqual(LibraryShelf.resolved(.tracked, for: "book"), .tracked)
 
         // Other types are unchanged.
         XCTAssertEqual(LibraryShelf.available(for: "movie"), [.tracked, .planning])

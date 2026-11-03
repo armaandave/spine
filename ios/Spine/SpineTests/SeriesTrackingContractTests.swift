@@ -102,8 +102,10 @@ final class SeriesTrackingContractTests: XCTestCase {
         let repository = Self.urlRepository(response: Self.trackingResponse)
         let ref = Self.ref("comic", source: "comicvine", id: "46568")
 
-        let saved = try await repository.updateSeriesProgress(ref: ref, value: 12)
+        let mutationId = UUID()
+        let saved = try await repository.updateSeriesProgress(ref: ref, value: 12, mutationId: mutationId)
         XCTAssertEqual(saved.reading?.total, 380)
+        XCTAssertEqual(SeriesURLProtocol.lastBody?["mutation_id"] as? String, mutationId.uuidString)
         XCTAssertEqual(SeriesURLProtocol.lastRequest?.httpMethod, "POST")
         XCTAssertEqual(SeriesURLProtocol.lastRequest?.url?.absoluteString, "https://example.com/api/v1/tracking/comicvine/comic/46568/progress/")
         XCTAssertEqual(SeriesURLProtocol.lastBody?["value"] as? Int, 12)
@@ -326,11 +328,20 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertEqual(book.warning(serverMessage: "Could not save."), "Could not save.", "A book's stays as it was")
     }
 
-    // MC-005: a total of one has no number.
-    func testATotalOfOneHasNoNumber() {
-        XCTAssertTrue(BookTrackingState(total: 1).hasNoNumber)
-        XCTAssertFalse(BookTrackingState(total: 2).hasNoNumber)
-        XCTAssertFalse(BookTrackingState().hasNoNumber)
+    // MC-005: a total of one has no number on the sheet. A paused read has none either: the server refuses it until it
+    // is resumed. A book keeps its number.
+    func testTheSheetHasNoNumberForATotalOfOneOrWhilePaused() {
+        func sheet(_ mediaType: String, total: Decimal?) -> ProgressUpdateViewModel {
+            ProgressUpdateViewModel(title: Self.title(mediaType, total: total), progress: nil)
+        }
+        XCTAssertFalse(sheet("comic", total: 1).showsNumber(journeyStatus: "In progress"))
+        XCTAssertFalse(sheet("manga", total: 1).showsNumber(journeyStatus: "In progress"))
+        XCTAssertTrue(sheet("comic", total: 2).showsNumber(journeyStatus: "In progress"))
+        XCTAssertTrue(sheet("manga", total: nil).showsNumber(journeyStatus: "In progress"))
+        XCTAssertFalse(sheet("manga", total: 380).showsNumber(journeyStatus: "Paused"))
+        XCTAssertFalse(sheet("comic", total: nil).showsNumber(journeyStatus: "Paused"))
+        XCTAssertTrue(sheet("book", total: 1).showsNumber(journeyStatus: "In progress"))
+        XCTAssertTrue(sheet("book", total: 300).showsNumber(journeyStatus: "Paused"))
     }
 
     // MC-100, MC-300: a save goes through the series route, and the server says whether the log screen follows.
@@ -351,15 +362,35 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertNil(ProgressDisplayPreferences.mode(for: ref), "No page-or-percent preference")
     }
 
-    // MC-101: a later save at the total doesn't.
-    func testALaterSaveDoesNotOpenIt() async throws {
+    // MC-100, MC-101: the log screen follows a save only when the server says, once per attempt, even at the total. A
+    // book's opens at its last page.
+    func testWhatFollowsASave() {
+        typealias Sheet = ProgressUpdateViewModel
+        XCTAssertEqual(Sheet.afterSave(isSeries: true, opensLog: true, reachedEnd: true), .openLog)
+        XCTAssertEqual(Sheet.afterSave(isSeries: true, opensLog: false, reachedEnd: true), .close, "A later save at the total")
+        XCTAssertEqual(Sheet.afterSave(isSeries: true, opensLog: false, reachedEnd: false), .close)
+        XCTAssertEqual(Sheet.afterSave(isSeries: false, opensLog: false, reachedEnd: true), .finish)
+        XCTAssertEqual(Sheet.afterSave(isSeries: false, opensLog: false, reachedEnd: false), .close)
+    }
+
+    // MC-100, MC-101: a retry after a lost answer sends the same mutation id; the next save, a new one.
+    func testARetriedSaveKeepsItsMutationId() async throws {
         let ref = Self.ref("comic", id: "7")
         media.details[ref.id] = Self.page(ref, status: "In progress", place: 54, total: 55)
-        tracking.progressResult = Self.seriesTracking(status: "In progress", place: 55, total: 55, opensLog: false)
         let page = pageModel(ref)
         await page.load()
-        _ = await page.saveProgress(ProgressUpdateSaveRequest(mode: .pages, value: 55), for: try XCTUnwrap(page.detail)).value
-        XCTAssertEqual(page.viewer?.book?.opensLog, false)
+        let request = ProgressUpdateSaveRequest(mode: .pages, value: 55)
+        tracking.progressError = URLError(.networkConnectionLost)
+        _ = await page.saveProgress(request, for: try XCTUnwrap(page.detail)).value
+        tracking.progressError = nil
+        tracking.progressResult = Self.seriesTracking(status: "In progress", place: 55, total: 55, opensLog: true)
+        _ = await page.saveProgress(request, for: try XCTUnwrap(page.detail)).value
+        XCTAssertEqual(page.viewer?.book?.opensLog, true)
+        _ = await page.saveProgress(ProgressUpdateSaveRequest(mode: .pages, value: 54), for: try XCTUnwrap(page.detail)).value
+        let ids = tracking.progressMutationIds
+        XCTAssertEqual(ids.count, 3)
+        XCTAssertEqual(ids[0], ids[1])
+        XCTAssertNotEqual(ids[1], ids[2])
     }
 
     // MARK: Actions (MC-200, MC-201)
@@ -543,27 +574,163 @@ final class SeriesTrackingContractTests: XCTestCase {
         XCTAssertEqual(InProgressCardPresentation.accessibilityLabel(for: Self.item("comic", "4", "Saga", status: "In progress", place: 12, total: 54)), "Saga, update progress, 12 of 54 issues")
     }
 
-    // MARK: Screens read from source (MC-200, MC-300, MC-104)
+    // MARK: The + menu (BK-100, MC-200)
 
-    func testThePlusMenuOffersKeepReadingAndReread() throws {
-        let source = try Self.source("MediaDetail/MediaDetailView.swift")
-        XCTAssertTrue(source.contains(#"Button("Keep Reading", systemImage: "book.pages")"#))
-        XCTAssertTrue(source.contains(#"Button("Reread", systemImage: "arrow.counterclockwise")"#))
-        XCTAssertTrue(source.contains(#"Button(isSeries ? "Remove from Library" : "Remove Tracking""#), "Only for a series in the library")
-        XCTAssertTrue(source.contains("detail.ref.readsLikeBook || detail.ref.mediaType == \"game\""), "The rail's + opens the book's menu")
+    private func live(_ status: String = "In progress", reasons: [String: String] = [:]) -> BookTrackingState {
+        BookTrackingState(
+            currentJourney: BookJourneyState(id: 41, status: status, progress: Self.count(5, max: 380)),
+            actionReasons: reasons
+        )
     }
 
-    // MC-104: the cover reads the stars and heart as it opens. Read only inside its closure, they'd keep their old values,
-    // and the log screen would open empty (seen in the simulator).
-    func testTheLogScreenIsBuiltWithTheValuesJustPicked() throws {
-        let source = try Self.source("MediaDetail/MediaDetailView.swift")
-        XCTAssertTrue(source.contains("[completionJourneyId, completionLiked, completionRatingSteps, completionOpenedByTotal] in"))
+    // BK-100: what isn't in the library has nothing to remove.
+    func testTheMenuOfAnUntrackedSeries() {
+        let menu = ReadingMenu(mediaType: "manga", status: nil, book: nil)
+        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertFalse(menu.rows.contains(where: \.isDisabled))
+        XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: false))
+        XCTAssertNil(menu.liveReason)
+        XCTAssertNil(menu.removal)
     }
 
-    func testTheSheetLeavesOutTheNumberForATotalOfOne() throws {
-        let source = try Self.source("MediaDetail/ProgressUpdateSheet.swift")
-        XCTAssertTrue(source.contains("showsNumber: !(title.ref.isSeries && title.totalPages == 1)"))
-        XCTAssertTrue(source.contains("} else if showsNumber {"), "No Save without a number")
+    // BK-100, BK-104: during a read, To Read is out and Update Progress is on offer, with the server's reason.
+    func testTheMenuDuringARead() {
+        let reason = "Pause or mark this attempt Did Not Finish first."
+        let menu = ReadingMenu(mediaType: "comic", status: "In progress", book: live(reasons: ["planning": reason]))
+        XCTAssertEqual(menu.rows.map(\.title), ["To Read", "Currently Reading ✓", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(menu.rows.filter(\.isDisabled).map(\.title), ["To Read", "Currently Reading ✓"])
+        XCTAssertEqual(menu.rows.map(\.command)[3], .didNotFinish(asks: true))
+        XCTAssertEqual(menu.liveReason, reason)
+    }
+
+    // BK-100, BK-303: Resume when Paused.
+    func testTheMenuWhilePaused() {
+        let menu = ReadingMenu(mediaType: "manga", status: "Paused", book: live("Paused"))
+        XCTAssertEqual(
+            menu.rows.map(\.title),
+            ["To Read", "Currently Reading", "Paused ✓", "Did Not Finish", "Resume Reading", "Log Read"]
+        )
+        XCTAssertEqual(menu.rows.first { $0.title == "Resume Reading" }?.command, .resume)
+    }
+
+    // MC-200: a Read series with more offers both; with nothing more, Reread only. A book keeps its row.
+    func testTheMenuOfAReadSeries() {
+        let more = ReadingMenu(mediaType: "manga", status: "Completed", book: BookTrackingState(offersKeepReading: true))
+        XCTAssertEqual(more.rows.map(\.title), ["To Read", "Keep Reading", "Reread", "Paused", "Did Not Finish", "Log Read"])
+        XCTAssertEqual(more.rows[1].command, .keepReading)
+        XCTAssertEqual(more.rows[2].command, .reread)
+        let done = ReadingMenu(mediaType: "comic", status: "Completed", book: BookTrackingState(offersKeepReading: false))
+        XCTAssertEqual(done.rows.map(\.title), ["To Read", "Reread", "Paused", "Did Not Finish", "Log Read"])
+        let book = ReadingMenu(mediaType: "book", status: "Completed", book: BookTrackingState())
+        XCTAssertEqual(book.rows.map(\.title), ["To Read", "Currently Reading", "Paused", "Did Not Finish", "Log Read"])
+    }
+
+    // BK-002: removal says why it can't happen, in the series' words.
+    func testTheMenusRemoval() {
+        let blocked = ReadingMenu(
+            mediaType: "manga",
+            status: "Completed",
+            book: BookTrackingState(canRemoveTracking: false, removeTrackingReason: "Delete reading attempts and logs first.")
+        )
+        XCTAssertEqual(blocked.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: true, reason: "Delete reading attempts and logs first."))
+        let free = ReadingMenu(mediaType: "comic", status: "Planning", book: BookTrackingState(canRemoveTracking: true))
+        XCTAssertEqual(free.removal, ReadingMenu.Removal(title: "Remove from Library", isDisabled: false, reason: nil))
+        XCTAssertEqual(ReadingMenu(mediaType: "book", status: "Planning", book: nil).removal?.title, "Remove Tracking")
+    }
+
+    // MC-000: a series speaks of attempts, whatever the server left out. A book of its journeys.
+    func testTheMenusFallbackWords() {
+        XCTAssertEqual(
+            ReadingMenu(mediaType: "manga", status: "In progress", book: live()).liveReason,
+            "Pause or mark this attempt Did Not Finish first."
+        )
+        XCTAssertEqual(
+            ReadingMenu(mediaType: "book", status: "In progress", book: live()).liveReason,
+            "Pause or finish the active journey before moving this book to To Read."
+        )
+    }
+
+    // MARK: Routing (BK-102, MC-104)
+
+    // BK-102, BK-103: the eye during a read opens the log, paused too; with none it marks; filled, it undoes only a mark.
+    func testWhatTheEyeDoes() {
+        XCTAssertEqual(ReadingRouting.eyeTap(book: live(), isRead: false, noun: "manga"), .openLog)
+        XCTAssertEqual(ReadingRouting.eyeTap(book: live("Paused"), isRead: false, noun: "manga"), .openLog)
+        XCTAssertEqual(ReadingRouting.eyeTap(book: nil, isRead: false, noun: "manga"), .markRead)
+        XCTAssertEqual(ReadingRouting.eyeTap(book: BookTrackingState(availableActions: ["undo_read"]), isRead: true, noun: "manga"), .undoRead)
+        let logged = BookTrackingState(availableActions: ["log"], actionReasons: ["undo_read": "Delete the log to undo this read."])
+        XCTAssertEqual(ReadingRouting.eyeTap(book: logged, isRead: true, noun: "manga"), .explain("Delete the log to undo this read."))
+        XCTAssertEqual(
+            ReadingRouting.eyeTap(book: BookTrackingState(availableActions: ["log"]), isRead: true, noun: "comic"),
+            .explain("Delete the completion log to mark this comic unread.")
+        )
+    }
+
+    // MC-104: stars or a heart given during a read, paused too, open the log. Taking them away, or with no read, doesn't.
+    func testWhenStarsAndTheHeartOpenTheLog() {
+        XCTAssertTrue(ReadingRouting.opinionOpensLog(book: live(), isGiving: true))
+        XCTAssertTrue(ReadingRouting.opinionOpensLog(book: live("Paused"), isGiving: true))
+        XCTAssertFalse(ReadingRouting.opinionOpensLog(book: live(), isGiving: false))
+        XCTAssertFalse(ReadingRouting.opinionOpensLog(book: nil, isGiving: true))
+        let closed = BookTrackingState(currentJourney: BookJourneyState(id: 40, status: "Dropped", progress: Self.count(5, max: 380)))
+        XCTAssertFalse(ReadingRouting.opinionOpensLog(book: closed, isGiving: true))
+    }
+
+    // BK-105, MC-100, MC-104: a log finishes a read under way, and only that; what opened it comes with it.
+    func testWhatALogScreenOpensWith() {
+        XCTAssertEqual(MediaLogPresentation.reading(live()).journeyId, 41)
+        XCTAssertEqual(MediaLogPresentation.reading(live("Paused")).journeyId, 41)
+        XCTAssertNil(MediaLogPresentation.reading(nil).journeyId)
+        for status in ["Completed", "Dropped"] {
+            let closed = BookTrackingState(currentJourney: BookJourneyState(id: 40, status: status, progress: Self.count(5, max: 380)))
+            XCTAssertNil(MediaLogPresentation.reading(closed).journeyId, "A closed read's id would return its old log: \(status)")
+        }
+        let carried = MediaLogPresentation.reading(live(), liked: true, ratingSteps: 7, openedByTotal: true)
+        XCTAssertEqual(carried.liked, true)
+        XCTAssertEqual(carried.ratingSteps, 7)
+        XCTAssertTrue(carried.openedByTotal)
+        XCTAssertFalse(MediaLogPresentation.reading(live()).openedByTotal)
+    }
+
+    // MC-300: Update Progress needs an attempt on a series, which an imported On Hold doesn't have. A book keeps its rule.
+    func testWhenThePageOffersUpdateProgress() {
+        func offers(_ mediaType: String, _ status: String, _ book: BookTrackingState?) -> Bool {
+            TrackingSummarySection.showsUpdateProgress(
+                ref: Self.ref(mediaType),
+                status: status,
+                state: UserMediaState(isTracked: true, status: status, book: book)
+            )
+        }
+        XCTAssertTrue(offers("manga", "In progress", live()))
+        XCTAssertTrue(offers("comic", "Paused", live("Paused")))
+        XCTAssertFalse(offers("manga", "Paused", BookTrackingState()))
+        XCTAssertFalse(offers("comic", "Paused", nil))
+        XCTAssertFalse(offers("manga", "Completed", BookTrackingState()))
+        XCTAssertTrue(offers("book", "Paused", BookTrackingState()))
+    }
+
+    // MC-102: a finished series not tracked yet has its total on the page's details.
+    func testAnUntrackedSeriesWithATotalHasNoNumberOnItsLog() {
+        let ref = Self.ref("manga", source: "mangaupdates", id: "9")
+        let details: [String: JSONValue] = ["number_of_chapters": .number(162)]
+        XCTAssertFalse(logViewModel(MediaDetail(ref: ref, title: "Monster", details: details)).showsSeriesPlace)
+        XCTAssertTrue(logViewModel(MediaDetail(ref: ref, title: "Monster")).showsSeriesPlace)
+    }
+
+    // MC-000: words.
+    func testChapterWords() {
+        XCTAssertEqual(ReadingWords.chapters("1"), "1 chapter")
+        XCTAssertEqual(ReadingWords.chapters("162"), "162 chapters")
+    }
+
+    // BK-001: a link asking for a section the type doesn't have opens its first one.
+    func testTheLibraryLinkOpensASectionTheTypeHas() {
+        for mediaType in ["manga", "comic", "book", "game", "tv"] {
+            XCTAssertEqual(LibraryShelf.resolved(.tracked, for: mediaType), .currentlyReading, mediaType)
+            XCTAssertEqual(LibraryShelf.resolved(.read, for: mediaType), .read, mediaType)
+        }
+        XCTAssertEqual(LibraryShelf.resolved(.tracked, for: "movie"), .tracked)
+        XCTAssertEqual(LibraryShelf.resolved(.read, for: "movie"), .tracked)
     }
 
     // MARK: Fixtures
@@ -602,16 +769,6 @@ final class SeriesTrackingContractTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(5))
         }
         XCTAssertTrue(condition(), "Timed out waiting", file: file, line: line)
-    }
-
-    private static func source(_ path: String) throws -> String {
-        try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("Spine/Features/\(path)"),
-            encoding: .utf8
-        )
     }
 
     private static func ref(_ mediaType: String, source: String = "mal", id: String = "2") -> MediaRef {
@@ -756,6 +913,7 @@ final class SeriesTrackingContractTests: XCTestCase {
 @MainActor
 final class SeriesTrackingRepository: TrackingRepository {
     var progressCalls: [Int] = []
+    var progressMutationIds: [UUID] = []
     var progressResult: TrackingState?
     var progressError: Error?
     var actions: [String] = []
@@ -780,8 +938,9 @@ final class SeriesTrackingRepository: TrackingRepository {
     /// The page's tracking merge: nothing newer than its payload.
     func detail(ref: MediaRef) async throws -> TrackingState { throw APIError.httpStatus(404, nil) }
 
-    func updateSeriesProgress(ref: MediaRef, value: Int) async throws -> TrackingState {
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID) async throws -> TrackingState {
         progressCalls.append(value)
+        progressMutationIds.append(mutationId)
         if let progressError { throw progressError }
         guard let progressResult else { throw APIError.httpStatus(500, nil) }
         return progressResult

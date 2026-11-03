@@ -169,7 +169,7 @@ protocol TrackingRepository {
     func updateBookJourney(source: String, mediaId: String, journeyId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
     func deleteBookJourney(source: String, mediaId: String, journeyId: Int) async throws -> TrackingState?
     func completeBook(source: String, mediaId: String, request: BookCompletionWriteRequest) async throws -> BookCompletionResponse
-    func updateSeriesProgress(ref: MediaRef, value: Int) async throws -> TrackingState
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID) async throws -> TrackingState
     func performSeriesAction(ref: MediaRef, action: String, request: BookActionRequest) async throws -> TrackingState?
     func updateSeriesAttempt(ref: MediaRef, attemptId: Int, request: BookJourneyWriteRequest) async throws -> TrackingState
     func deleteSeriesAttempt(ref: MediaRef, attemptId: Int) async throws -> TrackingState?
@@ -193,7 +193,7 @@ extension TrackingRepository {
         try await list(mediaType: "tv", page: page, status: InProgressLibraryLoader.status, query: nil)
     }
 
-    func updateSeriesProgress(ref _: MediaRef, value _: Int) async throws -> TrackingState { fatalError("Not implemented") }
+    func updateSeriesProgress(ref _: MediaRef, value _: Int, mutationId _: UUID) async throws -> TrackingState { fatalError("Not implemented") }
     func performSeriesAction(ref _: MediaRef, action _: String, request _: BookActionRequest) async throws -> TrackingState? { fatalError("Not implemented") }
     func updateSeriesAttempt(ref _: MediaRef, attemptId _: Int, request _: BookJourneyWriteRequest) async throws -> TrackingState { fatalError("Not implemented") }
     func deleteSeriesAttempt(ref _: MediaRef, attemptId _: Int) async throws -> TrackingState? { fatalError("Not implemented") }
@@ -1291,10 +1291,10 @@ struct APITrackingRepository: TrackingRepository {
         )
     }
 
-    func updateSeriesProgress(ref: MediaRef, value: Int) async throws -> TrackingState {
+    func updateSeriesProgress(ref: MediaRef, value: Int, mutationId: UUID) async throws -> TrackingState {
         try await client.post(
             "/tracking/\(ref.source)/\(ref.mediaType)/\(ref.mediaId)/progress/",
-            body: SeriesProgressRequest(value: value),
+            body: SeriesProgressRequest(value: value, mutationId: mutationId),
             authenticated: true
         )
     }

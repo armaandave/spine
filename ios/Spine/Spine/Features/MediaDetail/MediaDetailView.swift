@@ -1147,27 +1147,17 @@ final class MediaDetailViewModel {
                 // A whole number, and the server's answer says whether the log screen follows (MC-001, MC-100).
                 return .state(try await trackingRepository.updateSeriesProgress(
                     ref: ref,
-                    value: NSDecimalNumber(decimal: request.value).intValue
+                    value: NSDecimalNumber(decimal: request.value).intValue,
+                    mutationId: mutationId(for: "series.progress")
                 ))
             }
-            var state: TrackingState
-            if ref.mediaType == "book" {
-                state = try await trackingRepository.updateBookProgress(
-                    source: ref.source,
-                    mediaId: ref.mediaId,
-                    progressType: request.mode.apiValue,
-                    value: request.value,
-                    notes: ""
-                )
-            } else {
-                state = try await trackingRepository.update(
-                    ref: ref,
-                    request: TrackingWriteRequest(
-                        status: "In progress",
-                        progress: NSDecimalNumber(decimal: request.value).intValue
-                    )
-                )
-            }
+            var state = try await trackingRepository.updateBookProgress(
+                source: ref.source,
+                mediaId: ref.mediaId,
+                progressType: request.mode.apiValue,
+                value: request.value,
+                notes: ""
+            )
             state = state.replacingProgress(progressState(for: request, detail: detail, fallback: state.progress))
             ProgressDisplayPreferences.setMode(request.mode, for: ref)
             return .state(state)
@@ -2114,12 +2104,7 @@ private struct MediaDetailPageView: View {
     @State private var pendingPosterSave: PosterSaveResponse?
     @State private var pendingBackdropSave: BackdropSaveResponse?
     @State private var pendingLogoSave: LogoSaveResponse?
-    @State private var isLogPresented = false
-    @State private var completionJourneyId: Int?
-    @State private var completionLiked: Bool?
-    @State private var completionRatingSteps: Int?
-    /// Reaching the total opened the log screen: its close button reads Not now (MC-100).
-    @State private var completionOpenedByTotal = false
+    @State private var logPresentation: MediaLogPresentation?
     @State private var progressUpdateDetail: MediaDetail?
     @State private var pendingProgressUpdate: MediaDetail?
     @State private var editingBookJourney: BookJourneyState?
@@ -2129,7 +2114,7 @@ private struct MediaDetailPageView: View {
     @State private var pendingGameEdit: GamePlaythroughState?
     @State private var pendingGameCompletion: GameCompletionPresentation?
     @State private var gameCompletionPresentation: GameCompletionPresentation?
-    @State private var pendingBookLog = false
+    @State private var pendingLogPresentation: MediaLogPresentation?
     /// True from a choice that closes a tracking sheet until that sheet's onDismiss, so an alert or the next
     /// screen waits for the dismissal instead of colliding with it.
     @State private var isClosingPresentation = false
@@ -2362,7 +2347,7 @@ private struct MediaDetailPageView: View {
                             } else {
                                 presentedSheet = nil
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    isLogPresented = true
+                                    logPresentation = MediaLogPresentation()
                                 }
                             }
                         }
@@ -2542,24 +2527,22 @@ private struct MediaDetailPageView: View {
                     onUnauthorized: onUnauthorized) {}
             }
         }
-        // The capture list reads these as the cover opens: read only inside the closure, they'd keep their old values.
-        .fullScreenCover(isPresented: $isLogPresented, onDismiss: logComposerDismissed) {
-            [completionJourneyId, completionLiked, completionRatingSteps, completionOpenedByTotal] in
+        .fullScreenCover(item: $logPresentation, onDismiss: logComposerDismissed) { presentation in
             if let detail = viewModel.detail {
                 MediaLogView(
                     detail: detail,
                     trackingRepository: trackingRepository,
                     diaryRepository: diaryRepository,
                     mediaRepository: mediaRepository,
-                    completionJourneyId: completionJourneyId,
-                    preselectedLiked: completionLiked,
-                    preselectedRatingSteps: completionRatingSteps,
+                    completionJourneyId: presentation.journeyId,
+                    preselectedLiked: presentation.liked,
+                    preselectedRatingSteps: presentation.ratingSteps,
                     stateChangeOrigin: viewModel.changeOrigin,
                     onResult: { viewModel.applyLogSave($0) },
                     onUnauthorized: onUnauthorized,
                     onSaved: {},
                     tvPage: ref,
-                    closeTitle: completionOpenedByTotal ? "Not now" : nil
+                    closeTitle: presentation.openedByTotal ? "Not now" : nil
                 )
             }
         }
@@ -3001,24 +2984,19 @@ private struct MediaDetailPageView: View {
     private func openTVComposer(ratingSteps: Int? = nil) {
         if presentedSheet != nil { closeSheetForChoice() }
         presentAfterSettling {
-            completionJourneyId = nil
-            completionLiked = nil
-            completionRatingSteps = ratingSteps
-            if isClosingPresentation { pendingBookLog = true } else { isLogPresented = true }
+            present(MediaLogPresentation(ratingSteps: ratingSteps))
         }
     }
 
     /// The log composer closed: a TV log's question or season composer can follow now (TV-107, TV-403).
     private func logComposerDismissed() {
-        completionRatingSteps = nil
-        completionOpenedByTotal = false
         presentDeferredAlerts()
         viewModel.releaseDeferredTVFollowUp()
     }
 
     private func tvTrackAction(for detail: MediaDetail) {
         guard let tv = viewModel.viewer?.tv else {
-            presentAfterSettling { isLogPresented = true }
+            presentAfterSettling { logPresentation = MediaLogPresentation() }
             return
         }
         if detail.ref.mediaType == "episode" {
@@ -3089,7 +3067,7 @@ private struct MediaDetailPageView: View {
         } else {
             // The composer prefills the heart, rating and rewatch from confirmed state, so a heart or rating
             // still being sent must land first.
-            presentAfterSettling { isLogPresented = true }
+            presentAfterSettling { logPresentation = MediaLogPresentation() }
         }
     }
 
@@ -3120,16 +3098,14 @@ private struct MediaDetailPageView: View {
             return
         }
         if detail.ref.readsLikeBook {
-            if bookState(detail)?.hasLiveJourney == true {
+            switch ReadingRouting.eyeTap(book: bookState(detail), isRead: isEyeCompleted(detail), noun: detail.ref.mediaType) {
+            case .openLog:
                 openBookCompletion(for: detail)
-            } else if isEyeCompleted(detail) {
-                if bookState(detail)?.supports("undo_read") == true {
-                    resetAfterUnwatchIfSucceeds(viewModel.performBookAction("undo_read", for: detail))
-                } else {
-                    viewModel.quickActionErrorMessage = bookState(detail)?.actionReasons["undo_read"]
-                        ?? "Delete the completion log to mark this \(detail.ref.mediaType) unread."
-                }
-            } else {
+            case .undoRead:
+                resetAfterUnwatchIfSucceeds(viewModel.performBookAction("undo_read", for: detail))
+            case .explain(let reason):
+                viewModel.quickActionErrorMessage = reason
+            case .markRead:
                 rollBackWatchIfFails(viewModel.performBookAction("mark_read", for: detail))
             }
             return
@@ -3160,9 +3136,10 @@ private struct MediaDetailPageView: View {
     }
 
     private func likeAction(for detail: MediaDetail) {
+        let isGiving = viewModel.viewer?.hasLiked != true
         if usesBookGameActions(detail),
-           viewModel.viewer?.hasLiked != true,
-           (bookState(detail)?.hasLiveJourney == true || gameState(detail)?.hasLivePlaythrough == true) {
+           ReadingRouting.opinionOpensLog(book: bookState(detail), isGiving: isGiving)
+            || (isGiving && gameState(detail)?.hasLivePlaythrough == true) {
             openBookCompletion(for: detail, liked: true)
             return
         }
@@ -3182,7 +3159,8 @@ private struct MediaDetailPageView: View {
         }
         // Episodes have no stars of their own; their stars open Log Episode (TV-502).
         guard !detail.ref.isTVFamily else { return }
-        if halfSteps > 0, bookState(detail)?.hasLiveJourney == true || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
+        if ReadingRouting.opinionOpensLog(book: bookState(detail), isGiving: halfSteps > 0)
+            || (halfSteps > 0 && gameState(detail)?.hasLivePlaythrough == true) {
             ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
             ratingPicker.rollbackWatch()
             openBookCompletion(for: detail, ratingSteps: halfSteps)
@@ -3225,14 +3203,18 @@ private struct MediaDetailPageView: View {
                 if isClosingPresentation { pendingGameCompletion = presentation } else { gameCompletionPresentation = presentation }
                 return
             }
-            let book = confirmed?.book
-            // A manga's or a comic's log with nothing under way makes its own attempt (BK-105).
-            completionJourneyId = detail.ref.isSeries && book?.hasLiveJourney != true ? nil : book?.currentJourney?.id
-            completionLiked = liked
-            completionRatingSteps = ratingSteps
-            completionOpenedByTotal = openedByTotal
-            if isClosingPresentation { pendingBookLog = true } else { isLogPresented = true }
+            present(.reading(
+                confirmed?.book,
+                liked: liked,
+                ratingSteps: ratingSteps,
+                openedByTotal: openedByTotal
+            ))
         }
+    }
+
+    /// Opens the log screen, after a tracking sheet still sliding away.
+    private func present(_ presentation: MediaLogPresentation) {
+        if isClosingPresentation { pendingLogPresentation = presentation } else { logPresentation = presentation }
     }
 
     private func openProgressUpdate(for detail: MediaDetail) {
@@ -3277,7 +3259,7 @@ private struct MediaDetailPageView: View {
     private var isPresentingTrackingScreen: Bool {
         presentedSheet != nil || progressGamePlaythrough != nil || progressUpdateDetail != nil
             || editingGamePlaythrough != nil || editingBookJourney != nil
-            || gameCompletionPresentation != nil || isLogPresented
+            || gameCompletionPresentation != nil || logPresentation != nil
     }
 
     /// Closes the tracking sheet in the tap's frame. Its onDismiss, `presentPendingSheet`, ends the closing.
@@ -3304,9 +3286,9 @@ private struct MediaDetailPageView: View {
         } else if let presentation = pendingGameCompletion {
             pendingGameCompletion = nil
             gameCompletionPresentation = presentation
-        } else if pendingBookLog {
-            pendingBookLog = false
-            isLogPresented = true
+        } else if let presentation = pendingLogPresentation {
+            pendingLogPresentation = nil
+            logPresentation = presentation
         }
         presentDeferredAlerts()
     }
@@ -4390,7 +4372,7 @@ private struct MediaDetailPageView: View {
             chips.append(MediaDetailChip(label: "\(pages) pages", discoverRequest: nil))
         }
         if detail.ref.mediaType == "manga", let chapters = detailString(detail, "number_of_chapters") {
-            chips.append(MediaDetailChip(label: "\(chapters) chapters", discoverRequest: nil))
+            chips.append(MediaDetailChip(label: ReadingWords.chapters(chapters), discoverRequest: nil))
         }
         if detail.ref.mediaType == "anime", let format = detailString(detail, "format") {
             chips.append(MediaDetailChip(label: format, discoverRequest: nil))
@@ -5257,50 +5239,35 @@ private struct BookGameActionSheet: View {
 
     /// The same list as the game sheet, sized to its rows.
     private var bookActions: some View {
-        let status = shown.status
-        let bookState = shown.bookState
-        let isInProgress = status == "In progress"
+        let menu = ReadingMenu(mediaType: mediaType, status: shown.status, book: shown.bookState)
         return NavigationStack {
             List {
                 Section {
-                    bookStatusButton("To Read", systemImage: "bookmark", action: .planning,
-                                     selected: status == "Planning",
-                                     disabled: status == "Planning" || bookState?.hasLiveJourney == true)
-                    if isSeries, status == "Completed" {
-                        // Picking it back up says how: the old place or from the top (MC-200).
-                        if bookState?.offersKeepReading == true {
-                            Button("Keep Reading", systemImage: "book.pages") { commit { onReadingAction("keep_reading") } }
+                    ForEach(menu.rows) { row in
+                        Button { perform(row.command) } label: {
+                            if let image = row.systemImage {
+                                Label(row.title, systemImage: image)
+                            } else {
+                                Text(row.title)
+                            }
                         }
-                        Button("Reread", systemImage: "arrow.counterclockwise") { commit { onReadingAction("reread") } }
-                    } else {
-                        bookStatusButton("Currently Reading", systemImage: "book.pages", action: .currently,
-                                         selected: isInProgress, disabled: isInProgress)
+                        .disabled(row.isDisabled)
                     }
-                    bookStatusButton("Paused", systemImage: "pause.fill", action: .paused,
-                                     selected: status == "Paused", disabled: status == "Paused")
-                    Button {
-                        if bookState?.hasLiveJourney == true { isDNFConfirmationPresented = true }
-                        else { commit { onAction(.stopped) } }
-                    } label: {
-                        Label(status == "Dropped" ? "Did Not Finish ✓" : "Did Not Finish", systemImage: "xmark")
-                    }
-                    .disabled(status == "Dropped")
-                    if status == "Paused" { Button("Resume Reading") { commit { onAction(.currently) } } }
-                    Button("Log Read", systemImage: "square.and.pencil") { commit(onLog) }
                 }
-                if bookState?.hasLiveJourney == true {
-                    Text(bookState?.actionReasons["planning"] ?? "Pause or finish the active journey before moving this \(noun) to To Read.")
+                if let reason = menu.liveReason {
+                    Text(reason)
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Update Progress", systemImage: "slider.horizontal.3") { commit(onUpdateProgress) }
                 }
-                if status != nil {
+                if let removal = menu.removal {
                     Section {
-                        Button(isSeries ? "Remove from Library" : "Remove Tracking", role: .destructive) {
-                            if bookState?.canRemoveTracking != false { isRemoveConfirmationPresented = true }
+                        Button(removal.title, role: .destructive) {
+                            if !removal.isDisabled { isRemoveConfirmationPresented = true }
                         }
-                        .disabled(bookState?.canRemoveTracking == false)
-                        if bookState?.canRemoveTracking == false, let reason = bookState?.removeTrackingReason {
-                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        .disabled(removal.isDisabled)
+                        if let reason = removal.reason {
+                            Text(reason)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -5333,12 +5300,17 @@ private struct BookGameActionSheet: View {
         choice()
     }
 
-    private func bookStatusButton(_ title: String, systemImage: String, action: MediaDetailQuickAction,
-                                  selected: Bool, disabled: Bool) -> some View {
-        Button { commit { onAction(action) } } label: {
-            Label(selected ? "\(title) ✓" : title, systemImage: systemImage)
+    private func perform(_ command: ReadingMenu.Row.Command) {
+        switch command {
+        case .toRead: commit { onAction(.planning) }
+        case .currentlyReading, .resume: commit { onAction(.currently) }
+        case .keepReading: commit { onReadingAction("keep_reading") }
+        case .reread: commit { onReadingAction("reread") }
+        case .paused: commit { onAction(.paused) }
+        case .didNotFinish(asks: true): isDNFConfirmationPresented = true
+        case .didNotFinish(asks: false): commit { onAction(.stopped) }
+        case .log: commit(onLog)
         }
-        .disabled(disabled)
     }
 
     private func actionButton(title: String, systemName: String, action: MediaDetailQuickAction) -> some View {
@@ -6655,8 +6627,14 @@ struct TrackingSummarySection: View {
     }
 
     private var showsUpdateProgressButton: Bool {
-        if detail.ref.mediaType == "game" { return state?.game?.canUpdateProgress == true }
-        return ["In progress", "Paused"].contains(status) && detail.ref.readsLikeBook
+        Self.showsUpdateProgress(ref: detail.ref, status: status, state: state)
+    }
+
+    static func showsUpdateProgress(ref: MediaRef, status: String?, state: UserMediaState?) -> Bool {
+        if ref.mediaType == "game" { return state?.game?.canUpdateProgress == true }
+        // A series needs an attempt to update, which an imported On Hold doesn't have: it has Resume (MC-300).
+        if ref.isSeries { return state?.book?.hasLiveJourney == true }
+        return ["In progress", "Paused"].contains(status) && ref.readsLikeBook
     }
     private var hasLogs: Bool { (state?.diaryCount ?? 0) > 0 || state?.diaryEntryId != nil }
     private var hasMultipleLogs: Bool { Self.hasMultipleLogs(state) }

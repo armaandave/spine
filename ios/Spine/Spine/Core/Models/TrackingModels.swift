@@ -151,7 +151,7 @@ struct TrackingState: Codable, Equatable {
     }
 
     /// The reading state of a book, a manga or a comic.
-    var reading: BookTrackingState? {
+    nonisolated var reading: BookTrackingState? {
         book ?? series
     }
 
@@ -287,11 +287,6 @@ nonisolated struct BookTrackingState: Codable, Equatable, Hashable {
         self.unit = unit
         self.offersKeepReading = offersKeepReading
         self.opensLog = opensLog
-    }
-
-    /// A series with a total of one has status actions and no number (MC-005).
-    var hasNoNumber: Bool {
-        total == 1
     }
 
     var hasLiveJourney: Bool {
@@ -609,6 +604,8 @@ struct BookActionRequest: Encodable, Equatable {
 
 struct SeriesProgressRequest: Encodable, Equatable {
     let value: Int
+    /// The same on a retry, so a lost answer at the total still opens the log screen (MC-100, MC-101).
+    let mutationId: UUID
 }
 
 /// A manga's or a comic's log: the book's, with its own visibility (AC-5) and the optional number a log with no total
