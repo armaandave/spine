@@ -437,6 +437,79 @@ final class MusicContractTests: XCTestCase {
         XCTAssertEqual(detail.music?.representativeRelease?.media[0].tracks[0].title, "HYPERPOWER!")
     }
 
+    func testAFavoriteSongFindsItsPreviewAndAppleMusicLinkInItsAlbum() throws {
+        let favorite = LogFavorite(kind: .song, title: "SOS", id: "1657869385", number: "1")
+
+        let recording = try XCTUnwrap(favorite.recording(in: Self.appleAlbumDetail()))
+
+        XCTAssertEqual(recording.previewURL?.host(), "audio-ssl.itunes.apple.com")
+        XCTAssertEqual(recording.appleMusicURL?.absoluteString, "https://music.apple.com/us/album/sos/1657869377?i=1657869385")
+    }
+
+    func testAFavoriteOnASecondDiscFindsItsSong() throws {
+        var root = try Self.jsonObject("apple-album-detail.example.json")
+        var music = try XCTUnwrap(root["music"] as? [String: Any])
+        var release = try XCTUnwrap(music["representative_release"] as? [String: Any])
+        let media = try XCTUnwrap(release["media"] as? [[String: Any]])
+        var secondDisc = media[0]
+        secondDisc["position"] = 2
+        secondDisc["tracks"] = try XCTUnwrap(media[0]["tracks"] as? [[String: Any]]).suffix(1).map { $0 }
+        var firstDisc = media[0]
+        firstDisc["tracks"] = try XCTUnwrap(media[0]["tracks"] as? [[String: Any]]).dropLast().map { $0 }
+        release["media"] = [firstDisc, secondDisc]
+        music["representative_release"] = release
+        root["music"] = music
+        let detail = try JSONDecoder.api.decode(MediaDetail.self, from: Self.data(from: root))
+        let lastSong = try XCTUnwrap(detail.music?.representativeRelease?.media[1].tracks.first?.recording)
+
+        let favorite = LogFavorite(kind: .song, title: lastSong.title, id: lastSong.recordingMbid)
+
+        XCTAssertEqual(favorite.recording(in: detail)?.recordingMbid, lastSong.recordingMbid)
+    }
+
+    /// Every way a favorite can have nothing to play: `previewURL` is what shows the button.
+    func testNoPreviewWithoutAMatchOrAPreview() throws {
+        let apple = try Self.appleAlbumDetail()
+
+        XCTAssertNil(LogFavorite(kind: .song, title: "SOS", id: "3bd76d40-7f0e-36b7-9348-91a33afee20e").recording(in: apple),
+                     "Saved before the album moved from MusicBrainz: an old recording ID")
+        XCTAssertNil(LogFavorite(kind: .song, title: "SOS").recording(in: apple), "No ID")
+        XCTAssertNil(LogFavorite(kind: .song, title: "SOS", id: "1657869385").recording(in: nil), "The album didn't load")
+        XCTAssertNil(LogFavorite(kind: .episode, title: "SOS", id: "1657869385", seasonNumber: 1, episodeNumber: 1).recording(in: apple),
+                     "Episodes never match")
+
+        let noPreview = try XCTUnwrap(LogFavorite(kind: .song, title: "Kill Bill", id: "1657869393").recording(in: apple))
+        XCTAssertNil(noPreview.previewURL, "Apple has no preview")
+        XCTAssertNotNil(noPreview.appleMusicURL, "Touch and hold still opens the song")
+
+        let musicBrainz = try Self.albumDetail()
+        let recording = try XCTUnwrap(musicBrainz.music?.representativeRelease?.media.first?.tracks.first?.recording)
+        let onMusicBrainz = try XCTUnwrap(
+            LogFavorite(kind: .song, title: recording.title, id: recording.recordingMbid).recording(in: musicBrainz)
+        )
+        XCTAssertNil(onMusicBrainz.previewURL, "An album still on MusicBrainz")
+        XCTAssertNil(onMusicBrainz.appleMusicURL)
+
+        var withoutSongs = try Self.jsonObject("apple-album-detail.example.json")
+        withoutSongs["music"] = NSNull()
+        let saved = try JSONDecoder.api.decode(MediaDetail.self, from: Self.data(from: withoutSongs))
+        XCTAssertNil(LogFavorite(kind: .song, title: "SOS", id: "1657869385").recording(in: saved),
+                     "Apple failed: the page opened from its saved item, with no songs")
+    }
+
+    func testOnlySecureLinksCount() throws {
+        func recording(preview: String) throws -> MusicRecording {
+            try JSONDecoder.api.decode(MusicRecording.self, from: Data("""
+            {"recording_mbid": "1", "title": "Song", "is_video": false, "preview_url": "\(preview)", "source_url": "\(preview)"}
+            """.utf8))
+        }
+        XCTAssertNotNil(try recording(preview: "https://audio-ssl.itunes.apple.com/a.m4a").previewURL)
+        for bad in ["http://audio-ssl.itunes.apple.com/a.m4a", "file:///etc/hosts", "not a url", ""] {
+            XCTAssertNil(try recording(preview: bad).previewURL, bad)
+            XCTAssertNil(try recording(preview: bad).appleMusicURL, bad)
+        }
+    }
+
     func testAPIRepositoryRequestsExactRecordingPathAndDecodesDetail() async throws {
         let responseData = try Self.contractData("song-detail.example.json")
         let configuration = URLSessionConfiguration.ephemeral
@@ -1187,6 +1260,10 @@ final class MusicContractTests: XCTestCase {
 
     private static func appleAlbumDetail() throws -> MediaDetail {
         try JSONDecoder.api.decode(MediaDetail.self, from: contractData("apple-album-detail.example.json"))
+    }
+
+    private static func jsonObject(_ fileName: String) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: contractData(fileName)) as? [String: Any])
     }
 
     private static func albumDetail() throws -> MediaDetail {

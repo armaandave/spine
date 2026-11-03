@@ -55,9 +55,9 @@ struct LogFavorite: Codable, Hashable {
         case song
         case episode
 
-        /// "Favorite Song" or "Favorite Episode".
+        /// "Favorite song" or "Favorite episode".
         var label: String {
-            self == .song ? "Favorite Song" : "Favorite Episode"
+            self == .song ? "Favorite song" : "Favorite episode"
         }
     }
 
@@ -81,14 +81,17 @@ struct LogFavorite: Codable, Hashable {
         kind == .episode && containsSpoilers && !revealed
     }
 
-    /// "S1 E4" for an episode; a song's own number.
+    /// The favorite song in its album's tracklist. Nil for an episode, an album that sent no songs, and a favorite
+    /// saved before its album moved from MusicBrainz, whose ID is an old recording ID.
+    func recording(in detail: MediaDetail?) -> MusicRecording? {
+        guard kind == .song, let id, let media = detail?.music?.representativeRelease?.media else { return nil }
+        return media.lazy.flatMap(\.tracks).first { $0.recording.recordingMbid == id }?.recording
+    }
+
+    /// An episode's "S1 E4". A song shows only its name.
     var numberLabel: String? {
-        switch kind {
-        case .song:
-            number.flatMap { $0.isEmpty ? nil : $0 }
-        case .episode:
-            seasonNumber.flatMap { season in episodeNumber.map { "S\(season) E\($0)" } }
-        }
+        guard kind == .episode, let seasonNumber, let episodeNumber else { return nil }
+        return "S\(seasonNumber) E\(episodeNumber)"
     }
 
     /// The same song or episode, whatever its stored title. A deluxe album can list one recording twice, so a song

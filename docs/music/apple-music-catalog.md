@@ -213,7 +213,8 @@ top-level import would be circular.
 | `related` | On album pages, `other_versions`, `more_by_artist` and `related_albums` (below); empty for every other read |
 
 New keys are optional additions: `music.content_rating` and each track's
-`content_rating`, and each recording's `composer_name` and `source_url`.
+`content_rating`, and each recording's `composer_name`, `source_url` and `preview_url`
+(Apple's 30-second preview; null when it has none and for music videos).
 
 **Cover art.** An Apple Music album always shows Apple's cover.
 `app.curation.music_picks_apply` is false for Apple Music albums, and every reader of
