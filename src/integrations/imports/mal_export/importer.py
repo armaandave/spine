@@ -14,7 +14,7 @@ from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import single_weight
+from app import series_tracking, single_weight
 from app.models import (
     Anime,
     DiaryEntry,
@@ -211,6 +211,8 @@ class MALExportImporter:
                     Tag.objects.filter(id=tag_id).update(
                         usage_count=Greatest(F("usage_count") - count, 0),
                     )
+                if media_type == MediaTypes.MANGA.value:
+                    series_tracking.forget_progress(self.user, chunk)
 
     def _ensure_items(self, entries, items, metadata):
         for entry in entries:

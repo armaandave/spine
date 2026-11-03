@@ -357,6 +357,11 @@ def _import_series_rows(rows, user, source):
     for row in rows:
         rows_by_item[row.item_id].append(row)
     for item_rows in rows_by_item.values():
+        # Old Yamtrack exports list a title's newest row first. Rows with no date stay
+        # in file order, ahead of those with one.
+        item_rows.sort(
+            key=lambda row: getattr(row, "_history_date", None) or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        )
         *earlier, current = item_rows
         series_tracking.import_title(
             user,

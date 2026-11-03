@@ -188,11 +188,32 @@ class MyAnimeListImportTests(SeriesImportBase):
         )
         row = self.row("Berserk")
         self.assertEqual(row.status, READ)
-        self.assertEqual(row.attempts.count(), 1)
-        self.assertEqual(row.attempts.get().end_date, date(2021, 7, 1))
+        self.assertEqual(row.attempts.count(), 2, "The source's read, and the kept log's")
+        self.assertEqual(row.attempts.get(completion_diary_entry__import_source="myanimelist").end_date, date(2021, 7, 1))
         self.assertEqual(Manga.objects.filter(user=self.user).count(), 1)
-        self.assertTrue(DiaryEntry.objects.filter(pk=hand_made.pk).exists())
+        kept = row.attempts.get(completion_diary_entry=hand_made)
+        self.assertEqual((kept.status, kept.place), (READ, 380))
+        state = series_tracking.state_payload(row)
+        self.assertEqual(state["lifetime_read_count"], 2)
+        self.assertIn(hand_made.consumed_at.date().isoformat(), state["completion_dates"])
+        self.assertFalse(ProgressChange.objects.filter(actor=self.user, item=item).exists(), "Its numbers left the feed")
         self.assertFalse(DiaryEntry.objects.filter(user=self.user, item=item, consumed_at=datetime(2020, 5, 1, tzinfo=UTC)).exists())
+
+    # MC-400: a kept log is a read: the eye can't undo past it, and it can be deleted.
+    def test_a_kept_log_stays_a_read_when_the_source_has_no_date(self):
+        self.run_import([mal_entry(2, "Berserk", "completed", chapters=380, total=380, finish="2020-05-01")])
+        item = self.row("Berserk").item
+        DiaryEntry.objects.filter(user=self.user, item=item, import_source="myanimelist").delete()
+        Manga.objects.filter(user=self.user, item=item).delete()
+        _, hand_made = series_tracking.complete(self.user, item, completion_date=timezone.localdate())
+        self.run_import([mal_entry(2, "Berserk", "completed", chapters=380, total=380)], mode="overwrite")
+        row = self.row("Berserk")
+        self.assertEqual(row.status, READ)
+        self.assertEqual(row.current_attempt.completion_diary_entry, hand_made)
+        self.assertFalse(row.completed_manually, "It is this read, not one more")
+        self.assertEqual(series_tracking.state_payload(row)["lifetime_read_count"], 1)
+        with self.assertRaises(series_tracking.HistoryExists):
+            series_tracking.undo_read(self.user, item)
 
     # MC-400: new mode leaves a tracked series alone.
     def test_new_mode_leaves_a_tracked_series_alone(self):
@@ -214,6 +235,18 @@ class MyAnimeListImportTests(SeriesImportBase):
 
 class AniListImportTests(SeriesImportBase):
     """The AniList importer."""
+
+    # MC-000 (SW-006): a Los Angeles reader on a New York server keeps the source's date.
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_a_finish_date_stays_that_date_on_any_readers_calendar(self):
+        self.user.calendar_timezone = "America/Los_Angeles"
+        self.user.save(update_fields=["calendar_timezone"])
+        with timezone.override("America/New_York"):
+            self.run_import([
+                self.entry(2, "Berserk", "COMPLETED", progress=380, completed={"year": 2020, "month": 5, "day": 1}),
+            ])
+        self.assertEqual(DiaryEntry.objects.get(user=self.user).consumed_at, datetime(2020, 5, 1, tzinfo=UTC))
+        self.assertEqual(self.row("Berserk").attempts.get().end_date, FINISHED)
 
     def entry(self, media_id, title, status, *, progress=0, repeat=0, completed=None, chapters=None):
         return {
@@ -316,11 +349,12 @@ class YamtrackImportTests(SeriesImportBase):
         file = io.BytesIO((self.HEADER + "".join(rows)).encode())
         return yamtrack.importer(file, self.user, "new")
 
-    # MC-400: an old export's row per reread becomes one record.
+    # MC-400: an old export's row per reread becomes one record. Rows come newest first, as
+    # the exporter wrote them.
     def test_an_old_exports_row_per_reread_is_one_record(self):
         counts, warnings = self.run_import(
-            '2,mal,manga,Berserk,https://example.com/b.jpg,,,8,380,Completed,2018-01-01,2018-06-01,,2018-06-01T12:00:00Z\n',
             '2,mal,manga,Berserk,https://example.com/b.jpg,,,9,380,Completed,2020-01-01,2020-05-01,Again,2020-05-01T12:00:00Z\n',
+            '2,mal,manga,Berserk,https://example.com/b.jpg,,,8,380,Completed,2018-01-01,2018-06-01,,2018-06-01T12:00:00Z\n',
             '13,mal,manga,One Piece,https://example.com/o.jpg,,,,1100,In progress,2021-01-01,,,2021-01-01T12:00:00Z\n',
             '46568,comicvine,comic,Saga,https://example.com/s.jpg,,,,12,Paused,,,,2021-01-01T12:00:00Z\n',
         )
@@ -340,6 +374,29 @@ class YamtrackImportTests(SeriesImportBase):
         self.assertEqual((saga.status, saga.progress), (Status.PAUSED.value, 12))
         self.assertFalse(saga.attempts.exists())
         self.assert_no_activity()
+
+
+    # MC-400: the live read is the newest row, whichever order the file has it in.
+    def test_the_newest_row_is_the_read_under_way(self):
+        self.run_import(
+            '2,mal,manga,Berserk,https://example.com/b.jpg,,,,120,In progress,2021-01-01,,,2021-03-01T12:00:00Z\n',
+            '2,mal,manga,Berserk,https://example.com/b.jpg,,,8,380,Completed,2018-01-01,2018-06-01,,2018-06-01T12:00:00Z\n',
+        )
+        row = self.row("Berserk")
+        self.assertEqual((row.status, row.progress), (READING, 120))
+        self.assertEqual(row.current_attempt.place, 120)
+        self.assertEqual(row.attempts.filter(status=READ).count(), 1)
+
+    # MC-000 (SW-006): a date-only cell stays that date on a reader's own calendar.
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_a_finish_date_stays_that_date_on_any_readers_calendar(self):
+        self.user.calendar_timezone = "America/Los_Angeles"
+        self.user.save(update_fields=["calendar_timezone"])
+        with timezone.override("America/New_York"):
+            self.run_import(
+                '2,mal,manga,Berserk,https://example.com/b.jpg,,,8,380,Completed,2020-01-01,2020-05-01,,2020-05-01T12:00:00Z\n',
+            )
+        self.assertEqual(DiaryEntry.objects.get(user=self.user).consumed_at, datetime(2020, 5, 1, tzinfo=UTC))
 
 
 class MALExportImportTests(SeriesImportBase):
@@ -401,6 +458,20 @@ class MALExportImportTests(SeriesImportBase):
         self.assertEqual(MangaAttempt.objects.filter(tracking=row).count(), 1)
         self.assertEqual(DiaryEntry.objects.filter(user=self.user, item=row.item).count(), 1)
         self.assertTrue(row.attempts.get().completion_diary_entry_id)
+
+    # MC-400: overwriting drops the old attempts' numbers from the feed, and links a kept log.
+    def test_overwriting_drops_old_progress_and_links_a_kept_log(self):
+        self.run_import(self.entry(2, "Berserk", "Completed", chapters=380, total=380, finish="2020-05-01"))
+        item = self.row("Berserk").item
+        series_tracking.reread(self.user, item)
+        series_tracking.update_progress(self.user, item, value=4)
+        _, hand_made = series_tracking.complete(self.user, item, completion_date=timezone.localdate())
+        self.assertTrue(ProgressChange.objects.filter(actor=self.user, item=item).exists())
+        self.run_import(self.entry(2, "Berserk", "Completed", chapters=380, total=380, finish="2020-05-01"), mode="overwrite")
+        row = self.row("Berserk")
+        self.assertFalse(ProgressChange.objects.filter(actor=self.user, item=item).exists())
+        self.assertEqual(row.attempts.get(completion_diary_entry=hand_made).status, READ)
+        self.assertEqual(series_tracking.state_payload(row)["lifetime_read_count"], 2)
 
     # MC-400: a future finish date isn't a real read's date.
     def test_a_future_finish_date_is_undated(self):
