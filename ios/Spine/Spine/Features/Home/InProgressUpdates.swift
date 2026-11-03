@@ -464,8 +464,8 @@ final class InProgressUpdate {
     }
 }
 
-/// What VoiceOver reads for a card's title and "Update progress ›", with where the title stands that the card no
-/// longer shows: "Breaking Bad, update progress, S2 E2 next, 8 of 62", "Project Hail Mary, update progress, 40 of
+/// What VoiceOver reads for a card's title and "Update progress ›", with where the title stands, which the line
+/// doesn't show: "Breaking Bad, update progress, S2 E2 next, 8 of 62", "Project Hail Mary, update progress, 40 of
 /// 476 pages".
 enum InProgressCardPresentation {
     static let line = "Update progress"
@@ -526,8 +526,8 @@ enum InProgressCardPresentation {
 
 /// A card in Home's In progress rail (TV-701): the poster opens the title's page; the title and "Update progress ›"
 /// are one button, at least 44 points tall, that opens its progress UI over Home. Every media type reads the same.
-/// A thin bar along the poster's bottom fills to how far along the title is, when that is known.
-/// Profile's In progress rail shows posters only.
+/// A thin bar along the poster's bottom fills to how far along the title is, when that is known, with Library's badge
+/// just above it. Profile's In progress rail shows posters only.
 struct InProgressCard: View {
     /// Room under the poster for a two-line title and the line, so every card in the rail is the same height and no
     /// title is cut short.
@@ -550,9 +550,19 @@ struct InProgressCard: View {
                     orientation: item.media.posterOrientation
                 )
                 .overlay(alignment: .bottom) {
-                    if let progressFraction {
-                        InProgressBar(fraction: progressFraction)
+                    VStack(spacing: 4) {
+                        if let badge = LibraryPosterBadge.text(for: item) {
+                            // A game's percent and time can run wider than the poster: "58.25% · 120h 30m" needs 0.76.
+                            PosterBadgeLabel(text: badge)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .padding(.horizontal, 4)
+                        }
+                        if let progressFraction {
+                            InProgressBar(fraction: progressFraction)
+                        }
                     }
+                    .padding(.bottom, PosterSlot.carousel.cornerRadius * 0.75)
                 }
                 // A save from the card's progress UI moves the bar where it is.
                 .animation(.smooth(duration: 0.3), value: progressFraction)
@@ -607,7 +617,6 @@ private struct InProgressBar: View {
             Capsule().fill(.tint).frame(width: max(Self.height, Self.width * fraction))
         }
         .frame(width: Self.width, height: Self.height)
-        .padding(.bottom, Self.inset * 0.75)
         .accessibilityHidden(true)
     }
 }

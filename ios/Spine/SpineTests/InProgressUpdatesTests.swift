@@ -155,6 +155,51 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertEqual(InProgressCardPresentation.progressFraction(for: ticked[0]), 0.5)
     }
 
+    // MARK: The badge above the bar
+
+    func testTheCardsShowLibrarysBadgeAboveTheBar() throws {
+        let features = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Spine/Features", isDirectory: true)
+        let source = try String(contentsOf: features.appendingPathComponent("Home/InProgressUpdates.swift"), encoding: .utf8)
+        let badge = try XCTUnwrap(source.range(of: "LibraryPosterBadge.text(for: item)"))
+        let bar = try XCTUnwrap(source.range(of: "InProgressBar(fraction: progressFraction)"))
+        XCTAssertLessThan(badge.lowerBound, bar.lowerBound, "The badge sits above the bar")
+    }
+
+    func testTheBadgeMovesWhereTheCardIsAfterASave() async throws {
+        // A book's page saved from its panel.
+        let book = Self.item("book", "poster-badge-book", "Project Hail Mary", tracking: Self.bookTracking(status: "In progress", pages: 40))
+        media.details[book.media.ref.id] = Self.bookDetail(book.media.ref, status: "In progress", pages: 40)
+        tracking.bookProgressResult = Self.bookTracking(status: "In progress", pages: 238)
+        let home = homeViewModel(items: [book])
+        XCTAssertEqual(LibraryPosterBadge.text(for: home.inProgressItems[0]), "40/476 pages")
+
+        _ = await home.progressUpdates.updateProgress(for: book)
+        let update = try XCTUnwrap(home.progressUpdates.update)
+        let saved = await update.saveBookProgress(ProgressUpdateSaveRequest(mode: .pages, value: 238))
+
+        XCTAssertTrue(saved)
+        XCTAssertEqual(LibraryPosterBadge.text(for: home.inProgressItems[0]), "238/476 pages")
+
+        // A tick in a show's episode sheet moves it on, and the tick that catches the show up clears it.
+        let show = Self.item("tv", "1396", "Breaking Bad", tracking: Self.tracking(
+            tv: TVTrackingSurfacesTests.showState(status: "In progress", watched: 8, aired: 62, upNext: (2, 2))
+        ))
+        XCTAssertEqual(LibraryPosterBadge.text(for: show), "S2 E2")
+        let ticked = ContinueWatchingTicks.replacingTV(
+            TVTrackingSurfacesTests.showState(status: "In progress", watched: 9, aired: 62, upNext: (2, 3)),
+            id: show.id, in: [show]
+        )
+        XCTAssertEqual(LibraryPosterBadge.text(for: ticked[0]), "S2 E3")
+        let caughtUp = ContinueWatchingTicks.replacingTV(
+            TVTrackingSurfacesTests.showState(status: "In progress", watched: 62, aired: 62, caughtUp: true),
+            id: show.id, in: [show]
+        )
+        XCTAssertNil(LibraryPosterBadge.text(for: caughtUp[0]))
+    }
+
     // MARK: Books: the page's progress sheet
 
     func testABooksCardOpensItsPagesSheetAndSavesProgressWithThePagesOneRequest() async throws {
@@ -589,13 +634,13 @@ final class InProgressUpdatesTests: XCTestCase {
         XCTAssertTrue(source.contains("InProgressPoster(item: item)"))
         for code in ["InProgressCard(", "InProgressUpdates", "progressUpdates", "inProgressUpdatePresentations",
                      "ContinueWatchingTicks", "continueWatchingPresentations", "InProgressCardPresentation.line",
-                     "InProgressBar", "progressFraction"] {
+                     "InProgressBar", "progressFraction", "LibraryPosterBadge", "PosterBadgeLabel"] {
             XCTAssertFalse(source.contains(code), "Profile still has \(code)")
         }
     }
 
     func testTheCardsReadOneLineInTheNormalWidth() throws {
-        // One "Update progress ›" for every type: no per-show line, no condensed width, no count on the card.
+        // One "Update progress ›" for every type: no per-show line, no condensed width, no count on the line.
         let features = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
