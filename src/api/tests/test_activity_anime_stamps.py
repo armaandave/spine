@@ -19,7 +19,7 @@ from app.forms import AnimeForm
 from app.models import Anime, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry, update_diary_entry
 from app.tests.tv_fixtures import make_user, patch_now
-from integrations.imports import anilist, kitsu, mal, yamtrack
+from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
 from integrations.imports.mal_export.importer import MALExportImporter
 
 MOCK_DATA = Path(__file__).resolve().parent.parent.parent / "integrations" / "tests" / "mock_data"
@@ -394,6 +394,68 @@ class ImportTests(TestCase):
         self.assertTrue(
             Anime.objects.filter(user=self.user, status=Status.COMPLETED.value, end_date__isnull=False).exists(),
         )
+
+    def test_simkl(self):
+        def row(mal_id, title, status, **fields):
+            show = {"title": title, "ids": {"mal": mal_id}}
+            return {"show": show, "status": status, "user_rating": None, "watched_episodes_count": 12, "memo": {}, **fields}
+
+        rows = [
+            row(1, "Watching", "watching", last_watched_at="2024-02-09T10:00:00Z"),
+            row(2, "Marked", "completed"),
+            # 22:00 on Apr 9 on the owner's calendar.
+            row(3, "Dated", "completed", last_watched_at="2024-04-10T02:00:00Z"),
+        ]
+        metadata = {**ANIME_METADATA, "title": "Simkl"}
+        with (
+            mock.patch("app.providers.mal.anime", return_value=metadata),
+            mock.patch("integrations.imports.simkl.SimklImporter._get_user_list", return_value={"anime": rows}),
+        ):
+            simkl.SimklImporter(helpers.encrypt("token"), self.user, "new").import_data()
+        reasons = {row.item.media_id: self.reason_of(row) for row in Anime.objects.filter(user=self.user)}
+        self.assertEqual(reasons, {"1": "mark", "2": "mark", "3": "day:2024-04-09"})
+
+    def test_overwrite_mode(self):
+        item = Item.objects.create(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            media_id="229",
+            title="Dated",
+            image="https://example.com/c.jpg",
+        )
+        with mock.patch("app.providers.services.get_media_metadata", return_value={"max_progress": 12}):
+            Anime.objects.create(user=self.user, item=item, status=Status.IN_PROGRESS.value, progress=3)
+            csv = (
+                '"media_id","source","media_type","title","image","season_number","episode_number","score",'
+                '"progress","status","start_date","end_date","notes","progressed_at"\n'
+                '"228","mal","anime","Marked","https://example.com/b.jpg","","","","12","Completed",'
+                '"","","","2024-03-09T10:00:00Z"\n'
+                '"229","mal","anime","Dated","https://example.com/c.jpg","","","","12","Completed",'
+                '"","2024-04-09","","2024-05-09T10:00:00Z"\n'
+            )
+            yamtrack.importer(io.BytesIO(csv.encode()), self.user, "overwrite")
+        reasons = {row.item.title: self.reason_of(row) for row in Anime.objects.filter(user=self.user)}
+        self.assertEqual(reasons, {"Marked": "mark", "Dated": "day:2024-04-09"})
+
+    def test_the_bulk_update_path(self):
+        rows = []
+        with mock.patch("app.providers.services.get_media_metadata", return_value={"max_progress": 12}):
+            for number in (1, 2):
+                item = Item.objects.create(
+                    source=Sources.MANUAL.value,
+                    media_type=MediaTypes.ANIME.value,
+                    media_id=str(number),
+                    title=f"Anime {number}",
+                    image="https://example.com/poster.jpg",
+                )
+                rows.append(Anime.objects.create(user=self.user, item=item, status=Status.IN_PROGRESS.value))
+        dated, marked = rows
+        dated.status = marked.status = Status.COMPLETED.value
+        dated.end_date = datetime(2026, 3, 1, tzinfo=UTC)
+        fields = {MediaTypes.ANIME.value: ["status", "end_date"]}
+        helpers.bulk_update_media({MediaTypes.ANIME.value: rows}, fields, self.user)
+        self.assertEqual(self.reason_of(dated), "day:2026-03-01")
+        self.assertEqual(self.reason_of(marked), "mark")
 
     def test_a_date_stays_its_calendar_day_on_any_zone(self):
         row = Anime(
