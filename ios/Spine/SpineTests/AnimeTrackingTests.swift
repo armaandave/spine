@@ -1070,6 +1070,26 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(AnimeListMetrics(isAccessibilitySize: true, count: 10).stride, AnimeListMetrics.accessibilityRowHeight + spacing)
     }
 
+    func testAN101ARowAtAnAccessibilitySizeStaysInsideItsList() {
+        // A row of a fixed height offers its still more height than it needs, and the still mustn't grow to fill it: at
+        // 16:9 it would be wider than the screen, with the row's title and tick off the edge.
+        let rows = Self.rows(through: 1)
+        let row = TVEpisodeRows(
+            rows: [rows.rowModel(at: 0)],
+            rowHeight: AnimeListMetrics.accessibilityRowHeight,
+            state: { $0.tv },
+            isWatched: { _ in false },
+            onTick: { _ in },
+            onMarkUpTo: { _ in },
+            onSelect: nil
+        )
+        .environment(\.dynamicTypeSize, .accessibility3)
+        let host = UIHostingController(rootView: row)
+        let size = host.sizeThatFits(in: CGSize(width: 370, height: 2_000))
+        XCTAssertEqual(size.width, 370)
+        XCTAssertEqual(size.height, AnimeListMetrics.accessibilityRowHeight)
+    }
+
     func testAN701TheListNamesUpNextsRowToScrollTo() async throws {
         // It scrolls to a row, whatever an OS version counts as the top of the list.
         let item = Self.card(mediaId: "16498", title: "Attack on Titan", anime: Self.watching(upNext: 8, watched: 7, aired: 24))

@@ -9341,10 +9341,7 @@ private struct EpisodeCardStill: View {
     let fillsWidth: Bool
 
     var body: some View {
-        artwork
-            .aspectRatio(16 / 9, contentMode: .fill)
-            .frame(maxWidth: fillsWidth ? .infinity : nil)
-            .frame(width: fillsWidth ? nil : 148, height: fillsWidth ? nil : 84)
+        sizedArtwork
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(alignment: .bottomLeading) {
                 Text(verbatim: "E\(episodeNumber)")
@@ -9360,6 +9357,22 @@ private struct EpisodeCardStill: View {
                     .stroke(.white.opacity(0.08), lineWidth: 0.75)
             }
             .accessibilityHidden(true)
+    }
+
+    /// As wide as its row, a still takes its height from that width, whatever height a row of a fixed height offers it.
+    @ViewBuilder
+    private var sizedArtwork: some View {
+        if fillsWidth {
+            Color.clear
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay { artwork }
+                .clipped()
+        } else {
+            artwork
+                .aspectRatio(16 / 9, contentMode: .fill)
+                .frame(width: 148, height: 84)
+        }
     }
 
     @ViewBuilder
