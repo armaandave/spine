@@ -39,7 +39,8 @@ hearts, follows, or adding to a list.
   `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
   or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
   never from an import, a mark, a restore or Restart. It adds nothing to any number,
-  and nothing shows it yet (AC-1). Restart's start row carries `began_over`.
+  and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
+  row.
 - The day is the local day the progress was recorded. Each save also stores
   `saved_on`, the phone's date when saved, which nothing reads yet.
 
@@ -125,3 +126,8 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 - `object.id` of a day's progress addresses it: `/api/v1/progress/<id>/` is its page,
   with `like/` and `comments/` under it. A log uses `/api/v1/diary/<id>/like/` and
   `comments/`. `DELETE /api/v1/comments/<id>/` removes a comment.
+
+## Review status
+
+AC-2's status moves, `began_over` and `saved_on` are provisional until the phone test of
+Activity's first phase accepts them.

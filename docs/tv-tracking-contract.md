@@ -1207,6 +1207,8 @@ This document does not claim that TV implementation or runtime testing is comple
 No application code was changed while writing this contract.
 Follow-up documents, as for books and games: `tv-tracking-coverage.md`, mapping each law to its tests, and a simulator verification document.
 
+TV-703's status moves are provisional until the phone test of Activity's first phase accepts them.
+
 ## Scope boundary
 
 This contract does not cover:

@@ -393,7 +393,9 @@ Completed.
 - Direct Log requires a completion date but no start date.
 - A sent date equal to the phone's today is never refused: after a flight west
   today can fall before the start or the latest update, so the stored date stays
-  no earlier than those. A different date keeps these refusals.
+  no earlier than those.
+- On an update, a Stop or a Restart, a date one day ahead caps at today. Any other
+  date keeps these refusals, and so does a date ahead on a Start or a log.
 
 ### BK-307: DNF attempts remain visible as reading history
 
@@ -580,3 +582,8 @@ Numbered laws are normative only where they state resolved behavior. Sentences
 that explicitly say behavior remains to be finalized are not implementation
 instructions. New decisions from the product interview must update this
 contract before implementation begins.
+
+## Review status
+
+BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead
+are provisional until the phone test of Activity's first phase accepts them.
