@@ -1345,6 +1345,27 @@ class NextTitleTests(AnimeTestCase):
         self.state(sequel)
         self.assertFalse(self.state(item)["next_title"]["has_aired"])
 
+    def test_an_501_a_year_or_month_alone_has_aired_only_once_it_has_passed(self):
+        for released, expected in (
+            ("2025", True),
+            ("2026", False),
+            ("2027", False),
+            ("2026-09", True),
+            ("2026-10", False),
+            ("2026-11", False),
+            ("2026-10-25", True),
+            ("2026-10-26", False),
+            ("", False),
+            (None, False),
+        ):
+            stored = {"media_id": "1", "release_date": released}
+            self.assertEqual(anime_tracking._next_title_has_aired(stored, OCT_25, None), expected, released)  # noqa: SLF001
+
+    def test_an_501_a_next_title_known_only_by_this_year_reads_not_aired(self):
+        item, _ = self.pair(sequel_start="2026")
+        anime_tracking.mark_watched(self.user, item)
+        self.assertFalse(self.state(item)["next_title"]["has_aired"])
+
     def test_an_501_a_next_title_that_is_a_single_says_so(self):
         movie = self.fake.add(title="The Movie", total=1, format="Movie", start_date="2017-04-01", status="Finished")
         movie_item = self.title(title=movie)

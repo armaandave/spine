@@ -2773,8 +2773,13 @@ def _next_title_has_aired(stored, today, copy_of_next):
     """Return whether the next title has an aired episode (AN-501), from what's stored."""
     if copy_of_next is not None and not copy_of_next.awaiting_schedule:
         return copy_of_next.aired_through(user_calendar.now()) > 0
-    released = stored.get("release_date")
-    return bool(released) and str(released) <= today.isoformat()
+    released = str(stored.get("release_date") or "")
+    if not released:
+        return False
+    # A year or a month alone is only known to have aired once it has passed.
+    if len(released) < len("YYYY-MM-DD"):
+        return released < today.isoformat()[: len(released)]
+    return released <= today.isoformat()
 
 
 def state_payload(user, item, *, listing=None, detail=True):
