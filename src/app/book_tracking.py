@@ -1285,6 +1285,7 @@ def delete_completion(user, entry):
     entry.delete()
     _queue_statistics(user.id, consumed_at)
     if session is None:
+        _settle_read_with_no_journey(book)
         return book
     current = book.current_session_id == session.id
     restored_live_state = False
@@ -1355,7 +1356,56 @@ def delete_completion(user, entry):
         fields.append("completion_diary_entry")
         if fields:
             book.save(update_fields=fields)
+        _keep_the_eye(book)
     return book
+
+
+def _keep_the_eye(book):
+    """Make an eye that leaned on a log the mark it would have made, once no log is left.
+
+    Return whether it did. The person said it was read, and the number and your own file
+    should say so too (BK-103).
+    """
+    if not book.read_override_active or _has_completed_history(book):
+        return False
+    book.completed_manually = True
+    book.undated_read_previous_tracked = book.read_override_previous_tracked
+    book.undated_read_previous_status = book.read_override_previous_status
+    book.undated_read_previous_session = book.read_override_previous_session
+    book.undated_read_previous_override = False
+    _clear_override(book)
+    book.save(
+        update_fields=[
+            "completed_manually",
+            "undated_read_previous_tracked",
+            "undated_read_previous_status",
+            "undated_read_previous_session",
+            "undated_read_previous_override",
+            "read_override_active",
+            "read_override_previous_tracked",
+            "read_override_previous_status",
+            "read_override_previous_session",
+        ],
+    )
+    return True
+
+
+def _settle_read_with_no_journey(book):
+    """Leave a Read only what's behind it, once a log with no journey has gone (BK-404).
+
+    Your own file and old rows leave these. No record says what came before, so with no
+    other log or mark it's no longer Read, and its pages and date go too: left, that file
+    would write the log back from the date.
+    """
+    if book.status != Status.COMPLETED.value or book.current_session_id or _keep_the_eye(book):
+        return
+    latest = DiaryEntry.objects.filter(user=book.user, item=book.item).order_by("-consumed_at", "-id").first()
+    book.end_date = latest.consumed_at if latest else None
+    if not _has_completed_history(book):
+        book.status = Status.PLANNING.value
+        book.progress = 0
+        book.start_date = None
+    book.save(update_fields=["status", "progress", "start_date", "end_date"])
 
 
 @transaction.atomic

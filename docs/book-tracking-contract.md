@@ -177,6 +177,10 @@ without deleting or requiring deletion of those older logs. This exception can
 undo only that status-only change; it cannot undo an actual journey completion
 log.
 
+If the last log under that status change is deleted, the eye still says Read, so it
+becomes the undated completion fact under BK-102, and undoing it restores the same prior
+status.
+
 ### BK-104: Currently Reading starts live tracking
 
 Choosing Currently Reading represents reading the book now rather than
@@ -544,6 +548,10 @@ journey remains, deletion removes it from the library. Remaining history or
 undated completion evidence continues to determine its status under this
 contract.
 
+A log with no journey, as your own export coming back leaves one, records no prior state.
+With no other log or Mark as Read behind it, deleting it moves the book to To Read, and its
+date goes with it, so that file can't write the log back.
+
 ### BK-405: Library and reading statistics count different things
 
 - The Read library section counts unique books whose current status is Read,
@@ -606,6 +614,6 @@ contract before implementation begins.
 ## Review status
 
 BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead,
-BK-101's kept place and website Completed, BK-305's opening at a place, and BK-306's rules
-for a log's date, are provisional until the phone test of Activity's first phase accepts
-them.
+BK-101's kept place and website Completed, BK-103's mark when the last log goes, BK-305's
+opening at a place, BK-306's rules for a log's date, and BK-404's log with no journey, are
+provisional until the phone test of Activity's first phase accepts them.

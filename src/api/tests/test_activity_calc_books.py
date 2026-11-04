@@ -1031,6 +1031,44 @@ class AReadRowTests(BookCalcBase):
         self.assert_numbers(0, 0, 0)
 
 
+class ALogWithNoJourneyDeletedTests(BookCalcBase):
+    """Your own file and old rows leave logs with no journey: the read goes with its log."""
+
+    def logged(self, name="logged", **fields):
+        item = self.book(name)
+        moment = datetime(2025, 3, 1, tzinfo=UTC)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400, end_date=moment, **fields)
+        return item, self.log(item, moment)
+
+    def delete(self, entry):
+        with self.on(d(2026, 3, 1)):
+            book_tracking.delete_completion(self.owner, entry)
+
+    def test_the_only_log_takes_its_pages_and_its_date(self):
+        item, entry = self.logged()
+        self.assert_numbers(400, 0, 400)
+        self.delete(entry)
+        self.assert_numbers(0, 0, 0)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress, book.end_date), (Status.PLANNING.value, 0, None))
+
+    def test_a_second_log_keeps_the_read_on_its_date(self):
+        item, entry = self.logged()
+        other = self.log(item, datetime(2026, 1, 5, tzinfo=UTC))
+        self.delete(entry)
+        self.assert_numbers(0, 400, 400)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.end_date), (Status.COMPLETED.value, other.consumed_at))
+
+    def test_a_mark_stays_with_no_date(self):
+        item, entry = self.logged(completed_manually=True)
+        self.assert_numbers(400, 0, 800)
+        self.delete(entry)
+        self.assert_numbers(0, 0, 400)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.end_date), (Status.COMPLETED.value, None))
+
+
 class StatusMovesAroundAMarkTests(BookCalcBase):
     """A status move adds nothing to any number (decision 21), whenever the mark was."""
 

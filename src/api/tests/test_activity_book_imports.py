@@ -594,6 +594,60 @@ class AnEyeOverALogWithNoJourneyTests(BookImportBase):
         self.assertEqual(Book.objects.get(item=self.item_row).status, Status.PLANNING.value)
 
 
+class ALogDeletedThenYourOwnFileTests(BookImportBase):
+    """What a deleted log leaves has to come back from your own file as it went."""
+
+    def assert_it_comes_back_the_same(self, in_2025, in_2026, all_time):
+        self.assert_numbers(in_2025, in_2026, all_time)
+        self.from_file(self.export(), mode="overwrite")
+        self.assert_numbers(in_2025, in_2026, all_time)
+
+    def test_a_log_your_own_file_left_with_no_journey_stays_gone(self):
+        self.finish(self.item_row, d(2025, 3, 1))
+        self.from_file(self.export(), mode="overwrite")
+        entry = DiaryEntry.objects.get(item=self.item_row)
+        with self.on(d(2026, 3, 1)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_it_comes_back_the_same(0, 0, 0)
+        self.assertFalse(DiaryEntry.objects.filter(item=self.item_row).exists())
+        self.assertFalse(Book.objects.get(item=self.item_row).completed_manually)
+
+    def test_an_eye_that_leaned_on_the_log_becomes_the_mark(self):
+        """A log, To Read, the eye: the eye said Read, and a log's delete takes back only its own."""
+        _, entry = self.finish(self.item_row, d(2025, 3, 1))
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
+        self.assert_numbers(PAGES, 0, PAGES)
+        with self.on(d(2026, 1, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        book = Book.objects.get(item=self.item_row)
+        self.assertEqual((book.status, book.completed_manually, book.read_override_active), (Status.COMPLETED.value, True, False))
+        self.assertEqual(self.rows(), [])
+        self.assert_it_comes_back_the_same(0, 0, PAGES)
+        self.assertTrue(Book.objects.get(item=self.item_row).completed_manually)
+
+    def test_that_mark_undoes_to_what_the_eye_covered(self):
+        _, entry = self.finish(self.item_row, d(2025, 3, 1))
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
+        with self.on(d(2026, 1, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.do(book_tracking.undo_read, self.item_row, d(2026, 1, 4))
+        self.assert_numbers(0, 0, 0)
+        self.assertEqual(Book.objects.get(item=self.item_row).status, Status.PLANNING.value)
+
+    def test_an_eye_with_another_log_still_behind_it_stays_as_it_is(self):
+        _, first = self.finish(self.item_row, d(2025, 3, 1))
+        self.finish(self.item_row, d(2025, 4, 1))
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
+        with self.on(d(2026, 1, 3)):
+            book_tracking.delete_completion(self.owner, first)
+        book = Book.objects.get(item=self.item_row)
+        self.assertEqual((book.completed_manually, book.read_override_active), (False, True))
+        self.assert_numbers(PAGES, 0, PAGES)
+
+
 class WebDiaryAddTests(BookImportBase):
     """A web diary add stops clearing the undated mark."""
 
