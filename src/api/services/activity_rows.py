@@ -514,7 +514,7 @@ def _marked_at(model, tracking_id):
     return marked_at
 
 
-def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_journey):  # noqa: PLR0913
+def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_journey):
     """Return the stopped read a mark came after, or None.
 
     A direct To Read or Paused clears the mark's record of it, so with no record it's
@@ -568,9 +568,9 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
 def _book_rows(result, owners, _viewer, titles, piles):
     """Add books' rows. Book logs show to every viewer (AC-5), so all read alike."""
     only = {} if titles is None else {"item__in": titles}
-    # Plain values, not model rows: a Book's FieldTracker and thousands of saves were most of
-    # this walk, and every Stats miss runs it. Sessions don't load their book for the same
-    # reason. A plain save reads like a ProgressChange to everything below.
+    # Plain values, not model rows: a Book's FieldTracker and thousands of saves were
+    # most of this walk, and every Stats miss runs it. Sessions don't load their book
+    # for the same reason. A plain save reads like a ProgressChange to all that's below.
     changes = defaultdict(list)
     for pk, created_at, saved_on, previous, current in (
         ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.BOOK.value, **only)

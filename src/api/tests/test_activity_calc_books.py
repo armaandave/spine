@@ -1189,6 +1189,15 @@ class ImportedPlaceTests(BookCalcBase):
                 self.save(item, 130, d(2026, 3, 3))
                 self.assert_numbers(0, 10, 130)
 
+    def test_resuming_from_paused_opens_at_it(self):
+        """The phone sends resume on a book Paused, with no journey to resume."""
+        item = self.place("resumed")
+        self.do(book_tracking.assign_status, item, d(2026, 3, 1), Status.PAUSED.value)
+        self.do(book_tracking.resume, item, d(2026, 3, 2))
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+        self.assertEqual(self.rows(), ["2026-03-02 picked back up"])
+        self.assert_numbers(0, 0, 120)
+
     def test_the_phones_plain_status_write_holds_it(self):
         item = self.item(BOOK, "phone-place", source=Sources.MANUAL.value, title="phone-place")
         self.set_item(item, total_pages=400)
@@ -1558,7 +1567,7 @@ class AdapterCostTests(BookCalcBase):
                 self.assertEqual(counted.call_count, 0, media_type)
 
     def test_the_walk_builds_no_book_or_save_rows(self):
-        """A Book's FieldTracker and thousands of saves were most of a Stats miss (5.2)."""
+        """A Book's FieldTracker and thousands of saves were most of a Stats miss."""
         item = self.book("cost")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 40, d(2026, 3, 2))
