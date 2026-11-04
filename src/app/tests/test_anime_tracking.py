@@ -1225,6 +1225,14 @@ class SingleTests(AnimeTestCase):
             anime_tracking.choose(self.user, item, "Planning")
             self.assertEqual(self.row(item).status, "Planning")
 
+    def test_an_002_a_watched_single_doesnt_offer_a_pause_or_a_drop_it_hasnt_got(self):
+        item = self.title(total=1)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual(self.state(item)["action_reasons"]["planning"], anime_tracking.MSG_SINGLE_WATCHED)
+        with self.assertRaises(TVConflict) as refused:
+            anime_tracking.choose(self.user, item, "Planning")
+        self.assertEqual(refused.exception.message, anime_tracking.MSG_SINGLE_WATCHED)
+
     def test_an_002_a_written_status_on_a_single_is_refused_and_kept_from_the_web(self):
         item = self.title(total=1)
         with self.assertRaises(TVConflict):

@@ -128,6 +128,7 @@ MSG_NAME_EPISODES = "Name the first and last episodes to mark."
 MSG_MARK_UP_TO = "Mark watched up to here works on aired episodes."
 MSG_NO_NUMBER = "Enter a valid episode number."
 MSG_SINGLE_CHOICE = "This has no episodes to keep your place in. Mark it watched or log it."
+MSG_SINGLE_WATCHED = "You've already watched this anime."
 
 
 def supports(value):
@@ -1440,8 +1441,13 @@ def _choice_unavailable(calc, row, status):
             return MSG_ALL_WATCHED
         return None
     if status == PLANNING and calc.recorded:
-        return MSG_STARTED
+        return _planning_refusal(calc)
     return None
+
+
+def _planning_refusal(calc):
+    """Return why a title with something recorded can't be Planning: a single can't be paused or dropped (AN-002)."""
+    return MSG_SINGLE_WATCHED if calc.single else MSG_STARTED
 
 
 def _do_choose(ctx, status, *, quiet=False):
@@ -2563,7 +2569,7 @@ class _View:
                 actions.append("stop_rewatch")
         if selected != "planning":
             if calc.recorded:
-                reasons["planning"] = MSG_STARTED
+                reasons["planning"] = _planning_refusal(calc)
             else:
                 actions.append("planning")
         if calc.aired:
