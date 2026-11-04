@@ -139,7 +139,7 @@ class SaveReasonTests(AnimeBase):
         self.assertEqual(self.reasons(row)[-1], "mark")
 
     def test_the_eye_is_a_mark_whatever_date_it_carries(self):
-        """A phone a few seconds ahead, a tap that arrives after midnight, and an old date."""
+        """A phone seconds ahead, a tap arriving after midnight, and an old date."""
         for sent in (NOW + timedelta(days=1), NOW - timedelta(days=1), NOW - timedelta(days=90)):
             for status, progress in ((Status.PLANNING.value, 0), (Status.COMPLETED.value, 5)):
                 with self.subTest(sent=sent, status=status):
@@ -266,7 +266,7 @@ class BrowserDateTests(AnimeBase):
                     self.assertEqual(self.reasons(row)[-1], "day:2026-12-20", "an edit")
 
     def test_a_date_past_today_is_a_mark(self):
-        """With TRACK_TIME off the form fills the UTC date, tomorrow on a New York evening."""
+        """With TRACK_TIME off the form fills the UTC date: tomorrow, some evenings."""
         with patch_now(datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK))):
             row = self.post(Anime(user=self.user, item=self.item()), "2027-01-01")
         self.assertEqual(self.reasons(row), ["mark"])

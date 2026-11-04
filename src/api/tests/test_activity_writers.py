@@ -5,7 +5,7 @@ closed, and each one has a behavior test here. Rows hold the owner's date on a N
 server, read from a Tokyo account too.
 """
 
-import re
+import ast
 from datetime import date, datetime
 from pathlib import Path
 from unittest import mock
@@ -26,8 +26,7 @@ JAN_1 = date(2027, 1, 1)
 # 23:50 on Dec 31 in New York, already Jan 1 in Tokyo.
 LATE = datetime(2026, 12, 31, 23, 50, tzinfo=NEW_YORK)
 
-WRITES = re.compile(r"ProgressChange\(|ProgressChange\.objects\.create|ProgressChange\.objects\.bulk_create")
-CLASS_WRITES = re.compile(r"cls\.objects\.create")
+MODEL = "ProgressChange"
 # Every place a progress change is written. A new one needs its day, a behavior test
 # here and a line on this list.
 WRITERS = {
@@ -36,29 +35,104 @@ WRITERS = {
     "app/game_tracking.py": ["ProgressChange.objects.create"],
     "app/series_tracking.py": ["ProgressChange.objects.create"],
     "app/tv_tracking.py": ["ProgressChange(", "ProgressChange.objects.bulk_create"],
-    # The class statement matches too.
-    "social/models.py": ["ProgressChange(", "cls.objects.create", "cls.objects.create"],
+    "social/models.py": ["cls.objects.create", "cls.objects.create"],
 }
+CREATES = {"bulk_create", "create", "get_or_create", "update_or_create"}
+
+
+def writes_in(source, managers=(MODEL,)):
+    """Return each way this source writes a progress change, and which name their day.
+
+    It reads the code, not its text, so a call wrapped across lines still counts. An
+    alias counts as a write, because nothing after it can be seen.
+    """
+    writes = []
+    named_day = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            writes += [f"{MODEL} as {name.asname}" for name in node.names if name.name == MODEL and name.asname]
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Name) and node.value.id == MODEL:
+            writes.append(f"{MODEL} alias")
+        elif isinstance(node, ast.Call):
+            write = _write_called(node, managers)
+            if write:
+                writes.append(write)
+                if any(keyword.arg == "saved_on" for keyword in node.keywords):
+                    named_day.append(write)
+    return writes, named_day
+
+
+def _write_called(call, managers):
+    function = call.func
+    if isinstance(function, ast.Name):
+        return f"{function.id}(" if function.id == MODEL else None
+    if not isinstance(function, ast.Attribute):
+        return None
+    if function.attr == "get_model":
+        named = any(isinstance(arg, ast.Constant) and arg.value == MODEL for arg in call.args)
+        return f"{MODEL} get_model" if named else None
+    manager = function.value
+    if (
+        function.attr in CREATES
+        and isinstance(manager, ast.Attribute)
+        and manager.attr == "objects"
+        and isinstance(manager.value, ast.Name)
+        and manager.value.id in managers
+    ):
+        return f"{manager.value.id}.objects.{function.attr}"
+    return None
+
+
+def writer_files():
+    """Return each source file's writes, leaving out tests and migrations."""
+    root = Path(settings.BASE_DIR)
+    for path in root.rglob("*.py"):
+        parts = path.relative_to(root).parts
+        if "tests" in parts or "migrations" in parts or parts[0] == ".venv" or path.name.startswith("test_"):
+            continue
+        name = path.relative_to(root).as_posix()
+        # social/models.py writes through its classmethods.
+        yield name, writes_in(path.read_text(), (MODEL, "cls") if name == "social/models.py" else (MODEL,))
 
 
 class WriterScanTests(SimpleTestCase):
     """A writer that forgets its day fails silently, so the list of them is closed."""
 
     def test_no_writer_is_missing_from_the_list(self):
-        root = Path(settings.BASE_DIR)
-        found = {}
-        for path in root.rglob("*.py"):
-            parts = path.relative_to(root).parts
-            if "tests" in parts or "migrations" in parts or parts[0] == ".venv" or path.name.startswith("test_"):
-                continue
-            source = path.read_text()
-            calls = WRITES.findall(source)
-            name = path.relative_to(root).as_posix()
-            if name == "social/models.py":
-                calls += CLASS_WRITES.findall(source)
-            if calls:
-                found[name] = sorted(calls)
+        found = {name: sorted(writes) for name, (writes, _) in writer_files() if writes}
         self.assertEqual(found, {path: sorted(calls) for path, calls in WRITERS.items()})
+
+    def test_every_writer_names_its_day(self):
+        """A bulk_create takes rows, so its day is on the row it was built with."""
+        for name, (writes, named_day) in writer_files():
+            with self.subTest(name):
+                self.assertEqual(sorted(named_day), sorted(write for write in writes if not write.endswith("bulk_create")))
+
+    def test_the_scan_sees_every_shape_of_a_write(self):
+        shapes = {
+            "ProgressChange(": "row = ProgressChange(actor=user)",
+            "ProgressChange.objects.create": "ProgressChange.objects.create(actor=user)",
+            "ProgressChange.objects.bulk_create": "ProgressChange.objects.bulk_create(rows)",
+            "ProgressChange.objects.get_or_create": "ProgressChange.objects.get_or_create(actor=user)",
+            "ProgressChange.objects.update_or_create": "ProgressChange.objects.update_or_create(actor=user)",
+            "ProgressChange alias": "model = ProgressChange",
+            "ProgressChange as Change": "from social.models import ProgressChange as Change",
+            "ProgressChange get_model": 'apps.get_model("social", "ProgressChange").objects.create(actor=user)',
+        }
+        for write, source in shapes.items():
+            with self.subTest(write):
+                self.assertEqual(writes_in(source)[0], [write])
+        wrapped = "(\n    ProgressChange.objects\n    .create(actor=user)\n)"
+        self.assertEqual(writes_in(wrapped)[0], ["ProgressChange.objects.create"])
+
+    def test_a_create_without_its_day_shows(self):
+        self.assertEqual(writes_in("ProgressChange.objects.create(actor=user)")[1], [])
+        named = "ProgressChange.objects.create(actor=user, saved_on=day)"
+        self.assertEqual(writes_in(named)[1], ["ProgressChange.objects.create"])
+
+    def test_other_models_are_not_writes(self):
+        self.assertEqual(writes_in("Activity.objects.create(actor=user)")[0], [])
+        self.assertEqual(writes_in("ProgressChange.objects.filter(actor=user).delete()")[0], [])
 
 
 @override_settings(TIME_ZONE="America/New_York")
