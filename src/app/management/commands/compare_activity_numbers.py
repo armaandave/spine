@@ -6,19 +6,25 @@ the Stats cache out of the way. It writes nothing to the database, though the St
 may store list sizes in Redis, as any Stats page does. Its row side goes through the
 list's own filter function, never through the Stats reader, or it would compare a number
 with itself.
+
+It reads production's real rows right after a deploy, so a bad one costs only its own step:
+that line says it failed, the rest still report, and the command exits non-zero at the end.
 """
 
 import time
+import traceback
 from collections import Counter, defaultdict
 from datetime import date, timedelta
+from pathlib import Path
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.db.models import Count
 from django.db.models.functions import Coalesce
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from api.services import activity as activity_service
@@ -47,27 +53,47 @@ class Command(BaseCommand):
         parser.add_argument("--user", type=int, help="Compare one account by id.")
 
     def handle(self, *args, **options):
+        since = _moment(options["since"])
+        self.failed = 0
         with transaction.atomic():
             if connection.vendor == "postgresql":
                 with connection.cursor() as cursor:
                     cursor.execute("SET TRANSACTION READ ONLY")
             try:
-                self._report(options)
+                self._report(options, since)
             finally:
                 transaction.set_rollback(True)
+        if self.failed:
+            raise CommandError(f"{self.failed} steps failed, and their lines say which. The rest reported.")
 
-    def _report(self, options):
-        self._jit()
+    def _report(self, options, since):
+        self._guarded("jit", self._jit)
         users = get_user_model().objects.order_by("pk")
         if options["user"]:
             users = users.filter(pk=options["user"])
         for user in users:
-            self._account(user)
-        self._count_2()
-        self._count_14(options["since"])
+            self._guarded(f"user {user.pk}", self._account, user)
+        self._guarded("count 2", self._count_2)
+        self._guarded("count 14", self._count_14, since)
 
     def _say(self, *parts):
         self.stdout.write(" ".join(str(part) for part in parts))
+
+    def _guarded(self, label, step, *args):
+        """Run a step, so a bad row costs it and not the rest; return its result or None.
+
+        The savepoint is what lets the rest run: after an error Postgres refuses every
+        later query until one is rolled back. It says the error's type and place, never
+        its message, which could quote a row.
+        """
+        try:
+            with transaction.atomic():
+                return step(*args)
+        except Exception as error:  # noqa: BLE001
+            frame = traceback.extract_tb(error.__traceback__)[-1]
+            self._say(f"{label}: failed {type(error).__name__} at {Path(frame.filename).name}:{frame.lineno}")
+            self.failed += 1
+            return None
 
     def _jit(self):
         """Say whether Postgres plans with JIT: the speed gates ran without it."""
@@ -85,12 +111,9 @@ class Command(BaseCommand):
             calculation = activity_rows.rows_for([user], user, types=activity_rows.ADAPTERS)
         walk_ms = (time.perf_counter() - started) * 1000
         scope = StatsScope(owner=user, viewer=user)
-        started = time.perf_counter()
-        build_stats_v2(scope)
-        stats_ms = (time.perf_counter() - started) * 1000
-        self._say(
-            f"user {user.pk}: walk_ms={walk_ms:.0f} walk_queries={len(queries)} stats_ms={stats_ms:.0f}",
-        )
+        stats_ms = self._guarded(f"user {user.pk} stats", _stats_ms, scope)
+        stats = "failed" if stats_ms is None else f"{stats_ms:.0f}"
+        self._say(f"user {user.pk}: walk_ms={walk_ms:.0f} walk_queries={len(queries)} stats_ms={stats}")
         for media_type in activity_rows.ADAPTERS:
             self._type(user, scope.with_media_type(media_type), media_type, calculation)
 
@@ -100,10 +123,12 @@ class Command(BaseCommand):
         zone = user_calendar.calendar_tz(user)
         years = {row.day.year for row in rows} | {activity_rows.log_day(moment, zone).year for moment in logs}
         years |= _old_counter_years(scope, media_type, zone)
+        # A year today's code counts and the rows leave empty would lose its pill at the switch.
+        years |= self._guarded(f"user {user.pk} {media_type} years", _event_years, scope) or set()
         for year in sorted(years):
             ranged = scope._sibling(start_date=date(year, 1, 1), end_date=date(year, 12, 31))
-            self._range(user, ranged, media_type, str(year), calculation)
-        self._range(user, scope, media_type, "all", calculation)
+            self._guarded(f"user {user.pk} {media_type} {year}", self._range, user, ranged, media_type, str(year), calculation)
+        self._guarded(f"user {user.pk} {media_type} all", self._range, user, scope, media_type, "all", calculation)
 
     def _range(self, user, scope, media_type, label, calculation):
         """Print one type and range: each number today, and what the list gives."""
@@ -122,7 +147,7 @@ class Command(BaseCommand):
         titles = listed(activity_rows.TITLES)
         title_ids = {row.title_id for row in titles} | pile.titles
         counted = {row.title_id for row in titles} | (pile.titles - pile.no_amount)
-        unknown = {row.title_id for row in titles if not row.known} | (pile.titles - pile.known - pile.no_amount)
+        unknown = {row.title_id for row in listed() if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
         days = sorted({row.day for row in listed(activity_rows.DAYS)})
         today_days = sorted({day for day, _title, _bucket in scope.events})
         week_start = scope.week_starts_on
@@ -182,7 +207,7 @@ class Command(BaseCommand):
         """Count 14: a missed writer fails silently, so count rows with no stored day."""
         rows = ProgressChange.objects.order_by()
         if since:
-            rows = rows.filter(created_at__gte=parse_datetime(since))
+            rows = rows.filter(created_at__gte=since)
         empty = _per_type(rows.filter(saved_on__isnull=True))
         status = _per_type(rows.filter(current_progress__kind=ProgressChange.STATUS))
         began_over = rows.filter(current_progress__has_key="began_over").count()
@@ -205,10 +230,42 @@ def _old_counter_years(scope, media_type, zone):
     return set()
 
 
+def _moment(value):
+    """Return --since as a moment, saying so before any work if it can't be read as one."""
+    if not value:
+        return None
+    try:
+        moment = parse_datetime(value)
+    except ValueError:
+        moment = None
+    if moment is None:
+        raise CommandError("--since takes an ISO moment, such as 2026-11-04T12:00:00-05:00.")
+    return timezone.make_aware(moment) if timezone.is_naive(moment) else moment
+
+
+def _event_years(scope):
+    """Return the years today's code counts an active day in."""
+    return {day.year for day, _title, _bucket in scope.events}
+
+
+def _stats_ms(scope):
+    """Return how long the Stats build takes, in milliseconds."""
+    started = time.perf_counter()
+    build_stats_v2(scope)
+    return (time.perf_counter() - started) * 1000
+
+
 def _per_type(rows):
     """Return a queryset's row counts by Item type, as a plain sorted dict."""
     counts = rows.values("item__media_type").annotate(count=Count("id")).values_list("item__media_type", "count")
     return dict(sorted(counts))
+
+
+def _moved(change):
+    """Return how far a change moved. With no number on either side it's 0, as the feed sums it."""
+    current = activity_rows.saved_number(change.current_progress.get("value"))
+    previous = activity_rows.saved_number(change.previous_progress.get("value"))
+    return 0 if current is None or previous is None else current - previous
 
 
 def _qualifying_days(actor_ids):
@@ -225,7 +282,7 @@ def _qualifying_days(actor_ids):
         key = (change.actor_id, activity_service._title_key(change.item))
         day = activity_rows.saved_day(change, user_calendar.calendar_tz(actors[change.actor_id]))
         unit = change.current_progress.get("unit")
-        nets[key][day][unit] += change.current_progress.get("value", 0) - change.previous_progress.get("value", 0)
+        nets[key][day][unit] += _moved(change)
         moments[key][day].append(change.created_at)
     return {
         key: {

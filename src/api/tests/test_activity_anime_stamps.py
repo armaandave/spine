@@ -15,12 +15,14 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from api.services import tracking as tracking_service
+from app import user_calendar
 from app.forms import AnimeForm
 from app.models import Anime, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry, update_diary_entry
 from app.tests.tv_fixtures import make_user, patch_now
 from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
 from integrations.imports.mal_export.importer import MALExportImporter
+from integrations.webhooks.plex import PlexWebhookProcessor
 
 MOCK_DATA = Path(__file__).resolve().parent.parent.parent / "integrations" / "tests" / "mock_data"
 NEW_YORK = "America/New_York"
@@ -167,6 +169,68 @@ class SaveReasonTests(AnimeBase):
 
     def test_anything_else_is_a_mark(self):
         row = self.tracked(progress=3)
+        row.notes = "Good"
+        row.save()
+        self.assertEqual(self.reasons(row)[-1], "mark")
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class WebhookTests(AnimeBase):
+    """A media server says an episode was really played, so the last one is no mark."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch("integrations.webhooks.anime.app.providers.mal.anime", return_value=ANIME_METADATA)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def play(self, episode, user=None):
+        """Play an episode of the one anime here, and return its row."""
+        user = user or self.user
+        PlexWebhookProcessor()._handle_anime("229", episode, {"event": "media.scrobble"}, user)
+        return Anime.objects.get(user=user, item__media_id="229", item__source=Sources.MAL.value)
+
+    def watching(self, progress=11, user=None):
+        """Return a row part way through the anime the webhook plays."""
+        item, _ = Item.objects.get_or_create(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            media_id="229",
+            defaults={"title": "Exported", "image": "https://example.com/poster.jpg"},
+        )
+        return Anime.objects.create(user=user or self.user, item=item, status=Status.IN_PROGRESS.value, progress=progress)
+
+    def test_playing_the_last_episode_counts_today(self):
+        self.watching()
+        row = self.play(12)
+        self.assertEqual((row.status, row.progress), (Status.COMPLETED.value, 12))
+        self.assertEqual(self.reasons(row)[-1], TODAY)
+
+    def test_a_first_play_of_the_last_episode_counts_today(self):
+        row = self.play(12)
+        self.assertEqual(row.status, Status.COMPLETED.value)
+        self.assertEqual(self.reasons(row), [TODAY])
+
+    def test_playing_another_episode_still_counts_today(self):
+        self.watching()
+        row = self.play(5)
+        self.assertEqual(row.status, Status.IN_PROGRESS.value)
+        self.assertEqual(self.reasons(row)[-1], TODAY)
+
+    def test_a_play_lands_on_its_owners_calendar(self):
+        for zone, moment, day in (
+            ("Asia/Tokyo", datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2027-01-01"),
+            (LOS_ANGELES, datetime(2027, 1, 1, 1, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2026-12-31"),
+        ):
+            with self.subTest(zone), patch_now(moment):
+                user = make_user(calendar=zone)
+                self.watching(user=user)
+                self.assertEqual(self.reasons(self.play(12, user))[-1], day)
+
+    def test_a_later_save_of_that_row_says_what_it_is(self):
+        self.watching()
+        self.play(12)
+        row = Anime.objects.get(user=self.user, item__media_id="229")
         row.notes = "Good"
         row.save()
         self.assertEqual(self.reasons(row)[-1], "mark")
@@ -338,9 +402,10 @@ class ImportTests(TestCase):
     def assert_each_row_says_what_it_is(self):
         rows = Anime.objects.filter(user=self.user)
         self.assertTrue(rows.exists())
+        today = user_calendar.today(self.user)
         for row in rows:
-            finished = row.status == Status.COMPLETED.value and row.end_date
-            expected = f"day:{row.sent_end_day()}" if finished else "mark"
+            day = row.sent_end_day() if row.status == Status.COMPLETED.value else None
+            expected = f"day:{day}" if day and day <= today else "mark"
             self.assertEqual(self.reason_of(row), expected, row.item.title)
 
     def test_yamtrack_with_a_dated_completed_row_and_a_stamped_moment(self):
@@ -394,6 +459,9 @@ class ImportTests(TestCase):
         self.assertTrue(
             Anime.objects.filter(user=self.user, status=Status.COMPLETED.value, end_date__isnull=False).exists(),
         )
+        # The file's own future finish date.
+        future = Anime.objects.get(user=self.user, end_date=datetime(2099, 1, 1, tzinfo=UTC))
+        self.assertEqual(self.reason_of(future), "mark")
 
     def test_simkl(self):
         def row(mal_id, title, status, **fields):
@@ -456,6 +524,32 @@ class ImportTests(TestCase):
         helpers.bulk_update_media({MediaTypes.ANIME.value: rows}, fields, self.user)
         self.assertEqual(self.reason_of(dated), "day:2026-03-01")
         self.assertEqual(self.reason_of(marked), "mark")
+
+    def test_a_date_past_today_in_a_file_is_a_mark(self):
+        """As a series' import day: nobody watched anything on a date past today."""
+        csv = (
+            '"media_id","source","media_type","title","image","season_number","episode_number","score",'
+            '"progress","status","start_date","end_date","notes","progressed_at"\n'
+            '"229","mal","anime","Dated","https://example.com/c.jpg","","","","12","Completed",'
+            '"","2099-04-09","",""\n'
+        )
+        with mock.patch("app.providers.services.get_media_metadata", return_value={"max_progress": 12}):
+            yamtrack.importer(io.BytesIO(csv.encode()), self.user, "new")
+        self.assertEqual(self.reason_of(Anime.objects.get(user=self.user)), "mark")
+
+    def test_the_owners_calendar_decides_a_files_today(self):
+        carrier = datetime(2027, 1, 1, tzinfo=UTC)
+        server_midnight = datetime(2027, 1, 1, tzinfo=ZoneInfo(NEW_YORK))
+        for zone, moment, expected in (
+            ("Asia/Tokyo", datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2027-01-01"),
+            (NEW_YORK, datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK)), "mark"),
+            (LOS_ANGELES, datetime(2027, 1, 1, 1, 0, tzinfo=ZoneInfo(NEW_YORK)), "mark"),
+            (NEW_YORK, datetime(2027, 1, 1, 1, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2027-01-01"),
+        ):
+            for end_date in (carrier, server_midnight):
+                with self.subTest(zone=zone, moment=moment, end_date=end_date), patch_now(moment):
+                    row = Anime(user=make_user(calendar=zone), status=Status.COMPLETED.value, end_date=end_date)
+                    self.assertEqual(row.import_reason(), expected)
 
     def test_a_date_stays_its_calendar_day_on_any_zone(self):
         row = Anime(

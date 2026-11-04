@@ -69,6 +69,15 @@ def today(user) -> date:
     return now().astimezone(calendar_tz(user)).date()
 
 
+def log_ceiling(user) -> date:
+    """Return the latest date a log can hold: the user's today, or the server's if later.
+
+    With no zone header the server's today can be ahead of the user's, and a date it
+    allowed stays allowed. With the header they're the same day.
+    """
+    return max(today(user), timezone.localdate())
+
+
 def day_of(moment, user) -> date:
     """Return the calendar day of a moment on the user's calendar.
 

@@ -142,6 +142,21 @@ class GameStoriesTests(GameCalcBase):
         row = next(row for row in self.calc().rows if row.told)
         self.assertEqual((row.counts_title, row.known, row.told_unit), (True, False, "percent"))
 
+    def test_playtime_and_a_percent_on_one_day_tell_the_playtime(self):
+        """AC-2 for either order, and the percent is unknown as on any other day."""
+        hours_first = self.game("hours-first")
+        self.begin(hours_first, d(2026, 2, 1))
+        self.save(hours_first, h(5), d(2026, 2, 2))
+        self.percent(hours_first, 40, d(2026, 2, 2))
+        percent_first = self.game("percent-first")
+        self.begin(percent_first, d(2026, 2, 1))
+        self.percent(percent_first, 40, d(2026, 2, 2))
+        self.save(percent_first, h(5), d(2026, 2, 2))
+        for item in (hours_first, percent_first):
+            with self.subTest(item=item.title):
+                row = next(row for row in self.calc().rows if row.title_id == item.pk and row.told)
+                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (h(5), "minute", h(5), False))
+
     def test_steams_lifetime_never_adds(self):
         item = self.game()
         Game.objects.bulk_create(

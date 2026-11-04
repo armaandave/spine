@@ -175,7 +175,8 @@ compare_activity_numbers` prints today's number beside the calculation's, per ac
 Run it after the deploy, and again with `--since <the deploy's moment>` after the first real
 save of each type. Then bring Armaan the comparison, from a run made after steps 2 and 3, or
 once both their counts are zero: before them it reads unflagged Restarts as typo fixes and
-leaves out the undated Reads.
+leaves out the undated Reads. A step that meets a bad row prints `failed` on its own line, the
+rest still report, and the command exits non-zero at the end; bring him those lines too.
 
 Remove this section once Phase 1 has shipped.
 

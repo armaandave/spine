@@ -18,7 +18,7 @@ commit.
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import partial
 from types import SimpleNamespace
 
@@ -293,21 +293,20 @@ class Title:
             row = self._day(amount.day)
             row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
         if unit == PERCENT:
-            # A day that moved in both is told in its own unit; a percent adds nothing.
-            if not row.amount:
-                row.told += amount.value
-                row.told_unit = PERCENT
-                row.known = False
-            return
-        if row.told_unit == PERCENT:
-            row.told = ZERO
+            row.known = False
+            # A row tells one unit (AC-2), and an amount wins over a percent.
+            if row.told_unit not in ("", PERCENT):
+                return
+        else:
+            if row.told_unit == PERCENT:
+                row.told = ZERO
+            if self.unit == EPISODE:
+                row.amount += amount.value * (self.length or 0)
+                row.known = row.known and bool(self.length)
+            else:
+                row.amount += amount.value
         row.told += amount.value
         row.told_unit = unit
-        if self.unit == EPISODE:
-            row.amount += amount.value * (self.length or 0)
-            row.known = row.known and bool(self.length)
-        else:
-            row.amount += amount.value
 
     def rows(self):
         """Return the rows with something to say, and every log."""
@@ -365,12 +364,27 @@ class _Save:
     current_progress: dict
 
 
+def saved_number(value):
+    """Return a snapshot's number, or None for a null or anything that isn't one."""
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() else None
+
+
 def _pages_of(snapshot, length):
-    """Return a saved place in pages, or None for a percent of an unknown length."""
+    """Return a saved place in pages.
+
+    None with no number, or for a percent of an unknown length.
+    """
+    value = saved_number(snapshot.get("value"))
+    if value is None:
+        return None
     if snapshot.get("kind") == "pages":
-        return Decimal(str(snapshot["value"]))
+        return value
     if snapshot.get("kind") == "percentage" and length:
-        return Decimal(round(Decimal(str(snapshot["value"])) / 100 * length))
+        return Decimal(round(value / 100 * length))
     return None
 
 
@@ -378,14 +392,16 @@ def _book_target(snapshot, total):
     """Return (the pages a finished read comes to, whether that's its real length).
 
     A snapshot with a max holds the length at the finish, and it stays (STAT-201). With
-    no max it's only the last page typed, so the real length wins once it's known.
+    no max it's only the last page typed, so the real length wins once it's known. As in
+    stats_time._book_pages, a value of null or 0, or one that's no number, says nothing.
     """
-    if snapshot.get("kind") == "pages" and snapshot.get("max"):
-        return Decimal(str(snapshot["value"])), True
+    pages = saved_number(snapshot.get("value")) if snapshot.get("kind") == "pages" else None
+    if pages and saved_number(snapshot.get("max")):
+        return pages, True
     if total:
         return Decimal(total), True
-    if snapshot.get("kind") == "pages" and snapshot.get("value"):
-        return Decimal(str(snapshot["value"])), False
+    if pages:
+        return pages, False
     return None, False
 
 
@@ -437,10 +453,14 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
         elif kind == ProgressChange.STATUS:
             reading.touch(day, change, move=saved["move"])
         elif kind in ("pages", "percentage"):
+            value = saved_number(saved.get("value"))
+            if value is None:
+                # As the feed's SQL reads it: a save with no number moved nothing.
+                continue
             reading.touch(day, change)
             pages = _pages_of(saved, length)
             if pages is None:
-                reading.percents.move_to(Decimal(str(saved["value"])), day, change.created_at)
+                reading.percents.move_to(value, day, change.created_at)
             else:
                 reading.counted.move_to(pages, day, change.created_at)
 
@@ -470,7 +490,7 @@ def _walk_session(title, reading, session, saves, total, zone, *, continues):
     entry = session.completion_diary_entry if session.status == Status.COMPLETED.value else None
     snapshot = (entry.progress_snapshot or {}) if entry else {}
     # A finished read's percent saves use the length on its log (STAT-201).
-    length = (snapshot.get("max") if snapshot.get("kind") == "pages" else None) or total
+    length = (saved_number(snapshot.get("max")) if snapshot.get("kind") == "pages" else None) or total
     _walk_journey(reading, session, saves, length, zone, continues=continues, finished=bool(entry))
     if entry:
         day = log_day(entry.consumed_at, zone)
@@ -515,8 +535,7 @@ def marked_moments(model, tracking_ids):
     """Return when each title's mark last went on, by its history rows in save order.
 
     One query however many titles ask, because every Stats miss walks them all. A title
-    is left out when no row says so: migration 0075 and the undated Reads step write
-    none.
+    is left out when no row says so: migration 0075 writes none.
     """
     moments = {}
     marked = {}

@@ -689,6 +689,151 @@ class LengthTests(BookCalcBase):
         )
 
 
+class OneUnitTests(BookCalcBase):
+    """AC-2 tells a row in one unit: on a day with pages and a percent, the pages."""
+
+    def told(self, item):
+        """Return each of the title's rows: day, what it says, in what, what it adds."""
+        rows = [row for row in list_rows(self.calc().rows, media_type=BOOK) if row.title_id == item.pk]
+        return [(row.day, row.told, row.told_unit, row.amount) for row in rows if row.told]
+
+    def test_pages_then_a_percent_tell_the_pages(self):
+        item = self.book("pages-first", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 200, d(2026, 3, 2), at="10:00")
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_a_percent_then_pages_tell_the_pages(self):
+        item = self.book("percent-first", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.save(item, 200, d(2026, 3, 2), at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_a_percent_read_then_a_page_read_on_one_day_tell_the_pages(self):
+        """Each read folds in on its own, so the percent can reach the row first."""
+        item = self.book("two-reads", pages=None)
+        self.begin(item, d(2026, 3, 2))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.do(book_tracking.restart, item, d(2026, 3, 2))
+        self.save(item, 200, d(2026, 3, 2), at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_a_percent_beside_pages_is_unknown_whichever_reached_the_row_first(self):
+        """It has no length to read it with, as on any other day (STAT-201)."""
+        pages_first = self.book("pages-first", pages=None)
+        self.begin(pages_first, d(2026, 3, 1))
+        self.save(pages_first, 200, d(2026, 3, 2), at="10:00")
+        self.save(pages_first, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        percent_first = self.book("percent-first", pages=None)
+        self.begin(percent_first, d(2026, 3, 2))
+        self.save(percent_first, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.do(book_tracking.restart, percent_first, d(2026, 3, 2))
+        self.save(percent_first, 200, d(2026, 3, 2), at="11:00")
+        for item in (pages_first, percent_first):
+            with self.subTest(item=item.title):
+                row = next(row for row in self.calc().rows if row.title_id == item.pk and row.told)
+                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (200, "page", 200, False))
+
+    def test_two_percents_on_one_day_still_add_up(self):
+        item = self.book("percents", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.save(item, 45, d(2026, 3, 2), kind="percentage", at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 45, "percent", 0)])
+
+    def test_a_log_a_read_moved_onto_tells_the_pages(self):
+        item = self.book("moved", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 200, d(2026, 3, 2), at="10:00")
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        _, entry = self.finish(item, d(2026, 3, 5))
+        self.backdate(entry, d(2025, 12, 20))
+        self.assertEqual(self.told(item), [(d(2025, 12, 20), 200, "page", 200)])
+
+
+class UnusableNumberTests(BookCalcBase):
+    """A saved number can be null, 0 or not a number: the old counter's guards hold."""
+
+    def logged(self, name, snapshot, *, pages=300, journey=True):
+        """Return a book logged Mar 2 2025, with this on its log."""
+        item = self.book(name, pages=pages)
+        if journey:
+            _, entry = self.finish(item, d(2025, 3, 2))
+        else:
+            entry = self.log(item, datetime(2025, 3, 2, tzinfo=UTC))
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot=snapshot)
+        return item
+
+    def test_a_log_with_no_usable_pages_reads_the_length(self):
+        """STAT-201's snapshot wins only when it holds a number of pages."""
+        for value in (None, 0, "0", "abc", "NaN", "Infinity", True, ""):
+            for journey in (True, False):
+                with self.subTest(value=value, journey=journey):
+                    item = self.logged(f"{value!r}-{journey}", {"kind": "pages", "value": value, "max": 300}, journey=journey)
+                    self.assertEqual(self.rows(item), ["2025-03-02 log +300"])
+
+    def test_a_snapshot_with_no_value_at_all_reads_the_length(self):
+        item = self.logged("missing", {"kind": "pages", "max": 300})
+        self.assertEqual(self.rows(item), ["2025-03-02 log +300"])
+
+    def test_a_log_with_no_usable_pages_or_length_adds_nothing_and_says_so(self):
+        for value in (None, 0, "abc"):
+            with self.subTest(value=value):
+                item = self.logged(f"{value}-none", {"kind": "pages", "value": value, "max": 300}, pages=None)
+                row = next(row for row in self.calc().rows if row.title_id == item.pk)
+                self.assertEqual((row.amount, row.known), (Decimal(0), False))
+                self.assertTrue(row.log_id)
+
+    def test_pages_on_a_log_still_win_over_the_length(self):
+        item = self.logged("kept", {"kind": "pages", "value": 320, "max": 300})
+        self.assertEqual(self.rows(item), ["2025-03-02 log +320"])
+
+    def test_a_length_on_a_log_that_is_no_number_is_no_length(self):
+        item = self.logged("no-max", {"kind": "pages", "value": 320, "max": "abc"})
+        self.assertEqual(self.rows(item), ["2025-03-02 log +300"])
+
+    def test_a_percent_save_ignores_a_length_on_its_log_that_is_no_number(self):
+        item = self.book("percent-no-max", pages=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 25, d(2026, 3, 2), kind="percentage")
+        _, entry = self.finish(item, d(2026, 3, 5))
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": 400, "max": "abc"})
+        self.assertEqual(self.rows(item), ["2026-03-05 log +300", "2026-03-02 read 100", "2026-03-01 started"])
+
+    def test_a_save_with_no_number_moves_nothing(self):
+        for value in (None, "abc"):
+            with self.subTest(value=value):
+                item = self.book(f"save-{value}")
+                self.begin(item, d(2026, 3, 1))
+                self.save(item, 100, d(2026, 3, 2))
+                self.save(item, 150, d(2026, 3, 3))
+                self.save(item, 200, d(2026, 3, 4))
+                middle = ProgressChange.objects.filter(item=item, current_progress__value=150).get()
+                middle.current_progress["value"] = value
+                middle.save(update_fields=["current_progress"])
+                self.assertEqual(self.rows(item), ["2026-03-04 read 100", "2026-03-02 read 100", "2026-03-01 started"])
+
+    def test_a_percent_save_with_no_number_moves_nothing(self):
+        item = self.book("percent-null", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 25, d(2026, 3, 2), kind="percentage")
+        ProgressChange.objects.filter(item=item, current_progress__kind="percentage").update(
+            current_progress={"kind": "percentage", "value": None, "max": 100, "unit": "percent"},
+        )
+        self.assertEqual(self.rows(item), ["2026-03-01 started"])
+
+    def test_an_opening_with_no_number_holds_nothing(self):
+        item = self.book("opening")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 2))
+        change = ProgressChange.objects.get(item=item, current_progress__kind="pages")
+        change.previous_progress["value"] = None
+        change.save(update_fields=["previous_progress"])
+        self.assertEqual(self.rows(item), ["2026-03-02 read 100", "2026-03-01 started"])
+
+
 class DeleteTests(BookCalcBase):
     """A row follows what it was worked out from."""
 

@@ -74,7 +74,7 @@ def supports(value):
 def _calendar_datetime(value, user, *, required=True):
     if value is None and not required:
         return None
-    return single_weight.calendar_datetime(value, today=user_calendar.today(user))
+    return single_weight.calendar_datetime(value, user=user)
 
 
 def _carrier(day):
@@ -708,6 +708,25 @@ def mark_read(user, item):
         book.undated_read_previous_status = None if created else book.status
         book.undated_read_previous_session = None if created else book.current_session
         book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book, place)
+    return book
+
+
+def mark_imported_read(book):
+    """Give an undated imported Read what the eye writes (one-time step, decision 49).
+
+    mark_read returns at once on a Completed book. The importer made the row, so turning
+    the eye off keeps it, at To Read.
+    """
+    book.completed_manually = True
+    book.undated_read_previous_tracked = True
+    book.undated_read_previous_status = Status.PLANNING.value
+    book.undated_read_previous_session = None
+    book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book, 0)
+
+
+def _save_marked(book, place):
     book.status = Status.COMPLETED.value
     book.current_session = None
     book.progress = place
@@ -731,7 +750,6 @@ def mark_read(user, item):
             "end_date",
         ],
     )
-    return book
 
 
 @transaction.atomic
@@ -754,8 +772,8 @@ def assign_read(user, item, *, sent_day=None):
 def _place_before_mark(book):
     """Return the place the mark replaced: no column holds one, so its history says.
 
-    A Read's progress is its length, not a place, and the undated Reads step flags one
-    without writing a history row.
+    A Read's progress is its length, not a place, and that's what the row before the
+    undated Reads step's mark holds.
     """
     rows = book.history.order_by("-history_id").values_list("completed_manually", "status", "progress")
     for marked, status, progress in rows:

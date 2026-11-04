@@ -54,6 +54,7 @@ class AnimeWebhookMixin:
 
         if current_instance and current_instance.status != Status.COMPLETED.value:
             current_instance.progress = episode_number
+            current_instance.is_play = True
 
             if is_completed:
                 current_instance.end_date = now
@@ -76,7 +77,7 @@ class AnimeWebhookMixin:
                     current_instance.item,
                 )
         else:
-            app.models.Anime.objects.create(
+            anime = app.models.Anime(
                 item=anime_item,
                 user=user,
                 progress=episode_number,
@@ -84,6 +85,8 @@ class AnimeWebhookMixin:
                 start_date=now if not is_completed else None,
                 end_date=now if is_completed else None,
             )
+            anime.is_play = True
+            anime.save()
             logger.info(
                 "Created new anime instance with status: %s and progress %d",
                 status,

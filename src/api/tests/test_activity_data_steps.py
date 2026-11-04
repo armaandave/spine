@@ -11,6 +11,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.management import call_command
@@ -99,11 +100,98 @@ class UndatedReadsTests(StepBase):
         self.assertEqual(self.rows(), [])
         book = Book.objects.get(item=item)
         self.assertTrue(book.undated_read_previous_tracked)
-        self.assertIsNone(book.undated_read_previous_status)
+        self.assertEqual(book.undated_read_previous_status, Status.PLANNING.value)
+
+    def state_of(self, item):
+        """Return a book's row, leaving out what tells two rows apart."""
+        return Book.objects.filter(item=item).values(*self.state_fields).get()
+
+    @property
+    def state_fields(self):
+        apart = {"id", "item", "created_at", "progressed_at"}
+        return [field.attname for field in Book._meta.concrete_fields if field.name not in apart]
+
+    def history_of(self, item):
+        """Return a book's history rows, oldest first, as the same fields say them."""
+        book = Book.objects.get(item=item)
+        names = {field.attname for field in Book.history.model._meta.concrete_fields}
+        fields = [name for name in self.state_fields if name in names]
+        rows = Book.history.filter(id=book.pk).order_by("history_date", "history_id")
+        return list(rows.values("history_type", *fields))
+
+    def the_same_book_marked_by_the_eye(self, name, **fields):
+        """Return a book at To Read with these, after the eye."""
+        item = self.book(name)
+        Book.objects.bulk_create([Book(user=self.owner, item=item, status=Status.PLANNING.value, **fields)])
+        with self.on(d(2026, 3, 1)):
+            book_tracking.mark_read(self.owner, item)
+        return item
+
+    def test_it_leaves_exactly_what_the_eye_leaves(self):
+        """The eye returns at once on a Completed book, so the step writes this."""
+        kept = {"score": 8, "notes": "Loved it"}
+        eyed = self.the_same_book_marked_by_the_eye("eyed", **kept)
+        item = self.imported_read(
+            "imported",
+            progress=320,
+            start_date=datetime(2024, 3, 1, tzinfo=UTC),
+            **kept,
+        )
+        self.assertNotEqual(self.state_of(item), self.state_of(eyed))
+        run("fill_undated_reads", apply=True)
+        self.assertEqual(self.state_of(item), self.state_of(eyed))
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.progress, book.start_date, book.end_date), (0, None, None))
+
+    def test_it_writes_a_history_row_as_the_eye_does(self):
+        kept = {"notes": "Loved it"}
+        eyed = self.the_same_book_marked_by_the_eye("eyed", **kept)
+        item = self.imported_read("imported", progress=320, **kept)
+        run("fill_undated_reads", apply=True)
+        self.assertEqual(self.history_of(item), self.history_of(eyed))
+        self.assertEqual([row["history_type"] for row in self.history_of(item)], ["~"])
+
+    def test_it_calls_no_provider_and_queues_no_release_fetch(self):
+        self.imported_read("quiet", progress=320)
+        with (
+            patch("app.providers.services.get_media_metadata", side_effect=AssertionError("A provider call")),
+            patch("requests.Session.request", side_effect=AssertionError("A network call")),
+            patch("app.models.Item.fetch_releases", side_effect=AssertionError("A release fetch")),
+        ):
+            run("fill_undated_reads", apply=True)
+        self.assertTrue(Book.objects.get(user=self.owner).completed_manually)
+
+    def test_its_old_values_undo_it(self):
+        """They're all the wrapper keeps of a row, so they have to rebuild it."""
+        item = self.imported_read(
+            "undoable",
+            progress=320,
+            start_date=datetime(2024, 3, 1, tzinfo=UTC),
+            score=8,
+            notes="Loved it",
+        )
+        before = self.state_of(item)
+        out, _ = run("fill_undated_reads", apply=True)
+        self.assertNotEqual(self.state_of(item), before)
+        old = json.loads(out)
+        Book.objects.filter(pk=old.pop("book")).update(**old)
+        self.assertEqual(self.state_of(item), before)
+
+    def test_its_old_values_hold_no_title_or_notes(self):
+        self.imported_read("A Secret Title", notes="A secret note")
+        out, _ = run("fill_undated_reads", apply=True)
+        self.assertNotIn("Secret", out)
+        self.assertNotIn("secret", out)
 
     def test_a_marked_read_can_still_be_undone_and_keeps_the_row(self):
         """The importer made the row, so turning the eye off can't delete it."""
-        item = self.imported_read("undo", score=8, notes="Loved it")
+        item = self.imported_read(
+            "undo",
+            progress=320,
+            start_date=datetime(2024, 3, 1, tzinfo=UTC),
+            score=8,
+            notes="Loved it",
+        )
         run("fill_undated_reads", apply=True)
         self.assertEqual(Book.objects.get(item=item).score, 8)
         with self.on(d(2026, 3, 1)):
@@ -111,11 +199,13 @@ class UndatedReadsTests(StepBase):
         book = Book.objects.get(item=item)
         self.assertEqual(book.status, Status.PLANNING.value)
         self.assertEqual(book.notes, "Loved it")
+        self.assertIsNone(book.score)
+        self.assertEqual((book.progress, book.start_date, book.end_date), (0, None, None))
         self.assertFalse(book.completed_manually)
         self.assert_numbers(0, 0, 0)
 
     def test_undoing_a_read_that_held_its_length_leaves_no_place(self):
-        """The step writes no history row, so the row before it still says 400."""
+        """The row before the step's mark still says 400, and that's its length."""
         item = self.book("held-length")
         Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400)
         run("fill_undated_reads", apply=True)
@@ -127,6 +217,16 @@ class UndatedReadsTests(StepBase):
         self.begin(item, d(2026, 3, 2))
         self.assertEqual(Book.objects.get(item=item).progress, 0)
         self.assertEqual(self.rows(item), ["2026-03-02 started"])
+
+    def test_turning_the_eye_off_afterward_leaves_what_it_leaves_on_any_mark(self):
+        kept = {"score": 8, "notes": "Loved it"}
+        eyed = self.the_same_book_marked_by_the_eye("eyed", **kept)
+        item = self.imported_read("imported", progress=320, **kept)
+        run("fill_undated_reads", apply=True)
+        with self.on(d(2026, 3, 1)):
+            book_tracking.undo_read(self.owner, eyed)
+            book_tracking.undo_read(self.owner, item)
+        self.assertEqual(self.state_of(item), self.state_of(eyed))
 
     def test_a_read_holding_a_stopped_journey_holds_only_what_is_left(self):
         """Stopped, To Read, then a status written on the row, as the web form does."""

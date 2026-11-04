@@ -128,7 +128,10 @@ A title with no known length, such as an album whose songs haven't loaded, stays
 today. The app works this out; the server only sees the date it's sent.
 
 Future consumption dates are invalid. Planning future media belongs to planning
-or release features, not the diary.
+or release features, not the diary. A date is in the future when it's past the
+user's today. With no timezone from the app, as on the website, it must also be
+past the server's today, and a moment past the user's today is read on the
+server's calendar.
 
 ### SW-007: Duplicate same-day logs are valid
 
