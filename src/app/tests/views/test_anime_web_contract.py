@@ -5,7 +5,7 @@ from datetime import date
 from django.urls import reverse
 
 from app import anime_tracking
-from app.models import Anime
+from app.models import Anime, Item
 from app.tests.anime_fixtures import AnimeTestCase
 
 
@@ -34,6 +34,17 @@ class AnimeWebContractTests(AnimeTestCase):
             reverse("progress_edit", kwargs={"media_type": "anime", "instance_id": row.pk}),
             {"operation": operation},
         )
+
+    def test_an_100_a_manual_title_saved_completed_with_a_number_stays_completed(self):
+        item = Item.objects.create(
+            source="manual", media_type="anime", media_id="manual-1", title="Mine", image="https://example.com/p.jpg",
+        )
+        self.save(item, status="Completed", progress=12)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 12))
+        self.client.post(reverse("media_save"), {**self.form(item, status="Completed", progress=12), "notes": "Mine"})
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.notes), ("Completed", 12, "Mine"))
 
     def test_an_900_the_form_means_its_actions(self):
         item = self.title(total=3)

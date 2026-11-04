@@ -6,8 +6,9 @@ this copy, so no page ever waits for AniList: a first open with no copy tries on
 short timeout; everything else answers from the copy, and a failure keeps the numbers and
 backs off. The calendar job refreshes it (events.calendar.anime).
 
-Manual titles are never stored: they have no provider, so they have no total and no
-schedule, and any episode number is accepted.
+Manual titles are never stored: they have no provider, so they have no schedule, and
+their total is whatever number their owner writes, kept on that person's own row
+(anime_tracking, AN-100).
 
 get_listing may call a provider, so callers fetch before they take a lock or open the
 write's transaction (TV-705).

@@ -196,6 +196,15 @@ class MALImportTests(ImportTestCase):
         self.import_mal(entry)
         self.assertIsNone(self.row(self.item_of(title)).start_date)
 
+    def test_an_100_an_imported_manual_title_stays_completed_at_the_next_save(self):
+        item = Item.objects.create(
+            source="manual", media_type="anime", media_id="manual-1", title="Mine", image="https://example.com/p.jpg",
+        )
+        anime_tracking.import_title(self.user, item, status="Completed", count=12)
+        self.assertEqual((self.row(item).status, self.row(item).progress), ("Completed", 12))
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
+        self.assertEqual((self.row(item).status, self.row(item).progress), ("Completed", 12))
+
     def test_an_103_a_sources_number_past_the_ceiling_is_dropped_not_filled(self):
         title = self.fake.add(total=None)
         item = make_item(self.fake, title=title)

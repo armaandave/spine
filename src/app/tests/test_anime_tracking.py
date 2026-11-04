@@ -16,8 +16,9 @@ from django.test.utils import CaptureQueriesContext
 from api.services import media as media_service
 from app import anime_listing, anime_tracking
 from app.anime_tracking import TVConflict, TVInvalid, TVLogBlocks, TVLogFirst, TVStateChanged
-from app.models import Anime, AnimeMark, AnimeViewing, DiaryEntry, MediaLike, TVMutation
+from app.models import Anime, AnimeListing, AnimeMark, AnimeViewing, DiaryEntry, Item, MediaLike, TVMutation
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase
+from app.tests.tv_fixtures import make_user
 from app.tv_listing import TVDetailsUnavailable
 from lists.models import CustomList
 from social.models import Activity, ProgressChange
@@ -1644,6 +1645,103 @@ class AgreementTests(AnimeTestCase):
         self.assertEqual(tracking["progress"]["max"], 5)
         self.assertEqual(listed["anime"]["up_next"]["episode_number"], detail["up_next"]["episode_number"])
         self.assertEqual(listed["status"], detail["status"])
+
+
+class ManualTitleTests(AnimeTestCase):
+    """AN-100: a manual title has no provider, so the number its owner writes is its total."""
+
+    def manual(self):
+        return Item.objects.create(
+            source="manual",
+            media_type="anime",
+            media_id="manual-1",
+            title="Mine",
+            image="https://example.com/p.jpg",
+        )
+
+    def written(self, item, **data):
+        return anime_tracking.apply_written_state(self.user, item, data, entry_point=anime_tracking.WEB)
+
+    def test_an_100_a_written_completed_with_a_number_stays_completed(self):
+        item = self.manual()
+        self.written(item, status="Completed", progress=12)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.finished), ("Completed", 12, True))
+        self.assertEqual(self.state(item)["total"], 12)
+        self.assertTrue(all(viewing.kind == "fill" for viewing in self.viewings(item)))
+        self.written(item, notes="Loved it")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.notes), ("Completed", 12, "Loved it"))
+
+    def test_an_100_a_written_completed_with_no_number_uses_what_is_watched(self):
+        item = self.manual()
+        self.tick(item, 1, 2, 3)
+        self.written(item, status="Completed")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 3))
+        self.assertEqual(self.state(item)["total"], 3)
+
+    def test_an_100_a_higher_number_raises_the_total(self):
+        item = self.manual()
+        self.written(item, status="Completed", progress=12)
+        self.written(item, progress=15)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 15))
+        self.assertEqual(self.state(item)["total"], 15)
+
+    def test_an_100_a_lower_number_keeps_the_total_and_reopens_it(self):
+        item = self.manual()
+        self.written(item, status="Completed", progress=12)
+        self.clock.advance(minutes=1)
+        self.written(item, status="In progress", progress=10)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.up_next_episode), ("In progress", 10, 11))
+        self.assertEqual(self.state(item)["total"], 12)
+
+    def test_an_100_a_number_with_in_progress_sets_no_total(self):
+        item = self.manual()
+        self.written(item, status="In progress", progress=5)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.aired_count), ("In progress", 5, None))
+        self.assertIsNone(self.state(item)["total"])
+
+    def test_an_100_the_eye_stars_a_heart_and_a_log_finish_it(self):
+        for name, finish in (
+            ("eye", lambda item: anime_tracking.mark_watched(self.user, item)),
+            ("heart", lambda item: anime_tracking.set_like(self.user, item, True)),
+            ("stars", lambda item: anime_tracking.set_rating(self.user, item, 8)),
+            ("log", lambda item: anime_tracking.create_log(self.user, item, consumed_at=OCT_25)),
+        ):
+            with self.subTest(name=name):
+                item = Item.objects.create(
+                    source="manual",
+                    media_type="anime",
+                    media_id=f"manual-{name}",
+                    title="Mine",
+                    image="https://example.com/p.jpg",
+                )
+                finish(item)
+                self.assertEqual((self.row(item).status, self.row(item).finished), ("Completed", True))
+
+    def test_an_100_a_log_after_ticks_finishes_at_what_is_watched(self):
+        item = self.manual()
+        self.tick(item, 1, 2)
+        anime_tracking.create_log(self.user, item, consumed_at=OCT_25)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 2))
+
+    def test_an_100_a_number_past_the_ceiling_is_still_refused(self):
+        item = self.manual()
+        with self.assertRaises(TVInvalid):
+            self.written(item, status="Completed", progress=30000)
+        self.assertIsNone(self.row(item))
+
+    def test_an_100_the_owners_total_is_theirs_and_no_copy_is_stored(self):
+        item = self.manual()
+        self.written(item, status="Completed", progress=12)
+        self.assertFalse(AnimeListing.objects.filter(item=item).exists())
+        other = make_user()
+        self.assertIsNone(anime_tracking.state_payload(other, item)["total"])
 
 
 class NoNumbersTests(AnimeTestCase):

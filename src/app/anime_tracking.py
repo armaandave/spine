@@ -467,6 +467,20 @@ def _opinion_action(calc):
     return OPINION_MARK
 
 
+def _with_own_total(listing, row):
+    """Return the listing with a manual title's total, kept on its owner's row (AN-100).
+
+    A manual title has no provider, so the number its owner wrote is its total, stored as
+    the row's aired count.
+    """
+    if row is None or listing.item.source != Sources.MANUAL.value or listing.total is not None:
+        return listing
+    total = row.aired_count
+    if total is None and row.reconciled_at is None and row.status == COMPLETED:
+        total = row.progress
+    return replace(listing, total=total) if total else listing
+
+
 def _stored_facts(row, listing, now):
     """Return (episodes, choice) a row's stored numbers become at its first write (AN-902).
 
@@ -500,7 +514,7 @@ class _Ctx:
     def __init__(self, user, item, listing, entry_point, row):
         self.user = user
         self.item = item
-        self.listing = listing
+        self.listing = _with_own_total(listing, row)
         self.entry_point = entry_point
         self.now = user_calendar.now()
         self.today = user_calendar.today(user)
@@ -534,6 +548,17 @@ class _Ctx:
 
     def invalidate(self):
         self._calc = None
+
+    def set_own_total(self, number=None):
+        """Settle a manual title's total: the number its owner wrote, or what's watched (AN-100)."""
+        if self.item.source != Sources.MANUAL.value:
+            return
+        if number and number > MAX_EPISODE:
+            raise TVInvalid(MSG_NO_NUMBER)
+        total = max(number or 0, self.listing.total or 0, max(self.calc.viewed_any, default=0), 1)
+        if total != self.listing.total:
+            self.listing = replace(self.listing, total=total)
+            self.invalidate()
 
     def ensure_row(self):
         if self.row is None:
@@ -772,7 +797,7 @@ def _run_locked(  # noqa: PLR0913
     if entry_point != JOB:
         _adopt_stored_row(ctx)
     ctx.ticks_before = _tick_count(ctx.facts)
-    rows_before = len(_row_numbers(ctx.calc, listing))
+    rows_before = len(_row_numbers(ctx.calc, ctx.listing))
     outcome = body(ctx) or {}
     result = WriteResult(
         user=user,
@@ -794,7 +819,7 @@ def _run_locked(  # noqa: PLR0913
         ctx.row.refresh_from_db()
         result.row = ctx.row
         _record_start(ctx)
-        if not rows_changed and len(_row_numbers(ctx.calc, listing)) != rows_before:
+        if not rows_changed and len(_row_numbers(ctx.calc, ctx.listing)) != rows_before:
             result.rows_changed = True
     if mutation_id is not None or outcome.get("record_mutation"):
         TVMutation.objects.create(
@@ -1256,6 +1281,7 @@ def mark_watched(user, item, *, entry_point=APP, mutation_id=None):
     """The empty eye: mark every aired episode not watched, undated, as one mark (AN-300)."""
 
     def body(ctx):
+        ctx.set_own_total()
         _require_aired(ctx)
         return _do_mark(ctx, ctx.calc.aired, origin=AnimeMark.Origin.EYE)
 
@@ -1522,6 +1548,7 @@ def _apply_opinion_action(ctx, *, unchanged):
     if action == OPINION_LOG and not unchanged and ctx.entry_point != IMPORT:
         raise TVLogFirst(MSG_LOG_FIRST)
     if action == OPINION_MARK:
+        ctx.set_own_total()
         return _do_mark(ctx, ctx.calc.aired, origin=AnimeMark.Origin.OPINION)
     return {"changed": False}
 
@@ -1618,6 +1645,9 @@ def _next_unwatched(calc, count):
 
 def _do_write_progress(ctx, count):
     """A progress number means ticks (AN-900): raising ticks, lowering removes."""
+    if ctx.listing.total is not None:
+        # A manual title's total goes up with the number its owner writes (AN-100).
+        ctx.set_own_total(count)
     calc = ctx.calc
     # Before anything is built from the number (AN-103).
     if count < 0:
@@ -1732,6 +1762,7 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
                 return outcome
             ctx.reload()
         if status == COMPLETED:
+            ctx.set_own_total(int(progress) if progress else None)
             if not ctx.calc.aired:
                 if strict:
                     raise TVConflict(MSG_NOTHING_AIRED)
@@ -1802,6 +1833,7 @@ def _do_create_log(  # noqa: PLR0913
     import_source_id,
     import_source_order,
 ):
+    ctx.set_own_total()
     _require_aired(ctx)
     if day > ctx.today:
         raise TVInvalid(MSG_FUTURE_LOG)
@@ -2372,6 +2404,7 @@ class _View:
         if listing is None:
             listing = Listing(item=item)
         row = Anime.objects.filter(user=user, item=item).first()
+        listing = _with_own_total(listing, row)
         facts = _load_facts(user, item, row)
         now = user_calendar.now()
         numbers, choice = _stored_facts(row, listing, now)
