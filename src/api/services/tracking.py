@@ -336,13 +336,6 @@ def consume_media(
             season_number=item.season_number,
             entry_point=tv_tracking.LEGACY_APP,
         )
-    if anime_tracking.supports(media_type):
-        return _call_tv(
-            anime_tracking.mark_watched,
-            user,
-            anime_item(source, media_id),
-            entry_point=anime_tracking.LEGACY_APP,
-        )
     media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
     if media is None:
         media = create_or_update_tracking(

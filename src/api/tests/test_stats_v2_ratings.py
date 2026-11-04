@@ -250,13 +250,11 @@ class HighestRatedTests(RatingsBase):
             (season_item.id, "3.5"),
         ])
 
-    def test_the_latest_tracking_row_holds_the_current_rating(self):
-        # Anime keeps one tracking row per watch-through.
+    def test_the_tracking_row_holds_the_current_rating(self):
+        # One record per title, however many passes it has (AN-600).
         anime = self.item(MediaTypes.ANIME.value, "anime")
-        older = Anime(user=self.owner, item=anime, status=Status.COMPLETED.value, score=Decimal("10.0"))
-        Anime.objects.bulk_create([older])
-        newer = Anime(user=self.owner, item=anime, status=Status.IN_PROGRESS.value, score=Decimal("4.0"))
-        Anime.objects.bulk_create([newer])
+        row = Anime(user=self.owner, item=anime, status=Status.IN_PROGRESS.value, score=Decimal("4.0"))
+        Anime.objects.bulk_create([row])
         items = self.stats(self.owner, {**ALL_TIME, "media_type": "anime"})["highest_rated"]["items"]
         self.assertEqual([row["stars"] for row in items], ["2.0"])
 

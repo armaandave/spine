@@ -400,8 +400,7 @@ def _calculate(facts, listing, now, *, row, user, ignore_rewatch=False):  # noqa
     else:
         status = None
 
-    moments = [viewing.watched_at for viewing in ticks_all if viewing.watched_at is not None]
-    moments.extend(log.consumed_at for log in facts.logs)
+    first_dated_at, last_dated_at = _date_bounds(facts)
     return _Calc(
         single=listing.is_single,
         aired=aired,
@@ -432,9 +431,18 @@ def _calculate(facts, listing, now, *, row, user, ignore_rewatch=False):  # noqa
         in_library=in_library,
         status=status,
         rewatch_done=rewatching and all_watched,
-        first_dated_at=min(moments) if moments else None,
-        last_dated_at=max(moments) if moments else None,
+        first_dated_at=first_dated_at,
+        last_dated_at=last_dated_at,
     )
+
+
+def _date_bounds(facts):
+    """Return the first and last moments of the title's dated facts: ticks and logs."""
+    moments = [
+        viewing.watched_at for viewing in facts.viewings if viewing.kind == TICK and viewing.watched_at is not None
+    ]
+    moments.extend(log.consumed_at for log in facts.logs)
+    return (min(moments), max(moments)) if moments else (None, None)
 
 
 def _opinion_action(calc):
@@ -501,6 +509,8 @@ class _Ctx:
         self.facts = None
         self._calc = None
         self.reload()
+        # A row's dates follow its dated facts only when those moved (_start_date).
+        self.dates_before = _date_bounds(self.facts)
 
     def reload(self):
         self.facts = _load_facts(self.user, self.item, self.row)
@@ -517,7 +527,7 @@ class _Ctx:
 
     def ensure_row(self):
         if self.row is None:
-            self.row, self.created = _create_row(self.user, self.item)
+            self.row, self.created = _create_row(self.user, self.item, history=self.entry_point != IMPORT)
             self.version_before = self.row.state_version
             self.status_before = None
             self.count_before = 0
@@ -538,13 +548,17 @@ class _Ctx:
 
     def flush_row(self):
         if self.row is not None and self.row.pk is not None and self.dirty:
-            bulk_update_with_history(
-                [self.row],
-                Anime,
-                fields=sorted(self.dirty),
-                default_user=self.user,
-                default_date=self.now,
-            )
+            if self.entry_point == IMPORT:
+                # An import writes one history row per title, at its end (import_title).
+                Anime.objects.filter(pk=self.row.pk).update(**{name: getattr(self.row, name) for name in self.dirty})
+            else:
+                bulk_update_with_history(
+                    [self.row],
+                    Anime,
+                    fields=sorted(self.dirty),
+                    default_user=self.user,
+                    default_date=self.now,
+                )
             self.dirty.clear()
 
     def add_tick(self, number, *, watched_on, watched_at):
@@ -605,7 +619,7 @@ class _Ctx:
             self.set_row(earlier_question_at=self.now)
 
 
-def _create_row(user, item):
+def _create_row(user, item, *, history=True):
     """Create the user's tracking row (inside the lock). Return (row, created)."""
     existing = Anime.objects.select_for_update().filter(user=user, item=item).first()
     if existing is not None:
@@ -617,11 +631,15 @@ def _create_row(user, item):
         .first()
     )
     row = Anime(user=user, item=item, status=WATCHING, state_version=int((seed or {}).get("state_version") or 0))
+    if not history:
+        row.skip_history_when_saving = True
     try:
         with transaction.atomic():
             row.save_base(force_insert=True)
     except IntegrityError:
         return Anime.objects.select_for_update().get(user=user, item=item), False
+    if not history:
+        del row.skip_history_when_saving
     return row, True
 
 
@@ -823,8 +841,10 @@ def _reconcile(ctx):  # noqa: C901
     written = {}
     if calc.status is not None:
         written["status"] = calc.status
-    written["start_date"] = calc.first_dated_at
-    written["end_date"] = calc.last_dated_at if calc.status == COMPLETED else None
+    first_before, last_before = ctx.dates_before
+    written["start_date"] = _start_date(row.start_date, first_before, calc.first_dated_at)
+    written["end_date"] = _end_date(row.end_date, last_before, calc.last_dated_at, calc.status)
+    ctx.dates_before = (calc.first_dated_at, calc.last_dated_at)
     if row.progress != calc.watched_count:
         written["progress"] = calc.watched_count
         written["progressed_at"] = ctx.now
@@ -879,6 +899,20 @@ def _reconcile(ctx):  # noqa: C901
     ):
         item = ctx.item
         transaction.on_commit(lambda: item.fetch_releases(delay=True), robust=True)
+
+
+def _start_date(current, before, after):
+    """A row's start follows its first dated fact; a date from an import stays."""
+    return after if current is None or current == before else current
+
+
+def _end_date(current, before, after, status):
+    """A finished row's end is its last dated fact; an import's date stays until a newer one."""
+    if status != COMPLETED:
+        return None
+    if current is None or after not in (None, before):
+        return after
+    return None if after is None and current == before else current
 
 
 def _record_start(ctx):
@@ -1741,7 +1775,11 @@ def _do_create_log(  # noqa: PLR0913
     if liked is None:
         liked = ctx.facts.liked
     aired = list(calc.aired)
-    snapshot = {"anime": {"v": STAMP_VERSION, "pass": ctx.row.pass_number, "covers": _ranges(aired)}}
+    log_pass = ctx.row.pass_number
+    if ctx.entry_point == IMPORT and calc.rewatching and not is_rewatch:
+        # A source's finish on a title it says is being rewatched is the pass before.
+        log_pass -= 1
+    snapshot = {"anime": {"v": STAMP_VERSION, "pass": log_pass, "covers": _ranges(aired)}}
     entry = DiaryEntry.objects.create(
         user=ctx.user,
         item=ctx.item,
@@ -1766,20 +1804,21 @@ def _do_create_log(  # noqa: PLR0913
             anime=ctx.row,
             mark__isnull=False,
             diary_entry__isnull=True,
-            pass_number=ctx.row.pass_number,
+            pass_number=log_pass,
         ).update(diary_entry=entry, mark=None)
         AnimeMark.objects.filter(anime=ctx.row, fills__isnull=True).delete()
         ctx.reload()
         calc = ctx.calc
-    if calc.single:
-        # One log of a single is one watch of it (AN-002, SW-010).
-        own = _own_viewing_of_single(ctx)
-        if own is not None:
-            AnimeViewing.objects.filter(pk=own.id).update(diary_entry=entry)
+    if log_pass == ctx.row.pass_number:
+        if calc.single:
+            # One log of a single is one watch of it (AN-002, SW-010).
+            own = _own_viewing_of_single(ctx)
+            if own is not None:
+                AnimeViewing.objects.filter(pk=own.id).update(diary_entry=entry)
+            else:
+                ctx.add_fills([1], entry=entry)
         else:
-            ctx.add_fills([1], entry=entry)
-    else:
-        ctx.add_fills([number for number in aired if number not in calc.watched_pass], entry=entry)
+            ctx.add_fills([number for number in aired if number not in calc.watched_pass], entry=entry)
     ctx.changed = True
     ctx.end_choice()
     if update_current:
@@ -2134,6 +2173,9 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     notes="",
     earlier=(),
     total=None,
+    start_date=None,
+    end_date=None,
+    history_date=None,
 ):
     """Import one title as one tracking record, ending where the app would (AN-800).
 
@@ -2141,7 +2183,8 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     aired. Each entry of `earlier` is a finished earlier pass ({"count": n}); a pass under
     way after them is a rewatch. Planning, Paused and Dropped stay the choice; In progress
     means Watching. No provider is called, nothing is activity, and no question is asked.
-    Logs an overwrite kept get their fills back (TV-800).
+    Logs an overwrite kept get their fills back (TV-800). The source's dates stay on the
+    row, and its one history row carries the source's date, as other imports' do.
     """
     if Anime.objects.filter(user=user, item=item).exists():
         return None
@@ -2181,27 +2224,34 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
         values["notes"] = notes
     if rating is not None:
         values["score"] = rating
+    if start_date and status != PLANNING:
+        values["start_date"] = start_date
+    if end_date:
+        values["end_date"] = end_date
     ctx.set_row(**values)
+
+    def write_history():
+        Anime.history.bulk_history_create([row], default_user=user, default_date=history_date or ctx.now)
+
     if status == COMPLETED and not numbers and not fills:
         # Nothing says how many it has: it stays on its shelf as a stored Completed,
         # worked out at the user's first write (AN-902).
         ctx.set_row(status=COMPLETED)
         ctx.flush_row()
+        write_history()
         return row
-    if numbers:
-        mark = AnimeMark.objects.create(anime=row, origin=AnimeMark.Origin.IMPORT, pass_number=passes + 1)
-        fills.extend(
-            AnimeViewing(anime=row, episode_number=number, kind=FILL, pass_number=passes + 1, mark=mark)
-            for number in numbers
-        )
     if fills:
         AnimeViewing.objects.bulk_create(fills, batch_size=1000)
-    ctx.reload()
-    _rebuild_kept_logs(ctx)
+    # Logs an overwrite kept get their fills back first; the source's number fills the
+    # rest (TV-800).
+    held = _rebuild_kept_logs(ctx)
+    ctx.add_fills([number for number in numbers if number not in held], origin=AnimeMark.Origin.IMPORT)
     # Nothing here counts against progress: the number arrives with the row.
+    ctx.reload()
     ctx.ticks_before = None
     ctx.count_before = ctx.calc.watched_count
     _reconcile(ctx)
+    write_history()
     return row
 
 
@@ -2213,15 +2263,14 @@ def _implied_total(status, count, earlier):
 
 
 def _rebuild_kept_logs(ctx):
-    """Give each kept log its fills again, for what no viewing holds now (TV-800)."""
-    watched = {viewing.episode for viewing in ctx.facts.viewings}
+    """Give each kept log its fills again; return the episodes they hold (TV-800)."""
+    held = set()
     for log in ctx.facts.logs:
-        missing = sorted(number for number in log.covers if number not in watched)
+        missing = sorted(log.covers - held)
         if missing:
-            entry = DiaryEntry(pk=log.id)
-            ctx.add_fills(missing, entry=entry)
-            watched.update(missing)
-    ctx.reload()
+            ctx.add_fills(missing, entry=DiaryEntry(pk=log.id))
+            held.update(missing)
+    return held
 
 
 def clear_for_import(user, source, media_ids):
@@ -2255,7 +2304,7 @@ def _row_numbers(calc, listing):
 class _View:
     """Read-only state of one user's title for payloads."""
 
-    def __init__(self, user, item, row, listing, facts, now, today, *, unknown=False):
+    def __init__(self, user, item, row, listing, facts, now, today):
         self.user = user
         self.item = item
         self.row = row
@@ -2263,14 +2312,12 @@ class _View:
         self.facts = facts
         self.now = now
         self.today = today
-        self.unknown_listing = unknown
         self.calc = _calculate(facts, listing, now, row=row, user=user)
         self._history = None
 
     @classmethod
     def load(cls, user, item, listing):
-        unknown = listing is None
-        if unknown:
+        if listing is None:
             listing = Listing(item=item)
         row = Anime.objects.filter(user=user, item=item).first()
         facts = _load_facts(user, item, row)
@@ -2289,7 +2336,7 @@ class _View:
                 row = copy.copy(row)
                 row.choice = choice
                 row.choice_at = now
-        return cls(user, item, row, listing, facts, now, user_calendar.today(user), unknown=unknown)
+        return cls(user, item, row, listing, facts, now, user_calendar.today(user))
 
     @classmethod
     def from_ctx(cls, ctx):
@@ -2301,7 +2348,6 @@ class _View:
         view.facts = ctx.facts
         view.now = ctx.now
         view.today = ctx.today
-        view.unknown_listing = False
         view.calc = ctx.calc
         view._history = None
         return view

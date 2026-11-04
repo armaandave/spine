@@ -529,7 +529,7 @@ class TVInstalledBuildKeyTests(TVAPITestCase):
         self.assertTrue(set(listed["tracking"]) >= self.TRACKING_KEYS)
 
     def test_tv_205_an_unstarted_season_reports_untracked_but_keeps_its_opinions(self):
-        # A heart with nothing aired only saves (TV-303), so the season stays not started.
+        # A heart with nothing aired only saves (TV-303), so the season isn't started.
         show = self.make_show(seasons={1: 2, 2: [date(2030, 1, 1)]})
         self.tick(show, 1, 1)
         self.like(show, 2)

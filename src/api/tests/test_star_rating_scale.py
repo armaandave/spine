@@ -127,7 +127,7 @@ class TVStarScaleTests(TVAPITestCase):
 
 
 class AnimeStarScaleTests(TestCase):
-    """Anime through the generic tracking and diary writes, on the stars it now takes."""
+    """Anime through the generic tracking and diary writes, on the stars it takes."""
 
     def setUp(self):
         cache.clear()
@@ -168,7 +168,7 @@ class AnimeStarScaleTests(TestCase):
         self.assertEqual(stars.data["rating"], "3.5")
 
     def test_an_000_a_new_write_off_the_half_star_grid_is_refused(self):
-        """TV-504, as AN-000 inherits it: only the ten values from the app and the API."""
+        """TV-504, which AN-000 inherits: only the ten values from the app and API."""
         response = self.legacy.patch("/api/v1/tracking/mal/anime/1/", {"rating": "7.5"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)

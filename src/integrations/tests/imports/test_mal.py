@@ -47,7 +47,8 @@ class ImportMAL(TestCase):
         mock_request.side_effect = [anime_mock, manga_mock]
 
         mal.importer("bloodthirstiness", self.user, "new")
-        self.assertEqual(Anime.objects.filter(user=self.user).count(), 5)
+        # One record per title; a rewatch is a finished earlier pass (AN-800).
+        self.assertEqual(Anime.objects.filter(user=self.user).count(), 4)
         # One record per series; One Punch-Man's reread is a finished attempt (MC-400).
         self.assertEqual(Manga.objects.filter(user=self.user).count(), 2)
 

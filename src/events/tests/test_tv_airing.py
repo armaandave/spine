@@ -297,3 +297,13 @@ class TVAiringScheduleTests(TestCase):
             result = tasks.refresh_aired_tv.delay()
         self.assertEqual(result.get(), {"due": 0})
         job.assert_called_once_with()
+
+    def test_anime_has_its_own_hourly_task(self):
+        self.assertEqual(
+            settings.CELERY_BEAT_SCHEDULE["refresh_aired_anime"],
+            {"task": "Refresh aired anime", "schedule": 3600},
+        )
+        with mock.patch("app.anime_tracking.refresh_due_titles", return_value=2) as job:
+            result = tasks.refresh_aired_anime.delay()
+        self.assertEqual(result.get(), {"changed": 2})
+        job.assert_called_once_with()

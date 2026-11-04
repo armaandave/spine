@@ -697,6 +697,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Refresh aired TV",
         "schedule": 60 * 60,  # every hour; reopens shows whose next episode aired
     },
+    "refresh_aired_anime": {
+        "task": "Refresh aired anime",
+        "schedule": 60 * 60,  # every hour; reopens anime whose next episode aired
+    },
     "send_daily_digest": {
         "task": "Send daily digest",
         "schedule": crontab(hour=DAILY_DIGEST_HOUR, minute=0),

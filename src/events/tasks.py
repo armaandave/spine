@@ -41,9 +41,15 @@ def send_daily_digest_notifications():
 
 @shared_task(name="Refresh aired TV")
 def refresh_aired_tv():
-    """Reopen shows and anime whose next episode aired; work out shows left unworked (TV-206)."""
+    """Reopen shows whose next episode aired; work out shows left unworked (TV-206)."""
     logger.info("Starting aired TV refresh")
 
-    summary = tv_airing.refresh_aired_shows()
-    summary["anime_changed"] = anime_tracking.refresh_due_titles()
-    return summary
+    return tv_airing.refresh_aired_shows()
+
+
+@shared_task(name="Refresh aired anime")
+def refresh_aired_anime():
+    """Reopen anime whose next episode aired (AN-202, TV-206)."""
+    logger.info("Starting aired anime refresh")
+
+    return {"changed": anime_tracking.refresh_due_titles()}

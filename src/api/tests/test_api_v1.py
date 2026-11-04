@@ -38,6 +38,7 @@ from app.models import (
 from app.providers import services as provider_services
 from app.providers.services import ProviderAPIError
 from app.services import set_media_like, update_diary_entry_tags
+from app.tests.anime_fixtures import FakeAnimeProvider
 from lists.models import CustomList, CustomListItem
 from social.models import Activity, ContentLike, ProgressChange, SocialAuditLog
 
@@ -1696,11 +1697,13 @@ class ApiV1FoundationTests(TestCase):
         Anime.objects.create(user=user, item=item, status=Status.IN_PROGRESS.value, progress=10)
         self.client.force_authenticate(user)
 
-        response = self.client.patch(
-            "/api/v1/tracking/mal/anime/progress-change/",
-            {"status": Status.IN_PROGRESS.value, "progress": 12},
-            format="json",
-        )
+        with FakeAnimeProvider() as fake:
+            fake.add("progress-change", total=24)
+            response = self.client.patch(
+                "/api/v1/tracking/mal/anime/progress-change/",
+                {"status": Status.IN_PROGRESS.value, "progress": 12},
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         change = ProgressChange.objects.get(actor=user, item=item)
@@ -1708,14 +1711,11 @@ class ApiV1FoundationTests(TestCase):
         self.assertEqual(change.current_progress["value"], 12)
         self.assertEqual(response.data["latest_progress_change"]["id"], change.id)
         self.assertEqual(response.data["latest_progress_change"]["current"]["value"], 12)
-        self.assertTrue(
-            Activity.objects.filter(
-                actor=user,
-                verb="progress_updated",
-                target_type="progress_change",
-                target_id=change.id,
-                item=item,
-            ).exists()
+        # As for TV, the feed reads the change itself, with no Activity row (TV-703).
+        feed = self.client.get(f"/api/v1/users/{user.username}/activity/").data["results"]
+        self.assertEqual(
+            [(entry["type"], entry["object"]["summary"]) for entry in feed],
+            [("progress_updated", "watched 2 episodes")],
         )
 
     @patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": None})
@@ -1730,18 +1730,20 @@ class ApiV1FoundationTests(TestCase):
         Anime.objects.create(user=user, item=item, status=Status.IN_PROGRESS.value, progress=10)
         self.client.force_authenticate(user)
 
-        response = self.client.patch(
-            "/api/v1/tracking/mal/anime/progress-same/",
-            {"status": Status.IN_PROGRESS.value, "progress": 10},
-            format="json",
-        )
+        with FakeAnimeProvider() as fake:
+            fake.add("progress-same", total=24)
+            response = self.client.patch(
+                "/api/v1/tracking/mal/anime/progress-same/",
+                {"status": Status.IN_PROGRESS.value, "progress": 10},
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(ProgressChange.objects.filter(actor=user, item=item).exists())
 
     @patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": None})
     @patch("api.services.tracking.provider_services.get_media_metadata")
-    def test_new_tracking_has_no_progress_change(self, metadata_mock, _progress_mock):
+    def test_new_tracking_progress_number_means_ticks(self, metadata_mock, _progress_mock):
         user = get_user_model().objects.create_user(username="tracking-progress-new", password="strong-password-123")
         metadata_mock.return_value = {
             "title": "Progress New",
@@ -1750,19 +1752,22 @@ class ApiV1FoundationTests(TestCase):
         }
         self.client.force_authenticate(user)
 
-        response = self.client.patch(
-            "/api/v1/tracking/mal/anime/progress-new/",
-            {"status": Status.IN_PROGRESS.value, "progress": 5},
-            format="json",
-        )
+        with FakeAnimeProvider() as fake:
+            fake.add("progress-new", total=24)
+            response = self.client.patch(
+                "/api/v1/tracking/mal/anime/progress-new/",
+                {"status": Status.IN_PROGRESS.value, "progress": 5},
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["progress"]["value"], 5)
-        self.assertIsNone(response.data["latest_progress_change"])
-        # Starting it is recorded (for activity), but its first progress isn't a change.
+        # A number means ticks, which are activity from the first (AN-900, TV-703), and
+        # those ticks start the title.
+        self.assertEqual(response.data["latest_progress_change"]["current"]["value"], 5)
         self.assertEqual(
-            list(ProgressChange.objects.filter(actor=user).values_list("current_progress__kind", flat=True)),
-            [ProgressChange.START],
+            sorted(ProgressChange.objects.filter(actor=user).values_list("current_progress__kind", flat=True)),
+            sorted(["count", ProgressChange.START]),
         )
 
     def test_book_progress_records_progress_change_and_tracking_list_exposes_latest(self):
@@ -2176,19 +2181,21 @@ class ApiV1FoundationTests(TestCase):
         self.client.force_authenticate(user)
         metadata_mock.return_value = {"title": "Anime Log", "image": "https://example.com/anime.jpg"}
 
-        response = self.client.post(
-            "/api/v1/diary/",
-            {
-                "ref": {
-                    "source": Sources.MAL.value,
-                    "media_type": MediaTypes.ANIME.value,
-                    "media_id": "anime-log",
+        with FakeAnimeProvider() as fake:
+            fake.add("anime-log", total=12)
+            response = self.client.post(
+                "/api/v1/diary/",
+                {
+                    "ref": {
+                        "source": Sources.MAL.value,
+                        "media_type": MediaTypes.ANIME.value,
+                        "media_id": "anime-log",
+                    },
+                    "consumed_at": "2025-04-05T00:00:00Z",
+                    "auto_mark_consumed": True,
                 },
-                "consumed_at": "2025-04-05T00:00:00Z",
-                "auto_mark_consumed": True,
-            },
-            format="json",
-        )
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         item = Item.objects.get(media_id="anime-log", media_type=MediaTypes.ANIME.value)

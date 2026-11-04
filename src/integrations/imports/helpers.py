@@ -421,6 +421,9 @@ def _import_anime_rows(rows, user):
             notes=current.notes,
             earlier=[{"count": row.progress} for row in earlier if row.status == app.models.Status.COMPLETED.value],
             total=next((getattr(row, "_anime_total", None) for row in item_rows if getattr(row, "_anime_total", None)), None),
+            start_date=current.start_date,
+            end_date=current.end_date,
+            history_date=getattr(current, "_history_date", None),
         )
 
 

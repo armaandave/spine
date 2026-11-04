@@ -2045,8 +2045,8 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
     def test_a_30_stars_on_an_unwatched_season_while_watching_another(self):
         """TV-303.
 
-        Season 4 is marked watched undated with those stars, TV-107 asks about the seasons
-        before it, and no composer opens. The eye undoes the mark.
+        Season 4 is marked watched undated with those stars, TV-107 asks about the
+        seasons before it, and no composer opens. The eye undoes the mark.
         """
         show = self.make_show({1: 2, 2: 3, 3: 2, 4: 2})
         asked = {}

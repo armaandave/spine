@@ -148,6 +148,54 @@ class MALImportTests(ImportTestCase):
         row = self.row(self.item_of(title))
         self.assertEqual((row.status, row.choice, row.progress), ("In progress", "In progress", 0))
 
+    def test_an_800_an_import_records_no_progress_change(self):
+        title = self.fake.add(total=12)
+        self.import_mal(mal_entry(title, "watching", count=5))
+        self.assertFalse(ProgressChange.objects.filter(actor=self.user).exists())
+
+    def test_an_800_one_history_row_per_title_at_the_sources_date(self):
+        title = self.fake.add(total=12)
+        self.import_mal(mal_entry(title, "watching", count=5))
+        history = self.row(self.item_of(title)).history.all()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].history_type, "+")
+        self.assertEqual((history[0].status, history[0].progress), ("In progress", 5))
+        self.assertEqual(history[0].history_date, datetime(2026, 1, 1, tzinfo=UTC))
+
+    def test_an_800_the_sources_dates_stay_until_a_dated_fact_moves_them(self):
+        title = self.fake.add(total=12)
+        entry = mal_entry(title, "completed", count=12)
+        entry["list_status"].update({"start_date": "2020-03-01", "finish_date": "2020-04-01"})
+        self.import_mal(entry)
+        item = self.item_of(title)
+        row = self.row(item)
+        self.assertEqual(row.start_date.date(), date(2020, 3, 1))
+        self.assertEqual(row.end_date.date(), date(2020, 4, 1))
+
+        # A write with no date behind it moves neither.
+        anime_tracking.set_rating(self.user, item, 8, entry_point=anime_tracking.WEB)
+        row.refresh_from_db()
+        self.assertEqual(row.start_date.date(), date(2020, 3, 1))
+        self.assertEqual(row.end_date.date(), date(2020, 4, 1))
+
+        # A rewatch finished by a tick has its own end, and the start stays the source's.
+        anime_tracking.start_rewatch(self.user, item, entry_point=anime_tracking.WEB)
+        row.refresh_from_db()
+        self.assertIsNone(row.end_date)
+        for number in range(1, 13):
+            anime_tracking.tick(self.user, item, number, entry_point=anime_tracking.WEB)
+        row.refresh_from_db()
+        self.assertEqual(row.status, "Completed")
+        self.assertEqual(row.start_date.date(), date(2020, 3, 1))
+        self.assertEqual(row.end_date, self.viewings(item)[-1].watched_at)
+
+    def test_an_800_a_source_date_on_a_planned_title_is_no_start(self):
+        title = self.fake.add(total=12)
+        entry = mal_entry(title, "plan_to_watch")
+        entry["list_status"].update({"start_date": "2020-03-01"})
+        self.import_mal(entry)
+        self.assertIsNone(self.row(self.item_of(title)).start_date)
+
     def test_an_800_no_provider_call_per_episode_and_no_anilist_at_all(self):
         title = self.fake.add(total=500)
         self.fake.calls.clear()
@@ -181,10 +229,11 @@ class MALImportTests(ImportTestCase):
         row = self.row(item)
         self.assertEqual(row.choice, "")
         self.assertTrue(DiaryEntry.objects.filter(pk=entry.pk).exists())
-        # The log's fills are rebuilt for what the source's count doesn't hold.
+        # The log's fills are rebuilt, so its date dates them again.
         fills = {viewing.episode_number for viewing in self.viewings(item) if viewing.diary_entry_id == entry.pk}
-        self.assertEqual(fills, {2, 3, 4})
+        self.assertEqual(fills, {1, 2, 3, 4})
         self.assertEqual(row.progress, 4)
+        self.assertEqual(self.stats_time(2026)[1], 4)
 
     def test_an_800_new_mode_leaves_a_tracked_title_alone(self):
         title = self.fake.add(total=4)
@@ -364,6 +413,37 @@ class OtherImporterTests(ImportTestCase):
         self.assertEqual(Anime.objects.filter(user=self.user, item=item).count(), 1)
         self.assertEqual(self.row(item).pass_number, 3)
         self.assertEqual(len(self.viewings(item)), 36)
+
+    def test_an_800_the_mal_exports_log_on_a_rewatch_dates_the_pass_it_finished(self):
+        title = self.fake.add(total=12)
+        self._export(
+            (
+                title.media_id,
+                "Completed",
+                {
+                    "my_watched_episodes": "12",
+                    "my_rewatching": "1",
+                    "my_rewatching_ep": "5",
+                    "my_finish_date": "2020-05-01",
+                },
+            ),
+        )
+        item = self.item_of(title)
+        row = self.row(item)
+        self.assertEqual((row.status, row.pass_number, row.progress), ("In progress", 2, 5))
+        self.assertIsNotNone(row.rewatch_started_at)
+        entry = self.logs(item)[0]
+        self.assertFalse(entry.is_rewatch)
+        finished = [viewing for viewing in self.viewings(item) if viewing.pass_number == 1]
+        self.assertEqual(len(finished), 12)
+        self.assertTrue(all(viewing.diary_entry_id == entry.pk for viewing in finished))
+        current = [viewing for viewing in self.viewings(item) if viewing.pass_number == 2]
+        self.assertEqual(sorted(viewing.episode_number for viewing in current), [1, 2, 3, 4, 5])
+        self.assertTrue(all(viewing.diary_entry_id is None for viewing in current))
+        # Those twelve land on the day they finished, the five nowhere (AN-704).
+        self.assertEqual(self.stats_time(2020)[1], 12)
+        self.assertEqual(self.stats_time(2026)[1], 0)
+        self.assertEqual(self.stats_time()[1], 17)
 
     def test_an_800_the_mal_exports_overwrite_keeps_one_record_and_one_log(self):
         title = self.fake.add(total=12)

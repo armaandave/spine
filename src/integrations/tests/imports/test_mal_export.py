@@ -397,8 +397,8 @@ class MALExportImporterTests(TestCase):
         )
         Anime.objects.bulk_create(
             [
+                # One record per title (AN-800).
                 Anime(user=self.user, item=bebop, status=Status.PLANNING.value),
-                Anime(user=self.user, item=bebop, status=Status.COMPLETED.value),
                 Anime(user=self.user, item=untouched, status=Status.DROPPED.value),
             ],
         )
