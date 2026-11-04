@@ -886,6 +886,30 @@ class InstalledBuildTests(AnimeTestCase):
             ["start"],
         )
 
+    def kinds(self, item):
+        changes = ProgressChange.objects.filter(actor=self.user, item=item).order_by("id")
+        return [change.current_progress["kind"] for change in changes]
+
+    def test_an_900_progress_0_with_in_progress_after_a_restored_choice_records_a_start(self):
+        for chosen in ("Planning", "Dropped"):
+            with self.subTest(chosen=chosen):
+                item = self.title(total=12)
+                self.write(item, status=chosen)
+                self.tick(item, 1)
+                self.write(item, status="In progress", progress=0)
+                row = self.row(item)
+                self.assertEqual((row.status, row.choice, row.progress), ("In progress", "In progress", 0))
+                self.assertEqual(self.kinds(item), ["start"])
+
+    def test_an_900_progress_0_with_the_choice_it_had_leaves_no_activity(self):
+        item = self.title(total=12)
+        self.write(item, status="Planning")
+        self.tick(item, 1)
+        self.write(item, status="Planning", progress=0)
+        row = self.row(item)
+        self.assertEqual((row.status, row.choice, row.progress), ("Planning", "Planning", 0))
+        self.assertEqual(self.kinds(item), [])
+
     def test_an_900_progress_0_with_a_status_clears_stars_and_the_heart_as_leaving_does(self):
         item = self.title(total=2)
         self.tick(item, 1, 2)

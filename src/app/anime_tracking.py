@@ -1132,17 +1132,15 @@ def _after_removal(ctx, *, status_follows=False):
             _forget_starts_since(ctx, since)
             if not recorded:
                 _clear_opinions(ctx)
-            ctx.invalidate()
-            return False
-    if not recorded and not row.choice:
-        if not status_follows:
-            _leave_library(ctx)
-            return True
+    if status_follows and not recorded:
         _forget_progress(ctx)
         _clear_opinions(ctx)
         ctx.status_before = None
         ctx.count_before = 0
         ctx.ticks_before = 0
+    elif not recorded and not row.choice:
+        _leave_library(ctx)
+        return True
     ctx.invalidate()
     return False
 
