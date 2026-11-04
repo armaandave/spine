@@ -2638,13 +2638,15 @@ class Anime(Media):
 
     # Facts: stars and heart provenance (TV-501), choices (TV-005 to TV-007, TV-203,
     # TV-208), the rewatch and its pass (AN-600), the earlier-episodes question (TV-107)
-    # and the pass whose log screen has opened (AN-203).
+    # and the pass whose log screen has opened (AN-203). No database constraint on the
+    # sources: code from before them can still delete a log after a rollback (AN-901).
     rating_source = models.ForeignKey(
         "DiaryEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
+        db_constraint=False,
     )
     like_source = models.ForeignKey(
         "DiaryEntry",
@@ -2652,6 +2654,7 @@ class Anime(Media):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="+",
+        db_constraint=False,
     )
     like_is_independent = models.BooleanField(default=False, db_default=False)
     # "", "Planning", "In progress" (Watching), "Paused" or "Dropped".
@@ -2743,7 +2746,9 @@ class AnimeMark(models.Model):
         IMPORT = "import", "Import"
         STORED = "stored", "Stored number"
 
-    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="marks")
+    # No database constraint: code from before this table can still delete the tracking
+    # row after a rollback, and a mark with no row is never read (AN-901).
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="marks", db_constraint=False)
     origin = models.CharField(max_length=8, choices=Origin, default=Origin.EYE, db_default="eye")
     pass_number = models.PositiveIntegerField(default=1, db_default=1)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2770,7 +2775,10 @@ class AnimeViewing(models.Model):
         # An undated viewing a log or a mark added.
         FILL = "fill", "Fill"
 
-    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="viewings")
+    # No database constraints on anime and diary_entry: code from before this table can
+    # still delete a tracking row or a log after a rollback. A viewing with no row is never
+    # read, and one whose log is gone reads as undated (AN-901).
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="viewings", db_constraint=False)
     episode_number = models.PositiveIntegerField()
     kind = models.CharField(max_length=8, choices=Kind, default=Kind.TICK, db_default="tick")
     pass_number = models.PositiveIntegerField(default=1, db_default=1)
@@ -2791,6 +2799,7 @@ class AnimeViewing(models.Model):
         blank=True,
         on_delete=models.RESTRICT,
         related_name="anime_viewings",
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -2818,7 +2827,9 @@ class AnimeListing(models.Model):
     It is what every row and count reads, so no page ever waits for AniList.
     """
 
-    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="anime_listing")
+    # No database constraint: code from before this table can still delete a title after a
+    # rollback (AN-901).
+    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="anime_listing", db_constraint=False)
     # The episode count MAL lists; null when it lists none.
     total = models.PositiveIntegerField(null=True, blank=True)
     # MAL's status as the app shows it: "Finished", "Airing" or "Upcoming". Blank until

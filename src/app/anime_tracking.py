@@ -257,6 +257,12 @@ def _load_facts(user, item, row):
                 pass_number=int((snapshot["anime"].get("pass") or 1) if stamped else 1),
             ),
         )
+    # Code from before these tables can delete a log after a rollback, and its fills stay
+    # behind: with no log they read as undated (AN-901).
+    log_ids = {log.id for log in logs}
+    for viewing in viewings:
+        if viewing.entry_id not in log_ids:
+            viewing.entry_id = None
     liked = MediaLike.objects.filter(user=user, item=item).exists()
     return _Facts(viewings=viewings, logs=logs, liked=liked)
 
@@ -856,6 +862,11 @@ def _reconcile(ctx):  # noqa: C901
     if row.progress != calc.watched_count:
         written["progress"] = calc.watched_count
         written["progressed_at"] = ctx.now
+    log_ids = {log.id for log in ctx.facts.logs}
+    if row.rating_source_id not in (None, *log_ids):
+        written["rating_source"] = None
+    if row.like_source_id not in (None, *log_ids):
+        written["like_source"] = None
     ctx.set_row(**written)
     calc = ctx.calc
 
@@ -2518,8 +2529,8 @@ class _View:
             {
                 "selected_action": SELECTED_ACTIONS.get(status),
                 "remove_count": _remove_count(self.facts),
-                "rating_source_diary_entry_id": row.rating_source_id if row is not None else None,
-                "like_source_diary_entry_id": row.like_source_id if row is not None else None,
+                "rating_source_diary_entry_id": self._source_id(row, "rating_source_id"),
+                "like_source_diary_entry_id": self._source_id(row, "like_source_id"),
                 "like_is_independent": row.like_is_independent if row is not None else (True if self.facts.liked else None),
                 "eye": self.eye(),
                 "available_actions": actions,
@@ -2530,6 +2541,11 @@ class _View:
             },
         )
         return payload
+
+    def _source_id(self, row, name):
+        """Return the log a value came from, if it's still there (AN-901)."""
+        source_id = getattr(row, name) if row is not None else None
+        return source_id if any(log.id == source_id for log in self.facts.logs) else None
 
     def _row_index(self):
         """Return what rows need: each watched episode's latest unlogged viewing, and logs.

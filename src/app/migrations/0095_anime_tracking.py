@@ -123,7 +123,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='anime',
             name='like_source',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='app.diaryentry'),
+            field=models.ForeignKey(blank=True, db_constraint=False, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='app.diaryentry'),
         ),
         migrations.AddField(
             model_name='anime',
@@ -148,7 +148,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='anime',
             name='rating_source',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='app.diaryentry'),
+            field=models.ForeignKey(blank=True, db_constraint=False, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='app.diaryentry'),
         ),
         migrations.AddField(
             model_name='anime',
@@ -255,22 +255,22 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='animelisting',
             name='item',
-            field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='anime_listing', to='app.item'),
+            field=models.OneToOneField(db_constraint=False, on_delete=django.db.models.deletion.CASCADE, related_name='anime_listing', to='app.item'),
         ),
         migrations.AddField(
             model_name='animemark',
             name='anime',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='marks', to='app.anime'),
+            field=models.ForeignKey(db_constraint=False, on_delete=django.db.models.deletion.CASCADE, related_name='marks', to='app.anime'),
         ),
         migrations.AddField(
             model_name='animeviewing',
             name='anime',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='viewings', to='app.anime'),
+            field=models.ForeignKey(db_constraint=False, on_delete=django.db.models.deletion.CASCADE, related_name='viewings', to='app.anime'),
         ),
         migrations.AddField(
             model_name='animeviewing',
             name='diary_entry',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.RESTRICT, related_name='anime_viewings', to='app.diaryentry'),
+            field=models.ForeignKey(blank=True, db_constraint=False, null=True, on_delete=django.db.models.deletion.RESTRICT, related_name='anime_viewings', to='app.diaryentry'),
         ),
         migrations.AddField(
             model_name='animeviewing',

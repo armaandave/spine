@@ -432,7 +432,9 @@ class StatsScope:
 
     @staticmethod
     def _anime_has_day_q():
-        return Q(watched_on__isnull=False) | Q(diary_entry__isnull=False)
+        # Through the log itself: code from before these tables can delete a log after a
+        # rollback, and a fill it leaves behind has no day (AN-901).
+        return Q(watched_on__isnull=False) | Q(diary_entry__consumed_at__isnull=False)
 
     def _anime_days_q(self, start_date=None, end_date=None):
         """Match anime viewings whose day is on or between the dates; None is open."""
