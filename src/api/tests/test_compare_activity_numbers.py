@@ -15,7 +15,8 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
 from api.tests.test_activity_calc_books import BookCalcBase, d
-from app import book_tracking
+from app import book_tracking, game_tracking
+from app.models import Anime, GameSession, MediaTypes, Status
 from social.models import Comment, ContentLike, ProgressChange, ProgressPost
 
 WRITES = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", re.IGNORECASE)
@@ -100,6 +101,35 @@ class CompareTests(BookCalcBase):
 
 
 @override_settings(TIME_ZONE="America/New_York")
+class YearsOnlyTheOldCounterHasTests(CompareTests):
+    """A mark leaving a year moves its amount to the pile: All Time can't show that."""
+
+    def test_an_anime_marked_in_2025(self):
+        item = self.item(MediaTypes.ANIME.value, "marked", title="marked")
+        self.set_item(item, runtime_minutes=24)
+        row = self.tracking(Anime, item, status=Status.COMPLETED.value, progress=12)
+        self.history(row, 0, datetime(2025, 3, 1, 17, tzinfo=UTC), kind="+")
+        self.history(row, 12, datetime(2025, 3, 2, 17, tzinfo=UTC))
+        type(row).history.model.objects.filter(id=row.id).update(history_change_reason="mark")
+        line = self.line(self.compare(), f"user {self.owner.pk} anime 2025:")
+        self.assertIn("value=288->0", line)
+
+    def test_a_game_whose_hours_read_a_year_its_rows_left(self):
+        item = self.item(MediaTypes.GAME.value, "moved", title="moved")
+        with self.on(d(2026, 2, 10)):
+            game_tracking.start(self.owner, item)
+            game_tracking.update_progress(self.owner, item, total_minutes=3000)
+        GameSession.objects.filter(related_game__item=item).update(minutes_updated_on=d(2025, 12, 20))
+        line = self.line(self.compare(), f"user {self.owner.pk} game 2025:")
+        self.assertIn("value=3000->0", line)
+
+    def test_a_year_holding_nothing_either_way_prints_nothing(self):
+        self.seed_a_known_difference()
+        lines = self.compare()
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} book 2025:")])
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} anime 2")])
+
+
 class CountTwoTests(CompareTests):
     """Count 2: progress posts by class (plan 5.8)."""
 

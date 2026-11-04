@@ -12,10 +12,12 @@ import time
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 from django.db.models import Count
+from django.db.models.functions import Coalesce
 from django.test.utils import CaptureQueriesContext
 from django.utils.dateparse import parse_datetime
 
@@ -25,6 +27,7 @@ from api.services import stats_v2_activity as activity
 from api.services.stats_scope import StatsScope
 from api.services.stats_v2 import build_stats_v2
 from app import user_calendar
+from app.models import MediaTypes
 from social.models import Comment, ContentLike, ProgressChange, ProgressPost
 
 # The furthest any zone is from UTC, in hours: a viewer's day on a save's moment.
@@ -96,6 +99,7 @@ class Command(BaseCommand):
         logs = scope.all_entries.values_list("consumed_at", flat=True)
         zone = user_calendar.calendar_tz(user)
         years = {row.day.year for row in rows} | {activity_rows.log_day(moment, zone).year for moment in logs}
+        years |= _old_counter_years(scope, media_type, zone)
         for year in sorted(years):
             ranged = scope._sibling(start_date=date(year, 1, 1), end_date=date(year, 12, 31))
             self._range(user, ranged, media_type, str(year), calculation)
@@ -183,6 +187,22 @@ class Command(BaseCommand):
         status = _per_type(rows.filter(current_progress__kind=ProgressChange.STATUS))
         began_over = rows.filter(current_progress__has_key="began_over").count()
         self._say(f"count 14: empty_saved_on={empty} status_rows={status} began_over={began_over}")
+
+
+def _old_counter_years(scope, media_type, zone):
+    """Return the years a type's old counter reads beyond logs.
+
+    A mark leaving a year moves its amount to the pile, so All Time reads the same on both
+    sides, and only that year's own line can show the drop.
+    """
+    if media_type == MediaTypes.GAME.value:
+        days = stats_time.scope_game_sessions(scope).annotate(stats_day=Coalesce("minutes_updated_on", "end_date"))
+        return {day.year for day in days.values_list("stats_day", flat=True) if day}
+    if media_type in stats_time.PROGRESS_TYPES:
+        model = apps.get_model("app", media_type)
+        rows = model.history.model.objects.filter(id__in=model.objects.filter(user=scope.owner).values("id"))
+        return {moment.astimezone(zone).year for moment in rows.exclude(history_type="-").values_list("history_date", flat=True)}
+    return set()
 
 
 def _per_type(rows):
