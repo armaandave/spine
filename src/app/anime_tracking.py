@@ -1063,8 +1063,12 @@ def _leave_library(ctx):
     ctx.changed = True
 
 
-def _after_removal(ctx):
-    """Apply TV-208 and TV-003 after an undo removed facts; return True when it left."""
+def _after_removal(ctx, *, status_follows=False):
+    """Apply TV-208 and TV-003 after an undo removed facts; return True when it left.
+
+    status_follows keeps the row for a status written with the undo: what leaving clears
+    goes, and the title starts again from that status (AN-900).
+    """
     AnimeMark.objects.filter(anime=ctx.row, fills__isnull=True).delete()
     ctx.reload()
     row = ctx.row
@@ -1083,8 +1087,14 @@ def _after_removal(ctx):
             ctx.invalidate()
             return False
     if not recorded and not row.choice:
-        _leave_library(ctx)
-        return True
+        if not status_follows:
+            _leave_library(ctx)
+            return True
+        _forget_progress(ctx)
+        _clear_opinions(ctx)
+        ctx.status_before = None
+        ctx.count_before = 0
+        ctx.ticks_before = 0
     ctx.invalidate()
     return False
 
@@ -1693,7 +1703,7 @@ def _next_unwatched(calc, count):
     return numbers
 
 
-def _do_write_progress(ctx, count):
+def _do_write_progress(ctx, count, *, status_follows=False):
     """A progress number means ticks (AN-900): raising ticks, lowering removes."""
     if ctx.listing.total is not None:
         # A manual title's total goes up with the number its owner writes (AN-100).
@@ -1750,7 +1760,7 @@ def _do_write_progress(ctx, count):
     if to_remove:
         raise TVLogBlocks(MSG_DELETE_LOG)
     ctx.delete_viewings(removed)
-    left = _after_removal(ctx)
+    left = _after_removal(ctx, status_follows=status_follows)
     return {"changed": True, "left_library": left}
 
 
@@ -1797,8 +1807,9 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
     notes = data.get("notes")
     progress = data.get("progress")
 
-    def body(ctx):  # noqa: C901
+    def body(ctx):  # noqa: C901, PLR0912
         outcome = {"changed": False}
+        emptied = False
 
         def merge(result):
             if result:
@@ -1807,10 +1818,11 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
                     outcome["left_library"] = True
 
         if progress is not None and status != COMPLETED:
-            merge(_do_write_progress(ctx, int(progress)))
+            merge(_do_write_progress(ctx, int(progress), status_follows=status in CHOICES))
             if outcome.get("left_library"):
                 return outcome
             ctx.reload()
+            emptied = outcome["changed"] and not ctx.calc.recorded
         if status == COMPLETED:
             _refuse_unknown_airing(ctx)
             ctx.set_own_total(int(progress) if progress else None)
@@ -1823,6 +1835,11 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
             # A number sent with it can leave the status out of date: reaching the total
             # with In progress, say. The number stands, and that's no conflict.
             merge(_do_choose(ctx, status, quiet=not strict or progress is not None))
+            if emptied and not ctx.row.choice:
+                # It couldn't apply, as on a single, so nothing keeps the title here (TV-003).
+                _leave_library(ctx)
+                outcome["left_library"] = True
+                return outcome
         if has_rating:
             merge(_do_set_rating(ctx, rating) if strict else _quiet(lambda: _do_set_rating(ctx, rating)))
         if notes is not None and ctx.row is not None and ctx.row.notes != notes:

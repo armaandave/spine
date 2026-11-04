@@ -854,6 +854,71 @@ class InstalledBuildTests(AnimeTestCase):
         self.assertEqual((response.data["status"], response.data["progress"]["value"]), ("Completed", 12))
         self.assertEqual(self.row(item).progress, 12)
 
+    def test_an_900_a_status_sent_with_progress_0_applies_once_the_viewings_go(self):
+        for status in ("Planning", "In progress", "Paused", "Dropped"):
+            with self.subTest(status=status):
+                item = self.title(total=12)
+                self.tick(item, 1, 2)
+                response = self.write(item, status=status, progress=0)
+                self.assertEqual(response.data["status"], status)
+                self.assertEqual(response.data["progress"]["value"], 0)
+                row = self.row(item)
+                self.assertEqual((row.status, row.choice, row.progress), (status, status, 0))
+                self.assertEqual(self.viewings(item), [])
+                self.assertFalse(self.state(item)["finished"])
+
+    def test_an_900_progress_0_with_a_status_starts_again_from_nothing(self):
+        item = self.title(total=12)
+        self.tick(item, 1, 2)
+        self.write(item, status="Planning", progress=0)
+        self.assertFalse(ProgressChange.objects.filter(actor=self.user, item=item).exists())
+        self.write(item, status="In progress")
+        self.assertEqual(
+            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=item)],
+            ["start"],
+        )
+
+        other = self.title(total=12)
+        self.tick(other, 1, 2)
+        self.write(other, status="In progress", progress=0)
+        self.assertEqual(
+            [change.current_progress["kind"] for change in ProgressChange.objects.filter(actor=self.user, item=other)],
+            ["start"],
+        )
+
+    def test_an_900_progress_0_with_a_status_clears_stars_and_the_heart_as_leaving_does(self):
+        item = self.title(total=2)
+        self.tick(item, 1, 2)
+        anime_tracking.set_rating(self.user, item, 8)
+        self.post_like(item)
+        self.write(item, status="Planning", progress=0)
+        row = self.row(item)
+        self.assertIsNone(row.score)
+        self.assertFalse(self.liked(item))
+
+    def test_an_900_progress_0_with_no_status_still_leaves_the_library(self):
+        item = self.title(total=12)
+        self.tick(item, 1, 2)
+        self.write(item, progress=0)
+        self.assertIsNone(self.row(item))
+
+    def test_an_900_progress_0_with_a_status_that_cant_apply_leaves_the_library(self):
+        item = self.title(total=1)
+        self.tick(item, 1)
+        self.write(item, status="Paused", progress=0)
+        self.assertIsNone(self.row(item), "A single has no place to keep")
+        upcoming = self.fake.add(total=12, status="Upcoming", start_date="2027-03-12")
+        planned = self.title(title=upcoming)
+        self.write(planned, status="Planning", progress=0)
+        self.assertEqual(self.row(planned).status, "Planning")
+
+    def test_an_900_a_log_still_refuses_progress_0_with_a_status(self):
+        item = self.title(total=2)
+        self.log(item)
+        self.write(item, status="Planning", progress=0, expect=409)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 2))
+
     def test_an_900_a_put_with_a_status_works(self):
         item = self.title(total=3)
         response = self.api.put(self.url(item), {"status": "Planning"}, format="json")

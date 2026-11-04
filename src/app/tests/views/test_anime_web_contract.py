@@ -60,6 +60,24 @@ class AnimeWebContractTests(AnimeTestCase):
         self.assertEqual(self.watched(item), {1, 2})
         self.assertTrue(all(viewing.kind == "tick" for viewing in self.viewings(item)))
 
+    def test_an_900_a_form_with_a_status_and_a_number_of_0_keeps_the_status(self):
+        for status in ("Planning", "In progress", "Paused", "Dropped"):
+            with self.subTest(status=status):
+                item = self.title(total=5)
+                self.tick(item, 1, 2)
+                response = self.save(item, status=status, progress=0, instance_id=self.row(item).pk)
+                self.assertLess(response.status_code, 400)
+                row = self.row(item)
+                self.assertEqual((row.status, row.choice, row.progress), (status, status, 0))
+                self.assertEqual(self.viewings(item), [])
+
+    def test_an_900_a_finished_titles_form_set_to_0_empties_it(self):
+        item = self.title(total=2)
+        self.tick(item, 1, 2)
+        self.assertEqual(self.row(item).status, "Completed")
+        self.save(item, status="Completed", progress=0, instance_id=self.row(item).pk)
+        self.assertIsNone(self.row(item))
+
     def test_an_900_the_progress_buttons_tick_and_untick(self):
         item = self.title(total=2)
         self.tick(item, 1)

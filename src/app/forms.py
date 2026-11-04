@@ -346,6 +346,9 @@ class AnimeForm(MediaForm):
             payload["rating"] = score or None
         if "progress" in self.changed_data:
             payload["progress"] = self.cleaned_data.get("progress") or 0
+            if not payload["progress"] and self.cleaned_data["status"] in anime_tracking.CHOICES:
+                # The status beside a 0 still says where the title goes (AN-900).
+                payload["status"] = self.cleaned_data["status"]
         result = anime_tracking.apply_written_state(
             self.instance.user,
             self.instance.item,
