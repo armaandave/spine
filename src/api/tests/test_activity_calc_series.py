@@ -10,7 +10,7 @@ from decimal import Decimal
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import series_tracking as series
-from app.models import Comic, DiaryEntry, Manga, MediaTypes, Status
+from app.models import Comic, ComicAttempt, DiaryEntry, Manga, MediaTypes, Status
 from social.models import Follow, FollowStatus
 
 MANGA = MediaTypes.MANGA.value
@@ -144,11 +144,11 @@ class EverySaveTests(SeriesCalcBase):
         manga = self.title("same", media_type=MANGA)
         comic = self.title("same", media_type=COMIC)
         self.save(manga, 5, d(2026, 2, 1))
+        shared_id = Manga.objects.get(item=manga).current_attempt_id
+        row = self.do(series.assign_status, comic, d(2026, 2, 1), Status.PLANNING.value)
+        ComicAttempt.objects.create(pk=shared_id, tracking=row, status=Status.IN_PROGRESS.value)
+        Comic.objects.filter(pk=row.pk).update(status=Status.IN_PROGRESS.value, current_attempt_id=shared_id)
         self.save(comic, 7, d(2026, 2, 1))
-        self.assertEqual(
-            Manga.objects.get(item=manga).current_attempt_id,
-            Comic.objects.get(item=comic).current_attempt_id,
-        )
         self.assertEqual(self.number(pile=True), 5)
         self.media_type = COMIC
         self.assertEqual(self.number(pile=True), 7)
