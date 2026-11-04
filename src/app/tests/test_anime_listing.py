@@ -1095,6 +1095,44 @@ class NoCopyNeededTests(AnimeTestCase):
         anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
         self.assert_no_call()
 
+    def test_an_900_a_lowered_number_is_an_untick(self):
+        item = self.imported()
+        anime_tracking.write_progress(self.user, item, 2, entry_point=anime_tracking.WEB)
+        self.assertEqual(self.watched(item), {1, 2})
+        anime_tracking.apply_written_state(self.user, item, {"progress": 1}, entry_point=anime_tracking.WEB)
+        self.assertEqual(self.watched(item), {1})
+        self.write(item, progress=0)
+        self.assertIsNone(self.row(item))
+        self.assert_no_call()
+
+    def test_an_900_the_webs_minus_button_is_an_untick(self):
+        item = self.imported()
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("progress_edit", kwargs={"media_type": "anime", "instance_id": self.row(item).pk}),
+            {"operation": "decrease"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.row(item).progress, 2)
+        self.assert_no_call()
+
+    def test_an_900_a_raised_number_or_a_status_with_it_still_needs_the_numbers(self):
+        item = self.imported()
+        for write in (
+            lambda: anime_tracking.write_progress(self.user, item, 4, entry_point=anime_tracking.WEB),
+            lambda: anime_tracking.apply_written_state(self.user, item, {"progress": 4}, entry_point=anime_tracking.WEB),
+            lambda: anime_tracking.apply_written_state(self.user, item, {"progress": 3}, entry_point=anime_tracking.WEB),
+            lambda: anime_tracking.apply_written_state(
+                self.user,
+                item,
+                {"status": "Paused", "progress": 2},
+                entry_point=anime_tracking.WEB,
+            ),
+        ):
+            with self.assertRaises(AnimeDetailsUnavailable):
+                write()
+        self.assertEqual(self.row(item).progress, 3)
+
     def stored_completed(self, **values):
         # A file says it's finished and how many isn't known yet: a stored Completed (AN-902).
         item = self.title(total=12)

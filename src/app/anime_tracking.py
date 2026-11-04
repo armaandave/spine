@@ -1833,6 +1833,12 @@ def _do_write_progress(ctx, count, *, status_follows=False):
     return {"changed": True, "left_library": left}
 
 
+def _number_lowers(user, item, count):
+    """Return whether a written number is below the row's: it only removes, as an untick does."""
+    progress = Anime.objects.filter(user=user, item=item).values_list("progress", flat=True).first()
+    return progress is not None and int(count) < progress
+
+
 def write_progress(user, item, count, *, entry_point=APP, mutation_id=None):
     """Apply a progress number from the web or the API: it means ticks (AN-900)."""
     return _perform(
@@ -1842,6 +1848,8 @@ def write_progress(user, item, count, *, entry_point=APP, mutation_id=None):
         lambda ctx: _do_write_progress(ctx, int(count)),
         entry_point=entry_point,
         mutation_id=mutation_id,
+        # Lowering it needs no copy, so it works at any time.
+        listing=_listing_on_hand(item) if _number_lowers(user, item, count) else None,
     )
 
 
@@ -1924,8 +1932,12 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
         body,
         entry_point=entry_point,
         mutation_id=mutation_id,
-        # Notes and clearing stars need no copy, so they work at any time.
-        listing=_listing_on_hand(item) if status is None and progress is None and rating is None else None,
+        # Notes, clearing stars and lowering the number need no copy, so they work at any time.
+        listing=(
+            _listing_on_hand(item)
+            if status is None and rating is None and (progress is None or _number_lowers(user, item, progress))
+            else None
+        ),
     )
 
 
