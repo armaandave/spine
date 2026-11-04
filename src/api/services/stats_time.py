@@ -139,8 +139,9 @@ def _from_rows(rows, piles, media_type):
     Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
     """
     pile = activity_rows.piled(piles, media_type)
-    titles = {row.title_id for row in rows if row.counts_title} | pile.titles
-    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known)
+    in_rows = {row.title_id for row in rows if row.counts_title}
+    titles = in_rows | (pile.titles - pile.no_amount)
+    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
     result = TypeTime(media_type)
     result.value = int(sum((row.amount for row in rows), pile.amount))
     result.known = len(titles - unknown)
