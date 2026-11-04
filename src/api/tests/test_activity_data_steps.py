@@ -97,15 +97,21 @@ class UndatedReadsTests(StepBase):
         self.assert_numbers(0, 0, 400)
         self.assertEqual(self.rows(), [])
         book = Book.objects.get(item=item)
-        self.assertFalse(book.undated_read_previous_tracked)
+        self.assertTrue(book.undated_read_previous_tracked)
         self.assertIsNone(book.undated_read_previous_status)
 
-    def test_a_marked_read_can_still_be_undone(self):
-        item = self.imported_read("undo")
+    def test_a_marked_read_can_still_be_undone_and_keeps_the_row(self):
+        """The importer made the row, so turning the eye off can't delete it."""
+        item = self.imported_read("undo", score=8, notes="Loved it")
         run("fill_undated_reads", apply=True)
+        self.assertEqual(Book.objects.get(item=item).score, 8)
         with self.on(d(2026, 3, 1)):
             book_tracking.undo_read(self.owner, item)
-        self.assertFalse(Book.objects.filter(item=item).exists())
+        book = Book.objects.get(item=item)
+        self.assertEqual(book.status, Status.PLANNING.value)
+        self.assertEqual(book.notes, "Loved it")
+        self.assertFalse(book.completed_manually)
+        self.assert_numbers(0, 0, 0)
 
     def test_a_read_holding_a_stopped_journey_holds_only_what_is_left(self):
         """Stopped, To Read, then a status written on the row, as the web form does."""

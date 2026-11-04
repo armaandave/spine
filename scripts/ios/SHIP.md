@@ -155,7 +155,8 @@ the deploy unless he says stop to the counts message below, and only if its coun
 2. **Undated imported Reads,** only if the count isn't zero:
    `scripts/activity-steps-production.sh undated-reads --apply`. Goodreads and StoryGraph
    Reads with no date, no log and no mark become marks, on every account. All Time rises and
-   no year moves.
+   no year moves. Turning the eye off on one later keeps the book at To Read with its notes,
+   and clears its rating, as on any mark.
 3. **Past Restarts,** only if the count isn't zero:
    `scripts/activity-steps-production.sh past-restarts --apply`. That start row gets
    `began_over`. It's an upper bound: at most 3 across accounts.

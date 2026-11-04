@@ -52,9 +52,10 @@ class Command(BaseCommand):
         if not options["apply"]:
             self.stderr.write("dry run: nothing changed")
             return
+        # The importer made the row, so undoing it keeps the row, at To Read.
         Book.objects.filter(pk__in=[book.pk for book in books]).update(
             completed_manually=True,
-            undated_read_previous_tracked=False,
+            undated_read_previous_tracked=True,
             undated_read_previous_status=None,
             undated_read_previous_session=None,
             undated_read_previous_override=False,
