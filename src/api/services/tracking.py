@@ -1203,6 +1203,9 @@ def anime_item(source, media_id, *, create=True):
         if error.status_code == 404:
             raise NotFound from error
         raise TVDetailsUnavailableError(detail=anime_listing.UNAVAILABLE_MESSAGE) from error
+    except anime_listing.PROVIDER_FAILURES as error:
+        # A timeout never becomes a ProviderAPIError.
+        raise TVDetailsUnavailableError(detail=anime_listing.UNAVAILABLE_MESSAGE) from error
     return get_or_create_item_from_metadata(lookup, metadata)
 
 

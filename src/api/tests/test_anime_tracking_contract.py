@@ -8,12 +8,15 @@ and the account calendar on America/Los_Angeles; MAL and AniList are faked.
 
 import io
 from datetime import UTC, date, datetime
+from unittest import mock
 from uuid import uuid4
 
+import requests
 from rest_framework.test import APIClient
 
 from app import anime_tracking
 from app.models import Anime, AnimeMark, Item
+from app.providers import mal
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase
 from app.tests.tv_fixtures import make_user
 from integrations.imports.mal import MyAnimeListImporter
@@ -687,6 +690,20 @@ class RoutesTests(AnimeTestCase):
         response = self.action(item, "tick", expect=503, episode_number=1)
         self.assertEqual(response.data["error"]["code"], "provider_unavailable")
         self.assertEqual(response.data["error"]["message"], "Anime details are unavailable right now")
+
+    def test_routes_a_title_with_no_item_and_mal_timing_out_is_a_retryable_503(self):
+        url = "/api/v1/tracking/mal/anime/424242/"
+        log = {"ref": {"source": "mal", "media_type": "anime", "media_id": "424242"}, "consumed_at": "2026-10-25"}
+        for failure in (requests.exceptions.Timeout, requests.exceptions.ConnectionError, ValueError):
+            with mock.patch.object(mal, "anime", side_effect=failure), self.subTest(failure=failure.__name__):
+                for response in (
+                    self.api.post(f"{url}actions/tick/", {"episode_number": 1}, format="json"),
+                    self.api.post("/api/v1/diary/", log, format="json"),
+                    self.api.get(f"{url}rows/"),
+                ):
+                    self.assertEqual(response.status_code, 503, getattr(response, "data", None))
+                    self.assertEqual(response.data["error"]["code"], "provider_unavailable")
+        self.assertFalse(Item.objects.filter(media_id="424242").exists())
 
     def test_routes_a_stale_version_says_the_new_count(self):
         item = self.title(total=2)
