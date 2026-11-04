@@ -1721,6 +1721,46 @@ class AdapterCostTests(BookCalcBase):
         ):
             self.assert_numbers(0, 40, 400)
 
+    def assert_flat_walk(self, build, adapter=BOOK):
+        """Check the walk costs the same over 3 titles of a shape as over 33."""
+        built = 0
+        counts = []
+        for size in (3, 33):
+            while built < size:
+                build(built)
+                built += 1
+            with CaptureQueriesContext(connection) as walk:
+                rows_for([self.owner], self.owner, types=[adapter])
+            counts.append(len(walk))
+        self.assertEqual(counts[0], counts[1], counts)
+
+    def test_a_mark_then_a_reread_reads_history_once_for_every_title(self):
+        def build(number):
+            item = self.book(f"reread-{number}")
+            self.do(book_tracking.mark_read, item, d(2026, 3, 1))
+            self.begin(item, d(2026, 3, 2))
+            self.save(item, 40, d(2026, 3, 3))
+
+        self.assert_flat_walk(build)
+
+    def test_a_mark_with_a_legacy_journey_reads_history_once_for_every_title(self):
+        def build(number):
+            book = Book.objects.create(user=self.owner, item=self.book(f"legacy-{number}"), status=Status.COMPLETED.value, completed_manually=True)
+            BookSession.objects.create(related_book=book, status=Status.COMPLETED.value, origin=BookSession.Origin.LEGACY)
+
+        self.assert_flat_walk(build)
+
+    def test_a_marked_manga_with_an_attempt_reads_history_once_for_every_title(self):
+        manga = MediaTypes.MANGA.value
+
+        def build(number):
+            item = self.item(manga, f"manga-{number}", title=f"manga-{number}")
+            self.set_item(item, series_total=100)
+            self.do(series_tracking.mark_read, item, d(2026, 3, 1))
+            self.do(series_tracking.start, item, d(2026, 3, 2))
+
+        self.assert_flat_walk(build, adapter=manga)
+
     def test_one_global_request_walks_once(self):
         patcher, counted = self.counted_adapter()
         with patcher:

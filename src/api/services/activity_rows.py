@@ -445,12 +445,22 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
                 reading.counted.move_to(pages, day, change.created_at)
 
 
-def _carries_on(prior, session, saves):
+def marked_between(prior, later, marked_at):
+    """Return whether a mark went on after one journey began and before a later one did.
+
+    A mark closes the read before it, whatever status moves follow: decision 21 says they
+    change no number, so To Read in between can't turn a reread into carrying on.
+    """
+    return bool(marked_at and prior.created_at <= marked_at < later.created_at)
+
+
+def _carries_on(prior, session, saves, marked_at):
     """Return whether a journey continues the last; only Restart is new (decision 8)."""
     return bool(
         prior
         and prior.status == Status.DROPPED.value
         and session.previous_status != Status.COMPLETED.value
+        and not marked_between(prior, session, marked_at)
         and not any(change.current_progress.get("began_over") for change in saves),
     )
 
@@ -470,7 +480,7 @@ def _walk_session(title, reading, session, saves, total, zone, *, continues):
     return bool(entry)
 
 
-def _walk_journeys(title, sessions, saves, total, zone):
+def _walk_journeys(title, sessions, saves, total, zone, marked_at):
     """Fold a title's journeys into rows; return each journey's read.
 
     A file's read is its own: whatever its id sits between, it doesn't end the read
@@ -486,7 +496,7 @@ def _walk_journeys(title, sessions, saves, total, zone):
             _walk_session(title, own, session, session_saves, total, zone, continues=False)
             title.take(own)
             continue
-        continues = _carries_on(prior, session, session_saves)
+        continues = _carries_on(prior, session, session_saves, marked_at)
         if not continues or reading is None:
             if reading:
                 title.take(reading)
@@ -501,22 +511,23 @@ def _walk_journeys(title, sessions, saves, total, zone):
     return by_session
 
 
-def _marked_at(model, tracking_id):
-    """Return when this title's mark last went on, by its history rows in save order.
+def marked_moments(model, tracking_ids):
+    """Return when each title's mark last went on, by its history rows in save order.
 
-    None when no row says so: migration 0075 and the undated Reads step write none.
+    One query however many titles ask, because every Stats miss walks them all. A title is
+    left out when no row says so: migration 0075 and the undated Reads step write none.
     """
-    rows = model.history.filter(id=tracking_id).order_by("history_id")
-    marked_at = None
-    marked = False
-    for now_marked, moment in rows.values_list("completed_manually", "history_date"):
-        if now_marked and not marked:
-            marked_at = moment
-        marked = now_marked
-    return marked_at
+    moments = {}
+    marked = {}
+    rows = model.history.filter(id__in=tracking_ids).order_by("id", "history_id")
+    for tracking_id, now_marked, moment in rows.values_list("id", "completed_manually", "history_date"):
+        if now_marked and not marked.get(tracking_id):
+            moments[tracking_id] = moment
+        marked[tracking_id] = now_marked
+    return moments
 
 
-def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_journey):
+def _read_before_mark(marked_at, recorded_id, current_id, journeys, by_journey):
     """Return the stopped read a mark came after, or None.
 
     A direct To Read or Paused clears the mark's record of it, so with no record it's
@@ -528,7 +539,6 @@ def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_
         return by_journey.get(recorded_id)
     if not journeys:
         return None
-    marked_at = _marked_at(model, tracking_id)
     last = None
     for journey in journeys:
         if journey.previous_status == Status.COMPLETED.value or (marked_at and journey.created_at > marked_at):
@@ -539,10 +549,10 @@ def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_
     return by_journey.get(last.pk)
 
 
-def _book_title(actor_id, item, book, sessions, saves, entries, zone):
+def _book_title(actor_id, item, book, sessions, saves, entries, zone, marked_at):
     title = Title(actor_id, item, MediaTypes.BOOK.value, PAGE)
     total = item.total_pages or None
-    by_session = _walk_journeys(title, sessions, saves, total, zone)
+    by_session = _walk_journeys(title, sessions, saves, total, zone, marked_at)
     # A log with no journey behind it is a whole read on its own date.
     for entry in entries:
         if entry.pk not in title.logs:
@@ -556,7 +566,7 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
     if book and book.completed_manually:
         # A mark after a stop holds only what that read doesn't: a place with no day is
         # in the pile already.
-        stopped = _read_before_mark(Book, book.id, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
+        stopped = _read_before_mark(marked_at, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
         held = stopped.counted.value if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
     if book and book.progress and not own and (book.status != Status.COMPLETED.value or book.read_override_active):
@@ -605,16 +615,19 @@ def _book_rows(result, owners, _viewer, titles, piles):
     keys = {*sessions, *entries, *books}
     items = Item.objects.only("total_pages").in_bulk({item_id for _actor_id, item_id in keys})
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
+    moments = marked_moments(Book, [book.id for key, book in books.items() if book.completed_manually and key in sessions])
     for key in keys:
         actor_id, item_id = key
+        book = books.get(key)
         title = _book_title(
             actor_id,
             items[item_id],
-            books.get(key),
+            book,
             sessions[key],
             changes,
             entries[key],
             zones[actor_id],
+            moments.get(book.id) if book else None,
         )
         _collect(result, title, piles=piles)
 
@@ -851,7 +864,7 @@ def _log_on_read(title, reading, entry, total, zone, sees):
     reading.finish(entry.pk, day, entry.created_at, target)
 
 
-def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees):  # noqa: C901, PLR0912, PLR0915
+def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees, marked_at):  # noqa: C901, PLR0912, PLR0915
     title = Title(actor_id, item, item.media_type, unit)
     total = item.series_total or None
     marked = bool(row and row.completed_manually)
@@ -900,7 +913,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             _log_on_read(title, alone, entry, total, zone, sees)
             title.take(alone)
     if marked:
-        stopped = _read_before_mark(type(row), row.pk, row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
+        stopped = _read_before_mark(marked_at, row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
         held = stopped.counted.value if stopped else ZERO
         if opening_over_mark is not None:
             base = opening_over_mark
@@ -948,18 +961,21 @@ def _series_rows(model, attempt_model, unit, result, owners, viewer, titles, pil
         items[row.item_id] = row.item
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
     sees = _who_sees(owners, viewer)
+    moments = marked_moments(model, [row.pk for key, row in rows.items() if row.completed_manually and key in attempts])
     for key in {*attempts, *entries, *rows}:
         actor_id, item_id = key
+        row = rows.get(key)
         title = _series_title(
             actor_id,
             items[item_id],
-            rows.get(key),
+            row,
             attempts[key],
             changes,
             entries[key],
             unit,
             zones[actor_id],
             sees,
+            moments.get(row.pk) if row else None,
         )
         _collect(result, title, piles=piles)
 
