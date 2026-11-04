@@ -85,6 +85,8 @@ OTHER_TITLES = {
     MediaTypes.COMIC.value: "CO",
     MediaTypes.ANIME.value: "AN",
     MediaTypes.MOVIE.value: "F1",
+# What the sheet's last row has the phone save on, and what print-rows reads.
+STORED_TITLES = ("X", "Y", "Z", "W")
     MediaTypes.MUSIC.value: "P1",
 }
 
@@ -352,13 +354,15 @@ def friend_starts_over():
 
 
 def print_rows():
-    """Print what the status moves stored, for the sheet's last row."""
-    rows = ProgressChange.objects.filter(actor=dev_user(), item__media_id__startswith=PREFIX).order_by("id")
+    """Print every row the sheet's last row stored, and say so of any not saved today."""
+    names = [media_id(name) for name in STORED_TITLES]
+    rows = ProgressChange.objects.filter(actor=dev_user(), item__media_id__in=names).select_related("item").order_by("id")
     today = timezone.now().astimezone(ZoneInfo(NEW_YORK)).date()
-    for change in rows.select_related("item").filter(saved_on=today):
+    for change in rows:
         saved = change.current_progress
         began_over = " began_over" if saved.get("began_over") else ""
-        print(change.saved_on, change.item.title, saved.get("kind"), saved.get("move", saved.get("value")), began_over)  # noqa: T201
+        not_today = "" if change.saved_on == today else " NOT TODAY"
+        print(change.saved_on, change.item.title, saved.get("kind"), saved.get("move", saved.get("value")), f"{began_over}{not_today}")  # noqa: T201
 
 
 STEPS = {

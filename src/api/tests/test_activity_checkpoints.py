@@ -540,16 +540,53 @@ class StoredRowsTests(CheckpointBase):
         self.assertEqual(response.status_code, 200, response.content)
         self.step(self.post, "game", "Y", "actions/drop/", {"mutation_id": str(uuid4()), "end_date": today})
         self.assertEqual(
+        self.assertNotIn("NOT TODAY", printed.getvalue())
+
+    def printed_rows(self):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            self.step(seed.print_rows)
+        return printed.getvalue().splitlines()
+
+    def test_a_row_on_another_day_prints_and_says_so(self):
+        self.step(self.currently_reading, "X")
+        self.step(self.update_progress, "X", 10)
+        saved = ProgressChange.objects.filter(item=seed.book("X"), current_progress__kind="pages")
+        saved.update(saved_on=date(2026, 11, 2))
+        lines = self.printed_rows()
+        self.assertEqual(len(lines), 2, lines)
+        self.assertTrue(lines[1].startswith("2026-11-02 Book X pages 10"), lines)
+        self.assertIn("NOT TODAY", lines[1])
+        self.assertNotIn("NOT TODAY", lines[0])
+
+    def test_a_row_with_no_day_prints_and_says_so(self):
+        self.step(self.currently_reading, "X")
+        self.step(self.update_progress, "X", 10)
+        ProgressChange.objects.filter(item=seed.book("X"), current_progress__kind="pages").update(saved_on=None)
+        lines = self.printed_rows()
+        self.assertTrue(lines[1].startswith("None Book X pages 10"), lines)
+        self.assertIn("NOT TODAY", lines[1])
+
+    def test_it_prints_only_the_titles_the_row_names(self):
+        self.step(self.update_progress, "A", 250)
+        self.step(self.currently_reading, "X")
+        lines = self.printed_rows()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("Book X", lines[0])
             self.rows(seed.title(MediaTypes.GAME.value, "Y")),
             [("start", None, False), ("minutes", None, False), ("status", "stopped", False)],
         )
 
     def test_show_z_ticked_and_unticked(self):
         show = seed.show_z()
-        self.step(self.post, "tv", "Z", "seasons/1/episodes/1/watch/")
+        episode = {"season_number": 1, "episode_number": 1}
+        self.step(self.post, "tv", "Z", "actions/tick/", {**episode, "mutation_id": str(uuid4())})
         self.assertEqual(self.rows(show), [("start", None, False)])
-        response = self.step(self.phone().delete, f"/api/v1/tracking/manual/tv/{seed.media_id('Z')}/seasons/1/episodes/1/watch/")
-        self.assertEqual(response.status_code, 200, response.content)
+        listed = self.phone().get(f"/api/v1/media/manual/tv/{seed.media_id('Z')}/seasons/1/episodes/")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        first = next(row for row in listed.json()["episodes"] if row["episode_number"] == 1)
+        viewing = first["tv"]["untick_viewing_id"]
+        self.step(self.post, "tv", "Z", "actions/untick/", {**episode, "viewing_id": viewing, "mutation_id": str(uuid4())})
         self.assertEqual(self.rows(show), [])
 
     def test_manga_w(self):
@@ -564,6 +601,7 @@ class StoredRowsTests(CheckpointBase):
                 ("start", None, False),
                 ("count", None, False),
                 ("status", "paused", False),
+        """tickTVEpisode, then untickTVEpisode naming the viewing the episode's state names."""
                 ("status", "picked back up", False),
             ],
         )
