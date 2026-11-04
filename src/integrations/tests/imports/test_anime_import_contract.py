@@ -662,6 +662,63 @@ class OtherImporterTests(ImportTestCase):
         anime_tracking.delete_log(self.user, entry)
         self.assertEqual(self.stats_time(2020)[1], 0)
 
+    def test_an_800_the_mal_exports_log_of_a_single_is_one_watch(self):
+        title = self.fake.add(total=1, format="Movie")
+        self._export(
+            (
+                title.media_id,
+                "Completed",
+                {"series_episodes": "1", "my_watched_episodes": "1", "my_finish_date": "2021-05-01"},
+            ),
+        )
+        item = self.item_of(title)
+        entry = self.logs(item)[0]
+        viewings = self.viewings(item)
+        self.assertEqual([(viewing.episode_number, viewing.diary_entry_id) for viewing in viewings], [(1, entry.pk)])
+        self.assertEqual(self.stats_time(2021)[1], 1)
+        self.assertEqual(self.stats_time()[1], 1)
+        self.assertEqual(self.row(item).status, "Completed")
+
+    def test_an_800_a_singles_earlier_pass_stays_an_undated_mark_under_the_log(self):
+        title = self.fake.add(total=1, format="Movie")
+        self._export(
+            (
+                title.media_id,
+                "Completed",
+                {
+                    "series_episodes": "1",
+                    "my_watched_episodes": "1",
+                    "my_times_watched": "1",
+                    "my_finish_date": "2021-05-01",
+                },
+            ),
+        )
+        item = self.item_of(title)
+        entry = self.logs(item)[0]
+        viewings = sorted(self.viewings(item), key=lambda viewing: viewing.pass_number)
+        self.assertEqual(
+            [(viewing.pass_number, viewing.diary_entry_id, viewing.mark_id is not None) for viewing in viewings],
+            [(1, None, True), (2, entry.pk, False)],
+        )
+        self.assertEqual(self.stats_time(2021)[1], 1, "The earlier pass lands in no year")
+        self.assertEqual(self.stats_time()[1], 2)
+
+    def test_an_800_an_imported_log_of_a_single_with_nothing_to_claim_adds_its_own_watch(self):
+        title = self.fake.add(total=1, format="Movie")
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        anime_tracking.import_title(self.user, item, status="Planning", earlier=[{"count": 1}])
+        result = anime_tracking.create_log(
+            self.user,
+            item,
+            consumed_at=date(2021, 5, 1),
+            import_source="myanimelist",
+            entry_point=anime_tracking.IMPORT,
+        )
+        by_entry = {viewing.pass_number: viewing.diary_entry_id for viewing in self.viewings(item)}
+        self.assertEqual(by_entry, {1: None, 2: result.entry.pk})
+        self.assertEqual(self.stats_time(2021)[1], 1)
+
     def test_an_800_a_date_past_the_users_today_becomes_today_and_aborts_nothing(self):
         # 22:30 in Los Angeles, with the server in New York already on the 26th.
         self.clock.advance(hours=10, minutes=30)

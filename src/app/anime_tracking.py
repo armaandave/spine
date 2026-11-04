@@ -1919,10 +1919,11 @@ def _do_create_log(  # noqa: PLR0913
         import_source_order=import_source_order,
     )
     single_weight._replace_tags(entry, tags or [])  # noqa: SLF001
+    claimed = 0
     if ctx.entry_point == IMPORT:
         # An import's log dates the fills of the import's mark (AN-800). The mark isn't
         # kept with them: deleting this log takes them away.
-        AnimeViewing.objects.filter(
+        claimed = AnimeViewing.objects.filter(
             anime=ctx.row,
             mark__isnull=False,
             diary_entry__isnull=True,
@@ -1933,11 +1934,12 @@ def _do_create_log(  # noqa: PLR0913
         calc = ctx.calc
     if log_pass == ctx.row.pass_number:
         if calc.single:
-            # One log of a single is one watch of it (AN-002, SW-010).
-            own = _own_viewing_of_single(ctx)
+            # One log of a single is one watch of it (AN-002, SW-010). An import's log has
+            # its own pass's fill, or a new one: an earlier pass's mark stays a mark.
+            own = None if ctx.entry_point == IMPORT else _own_viewing_of_single(ctx)
             if own is not None:
                 AnimeViewing.objects.filter(pk=own.id).update(diary_entry=entry)
-            else:
+            elif not claimed:
                 ctx.add_fills([1], entry=entry)
         else:
             ctx.add_fills([number for number in aired if number not in calc.watched_pass], entry=entry)
