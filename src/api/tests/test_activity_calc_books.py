@@ -631,6 +631,73 @@ class DeleteTests(BookCalcBase):
         self.assert_numbers(0, 200, 200)
         self.assertEqual(Book.objects.get(item=item).status, Status.IN_PROGRESS.value)
 
+    def test_deleting_a_log_never_turns_a_reread_into_a_typo_fix(self):
+        """Stopped at 200, logged, reread to 40: that reread opened at zero when it began."""
+        item = self.book("splice")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, item, d(2025, 11, 15))
+        _, entry = self.finish(item, d(2025, 12, 1))
+        self.assert_numbers(400, 0, 400)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 40, d(2026, 2, 2))
+        self.assert_numbers(400, 40, 440)
+        with self.on(d(2026, 2, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(200, 40, 240)
+        self.assertEqual(
+            self.rows(),
+            [
+                "2026-02-02 read 40",
+                "2026-02-01 started",
+                "2025-11-15 stopped",
+                "2025-11-10 read 200",
+                "2025-11-01 started",
+            ],
+        )
+
+    def test_nor_does_to_read_or_paused_between_the_log_and_the_reread(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value):
+            with self.subTest(status=status):
+                item = self.book(f"between-{status}")
+                self.begin(item, d(2025, 11, 1))
+                self.save(item, 200, d(2025, 11, 10))
+                self.do(book_tracking.drop, item, d(2025, 11, 15))
+                _, entry = self.finish(item, d(2025, 12, 1))
+                self.do(book_tracking.assign_status, item, d(2026, 1, 1), status)
+                self.begin(item, d(2026, 2, 1))
+                self.save(item, 40, d(2026, 2, 2))
+                with self.on(d(2026, 2, 3)):
+                    book_tracking.delete_completion(self.owner, entry)
+                self.assertEqual(
+                    self.rows(item),
+                    [
+                        "2026-02-02 read 40",
+                        "2026-02-01 started",
+                        "2025-11-15 stopped",
+                        "2025-11-10 read 200",
+                        "2025-11-01 started",
+                    ],
+                )
+
+    def test_a_reread_over_a_mark_or_a_log_says_it_began_over(self):
+        for name, mark in (("over-log", lambda item: self.finish(item, d(2025, 12, 1))), ("over-eye", lambda item: self.do(book_tracking.mark_read, item, d(2025, 12, 1)))):
+            with self.subTest(name=name):
+                item = self.book(name)
+                mark(item)
+                self.begin(item, d(2026, 2, 1))
+                start = ProgressChange.objects.get(item=item, current_progress__kind=ProgressChange.START)
+                self.assertIs(start.current_progress.get("began_over"), True)
+
+    def test_a_first_start_and_a_pick_up_do_not_say_it(self):
+        item = self.book("not-over")
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, 10, d(2026, 1, 2))
+        self.do(book_tracking.drop, item, d(2026, 1, 3))
+        self.begin(item, d(2026, 1, 4))
+        starts = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START)
+        self.assertEqual([change.current_progress.get("began_over") for change in starts], [None, None])
+
     def test_deleting_a_direct_log_leaves_nothing(self):
         item = self.book("direct")
         _, entry = self.finish(item, d(2026, 3, 3))

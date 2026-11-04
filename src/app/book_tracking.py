@@ -383,6 +383,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
         return book
 
     picks_back_up = _picks_back_up(book)
+    began_over = _over_a_finished_read(book)
     started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
     pages_read, percentage_read = _opening_place(book)
     session = BookSession.objects.create(
@@ -399,7 +400,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, session)
-    _record_start(user, item, session)
+    _record_start(user, item, session, **({"began_over": True} if began_over else {}))
     if picks_back_up:
         _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
@@ -411,6 +412,17 @@ def _last_read(book):
         if not session.from_file:
             return session
     return None
+
+
+def _over_a_finished_read(book):
+    """Return whether a new journey is a reread, which begins at zero (decision 6).
+
+    Its start row keeps this, because deleting that log later can't change where it began.
+    """
+    if book.status == Status.COMPLETED.value:
+        return True
+    last = _last_read(book)
+    return bool(last and last.status == Status.COMPLETED.value)
 
 
 def _opening_place(book):
