@@ -210,7 +210,7 @@ final class AnimeTrackingTests: XCTestCase {
                 offerLog: true
             )
         )
-        XCTAssertEqual(TVDataURLProtocol.requests.last?.url?.path, "/api/v1/tracking/mal/anime/16498/actions/mark_earlier/")
+        XCTAssertEqual(TVDataURLProtocol.requests.last?.url?.path, "/api/v1/tracking/mal/anime/16498/actions/mark_earlier")
         let body = try XCTUnwrap(TVDataURLProtocol.bodies.last)
         XCTAssertEqual((body["from"] as? [String: Any])?["episode_number"] as? Int, 1)
         XCTAssertEqual((body["to"] as? [String: Any])?["episode_number"] as? Int, 4)
@@ -220,7 +220,7 @@ final class AnimeTrackingTests: XCTestCase {
         TVDataURLProtocol.response = Data(#"{"anime":{"status":null},"rows":{"count":0,"episodes":[]}}"#.utf8)
         let ref = MediaRef(itemId: nil, source: "mal", mediaType: "anime", mediaId: "21", seasonNumber: nil, episodeNumber: nil)
         _ = try await repository.animeRows(ref: ref)
-        XCTAssertEqual(TVDataURLProtocol.requests.last?.url?.path, "/api/v1/tracking/mal/anime/21/rows/")
+        XCTAssertEqual(TVDataURLProtocol.requests.last?.url?.path, "/api/v1/tracking/mal/anime/21/rows")
 
         TVDataURLProtocol.response = Data(#"{"count":0,"next":null,"previous":null,"results":[]}"#.utf8)
         _ = try await repository.continueWatchingAnime(page: nil)
@@ -249,6 +249,31 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertTrue(OpinionAction.log.opensLog(isGiving: true), "Partway, giving opens the log screen")
         XCTAssertFalse(OpinionAction.log.opensLog(isGiving: false), "Clearing is only that, at any time")
         XCTAssertFalse(OpinionAction.unknown.opensLog(isGiving: true))
+    }
+
+    func testAN301TheStarsAndHeartRouteByWhatThePageSays() {
+        // Anime: from the title's own state.
+        for action in [OpinionAction.mark, .log, .save] {
+            let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: action)))
+            XCTAssertEqual(page.opinionAction, action)
+            XCTAssertEqual(page.opinionAction?.opensLog(isGiving: true), action == .log)
+        }
+
+        // TV: the show page reads the show's, and a season page that season's, never the other's.
+        let showRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1399", seasonNumber: nil, episodeNumber: nil)
+        let season = TVSeasonState(seasonNumber: 2, opinionAction: .mark)
+        let tv = TVShowState(opinionAction: .log, season: season)
+        let show = model(MediaDetail(ref: showRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: tv)))
+        XCTAssertEqual(show.opinionAction, .log, "Partway show: Whole show opens")
+        let seasonRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399", seasonNumber: 2, episodeNumber: nil)
+        let seasonPage = model(MediaDetail(ref: seasonRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: tv)))
+        XCTAssertEqual(seasonPage.opinionAction, .mark, "An unstarted season marks, whatever the show is")
+
+        // An episode page and other media types keep their own rules.
+        let episodeRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "episode", mediaId: "1399", seasonNumber: 2, episodeNumber: 1)
+        XCTAssertNil(model(MediaDetail(ref: episodeRef, title: "E", userState: UserMediaState(isTracked: true, tv: tv))).opinionAction)
+        let movieRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
+        XCTAssertNil(model(MediaDetail(ref: movieRef, title: "M", userState: .untracked)).opinionAction)
     }
 
     func testTV304OpinionActionDecodesOnTheShowAndTheSeason() throws {
@@ -795,7 +820,7 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(metrics.offset(ofRow: 800), 80_000)
 
         // It builds what's on screen and a chunk or more either side, never the whole list.
-        let window = metrics.window(openingOnRow: 800)
+        let window = metrics.built(metrics.window(openingOnRow: 800))
         XCTAssertTrue(window.contains(800))
         XCTAssertLessThan(window.count, 40)
         XCTAssertEqual(metrics.heightAbove(window), CGFloat(window.lowerBound) * 100)
@@ -804,9 +829,9 @@ final class AnimeTrackingTests: XCTestCase {
 
         // Scrolling a little changes nothing: the rows are built in chunks, so most frames build nothing.
         var changes = 0
-        var last = metrics.window(y: 0, height: 700)
+        var last = metrics.built(metrics.window(y: 0, height: 700))
         for y in stride(from: CGFloat(0), through: 8_000, by: 10) {
-            let next = metrics.window(y: y, height: 700)
+            let next = metrics.built(metrics.window(y: y, height: 700))
             if next != last { changes += 1 }
             last = next
             XCTAssertTrue(next.contains(Int(y / 100)), "The row at the top is always built")
@@ -816,9 +841,15 @@ final class AnimeTrackingTests: XCTestCase {
 
         // Every episode is reachable, the ends included.
         XCTAssertEqual(metrics.window(y: 0, height: 700).lowerBound, 0)
-        XCTAssertEqual(metrics.window(y: metrics.offset(ofRow: 1_188), height: 700).upperBound, 1_189)
+        XCTAssertEqual(metrics.built(metrics.window(y: metrics.offset(ofRow: 1_188), height: 700)).upperBound, 1_189)
         XCTAssertEqual(metrics.window(y: -50, height: 700).lowerBound, 0, "An overscroll at the top")
-        XCTAssertEqual(AnimeListMetrics(count: 0).window(y: 0, height: 700), 0..<0)
+        let empty = AnimeListMetrics(count: 0)
+        XCTAssertEqual(empty.built(empty.window(y: 0, height: 700)), 0..<0)
+
+        // A row a tick adds shows at once: the window doesn't stop at the old end (N-18).
+        let one = AnimeListMetrics(count: 1)
+        let two = AnimeListMetrics(count: 2)
+        XCTAssertEqual(two.built(one.window(y: 0, height: 700)), 0..<2)
 
         // The room under the last row lets a row near the end reach the top.
         XCTAssertEqual(metrics.roomBelowRows(viewportHeight: 340, openingOnRow: 1_188), 440)
@@ -935,6 +966,33 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertNil(AnimeTrackingPresentation.pageStatus(for: AnimeState()), "Not in the library")
         XCTAssertEqual(AnimeTrackingPresentation.upNextLabel(for: TVEpisodePointer(seasonNumber: 1, episodeNumber: 2)), "Up next")
         XCTAssertEqual(AnimeTrackingPresentation.upNextLabel(for: TVEpisodePointer(seasonNumber: 1, episodeNumber: 2, isNew: true)), "New episode")
+    }
+
+    func testAN702TheTrackingSectionReadsTheTitlesState() {
+        let state = UserMediaState(
+            isTracked: true,
+            status: "In progress",
+            progress: ProgressState(kind: "episodes", value: 7, max: 24, unit: "episode"),
+            anime: Self.watching(upNext: 8, watched: 7, aired: 24)
+        )
+        let detail = MediaDetail(ref: Self.ref(), title: "Attack on Titan", userState: state)
+        XCTAssertEqual(TrackingSummarySection.lines(detail: detail, state: state, preferredMode: nil), ["7 of 24 watched"], "Not the row's stored number")
+        XCTAssertEqual(TrackingSummarySection.tvUpNext(detail: detail, state: state)?.episodeNumber, 8)
+        XCTAssertFalse(TrackingSummarySection.showsUpdateProgress(ref: detail.ref, status: "In progress", state: state), "The rows are its progress UI")
+
+        // Not in the library yet: the list has every row, and there's no Up next row above it.
+        let untracked = UserMediaState(isTracked: false, anime: AnimeState(upNext: AnimeEpisodePointer(episodeNumber: 1)))
+        XCTAssertNil(TrackingSummarySection.tvUpNext(detail: detail, state: untracked))
+        XCTAssertEqual(TrackingSummarySection.lines(detail: detail, state: untracked, preferredMode: nil), [])
+
+        // A single has no number anywhere (AN-002).
+        let single = UserMediaState(
+            isTracked: true,
+            status: "Completed",
+            progress: ProgressState(kind: "episodes", value: 1, max: 1, unit: "episode"),
+            anime: AnimeState(inLibrary: true, status: "Completed", started: true, finished: true, single: true, watchedCount: 1, airedCount: 1)
+        )
+        XCTAssertEqual(TrackingSummarySection.lines(detail: detail, state: single, preferredMode: nil), [])
     }
 
     // MARK: Home's sheet (AN-701, TV-701)

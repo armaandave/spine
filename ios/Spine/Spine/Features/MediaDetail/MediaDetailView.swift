@@ -926,6 +926,17 @@ final class MediaDetailViewModel {
         }
     }
 
+    /// What stars and the heart do on this page now, as the server says (TV-303, TV-304, AN-301). Nil where the page has
+    /// no such rule: an episode page, or another media type.
+    var opinionAction: OpinionAction? {
+        switch ref.mediaType {
+        case "tv": viewer?.tv?.opinionAction
+        case "season": viewer?.tv?.season?.opinionAction
+        case "anime": viewer?.anime?.opinionAction
+        default: nil
+        }
+    }
+
     /// Whether an episode shows as watched, counting pending and confirmed writes (TV-705). Before the page has
     /// loaded, those writes alone decide: Continue Watching's episode sheet lists up next's row, and ticks it, while
     /// its season loads (TV-701).
@@ -3141,18 +3152,6 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    /// What stars and the heart do on this page now, as the server says (TV-303, TV-304, AN-301). Nil where the page has no
-    /// such rule: an episode page, or another media type.
-    private func opinionAction(for detail: MediaDetail) -> OpinionAction? {
-        guard let viewer = viewModel.viewer else { return nil }
-        switch detail.ref.mediaType {
-        case "tv": return viewer.tv?.opinionAction
-        case "season": return viewer.tv?.season?.opinionAction
-        case "anime": return viewer.anime?.opinionAction
-        default: return nil
-        }
-    }
-
     /// Stars or a heart: the log screen holding the value when the page is partway, otherwise the direct set. A write
     /// still on its way can change which, so the answer waits for it (a first tick makes a show partway).
     private func routeOpinion(
@@ -3162,9 +3161,9 @@ private struct MediaDetailPageView: View {
         sets: @escaping () -> Void
     ) {
         let route = {
-            if opinionAction(for: detail)?.opensLog(isGiving: isGiving) == true { opensLog() } else { sets() }
+            if viewModel.opinionAction?.opensLog(isGiving: isGiving) == true { opensLog() } else { sets() }
         }
-        guard viewModel.hasPendingWrites, opinionAction(for: detail) != nil else {
+        guard viewModel.hasPendingWrites, viewModel.opinionAction != nil else {
             route()
             return
         }

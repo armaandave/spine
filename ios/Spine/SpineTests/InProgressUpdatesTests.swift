@@ -28,7 +28,8 @@ final class InProgressUpdatesTests: XCTestCase {
         for mediaType in ["book", "game", "manga", "comic"] {
             XCTAssertEqual(InProgressUpdates.route(for: Self.item(mediaType, "7", "Title")), .progress, mediaType)
         }
-        // Their pages have no progress UI: the anime page logs, movies and albums are watched or listened to whole.
+        // Their pages have no progress UI: movies and albums are watched or listened to whole. An anime with no up next
+        // has nothing to open on (AN-701).
         for mediaType in ["anime", "movie", "music"] {
             XCTAssertEqual(InProgressUpdates.route(for: Self.item(mediaType, "7", "Title")), .page, mediaType)
         }

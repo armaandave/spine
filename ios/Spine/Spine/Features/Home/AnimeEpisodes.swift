@@ -184,14 +184,18 @@ nonisolated struct AnimeListMetrics: Equatable {
     }
 
     /// The rows to build when the list's top `y` points down it shows `height` points of it: everything on screen and a
-    /// chunk or more either side, whole chunks only.
+    /// chunk or more either side. It moves a whole chunk at a time, so scrolling changes what's built only every few rows,
+    /// and it doesn't stop at the list's end, so a row a tick adds is there at once. `built` keeps it to the list.
     func window(y: CGFloat, height: CGFloat) -> Range<Int> {
-        guard count > 0, stride > 0 else { return 0..<0 }
-        let first = Int(max(0, y) / stride)
-        let last = Int((max(0, y) + max(0, height)) / stride)
-        let lower = max(0, first / Self.chunk * Self.chunk - Self.chunk)
-        let upper = min(count, (last / Self.chunk + 2) * Self.chunk)
-        return min(lower, count)..<max(min(lower, count), upper)
+        guard stride > 0 else { return 0..<0 }
+        let firstChunk = Int(max(0, y) / stride) / Self.chunk
+        let chunksOnScreen = Int((max(0, height) / stride).rounded(.up)) / Self.chunk + 1
+        return max(0, firstChunk - 1) * Self.chunk..<(firstChunk + chunksOnScreen + 1) * Self.chunk
+    }
+
+    /// The rows of a window this list has.
+    func built(_ window: Range<Int>) -> Range<Int> {
+        window.clamped(to: 0..<count)
     }
 
     /// The window as the list opens on a row: a row at its top, whatever its height turns out to be.
@@ -261,7 +265,7 @@ private struct AnimeEpisodeList: View {
         ScrollView {
             VStack(spacing: 0) {
                 if let rows {
-                    let built = window.clamped(to: 0..<rows.episodes.count)
+                    let built = metrics.built(window)
                     Color.clear
                         .frame(height: metrics.heightAbove(built))
                         .accessibilityHidden(true)
