@@ -5,8 +5,10 @@ file never closes a read under way, and your own file coming back adds nothing.
 """
 
 import csv
+from datetime import datetime
 from io import BytesIO, StringIO
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.test import override_settings
 from django.urls import reverse
@@ -458,6 +460,27 @@ class FilesComingBackTests(BookImportBase):
         self.finish(self.item_row, d(2024, 5, 1), saved_on=d(2026, 3, 1))
         self.from_storygraph(storygraph_file(dates="2024/05/01"))
         self.assert_one_log()
+
+    def log_at_a_real_moment(self):
+        """Write an old log at 23:59 New York time, which is the next day in UTC."""
+        moment = datetime(2024, 5, 1, 23, 59, 59, tzinfo=ZoneInfo(NEW_YORK))
+        self.finish(self.item_row, d(2024, 5, 1))
+        DiaryEntry.objects.filter(item=self.item_row).update(consumed_at=moment)
+        Book.objects.filter(item=self.item_row).update(end_date=moment)
+        BookSession.objects.filter(related_book__item=self.item_row).update(end_date=moment)
+        self.assertEqual(self.number(pile=True), PAGES)
+
+    def test_a_goodreads_file_over_an_old_log_at_a_real_moment_that_day(self):
+        self.log_at_a_real_moment()
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.assertEqual(DiaryEntry.objects.filter(item=self.item_row).count(), 1)
+        self.assertEqual(self.number(pile=True), PAGES)
+
+    def test_your_own_file_over_an_old_log_at_a_real_moment(self):
+        self.log_at_a_real_moment()
+        self.from_file(self.export(), mode="overwrite")
+        self.assertEqual(DiaryEntry.objects.filter(item=self.item_row).count(), 1)
+        self.assertEqual(self.number(pile=True), PAGES)
 
     def test_the_next_day_is_another_read(self):
         self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))

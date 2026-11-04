@@ -15,6 +15,7 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 import app
+from api.services.activity_rows import log_day
 from api.services.item_metadata import is_metadata_current, store_item_metadata
 from app import book_tracking, series_tracking, single_weight, tv_tracking, user_calendar
 from app.models import DiaryEntry, MediaTypes
@@ -347,11 +348,13 @@ def _import_single_weight_rows(rows, user, model):
 def book_log_on(user, item, day):
     """Return this title's log on a calendar day, or None (SW-504).
 
-    A log's date is a UTC-midnight carrier, so it's read as stored: on the server's zone
-    it would be the day before, and a file would come back as a second read.
+    It reads a log's day as the calculation does: a UTC-midnight carrier as stored, and an
+    old log's real moment on the owner's calendar. Read any other way, the evening's log
+    is on another day, and a file comes back as a second read.
     """
+    zone = user_calendar.calendar_tz(user)
     for entry in DiaryEntry.objects.filter(user=user, item=item):
-        if single_weight.calendar_date(entry.consumed_at) == day:
+        if log_day(entry.consumed_at, zone) == day:
             return entry
     return None
 
