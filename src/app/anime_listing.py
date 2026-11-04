@@ -450,6 +450,11 @@ def _apply_episodes(row, episodes, now):
     )
     schedule = episodes.get("schedule") or {}
     listed = episodes.get("episodes") or {}
+    if row.total and any(number > row.total for number in listed):
+        # AniList can file another season's episodes under a title: it lists Attack on Titan's
+        # 25 under Season 2's 12. A list running past the total isn't this title's, and a row
+        # without a title still reads "Episode 5" (AN-101).
+        listed = {}
     row.rows = [
         [
             number,

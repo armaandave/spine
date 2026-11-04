@@ -120,6 +120,15 @@ class ListingTests(AnimeTestCase):
         self.rows(item)
         self.assertEqual(self.fake.calls, [])
 
+    def test_an_101_a_list_running_past_the_total_isnt_this_titles(self):
+        # AniList lists Attack on Titan's 25 episodes under Season 2's 12.
+        item = self.title(
+            total=2,
+            episodes={1: ("Another season's first", "https://example.com/1.jpg"), 3: ("Another season's third", "")},
+        )
+        anime_listing.get_listing(item)
+        self.assertEqual([row.get("t") for row in self.rows(item)["episodes"]], [None, None], "They read Episode 1")
+
     def test_an_101_a_failure_stores_the_numbers_and_backs_off(self):
         self.fake.fail("anilist")
         item = self.title(total=2)
