@@ -339,6 +339,88 @@ class PickedUpBooksTests(StepBase):
         _, err = run("fill_picked_up_books")
         self.assertIn("no place: 0", err)
 
+    def blank(self, item):
+        """Empty the journey just picked up, as it was before one opened at its place."""
+        journey = Book.objects.get(item=item).current_session
+        BookSession.objects.filter(pk=journey.pk).update(pages_read=None, percentage_read=None)
+        Book.objects.filter(item=item).update(progress=0)
+        return journey
+
+    def test_a_restart_with_no_reading_then_a_pick_up_changes_no_number(self):
+        """Stopped at 200, Restart, stopped with nothing read, back: that read began at zero."""
+        item = self.book("chain")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.restart, item, d(2025, 11, 3))
+        self.do(book_tracking.drop, item, d(2025, 11, 4))
+        self.begin(item, d(2026, 4, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        _, err = run("fill_picked_up_books", apply=True)
+        self.assertIn("no place: 0", err)
+        self.assertEqual(self.numbers(), before)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+
+    def test_a_pick_up_a_restart_a_stop_and_a_pick_up_changes_no_number(self):
+        item = self.book("over-a-restart")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.begin(item, d(2025, 6, 1))
+        self.blank(item)
+        self.do(book_tracking.restart, item, d(2025, 6, 2))
+        self.do(book_tracking.drop, item, d(2025, 6, 3))
+        self.begin(item, d(2026, 5, 1))
+        self.blank(item)
+        before = self.numbers()
+        self.assertEqual(before, {"2025": 200, "2026": 0, "all_time": 200})
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.numbers(), before)
+
+    def test_two_pick_ups_with_nothing_read_between_walk_back_to_the_place(self):
+        item = self.book("twice-back")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.begin(item, d(2025, 6, 1))
+        self.blank(item)
+        self.do(book_tracking.drop, item, d(2025, 6, 2))
+        self.begin(item, d(2026, 5, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(self.numbers(), before)
+
+    def test_a_file_between_the_stop_and_the_pick_up_is_walked_past(self):
+        item = self.book("past-a-file")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        with self.on(d(2025, 6, 1)):
+            book_tracking.complete(self.owner, item, completion_date=d(2024, 1, 1), update_current=False, force_direct=True)
+        self.begin(item, d(2026, 5, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(self.numbers(), before)
+
+    def test_a_read_after_a_log_keeps_its_zero(self):
+        item = self.book("after-a-log")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.finish(item, d(2025, 6, 1))
+        self.begin(item, d(2026, 5, 1))
+        ProgressChange.objects.filter(item=item, current_progress__began_over=True).delete()
+        self.blank(item)
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
     def test_the_owners_version_moves(self):
         self.picked_up_before()
         key = stats_cache.user_version_key(self.owner.pk)

@@ -2,8 +2,9 @@
 
 Count 15, decision 60. A new journey now opens at the stopped journey's place. Before that
 it held nothing, so its sheet opened blank. Each one: an open journey holding neither place
-field, whose last journey ended Dropped with a place, and that isn't a Restart. It writes
-those two fields and the book's own progress, so no number and no row changes.
+field, that carries on from a stopped journey with a place, with no Restart or reread
+between. It writes those two fields and the book's own progress, so no number and no row
+changes.
 
 A dry run by default. With --apply it changes rows, and it's idempotent. Counts go to
 standard error. With --apply each old value goes to standard output as a JSON line, so the
@@ -20,6 +21,35 @@ from app.models import Book, BookSession, Status
 from social.models import ProgressChange
 
 
+def _stopped_place(journey):
+    """Return the stopped journey whose place this open one carries on from, or None.
+
+    It walks back one journey at a time with the calculation's own test
+    (activity_rows._carries_on): a Restart or a reread began at zero, so nothing behind one
+    is this read's place. A stopped journey holding nothing passes it on. A file's read is
+    its own, so the walk steps past it.
+    """
+    book = journey.related_book
+    began_over = {
+        change.current_progress.get("journey_id")
+        for change in ProgressChange.objects.filter(
+            actor_id=book.user_id,
+            item_id=book.item_id,
+            current_progress__began_over=True,
+        )
+    }
+    newer = journey
+    for prior in book.reading_sessions.filter(pk__lt=journey.pk).order_by("-id"):
+        if prior.from_file:
+            continue
+        if newer.pk in began_over or newer.previous_status == Status.COMPLETED.value or prior.status != Status.DROPPED.value:
+            return None
+        if prior.pages_read is not None or prior.percentage_read is not None:
+            return prior
+        newer = prior
+    return None
+
+
 def picked_up_with_no_place():
     """Return (open journey, the stopped journey it carries on from), on every account."""
     found = []
@@ -29,21 +59,9 @@ def picked_up_with_no_place():
         percentage_read__isnull=True,
     ).select_related("related_book")
     for journey in journeys.order_by("id"):
-        last = (
-            BookSession.objects.filter(related_book=journey.related_book, pk__lt=journey.pk)
-            .exclude(pages_read__isnull=True, percentage_read__isnull=True)
-            .order_by("-id")
-            .first()
-        )
-        if last is None or last.status != Status.DROPPED.value or journey.previous_status == Status.COMPLETED.value:
-            continue
-        restarted = ProgressChange.objects.filter(
-            current_progress__journey_id=journey.pk,
-            current_progress__began_over=True,
-            actor_id=journey.related_book.user_id,
-        ).exists()
-        if not restarted:
-            found.append((journey, last))
+        stopped = _stopped_place(journey)
+        if stopped:
+            found.append((journey, stopped))
     return found
 
 
