@@ -44,6 +44,7 @@ STALE_ACTIVE = timedelta(days=1)
 STALE_SETTLED = timedelta(days=7)
 NUMBERS_FRESH = timedelta(days=1)
 STATUS_FINISHED = "Finished"
+STATUS_AIRING = "Airing"
 STATUS_UPCOMING = "Upcoming"
 FORMAT_MOVIE = "movie"
 PROVIDER_FAILURES = (
@@ -115,6 +116,11 @@ class Listing:
     def finished_airing(self):
         return self.provider_status == STATUS_FINISHED
 
+    @property
+    def awaiting_schedule(self):
+        """MAL says it's airing and AniList hasn't answered: nobody knows how many aired (AN-100)."""
+        return self.provider_status == STATUS_AIRING and self.rows_fetched_at is None
+
     @cached_property
     def by_number(self):
         return {row.number: row for row in self.rows}
@@ -126,7 +132,7 @@ class Listing:
     @property
     def aired_is_known(self):
         """Whether Spine knows how many have aired (AN-102): a total or a schedule."""
-        return self.cap is not None or self.has_schedule
+        return not self.awaiting_schedule and (self.cap is not None or self.has_schedule)
 
     @property
     def may_have_aired(self):
@@ -139,6 +145,8 @@ class Listing:
         An episode's airing means every episode before it has too. The user's own
         viewings are the fourth rule, which only the caller knows.
         """
+        if self.awaiting_schedule:
+            return 0
         cap = self.cap
         through = 0
         if self.finished_airing and cap:
@@ -166,6 +174,8 @@ class Listing:
         aired holds the numbers that have aired for this user. The named next episode
         comes first, then the schedule; a total with more to come names the next number.
         """
+        if self.awaiting_schedule:
+            return None
         cap = self.cap
         candidates = []
         if self.next_episode is not None and self.next_episode not in aired:
@@ -183,6 +193,8 @@ class Listing:
 
     def known_unaired(self, aired):
         """Return the unaired episodes Spine knows of, in order (AN-101)."""
+        if self.awaiting_schedule:
+            return []
         numbers = set()
         if self.cap:
             numbers.update(range(1, self.cap + 1))
@@ -322,6 +334,7 @@ def update_from_metadata(item, metadata):
         and row.fetched_at is not None
         and now - row.fetched_at < NUMBERS_FRESH
         and row.total == (metadata.get("max_progress") or None)
+        and row.provider_status == str((metadata.get("details") or {}).get("status") or "")[:20]
         and not (has_series and row.series_checked_at is None)
     ):
         # The usual page view writes nothing.
@@ -445,7 +458,7 @@ def _save(item, *, numbers, episodes, now, failed=False):
     fields = []
     if numbers is not None:
         _apply_numbers(row, numbers, now)
-        fields.extend(["total", "provider_status", "media_format", "premiere_date", "fetched_at"])
+        fields.extend(["total", "provider_status", "media_format", "premiere_date", "fetched_at", "rows_fetched_at"])
         series_items = (numbers.get("related") or {}).get("series")
         if series_items:
             row.next_title = next_title_in(series_items, item.media_id)
@@ -466,7 +479,12 @@ def _save(item, *, numbers, episodes, now, failed=False):
 def _apply_numbers(row, metadata, now):
     details = metadata.get("details") or {}
     row.total = metadata.get("max_progress") or None
-    row.provider_status = str(details.get("status") or "")[:20]
+    status = str(details.get("status") or "")[:20]
+    if row.provider_status and status != row.provider_status:
+        # AniList answered about a title in another state: announced, say, with nothing
+        # on the schedule. That says nothing now, so it has to answer again (AN-100).
+        row.rows_fetched_at = None
+    row.provider_status = status
     row.media_format = str(metadata.get("series_format") or details.get("format") or "")[:20]
     row.premiere_date = _full_date(details.get("start_date"))
     row.fetched_at = now

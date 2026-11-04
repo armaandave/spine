@@ -1278,10 +1278,20 @@ def _require_aired(ctx):
         raise TVInvalid(_nothing_aired_message(ctx.calc, ctx.today))
 
 
+def _refuse_unknown_airing(ctx):
+    """While nobody knows how many have aired, nothing can fill the rest (AN-100). Retryable.
+
+    An import isn't a person waiting on an answer: it fills only what its source says.
+    """
+    if ctx.listing.awaiting_schedule and ctx.entry_point != IMPORT:
+        raise AnimeDetailsUnavailable
+
+
 def mark_watched(user, item, *, entry_point=APP, mutation_id=None):
     """The empty eye: mark every aired episode not watched, undated, as one mark (AN-300)."""
 
     def body(ctx):
+        _refuse_unknown_airing(ctx)
         ctx.set_own_total()
         _require_aired(ctx)
         return _do_mark(ctx, ctx.calc.aired, origin=AnimeMark.Origin.EYE)
@@ -1354,6 +1364,7 @@ def mark_up_to(user, item, episode_number, *, entry_point=APP, mutation_id=None)
     def body(ctx):
         _refuse_bad_number(number)
         _refuse_past_total(ctx.listing, number)
+        _refuse_unknown_airing(ctx)
         calc = ctx.calc
         if number not in calc.aired_set and not calc.may_have_aired:
             raise TVInvalid(MSG_MARK_UP_TO)
@@ -1549,6 +1560,7 @@ def _apply_opinion_action(ctx, *, unchanged):
     if action == OPINION_LOG and not unchanged and ctx.entry_point != IMPORT:
         raise TVLogFirst(MSG_LOG_FIRST)
     if action == OPINION_MARK:
+        _refuse_unknown_airing(ctx)
         ctx.set_own_total()
         return _do_mark(ctx, ctx.calc.aired, origin=AnimeMark.Origin.OPINION)
     return {"changed": False}
@@ -1630,7 +1642,8 @@ def set_like(user, item, liked, *, entry_point=APP, mutation_id=None):
 
 def _first_open_row(calc):
     """Return the row a title with no numbers shows past its viewings (AN-101)."""
-    return max(calc.viewed_any, default=0) + 1
+    number = max(calc.viewed_any, default=0) + 1
+    return min(number, calc.cap) if calc.cap else number
 
 
 def _next_unwatched(calc, count):
@@ -1763,6 +1776,7 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
                 return outcome
             ctx.reload()
         if status == COMPLETED:
+            _refuse_unknown_airing(ctx)
             ctx.set_own_total(int(progress) if progress else None)
             if not ctx.calc.aired:
                 if strict:
@@ -1834,6 +1848,7 @@ def _do_create_log(  # noqa: PLR0913
     import_source_id,
     import_source_order,
 ):
+    _refuse_unknown_airing(ctx)
     ctx.set_own_total()
     _require_aired(ctx)
     if day > ctx.today:
@@ -2710,7 +2725,9 @@ def _next_title_has_aired(stored, today):
         .first()
     )
     if copy_of_next is not None and copy_of_next.fetched_at is not None:
-        return anime_listing._listing_from_row(copy_of_next).aired_through(user_calendar.now()) > 0  # noqa: SLF001
+        listing = anime_listing._listing_from_row(copy_of_next)  # noqa: SLF001
+        if not listing.awaiting_schedule:
+            return listing.aired_through(user_calendar.now()) > 0
     released = stored.get("release_date")
     return bool(released) and str(released) <= today.isoformat()
 

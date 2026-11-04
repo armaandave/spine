@@ -6,10 +6,11 @@ from unittest import mock
 
 import requests
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from app import anime_listing, anime_tracking
 from app.anime_listing import AnimeDetailsUnavailable
-from app.models import AnimeListing, Item
+from app.models import AnimeListing, AnimeMark, Item
 from app.providers import anilist, services
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase, FakeAnimeProvider
 from app.tests.tv_fixtures import ProviderDown
@@ -303,6 +304,144 @@ class StaleCopyTests(AnimeTestCase):
         self.clock.advance(hours=25)
         anime_listing.get_listing(item)
         self.assertIsNone(AnimeListing.objects.get(item=item).retry_after)
+
+
+class AiringUnknownTests(AnimeTestCase):
+    """AN-100: while MAL says airing and AniList hasn't answered, nobody knows how many aired."""
+
+    def setUp(self):
+        super().setUp()
+        self.airing = self.fake.add(
+            total=12,
+            status="Airing",
+            next_episode=8,
+            next_air_at=self.clock.moment + timedelta(days=3),
+        )
+        self.item = self.title(title=self.airing)
+        self.fake.fail("anilist")
+
+    def numbers(self):
+        return [row["n"] for row in self.rows(self.item)["episodes"]]
+
+    def test_an_100_a_first_open_doesnt_count_every_listed_episode(self):
+        state = self.state(self.item)
+        self.assertIsNone(state["aired_count"])
+        self.assertEqual(state["total"], 12)
+        self.assertIsNone(state["next_airing"])
+        self.assertEqual(self.numbers(), [1])
+
+    def test_an_100_a_tick_still_works_and_the_rows_run_to_one_past_it(self):
+        self.tick(self.item, 3)
+        self.assertEqual(self.numbers(), [1, 2, 3, 4])
+        state = self.state(self.item)
+        self.assertEqual((state["watched_count"], state["aired_count"]), (1, None))
+        self.assertEqual(self.row(self.item).aired_count, None)
+
+    def test_an_100_the_rows_stop_at_the_total(self):
+        self.tick(self.item, 12)
+        self.assertEqual(self.numbers(), list(range(1, 13)))
+
+    def test_an_100_a_tick_past_the_total_is_still_refused(self):
+        with self.assertRaises(anime_tracking.TVInvalid):
+            self.tick(self.item, 13)
+
+    def test_an_100_whatever_fills_the_rest_is_refused_and_retryable(self):
+        for name, write in (
+            ("eye", lambda: anime_tracking.mark_watched(self.user, self.item)),
+            ("stars", lambda: anime_tracking.set_rating(self.user, self.item, 8)),
+            ("heart", lambda: anime_tracking.set_like(self.user, self.item, True)),
+            ("log", lambda: anime_tracking.create_log(self.user, self.item, consumed_at=OCT_25)),
+            ("up to here", lambda: anime_tracking.mark_up_to(self.user, self.item, 4)),
+            (
+                "written Completed",
+                lambda: anime_tracking.apply_written_state(
+                    self.user,
+                    self.item,
+                    {"status": "Completed"},
+                    entry_point=anime_tracking.LEGACY_APP,
+                ),
+            ),
+        ):
+            with self.subTest(name=name), self.assertRaises(AnimeDetailsUnavailable):
+                write()
+            self.assertIsNone(self.row(self.item))
+
+    def test_an_100_the_refusal_is_the_retryable_503(self):
+        response = self.action(self.item, "mark_watched", expect=503)
+        self.assertEqual(response.data["error"]["message"], anime_listing.UNAVAILABLE_MESSAGE)
+        self.assertEqual(response.data["error"]["reason"], "tv_details_unavailable")
+
+    def test_an_100_a_webs_written_completed_says_why(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("media_save"),
+            {
+                "media_id": self.item.media_id,
+                "source": self.item.source,
+                "media_type": "anime",
+                "status": "Completed",
+                "progress": 0,
+                "score": "",
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.row(self.item))
+
+    def test_an_100_once_anilist_answers_the_eye_fills_only_what_aired(self):
+        self.tick(self.item, 1)
+        self.clock.advance(minutes=16)
+        self.fake.recover()
+        self.assertEqual(self.state(self.item)["aired_count"], 7)
+        anime_tracking.mark_watched(self.user, self.item)
+        row = self.row(self.item)
+        self.assertEqual((row.status, row.progress, row.caught_up), ("In progress", 7, True))
+
+    def test_an_100_announced_then_airing_waits_for_anilist(self):
+        title = self.fake.add(total=12, status="Upcoming", start_date="2026-12-01")
+        item = self.title(title=title)
+        self.fake.recover()
+        self.state(item)
+        self.clock.advance(days=40)
+        title.status = "Airing"
+        title.next_episode = 4
+        title.next_air_at = self.clock.moment + timedelta(days=3)
+        self.fake.fail("anilist")
+        with self.assertRaises(AnimeDetailsUnavailable):
+            anime_tracking.mark_watched(self.user, item)
+        self.assertIsNone(self.state(item)["aired_count"])
+        self.clock.advance(minutes=16)
+        self.fake.recover()
+        anime_tracking.mark_watched(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.caught_up), ("In progress", 3, True))
+
+    def test_an_100_a_status_change_on_the_page_makes_anilists_old_answer_count_for_nothing(self):
+        title = self.fake.add(total=12, status="Upcoming", start_date="2026-12-01")
+        item = self.title(title=title)
+        self.fake.recover()
+        anime_listing.get_listing(item)
+        anime_listing.update_from_metadata(item, {"max_progress": 12, "details": {"status": "Airing"}})
+        self.assertTrue(AnimeListing.objects.get(item=item).rows_fetched_at is None)
+        self.assertTrue(anime_listing.stored_listing(item).awaiting_schedule)
+
+    def test_an_100_a_finished_title_counts_every_listed_episode_with_anilist_down(self):
+        item = self.title(total=12)
+        anime_tracking.mark_watched(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 12))
+
+    def test_an_800_an_import_isnt_refused(self):
+        anime_listing.get_listing(self.item)
+        anime_tracking.import_title(self.user, self.item, status="Completed", count=7)
+        row = self.row(self.item)
+        self.assertEqual(row.progress, 7)
+        self.assertFalse(AnimeMark.objects.filter(anime=row, origin="eye").exists())
+
+    def test_an_500_an_airing_next_title_with_no_answer_goes_by_its_release_date(self):
+        anime_listing.get_listing(self.item)
+        stored = {"media_id": self.item.media_id, "release_date": "2026-01-01"}
+        self.assertTrue(anime_tracking._next_title_has_aired(stored, OCT_25))  # noqa: SLF001
 
 
 class EmptyCopyTests(AnimeTestCase):
