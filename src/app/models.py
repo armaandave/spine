@@ -2636,9 +2636,11 @@ class Anime(Media):
 
     tracker = FieldTracker()
     # What only the caller knows. The day the web form sent is the browser's, which the
-    # row can't read back from end_date. The eye is a mark whatever date it carries.
+    # row can't read back from end_date. The eye is a mark whatever date it carries, and
+    # a media server's play is a real watch whatever status it reached.
     form_end_day = None
     is_eye = False
+    is_play = False
 
     def save(self, *args, **kwargs):
         """Say what this save was, before saving can turn it into something else."""
@@ -2651,14 +2653,17 @@ class Anime(Media):
 
         The eye marks. Setting Completed marks, unless the save sent a date before today:
         the web form fills today by itself, so a typed today can't be told from it, and
-        nobody watched anything on a date past today. Reaching the last episode by typing
-        it is checked here first, so it stays a typed number.
+        nobody watched anything on a date past today. A media server playing the last
+        episode watched it today. Reaching the last episode by typing it is checked here
+        first, so it stays a typed number.
         """
         if self.is_eye:
             return "mark"
         today = user_calendar.today(self.user)
         status_moved = self.tracker.has_changed("status")
         if status_moved and self.status == Status.COMPLETED.value:
+            if self.is_play:
+                return f"day:{today}"
             sent = (self.form_end_day or self.sent_end_day()) if self.tracker.has_changed("end_date") else None
             return f"day:{sent}" if sent and sent < today else "mark"
         if self.pk is None:

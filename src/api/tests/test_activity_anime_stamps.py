@@ -21,6 +21,7 @@ from app.services import create_diary_entry, update_diary_entry
 from app.tests.tv_fixtures import make_user, patch_now
 from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
 from integrations.imports.mal_export.importer import MALExportImporter
+from integrations.webhooks.plex import PlexWebhookProcessor
 
 MOCK_DATA = Path(__file__).resolve().parent.parent.parent / "integrations" / "tests" / "mock_data"
 NEW_YORK = "America/New_York"
@@ -167,6 +168,68 @@ class SaveReasonTests(AnimeBase):
 
     def test_anything_else_is_a_mark(self):
         row = self.tracked(progress=3)
+        row.notes = "Good"
+        row.save()
+        self.assertEqual(self.reasons(row)[-1], "mark")
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class WebhookTests(AnimeBase):
+    """A media server says an episode was really played, so the last one is no mark."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch("integrations.webhooks.anime.app.providers.mal.anime", return_value=ANIME_METADATA)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def play(self, episode, user=None):
+        """Play an episode of the one anime here, and return its row."""
+        user = user or self.user
+        PlexWebhookProcessor()._handle_anime("229", episode, {"event": "media.scrobble"}, user)  # noqa: SLF001
+        return Anime.objects.get(user=user, item__media_id="229", item__source=Sources.MAL.value)
+
+    def watching(self, progress=11, user=None):
+        """Return a row part way through the anime the webhook plays."""
+        item, _ = Item.objects.get_or_create(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            media_id="229",
+            defaults={"title": "Exported", "image": "https://example.com/poster.jpg"},
+        )
+        return Anime.objects.create(user=user or self.user, item=item, status=Status.IN_PROGRESS.value, progress=progress)
+
+    def test_playing_the_last_episode_counts_today(self):
+        self.watching()
+        row = self.play(12)
+        self.assertEqual((row.status, row.progress), (Status.COMPLETED.value, 12))
+        self.assertEqual(self.reasons(row)[-1], TODAY)
+
+    def test_a_first_play_of_the_last_episode_counts_today(self):
+        row = self.play(12)
+        self.assertEqual(row.status, Status.COMPLETED.value)
+        self.assertEqual(self.reasons(row), [TODAY])
+
+    def test_playing_another_episode_still_counts_today(self):
+        self.watching()
+        row = self.play(5)
+        self.assertEqual(row.status, Status.IN_PROGRESS.value)
+        self.assertEqual(self.reasons(row)[-1], TODAY)
+
+    def test_a_play_lands_on_its_owners_calendar(self):
+        for zone, moment, day in (
+            ("Asia/Tokyo", datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2027-01-01"),
+            (LOS_ANGELES, datetime(2027, 1, 1, 1, 0, tzinfo=ZoneInfo(NEW_YORK)), "day:2026-12-31"),
+        ):
+            with self.subTest(zone), patch_now(moment):
+                user = make_user(calendar=zone)
+                self.watching(user=user)
+                self.assertEqual(self.reasons(self.play(12, user))[-1], day)
+
+    def test_a_later_save_of_that_row_says_what_it_is(self):
+        self.watching()
+        self.play(12)
+        row = Anime.objects.get(user=self.user, item__media_id="229")
         row.notes = "Good"
         row.save()
         self.assertEqual(self.reasons(row)[-1], "mark")
