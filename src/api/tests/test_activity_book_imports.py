@@ -255,6 +255,89 @@ class ALiveReadTests(BookImportBase):
         self.assertEqual(Book.objects.get(item=self.item_row).current_session_id, journey)
         self.assert_numbers(0, 100, 100)
 
+    def test_stopping_it_after_a_file_keeps_its_pages_where_they_are(self):
+        self.live_read()
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 100)
+        self.do(book_tracking.drop, self.item_row, d(2026, 3, 4))
+        self.assert_numbers(0, 100, 100 + PAGES)
+        self.assertEqual(self.number(start=d(2024, 1, 1), end=d(2024, 12, 31)), PAGES)
+        self.assertEqual(
+            self.rows(),
+            ["2026-03-04 stopped", "2026-03-02 read 100", "2026-03-01 started", "2024-05-01 log +321"],
+        )
+
+    def test_it_reopens_at_its_place_after_a_file_and_a_stop(self):
+        self.live_read()
+        self.from_storygraph(storygraph_file(dates="2024/05/01"))
+        self.do(book_tracking.drop, self.item_row, d(2026, 3, 4))
+        self.begin(self.item_row, d(2026, 4, 1))
+        progress = self.client_for(self.owner, NEW_YORK).get(f"/api/v1/tracking/{self.item_row.source}/{BOOK}/{MEDIA_ID}/").json()["progress"]
+        self.assertEqual(progress["value"], 100)
+        self.save(self.item_row, 130, d(2026, 4, 2))
+        self.assert_numbers(0, 130, 130 + PAGES)
+        self.assertEqual(
+            self.rows(),
+            [
+                "2026-04-02 read 30",
+                "2026-04-01 picked back up",
+                "2026-03-04 stopped",
+                "2026-03-02 read 100",
+                "2026-03-01 started",
+                "2024-05-01 log +321",
+            ],
+        )
+
+
+class AStoppedReadTests(BookImportBase):
+    """A file's read over a stopped read: neither joins the other (decision 8)."""
+
+    def stopped_read(self):
+        self.begin(self.item_row, d(2025, 11, 1))
+        self.save(self.item_row, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, self.item_row, d(2025, 11, 15))
+
+    def assert_it_stayed(self):
+        self.assert_numbers(200, 0, 200 + PAGES)
+        self.assertEqual(self.number(start=d(2024, 1, 1), end=d(2024, 12, 31)), PAGES)
+
+    def test_a_goodreads_read_dated_before_it(self):
+        self.stopped_read()
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.assert_it_stayed()
+
+    def test_a_storygraph_read_dated_before_it(self):
+        self.stopped_read()
+        self.from_storygraph(storygraph_file(dates="2024/05/01"))
+        self.assert_it_stayed()
+
+    def test_it_reopens_at_its_place_and_says_so(self):
+        self.stopped_read()
+        self.from_goodreads(goodreads_file(**{"Date Read": "2026/01/05"}))
+        self.begin(self.item_row, d(2026, 4, 1))
+        self.assertEqual(Book.objects.get(item=self.item_row).progress, 200)
+        self.assertEqual(self.rows()[0], "2026-04-01 picked back up")
+        self.save(self.item_row, 250, d(2026, 4, 2))
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), 200)
+        self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 50 + PAGES)
+
+    def test_a_log_of_his_own_after_a_stop_still_finishes_that_read(self):
+        self.stopped_read()
+        self.finish(self.item_row, d(2025, 12, 1))
+        self.assert_numbers(PAGES, 0, PAGES)
+
+
+class APlaceWithNoJourneyTests(BookImportBase):
+    """A file's read over a place: the place stays where it was."""
+
+    def test_the_place_stays_in_the_pile_and_as_the_opening(self):
+        self.from_file(self.yamtrack_row(status=Status.IN_PROGRESS.value, progress=120))
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+        self.begin(self.item_row, d(2026, 4, 1))
+        self.assertEqual(Book.objects.get(item=self.item_row).progress, 120)
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+
 
 class OverwriteYourOwnExportTests(BookImportBase):
     """A Spine export in overwrite mode: All Time holds, and what years do is pinned."""

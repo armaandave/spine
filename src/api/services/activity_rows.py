@@ -408,29 +408,44 @@ def _carries_on(prior, session, saves):
     )
 
 
+def _walk_session(title, reading, session, saves, total, zone, *, continues):
+    """Walk one journey into its read; return whether a log finished it."""
+    entry = session.completion_diary_entry if session.status == Status.COMPLETED.value else None
+    snapshot = (entry.progress_snapshot or {}) if entry else {}
+    # A finished read's percent saves use the length on its log (STAT-201).
+    length = (snapshot.get("max") if snapshot.get("kind") == "pages" else None) or total
+    _walk_journey(reading, session, saves, length, zone, continues=continues, finished=bool(entry))
+    if entry:
+        day = log_day(entry.consumed_at, zone)
+        target, known = _book_target(snapshot, total)
+        title.add_log(entry, day, known=known)
+        reading.finish(entry.pk, day, entry.created_at, target)
+    return bool(entry)
+
+
 def _walk_journeys(title, sessions, saves, total, zone):
-    """Fold a title's journeys into rows; return each journey's read."""
+    """Fold a title's journeys into rows; return each journey's read.
+
+    A file's read is its own: whatever its id sits between, it doesn't end the read under
+    way or carry on from one, so a file's date never moves a read's pages.
+    """
     by_session = {}
     reading = None
     prior = None
     for session in sessions:
         session_saves = saves.get(session.pk, [])
+        if session.from_file:
+            by_session[session.pk] = own = Reading()
+            _walk_session(title, own, session, session_saves, total, zone, continues=False)
+            title.take(own)
+            continue
         continues = _carries_on(prior, session, session_saves)
         if not continues or reading is None:
             if reading:
                 title.take(reading)
             reading = Reading()
         by_session[session.pk] = reading
-        entry = session.completion_diary_entry if session.status == Status.COMPLETED.value else None
-        snapshot = (entry.progress_snapshot or {}) if entry else {}
-        # A finished read's percent saves use the length on its log (STAT-201).
-        length = (snapshot.get("max") if snapshot.get("kind") == "pages" else None) or total
-        _walk_journey(reading, session, session_saves, length, zone, continues=continues, finished=bool(entry))
-        if entry:
-            day = log_day(entry.consumed_at, zone)
-            target, known = _book_target(snapshot, total)
-            title.add_log(entry, day, known=known)
-            reading.finish(entry.pk, day, entry.created_at, target)
+        if _walk_session(title, reading, session, session_saves, total, zone, continues=continues):
             title.take(reading)
             reading = None
         prior = session
@@ -472,13 +487,14 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
             alone = Reading()
             alone.finish(entry.pk, day, entry.created_at, target)
             title.take(alone)
+    own = [session for session in sessions if not session.from_file]
     if book and book.completed_manually:
         # A mark after a stop holds only what that read doesn't: a place with no day is
         # in the pile already.
-        stopped = _read_before_mark(book.undated_read_previous_session_id, book.current_session_id, sessions, by_session)
+        stopped = _read_before_mark(book.undated_read_previous_session_id, book.current_session_id, own, by_session)
         held = stopped.counted.value if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
-    elif book and book.progress and not sessions and not (entries and book.status == Status.COMPLETED.value):
+    elif book and book.progress and not own and not (entries and book.status == Status.COMPLETED.value):
         # A place with no journey. A Read with a log holds that log's pages, not more.
         title.add_to_pile(Decimal(book.progress))
     return title

@@ -3104,6 +3104,11 @@ class BookSession(models.Model):
         super().save(*args, **kwargs)
         self.related_book._invalidate_progress_cache()
 
+    @property
+    def from_file(self):
+        """Return whether a file wrote this read: it's its own, and joins no other."""
+        return bool((self.pre_completion_progress or {}).get("from_file"))
+
 
 class Comic(SeriesMedia):
     """Model for comics."""

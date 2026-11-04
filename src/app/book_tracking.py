@@ -405,6 +405,14 @@ def start(user, item, *, start_date=None, mutation_id=None):
     return book
 
 
+def _last_read(book):
+    """Return the last journey really read: a file's read is its own, whatever its id."""
+    for session in book.reading_sessions.order_by("-id"):
+        if not session.from_file:
+            return session
+    return None
+
+
 def _opening_place(book):
     """Return where a new journey opens, as (pages, percent) (BK-305, decision 8).
 
@@ -414,7 +422,7 @@ def _opening_place(book):
     """
     if book.status == Status.COMPLETED.value:
         return None, None
-    last = book.reading_sessions.order_by("-id").first()
+    last = _last_read(book)
     if last is None:
         return book.progress or None, None
     if last.status == Status.DROPPED.value:
@@ -891,8 +899,8 @@ def complete(
 ):
     """Atomically create one completion log and complete its journey.
 
-    With force_direct, as an import asks, it's a read of its own: a file's date never
-    closes a read under way or moves its pages.
+    With force_direct, as an import asks, it's a read of its own, and says so: a file's
+    date never closes a read under way or moves its pages, then or when that read stops.
     """
     rating = single_weight.validate_storage_rating(rating)
     completed_at = _calendar_datetime(completion_date, user)
@@ -970,6 +978,7 @@ def complete(
             previous_session=None if created else book.current_session,
             previous_read_override=_deactivate_override(book),
             mutation_id=mutation_id,
+            pre_completion_progress={"from_file": True} if force_direct else None,
         )
 
     total_pages = item.total_pages
@@ -1433,7 +1442,7 @@ def _picks_back_up(book):
     """
     if book.status not in {Status.PAUSED.value, Status.DROPPED.value}:
         return False
-    last = book.reading_sessions.order_by("-id").first()
+    last = _last_read(book)
     return last.status == Status.DROPPED.value if last else bool(book.progress)
 
 
