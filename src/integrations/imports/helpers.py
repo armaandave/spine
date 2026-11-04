@@ -417,7 +417,7 @@ def _import_anime_rows(rows, user):
             current.item,
             status=current.status,
             count=current.progress,
-            score=next((row.score for row in reversed(item_rows) if row.score is not None), None),
+            score=next((row.score for row in reversed(item_rows) if row.score), None),
             notes=next((row.notes for row in reversed(item_rows) if row.notes), ""),
             earlier=[{"count": row.progress} for row in earlier if row.status == app.models.Status.COMPLETED.value],
             total=next((getattr(row, "_anime_total", None) for row in item_rows if getattr(row, "_anime_total", None)), None),

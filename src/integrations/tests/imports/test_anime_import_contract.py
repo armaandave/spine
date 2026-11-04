@@ -706,6 +706,18 @@ class OtherImporterTests(ImportTestCase):
         self.assertEqual((row.pass_number, row.progress, row.status), (2, 3, "In progress"))
         self.assertEqual((str(row.score), row.notes), ("9.0", "A note"))
 
+    def test_an_800_a_later_yamtrack_row_with_a_score_of_0_has_no_stars(self):
+        title = self.fake.add(total=12)
+        Item.objects.create(source="mal", media_type="anime", media_id=title.media_id, title="T", image="https://example.com/p.jpg")
+        header = ",".join(("media_id", "source", "media_type", "title", "image", "season_number", "episode_number", "score", "progress", "status", "start_date", "end_date", "notes", "progressed_at"))
+        rows = [
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,0,3,In progress,,,,2026-02-01T00:00:00+00:00",
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,9,12,Completed,,,,2026-01-01T00:00:00+00:00",
+        ]
+        file = io.BytesIO("\n".join([header, *rows]).encode())
+        yamtrack.YamtrackImporter(file, self.user, "new").import_data()
+        self.assertEqual(str(Anime.objects.get(user=self.user).score), "9.0")
+
     def test_an_800_a_later_yamtrack_rows_own_stars_and_notes_win(self):
         title = self.fake.add(total=12)
         Item.objects.create(source="mal", media_type="anime", media_id=title.media_id, title="T", image="https://example.com/p.jpg")

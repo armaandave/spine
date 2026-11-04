@@ -1855,6 +1855,17 @@ class ManualTitleTests(AnimeTestCase):
         anime_tracking.delete_log(self.user, entry)
         self.assertEqual((self.row(marked).status, self.state(marked)["total"]), ("Completed", 3))
 
+    def test_an_900_starting_a_manual_title_over_takes_its_total_with_it(self):
+        item = self.manual()
+        self.tick(item, 1, 2)
+        self.written(item, status="Completed")
+        self.assertEqual(self.state(item)["total"], 2)
+        self.written(item, status="Planning", progress=0)
+        state = self.state(item)
+        self.assertEqual((state["status"], state["total"], self.row(item).aired_count), ("Planning", None, None))
+        self.tick(item, 3)
+        self.assertEqual(self.row(item).progress, 1)
+
     def test_an_100_a_number_the_owner_wrote_stays_when_a_mark_is_undone(self):
         item = self.manual()
         self.tick(item, 1)

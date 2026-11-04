@@ -1129,6 +1129,9 @@ def _after_removal(ctx, *, status_follows=False):
         ctx.status_before = None
         ctx.count_before = 0
         ctx.ticks_before = 0
+        if ctx.listing.fetched_at is None:
+            # A total kept on the row goes too: leaving would have taken it.
+            ctx.listing = replace(ctx.listing, total=None)
     ctx.invalidate()
     return False
 
