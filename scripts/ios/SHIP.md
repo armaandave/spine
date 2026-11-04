@@ -137,9 +137,11 @@ Some ships carry a data step that has to run once, right after their deploy is v
 The ship that adds `src/social/migrations/0005_progresschange_saved_on.py` stores each
 save's day and records status moves, with the calculation in switched off, so nothing you'd
 see changes. Migration `0005` fills the new column on its own and writes only that column,
-so it's additive. Its message (Workflow A, step 5) says that a refusal becomes a success
-here, which is safe on installed code: a save or a Stop from a phone a few seconds ahead,
-and a save or a Stop after flying west.
+so it's additive. Its message (Workflow A, step 5) says that some refusals become successes
+here, which is safe on installed code: a save, a Stop or a Restart from a phone a few seconds
+ahead or after flying west; a game's Start dated a day ahead; a log or a log's date edit on
+the phone's own date after flying west, on a book, game, manga or comic; and a date that was
+ahead only of the server's calendar, on an account east of it.
 
 **Each step below waits for the user's request; the ship request doesn't cover it.** The
 ship message (step 5) names each as waiting. It can't print a count yet, because the dry runs
@@ -171,7 +173,9 @@ in `~/projects/spine-backups/`, never on the container's disk or under `/yamtrac
 compare_activity_numbers` prints today's number beside the calculation's, per account. Its
 `count 14` line must read `empty_saved_on={}`: a writer that forgets its day fails silently.
 Run it after the deploy, and again with `--since <the deploy's moment>` after the first real
-save of each type. Then bring Armaan the comparison.
+save of each type. Then bring Armaan the comparison, from a run made after steps 2 and 3, or
+once both their counts are zero: before them it reads unflagged Restarts as typo fixes and
+leaves out the undated Reads.
 
 Remove this section once Phase 1 has shipped.
 
@@ -249,7 +253,8 @@ Remove this section once the production fill has finished.
   `~/projects/spine-backups/pre-deploy-<run>.dump`, which loses every write since. Both
   need the user's yes.
 - **Each save's day (`social` `0005`).** Old code writes no `saved_on`, and reads rows
-  through its own zone until the next ship. After the fix is live, run
+  through its own zone until the next ship. It has neither of these commands nor the steps'
+  wrapper, so after the ship that brings this code back, run
   `docker exec spine python manage.py fill_progress_days`, then
   `compare_activity_numbers --since <the roll-forward's moment>`, whose `count 14` line
   must read `empty_saved_on={}` (it isn't empty before the fill). Never run
