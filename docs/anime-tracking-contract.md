@@ -117,12 +117,13 @@ Spine keeps a stored copy of the title's total, aired count, next episode and ro
 A page refreshes a copy that has gone stale: a day after it was read while the title is airing or announced, as soon as a known airing time has passed, and a week after it was read once the title has finished. Each provider gets one short try, and a failure keeps the copy and backs off.
 A copy needs MAL's numbers: one without them counts as no copy.
 A write that needs a title Spine has no copy of is refused with a retryable "Anime details are unavailable right now", and changes nothing.
-A write that needs no copy never asks for one: an untick, the filled eye, clearing stars, turning the heart off, stopping a rewatch, a log edit, or a form's notes.
+A write that needs no copy never asks for one: an untick, a lowered number, the filled eye, clearing stars, turning the heart off, stopping a rewatch, a log edit, or a form's notes.
+A choice of Watching, Planning, Paused or Dropped reads a copy as it is, stale or not, because a click shouldn't wait on a provider.
 
 While MAL says a title is airing and AniList hasn't answered, Spine doesn't know how many have aired, whatever the total.
 The rows run to one past the last watched and a tick still works, but anything that fills the rest (the eye, stars or a heart that mark, a log, Mark watched up to here) is refused with that same retryable message.
 
-A manual title has no provider, so the number its owner writes is its total, kept on their own record. With no number, what's watched is the total once the eye, stars or a heart that mark, a log or a written Completed finishes it. That total goes when the log or mark that set it is undone.
+A manual title has no provider, so the number its owner writes or a file gives is its total, kept on their own record, and no undo erases it. With no number, what's watched is the total once the eye, stars or a heart that mark, a log or a written Completed finishes it. That total goes as soon as no log or mark that finishes a title is left.
 
 ### AN-101: What a row shows
 
