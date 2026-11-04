@@ -808,7 +808,47 @@ class OtherImporterTests(ImportTestCase):
         )
         entry = self.logs(self.item_of(late))[0]
         self.assertEqual(entry.consumed_at, datetime(2026, 10, 25, tzinfo=UTC))
+        self.assertEqual(self.row(self.item_of(late)).end_date, datetime(2026, 10, 25, tzinfo=UTC))
         self.assertEqual(self.logs(self.item_of(other))[0].consumed_at, datetime(2020, 5, 1, tzinfo=UTC))
+
+    def test_an_800_a_date_on_the_users_today_that_is_the_servers_tomorrow_is_a_log(self):
+        # 04:00 on the 26th in Tokyo, with the server in New York still on the 25th.
+        self.user = make_user(calendar="Asia/Tokyo")
+        title = self.fake.add(total=12)
+        self._export((title.media_id, "Completed", {"my_watched_episodes": "12", "my_finish_date": "2026-10-26"}))
+        item = self.item_of(title)
+        self.assertEqual(self.logs(item)[0].consumed_at, datetime(2026, 10, 26, tzinfo=UTC))
+        self.assertEqual(self.row(item).end_date, datetime(2026, 10, 26, tzinfo=UTC))
+
+    def test_an_800_a_date_further_out_isnt_real_and_counts_as_no_date(self):
+        for finish in ("2099-01-01", "2026-10-27"):
+            with self.subTest(finish=finish):
+                title = self.fake.add(total=12)
+                self._export(
+                    (
+                        title.media_id,
+                        "Completed",
+                        {"my_watched_episodes": "12", "my_start_date": finish, "my_finish_date": finish},
+                    ),
+                )
+                item = self.item_of(title)
+                self.assertEqual(self.logs(item), [])
+                row = self.row(item)
+                self.assertEqual((row.status, row.progress, row.start_date, row.end_date), ("Completed", 12, None, None))
+                self.assertTrue(all(viewing.diary_entry_id is None for viewing in self.viewings(item)))
+
+    def test_an_800_every_importers_dates_are_judged_on_the_users_calendar(self):
+        real = datetime(2020, 5, 1, 14, 30, tzinfo=UTC)
+        for start, end, expected in (
+            (real, real, (real, real)),
+            (datetime(2099, 1, 1, tzinfo=UTC), datetime(2099, 1, 2, tzinfo=UTC), (None, None)),
+            (None, datetime(2026, 10, 26, tzinfo=UTC), (None, datetime(2026, 10, 25, tzinfo=UTC))),
+        ):
+            with self.subTest(end=end):
+                item = self.title(total=12)
+                anime_tracking.import_title(self.user, item, status="Completed", count=12, start_date=start, end_date=end)
+                row = self.row(item)
+                self.assertEqual((row.start_date, row.end_date), expected)
 
     def test_an_800_a_new_builds_future_log_is_still_refused(self):
         item = self.title(total=12)

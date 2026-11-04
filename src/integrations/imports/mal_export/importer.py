@@ -14,7 +14,7 @@ from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import anime_tracking, series_tracking, single_weight
+from app import anime_tracking, series_tracking, single_weight, user_calendar
 from app.models import (
     Anime,
     DiaryEntry,
@@ -283,14 +283,13 @@ class MALExportImporter:
         ).count()
 
     def _create_diary_entries(self, entries, items):
-        today = timezone.localdate()
+        today = user_calendar.today(self.user)
         candidates = [
             entry
             for entry in entries
             if entry.media_type != MediaTypes.MANGA.value
             and entry.completed_once
-            and entry.finish_date is not None
-            and entry.finish_date <= today
+            and anime_tracking.imported_day(self.user, entry.finish_date) is not None
         ]
         if not candidates:
             return
@@ -312,13 +311,14 @@ class MALExportImporter:
             source_id = f"{entry.media_type}:{entry.media_id}:finish"
             if source_id in existing_source_ids:
                 continue
-            if entry.finish_date in existing_days[item.id]:
+            finish_day = anime_tracking.imported_day(self.user, entry.finish_date)
+            if finish_day in existing_days[item.id]:
                 # A log for that day already exists (e.g. created by hand).
                 continue
             create_diary_entry(
                 self.user,
                 item,
-                consumed_at=single_weight.calendar_datetime(entry.finish_date, today=today),
+                consumed_at=single_weight.calendar_datetime(finish_day, today=today),
                 rating=entry.score,
                 review="",
                 is_rewatch=False,
@@ -329,7 +329,7 @@ class MALExportImporter:
                 update_current=False,
             )
             existing_source_ids.add(source_id)
-            existing_days[item.id].add(entry.finish_date)
+            existing_days[item.id].add(finish_day)
             self.counts["diary"] += 1
 
 

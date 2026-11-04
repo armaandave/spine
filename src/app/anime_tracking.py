@@ -1996,7 +1996,8 @@ def create_log(  # noqa: PLR0913
     consumed_at is a calendar date, or a datetime that converts to the user's calendar;
     a future one is TVInvalid. is_rewatch None takes TV-404's default; liked None takes
     the title's current heart. Posts one diary activity (AN-703). An import's date past the
-    user's today becomes today: one date never aborts an import (AN-800).
+    user's today becomes today: one date never aborts an import, and imported_day has
+    already dropped one further out than a time zone (AN-800).
     """
     day = _parse_log_day(consumed_at, user)
     today = user_calendar.today(user)
@@ -2305,6 +2306,27 @@ def refresh_due_titles(now=None):
 # ---------------------------------------------------------------------------------
 
 
+def imported_day(user, value):
+    """Return a source's date as a day on the user's calendar, or None (AN-800).
+
+    One day past their today becomes today, because that's a time zone. A date further out
+    isn't real, so it counts as no date: Spine never invents one.
+    """
+    if not value:
+        return None
+    day = _parse_log_day(value, user)
+    today = user_calendar.today(user)
+    return None if day > today + timedelta(days=1) else min(day, today)
+
+
+def _imported_date(user, value):
+    """Return what a row stores of a source's date: as given, while it's a real one."""
+    day = imported_day(user, value)
+    if day is None:
+        return None
+    return value if day == _parse_log_day(value, user) else _carrier(day)
+
+
 @transaction.atomic
 def import_title(  # noqa: C901, PLR0912, PLR0913
     user,
@@ -2335,6 +2357,8 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     count = _sane_number(count)
     total = _sane_number(total)
     earlier = [{"count": _sane_number(entry.get("count"))} for entry in earlier]
+    start_date = _imported_date(user, start_date)
+    end_date = _imported_date(user, end_date)
     listing = anime_listing.provisional_listing(item, total or _implied_total(status, count, earlier))
     rating = _validate_rating(score, IMPORT) if score not in (None, "", 0, "0", "0.0") else None
     ctx = _Ctx(user, item, listing, IMPORT, None)
@@ -2989,6 +3013,7 @@ __all__ = [
     "create_log",
     "delete_log",
     "import_title",
+    "imported_day",
     "list_payload",
     "log_info",
     "mark_earlier",
