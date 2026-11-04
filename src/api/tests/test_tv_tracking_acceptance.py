@@ -1017,7 +1017,7 @@ class FlowCWholeShowTests(AcceptanceHelpers, TVAcceptanceTestCase):
             driver.delete_log(entry_id)
             # Partway, so only an import can have set these (TV-304, TV-800).
             tv_tracking.set_rating(driver.user, show, 8, entry_point=tv_tracking.IMPORT)
-            tv_tracking.set_like(driver.user, show, True, entry_point=tv_tracking.IMPORT)
+            tv_tracking.set_like(driver.user, show, liked=True, entry_point=tv_tracking.IMPORT)
             if driver.path == "api":
                 counts["remove"] = driver.state(show)["remove_count"]
             driver.remove(show)
