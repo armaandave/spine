@@ -24,6 +24,8 @@ from integrations.imports.mal_export.importer import MALExportImporter
 
 MOCK_DATA = Path(__file__).resolve().parent.parent.parent / "integrations" / "tests" / "mock_data"
 NEW_YORK = "America/New_York"
+TOKYO = "Asia/Tokyo"
+LOS_ANGELES = "America/Los_Angeles"
 NOW = datetime(2026, 10, 25, 20, 5, tzinfo=ZoneInfo(NEW_YORK))
 TODAY = "day:2026-10-25"
 ANIME_METADATA = {
@@ -92,9 +94,15 @@ class SaveReasonTests(AnimeBase):
 
     def test_a_new_row_above_zero_counts_today(self):
         self.assertEqual(self.reasons(self.tracked(progress=3)), [TODAY])
+        self.assertEqual(self.reasons(self.tracked(status=Status.PAUSED.value, progress=3)), [TODAY])
 
     def test_a_new_in_progress_row_is_the_start(self):
         self.assertEqual(self.reasons(self.tracked()), [TODAY])
+
+    def test_a_new_row_that_opens_anywhere_else_at_zero_is_a_mark(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value):
+            with self.subTest(status):
+                self.assertEqual(self.reasons(self.tracked(status=status)), ["mark"])
 
     def test_a_status_move_counts_today(self):
         row = self.tracked(progress=3)
@@ -129,6 +137,22 @@ class SaveReasonTests(AnimeBase):
             media_id=row.item.media_id,
         )
         self.assertEqual(self.reasons(row)[-1], "mark")
+
+    def test_the_eye_is_a_mark_whatever_date_it_carries(self):
+        """A phone a few seconds ahead, a tap that arrives after midnight, and an old date."""
+        for sent in (NOW + timedelta(days=1), NOW - timedelta(days=1), NOW - timedelta(days=90)):
+            for status, progress in ((Status.PLANNING.value, 0), (Status.COMPLETED.value, 5)):
+                with self.subTest(sent=sent, status=status):
+                    row = self.tracked(status=status, progress=progress)
+                    before = len(self.reasons(row))
+                    tracking_service.consume_media(
+                        self.user,
+                        source=row.item.source,
+                        media_type=row.item.media_type,
+                        media_id=row.item.media_id,
+                        consumed_at=sent,
+                    )
+                    self.assertEqual(set(self.reasons(row)[before:]), {"mark"})
 
     def test_a_status_set_to_completed_through_the_api_is_a_mark(self):
         row = self.tracked(progress=3)
@@ -185,6 +209,74 @@ class WebFormTests(AnimeBase):
         row = self.tracked(progress=3)
         self.post(row, end_date="2026-03-01")
         self.assertEqual(self.reasons(row)[-1], "day:2026-03-01")
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class BrowserDateTests(AnimeBase):
+    """TRACK_TIME is on by default, so the form's date is the browser's own wall clock.
+
+    Django reads it on the server's zone, so it isn't a moment on the owner's calendar.
+    """
+
+    # (Whose browser, the moment it filled the form)
+    FILLED = (
+        (NEW_YORK, datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK))),
+        (TOKYO, datetime(2027, 1, 1, 15, 0, tzinfo=ZoneInfo(TOKYO))),
+        (TOKYO, datetime(2027, 1, 1, 9, 0, tzinfo=ZoneInfo(TOKYO))),
+        (LOS_ANGELES, datetime(2027, 1, 1, 1, 0, tzinfo=ZoneInfo(LOS_ANGELES))),
+        (LOS_ANGELES, datetime(2026, 12, 31, 12, 0, tzinfo=ZoneInfo(LOS_ANGELES))),
+    )
+
+    def post(self, instance, end_date):
+        item = instance.item
+        form = AnimeForm(
+            {
+                "media_type": item.media_type,
+                "source": item.source,
+                "media_id": item.media_id,
+                "status": Status.COMPLETED.value,
+                "progress": 12,
+                "end_date": end_date,
+            },
+            instance=instance,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        return form.save()
+
+    def test_the_date_it_fills_is_a_mark_on_any_calendar(self):
+        for zone, moment in self.FILLED:
+            sent = moment.strftime("%Y-%m-%dT%H:%M")
+            with self.subTest(zone=zone, sent=sent), patch_now(moment):
+                user = make_user(calendar=zone)
+                row = self.post(Anime(user=user, item=self.item()), sent)
+                self.assertEqual(self.reasons(row), ["mark"], "a new row")
+                row = Anime.objects.create(user=user, item=self.item(), status=Status.IN_PROGRESS.value, progress=3)
+                self.post(row, sent)
+                self.assertEqual(self.reasons(row)[-1], "mark", "an edit")
+
+    def test_a_typed_earlier_date_stays_that_date_on_any_calendar(self):
+        for zone, moment in self.FILLED:
+            for sent in ("2026-12-20T00:30", "2026-12-20T23:30"):
+                with self.subTest(zone=zone, sent=sent), patch_now(moment):
+                    user = make_user(calendar=zone)
+                    row = self.post(Anime(user=user, item=self.item()), sent)
+                    self.assertEqual(self.reasons(row), ["day:2026-12-20"], "a new row")
+                    row = Anime.objects.create(user=user, item=self.item(), status=Status.IN_PROGRESS.value, progress=3)
+                    self.post(row, sent)
+                    self.assertEqual(self.reasons(row)[-1], "day:2026-12-20", "an edit")
+
+    def test_a_date_past_today_is_a_mark(self):
+        """With TRACK_TIME off the form fills the UTC date, tomorrow on a New York evening."""
+        with patch_now(datetime(2026, 12, 31, 20, 0, tzinfo=ZoneInfo(NEW_YORK))):
+            row = self.post(Anime(user=self.user, item=self.item()), "2027-01-01")
+        self.assertEqual(self.reasons(row), ["mark"])
+
+    def test_an_unchanged_date_on_a_move_to_completed_is_a_mark(self):
+        row = self.tracked(progress=3)
+        Anime.objects.filter(pk=row.pk).update(end_date=datetime(2026, 3, 1, 12, 0, tzinfo=ZoneInfo(NEW_YORK)))
+        row = Anime.objects.get(pk=row.pk)
+        self.post(row, "2026-03-01T12:00")
+        self.assertEqual(self.reasons(row)[-1], "mark")
 
 
 @override_settings(TIME_ZONE=NEW_YORK)

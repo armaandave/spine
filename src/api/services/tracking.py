@@ -329,6 +329,7 @@ def consume_media(
     if media_type in UNDATED_MARKS:
         return _call_book(UNDATED_MARKS[media_type], user, media.item)
     media.end_date = consumed_at or timezone.now()
+    media.is_eye = True
     media.mark_consumed()
     return media
 

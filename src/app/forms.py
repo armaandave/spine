@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django import forms
 from django.conf import settings
+from django.utils import timezone
 
 from app import config
 from app.models import (
@@ -325,6 +326,12 @@ class MangaForm(SeriesForm):
 
 class AnimeForm(MediaForm):
     """Form for anime."""
+
+    def save(self, commit=True):  # noqa: FBT002
+        """Say which day the browser sent: Django read its wall clock on the server's zone."""
+        end_date = self.cleaned_data.get("end_date")
+        self.instance.form_end_day = timezone.localtime(end_date).date() if end_date else None
+        return super().save(commit)
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""

@@ -2635,6 +2635,10 @@ class Anime(Media):
     """
 
     tracker = FieldTracker()
+    # What only the caller knows. The day the web form sent is the browser's, which the
+    # row can't read back from end_date. The eye is a mark whatever date it carries.
+    form_end_day = None
+    is_eye = False
 
     def save(self, *args, **kwargs):
         """Say what this save was, before saving can turn it into something else."""
@@ -2643,19 +2647,25 @@ class Anime(Media):
         super().save(*args, **kwargs)
 
     def _save_reason(self):
-        """A typed number, a new row above 0 or a status move counts today.
+        """A typed number, a new row above 0 or at In progress, or a status move counts today.
 
-        Setting Completed marks, unless the save sent a date other than today: the web
-        form fills today by itself, so a typed today can't be told from it. Reaching the
-        last episode by typing it is checked here first, so it stays a typed number.
+        The eye marks. Setting Completed marks, unless the save sent a date before today:
+        the web form fills today by itself, so a typed today can't be told from it, and
+        nobody watched anything on a date past today. Reaching the last episode by typing
+        it is checked here first, so it stays a typed number.
         """
+        if self.is_eye:
+            return "mark"
         today = user_calendar.today(self.user)
         status_moved = self.tracker.has_changed("status")
         if status_moved and self.status == Status.COMPLETED.value:
-            sent = self.sent_end_day() if self.tracker.has_changed("end_date") else None
-            return f"day:{sent}" if sent and sent != today else "mark"
-        typed = self.tracker.has_changed("progress") and (self.pk is not None or self.progress > 0)
-        return f"day:{today}" if typed or status_moved else "mark"
+            sent = (self.form_end_day or self.sent_end_day()) if self.tracker.has_changed("end_date") else None
+            return f"day:{sent}" if sent and sent < today else "mark"
+        if self.pk is None:
+            counts = self.progress > 0 or self.status == Status.IN_PROGRESS.value
+        else:
+            counts = status_moved or self.tracker.has_changed("progress")
+        return f"day:{today}" if counts else "mark"
 
     def sent_end_day(self):
         """Return `end_date` as the calendar day it was sent as, or None."""
@@ -2666,7 +2676,7 @@ class Anime(Media):
             return value.date()
         if value.utcoffset() == timedelta(0) and value.time() == time.min:
             return value.date()
-        # A form's or a file's date arrives as midnight on the server's zone.
+        # A file's date arrives as midnight on the server's zone.
         server_time = timezone.localtime(value)
         return server_time.date() if server_time.time() == time.min else user_calendar.day_of(value, self.user)
 
