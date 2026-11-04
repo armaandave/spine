@@ -382,17 +382,30 @@ def _opening(session, saves, length, *, finished):
     return None
 
 
+def _first_move_picks_up(saves):
+    """Return whether a journey's first status move is a pick-up.
+
+    Nothing in it was paused, so it picked up something it no longer sits beside: a place
+    with no journey, or a stopped attempt since deleted.
+    """
+    for change in saves:
+        if change.current_progress.get("kind") == ProgressChange.STATUS:
+            return change.current_progress.get("move") == ProgressChange.PICKED_BACK_UP
+    return False
+
+
 def _walk_journey(reading, session, saves, length, zone, *, continues, finished):
     opening = _opening(session, saves, length, finished=finished)
     if opening and opening > reading.counted.value:
         reading.counted.move_to(opening, None, None)
+    started = not continues and not _first_move_picks_up(saves)
     for change in saves:
         saved = change.current_progress
         kind = saved.get("kind")
         day = saved_day(change, zone)
         if kind == ProgressChange.START:
             # A start on a read carrying on isn't a start (decision 8).
-            reading.touch(day, change, started=not continues)
+            reading.touch(day, change, started=started)
         elif kind == ProgressChange.STATUS:
             reading.touch(day, change, move=saved["move"])
         elif kind in ("pages", "percentage"):
@@ -761,13 +774,14 @@ def _carries_on_series(reading, attempt, opening):
 
 
 def _walk_attempt_saves(reading, saves, zone, *, carried):
+    started = not carried and not _first_move_picks_up(saves)
     for change in saves:
         saved = change.current_progress
         kind = saved.get("kind")
         day = saved_day(change, zone)
         if kind == ProgressChange.START:
             # A start on a read carrying on isn't a start (MC-201).
-            reading.touch(day, change, started=not carried)
+            reading.touch(day, change, started=started)
         elif kind == ProgressChange.STATUS:
             reading.touch(day, change, move=saved["move"])
         elif kind == "count":

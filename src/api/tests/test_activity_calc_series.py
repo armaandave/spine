@@ -210,6 +210,16 @@ class ContinuingTests(SeriesCalcBase):
         self.finish(item, d(2026, 2, 3))
         self.assert_years(100, 100, 200)
 
+    def test_back_after_its_stopped_attempt_was_deleted_is_no_start(self):
+        item = self.title("deleted", total=100)
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 30, d(2025, 11, 2))
+        self.do(series.drop, item, d(2025, 11, 3))
+        first = Manga.objects.get(item=item).current_attempt_id
+        self.begin(item, d(2026, 4, 1))
+        self.do(series.delete_journey, item, d(2026, 4, 2), first)
+        self.assertEqual(self.lines(), ["2026-04-01 picked back up"])
+
     def test_restart_begins_at_zero(self):
         item = self.title("restart", total=100)
         self.save(item, 30, d(2026, 2, 1))

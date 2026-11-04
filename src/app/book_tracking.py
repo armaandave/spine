@@ -1476,9 +1476,10 @@ def _picks_back_up(book):
     """Return whether a new journey carries on from a read that was stopped (AC-1).
 
     Paused or Did Not Finish on a book never started has nothing to pick back up. Nor has
-    one finished, whose next journey is a new read.
+    one finished, whose next journey is a new read. To Read in between changes neither,
+    as where the journey opens says (_opening_place).
     """
-    if book.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+    if book.status not in {Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value}:
         return False
     last = _last_read(book)
     return last.status == Status.DROPPED.value if last else bool(book.progress)

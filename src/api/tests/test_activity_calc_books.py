@@ -469,6 +469,65 @@ class StatusMoveTests(BookCalcBase):
         self.assertEqual(row.progress_id, saved.pk)
 
 
+class PickUpRowTests(BookCalcBase):
+    """A pick-up says so on its day, and is no start (AC-1, plan 5.2)."""
+
+    def row_on(self, item, day):
+        return next(row for row in self.calc().rows if row.title_id == item.pk and row.day == day and not row.log_id)
+
+    def assert_picked_up(self, item, day):
+        row = self.row_on(item, day)
+        self.assertEqual((row.started, row.moves), (False, [BACK]))
+        self.assertFalse(row.is_event)
+
+    def test_stopped_then_to_read_then_back_says_so(self):
+        item = self.book("through-to-read")
+        self.begin(item, d(2025, 1, 1))
+        self.save(item, 100, d(2025, 1, 2))
+        self.do(book_tracking.drop, item, d(2025, 1, 3))
+        self.do(book_tracking.assign_status, item, d(2025, 2, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 1))
+        self.assert_picked_up(item, d(2026, 1, 1))
+
+    def test_to_read_on_a_book_never_stopped_is_a_start(self):
+        item = self.book("to-read-first")
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 2))
+        row = self.row_on(item, d(2026, 1, 2))
+        self.assertEqual((row.started, row.moves), (True, []))
+
+    def test_to_read_after_a_log_is_a_reread(self):
+        item = self.book("to-read-after-log")
+        self.finish(item, d(2025, 6, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 2))
+        row = self.row_on(item, d(2026, 1, 2))
+        self.assertEqual((row.started, row.moves), (True, []))
+
+    def test_back_to_an_imported_place_is_no_start(self):
+        item = self.book("place")
+        Book.objects.create(user=self.owner, item=item, status=Status.DROPPED.value, progress=120)
+        self.begin(item, d(2026, 2, 1))
+        self.assert_picked_up(item, d(2026, 2, 1))
+
+    def test_back_after_its_stopped_attempt_was_deleted_is_no_start(self):
+        item = self.book("deleted")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        first = Book.objects.get(item=item).current_session_id
+        self.begin(item, d(2026, 4, 1))
+        self.do(book_tracking.delete_journey, item, d(2026, 4, 2), first)
+        self.assert_picked_up(item, d(2026, 4, 1))
+
+    def test_a_pause_and_a_resume_leave_the_journeys_own_start_a_start(self):
+        item = self.book("paused-later")
+        self.begin(item, d(2026, 1, 1))
+        self.do(book_tracking.pause, item, d(2026, 1, 2))
+        self.do(book_tracking.resume, item, d(2026, 1, 3))
+        self.assertTrue(self.row_on(item, d(2026, 1, 1)).started)
+
+
 class BackdatedLogTests(BookCalcBase):
     """Decision 10: before the first activity everything moves; else only the rest."""
 
