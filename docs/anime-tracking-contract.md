@@ -284,7 +284,7 @@ A single follows AN-002.
 As TV-703: a day's ticks on a title are one item, "watched 4 episodes". Unticks count against that day's ticks.
 Marks and fills are never activity.
 Starting a title is activity: choosing Watching, a tick that puts it in Watching, or starting a rewatch.
-A log is one item on its calendar day, and replaces that day's start and progress.
+A log is one item on its calendar day, separate from that day's start or progress (AC-2).
 Imports and webhooks' marks start nothing.
 
 ### AN-704: Stats read viewings

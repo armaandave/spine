@@ -924,7 +924,7 @@ What people see as activity is defined in [the activity contract](activity-contr
 - Unticks count against that day's ticks. A day that didn't move forward shows nothing (AC-2).
 - Marks and fills aren't progress: the show and season eyes, Mark watched up to here, the Yes to the earlier-episodes question, and a log's fills (AC-1).
 - Starting the show is activity: choosing Watching, a tick that puts the show in Watching, or starting a rewatch. Resuming a paused show isn't starting it; starting again after finishing or dropping is. Progress that day replaces the start (AC-1, AC-2).
-- A log of the show, or of any of its seasons or episodes, is one item on its calendar day (TV-407). It replaces that day's start and progress for everyone who can see the log (AC-2).
+- A log of the show, or of any of its seasons or episodes, is one item on its calendar day (TV-407), separate from that day's start or progress (AC-2).
 - When the show leaves the library, its starts and progress go with it. Deleting a season's tracking removes that season's progress (AC-2).
 - Imports, scheduled jobs and the repair start nothing and record no progress.
 
