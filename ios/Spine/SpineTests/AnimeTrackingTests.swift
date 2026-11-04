@@ -677,6 +677,20 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(logModel(detail).selectedTitle, "Attack on Titan")
     }
 
+    func testAN400TheDiaryTabLogsATitleUnderTheSameRules() async throws {
+        let viewModel = DiaryCreateViewModel(diaryRepository: diary, mediaRepository: media, trackingRepository: tracking, onUnauthorized: {})
+        viewModel.select(MediaSummary(ref: Self.ref(), title: "Attack on Titan", posterUrl: nil, posterOrientation: .portrait))
+        XCTAssertTrue(viewModel.usesCalendarDate)
+        XCTAssertNil(viewModel.isRewatchForRequest, "Left to the server until the toggle is touched")
+
+        _ = await viewModel.create()
+        let request = try XCTUnwrap(diary.tvCreates.last)
+        XCTAssertEqual(request.ref.mediaType, "anime")
+        XCTAssertNotNil(request.mutationId)
+        let body = try XCTUnwrap(try JSONSerialization.jsonObject(with: JSONEncoder.api.encode(request)) as? [String: Any])
+        XCTAssertEqual((body["consumed_at"] as? String)?.count, 10, "A calendar date, never a datetime")
+    }
+
     func testAN402EditAndDeleteMirrorTV() async throws {
         let entry = try decode(DiaryEntry.self, TVTrackingModelsTests.diaryEntryJSON(mediaType: "anime", extra: #","anime_log":{"unmarks_count":7,"covers_count":12,"state_version":44}"#))
         diary.detailResults = [entry]
