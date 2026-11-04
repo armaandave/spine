@@ -6,6 +6,7 @@ one applies (those run in their own files too). The server runs on America/New_Y
 and the account calendar on America/Los_Angeles; MAL and AniList are faked.
 """
 
+import io
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
@@ -402,9 +403,38 @@ class AcceptanceTests(AnimeTestCase):
         self.assertEqual(passes, {1, 2, 3})
         self.assertEqual(len(self.viewings(item)), 36)
         self.assertEqual(AnimeMark.objects.filter(anime=row).count(), 3)
+        # Counts and marks are no progress and no start; the next case has a dated log.
         self.assertEqual(self.activity(), [])
         self.assertFalse(ProgressChange.objects.filter(actor=self.user).exclude(previous_progress__value=12).exists())
         self.assertEqual(self.fake.count("anilist"), 0)
+
+    def test_n_24_a_dated_row_of_the_mal_export_is_a_log_on_its_own_date(self):
+        from integrations.imports.mal_export.importer import MALExportImporter
+        from integrations.tests.imports.test_mal_export import _xml
+
+        title = self.fake.add(total=12)
+        file = io.BytesIO(
+            _xml(
+                (
+                    title.media_id,
+                    "Completed",
+                    {"my_watched_episodes": "12", "my_times_watched": "2", "my_finish_date": "2020-05-01"},
+                ),
+            ),
+        )
+        MALExportImporter(
+            file,
+            self.user,
+            "new",
+            metadata_fetcher=lambda _type, _id: {"title": "T", "image": "https://example.com/p.jpg", "max_progress": 12, "details": {}},
+        ).import_data()
+        item = Item.objects.get(media_id=title.media_id, media_type="anime")
+        self.assertEqual(self.row(item).pass_number, 3)
+        self.assertEqual(
+            [(row["type"], row["consumed_at"]) for row in self.activity()],
+            [("diary_created", "2020-05-01")],
+        )
+        self.assertFalse(ProgressChange.objects.filter(actor=self.user).exists())
 
     def test_n_25_import_with_a_count_of_5_in_progress(self):
         title = self.fake.add(total=12)
@@ -489,7 +519,7 @@ class AcceptanceTests(AnimeTestCase):
 
 
 class OtherPeoplesListsTests(AnimeTestCase):
-    """AC-5, AC-6: another person's list says where a title stands, not what a hidden log said."""
+    """AC-5, AC-6: another's list says where a title stands, not what a hidden log said."""
 
     def setUp(self):
         super().setUp()

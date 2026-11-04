@@ -2277,7 +2277,8 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     A count becomes undated fills as one mark, and Completed an undated mark of everything
     aired. Each entry of `earlier` is a finished earlier pass ({"count": n}); a pass under
     way after them is a rewatch. Planning, Paused and Dropped stay the choice; In progress
-    means Watching. No provider is called, nothing is activity, and no question is asked.
+    means Watching. No provider is called, and no question is asked. Counts and marks are
+    no progress and no start; a log the import goes on to make is a log (AC-1).
     Logs an overwrite kept get their fills back (TV-800). The source's dates stay on the
     row, and its one history row carries the source's date, as other imports' do.
     """

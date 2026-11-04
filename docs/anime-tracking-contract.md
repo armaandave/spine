@@ -87,6 +87,7 @@ A show tracked under both TV and anime stays two separate things, and Spine does
 
 A single has no episode rows, no up next, no earlier-episodes question and no number anywhere.
 It has the eye, stars, the heart, and a + menu with Planning, Log and Remove from Library.
+Watching, Pause and Drop are refused with a reason, and a webhook's play does nothing.
 
 - The eye and direct stars or a heart mark it watched, undated, and it moves to Completed.
 - It has no partway: once marked or logged, stars and the heart just save.
@@ -105,10 +106,17 @@ An episode counts as aired when any of these holds:
 - AniList's schedule says its time has passed;
 - AniList names a later episode as next to air;
 - the user has a viewing of it; or
-- the title has a total, AniList has no schedule for it, as with an older title, and MAL doesn't list it as not yet aired; then every listed episode counts as aired.
+- the title has a total, AniList has answered with no schedule for it, as with an older title, and MAL doesn't list it as not yet aired; then every listed episode counts as aired.
 
 Spine keeps a stored copy of the title's total, aired count, next episode and rows, updated whenever it fetches them, and uses that copy when a provider can't be reached.
+A page refreshes a copy that has gone stale: a day after it was read while the title is airing or announced, as soon as a known airing time has passed, and a week after it was read once the title has finished. Each provider gets one short try, and a failure keeps the copy and backs off.
+A copy needs MAL's numbers: one without them counts as no copy.
 A write that needs a title Spine has no copy of is refused with a retryable "Anime details are unavailable right now", and changes nothing.
+
+While MAL says a title is airing and AniList hasn't answered, Spine doesn't know how many have aired, whatever the total.
+The rows run to one past the last watched and a tick still works, but anything that fills the rest (the eye, stars or a heart that mark, a log, Mark watched up to here) is refused with that same retryable message.
+
+A manual title has no provider, so the number its owner writes is its total, kept on their own record. With no number, what's watched is the total once the eye, stars or a heart that mark, a log or a written Completed finishes it.
 
 ### AN-101: What a row shows
 
@@ -117,7 +125,7 @@ The page and the Home sheet list one row per aired episode, then the unaired epi
 - A row shows the episode's number, its title and image when AniList lists them, and a tick. Without them it reads "Episode 5".
 - Rows never wait for AniList. If a fetch fails, the number stays.
 - An unaired row shows its air date in place of a tick, or "TBA".
-- With no total and no schedule, the list runs to one past the last watched episode, so ticking still works.
+- With no total and no schedule, the list runs from E1 to one past the last watched episode, so any of them can be ticked.
 - Tapping a row's tick ticks or unticks it. Tapping its body does nothing, because episodes have no pages.
 - A title with a thousand episodes opens at up next as fast as a short one, and every episode stays reachable.
 
@@ -132,7 +140,7 @@ Every write keeps the tracking record's progress equal to this count, on every e
 
 A tick, log or mark of an episode past a known total is refused, and the message names the total.
 A tick of an episode whose air time is more than one day away is refused; the one day covers time zones.
-With no total and no schedule, any episode number is accepted.
+With no total and no schedule, any episode number is accepted up to 20,000, past the longest anime there is. A number over that is refused as a clean error before anything is built from it, and an import drops it instead of filling it.
 A log or mark of a title with nothing aired is refused.
 A refused write changes nothing.
 If a total later falls below an episode the user watched, that viewing stays and counts toward nothing.
@@ -309,9 +317,12 @@ MAL, MAL export, AniList, Kitsu, SIMKL and Yamtrack imports create one tracking 
 - Completed becomes an undated mark of everything aired. Any log the import makes today, it still makes, and that log's date dates its fills.
 - Each rewatch in the source becomes a finished earlier pass, never another record.
 - Planning, Paused and Dropped stay the user's choice. In progress means Watching. Spine never infers a stop from inactivity (GM-501).
-- Imports create no feed activity, never ask the earlier-episodes question and never open anything.
+- Imported counts and marks create no progress or starts. An imported log is a log, on its own date (AC-1). A date past today on the user's calendar becomes today, because one date never aborts an import.
+- Imports never ask the earlier-episodes question and never open anything.
+- A person's file never sets the stored copy anyone else reads. What it says stays on their own record until the calendar job, which the import's end queues, reads the real numbers.
+- A place after a finished pass is a rewatch, Paused or Dropped too, and keeps that place (AN-600).
 - They write in bulk, with no provider call per episode.
-- Overwrite replaces viewings, marks and choices with the source's. Logs survive and their fills are rebuilt (TV-800).
+- Overwrite replaces viewings, marks and choices with the source's. Logs survive and their fills are rebuilt in the pass each finished, never one the source says is still open (TV-800).
 
 ### AN-801: A webhook play isn't a watch
 
@@ -332,16 +343,19 @@ What they send still works: a tracking write with a status or a progress number,
 
 - A written Completed means mark it watched. In progress means choose Watching. Planning, Paused and Dropped mean that choice.
 - A progress number from the web or the API means ticks. Raising it ticks the next unwatched episodes, dated now. Lowering it removes the latest unlogged viewings, and is refused when a log covers them.
+- When a number leaves the status sent with it out of date, such as reaching the total with In progress, the number applies and the status doesn't fail it.
 
 Installed builds keep these limits until the next build: their anime eye does nothing, they have no rows, Home's card opens the page, and their stars and heart on a partway title show the server's reason.
 
 ### AN-901: Expand, then contract
 
 Migrations are additive. Every new NOT NULL column has a database default, so code from before these columns keeps saving after a rollback (TV-901, MC-500).
+The new foreign keys have no database constraint, except a viewing's mark, so that code can still delete a tracking row or a log. A viewing with no row is never read, and a fill whose log is gone reads as undated.
 
 ### AN-902: There is no data to repair
 
 No account on production had an anime tracking row or anime log on 2026-11-03. Re-check that count right before shipping.
+A database holding two rows for one person and title can't take this migration, and production and the test backend had none.
 A stored progress number that does turn up on a development database is worked out as an undated mark the first time the user writes to that title.
 
 ## Acceptance scenarios
@@ -373,7 +387,7 @@ Run each through the API, and through the web, a webhook or an import where one 
 | N-21 | Finished title, Rewatch, tick E1 and E2, then Stop rewatching. | Rewatching read "1 of 25" and "2 of 25". Afterwards Completed with every tick from both passes kept. Stats counted the two again. | AN-600, AN-704 |
 | N-22 | Pause at E8. Tick E8 by mistake, then untick it. | Paused again at E8. | TV-208 |
 | N-23 | Eye on a movie. Then stars. Then Log. | Completed; stars only save; one log. No rows, no number. | AN-002 |
-| N-24 | Import a MAL row with 2 rewatches and a count of 12, Completed. | One tracking row, three passes, no activity. | AN-800 |
+| N-24 | Import a MAL row with 2 rewatches and a count of 12, Completed. | One tracking row, three passes. Its counts and marks create no progress or start. A log the source dates is a log on that date (AC-1). | AN-800 |
 | N-25 | Import with a count of 5, In progress. | Watching, "E6 next · 5 of 12", 5 undated fills. Stats' year unchanged, All Time rises. | AN-800, AN-704 |
 | N-26 | Webhook watched event for E4 of an untracked title. | A tick at the event's time, no question. | AN-801 |
 | N-27 | A progress write of 5 through the API on an untracked title, then 3. | Five ticks dated now, then the two latest gone. | AN-900 |

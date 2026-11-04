@@ -134,11 +134,11 @@ class UserTrackingListView(TrackingListView):
 
 
 def _hide_series_logs(rows, viewer, owner):
-    """Tell another person nothing of a manga's, comic's or anime's logs they can't see (AC-5).
+    """Tell another person nothing of logs they can't see (AC-5): manga, comics, anime.
 
     Those logs can set the rating and the end date, and an anime's its start and last
-    watched day too. The attempts and log counts say the rest, so another person gets where
-    the title stands, as AC-6 has it.
+    watched day too. The attempts and log counts say the rest, so another person gets
+    where the title stands, as AC-6 has it.
     """
     series = [row for row in rows if row["media"]["ref"]["media_type"] in (*SERIES_TYPES, MediaTypes.ANIME.value)]
     if not series:
