@@ -111,7 +111,7 @@ def calendar_datetime(value, *, today=None, user=None):
     """Normalize a user calendar date to a stable UTC date carrier.
 
     With `user`, the calendar is theirs (SW-006): it says what a moment's day is, and
-    what's in the future.
+    what's in the future, unless the server's today is later (user_calendar.log_ceiling).
     """
     if value is None:
         raise ValidationError("A consumption date is required.")
@@ -129,7 +129,7 @@ def calendar_datetime(value, *, today=None, user=None):
             day = date.fromisoformat(str(value))
         except (TypeError, ValueError) as error:
             raise ValidationError("Enter a valid calendar date.") from error
-    if day > today:
+    if day > (user_calendar.log_ceiling(user) if user else today):
         raise ValidationError("Consumption dates cannot be in the future.")
     return datetime.combine(day, time.min, tzinfo=UTC)
 
@@ -139,12 +139,15 @@ def _moment_day(value, user, today):
 
     What the server builds from a date is that date's first or last moment on its own
     zone, as a file's date and the website's are. That stays the date on any calendar,
-    unless it's past the owner's today, which makes it a real moment after all.
+    unless it's past the owner's today, which makes it a real moment after all. A moment
+    that's past the owner's today on their own calendar keeps the server's reading, so
+    it's refused only where it always was.
     """
     local = timezone.localtime(value)
     if user is None or (local.time() in (time.min, time.max) and local.date() <= today):
         return local.date()
-    return user_calendar.day_of(value, user)
+    day = user_calendar.day_of(value, user)
+    return day if day <= today else local.date()
 
 
 def sent_day(value, today):

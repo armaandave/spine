@@ -25,16 +25,6 @@ from social.models import Activity, Comment, ContentLike
 TV_PAGE_FIELDS = ("page_season_number", "page_episode_number")
 
 
-def _log_date(value, user):
-    """Return a log's date, in the future only by its owner's calendar (SW-005).
-
-    A datetime a client sends is a real moment, so it's read on that calendar too.
-    """
-    if isinstance(value, datetime) and not single_weight.is_calendar_datetime(value):
-        value = user_calendar.day_of(value, user)
-    return single_weight.calendar_datetime(value, today=user_calendar.today(user))
-
-
 def tv_write_payload(tv_write, data, *, created):
     """Return the TV keys a log's create or update response adds (plan 2.3.7).
 
@@ -312,7 +302,7 @@ def _create_entry(user, data):
         try:
             rating = single_weight.rating_from_wire(rating)
             if ref["media_type"] != MediaTypes.GAME.value:
-                consumed_at = _log_date(consumed_at, user)
+                consumed_at = single_weight.calendar_datetime(consumed_at, user=user)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
     else:
@@ -522,7 +512,7 @@ def _update_entry(entry, data, tags):
             if "rating" in data:
                 data["rating"] = single_weight.rating_from_wire(data["rating"])
             if "consumed_at" in data and entry.item.media_type != MediaTypes.GAME.value:
-                data["consumed_at"] = _log_date(data["consumed_at"], entry.user)
+                data["consumed_at"] = single_weight.calendar_datetime(data["consumed_at"], user=entry.user)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
         data.pop("visibility", None)

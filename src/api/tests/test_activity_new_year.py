@@ -845,3 +845,207 @@ class DatesTheServerBuiltTests(NewYearBase):
             with self.subTest(zone=zone):
                 created = single_weight.import_logs(user, self.item(MediaTypes.MOVIE.value), rows, source="trakt")
                 self.assertEqual([entry.consumed_at for entry in created], [carrier(day)])
+
+
+# 00:30 on Jan 1 in Los Angeles while it's still Dec 31 there, and 00:30 on Jan 1 in Tokyo
+# at 23:50 on Dec 31 there, which is still Dec 31 in New York.
+MOMENT_PAST_THE_WEST = "2027-01-01T08:30:00Z"
+MOMENT_PAST_THE_EAST = "2026-12-31T15:30:00Z"
+EAST_AT_2350 = datetime(2026, 12, 31, 23, 50, tzinfo=ZoneInfo(TOKYO))
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class AheadOfItsOwnerOnlyTests(NewYearBase):
+    """What the server's calendar allowed with no zone header stays allowed, on that day.
+
+    The website and any other client send no header. A date or moment can then be past its
+    owner's today without being past the server's. With the header the two are one day, so
+    a phone a day ahead stays refused.
+    """
+
+    GRID = tuple(
+        (media_type, False)
+        for media_type in (MediaTypes.GAME.value, MediaTypes.BOOK.value, MediaTypes.MOVIE.value, MediaTypes.MUSIC.value)
+    )
+    TRACKED = (MediaTypes.GAME.value, MediaTypes.BOOK.value)
+
+    titled = LogMomentTests.titled
+    client_for = LogMomentTests.client_for
+    post_log = LogMomentTests.post_log
+    edit_log = LogMomentTests.edit_log
+    assert_log_lands = LogMomentTests.assert_log_lands
+    assert_edit_lands = LogMomentTests.assert_edit_lands
+    browser = DatesTheServerBuiltTests.browser
+    web_log = DatesTheServerBuiltTests.web_log
+
+    def setUp(self):
+        super().setUp()
+        self.west = make_user(calendar=LOS_ANGELES)
+        self.east = make_user(calendar=TOKYO)
+
+    def old_log(self, user, item):
+        """Return a log from weeks ago, on the type's own path."""
+        if single_weight.supports(item):
+            return single_weight.create_log(user, item, consumed_at=date(2026, 12, 1))[0]
+        return LogMomentTests.old_log(self, user, item)
+
+    def module(self, media_type):
+        return game_tracking if media_type == MediaTypes.GAME.value else book_tracking
+
+    def complete(self, user, item, *, header=False):
+        return self.client_for(user, header=header).post(
+            self.url(item, "complete/"),
+            {"completion_date": str(JAN_1), "mutation_id": str(uuid4())},
+            format="json",
+        )
+
+    def test_a_west_account_logging_the_servers_today(self):
+        for sent in (str(JAN_1), MOMENT_PAST_THE_WEST):
+            self.assert_log_lands(self.west, EARLY, sent, JAN_1)
+
+    def test_a_west_account_moving_a_log_to_the_servers_today(self):
+        for sent in (str(JAN_1), MOMENT_PAST_THE_WEST):
+            self.assert_edit_lands(self.west, EARLY, sent, JAN_1)
+
+    def test_a_west_accounts_finish_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        for media_type in self.TRACKED:
+            for started in (False, True):
+                with self.subTest(media_type=media_type, started=started):
+                    item = self.titled(media_type)
+                    if started:
+                        self.module(media_type).start(self.west, item, start_date=date(2026, 12, 1))
+                    response = self.complete(self.west, item)
+                    self.assertEqual(response.status_code, 201, response.data)
+                    self.assertEqual(DiaryEntry.objects.get(user=self.west, item=item).consumed_at, carrier(JAN_1))
+
+    def test_a_west_accounts_journey_edit_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        client = self.client_for(self.west, header=False)
+        for field in ("start_date", "end_date"):
+            with self.subTest(field=field):
+                item = self.titled(MediaTypes.BOOK.value)
+                book_tracking.start(self.west, item, start_date=date(2026, 12, 1))
+                if field == "end_date":
+                    book_tracking.drop(self.west, item, end_date=date(2026, 12, 2))
+                session = BookSession.objects.get(related_book__item=item)
+                response = client.patch(self.url(item, f"journeys/{session.pk}/"), {field: str(JAN_1)}, format="json")
+                self.assertEqual(response.status_code, 200, response.data)
+                session.refresh_from_db()
+                self.assertEqual(getattr(session, field).date(), JAN_1)
+
+    def test_a_west_accounts_playthrough_edit_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        client = self.client_for(self.west, header=False)
+        for field in ("start_date", "end_date"):
+            with self.subTest(field=field):
+                item = self.titled(MediaTypes.GAME.value)
+                game_tracking.start(self.west, item, start_date=date(2026, 12, 1))
+                if field == "end_date":
+                    game_tracking.drop(self.west, item, end_date=date(2026, 12, 2))
+                session = GameSession.objects.get(related_game__item=item)
+                response = client.patch(self.url(item, f"playthroughs/{session.pk}/"), {field: str(JAN_1)}, format="json")
+                self.assertEqual(response.status_code, 200, response.data)
+                session.refresh_from_db()
+                self.assertEqual(getattr(session, field), JAN_1)
+
+    def test_a_west_accounts_book_start_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        item = self.titled(MediaTypes.BOOK.value)
+        self.post(self.client_for(self.west, header=False), item, "actions/start/", start_date=str(JAN_1))
+        self.assertEqual(BookSession.objects.get(related_book__item=item).start_date.date(), JAN_1)
+
+    def test_a_start_sent_as_a_moment_through_the_generic_write(self):
+        """The generic tracking write takes a moment for a book and a game."""
+        for user, moment, sent in ((self.west, EARLY, MOMENT_PAST_THE_WEST), (self.east, EAST_AT_2350, MOMENT_PAST_THE_EAST)):
+            self.clock.set(moment)
+            for media_type in self.TRACKED:
+                with self.subTest(user=user.calendar_timezone, media_type=media_type):
+                    response = self.client_for(user, header=False).put(
+                        self.url(self.titled(media_type)),
+                        {"status": Status.IN_PROGRESS.value, "start_date": sent},
+                        format="json",
+                    )
+                    self.assertLess(response.status_code, 300, response.data)
+
+    def test_a_west_accounts_web_log_and_date_edit_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        for media_type, _ in self.GRID:
+            with self.subTest(media_type=media_type):
+                item = self.titled(media_type)
+                response = self.web_log(self.west, item, JAN_1, mutation_id=str(uuid4()))
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(DiaryEntry.objects.get(user=self.west, item=item).consumed_at, carrier(JAN_1))
+                entry = self.old_log(self.west, self.titled(media_type))
+                edit = self.browser(self.west).post(reverse("update_diary_entry", args=[entry.pk]), {"watch_date": str(JAN_1)})
+                self.assertEqual(edit.status_code, 200, edit.content)
+                entry.refresh_from_db()
+                self.assertEqual(entry.consumed_at, carrier(JAN_1))
+
+    def test_a_west_accounts_web_finish_on_the_servers_today(self):
+        self.clock.set(EARLY)
+        item = self.titled(MediaTypes.BOOK.value)
+        metadata = {"title": item.title, "image": item.image, "max_progress": 400, "total_pages": 400}
+        with mock.patch("app.views.services.get_media_metadata", return_value=metadata):
+            response = self.browser(self.west).post(
+                reverse("log_book_completed", args=[item.source, item.media_id]),
+                {"end_date": "2027-01-01T00:30"},
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(DiaryEntry.objects.get(user=self.west, item=item).consumed_at, carrier(JAN_1))
+
+    def test_an_east_account_logging_a_moment_just_past_its_today(self):
+        self.assert_log_lands(self.east, EAST_AT_2350, MOMENT_PAST_THE_EAST, DEC_31)
+
+    def test_an_east_account_moving_a_log_to_a_moment_just_past_its_today(self):
+        self.assert_edit_lands(self.east, EAST_AT_2350, MOMENT_PAST_THE_EAST, DEC_31)
+
+    def test_what_is_past_both_calendars_stays_refused(self):
+        tomorrow_everywhere = (
+            (self.west, EARLY, str(JAN_2)),
+            (self.west, EARLY, "2027-01-02T09:00:00Z"),
+            (self.east, EAST_AT_2350, str(JAN_1)),
+            (self.east, EAST_AT_2350, "2027-01-01T06:00:00Z"),
+        )
+        for user, moment, sent in tomorrow_everywhere:
+            self.clock.set(moment)
+            for media_type, _ in self.GRID:
+                with self.subTest(user=user.calendar_timezone, media_type=media_type, sent=sent):
+                    item = self.titled(media_type)
+                    self.assertEqual(self.post_log(user, item, sent, header=False).status_code, 400)
+                    self.assertFalse(DiaryEntry.objects.filter(user=user, item=item).exists())
+                    entry = self.old_log(user, self.titled(media_type))
+                    self.assertEqual(self.edit_log(user, entry, sent, header=False).status_code, 400)
+
+    def test_the_web_stays_refused_past_both_calendars(self):
+        for user, moment, sent in ((self.west, EARLY, JAN_2), (self.east, EAST_AT_2350, JAN_1)):
+            self.clock.set(moment)
+            for media_type in (MediaTypes.GAME.value, MediaTypes.MOVIE.value, MediaTypes.MUSIC.value):
+                with self.subTest(user=user.calendar_timezone, media_type=media_type):
+                    item = self.titled(media_type)
+                    response = self.web_log(user, item, sent, mutation_id=str(uuid4()))
+                    self.assertEqual(response.status_code, 400, response.content)
+                    self.assertFalse(DiaryEntry.objects.filter(user=user, item=item).exists())
+                    entry = self.old_log(user, self.titled(media_type))
+                    edit = self.browser(user).post(reverse("update_diary_entry", args=[entry.pk]), {"watch_date": str(sent)})
+                    self.assertEqual(edit.status_code, 400, edit.content)
+
+    def test_a_phone_a_day_ahead_stays_refused(self):
+        for user, moment, sent in (
+            (self.west, EARLY, str(JAN_1)),
+            (self.west, EARLY, MOMENT_PAST_THE_WEST),
+            (self.east, EAST_AT_2350, str(JAN_1)),
+            (self.east, EAST_AT_2350, MOMENT_PAST_THE_EAST),
+        ):
+            self.clock.set(moment)
+            for media_type, _ in self.GRID:
+                with self.subTest(user=user.calendar_timezone, media_type=media_type, sent=sent):
+                    item = self.titled(media_type)
+                    self.assertEqual(self.post_log(user, item, sent, header=True).status_code, 400)
+                    self.assertFalse(DiaryEntry.objects.filter(user=user, item=item).exists())
+                    entry = self.old_log(user, self.titled(media_type))
+                    self.assertEqual(self.edit_log(user, entry, sent, header=True).status_code, 400)
+        for media_type in self.TRACKED:
+            with self.subTest(media_type=media_type):
+                self.clock.set(EARLY)
+                self.assertEqual(self.complete(self.west, self.titled(media_type), header=True).status_code, 400)

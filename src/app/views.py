@@ -2968,7 +2968,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                 # The book's row takes this date too, so it's its owner's day, as a carrier.
                 today = user_calendar.today(request.user)
                 consumed_at = single_weight.calendar_datetime(today, today=today)
-        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.today(request.user):
+        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.log_ceiling(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3182,7 +3182,7 @@ def update_diary_entry(request, entry_id):
         elif not consumed_at:
             # Keep the original datetime to preserve ordering.
             consumed_at = entry.consumed_at
-        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > user_calendar.today(request.user):
+        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > user_calendar.log_ceiling(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         elif not series_tracking.supports(entry.item):
             # A series takes the date as sent: this moment is already the next day east of the server.
