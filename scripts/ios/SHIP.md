@@ -100,7 +100,8 @@ Run from the feature worktree unless a step says otherwise.
    - `docker logs --since 10m spine 2>&1 | grep -iE 'error|traceback'` shows nothing new.
    - If the ship carries a one-time data step ("One-time data steps", below), run it
      now. The user's ship request covers it, except a part the step says waits for
-     the user's request.
+     the user's request. Where the step's section says so, run its dry run and send the
+     user its count first; that message, not step 5's, is the one to say stop to.
    - Once music albums have moved to Apple Music, one moved album's page answers 200
      with `ref.source` `apple_music`.
 9. **Build,** only if the push changed the iOS app; otherwise skip to step 10. If
@@ -141,13 +142,16 @@ here, which is safe on installed code: a save or a Stop from a phone a few secon
 and a save or a Stop after flying west.
 
 **Each step below waits for the user's request; the ship request doesn't cover it.** The
-ship message names each as waiting and prints its dry run's count. Armaan's yes on these two
+ship message (step 5) names each as waiting. It can't print a count yet, because the dry runs
+need the deployed code: the wrapper stops until `0005` is applied. Armaan's yes on these two
 is on record (Activity plan, decision 49), and that yes is the request, so each runs after
-the deploy unless he says stop when that message goes out, and only if its count finds any.
+the deploy unless he says stop to the counts message below, and only if its count finds any.
 
-1. **Dry runs,** after the deploy is verified (step 8):
+1. **Dry runs and the counts message,** after the deploy is verified (step 8):
    `scripts/activity-steps-production.sh undated-reads` and
-   `scripts/activity-steps-production.sh past-restarts`. Each prints counts only.
+   `scripts/activity-steps-production.sh past-restarts`. Each prints counts only. Send him a
+   short message with both counts and what `--apply` will do. If both are zero, the steps
+   are done. Otherwise wait 10 minutes before `--apply`, and don't run it if he says stop.
 2. **Undated imported Reads,** only if the count isn't zero:
    `scripts/activity-steps-production.sh undated-reads --apply`. Goodreads and StoryGraph
    Reads with no date, no log and no mark become marks, on every account. All Time rises and
@@ -159,7 +163,7 @@ the deploy unless he says stop when that message goes out, and only if its count
 The wrapper takes a verified `pg_dump` first and keeps the old ids and values in a 600 file
 in `~/projects/spine-backups/`, never on the container's disk or under `/yamtrack/media`.
 
-**The checks, which change nothing.** `docker exec spine python manage.py
+**The checks, which change no data.** `docker exec spine python manage.py
 compare_activity_numbers` prints today's number beside the calculation's, per account. Its
 `count 14` line must read `empty_saved_on={}`: a writer that forgets its day fails silently.
 Run it after the deploy, and again with `--since <the deploy's moment>` after the first real
