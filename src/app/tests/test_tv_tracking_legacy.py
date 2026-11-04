@@ -335,7 +335,10 @@ class TV703OldSeasonProgressChangeTests(LegacyTestCase):
 
         return [
             (change.item.season_number, change.previous_progress["value"], change.current_progress["value"])
-            for change in ProgressChange.objects.filter(actor=self.user).select_related("item").order_by("id")
+            for change in ProgressChange.objects.filter(actor=self.user)
+            .exclude(current_progress__kind=ProgressChange.STATUS)
+            .select_related("item")
+            .order_by("id")
         ]
 
     def test_tv_703_the_first_tick_on_a_legacy_shows_season_records_a_progress_change(self):

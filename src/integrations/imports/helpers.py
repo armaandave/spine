@@ -260,6 +260,13 @@ def imported_counts(bulk_media_list):
     }
 
 
+def _stamp_anime_rows(media_type, rows):
+    """Say what each imported anime row is on its history row (Anime's change reason)."""
+    if media_type == MediaTypes.ANIME.value:
+        for row in rows:
+            row._change_reason = row.import_reason()
+
+
 def _bulk_create_media(bulk_media_list, user, source=""):
     """Bulk create each media type's rows as the importer built them."""
     for media_type, bulk_media in bulk_media_list.items():
@@ -292,6 +299,7 @@ def _bulk_create_media(bulk_media_list, user, source=""):
             )
             update_episode_references(bulk_media, user)
 
+        _stamp_anime_rows(media_type, bulk_media)
         bulk_create_with_history(
             bulk_media,
             model,
@@ -406,6 +414,7 @@ def bulk_update_media(bulk_media_list, fields_by_media_type, user):
         model = apps.get_model(app_label="app", model_name=media_type)
 
         logger.info("Bulk updating %s", media_type)
+        _stamp_anime_rows(media_type, bulk_media)
         bulk_update_with_history(
             bulk_media,
             model,

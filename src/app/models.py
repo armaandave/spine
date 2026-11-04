@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 
 from django.apps import apps
@@ -30,7 +31,7 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 import app
 import events
 import users
-from app import providers
+from app import providers, user_calendar
 from app.mixins import CalendarTriggerMixin
 from django.core.exceptions import ValidationError
 
@@ -2626,9 +2627,74 @@ class Manga(SeriesMedia):
 
 
 class Anime(Media):
-    """Model for anime."""
+    """Model for anime.
+
+    The generic path writes change rows for its starts and numbers, for installed builds
+    and the old feed, but the calculation's adapter will ignore them and read the history
+    rows. So each history row says what it was in its change reason: `day:<date>`, the
+    date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no day
+    (docs/activity-contract.md, AC-2).
+    """
 
     tracker = FieldTracker()
+    # What only the caller knows. The day the web form sent is the browser's, which the
+    # row can't read back from end_date. The eye is a mark whatever date it carries, and
+    # a media server's play is a real watch whatever status it reached.
+    form_end_day = None
+    is_eye = False
+    is_play = False
+
+    def save(self, *args, **kwargs):
+        """Say what this save was, before saving can turn it into something else."""
+        if not (getattr(self, "_change_reason", None) or "").startswith("log:"):
+            self._change_reason = self._save_reason()
+        super().save(*args, **kwargs)
+
+    def _save_reason(self):
+        """A typed number, a new row above 0 or at In progress, or a status move counts today.
+
+        The eye marks. Setting Completed marks, unless the save sent a date before today:
+        the web form fills today by itself, so a typed today can't be told from it, and
+        nobody watched anything on a date past today. A media server playing the last
+        episode watched it today. Reaching the last episode by typing it is checked here
+        first, so it stays a typed number.
+        """
+        if self.is_eye:
+            return "mark"
+        today = user_calendar.today(self.user)
+        status_moved = self.tracker.has_changed("status")
+        if status_moved and self.status == Status.COMPLETED.value:
+            if self.is_play:
+                return f"day:{today}"
+            sent = (self.form_end_day or self.sent_end_day()) if self.tracker.has_changed("end_date") else None
+            return f"day:{sent}" if sent and sent < today else "mark"
+        if self.pk is None:
+            counts = self.progress > 0 or self.status == Status.IN_PROGRESS.value
+        else:
+            counts = status_moved or self.tracker.has_changed("progress")
+        return f"day:{today}" if counts else "mark"
+
+    def sent_end_day(self):
+        """Return `end_date` as the calendar day it was sent as, or None."""
+        value = self.end_date
+        if not isinstance(value, datetime):
+            return value
+        if timezone.is_naive(value):
+            return value.date()
+        if value.utcoffset() == timedelta(0) and value.time() == time.min:
+            return value.date()
+        # A file's date arrives as midnight on the server's zone.
+        server_time = timezone.localtime(value)
+        return server_time.date() if server_time.time() == time.min else user_calendar.day_of(value, self.user)
+
+    def import_reason(self):
+        """Only a Completed row's end date dates an imported number, and never a future one.
+
+        A row's `progressed_at` and a provider's `updated_at` are when it was written,
+        never when it was watched.
+        """
+        day = self.sent_end_day() if self.status == Status.COMPLETED.value else None
+        return f"day:{day}" if day and day <= user_calendar.today(self.user) else "mark"
 
 
 class Movie(Media):

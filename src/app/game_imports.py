@@ -3,7 +3,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from app import game_tracking, single_weight
+from app import game_tracking, single_weight, user_calendar
 from app.models import DiaryEntry
 
 
@@ -15,10 +15,11 @@ def import_logs(user, item, rows, *, source):
     game = game_tracking._locked_game(user, item)
     preserve_rating = bool(game and game.score is not None and game.rating_source_id is None)
     preserve_like = bool(game and game.like_is_independent)
+    today = user_calendar.today(user)
     ordered = sorted(
         enumerate(rows),
         key=lambda pair: (
-            single_weight.calendar_date(single_weight.calendar_datetime(pair[1]["consumed_at"])),
+            single_weight.calendar_date(single_weight.calendar_datetime(pair[1]["consumed_at"], today=today, user=user)),
             pair[1].get("source_order") if pair[1].get("source_order") is not None else pair[0],
         ),
     )

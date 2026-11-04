@@ -14,7 +14,7 @@ from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import series_tracking, single_weight
+from app import series_tracking, single_weight, user_calendar
 from app.models import (
     Anime,
     DiaryEntry,
@@ -279,7 +279,7 @@ class MALExportImporter:
         ).count()
 
     def _create_diary_entries(self, entries, items):
-        today = timezone.localdate()
+        today = user_calendar.today(self.user)
         candidates = [
             entry
             for entry in entries

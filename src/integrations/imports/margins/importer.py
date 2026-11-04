@@ -8,9 +8,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
-from django.utils import timezone
 
-from app import book_tracking
+from app import book_tracking, user_calendar
 from app.models import (
     Book,
     DiaryEntry,
@@ -54,7 +53,7 @@ class MarginsImporter:
         self.counts = Counter()
 
     def import_data(self):
-        rows = parse_export(self.file)
+        rows = parse_export(self.file, today=user_calendar.today(self.user))
         known = []
         for row in rows:
             if row.state:
@@ -141,7 +140,7 @@ class MarginsImporter:
                 self.user,
                 item,
                 status=Status.IN_PROGRESS.value,
-                start_date=reading.start_date or timezone.localdate(),
+                start_date=reading.start_date or user_calendar.today(self.user),
             )
         if all(row.state == TO_READ for row in rows):
             book_tracking.assign_status(self.user, item, Status.PLANNING.value)

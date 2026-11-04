@@ -51,6 +51,7 @@ from django.db.models.functions import Cast, Coalesce, TruncDate
 
 from api.serializers.common import media_summary_from_item, prime_collection_items
 from api.services import activity as activity_service
+from api.services import activity_rows
 from api.services import filters as filter_service
 from api.services import stats as stats_service
 from app import exposure, user_calendar
@@ -136,6 +137,7 @@ class StatsScope:
         media_type=None,
         audience=None,
         summaries=None,
+        calculations=None,
     ):
         """Hold the validated request; querysets are built on first use."""
         self.owner = owner
@@ -148,6 +150,9 @@ class StatsScope:
             self.__dict__["audience"] = audience
         # Serialized media summaries by Item ID, shared with sibling scopes.
         self._summaries = {} if summaries is None else summaries
+        # The calculation's full result, shared with sibling scopes: one Global request
+        # asks for it many times.
+        self._calculations = {} if calculations is None else calculations
 
     # Who
 
@@ -286,9 +291,54 @@ class StatsScope:
             "media_type": self.media_type,
             "audience": self.__dict__.get("audience"),
             "summaries": self._summaries,
+            "calculations": self._calculations,
         }
         values.update(changes)
         return StatsScope(**values)
+
+    # The calculation
+
+    def calculation(self):
+        """Return the switched-on types' rows and piles for this owner and audience.
+
+        It's the full call, whatever this scope's tab or range, so every section and
+        sibling scope reads one result.
+        """
+        key = (self.owner.pk, self.audience)
+        if key not in self._calculations:
+            self._calculations[key] = activity_rows.rows_for([self.owner], self.viewer)
+        return self._calculations[key]
+
+    @property
+    def calculated_types(self):
+        """The types this scope covers that read the calculation."""
+        return [media_type for media_type in self.primary_types if media_type in activity_rows.CALCULATED_TYPES]
+
+    def calculated_rows(self):
+        """Return the calculation's rows of this scope's types, in its range."""
+        if not self.calculated_types:
+            return []
+        return [
+            row
+            for row in activity_rows.in_range(
+                self.calculation().rows,
+                start_date=self.start_date,
+                end_date=self.end_date,
+            )
+            if row.bucket in self.calculated_types
+        ]
+
+    def moved_days(self):
+        """Return the viewings a log moved, by id, with the day each now lands on."""
+        return self.calculation().moved if MediaTypes.TV.value in activity_rows.CALCULATED_TYPES else {}
+
+    def _calculated_title_ids(self):
+        """Return the titles with a counted row in the range, plus All Time's pile."""
+        ids = {row.title_id for row in self.calculated_rows() if row.counts_title}
+        if self.is_all_time:
+            for media_type in self.calculated_types:
+                ids |= activity_rows.piled(self.calculation().piles, media_type).titles
+        return ids
 
     # Logs
 
@@ -356,17 +406,18 @@ class StatsScope:
         """Match fills a log made: they count on that log's day (STAT-104)."""
         return Q(kind=Episode.Kind.FILL, diary_entry__isnull=False)
 
-    @staticmethod
-    def viewing_has_day_q():
-        return (
+    def viewing_has_day_q(self):
+        has_day = (
             Q(watched_on__isnull=False)
             | (Q(end_date__isnull=False) & ~Q(kind=Episode.Kind.FILL))
             | StatsScope._log_fill_q()
         )
+        moved = self.moved_days()
+        return has_day | Q(id__in=list(moved)) if moved else has_day
 
     def viewing_day(self):
-        """Return a viewing's day: watched_on, a non-fill's end_date, a fill's log."""
-        return Coalesce(
+        """Return a viewing's day: moved, watched_on, a non-fill's end_date, a log."""
+        day = Coalesce(
             F("watched_on"),
             Case(
                 When(
@@ -377,6 +428,14 @@ class StatsScope:
                 default=Value(None, output_field=DateField()),
                 output_field=DateField(),
             ),
+            output_field=DateField(),
+        )
+        moved = self.moved_days()
+        if not moved:
+            return day
+        return Case(
+            *(When(id=viewing_id, then=Value(moved_to, output_field=DateField())) for viewing_id, moved_to in moved.items()),
+            default=day,
             output_field=DateField(),
         )
 
@@ -404,11 +463,20 @@ class StatsScope:
             before = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=self.zone)
             moment &= Q(end_date__lt=before)
         log_days = filter_service.log_day_range_q(self.owner, start_date, end_date, "diary_entry__consumed_at")
-        return (
+        in_range = (
             watched
             | (moment & ~Q(kind=Episode.Kind.FILL))
             | (Q(watched_on__isnull=True) & self._log_fill_q() & log_days)
         )
+        moved = self.moved_days()
+        if not moved:
+            return in_range
+        moved_in = [
+            viewing_id
+            for viewing_id, day in moved.items()
+            if (start_date is None or day >= start_date) and (end_date is None or day <= end_date)
+        ]
+        return (in_range & ~Q(id__in=list(moved))) | Q(id__in=moved_in)
 
     # Titles
 
@@ -519,6 +587,9 @@ class StatsScope:
         if self.counts_tv:
             parts.append(self.viewing_title_ids())
         parts.extend(self.undated_completion_item_ids())
+        calculated = self._calculated_title_ids()
+        if calculated:
+            parts.append(Item.objects.filter(id__in=calculated).values("id"))
         return Q(id__in=union_ids(*parts))
 
     @cached_property
@@ -558,9 +629,12 @@ class StatsScope:
         included, moved forward on net. TV counts only its starts: its ticks already
         are events, as dated viewings on the day watched.
         """
+        calculated = {(row.day, row.title_id, row.bucket) for row in self.calculated_rows() if row.is_event}
         changes = ProgressChange.objects.filter(actor=self.owner, item__media_type__in=self.item_types).exclude(
             Q(item__media_type__in=TV_ITEM_TYPES) & ~Q(current_progress__unit=ProgressChange.START),
         )
+        if self.calculated_types:
+            changes = changes.exclude(item__media_type__in=self.calculated_types)
         if not self.is_all_time:
             changes = changes.filter(
                 created_at__gte=datetime.combine(self.start_date, time.min, tzinfo=self.zone),
@@ -581,7 +655,7 @@ class StatsScope:
             .values_list("event_day", "event_title", "event_bucket")
             .order_by()
         )
-        return set(rows)
+        return set(rows) | calculated
 
     @cached_property
     def events(self):

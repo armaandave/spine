@@ -1,16 +1,15 @@
 """Authoritative book tracking and reading-journey transitions."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from django.utils import timezone
 
 from api.services import stats_cache
-from app import single_weight
+from app import single_weight, user_calendar
 from app.models import (
     Book,
     BookSession,
@@ -22,6 +21,7 @@ from app.models import (
     Tag,
 )
 from app.tasks import update_daily_statistics
+from social.models import ProgressChange
 
 UNSET = object()
 OPEN_STATUSES = {Status.IN_PROGRESS.value, Status.PAUSED.value}
@@ -70,10 +70,20 @@ def supports(value):
     return getattr(value, "media_type", value) == "book"
 
 
-def _calendar_datetime(value, *, required=True):
+def _calendar_datetime(value, user, *, required=True):
     if value is None and not required:
         return None
-    return single_weight.calendar_datetime(value)
+    return single_weight.calendar_datetime(value, user=user)
+
+
+def _carrier(day):
+    return datetime.combine(day, time.min, tzinfo=UTC)
+
+
+def _sent_carrier(value, user):
+    """Return the date a phone sent for a Stop or Restart; a day ahead caps at today."""
+    today = user_calendar.today(user)
+    return _carrier(single_weight.sent_day(value or today, today))
 
 
 def _day(value):
@@ -228,9 +238,16 @@ def _has_prior_completion(book, completed_at, *, exclude_session=None):
     return sessions.exists()
 
 
-def _validate_journey_date(session, value, *, ending=False):
-    moment = _calendar_datetime(value)
+def _validate_journey_date(session, value, user, *, ending=False):
+    """Return a journey's date as a carrier, in order with its start and saves (BK-306).
+
+    The phone's own date is never refused: after a flight west today can be before the
+    start or the last save, so the stored date stays no earlier than those.
+    """
+    moment = _calendar_datetime(value, user)
     day = _day(moment)
+    if day == user_calendar.today(user):
+        return _carrier(max(filter(None, (day, _day(session.start_date), session.progressed_on if ending else None))))
     if session.start_date and day < _day(session.start_date):
         raise ValidationError("Journey end dates cannot predate the start date.")
     if ending and session.progressed_on and day < session.progressed_on:
@@ -332,9 +349,11 @@ def start(user, item, *, start_date=None, mutation_id=None):
             current.status = Status.IN_PROGRESS.value
             current.save(update_fields=["status"])
             _set_book_from_session(book, current)
+            _record_status(user, item, current, ProgressChange.PICKED_BACK_UP)
         return book
 
-    started_at = _calendar_datetime(start_date or timezone.localdate())
+    picks_back_up = _picks_back_up(book)
+    started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
     session = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
@@ -348,6 +367,8 @@ def start(user, item, *, start_date=None, mutation_id=None):
     )
     _set_book_from_session(book, session)
     _record_start(user, item, session)
+    if picks_back_up:
+        _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
 
 
@@ -366,8 +387,8 @@ def import_journey(user, item, *, status, start_date=None, end_date=None):
     session = BookSession.objects.create(
         related_book=book,
         status=status,
-        start_date=_calendar_datetime(start_date, required=False),
-        end_date=_calendar_datetime(end_date, required=False),
+        start_date=_calendar_datetime(start_date, user, required=False),
+        end_date=_calendar_datetime(end_date, user, required=False),
         origin=BookSession.Origin.LIVE,
         previous_tracked=not created,
         previous_status=None if created else book.status,
@@ -391,6 +412,7 @@ def pause(user, item):
     if session.status == Status.IN_PROGRESS.value:
         session.status = Status.PAUSED.value
         session.save(update_fields=["status"])
+        _record_status(user, item, session, ProgressChange.PAUSED)
     _set_book_from_session(book, session)
     return book
 
@@ -402,6 +424,8 @@ def resume(user, item, *, start_date=None, mutation_id=None):
         raise ValidationError("Only a paused book can be resumed.")
     session = _open_session(book)
     if session:
+        if session.status == Status.PAUSED.value:
+            _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
         session.status = Status.IN_PROGRESS.value
         session.save(update_fields=["status"])
         _set_book_from_session(book, session)
@@ -420,11 +444,13 @@ def drop(user, item, *, end_date=None):
     session.status = Status.DROPPED.value
     session.end_date = _validate_journey_date(
         session,
-        end_date or timezone.localdate(),
+        _sent_carrier(end_date, user),
+        user,
         ending=True,
     )
     session.save(update_fields=["status", "end_date"])
     _set_book_from_session(book, session)
+    _record_status(user, item, session, ProgressChange.STOPPED)
     return book
 
 
@@ -446,11 +472,12 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     old.status = Status.DROPPED.value
     old.end_date = _validate_journey_date(
         old,
-        end_date or timezone.localdate(),
+        _sent_carrier(end_date, user),
+        user,
         ending=True,
     )
     old.save(update_fields=["status", "end_date"])
-    started_at = _calendar_datetime(start_date or timezone.localdate())
+    started_at = _sent_carrier(start_date, user)
     new = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
@@ -463,7 +490,8 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, new)
-    _record_start(user, item, new)
+    # Only Restart begins at zero, and its row says so (decision 8).
+    _record_start(user, item, new, began_over=True)
     return book
 
 
@@ -522,8 +550,12 @@ def update_progress(
     else:
         raise ValidationError("progress_type must be pages or percentage.")
 
-    progress_day = _day(_calendar_datetime(progressed_on or timezone.localdate()))
-    if session.start_date and progress_day < _day(session.start_date):
+    today = user_calendar.today(user)
+    progress_day = single_weight.sent_day(progressed_on or today, today)
+    if progress_day == today:
+        # Never refused: after a flight west today can be before the start or last save.
+        progress_day = max(filter(None, (today, _day(session.start_date), session.progressed_on)))
+    elif session.start_date and progress_day < _day(session.start_date):
         raise ValidationError("Progress updates cannot predate the journey start.")
     previous = _journey_progress(session)
     session.pages_read = pages
@@ -560,6 +592,25 @@ def mark_read(user, item):
         book.undated_read_previous_status = None if created else book.status
         book.undated_read_previous_session = None if created else book.current_session
         book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book)
+    return book
+
+
+def mark_imported_read(book):
+    """Give an undated imported Read what the eye writes (one-time step, decision 49).
+
+    mark_read returns at once on a Completed book. The importer made the row, so turning
+    the eye off keeps it, at To Read.
+    """
+    book.completed_manually = True
+    book.undated_read_previous_tracked = True
+    book.undated_read_previous_status = Status.PLANNING.value
+    book.undated_read_previous_session = None
+    book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book)
+
+
+def _save_marked(book):
     book.status = Status.COMPLETED.value
     book.current_session = None
     book.progress = 0
@@ -583,7 +634,6 @@ def mark_read(user, item):
             "end_date",
         ],
     )
-    return book
 
 
 def _restore_marker_state(book):
@@ -808,7 +858,7 @@ def complete(
 ):
     """Atomically create one completion log and complete its journey."""
     rating = single_weight.validate_storage_rating(rating)
-    completed_at = _calendar_datetime(completion_date)
+    completed_at = _calendar_datetime(completion_date, user)
     mutation_id = _mutation(mutation_id)
     if import_source and import_source_id:
         existing_entry = DiaryEntry.objects.select_for_update().filter(
@@ -845,7 +895,7 @@ def complete(
         exclude_session=session,
     )
     if session:
-        completed_at = _validate_journey_date(session, completed_at, ending=True)
+        completed_at = _validate_journey_date(session, completed_at, user, ending=True)
         session.pre_completion_status = session.status
         session.pre_completion_progress = {
             "pages_read": session.pages_read,
@@ -968,6 +1018,7 @@ def update_completion(entry, data, *, tags=UNSET):
         entry.consumed_at = _validate_journey_date(
             session,
             data["consumed_at"],
+            entry.user,
             ending=True,
         )
         session.end_date = entry.consumed_at
@@ -1104,7 +1155,7 @@ def _splice_session(book, session):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     changes = ProgressChange.objects.filter(
         actor=user,
@@ -1223,7 +1274,7 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
         raise ValidationError("Edit a completed journey's date through its diary log.")
     fields = []
     if start_date is not UNSET:
-        started_at = _calendar_datetime(start_date)
+        started_at = _calendar_datetime(start_date, user)
         if session.progressed_on and _day(started_at) > session.progressed_on:
             raise ValidationError("Journey starts cannot follow their latest progress update.")
         if session.end_date and _day(started_at) > _day(session.end_date):
@@ -1231,7 +1282,7 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
         session.start_date = started_at
         fields.append("start_date")
     if end_date is not UNSET:
-        session.end_date = _validate_journey_date(session, end_date, ending=True)
+        session.end_date = _validate_journey_date(session, end_date, user, ending=True)
         fields.append("end_date")
     if fields:
         session.save(update_fields=fields)
@@ -1282,7 +1333,7 @@ def remove_tracking(user, item):
 
 
 def _record_progress_change(user, item, previous, current):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     change = ProgressChange.objects.create(
         actor=user,
@@ -1295,6 +1346,7 @@ def _record_progress_change(user, item, previous, current):
             "journey_id": current["journey_id"],
         },
         current_progress=current,
+        saved_on=user_calendar.today(user),
     )
     Activity.objects.create(
         actor=user,
@@ -1306,11 +1358,29 @@ def _record_progress_change(user, item, previous, current):
     )
 
 
-def _record_start(user, item, session):
+def _record_start(user, item, session, **context):
     """Record a new journey; deleting the journey drops it with its progress."""
-    from social.models import ProgressChange
+    ProgressChange.record_start(user, item, journey_id=session.pk, **context)
 
-    ProgressChange.record_start(user, item, journey_id=session.pk)
+
+def _record_status(user, item, session, move):
+    """Record a status move the person chose.
+
+    Imports, marks, restores and Restart record none (AC-1).
+    """
+    ProgressChange.record_status(user, item, move, journey_id=session.pk)
+
+
+def _picks_back_up(book):
+    """Return whether a new journey carries on from a read that was stopped (AC-1).
+
+    Paused or Did Not Finish on a book never started has nothing to pick back up. Nor has
+    one finished, whose next journey is a new read.
+    """
+    if book.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+        return False
+    last = book.reading_sessions.order_by("-id").first()
+    return last.status == Status.DROPPED.value if last else bool(book.progress)
 
 
 def is_true_reread(session):

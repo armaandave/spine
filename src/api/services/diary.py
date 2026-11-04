@@ -302,7 +302,7 @@ def _create_entry(user, data):
         try:
             rating = single_weight.rating_from_wire(rating)
             if ref["media_type"] != MediaTypes.GAME.value:
-                consumed_at = single_weight.calendar_datetime(consumed_at)
+                consumed_at = single_weight.calendar_datetime(consumed_at, user=user)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
     else:
@@ -512,7 +512,7 @@ def _update_entry(entry, data, tags):
             if "rating" in data:
                 data["rating"] = single_weight.rating_from_wire(data["rating"])
             if "consumed_at" in data and entry.item.media_type != MediaTypes.GAME.value:
-                data["consumed_at"] = single_weight.calendar_datetime(data["consumed_at"])
+                data["consumed_at"] = single_weight.calendar_datetime(data["consumed_at"], user=entry.user)
         except DjangoValidationError as error:
             raise serializers.ValidationError({"detail": error.messages[0]}) from error
         data.pop("visibility", None)

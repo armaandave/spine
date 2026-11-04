@@ -2105,7 +2105,7 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                 item.save(update_fields=["total_pages"])
         
     # Determine default date for logging
-    default_date = timezone.localdate()
+    default_date = user_calendar.today(request.user)
     tv_defaults = None
     if tv_tracking.supports(item):
         # The server's composer defaults for this target: date and Rewatch (TV-404).
@@ -2964,7 +2964,11 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
             if (single_weight.supports(media_type) or game_tracking.supports(media_type)):
                 return JsonResponse({"error": "A consumption date is required."}, status=400)
             consumed_at = timezone.now()
-        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > timezone.localdate():
+            if media_type == MediaTypes.BOOK.value:
+                # The book's row takes this date too, so it's its owner's day, as a carrier.
+                today = user_calendar.today(request.user)
+                consumed_at = single_weight.calendar_datetime(today, today=today)
+        elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.log_ceiling(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:
             # Convert date to datetime at end of day to allow multiple entries per day
@@ -3178,9 +3182,10 @@ def update_diary_entry(request, entry_id):
         elif not consumed_at:
             # Keep the original datetime to preserve ordering.
             consumed_at = entry.consumed_at
-        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > timezone.localdate():
+        elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > user_calendar.log_ceiling(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
-        else:
+        elif not series_tracking.supports(entry.item):
+            # A series takes the date as sent: this moment is already the next day east of the server.
             # Convert date to datetime at end of day to allow multiple entries per day
             consumed_at = timezone.datetime.combine(consumed_at, timezone.datetime.max.time())
             consumed_at = timezone.make_aware(consumed_at)
@@ -3508,10 +3513,12 @@ def log_book_completed(request, source, media_id):
 
         from app import book_tracking
 
+        # The day the browser sent: Django read its wall clock on the server's zone.
+        end_date = form.cleaned_data.get('end_date')
         book_instance, _ = book_tracking.complete(
             request.user,
             item,
-            completion_date=form.cleaned_data.get('end_date') or timezone.localdate(),
+            completion_date=timezone.localtime(end_date).date() if end_date else user_calendar.today(request.user),
             rating=form.cleaned_data.get('score'),
             review=form.cleaned_data.get('notes', ''),
             mutation_id=uuid4(),

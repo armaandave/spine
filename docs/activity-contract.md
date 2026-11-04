@@ -35,7 +35,19 @@ hearts, follows, or adding to a list.
 - Starts are recorded in `social.ProgressChange` as a step of kind `start`; they
   never count as a title's latest progress. Deleting a book journey, a manga or comic
   attempt, or a game playthrough deletes its start and progress with it.
-- The day is the local day the progress was recorded.
+- A status move the person chooses is recorded the same way, as a step of kind
+  `status` with value 0 in previous and current and its `move`: `paused`, `stopped`
+  or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
+  never from an import, a mark, a restore or Restart. It adds nothing to any number,
+  and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
+  row.
+- The day is the local day the progress was recorded. Each save also stores
+  `saved_on`, the phone's date when saved, which nothing reads yet.
+- Anime's generic path writes start and progress steps, for installed builds and the
+  old feed, but the calculation's adapter will ignore them and read anime's history
+  rows. So each history row says what it was in its change reason: `day:<date>`, the
+  date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no
+  day. Nothing reads these yet either.
 
 ## AC-3: Newest date first
 
@@ -108,7 +120,7 @@ not read by these endpoints.
 `status` is the tracking status, and `progress_label` says how far they got, for
 example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log.
 
-## AC-6: Likes and comments
+## AC-7: Likes and comments
 
 - Anyone who can see an item can like it and comment on it. Comments have no replies.
 - A comment's author, the item's owner, and admins can delete a comment. Nobody across
@@ -119,3 +131,8 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 - `object.id` of a day's progress addresses it: `/api/v1/progress/<id>/` is its page,
   with `like/` and `comments/` under it. A log uses `/api/v1/diary/<id>/like/` and
   `comments/`. `DELETE /api/v1/comments/<id>/` removes a comment.
+
+## Review status
+
+AC-2's status moves, `began_over`, `saved_on` and anime's change reasons are provisional
+until the phone test of Activity's first phase accepts them.

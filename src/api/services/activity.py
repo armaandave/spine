@@ -301,10 +301,12 @@ def _progress_days(changes):
     """Group progress changes into one row per person, title, and day.
 
     A show's and its seasons' changes count toward the show. Each unit's net change is
-    summed, and a day that didn't move forward is left out.
+    summed, and a day that didn't move forward is left out. Only rows in a counted unit
+    enter the group: a status move can't change a day's id or its place in the order.
     """
     return (
-        changes.annotate(
+        changes.filter(current_progress__unit__in=UNITS)
+        .annotate(
             day=TruncDate("created_at", tzinfo=timezone.get_current_timezone()),
             title_key=Case(
                 When(
