@@ -473,19 +473,36 @@ def _walk_journeys(title, sessions, saves, total, zone):
     return by_session
 
 
-def _read_before_mark(recorded_id, current_id, journeys, by_journey):
+def _marked_at(tracking):
+    """Return when this title's mark last went on, by its history rows in save order.
+
+    None when no row says so: migration 0075 and the undated Reads step write none.
+    """
+    marked_at = None
+    marked = False
+    for now_marked, moment in tracking.history.order_by("history_id").values_list("completed_manually", "history_date"):
+        if now_marked and not marked:
+            marked_at = moment
+        marked = now_marked
+    return marked_at
+
+
+def _read_before_mark(tracking, recorded_id, current_id, journeys, by_journey):
     """Return the stopped read a mark came after, or None.
 
-    A direct To Read or Paused clears the mark's record of it, so with no record it's
-    the last journey from before the mark. A journey begun after a Read came after the
-    mark, and so did one the title still sits on: a mark takes the title off its
-    journey.
+    A direct To Read or Paused clears the mark's record of it, so with no record it's the
+    last journey from before the mark, by moment, which no status move can change. A
+    journey begun after a Read came after the mark, and so did one the title still sits
+    on: a mark takes the title off its journey.
     """
     if recorded_id:
         return by_journey.get(recorded_id)
+    if not journeys:
+        return None
+    marked_at = _marked_at(tracking)
     last = None
     for journey in journeys:
-        if journey.previous_status == Status.COMPLETED.value:
+        if journey.previous_status == Status.COMPLETED.value or (marked_at and journey.created_at > marked_at):
             break
         last = journey
     if last is None or last.status != Status.DROPPED.value or current_id == last.pk:
@@ -510,7 +527,7 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
     if book and book.completed_manually:
         # A mark after a stop holds only what that read doesn't: a place with no day is
         # in the pile already.
-        stopped = _read_before_mark(book.undated_read_previous_session_id, book.current_session_id, own, by_session)
+        stopped = _read_before_mark(book, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
         held = stopped.counted.value if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
     elif book and book.progress and not own and not (entries and book.status == Status.COMPLETED.value):
@@ -853,7 +870,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             _log_on_read(title, alone, entry, total, zone, sees)
             title.take(alone)
     if marked:
-        stopped = _read_before_mark(row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
+        stopped = _read_before_mark(row, row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
         held = stopped.counted.value if stopped else ZERO
         if opening_over_mark is not None:
             base = opening_over_mark

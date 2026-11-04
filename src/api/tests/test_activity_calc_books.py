@@ -991,6 +991,81 @@ class PileTests(BookCalcBase):
         self.assertEqual(self.calc(piles=False).piles, [])
 
 
+class StatusMovesAroundAMarkTests(BookCalcBase):
+    """A status move adds nothing to any number (decision 21), whenever the mark came."""
+
+    def read_after_the_eye(self, name):
+        item = self.book(name)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.assert_numbers(0, 200, 600)
+        return item
+
+    def test_to_read_after_a_read_begun_after_the_eye(self):
+        item = self.read_after_the_eye("to-read")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.assert_numbers(0, 200, 600)
+
+    def test_a_heart_after_a_read_begun_after_the_eye(self):
+        item = self.read_after_the_eye("heart")
+        self.do(book_tracking.set_like, item, d(2026, 2, 4), liked=True)
+        self.assert_numbers(0, 200, 600)
+
+    def test_currently_reading_after_a_stop_to_read_and_the_eye(self):
+        item = self.book("after-the-eye")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 2))
+        self.assert_numbers(200, 0, 400)
+        self.do(book_tracking.assign_status, item, d(2026, 1, 3), Status.PLANNING.value)
+        self.assert_numbers(200, 0, 400)
+        self.begin(item, d(2026, 2, 1))
+        self.assert_numbers(200, 0, 400)
+
+    def test_a_mark_taken_off_and_put_on_again_goes_by_the_last_one(self):
+        item = self.book("twice")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.do(book_tracking.undo_read, item, d(2026, 1, 2))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.assert_numbers(0, 200, 400)
+
+    def test_a_mark_with_no_history_row_goes_by_the_status_chain(self):
+        """Migration 0075 and the undated Reads step flag a book with no history row."""
+        item = self.book("no-history")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        Book.objects.filter(item=item).update(status=Status.COMPLETED.value, current_session=None, completed_manually=True)
+        self.assert_numbers(200, 0, 400)
+
+    def test_on_a_manga_too(self):
+        manga = self.item(MediaTypes.MANGA.value, "manga", title="manga")
+        self.set_item(manga, series_total=400)
+
+        def pile():
+            calculation = rows_for([self.owner], self.owner, types=[MediaTypes.MANGA.value])
+            return int(piled(calculation.piles, MediaTypes.MANGA.value).amount)
+
+        self.do(series_tracking.mark_read, manga, d(2026, 1, 1))
+        self.do(series_tracking.assign_status, manga, d(2026, 1, 2), Status.PLANNING.value)
+        self.do(series_tracking.start, manga, d(2026, 2, 1))
+        with self.on(d(2026, 2, 2)):
+            series_tracking.update_progress(self.owner, manga, value=200)
+        self.do(series_tracking.drop, manga, d(2026, 2, 3))
+        before = pile()
+        self.do(series_tracking.assign_status, manga, d(2026, 2, 4), Status.PLANNING.value)
+        self.assertEqual(pile(), before)
+
+
 class LegacyJourneyTests(BookCalcBase):
     """Rows migration 0075 left: a Completed journey with no log, which is no reading."""
 
