@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 # Show Z's choice queues its calendar on commit through events.tasks, which the served
@@ -82,15 +82,17 @@ BOOKS = {
     "Friend": 400,
 }
 # On the list: J and V are untouched until their rows, so they aren't in the Library.
+# They share a length and tiles with no title on them, so the list's order tells them
+# apart: J, V, X, first.
 LISTED_BOOKS = ("J", "V", "X")
+# What the sheet's last row has the phone save on, and what print-rows reads.
+STORED_TITLES = ("X", "Y", "Z", "W")
 OTHER_TITLES = {
     MediaTypes.GAME.value: "Y",
     MediaTypes.MANGA.value: "W",
     MediaTypes.COMIC.value: "CO",
     MediaTypes.ANIME.value: "AN",
     MediaTypes.MOVIE.value: "F1",
-# What the sheet's last row has the phone save on, and what print-rows reads.
-STORED_TITLES = ("X", "Y", "Z", "W")
     MediaTypes.MUSIC.value: "P1",
 }
 
@@ -200,8 +202,8 @@ def _make_titles(dev):
         )
     titles.append(_make_show())
     listed = CustomList.objects.create(owner=dev, name=LIST_NAME)
-    for item in titles:
-        CustomListItem.objects.create(custom_list=listed, item=item)
+    for position, item in enumerate(titles, start=1):
+        CustomListItem.objects.create(custom_list=listed, item=item, position=position)
 
 
 def _make_show():

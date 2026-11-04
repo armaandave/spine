@@ -540,25 +540,6 @@ class StoredRowsTests(CheckpointBase):
         self.assertEqual(len(lines), 2)
         self.assertTrue(all(line.startswith("2026-11-03 Book X start") for line in lines), lines)
         self.assertIn("began_over", lines[1])
-
-    def post(self, media_type, name, suffix, body=None):
-        response = self.phone().post(f"/api/v1/tracking/manual/{media_type}/{seed.media_id(name)}/{suffix}", body or {}, format="json")
-        self.assertEqual(response.status_code, 200, response.content)
-        return response.json()
-
-    def test_game_y(self):
-        today = TODAY.isoformat()
-        state = self.step(self.post, "game", "Y", "actions/start/", {"mutation_id": str(uuid4()), "start_date": today})
-        playthrough = state["game"]["current_playthrough"]["id"]
-        response = self.step(
-            self.phone().patch,
-            f"/api/v1/tracking/manual/game/{seed.media_id('Y')}/playthroughs/{playthrough}/",
-            {"total_minutes": 120, "progressed_on": today},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.step(self.post, "game", "Y", "actions/drop/", {"mutation_id": str(uuid4()), "end_date": today})
-        self.assertEqual(
         self.assertNotIn("NOT TODAY", printed.getvalue())
 
     def printed_rows(self):
@@ -592,11 +573,31 @@ class StoredRowsTests(CheckpointBase):
         lines = self.printed_rows()
         self.assertEqual(len(lines), 1, lines)
         self.assertIn("Book X", lines[0])
+
+    def post(self, media_type, name, suffix, body=None):
+        response = self.phone().post(f"/api/v1/tracking/manual/{media_type}/{seed.media_id(name)}/{suffix}", body or {}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_game_y(self):
+        today = TODAY.isoformat()
+        state = self.step(self.post, "game", "Y", "actions/start/", {"mutation_id": str(uuid4()), "start_date": today})
+        playthrough = state["game"]["current_playthrough"]["id"]
+        response = self.step(
+            self.phone().patch,
+            f"/api/v1/tracking/manual/game/{seed.media_id('Y')}/playthroughs/{playthrough}/",
+            {"total_minutes": 120, "progressed_on": today},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.step(self.post, "game", "Y", "actions/drop/", {"mutation_id": str(uuid4()), "end_date": today})
+        self.assertEqual(
             self.rows(seed.title(MediaTypes.GAME.value, "Y")),
             [("start", None, False), ("minutes", None, False), ("status", "stopped", False)],
         )
 
     def test_show_z_ticked_and_unticked(self):
+        """tickTVEpisode, then untickTVEpisode naming the viewing the episode's state names."""
         show = seed.show_z()
         episode = {"season_number": 1, "episode_number": 1}
         self.step(self.post, "tv", "Z", "actions/tick/", {**episode, "mutation_id": str(uuid4())})
@@ -620,7 +621,6 @@ class StoredRowsTests(CheckpointBase):
                 ("start", None, False),
                 ("count", None, False),
                 ("status", "paused", False),
-        """tickTVEpisode, then untickTVEpisode naming the viewing the episode's state names."""
                 ("status", "picked back up", False),
             ],
         )
@@ -679,6 +679,7 @@ class SeedScriptTests(SimpleTestCase):
         self.write_script(checkout / "scripts" / "ios" / "test-backend.sh", status)
         environment = {key: value for key, value in os.environ.items() if key != "DB_HOST"}
         environment["PATH"] = f"{self.bin}{os.pathsep}{environment['PATH']}"
+        environment.update(extra)
         return subprocess.run(  # noqa: S603
             ["bash", str(checkout / "scripts" / "ios" / self.SCRIPT.name)],  # noqa: S607
             cwd=checkout,
@@ -694,7 +695,6 @@ class SeedScriptTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Ran seed", result.stdout)
         self.assertIn("never from search", result.stdout)
-
         self.assertIn("Book J, Book V and Book X, in that order", result.stdout)
         self.assertIn("until Wed 21:40", result.stdout)
 
@@ -718,6 +718,7 @@ class SeedScriptTests(SimpleTestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("DB_HOST", result.stderr)
         self.assertFalse(self.seeded())
+
     def test_the_test_backends_own_checkout_is_refused_though_its_served(self):
         own = self.worktree(".claude/test-backend")
         result = self.run_it(own, served=own)

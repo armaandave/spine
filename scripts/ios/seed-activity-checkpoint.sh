@@ -21,8 +21,10 @@ die() { echo "error: $*" >&2; exit 1; }
 [ "$top" != "$main_root" ] || die "the main checkout's database holds personal data. Run this from a feature worktree."
 [ "$top" != "$main_root/.claude/test-backend" ] || die "that's the test backend's own checkout, and its lasting test database. Run this from a feature worktree."
 [ -z "${DB_HOST:-}" ] || die "DB_HOST is set, which would point this at Postgres. Unset it."
-served=$("$script_dir/test-backend.sh" status | sed -n 's/^SERVED_CHECKOUT: //p')
+backend=$("$script_dir/test-backend.sh" status)
+served=$(echo "$backend" | sed -n 's/^SERVED_CHECKOUT: //p')
 [ "$served" = "$top" ] || die "the test backend is serving $served, not $top. Run: scripts/ios/test-backend.sh use 12"
+until_when=$(echo "$backend" | sed -n 's/^SERVING: .*, until //p')
 
 year=$(date +%Y)
 [ "$year" = 2026 ] || echo "warning: this sheet's steps put \"today\" in 2026, and today is $year. A today step lands in another column."
@@ -40,3 +42,5 @@ vendor=$(uv run --locked python manage.py shell -c 'from django.db import connec
 uv run --locked python manage.py shell -c "from api.tests.activity_checkpoint_seed import STEPS; STEPS['$step']()"
 echo "Ran $step. Pull to refresh on Stats, Home and the list: the app holds pages in memory."
 echo "Open the sheet's books from Home's In progress, the Library or the Checkpoint titles list, never from search: it finds real books of the same name."
+echo "On that list the first three tiles are Book J, Book V and Book X, in that order. They look alike, and they're all 300 pages, so a wrong tap gives the same number."
+echo "The test backend serves this until ${until_when:-you release it}. Then it goes back to myapp-main by itself and what was written is dropped, so reseed and restart the sheet from the top."

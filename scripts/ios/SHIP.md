@@ -188,6 +188,11 @@ decode them and never show them: a book's `known` and `total` count titles, `yea
 `header.titles` count reading with no log, and a book's `progress` after a pick-up is its
 place (BK-305).
 
+**The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
+run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 1 sheet.
+The default of 4 hours can run out mid-sheet, and the phone would read another database with no
+warning.
+
 **Before you say this is ready to ship:** the speed gate must have passed on this branch (plan
 5.2, against section 6's limits): a Stats miss on Global and Books, All Time and one year,
 median of 5, on a throwaway Postgres, under 1.5 seconds and under 2 times today's. This phase
