@@ -64,7 +64,7 @@ class CompareTests(BookCalcBase):
         self.assertIn("pile=None->0", everything)
 
     def test_known_says_what_the_reader_says_when_an_older_row_is_unknown(self):
-        """A percent with no length, then pages: the newest row is known, the title isn't."""
+        """A percent with no length, then pages: only the newest row is known."""
         item = self.book("no-length", pages=None)
         self.begin(item, d(2026, 3, 1))
         self.save(item, 25, d(2026, 3, 2), kind="percentage")
@@ -352,7 +352,7 @@ class BadRowTests(BookCalcBase):
         self.assert_every_count_reports(lines)
 
     def test_todays_events_failing_leaves_the_rest_of_the_account(self):
-        """Postgres refuses their cast of a bad value, so they get a step of their own."""
+        """Postgres refuses their cast of a bad value, so they get their own step."""
         item = self.book("events")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 40, d(2026, 3, 5))

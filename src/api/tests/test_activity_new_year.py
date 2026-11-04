@@ -847,8 +847,8 @@ class DatesTheServerBuiltTests(NewYearBase):
                 self.assertEqual([entry.consumed_at for entry in created], [carrier(day)])
 
 
-# 00:30 on Jan 1 in Los Angeles while it's still Dec 31 there, and 00:30 on Jan 1 in Tokyo
-# at 23:50 on Dec 31 there, which is still Dec 31 in New York.
+# 00:30 on Jan 1 in Los Angeles while it's still Dec 31 there, and 00:30 on Jan 1 in
+# Tokyo at 23:50 on Dec 31 there, which is still Dec 31 in New York.
 MOMENT_PAST_THE_WEST = "2027-01-01T08:30:00Z"
 MOMENT_PAST_THE_EAST = "2026-12-31T15:30:00Z"
 EAST_AT_2350 = datetime(2026, 12, 31, 23, 50, tzinfo=ZoneInfo(TOKYO))
@@ -856,11 +856,11 @@ EAST_AT_2350 = datetime(2026, 12, 31, 23, 50, tzinfo=ZoneInfo(TOKYO))
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class AheadOfItsOwnerOnlyTests(NewYearBase):
-    """What the server's calendar allowed with no zone header stays allowed, on that day.
+    """What the server's calendar allowed with no zone header stays allowed, that day.
 
-    The website and any other client send no header. A date or moment can then be past its
-    owner's today without being past the server's. With the header the two are one day, so
-    a phone a day ahead stays refused.
+    The website and any other client send no header. A date or moment can then be past
+    its owner's today without being past the server's. With the header the two are one
+    day, so a phone a day ahead stays refused.
     """
 
     GRID = tuple(
