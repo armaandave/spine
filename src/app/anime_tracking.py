@@ -1063,6 +1063,24 @@ def _leave_library(ctx):
     ctx.changed = True
 
 
+def _forget_worked_out_total(ctx):
+    """A total a log or mark worked out on a manual title goes when that write is undone (AN-100).
+
+    It's the last episode watched, and nothing else could have set it once no log and no
+    mark that finishes a title is left. A number the owner wrote past what's watched stays.
+    """
+    total = ctx.listing.total
+    if ctx.item.source != Sources.MANUAL.value or total is None or total != max(ctx.calc.viewed_any, default=0):
+        return
+    finishing_marks = AnimeMark.objects.filter(
+        anime=ctx.row,
+        origin__in=(AnimeMark.Origin.EYE, AnimeMark.Origin.OPINION),
+    )
+    if not ctx.facts.logs and not finishing_marks.exists():
+        ctx.listing = replace(ctx.listing, total=None)
+        ctx.invalidate()
+
+
 def _after_removal(ctx, *, status_follows=False):
     """Apply TV-208 and TV-003 after an undo removed facts; return True when it left.
 
@@ -1071,6 +1089,7 @@ def _after_removal(ctx, *, status_follows=False):
     """
     AnimeMark.objects.filter(anime=ctx.row, fills__isnull=True).delete()
     ctx.reload()
+    _forget_worked_out_total(ctx)
     row = ctx.row
     recorded = bool(ctx.facts.viewings or ctx.facts.logs)
     if row.ended_choice and not row.choice:

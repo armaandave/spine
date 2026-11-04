@@ -1795,6 +1795,77 @@ class ManualTitleTests(AnimeTestCase):
         row = self.row(item)
         self.assertEqual((row.status, row.progress), ("Completed", 2))
 
+    def assert_no_total(self, item, watched):
+        row = self.row(item)
+        self.assertEqual((row.status, row.finished, row.aired_count), ("In progress", False, None))
+        state = self.state(item)
+        self.assertEqual((state["total"], state["aired_count"], state["watched_count"]), (None, None, watched))
+
+    def test_an_100_a_total_a_log_worked_out_goes_with_the_log(self):
+        item = self.manual()
+        self.tick(item, 1, 2, 3)
+        entry = self.log(item).entry
+        self.assertEqual((self.row(item).status, self.state(item)["total"]), ("Completed", 3))
+        anime_tracking.delete_log(self.user, entry)
+        self.assert_no_total(item, 3)
+        self.tick(item, 4)
+        self.assertEqual(self.row(item).progress, 4)
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1, 2, 3, 4, 5])
+
+    def test_an_100_the_fills_of_a_log_go_with_the_total_it_worked_out(self):
+        item = self.manual()
+        self.tick(item, 3)
+        entry = self.log(item).entry
+        self.assertEqual(self.watched(item), {1, 2, 3})
+        anime_tracking.delete_log(self.user, entry)
+        self.assert_no_total(item, 1)
+        self.assertEqual(self.watched(item), {3})
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1, 2, 3, 4])
+
+    def test_an_100_a_total_the_eye_worked_out_goes_when_its_mark_is_undone(self):
+        item = self.manual()
+        self.tick(item, 3)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual((self.row(item).status, self.state(item)["total"]), ("Completed", 3))
+        anime_tracking.unmark(self.user, item)
+        self.assert_no_total(item, 1)
+        self.tick(item, 4)
+        self.assertEqual(self.watched(item), {3, 4})
+
+    def test_an_100_another_log_or_mark_keeps_a_worked_out_total(self):
+        item = self.manual()
+        self.tick(item, 1, 2, 3)
+        first = self.log(item).entry
+        second = self.log(item).entry
+        anime_tracking.delete_log(self.user, first)
+        self.assertEqual((self.row(item).status, self.state(item)["total"]), ("Completed", 3))
+        anime_tracking.delete_log(self.user, second)
+        self.assert_no_total(item, 3)
+
+        marked = Item.objects.create(
+            source="manual",
+            media_type="anime",
+            media_id="manual-2",
+            title="Mine too",
+            image="https://example.com/p.jpg",
+        )
+        self.tick(marked, 3)
+        anime_tracking.mark_watched(self.user, marked)
+        entry = self.log(marked).entry
+        anime_tracking.delete_log(self.user, entry)
+        self.assertEqual((self.row(marked).status, self.state(marked)["total"]), ("Completed", 3))
+
+    def test_an_100_a_number_the_owner_wrote_stays_when_a_mark_is_undone(self):
+        item = self.manual()
+        self.tick(item, 1)
+        self.written(item, status="Completed", progress=12)
+        self.assertEqual(self.state(item)["total"], 12)
+        anime_tracking.unmark(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.up_next_episode, row.aired_count), ("In progress", 1, 2, 12))
+        with self.assertRaises(TVInvalid):
+            self.tick(item, 13)
+
     def test_an_100_a_number_past_the_ceiling_is_still_refused(self):
         item = self.manual()
         with self.assertRaises(TVInvalid):
