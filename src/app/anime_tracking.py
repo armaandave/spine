@@ -941,7 +941,7 @@ def _reconcile(ctx):  # noqa: C901
         written["status"] = calc.status
     first_before, last_before = ctx.dates_before
     written["start_date"] = _start_date(row.start_date, first_before, calc.first_dated_at)
-    written["end_date"] = _end_date(row.end_date, last_before, calc.last_dated_at, calc.status)
+    written["end_date"] = _end_date(row.end_date, last_before, calc.last_dated_at, calc.status or row.status)
     ctx.dates_before = (calc.first_dated_at, calc.last_dated_at)
     if row.progress != calc.watched_count:
         written["progress"] = calc.watched_count
@@ -974,7 +974,15 @@ def _reconcile(ctx):  # noqa: C901
     if anything:
         # The row's state is written with update() and bulk writes (STAT-006).
         stats_cache.bump_user(ctx.user)
-    if anything or row.reconciled_at is None:
+    # With no copy to go on, a row never worked out still can't be: its stored number waits
+    # for the real ones (AN-902).
+    can_work_out = (
+        row.reconciled_at is not None
+        or ctx.listing.fetched_at is not None
+        or ctx.item.source == Sources.MANUAL.value
+        or ctx.entry_point == IMPORT
+    )
+    if can_work_out and (anything or row.reconciled_at is None):
         cache_changes["reconciled_at"] = ctx.now
     if anything:
         cache_changes["state_version"] = _version_after(row.state_version, ctx.now)

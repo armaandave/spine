@@ -836,8 +836,7 @@ class CalendarJobTests(AnimeTestCase):
         # Through the real read: the calls for 25 and for 5 answer, the last aired one fails.
         items = [self.title(total=12, status="Airing") for _ in range(30)]
         on_a_break = items[-1]
-        first_read = anime_tracking.refresh_after_calendar
-        first_read(items[-1:])
+        anime_tracking.refresh_after_calendar(items[-1:])
         before = AnimeListing.objects.get(item=on_a_break)
         self.clock.advance(days=1)
         media = [
@@ -1095,6 +1094,56 @@ class NoCopyNeededTests(AnimeTestCase):
         anime_tracking.set_rating(self.user, item, None)
         anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
         self.assert_no_call()
+
+    def stored_completed(self, **values):
+        # A file says it's finished and how many isn't known yet: a stored Completed (AN-902).
+        item = self.title(total=12)
+        anime_tracking.import_title(self.user, item, status="Completed", count=0, **values)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.reconciled_at), ("Completed", 0, None))
+        return item
+
+    def test_an_902_a_write_with_no_copy_doesnt_work_a_stored_completed_out(self):
+        item = self.stored_completed()
+        self.fake.fail()
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
+        self.fake.recover()
+        row = self.row(item)
+        self.assertEqual((row.notes, row.status, row.reconciled_at), ("Mine", "Completed", None))
+        anime_tracking.refresh_after_calendar([item])
+        state = self.state(item)
+        self.assertEqual((state["status"], state["watched_count"], state["aired_count"]), ("Completed", 12, 12))
+        self.assertNotEqual(state["eye"]["tap"], "mark")
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Still mine"}, entry_point=anime_tracking.WEB)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 12))
+        self.assertIsNotNone(row.reconciled_at)
+        self.assertEqual(self.watched(item), set(range(1, 13)))
+
+    def test_an_902_clearing_stars_or_an_untick_with_no_copy_doesnt_either(self):
+        for write in (
+            lambda item: anime_tracking.set_rating(self.user, item, None),
+            lambda item: anime_tracking.set_like(self.user, item, False),
+            lambda item: anime_tracking.untick(self.user, item, 1),
+        ):
+            item = self.stored_completed()
+            self.fake.fail()
+            write(item)
+            self.fake.recover()
+            self.assertIsNone(self.row(item).reconciled_at)
+
+    def test_an_902_a_write_with_no_copy_keeps_a_stored_completeds_dates(self):
+        finished = datetime(2020, 5, 1, tzinfo=UTC)
+        item = self.stored_completed(end_date=finished)
+        self.fake.fail()
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
+        self.fake.recover()
+        self.assertEqual(self.row(item).end_date, finished)
+
+    def test_an_902_a_manual_titles_write_still_works_it_out(self):
+        item = Item.objects.create(source="manual", media_type="anime", media_id="manual-1", title="Mine", image="https://example.com/p.jpg")
+        self.tick(item, 1)
+        self.assertIsNotNone(self.row(item).reconciled_at)
 
     def test_an_100_what_needs_the_numbers_is_still_refused(self):
         item = self.imported()
