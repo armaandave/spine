@@ -1314,6 +1314,9 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
                 current_progress__journey_id=attempt.pk,
                 current_progress__kind=ProgressChange.START,
             ).update(saved_on=day)
+            # Stats read that day, and neither this write nor an attempt the title has
+            # moved on from saves a row that bumps.
+            stats_cache.bump_user(user.pk)
     if end_date is not UNSET:
         day = _user_day(user, end_date) if end_date is not None else None
         if day:

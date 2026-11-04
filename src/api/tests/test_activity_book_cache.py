@@ -20,10 +20,10 @@ from django.urls import reverse
 
 from api.services import stats_cache
 from api.services.item_metadata import fill_book_pages, store_item_metadata
-from api.tests.test_activity_calc_books import NEW_YORK, BookCalcBase, d
-from app import book_tracking
+from api.tests.test_activity_calc_books import NEW_YORK, BookCalcBase, d, rendered
+from app import book_tracking, series_tracking
 from app.admin import ItemAdmin
-from app.models import Book, Item, Status
+from app.models import Book, ComicAttempt, Item, MangaAttempt, MediaTypes, Status
 from social.models import ProgressChange
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-book-cache"}}
@@ -147,3 +147,33 @@ class BumpTests(BookCalcBase):
             self.owner,
             lambda: call_command("flag_past_restarts", "--apply", stdout=io.StringIO(), stderr=io.StringIO()),
         )
+
+
+@override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class SeriesEditDatesTests(BookCalcBase):
+    """A series' attempts aren't in OWNERS, so moving a start row has to bump by itself."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        setattr(connection, stats_cache.PENDING_ATTR, (None, None))
+
+    def active_days(self, media_type):
+        year = {"schema": "2", "start_date": "2026-01-01", "end_date": "2026-12-31", "media_type": media_type}
+        return rendered(self.get(self.owner, year))["header"]["active_days"]
+
+    def test_an_older_attempt_moved_across_a_year_moves_stats_at_once(self):
+        for media_type, attempts in ((MediaTypes.MANGA.value, MangaAttempt), (MediaTypes.COMIC.value, ComicAttempt)):
+            with self.subTest(media_type=media_type):
+                item = self.item(media_type, f"edited-{media_type}", title=media_type)
+                self.set_item(item, series_total=100)
+                with self.captureOnCommitCallbacks(execute=True):
+                    self.do(series_tracking.start, item, d(2026, 3, 1))
+                    self.do(series_tracking.drop, item, d(2026, 3, 2))
+                    self.do(series_tracking.start, item, d(2026, 4, 1))
+                self.assertEqual(self.active_days(media_type), 2)
+                older = attempts.objects.filter(tracking__item=item).order_by("id").first()
+                with self.captureOnCommitCallbacks(execute=True):
+                    self.do(series_tracking.update_journey, item, d(2026, 5, 1), older.pk, start_date=d(2025, 12, 15))
+                self.assertEqual(self.active_days(media_type), 1)
