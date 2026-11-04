@@ -21,7 +21,7 @@ from app.models import Book, DiaryEntry, Status
 
 
 def undated_reads():
-    """Return Read books with no date, no log, no journey and no mark, on every account."""
+    """Return Read books with no date, log, current journey or mark, on every account."""
     logs = DiaryEntry.objects.filter(user_id=OuterRef("user_id"), item_id=OuterRef("item_id"))
     return Book.objects.filter(
         ~Exists(logs),

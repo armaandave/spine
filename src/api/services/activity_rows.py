@@ -396,6 +396,25 @@ def _walk_journeys(title, sessions, saves, total, zone):
     return by_session
 
 
+def _read_before_mark(book, sessions, by_session):
+    """Return the stopped read a mark came after, or None.
+
+    A direct To Read or Paused clears the mark's record of it, so with no record it's
+    the last journey from before the mark. A journey begun after a Read came after the
+    mark, and so did one the book still sits on: a mark takes the book off its journey.
+    """
+    if book.undated_read_previous_session_id:
+        return by_session.get(book.undated_read_previous_session_id)
+    last = None
+    for session in sessions:
+        if session.previous_status == Status.COMPLETED.value:
+            break
+        last = session
+    if last is None or last.status != Status.DROPPED.value or book.current_session_id == last.pk:
+        return None
+    return by_session[last.pk]
+
+
 def _book_title(actor_id, item, book, sessions, saves, entries, zone):
     title = Title(actor_id, item, MediaTypes.BOOK.value, PAGE)
     total = item.total_pages or None
@@ -411,7 +430,7 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
             title.take(alone)
     if book and book.completed_manually:
         # A mark after a stop holds only what that read didn't date.
-        stopped = by_session.get(book.undated_read_previous_session_id)
+        stopped = _read_before_mark(book, sessions, by_session)
         dated = stopped.dated if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - dated, ZERO), known=bool(total))
     elif book and book.progress and not sessions:

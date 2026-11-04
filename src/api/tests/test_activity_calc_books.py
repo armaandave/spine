@@ -699,6 +699,57 @@ class PileTests(BookCalcBase):
         self.do(book_tracking.mark_read, item, d(2026, 2, 4))
         self.assert_numbers(0, 200, 400)
 
+    def stopped_at_200(self, name):
+        item = self.book(name)
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, item, d(2025, 11, 15))
+        return item
+
+    def test_stopped_then_to_read_then_the_eye_holds_only_what_is_left(self):
+        item = self.stopped_at_200("through-to-read")
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 3))
+        self.assertIsNone(Book.objects.get(item=item).undated_read_previous_session_id)
+        self.assert_numbers(200, 0, 400)
+
+    def test_stopped_then_a_direct_paused_then_the_eye_holds_only_what_is_left(self):
+        item = self.stopped_at_200("through-paused")
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PAUSED.value)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 3))
+        self.assertIsNone(Book.objects.get(item=item).undated_read_previous_session_id)
+        self.assert_numbers(200, 0, 400)
+
+    def test_stopped_then_the_eye_then_a_reread_counts_the_reread_too(self):
+        item = self.stopped_at_200("then-a-reread")
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 3))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 50, d(2026, 2, 2))
+        self.assert_numbers(200, 50, 450)
+
+    def test_a_read_begun_after_the_eye_holds_on_top_of_it(self):
+        """The mark doesn't stand for its pages, even stopped and picked back up."""
+        item = self.book("reread")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.assert_numbers(0, 200, 600)
+        self.begin(item, d(2026, 2, 4))
+        self.save(item, 250, d(2026, 2, 5))
+        self.do(book_tracking.drop, item, d(2026, 2, 6))
+        self.assert_numbers(0, 250, 650)
+
+    def test_a_read_after_the_eye_through_to_read_holds_on_top_of_it(self):
+        item = self.book("marked-first")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.assert_numbers(0, 200, 600)
+
     def test_a_place_with_no_journey_sits_in_the_pile_and_stays_as_the_opening(self):
         item = self.book("yamtrack")
         Book.objects.bulk_create([Book(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=120)])

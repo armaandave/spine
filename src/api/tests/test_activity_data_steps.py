@@ -107,6 +107,18 @@ class UndatedReadsTests(StepBase):
             book_tracking.undo_read(self.owner, item)
         self.assertFalse(Book.objects.filter(item=item).exists())
 
+    def test_a_read_holding_a_stopped_journey_holds_only_what_is_left(self):
+        """Stopped, To Read, then a status written on the row, as the web form does."""
+        item = self.book("stopped")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, item, d(2025, 11, 15))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        Book.objects.filter(item=item).update(status=Status.COMPLETED.value)
+        self.assert_numbers(200, 0, 200)
+        run("fill_undated_reads", apply=True)
+        self.assert_numbers(200, 0, 400)
+
     def test_it_leaves_alone_a_log_a_date_a_journey_and_a_mark(self):
         logged = self.book("logged")
         self.finish(logged, d(2025, 3, 1))
