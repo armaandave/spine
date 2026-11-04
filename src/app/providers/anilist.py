@@ -82,6 +82,11 @@ query ($malIds: [Int], $page: Int) {
     }
     media(idMal_in: $malIds, type: ANIME) {
       idMal
+      startDate {
+        year
+        month
+        day
+      }
       nextAiringEpisode {
         episode
         airingAt
@@ -95,6 +100,21 @@ query ($malIds: [Int], $page: Int) {
       streamingEpisodes {
         title
         thumbnail
+      }
+      relations {
+        edges {
+          relationType
+          node {
+            startDate {
+              year
+              month
+              day
+            }
+            streamingEpisodes {
+              title
+            }
+          }
+        }
       }
     }
   }
@@ -785,7 +805,8 @@ def _anime_episodes(media):
         if node.get("episode") and node.get("airingAt")
     }
     episodes = {}
-    for streaming in media.get("streamingEpisodes") or []:
+    own_list = () if _list_is_an_earlier_titles(media) else media.get("streamingEpisodes") or ()
+    for streaming in own_list:
         number, title = parse_episode_title(streaming.get("title"))
         # Order isn't guaranteed, and a title can come once per streaming site.
         if number is not None and number not in episodes:
@@ -799,6 +820,35 @@ def _anime_episodes(media):
         "schedule": schedule,
         "episodes": episodes,
     }
+
+
+def _list_titles(media):
+    return {streaming.get("title") for streaming in media.get("streamingEpisodes") or []} - {None}
+
+
+def _started(media):
+    """Return when a title started, to compare; an unknown part sorts as late as it can."""
+    start = media.get("startDate") or {}
+    return (start.get("year") or 9999, start.get("month") or 12, start.get("day") or 31)
+
+
+def _list_is_an_earlier_titles(media):
+    """Return whether a title's episode list is one a title before it has (AN-101).
+
+    AniList files one list under every season of a series, so Kaguya-sama's second and third
+    seasons list the first's episodes. Only a prequel that came out first counts: Attack on
+    Titan's later OVA has Season 1's list and is filed as its prequel, and it's Season 1's.
+    """
+    own = _list_titles(media)
+    for edge in (media.get("relations") or {}).get("edges") or []:
+        prequel = edge.get("node") or {}
+        if edge.get("relationType") != "PREQUEL" or _started(prequel) >= _started(media):
+            continue
+        theirs = _list_titles(prequel)
+        shared = own & theirs
+        if shared and (shared == own or shared == theirs):
+            return True
+    return False
 
 
 def parse_episode_title(value):

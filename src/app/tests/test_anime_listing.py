@@ -137,6 +137,103 @@ class AniListParsingTests(SimpleTestCase):
         self.assertEqual(list(result), ["1"])
 
 
+def media_with_a_prequel(own, prequel_list, *, started=(2020, 4, 11), prequel_started=(2019, 1, 12), relation="PREQUEL"):
+    """Return one title as AniList answers: its list, its start, and one related title's."""
+
+    def date(parts):
+        return dict(zip(("year", "month", "day"), parts, strict=True))
+
+    return {
+        "idMal": 40591,
+        "nextAiringEpisode": None,
+        "airingSchedule": {"nodes": []},
+        "startDate": date(started),
+        "streamingEpisodes": [{"title": title, "thumbnail": "https://example.com/own.jpg"} for title in own],
+        "relations": {
+            "edges": [
+                {
+                    "relationType": relation,
+                    "node": {"startDate": date(prequel_started), "streamingEpisodes": [{"title": title} for title in prequel_list]},
+                },
+            ],
+        },
+    }
+
+
+class AnotherSeasonsListTests(SimpleTestCase):
+    """AN-101: a list that's the title before's isn't this title's (recorded 2026-11-04)."""
+
+    KAGUYA = ("Episode 1 - I Will Make You Invite Me to a Movie", "Episode 2 - Kaguya Wants to Be Stopped")
+
+    def episodes(self, media):
+        answer = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": [media]}}}
+        with mock.patch.object(services, "api_request", return_value=answer):
+            return anilist.anime_episodes([str(media["idMal"])])[str(media["idMal"])]["episodes"]
+
+    def test_an_101_a_later_season_with_its_prequels_list_has_no_titles_or_images(self):
+        # Kaguya-sama S2 and S3, Overlord II and Mob Psycho II all have the first season's.
+        self.assertEqual(self.episodes(media_with_a_prequel(self.KAGUYA, self.KAGUYA)), {})
+
+    def test_an_101_a_later_season_with_its_own_list_keeps_it(self):
+        # Monogatari Second Season's 26 share nothing with Nisemonogatari's 13.
+        own = ("Episode 1 - Tsubasa Tiger Part One", "Episode 2 - Tsubasa Tiger Part Two")
+        episodes = self.episodes(media_with_a_prequel(own, ("Episode 1 - Karen Bee Part One",)))
+        self.assertEqual(episodes[1]["title"], "Tsubasa Tiger Part One")
+        self.assertEqual(episodes[1]["image"], "https://example.com/own.jpg")
+
+    def test_an_101_a_first_seasons_list_stays_though_a_later_ova_is_filed_as_its_prequel(self):
+        # Attack on Titan's OVA, out months after Season 1, has Season 1's 25 and is its PREQUEL.
+        titan = ("Episode 1 - To You, 2,000 Years in the Future",)
+        media = media_with_a_prequel(titan, titan, started=(2013, 4, 7), prequel_started=(2013, 12, 9))
+        self.assertEqual(self.episodes(media)[1]["title"], "To You, 2,000 Years in the Future")
+
+    def test_an_101_a_special_out_before_it_counts_as_much_as_a_season(self):
+        # Tonikawa Season 2's PREQUEL is the special between the seasons, with Season 1's list.
+        own = ("Episode 1 - Marriage",)
+        self.assertEqual(self.episodes(media_with_a_prequel(own, own, started=(2023, 4, 8), prequel_started=(2022, 8, 3))), {})
+
+    def test_an_101_one_list_holding_the_other_is_the_same_list(self):
+        self.assertEqual(self.episodes(media_with_a_prequel(self.KAGUYA, self.KAGUYA[:1])), {})
+        self.assertEqual(self.episodes(media_with_a_prequel(self.KAGUYA[:1], self.KAGUYA)), {})
+
+    def test_an_101_one_title_in_common_isnt_the_same_list(self):
+        own = ("Episode 1 - Reunion", "Episode 2 - Theirs")
+        theirs = ("Episode 1 - Reunion", "Episode 2 - Mine")
+        self.assertEqual(self.episodes(media_with_a_prequel(own, theirs))[2]["title"], "Theirs")
+
+    def test_an_101_only_a_prequel_is_compared(self):
+        media = media_with_a_prequel(self.KAGUYA, self.KAGUYA, relation="SEQUEL")
+        self.assertEqual(self.episodes(media)[1]["title"], "I Will Make You Invite Me to a Movie")
+
+    def test_an_101_a_prequel_with_no_list_or_no_date_changes_nothing(self):
+        self.assertEqual(self.episodes(media_with_a_prequel(self.KAGUYA, ()))[1]["title"], "I Will Make You Invite Me to a Movie")
+        media = media_with_a_prequel(self.KAGUYA, self.KAGUYA, prequel_started=(None, None, None))
+        self.assertEqual(self.episodes(media)[1]["title"], "I Will Make You Invite Me to a Movie")
+
+    def test_an_101_a_season_not_out_yet_with_its_prequels_list_has_no_titles_either(self):
+        media = media_with_a_prequel(self.KAGUYA, self.KAGUYA, started=(None, None, None))
+        self.assertEqual(self.episodes(media), {})
+
+    def test_an_101_the_schedule_stays_when_the_list_goes(self):
+        media = media_with_a_prequel(self.KAGUYA, self.KAGUYA)
+        media["nextAiringEpisode"] = {"episode": 3, "airingAt": 1798985760}
+        media["airingSchedule"] = {"nodes": [{"episode": 3, "airingAt": 1798985760}]}
+        answer = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": [media]}}}
+        with mock.patch.object(services, "api_request", return_value=answer):
+            result = anilist.anime_episodes(["40591"])["40591"]
+        self.assertEqual(result["episodes"], {})
+        self.assertEqual(result["next"], {"episode": 3, "airing_at": 1798985760})
+        self.assertEqual(result["schedule"], {3: 1798985760})
+
+    def test_an_101_the_request_asks_for_what_the_comparison_needs(self):
+        empty = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
+        with mock.patch.object(services, "api_request", return_value=empty) as request:
+            anilist.anime_episodes(["1"])
+        query = request.call_args.kwargs["params"]["query"]
+        for part in ("relations", "relationType", "startDate", "streamingEpisodes"):
+            self.assertIn(part, query)
+
+
 class ListingTests(AnimeTestCase):
     """AN-100, AN-101: the copy, a first open and backing off."""
 
