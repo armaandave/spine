@@ -617,6 +617,54 @@ class LengthTests(BookCalcBase):
         )
 
 
+class OneUnitTests(BookCalcBase):
+    """AC-2 tells a row in one unit: on a day with pages and a percent, the pages."""
+
+    def told(self, item):
+        """Return each of the title's rows: its day, what it says, in what, and what it adds."""
+        rows = [row for row in list_rows(self.calc().rows, media_type=BOOK) if row.title_id == item.pk]
+        return [(row.day, row.told, row.told_unit, row.amount) for row in rows if row.told]
+
+    def test_pages_then_a_percent_tell_the_pages(self):
+        item = self.book("pages-first", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 200, d(2026, 3, 2), at="10:00")
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_a_percent_then_pages_tell_the_pages(self):
+        item = self.book("percent-first", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.save(item, 200, d(2026, 3, 2), at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_a_percent_read_then_a_page_read_on_one_day_tell_the_pages(self):
+        """Each read folds in on its own, so the percent can reach the row first."""
+        item = self.book("two-reads", pages=None)
+        self.begin(item, d(2026, 3, 2))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.do(book_tracking.restart, item, d(2026, 3, 2))
+        self.save(item, 200, d(2026, 3, 2), at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
+
+    def test_two_percents_on_one_day_still_add_up(self):
+        item = self.book("percents", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.save(item, 45, d(2026, 3, 2), kind="percentage", at="11:00")
+        self.assertEqual(self.told(item), [(d(2026, 3, 2), 45, "percent", 0)])
+
+    def test_a_log_a_read_moved_onto_tells_the_pages(self):
+        item = self.book("moved", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 200, d(2026, 3, 2), at="10:00")
+        self.save(item, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        _, entry = self.finish(item, d(2026, 3, 5))
+        self.backdate(entry, d(2025, 12, 20))
+        self.assertEqual(self.told(item), [(d(2025, 12, 20), 200, "page", 200)])
+
+
 class UnusableNumberTests(BookCalcBase):
     """A saved number can be null, 0 or no number at all: the old counter's guards hold."""
 

@@ -247,12 +247,17 @@ class Title:
         else:
             row = self._day(amount.day)
             row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
-        row.told += amount.value
-        row.told_unit = unit
         if unit == PERCENT:
             row.known = False
+            # A row tells one unit (AC-2), and pages win over a percent.
+            if row.told_unit not in ("", PERCENT):
+                return
         else:
+            if row.told_unit == PERCENT:
+                row.told = ZERO
             row.amount += amount.value
+        row.told += amount.value
+        row.told_unit = unit
 
     def rows(self):
         """Return the rows with something to say, and every log."""
