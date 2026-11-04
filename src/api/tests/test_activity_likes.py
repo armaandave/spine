@@ -6,6 +6,7 @@ old like coming back on a new save that day. The feed here is still the old read
 
 from datetime import datetime
 from unittest.mock import patch
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -484,6 +485,35 @@ class EditDatesThenDeleteTests(LikesBase):
         self.assertEqual(ContentLike.objects.count(), 1)
 
 
+class ATitleRemovedThenTrackedAgainTests(LikesBase):
+    """Removing a title through the phone's own request, and tracking it again that day."""
+
+    def test_an_anime_starts_at_nothing(self):
+        item = Item.objects.create(
+            media_id="removed-anime",
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="removed-anime",
+            image="https://example.com/a.jpg",
+        )
+        phone = self.client_for(self.owner, NEW_YORK)
+        url = f"/api/v1/tracking/{item.source}/anime/{item.media_id}/"
+        Anime.objects.bulk_create([Anime(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=0)])
+        self.assertEqual(phone.patch(url, {"progress": 3}, format="json").status_code, 200)
+        change = ProgressChange.objects.filter(item=item).latest("id")
+        self.like(change)
+        self.comment(change)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = phone.delete(url)
+        self.assertLess(response.status_code, 300, response.content)
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(Comment.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        Anime.objects.bulk_create([Anime(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=0)])
+        self.assertEqual(phone.patch(url, {"progress": 2}, format="json").status_code, 200)
+        self.assertEqual(self.feed_rows()[0][1:], ("watched 2 episodes", 0, 0))
+
+
 @override_settings(TIME_ZONE=NEW_YORK)
 class RealCommitTests(TransactionTestCase):
     """No wrapping transaction, as an import task runs, so the receiver's hook fires."""
@@ -589,6 +619,18 @@ class TVSeasonDeleteTests(TestCase):
         self.assertEqual(Comment.objects.count(), 0)
         self.assertEqual(ProgressPost.objects.count(), 0)
         self.assertEqual([row[:4] for row in self.rows()], [("2026-10-25", "watched 1 episode", 0, 0)])
+
+    def test_a_show_removed_then_ticked_again_starts_at_nothing(self):
+        self.tick(1, 1)
+        self.like_the_top_row()
+        with self.captureOnCommitCallbacks(execute=True):
+            tv_tracking.remove(self.owner, self.show, mutation_id=uuid4())
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(Comment.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.tick(1, 2)
+        self.assertEqual(self.rows()[0][2:4], (0, 0))
 
     def test_a_shows_only_season_deleted_then_ticked_again_starts_at_nothing(self):
         self.tick(1, 1)
