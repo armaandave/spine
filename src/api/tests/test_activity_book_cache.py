@@ -8,8 +8,10 @@ an hour.
 
 import io
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.contrib.admin import site
 from django.core.cache import cache
 from django.core.management import call_command
 from django.db import connection
@@ -20,7 +22,8 @@ from api.services import stats_cache
 from api.services.item_metadata import fill_book_pages, store_item_metadata
 from api.tests.test_activity_calc_books import NEW_YORK, BookCalcBase, d
 from app import book_tracking
-from app.models import Book, Status
+from app.admin import ItemAdmin
+from app.models import Book, Item, Status
 from social.models import ProgressChange
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-book-cache"}}
@@ -65,6 +68,25 @@ class BumpTests(BookCalcBase):
             fill_book_pages(item, 400)
         self.assertNotEqual(self.version(self.owner), before[0])
         self.assertNotEqual(self.version(reader), before[1])
+
+    def test_a_page_count_edited_in_admin_bumps_whoever_holds_the_book(self):
+        """STAT-006, and the one way to give a manual book a length."""
+        item = self.holder("admin")
+        before = self.version(self.owner)
+        item.total_pages = 400
+        admin_page = ItemAdmin(Item, site)
+        with self.captureOnCommitCallbacks(execute=True):
+            admin_page.save_model(None, item, SimpleNamespace(changed_data=["total_pages"]), change=True)
+        self.assertNotEqual(self.version(self.owner), before)
+
+    def test_another_edit_in_admin_bumps_no_one(self):
+        item = self.holder("admin-title")
+        before = self.version(self.owner)
+        item.title = "A new title"
+        admin_page = ItemAdmin(Item, site)
+        with self.captureOnCommitCallbacks(execute=True):
+            admin_page.save_model(None, item, SimpleNamespace(changed_data=["title"]), change=True)
+        self.assertEqual(self.version(self.owner), before)
 
     def test_someone_with_only_a_log_counts_as_holding_it(self):
         item = self.book("logged", pages=None)
