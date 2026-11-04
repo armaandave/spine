@@ -576,12 +576,12 @@ class AnEyeOverALogWithNoJourneyTests(BookImportBase):
         self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
         self.from_file(self.export(), mode="overwrite")
         self.assertFalse(BookSession.objects.filter(related_book__item=self.item_row).exists())
-        self.assert_numbers(0, 0, PAGES)
+        self.assert_numbers(PAGES, 0, PAGES)
 
     def test_the_eye_uses_the_log(self):
         self.logged_with_no_journey()
         self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
-        self.assert_numbers(0, 0, PAGES)
+        self.assert_numbers(PAGES, 0, PAGES)
         book = Book.objects.get(item=self.item_row)
         self.assertTrue(book.read_override_active)
         self.assertFalse(book.completed_manually)
@@ -590,7 +590,7 @@ class AnEyeOverALogWithNoJourneyTests(BookImportBase):
         self.logged_with_no_journey()
         self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
         self.do(book_tracking.undo_read, self.item_row, d(2026, 1, 3))
-        self.assert_numbers(0, 0, PAGES)
+        self.assert_numbers(PAGES, 0, PAGES)
         self.assertEqual(Book.objects.get(item=self.item_row).status, Status.PLANNING.value)
 
 

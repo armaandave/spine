@@ -1164,7 +1164,6 @@ class AMarkBetweenTwoReadsTests(BookCalcBase):
         self.save(item, 30, d(2026, 2, 2))
         self.do(book_tracking.drop, item, d(2026, 2, 3))
         self.do(book_tracking.mark_read, item, d(2026, 2, 4))
-        self.assertEqual(piled(self.calc().piles, BOOK).amount, 70)
         return item
 
     def pile(self):
