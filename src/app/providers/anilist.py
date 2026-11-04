@@ -74,6 +74,8 @@ query ($malIds: [Int]) {
 }
 """
 
+# What AniList calls a title that isn't finished or still to come.
+ANIME_UNDER_WAY = ("RELEASING", "HIATUS", "CANCELLED")
 ANIME_EPISODES_QUERY = """
 query ($malIds: [Int], $page: Int) {
   Page(page: $page, perPage: 25) {
@@ -81,7 +83,9 @@ query ($malIds: [Int], $page: Int) {
       hasNextPage
     }
     media(idMal_in: $malIds, type: ANIME) {
+      id
       idMal
+      status
       startDate {
         year
         month
@@ -763,38 +767,80 @@ def anime_series_nodes(mal_ids, *, timeout=REQUEST_TIMEOUT):
 def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
     """Return what AniList says about MAL anime IDs' episodes, by MAL ID as text.
 
-    One request per 25 titles, never one per episode. Each value is {"next": {"episode",
-    "airing_at"} or None, "schedule": {episode: airing Unix seconds}, "episodes":
-    {episode: {"title", "image"}}}. A title AniList doesn't have is left out.
+    One request per 25 titles, never one per episode, and one more for those on a break.
+    Each value is {"next": {"episode", "airing_at"} or None, "schedule": {episode: airing
+    Unix seconds}, "episodes": {episode: {"title", "image"}}}, and for a title on a break
+    "last_aired": {"episode", "airing_at"} or None. A title AniList doesn't have is left out.
     """
+
+    def post(params):
+        return services.api_request(
+            "ANILIST",
+            "POST",
+            API_URL,
+            params=params,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=timeout or REQUEST_TIMEOUT,
+            retry_rate_limits=retry_rate_limits,
+        )
+
     ids = sorted({int(value) for value in mal_ids if str(value).isdigit()})
     results = {}
     for offset in range(0, len(ids), 25):
         chunk = ids[offset : offset + 25]
+        on_a_break = {}
         page = 1
         while True:
-            response = services.api_request(
-                "ANILIST",
-                "POST",
-                API_URL,
-                params={
-                    "query": ANIME_EPISODES_QUERY,
-                    "variables": {"malIds": chunk, "page": page},
-                },
-                headers={"Accept": "application/json", "Content-Type": "application/json"},
-                timeout=timeout or REQUEST_TIMEOUT,
-                retry_rate_limits=retry_rate_limits,
-            )
+            response = post({"query": ANIME_EPISODES_QUERY, "variables": {"malIds": chunk, "page": page}})
             connection = (response.get("data") or {}).get("Page") or {}
             for media in connection.get("media") or []:
                 if media.get("idMal"):
                     results[str(media["idMal"])] = _anime_episodes(media)
+                    if _is_on_a_break(media):
+                        on_a_break[int(media["id"])] = str(media["idMal"])
             # A full page reports a next one even with nothing left to ask for.
             answered = all(str(mal_id) in results for mal_id in chunk)
             if answered or not (connection.get("pageInfo") or {}).get("hasNextPage"):
                 break
             page += 1
+        if on_a_break:
+            # A failure here fails the read: without it a title on a break would read as one
+            # with no schedule at all, so its copy is better kept.
+            answers = post({"query": _last_aired_query(on_a_break)})["data"]
+            for anilist_id, mal_id in on_a_break.items():
+                results[mal_id]["last_aired"] = _last_aired(answers, anilist_id)
     return results
+
+
+def _is_on_a_break(media):
+    """Return whether a title is under way with nothing named next (AN-100)."""
+    return (
+        media.get("status") in ANIME_UNDER_WAY
+        and media.get("id")
+        and not media.get("nextAiringEpisode")
+        and not (media.get("airingSchedule") or {}).get("nodes")
+    )
+
+
+def _last_aired_query(anilist_ids):
+    """Return one query for each title's last schedule entry that has aired.
+
+    A title's own airingSchedule lists from its first episode, 25 at a time, so a long
+    runner's last entry takes the schedule's own query.
+    """
+    aliases = " ".join(
+        f"a{anilist_id}: Page(page: 1, perPage: 1) {{ airingSchedules(mediaId: {anilist_id}, "
+        "notYetAired: false, sort: EPISODE_DESC) { episode airingAt } }"
+        for anilist_id in anilist_ids
+    )
+    return f"query {{ {aliases} }}"
+
+
+def _last_aired(answers, anilist_id):
+    entries = (answers.get(f"a{anilist_id}") or {}).get("airingSchedules") or []
+    if not entries or not entries[0].get("episode") or not entries[0].get("airingAt"):
+        return None
+    return {"episode": entries[0]["episode"], "airing_at": entries[0]["airingAt"]}
 
 
 def _anime_episodes(media):

@@ -43,6 +43,9 @@ FAILURE_BACKOFF = timedelta(minutes=15)
 STALE_ACTIVE = timedelta(days=1)
 STALE_SETTLED = timedelta(days=7)
 NUMBERS_FRESH = timedelta(days=1)
+# AniList stops following some titles: Nintama Rantarou's last schedule entry is from 2020.
+# Half a year on, a title's last entry no longer says how far it has aired (AN-100).
+SCHEDULE_ABANDONED = timedelta(days=183)
 STATUS_FINISHED = "Finished"
 STATUS_AIRING = "Airing"
 STATUS_UPCOMING = "Upcoming"
@@ -136,8 +139,14 @@ class Listing:
 
     @property
     def may_have_aired(self):
-        """Whether a title with no numbers can have aired, so its first row can be ticked."""
-        return not self.aired_is_known and not self.is_upcoming
+        """Whether an episode past what's known can have aired, so it can be ticked (AN-101).
+
+        With no numbers, its first row. With no total and nothing named next, AniList may
+        just be behind, so its next one too.
+        """
+        if self.is_upcoming:
+            return False
+        return not self.aired_is_known or (self.cap is None and self.next_episode is None)
 
     def aired_through(self, now):
         """Return the last episode that has aired, by AN-100's first three and last rule.
@@ -157,8 +166,9 @@ class Listing:
         if self.next_episode is not None:
             passed = self.next_air_at is not None and self.next_air_at <= now
             through = max(through, self.next_episode if passed else self.next_episode - 1)
-        if cap and not self.has_schedule and not self.is_upcoming:
-            through = cap
+        if not self.has_schedule and not self.is_upcoming:
+            # Spine can't tell, so everything the title lists counts (AN-100).
+            through = cap or max(self.by_number, default=0)
         return min(through, cap) if cap else through
 
     def air_at(self, number):
@@ -511,13 +521,20 @@ def _apply_episodes(row, episodes, now):
         if next_airing and next_airing.get("airing_at")
         else None
     )
-    schedule = episodes.get("schedule") or {}
-    listed = episodes.get("episodes") or {}
+    schedule = dict(episodes.get("schedule") or {})
+    listed = dict(episodes.get("episodes") or {})
     if row.total and any(number > row.total for number in listed):
         # AniList can file another season's episodes under a title: it lists Attack on Titan's
         # 25 under Season 2's 12. A list running past the total isn't this title's, and a row
         # without a title still reads "Episode 5" (AN-101).
         listed = {}
+    last_aired = episodes.get("last_aired")
+    if last_aired:
+        if now - datetime.fromtimestamp(last_aired["airing_at"], tz=UTC) < SCHEDULE_ABANDONED:
+            schedule[last_aired["episode"]] = last_aired["airing_at"]
+        else:
+            # It did air, but that's all it says now.
+            listed.setdefault(last_aired["episode"], {})
     row.rows = [
         [
             number,

@@ -119,6 +119,79 @@ class AniListParsingTests(SimpleTestCase):
         self.assertEqual(request.call_count, 1)
         self.assertEqual(len(result), 25)
 
+    def break_media(self, mal_id, **values):
+        return {
+            "id": mal_id + 1000,
+            "idMal": mal_id,
+            "status": "RELEASING",
+            "nextAiringEpisode": None,
+            "airingSchedule": {"nodes": []},
+            "streamingEpisodes": [],
+            **values,
+        }
+
+    def page(self, *media):
+        return {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": list(media)}}}
+
+    def test_an_100_a_title_on_a_break_asks_for_its_last_aired_entry(self):
+        last = {"data": {"a1021": {"airingSchedules": [{"episode": 1180, "airingAt": 1790000000}]}}}
+        with mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21)), last]) as request:
+            result = anilist.anime_episodes(["21"], timeout=3, retry_rate_limits=False)["21"]
+        self.assertEqual(result["last_aired"], {"episode": 1180, "airing_at": 1790000000})
+        self.assertEqual((result["next"], result["schedule"]), (None, {}))
+        self.assertEqual(request.call_count, 2)
+        query = request.call_args.kwargs["params"]["query"]
+        for part in ("mediaId: 1021", "notYetAired: false", "EPISODE_DESC"):
+            self.assertIn(part, query)
+        self.assertEqual(request.call_args.kwargs["timeout"], 3)
+        self.assertFalse(request.call_args.kwargs["retry_rate_limits"])
+
+    def test_an_100_a_hiatus_is_a_break_too(self):
+        last = {"data": {"a1021": {"airingSchedules": []}}}
+        with mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21, status="HIATUS")), last]):
+            self.assertIsNone(anilist.anime_episodes(["21"])["21"]["last_aired"])
+
+    def test_an_100_one_more_request_for_every_title_on_a_break_in_a_chunk(self):
+        last = {
+            "data": {
+                "a1001": {"airingSchedules": [{"episode": 5, "airingAt": 1790000000}]},
+                "a1002": {"airingSchedules": []},
+            },
+        }
+        page = self.page(self.break_media(1), self.break_media(2))
+        with mock.patch.object(services, "api_request", side_effect=[page, last]) as request:
+            result = anilist.anime_episodes(["1", "2"])
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(result["1"]["last_aired"]["episode"], 5)
+        self.assertIsNone(result["2"]["last_aired"])
+
+    def test_an_100_a_title_with_a_next_episode_or_not_under_way_costs_no_second_request(self):
+        for media in (
+            self.break_media(1, nextAiringEpisode={"episode": 3, "airingAt": 1790000000}),
+            self.break_media(1, airingSchedule={"nodes": [{"episode": 3, "airingAt": 1790000000}]}),
+            self.break_media(1, status="FINISHED"),
+            self.break_media(1, status="NOT_YET_RELEASED"),
+        ):
+            with self.subTest(media=media), mock.patch.object(services, "api_request", return_value=self.page(media)) as request:
+                self.assertNotIn("last_aired", anilist.anime_episodes(["1"])["1"])
+                self.assertEqual(request.call_count, 1)
+
+    def test_an_100_a_failed_second_request_fails_the_read_so_the_copy_stays(self):
+        for failure in (requests.exceptions.Timeout, ProviderDown):
+            with (
+                self.subTest(failure=failure.__name__),
+                mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21)), failure]),
+                self.assertRaises(failure),
+            ):
+                anilist.anime_episodes(["21"])
+
+    def test_an_100_a_second_answer_with_no_data_is_a_failed_read(self):
+        with (
+            mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21)), {"errors": []}]),
+            self.assertRaises(KeyError),
+        ):
+            anilist.anime_episodes(["21"])
+
     def test_an_101_a_title_still_to_answer_is_looked_for_on_the_next_page(self):
         first = {
             "data": {
@@ -761,6 +834,113 @@ class CalendarJobTests(AnimeTestCase):
         anime_tracking.refresh_after_calendar([item])
         self.assertEqual(AnimeListing.objects.get(item=item).total, 2)
         self.assertEqual(self.row(item).progress, 1)
+
+
+class BreakTests(AnimeTestCase):
+    """AN-100: with nothing named next, AniList's last past entry says how far it has aired."""
+
+    def on_break(self, *, last=12, days_ago=10, total=24, **values):
+        moment = self.clock.moment - timedelta(days=days_ago)
+        return self.title(total=total, status="Airing", last_aired=(last, moment), **values)
+
+    def numbers(self, item):
+        return [row["n"] for row in self.rows(item)["episodes"]]
+
+    def test_an_100_a_title_with_a_total_counts_what_aired_before_the_break(self):
+        item = self.on_break()
+        state = self.state(item)
+        self.assertEqual((state["total"], state["aired_count"]), (24, 12))
+        self.assertEqual(state["eye"]["count"], 12)
+        rows = self.rows(item)["episodes"]
+        self.assertEqual([row["n"] for row in rows], list(range(1, 25)))
+        self.assertEqual(rows[11]["a"], 1)
+        self.assertEqual(rows[12], {"n": 13}, "It reads TBA")
+        anime_tracking.mark_watched(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.aired_count, row.caught_up), ("In progress", 12, 12, True))
+        self.assertEqual((row.next_air_episode, row.next_air_date), (13, None))
+
+    def test_an_400_a_log_during_a_break_covers_what_aired(self):
+        item = self.on_break()
+        self.log(item)
+        self.assertEqual(self.watched(item), set(range(1, 13)))
+        self.assertEqual(self.row(item).status, "In progress")
+
+    def test_an_103_an_episode_after_the_break_isnt_ticked_with_a_total(self):
+        item = self.on_break()
+        with self.assertRaises(anime_tracking.TVInvalid):
+            self.tick(item, 13)
+
+    def test_an_100_a_long_runner_counts_every_episode_up_to_it(self):
+        item = self.on_break(total=None, last=1180, episodes={62: ("Sixty-two", ""), 130: ("One thirty", "")})
+        state = self.state(item)
+        self.assertEqual((state["total"], state["aired_count"]), (None, 1180))
+        rows = self.rows(item)["episodes"]
+        self.assertEqual([row["n"] for row in rows], list(range(1, 1181)))
+        self.assertEqual(rows[61]["t"], "Sixty-two")
+        self.assertTrue(all(row["a"] == 1 for row in rows))
+
+    def test_an_101_a_long_runner_on_a_break_can_still_tick_what_anilist_hasnt_listed(self):
+        item = self.on_break(total=None, last=3)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual(self.numbers(item), [1, 2, 3, 4])
+        self.tick(item, 4)
+        self.assertEqual(self.numbers(item), [1, 2, 3, 4, 5])
+        state = self.state(item)
+        self.assertEqual((state["watched_count"], state["aired_count"], state["caught_up"]), (4, 4, True))
+
+    def test_an_100_a_long_break_still_counts_within_half_a_year(self):
+        # Yamato yo Towa ni: REBEL3199: 26 episodes, E19 in June, in theaters a part at a time.
+        state = self.state(self.on_break(total=26, last=19, days_ago=131))
+        self.assertEqual(state["aired_count"], 19)
+
+    def test_an_100_past_half_a_year_anilist_has_stopped_following_a_title_with_a_total(self):
+        # Zhe Tian: 208 episodes, weekly, E160 in April and nothing since.
+        state = self.state(self.on_break(total=208, last=160, days_ago=189))
+        self.assertEqual(state["aired_count"], 208)
+
+    def test_an_100_past_half_a_year_a_long_runners_entry_is_still_evidence(self):
+        # Chibi Maruko-chan: no total, E1462 in 2024, and a list of E1419 to E1448.
+        episodes = {number: (f"Title {number}", "") for number in range(1419, 1449)}
+        item = self.on_break(total=None, last=1462, days_ago=674, episodes=episodes)
+        state = self.state(item)
+        self.assertEqual((state["aired_count"], state["eye"]["count"]), (None, 1462))
+        self.assertEqual(self.numbers(item), list(range(1, 1463)))
+        self.tick(item, 1500)
+        self.assertEqual(self.numbers(item), list(range(1, 1502)))
+
+    def test_an_202_the_break_ends_and_the_next_one_is_named(self):
+        title = self.fake.add(total=24, status="Airing", last_aired=(12, self.clock.moment - timedelta(days=10)))
+        item = self.title(title=title)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual(self.row(item).caught_up, True)
+        self.clock.advance(days=2)
+        title.last_aired = None
+        title.next_episode = 13
+        title.next_air_at = self.clock.moment + timedelta(days=1)
+        title.schedule = {13: title.next_air_at}
+        anime_tracking.refresh_after_calendar([item])
+        row = self.row(item)
+        self.assertEqual((row.aired_count, row.caught_up, row.next_air_episode), (12, True, 13))
+        self.clock.advance(days=2)
+        anime_tracking.refresh_after_calendar([item])
+        row = self.row(item)
+        self.assertEqual((row.aired_count, row.caught_up, row.up_next_episode), (13, False, 13))
+
+    def test_an_100_a_failed_read_during_a_break_keeps_the_count(self):
+        item = self.on_break()
+        self.assertEqual(self.state(item)["aired_count"], 12)
+        self.clock.advance(days=2)
+        self.fake.fail("anilist")
+        self.assertEqual(self.state(item)["aired_count"], 12)
+        self.fake.recover()
+        self.clock.advance(minutes=16)
+        self.assertEqual(self.state(item)["aired_count"], 12)
+
+    def test_an_100_a_finished_title_ignores_its_old_entry(self):
+        moment = self.clock.moment - timedelta(days=10)
+        state = self.state(self.title(total=24, status="Finished", last_aired=(12, moment)))
+        self.assertEqual(state["aired_count"], 24)
 
 
 class NoCopyNeededTests(AnimeTestCase):

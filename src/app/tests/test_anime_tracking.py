@@ -1895,6 +1895,64 @@ class NoNumbersTests(AnimeTestCase):
         self.assertEqual(rows["first_unwatched"], 1)
         self.assertEqual(rows["count"], 4)
 
+    def listed(self, *numbers, **values):
+        episodes = {number: (f"Title {number}", f"https://example.com/{number}.jpg") for number in numbers}
+        return self.title(total=None, status="Airing", episodes=episodes, **values)
+
+    def test_an_101_with_a_list_it_runs_to_the_highest_listed_with_no_gaps(self):
+        # Chibi Maruko-chan's list, nothing watched: it read E1, then E1419 to E1448.
+        rows = self.rows(self.listed(*range(1419, 1449)))
+        self.assertEqual([row["n"] for row in rows["episodes"]], list(range(1, 1449)))
+        self.assertEqual(rows["count"], 1448)
+        self.assertEqual(rows["episodes"][0], {"n": 1, "a": 1})
+        self.assertEqual(rows["episodes"][1418]["t"], "Title 1419")
+        self.assertEqual(rows["episodes"][1418]["i"], "https://example.com/1419.jpg")
+        self.assertTrue(all(row["a"] == 1 for row in rows["episodes"]))
+        self.assertEqual((rows["up_next"], rows["first_unwatched"]), (1, 1))
+
+    def test_an_101_one_pieces_list_with_no_next_episode_has_no_gaps(self):
+        rows = self.rows(self.listed(*range(62, 131)))
+        self.assertEqual([row["n"] for row in rows["episodes"]], list(range(1, 131)))
+
+    def test_an_101_the_list_runs_on_to_one_past_the_last_watched_when_that_is_later(self):
+        item = self.listed(1, 2, 3)
+        self.tick(item, 2)
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1, 2, 3])
+        self.tick(item, 3)
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1, 2, 3, 4])
+        self.tick(item, 9)
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], list(range(1, 11)))
+
+    def test_an_100_a_listed_episode_counts_as_evidence_it_aired(self):
+        item = self.listed(1, 2, 3)
+        state = self.state(item)
+        self.assertIsNone(state["aired_count"], "How many have aired stays unknown")
+        self.assertEqual(state["eye"]["count"], 3)
+        self.tick(item, 1)
+        self.assertEqual((self.row(item).up_next_episode, self.row(item).caught_up), (2, False))
+        anime_tracking.mark_watched(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.progress, row.caught_up, row.finished, row.aired_count), (3, True, False, None))
+        self.assertEqual(self.watched(item), {1, 2, 3})
+
+    def test_an_100_a_log_covers_what_is_listed(self):
+        item = self.listed(5, 6)
+        self.log(item)
+        self.assertEqual(self.watched(item), {1, 2, 3, 4, 5, 6})
+
+    def test_an_101_any_number_can_still_be_ticked_past_the_list(self):
+        item = self.listed(1, 2, 3)
+        self.tick(item, 500)
+        self.assertEqual(self.row(item).progress, 1)
+
+    def test_an_100_an_upcoming_titles_list_is_no_evidence(self):
+        item = self.title(total=None, status="Upcoming", start_date="2027-03-12", episodes={1: ("First", ""), 2: ("Second", "")})
+        state = self.state(item)
+        self.assertEqual((state["aired_count"], state["eye"]["tap"]), (None, "nothing_aired"))
+        rows = self.rows(item)
+        self.assertEqual([row["n"] for row in rows["episodes"]], [1, 2])
+        self.assertFalse(any(row.get("a") for row in rows["episodes"]))
+
     def test_an_101_a_write_that_changes_the_list_sends_it(self):
         item = self.bare()
         ticked = anime_tracking.write_envelope(self.tick(item, 1))

@@ -47,6 +47,8 @@ class FakeTitle:
     schedule: dict = field(default_factory=dict)
     next_episode: int | None = None
     next_air_at: datetime | None = None
+    # During a break: (number, airing moment) of the last entry that has aired.
+    last_aired: tuple | None = None
     # MAL's series order: the entries of mal.anime_series()["items"].
     series: list = field(default_factory=list)
 
@@ -166,6 +168,11 @@ class FakeAnimeProvider:
                     for number, values in title.episodes.items()
                 },
             }
+            if title.last_aired:
+                results[str(media_id)]["last_aired"] = {
+                    "episode": title.last_aired[0],
+                    "airing_at": int(title.last_aired[1].timestamp()),
+                }
         return results
 
 
