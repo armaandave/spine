@@ -19,6 +19,7 @@ from django.test import override_settings
 
 from api.services import stats_cache
 from api.tests.test_activity_calc_books import BookCalcBase, d
+from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
 from app import book_tracking
 from app.models import Book, BookSession, Game, MediaTypes, Status
 from social.models import ProgressChange
@@ -266,3 +267,76 @@ class PastRestartsTests(StepBase):
         self.assertEqual(BookSession.objects.filter(related_book__item__media_type=MediaTypes.BOOK.value).count(), 2)
         _, err = run("flag_past_restarts")
         self.assertIn(f"per account: {{{self.owner.pk}: 1}}", err)
+
+
+class PickedUpBooksTests(StepBase):
+    """Decision 60: books stopped and picked back up before Phase 1 get their place back."""
+
+    def picked_up_before(self, name="old", value=200, kind="pages", pages=400):
+        """A pick-up as it was before a new journey opened at its place."""
+        item = self.book(name, pages=pages)
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, value, d(2025, 11, 2), kind=kind)
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.begin(item, d(2026, 4, 1))
+        journey = Book.objects.get(item=item).current_session
+        BookSession.objects.filter(pk=journey.pk).update(pages_read=None, percentage_read=None)
+        Book.objects.filter(item=item).update(progress=0)
+        return item, journey
+
+    def payloads(self):
+        """Return Stats' whole payload, as the phone reads it, for each year and All Time."""
+        return [self.summary(params, tab="book") for params in (YEAR_2025, YEAR_2026, ALL_TIME)]
+
+    def test_a_dry_run_changes_nothing_and_counts_per_account(self):
+        _item, journey = self.picked_up_before()
+        _, err = run("fill_picked_up_books")
+        self.assertIn(f"count 15, books picked up with no place: 1, per account: {{{self.owner.pk}: 1}}", err)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+
+    def test_apply_gives_a_page_place_back_and_a_second_run_changes_nothing(self):
+        item, journey = self.picked_up_before()
+        out, _ = run("fill_picked_up_books", apply=True)
+        self.assertEqual(json.loads(out), {"journey": journey.pk, "pages_read": None, "percentage_read": None})
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(Book.objects.get(item=item).progress, 200)
+        out, err = run("fill_picked_up_books", apply=True)
+        self.assertEqual(out, "")
+        self.assertIn("no place: 0", err)
+
+    def test_apply_gives_a_percent_place_back(self):
+        _item, journey = self.picked_up_before("percent", value=25, kind="percentage", pages=None)
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+        self.assertEqual(float(journey.percentage_read), 25.0)
+
+    def test_no_number_and_no_row_changes(self):
+        self.picked_up_before()
+        rows = ProgressChange.objects.count()
+        before = self.payloads()
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.payloads(), before)
+        self.assertEqual(ProgressChange.objects.count(), rows)
+
+    def test_a_restart_and_a_reread_keep_their_zero(self):
+        restarted = self.book("restarted")
+        self.begin(restarted, d(2026, 3, 1))
+        self.save(restarted, 100, d(2026, 3, 2))
+        self.do(book_tracking.restart, restarted, d(2026, 3, 3))
+        reread = self.book("reread")
+        self.finish(reread, d(2026, 3, 1))
+        self.begin(reread, d(2026, 3, 2))
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
+    def test_the_owners_version_moves(self):
+        self.picked_up_before()
+        key = stats_cache.user_version_key(self.owner.pk)
+        with self.captureOnCommitCallbacks(execute=True):
+            setattr(connection, stats_cache.PENDING_ATTR, (None, None))
+            before = cache.get(key)
+            run("fill_picked_up_books", apply=True)
+        self.assertNotEqual(cache.get(key), before)

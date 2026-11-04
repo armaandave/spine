@@ -42,6 +42,7 @@ NAMING = {
     "app/book_tracking.py",
     "app/game_tracking.py",
     "app/management/commands/compare_activity_numbers.py",
+    "app/management/commands/fill_picked_up_books.py",
     "app/management/commands/fill_progress_days.py",
     "app/management/commands/flag_past_restarts.py",
     "app/music_move.py",
