@@ -249,6 +249,9 @@ private struct AnimeEpisodeList: View {
     @State private var window: Range<Int>
     /// The list on screen (`AnimeEpisodes.listID`): it catches up with the model together with the scroll position.
     @State private var shownListID: String
+    /// The list is on its way to up next's row: what's built stays around that row until it gets there, because a row
+    /// that isn't built can't be scrolled to, and the first reading of the scroll view is still at the top of the list.
+    @State private var isOpening = true
 
     init(episodes: AnimeEpisodes, isAccessibilitySize: Bool) {
         self.episodes = episodes
@@ -317,12 +320,24 @@ private struct AnimeEpisodeList: View {
                 y: geometry.contentOffset.y + geometry.contentInsets.top,
                 height: geometry.containerSize.height
             )
-        } action: { _, built in
-            if built != window { window = built }
+        } action: { _, next in
+            if isOpening {
+                guard next.contains(episodes.startIndex) else { return }
+                isOpening = false
+            }
+            if next != window { window = next }
+        }
+        .onScrollPhaseChange { _, phase in
+            if phase == .interacting { isOpening = false }
+        }
+        .onAppear {
+            // A position set before the first layout doesn't move a list that has its rows from the start.
+            position.scrollTo(id: episodes.startRowID, anchor: .top)
         }
         .onChange(of: episodes.listID) { _, listID in
             // Every row and up next's place, in one update.
             shownListID = listID
+            isOpening = true
             window = metrics.window(openingOnRow: episodes.startIndex)
             position.scrollTo(id: episodes.startRowID, anchor: .top)
         }
