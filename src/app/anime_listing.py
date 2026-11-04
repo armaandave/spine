@@ -50,14 +50,7 @@ STATUS_FINISHED = "Finished"
 STATUS_AIRING = "Airing"
 STATUS_UPCOMING = "Upcoming"
 FORMAT_MOVIE = "movie"
-PROVIDER_FAILURES = (
-    services.ProviderAPIError,
-    requests.exceptions.RequestException,
-    AttributeError,
-    KeyError,
-    TypeError,
-    ValueError,
-)
+PROVIDER_FAILURES = anilist.READ_FAILURES
 
 
 class AnimeDetailsUnavailable(TVDetailsUnavailable):

@@ -76,6 +76,15 @@ query ($malIds: [Int]) {
 
 # What AniList calls a title that isn't finished or still to come.
 ANIME_UNDER_WAY = ("RELEASING", "HIATUS", "CANCELLED")
+# How a read fails: an error from the provider, a timeout, or an answer of the wrong shape.
+READ_FAILURES = (
+    services.ProviderAPIError,
+    requests.exceptions.RequestException,
+    AttributeError,
+    KeyError,
+    TypeError,
+    ValueError,
+)
 ANIME_EPISODES_QUERY = """
 query ($malIds: [Int], $page: Int) {
   Page(page: $page, perPage: 25) {
@@ -771,6 +780,7 @@ def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
     Each value is {"next": {"episode", "airing_at"} or None, "schedule": {episode: airing
     Unix seconds}, "episodes": {episode: {"title", "image"}}}, and for a title on a break
     "last_aired": {"episode", "airing_at"} or None. A title AniList doesn't have is left out.
+    A title whose read failed has None, so a failure costs only the titles it was for.
     """
 
     def post(params):
@@ -790,25 +800,37 @@ def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
         chunk = ids[offset : offset + 25]
         on_a_break = {}
         page = 1
-        while True:
-            response = post({"query": ANIME_EPISODES_QUERY, "variables": {"malIds": chunk, "page": page}})
-            connection = (response.get("data") or {}).get("Page") or {}
-            for media in connection.get("media") or []:
-                if media.get("idMal"):
-                    results[str(media["idMal"])] = _anime_episodes(media)
-                    if _is_on_a_break(media):
-                        on_a_break[int(media["id"])] = str(media["idMal"])
-            # A full page reports a next one even with nothing left to ask for.
-            answered = all(str(mal_id) in results for mal_id in chunk)
-            if answered or not (connection.get("pageInfo") or {}).get("hasNextPage"):
-                break
-            page += 1
+        try:
+            while True:
+                response = post({"query": ANIME_EPISODES_QUERY, "variables": {"malIds": chunk, "page": page}})
+                connection = (response.get("data") or {}).get("Page") or {}
+                for media in connection.get("media") or []:
+                    if media.get("idMal"):
+                        results[str(media["idMal"])] = _anime_episodes(media)
+                        if _is_on_a_break(media):
+                            on_a_break[int(media["id"])] = str(media["idMal"])
+                # A full page reports a next one even with nothing left to ask for.
+                answered = all(str(mal_id) in results for mal_id in chunk)
+                if answered or not (connection.get("pageInfo") or {}).get("hasNextPage"):
+                    break
+                page += 1
+        except READ_FAILURES:
+            # AniList is down or hanging, so the chunks still to come aren't asked either.
+            logger.warning("AniList can't be read for %s titles", len(ids) - offset, exc_info=True)
+            results.update(dict.fromkeys(on_a_break.values()))
+            for mal_id in ids[offset:]:
+                results.setdefault(str(mal_id))
+            break
         if on_a_break:
-            # A failure here fails the read: without it a title on a break would read as one
-            # with no schedule at all, so its copy is better kept.
-            answers = post({"query": _last_aired_query(on_a_break)})["data"]
-            for anilist_id, mal_id in on_a_break.items():
-                results[mal_id]["last_aired"] = _last_aired(answers, anilist_id)
+            try:
+                answers = post({"query": _last_aired_query(on_a_break)})["data"]
+                for anilist_id, mal_id in on_a_break.items():
+                    results[mal_id]["last_aired"] = _last_aired(answers, anilist_id)
+            except READ_FAILURES:
+                # Without it a title on a break would read as one with no schedule at all,
+                # so its copy is better kept.
+                logger.warning("AniList's last aired entries can't be read", exc_info=True)
+                results.update(dict.fromkeys(on_a_break.values()))
     return results
 
 

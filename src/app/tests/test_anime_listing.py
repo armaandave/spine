@@ -19,6 +19,7 @@ from events.calendar.main import process_items
 from events.calendar.selectors import filter_items_to_fetch
 from events.models import Event
 
+REAL_ANIME_EPISODES = anilist.anime_episodes
 ATTACK_ON_TITAN = {
     "data": {
         "Page": {
@@ -176,21 +177,43 @@ class AniListParsingTests(SimpleTestCase):
                 self.assertNotIn("last_aired", anilist.anime_episodes(["1"])["1"])
                 self.assertEqual(request.call_count, 1)
 
-    def test_an_100_a_failed_second_request_fails_the_read_so_the_copy_stays(self):
-        for failure in (requests.exceptions.Timeout, ProviderDown):
-            with (
-                self.subTest(failure=failure.__name__),
-                mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21)), failure]),
-                self.assertRaises(failure),
-            ):
-                anilist.anime_episodes(["21"])
+    def test_an_100_a_failed_last_aired_read_costs_only_the_titles_it_was_for(self):
+        for failure in (requests.exceptions.Timeout, ProviderDown, {"errors": []}):
+            read_fine = self.break_media(22, status="FINISHED")
+            answers = [self.page(self.break_media(21), read_fine), failure]
+            with self.subTest(failure=failure), mock.patch.object(services, "api_request", side_effect=answers):
+                result = anilist.anime_episodes(["21", "22"])
+            self.assertIsNone(result["21"])
+            self.assertEqual(result["22"]["schedule"], {})
 
-    def test_an_100_a_second_answer_with_no_data_is_a_failed_read(self):
-        with (
-            mock.patch.object(services, "api_request", side_effect=[self.page(self.break_media(21)), {"errors": []}]),
-            self.assertRaises(KeyError),
-        ):
-            anilist.anime_episodes(["21"])
+    def test_an_100_a_failed_last_aired_read_keeps_every_chunk_that_answered(self):
+        # 30 titles make calls for 25, for 5, and for the last aired entry of one of those 5.
+        first = self.page(*[self.break_media(number, status="FINISHED") for number in range(1, 26)])
+        second = self.page(*[self.break_media(number, status="FINISHED") for number in range(26, 30)], self.break_media(30))
+        ids = [str(number) for number in range(1, 31)]
+        with mock.patch.object(services, "api_request", side_effect=[first, second, requests.exceptions.Timeout]) as request:
+            result = anilist.anime_episodes(ids)
+        self.assertEqual(request.call_count, 3)
+        self.assertIsNone(result["30"])
+        self.assertEqual([mal_id for mal_id, answer in result.items() if answer is None], ["30"])
+
+    def test_an_100_a_chunk_that_fails_ends_the_asking_and_keeps_the_ones_before_it(self):
+        first = self.page(*[self.break_media(number, status="FINISHED") for number in range(1, 26)])
+        ids = [str(number) for number in range(1, 61)]
+        with mock.patch.object(services, "api_request", side_effect=[first, requests.exceptions.Timeout]) as request:
+            result = anilist.anime_episodes(ids)
+        self.assertEqual(request.call_count, 2, "AniList is down or hanging, so the third chunk isn't asked")
+        self.assertEqual(len(result), 60)
+        self.assertTrue(all(result[str(number)] is not None for number in range(1, 26)))
+        self.assertTrue(all(result[str(number)] is None for number in range(26, 61)))
+
+    def test_an_100_a_title_on_a_break_loses_its_answer_when_a_later_page_fails(self):
+        first = {
+            "data": {"Page": {"pageInfo": {"hasNextPage": True}, "media": [self.break_media(1)]}},
+        }
+        with mock.patch.object(services, "api_request", side_effect=[first, requests.exceptions.Timeout]):
+            result = anilist.anime_episodes(["1", "2"])
+        self.assertEqual(result, {"1": None, "2": None})
 
     def test_an_101_a_title_still_to_answer_is_looked_for_on_the_next_page(self):
         first = {
@@ -808,6 +831,45 @@ class CalendarJobTests(AnimeTestCase):
             events_bulk = []
             calendar_anime.process_anime_bulk([good, bad], events_bulk)
         self.assertEqual([(event.item, event.content_number) for event in events_bulk], [(good, 12)])
+
+    def test_an_202_a_failed_read_of_some_titles_keeps_the_answers_of_the_rest(self):
+        # Through the real read: the calls for 25 and for 5 answer, the last aired one fails.
+        items = [self.title(total=12, status="Airing") for _ in range(30)]
+        on_a_break = items[-1]
+        first_read = anime_tracking.refresh_after_calendar
+        first_read(items[-1:])
+        before = AnimeListing.objects.get(item=on_a_break)
+        self.clock.advance(days=1)
+        media = [
+            {
+                "id": 1000 + int(item.media_id),
+                "idMal": int(item.media_id),
+                "status": "RELEASING",
+                "nextAiringEpisode": {"episode": 8, "airingAt": int(self.clock.moment.timestamp()) + 86400},
+                "airingSchedule": {"nodes": [{"episode": 8, "airingAt": int(self.clock.moment.timestamp()) + 86400}]},
+                "streamingEpisodes": [],
+            }
+            for item in items
+        ]
+        media[-1].update(nextAiringEpisode=None, airingSchedule={"nodes": []})
+        media.sort(key=lambda entry: entry["idMal"])
+        pages = [
+            {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": media[:25]}}},
+            {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": media[25:]}}},
+            requests.exceptions.Timeout,
+        ]
+        with (
+            mock.patch.object(anilist, "anime_episodes", REAL_ANIME_EPISODES),
+            mock.patch.object(services, "api_request", side_effect=pages),
+        ):
+            anime_tracking.refresh_after_calendar(items)
+        fine = AnimeListing.objects.get(item=items[0])
+        self.assertEqual((fine.next_episode, fine.retry_after), (8, None))
+        self.assertEqual(fine.rows_fetched_at, self.clock.moment)
+        self.assertFalse(anime_listing.stored_listing(items[0]).awaiting_schedule)
+        kept = AnimeListing.objects.get(item=on_a_break)
+        self.assertEqual(kept.rows_fetched_at, before.rows_fetched_at, "It keeps what it had")
+        self.assertIsNotNone(kept.retry_after)
 
     def test_an_202_refreshing_asks_anilist_once_for_many_titles(self):
         items = [self.title(total=2) for _ in range(3)]
