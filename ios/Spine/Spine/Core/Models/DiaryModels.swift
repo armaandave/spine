@@ -42,8 +42,8 @@ struct DiaryEntry: Codable, Identifiable {
     /// The owner's view of an anime log: what deleting it unmarks (TV-406). Nil for others.
     var animeLog: TVLogInfo? = nil
     /// An anime log's create and update responses add the title's state and rows (AN-400).
-    var anime: AnimeState? = nil
-    var rows: AnimeRows? = nil
+    @LossyAnimeValue var anime: AnimeState? = nil
+    @LossyAnimeValue var rows: AnimeRows? = nil
 
     /// What deleting this log unmarks, for a TV or an anime log.
     var trackedLog: TVLogInfo? { tvLog ?? animeLog }

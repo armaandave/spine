@@ -1204,7 +1204,7 @@ struct MediaDetail: Decodable, Identifiable {
             customLogoUrl: try container.decodeIfPresent(String.self, forKey: .customLogoUrl),
             tvUnlistedSeasons: try container.decodeIfPresent([TVUnlistedSeason].self, forKey: .tvUnlistedSeasons),
             tvUnlistedEpisodes: try container.decodeIfPresent([TVUnlistedEpisode].self, forKey: .tvUnlistedEpisodes),
-            animeRows: try container.decodeIfPresent(AnimeRows.self, forKey: .animeRows)
+            animeRows: container.decodeLossily(AnimeRows.self, forKey: .animeRows)
         )
     }
 
@@ -1744,7 +1744,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
             ?? container.decodeIfPresent(BookTrackingState.self, forKey: .series)
         game = try container.decodeIfPresent(GameTrackingState.self, forKey: .game)
         tv = try container.decodeIfPresent(TVShowState.self, forKey: .tv)
-        anime = try container.decodeIfPresent(AnimeState.self, forKey: .anime)
+        anime = container.decodeLossily(AnimeState.self, forKey: .anime)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1793,8 +1793,8 @@ struct MediaLikeResponse: Codable, Equatable {
     var episode: TVEpisodeState? = nil
     var earlierUnwatched: TVEarlierUnwatched? = nil
     /// Anime likes (AN-301): the title's state after the heart, and every row when the heart marked it.
-    var anime: AnimeState? = nil
-    var rows: AnimeRows? = nil
+    @LossyAnimeValue var anime: AnimeState? = nil
+    @LossyAnimeValue var rows: AnimeRows? = nil
 
     /// The heart's TV keys as a write envelope, for the follow-up coordinator and `applying(tvEnvelope:tracking:)`.
     var tvEnvelope: TVWriteEnvelope {

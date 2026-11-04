@@ -763,9 +763,9 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         finished = try c.decodeIfPresent(TVFinished.self, forKey: .finished)
         earlierUnwatched = try c.decodeIfPresent(TVEarlierUnwatched.self, forKey: .earlierUnwatched)
         seasonEpisodes = try c.decodeIfPresent([TVEpisodeState].self, forKey: .seasonEpisodes)
-        anime = try c.decodeIfPresent(AnimeState.self, forKey: .anime)
-        row = try c.decodeIfPresent(AnimeRow.self, forKey: .row)
-        rows = try c.decodeIfPresent(AnimeRows.self, forKey: .rows)
+        anime = c.decodeLossily(AnimeState.self, forKey: .anime)
+        row = c.decodeLossily(AnimeRow.self, forKey: .row)
+        rows = c.decodeLossily(AnimeRows.self, forKey: .rows)
     }
 
     /// A diary create or update returns the entry plus `tv`, the log target's `season` and `episode`, `finished`

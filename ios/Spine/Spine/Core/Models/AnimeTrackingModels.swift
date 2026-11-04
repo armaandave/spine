@@ -4,6 +4,44 @@ import Foundation
 // season with no show around it (AN-000), so its writes, follow-ups and rows reuse TV's types: every key here is new
 // and additive, and an episode's coordinate is season `AnimeRows.seasonNumber`.
 
+/// An anime value on a payload shared with other things: a page, a list, a write's answer. One that can't be read decodes
+/// as absent, so it loses only itself and never what it came with.
+@propertyWrapper
+nonisolated struct LossyAnimeValue<Value: Codable & Hashable>: Codable, Hashable {
+    var wrappedValue: Value?
+
+    init(wrappedValue: Value? = nil) {
+        self.wrappedValue = wrappedValue
+    }
+
+    init(from decoder: Decoder) throws {
+        wrappedValue = try? Value(from: decoder)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try wrappedValue?.encode(to: encoder)
+    }
+}
+
+nonisolated extension KeyedDecodingContainer {
+    /// The value at `key`, nil when it's missing or can't be read.
+    func decodeLossily<Value: Codable & Hashable>(_ type: Value.Type, forKey key: Key) -> Value? {
+        ((try? decodeIfPresent(LossyAnimeValue<Value>.self, forKey: key)) ?? nil)?.wrappedValue
+    }
+
+    /// A missing key is an absent value, which a synthesized decoder asks for here.
+    func decode<Value>(_ type: LossyAnimeValue<Value>.Type, forKey key: Key) throws -> LossyAnimeValue<Value> {
+        LossyAnimeValue(wrappedValue: decodeLossily(Value.self, forKey: key))
+    }
+}
+
+nonisolated extension KeyedEncodingContainer {
+    /// An absent value leaves its key out, as a plain optional does.
+    mutating func encode<Value>(_ value: LossyAnimeValue<Value>, forKey key: Key) throws {
+        try encodeIfPresent(value.wrappedValue, forKey: key)
+    }
+}
+
 /// `up_next`: the next episode to watch (TV-105, AN-701).
 nonisolated struct AnimeEpisodePointer: Codable, Hashable {
     var episodeNumber: Int
@@ -330,7 +368,8 @@ nonisolated struct AnimeRows: Codable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        episodes = try c.decodeIfPresent([AnimeRow].self, forKey: .episodes) ?? []
+        // A row that can't be read loses only itself (AN-101).
+        episodes = try c.decodeIfPresent([LossyAnimeValue<AnimeRow>].self, forKey: .episodes)?.compactMap(\.wrappedValue) ?? []
         count = try c.decodeIfPresent(Int.self, forKey: .count) ?? episodes.count
         upNext = try c.decodeIfPresent(Int.self, forKey: .upNext)
         firstUnwatched = try c.decodeIfPresent(Int.self, forKey: .firstUnwatched)

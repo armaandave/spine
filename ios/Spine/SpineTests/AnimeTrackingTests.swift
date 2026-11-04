@@ -127,6 +127,65 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertFalse(item.tracking.anime?.single ?? true)
     }
 
+    func testAN101ARowThatCantBeReadLosesOnlyItself() throws {
+        let rows = try decode(AnimeRows.self, """
+        {"count": 4, "up_next": 4, "episodes": [{"n": 1, "a": 1}, {"a": 1}, {"n": 3, "a": true}, {"n": 4, "a": 1}]}
+        """)
+        XCTAssertEqual(rows.episodes.map(\.number), [1, 4])
+        XCTAssertEqual(rows.startIndex, 1, "The list still opens on up next")
+
+        let page = try decode(MediaDetail.self, """
+        {"ref": {"source": "mal", "media_type": "anime", "media_id": "21"}, "title": "One Piece",
+         "anime_rows": {"count": 2, "episodes": [{"t": "No number"}, {"n": 2, "a": 1}]}}
+        """)
+        XCTAssertEqual(page.title, "One Piece")
+        XCTAssertEqual(page.animeRows?.episodes.map(\.number), [2])
+    }
+
+    func testABadAnimeStateDecodesAsAbsentAndCostsNothingElse() throws {
+        let page = try decode(MediaDetail.self, """
+        {"ref": {"source": "mal", "media_type": "anime", "media_id": "21"}, "title": "One Piece",
+         "user_state": {"is_tracked": true, "status": "In progress", "has_liked": true, "anime": {"version": "not a number"}},
+         "anime_rows": "not a list"}
+        """)
+        XCTAssertEqual(page.title, "One Piece")
+        XCTAssertEqual(page.userState?.status, "In progress")
+        XCTAssertEqual(page.userState?.hasLiked, true)
+        XCTAssertNil(page.userState?.anime)
+        XCTAssertNil(page.animeRows)
+
+        let envelope = try decode(TVActionResponse.self, """
+        {"tracking": null, "anime": {"up_next": {"episode_number": "x"}}, "row": {"a": 1}, "rows": 7, "changed": true}
+        """)
+        XCTAssertTrue(envelope.envelope.changed, "The write landed")
+        XCTAssertNil(envelope.envelope.anime)
+        XCTAssertNil(envelope.envelope.row)
+        XCTAssertNil(envelope.envelope.rows)
+
+        let like = try decode(MediaLikeResponse.self, #"{"liked": true, "anime": [], "rows": {"episodes": 3}}"#)
+        XCTAssertTrue(like.liked)
+        XCTAssertNil(like.anime)
+        XCTAssertNil(like.rows)
+    }
+
+    func testABadListStateCostsHomesRailOnlyThatState() async throws {
+        let repository = APITrackingRepository(client: TVTrackingModelsTests.client())
+        func item(_ mediaId: String, anime: String) -> String {
+            """
+            {"media": {"ref": {"source": "mal", "media_type": "anime", "media_id": "\(mediaId)"}, "title": "T\(mediaId)"},
+             "tracking": {"tracking_id": \(mediaId), "status": "In progress", "rating": null, "progress": null, "repeats": null,
+                          "start_date": null, "end_date": null, "notes": null, "updated_at": null, "anime": \(anime)}}
+            """
+        }
+        let good = #"{"version": 1, "in_library": true, "status": "In progress", "up_next": {"episode_number": 2}}"#
+        let results = [item("1", anime: #"{"version": "bad"}"#), item("2", anime: good)].joined(separator: ",")
+        TVDataURLProtocol.response = Data(#"{"count": 2, "next": null, "previous": null, "results": [\#(results)]}"#.utf8)
+        let page = try await repository.continueWatchingAnime(page: nil)
+        XCTAssertEqual(page.results.map(\.media.ref.mediaId), ["1", "2"], "Both stay on the rail")
+        XCTAssertNil(page.results[0].tracking.anime)
+        XCTAssertEqual(page.results[1].tracking.anime?.upNext?.episodeNumber, 2)
+    }
+
     func testPayloadsWithoutAnimeKeysDecodeAsBefore() throws {
         let detail = try decode(MediaDetail.self, #"{"ref":{"source":"tmdb","media_type":"tv","media_id":"1"},"title":"A Show","user_state":{"is_tracked":false,"in_lists":[],"has_liked":false}}"#)
         XCTAssertNil(detail.animeRows)
