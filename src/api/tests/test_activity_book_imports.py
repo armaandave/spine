@@ -124,6 +124,7 @@ class ABookSpineHasNeverSeen:
     """Resolve any row to a book with no Item yet, the provider's page count on it."""
 
     def __init__(self, pages):
+        """Hold the page count the provider lists, if any."""
         self.pages = pages
 
     def resolve_rows(self, rows):
@@ -465,7 +466,7 @@ class FilesComingBackTests(BookImportBase):
 
 
 class YamtrackScoresTests(BookImportBase):
-    """A file's score off the half stars keeps its log, and says so (docs/media-imports.md)."""
+    """A file's score off the half stars keeps its log, and the import says so."""
 
     def test_it_keeps_the_log_and_rounds_the_rating(self):
         payload = self.yamtrack_row(status=Status.COMPLETED.value, end_date="2024-05-01 00:00:00+00:00", score="8.5")
@@ -514,7 +515,7 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
         self.assertEqual(self.summary(YEAR_2025, tab=BOOK), before_2025)
 
     def test_a_reread_stopped_then_the_eye_invents_no_mark(self):
-        """The file holds no place on a Completed row, so the stopped reread's 50 goes."""
+        """A Completed row in the file holds no place, so the reread's 50 goes."""
         item = self.titled("reread-eye")
         self.finish(item, d(2025, 3, 1))
         self.begin(item, d(2026, 1, 1))

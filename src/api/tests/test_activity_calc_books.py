@@ -692,7 +692,7 @@ class DeleteTests(BookCalcBase):
         self.assertEqual(Book.objects.get(item=item).status, Status.IN_PROGRESS.value)
 
     def test_deleting_a_log_never_turns_a_reread_into_a_typo_fix(self):
-        """Stopped at 200, logged, reread to 40: that reread opened at zero when it began."""
+        """Stopped at 200, logged, reread to 40: that reread began at zero."""
         item = self.book("splice")
         self.begin(item, d(2025, 11, 1))
         self.save(item, 200, d(2025, 11, 10))
@@ -747,7 +747,7 @@ class DeleteTests(BookCalcBase):
                 mark(item)
                 self.begin(item, d(2026, 2, 1))
                 start = ProgressChange.objects.get(item=item, current_progress__kind=ProgressChange.START)
-                self.assertIs(start.current_progress.get("began_over"), True)
+                self.assertTrue(start.current_progress.get("began_over"))
 
     def test_a_first_start_and_a_pick_up_do_not_say_it(self):
         item = self.book("not-over")
@@ -992,7 +992,7 @@ class PileTests(BookCalcBase):
 
 
 class StatusMovesAroundAMarkTests(BookCalcBase):
-    """A status move adds nothing to any number (decision 21), whenever the mark came."""
+    """A status move adds nothing to any number (decision 21), whenever the mark was."""
 
     def read_after_the_eye(self, name):
         item = self.book(name)
@@ -1067,7 +1067,7 @@ class StatusMovesAroundAMarkTests(BookCalcBase):
 
 
 class LegacyJourneyTests(BookCalcBase):
-    """Rows migration 0075 left: a Completed journey with no log, which is no reading."""
+    """What migration 0075 left: a Completed journey with no log is no reading."""
 
     def legacy(self, item, *, marked=True, status=Status.COMPLETED.value, pages=400):
         Book.objects.bulk_create(

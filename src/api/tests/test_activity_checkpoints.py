@@ -1,10 +1,10 @@
 """Each phone sheet, step by step, so a wrong number fails here before Armaan sees it.
 
 With the Stats cache on and each step run through commit, a write that misses a bump
-leaves the old number. Everything is read through the real endpoints, as JSON, and every
-number on a sheet is checked as a plain int, so a Decimal rendered as 360.0, which the app
-reads as 0, fails here. So does one marked approximate, which the app prints with ≈. Each
-step sends the request the phone sends. The seed is the same one the phone test runs.
+leaves the old number. Everything is read through the real endpoints, as JSON, and
+every number on a sheet is checked as a plain int, so a Decimal rendered as 360.0, which
+the app reads as 0, fails here. So does one marked approximate, which the app prints
+with ≈. Each step sends the request the phone sends. The seed is the phone test's own.
 """
 
 import contextlib
@@ -40,7 +40,6 @@ from api.tests.test_stats_v2_shape import ALL_TIME, YEAR_2024, YEAR_2025
 from app import book_tracking
 from app.models import (
     TV,
-    Book,
     DiaryEntry,
     Episode,
     Item,
@@ -88,7 +87,7 @@ class CheckpointBase(TestCase):
         self.dev = seed.dev_user()
 
     def dirty_the_dev_user(self):
-        """Leave what a finished sheet leaves, in another year: none of it reaches the sheet."""
+        """Leave what a finished sheet leaves, in another year: none of it shows."""
         users = get_user_model().objects
         dev, _ = users.get_or_create(username=seed.DEV_USERNAME)
         friend, _ = users.get_or_create(username=seed.FRIEND_USERNAME)
@@ -127,14 +126,14 @@ class CheckpointBase(TestCase):
         return response.json()
 
     def pages(self, params, user=None):
-        """Return the number as the phone prints it: a plain int, in pages, not approximate."""
+        """Return the number as the phone prints it: an int, pages, not approximate."""
         rows = self.stats(params, user=user)["time"]["rows"]
         row = next((row for row in rows if row["media_type"] == BOOK), None)
         if row is None:
             return 0
         self.assertIs(type(row["value"]), int, row)
         self.assertEqual(row["unit"], "pages", row)
-        self.assertIs(row["approximate"], False, row)
+        self.assertFalse(row["approximate"], row)
         return row["value"]
 
     def assert_header_numbers(self, params):
@@ -195,7 +194,7 @@ class CheckpointBase(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
 
     def log(self, name, day=TODAY):
-        """Send what MediaLogView's finished log sends: a journey id only for a live read."""
+        """Send what MediaLogView's log sends: a journey id only for a live read."""
         book = self.phone().get(self.book_url(name)).json().get("book") or {}
         journey = book.get("current_journey") or {}
         body = {
@@ -219,7 +218,7 @@ class CheckpointBase(TestCase):
         self.assertEqual(response.status_code, 204, response.content)
 
     def currently_reading(self, name):
-        """performQuickAction(.currently) on a book that isn't paused: a PATCH, not an action."""
+        """performQuickAction(.currently) off Paused: a PATCH, not an action."""
         response = self.phone().patch(
             self.book_url(name),
             {"status": "In progress", "start_date": TODAY.isoformat(), "mutation_id": str(uuid4())},
@@ -228,7 +227,7 @@ class CheckpointBase(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
 
     def action(self, name, action):
-        """Send a book action as performBookAction does, with the dates it sends for each."""
+        """Send a book action as performBookAction does, with the dates it sends."""
         body = {"mutation_id": str(uuid4())}
         if action in ("resume", "restart"):
             body["start_date"] = TODAY.isoformat()
@@ -409,7 +408,7 @@ class BooksSheetTests(CheckpointBase):
 
 
 class EveryRowCanBeReachedTests(CheckpointBase):
-    """He opens a book from Home's In progress, the Library or the list, never from search."""
+    """He opens a book from Home's In progress, the Library or the list, not search."""
 
     def reachable(self):
         listed = CustomList.objects.get(owner=self.dev, name=seed.LIST_NAME)
@@ -463,7 +462,7 @@ class LikesSheetTests(CheckpointBase):
         self.assertEqual(ContentLike.objects.count(), 0)
 
     def test_run_after_midnight_the_new_save_stays_on_the_friends_day(self):
-        """A sheet lasts up to 12 hours: this row has to read the day the like was on."""
+        """A sheet lasts up to 12 hours: this row must read the day the like was on."""
         self.assertEqual(self.friend_row()["consumed_at"], "2026-11-02")
         after_midnight = datetime(2026, 11, 4, 0, 30, tzinfo=ZoneInfo(NEW_YORK))
         with patch("django.utils.timezone.now", return_value=after_midnight), self.captureOnCommitCallbacks(execute=True):
@@ -572,7 +571,7 @@ class StoredRowsTests(CheckpointBase):
 
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
 class BooksSheetOnUTCTests(BooksSheetTests):
-    """The test backend's settings resolve to UTC, so that's where the phone test runs."""
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
 
 
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
@@ -581,7 +580,7 @@ class LikesSheetOnUTCTests(LikesSheetTests):
 
 
 class SeedScriptTests(SimpleTestCase):
-    """It clears the dev user, so it runs only in a feature worktree that's being served."""
+    """It clears the dev user, so it runs only in a feature worktree being served."""
 
     SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "ios" / "seed-activity-checkpoint.sh"
 
@@ -595,12 +594,12 @@ class SeedScriptTests(SimpleTestCase):
         self.git(self.main, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "first")
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        # A stand-in for uv: the script asks it for the database's vendor, then runs the seed.
-        self.write_script(self.bin / "uv", 'echo sqlite\n')
+        # A stand-in for uv: the script asks it for the database's vendor, then seeds.
+        self.write_script(self.bin / "uv", "echo sqlite\n")
         self.install(self.main)
 
     def git(self, where, *args):
-        subprocess.run(["git", *args], cwd=where, check=True, capture_output=True)
+        subprocess.run(["git", *args], cwd=where, check=True, capture_output=True)  # noqa: S603, S607
 
     def write_script(self, path, body):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -622,8 +621,8 @@ class SeedScriptTests(SimpleTestCase):
         self.write_script(checkout / "scripts" / "ios" / "test-backend.sh", f'echo "SERVED_CHECKOUT: {served}"\n')
         environment = {key: value for key, value in os.environ.items() if key != "DB_HOST"}
         environment["PATH"] = f"{self.bin}{os.pathsep}{environment['PATH']}"
-        return subprocess.run(
-            ["bash", str(checkout / "scripts" / "ios" / self.SCRIPT.name)],
+        return subprocess.run(  # noqa: S603
+            ["bash", str(checkout / "scripts" / "ios" / self.SCRIPT.name)],  # noqa: S607
             cwd=checkout,
             env=environment,
             capture_output=True,

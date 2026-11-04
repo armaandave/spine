@@ -60,7 +60,7 @@ MAL_EXPORT = (
 
 
 def _anime_save(owner, item):
-    """Write what a like reaches on an anime: anime's own saves have no change row here."""
+    """Write what a like reaches on an anime: its own saves have no change row here."""
     return ProgressChange.objects.create(
         actor=owner,
         item=item,
@@ -437,7 +437,7 @@ class RealOverwriteTests(LikesBase, BookImportBase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class RealCommitTests(TransactionTestCase):
-    """No wrapping transaction, as an import task runs, so the receiver's hook really fires."""
+    """No wrapping transaction, as an import task runs, so the receiver's hook fires."""
 
     def setUp(self):
         for target in ("app.models.Item.fetch_releases", "app.signals.update_daily_statistics.delay"):
@@ -470,7 +470,7 @@ class RealCommitTests(TransactionTestCase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class TVSeasonDeleteTests(TestCase):
-    """A season is left out of the receiver, so its delete is what drops a post (plan 5.4)."""
+    """A season is left out of the receiver, so its delete has to drop a post (5.4)."""
 
     def setUp(self):
         self.provider = FakeTVProvider().__enter__()

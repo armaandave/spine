@@ -340,14 +340,14 @@ class PickedUpBooksTests(StepBase):
         self.assertIn("no place: 0", err)
 
     def blank(self, item):
-        """Empty the journey just picked up, as it was before one opened at its place."""
+        """Empty the journey just picked up, as before one opened at its place."""
         journey = Book.objects.get(item=item).current_session
         BookSession.objects.filter(pk=journey.pk).update(pages_read=None, percentage_read=None)
         Book.objects.filter(item=item).update(progress=0)
         return journey
 
     def test_a_restart_with_no_reading_then_a_pick_up_changes_no_number(self):
-        """Stopped at 200, Restart, stopped with nothing read, back: that read began at zero."""
+        """Stopped at 200, Restart, stopped with nothing read, back: it began at 0."""
         item = self.book("chain")
         self.begin(item, d(2025, 11, 1))
         self.save(item, 200, d(2025, 11, 2))

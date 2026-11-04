@@ -229,7 +229,7 @@ class ContinuingTests(SeriesCalcBase):
         self.assertEqual(self.lines(), ["2026-03-02 read 10", "2025-11-01 started"])
 
     def test_edit_dates_then_a_log_goes_by_the_edited_start(self):
-        """Edited to November, a log in December is after first activity, so nothing moves."""
+        """Edited to November, a log in December is after first activity."""
         item = self.title("edited-log", total=400)
         self.begin(item, d(2026, 3, 1))
         with self.on(d(2026, 3, 3)):

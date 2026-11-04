@@ -3,10 +3,10 @@
 scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
 and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
 first, so it can run again over anything, and it uses only manual titles, which search
-can't find: searching "Book V" reaches a real book of that name. So every book a row names
-opens from Home's In progress, the Library or the "Checkpoint titles" list, and a book
-untouched until its row is on that list. Anything dated in the past, and anything another
-person does, is a step here: the sheet says when, and the phone does the rest.
+can't find: searching "Book V" reaches a real book of that name. So every book a row
+names opens from Home's In progress, the Library or the "Checkpoint titles" list, and a
+book untouched until its row is on that list. Anything dated in the past, and anything
+another person does, is a step here: the sheet says when, and the phone does the rest.
 """
 
 from contextlib import contextmanager
@@ -338,8 +338,8 @@ def like_from_tokyo():
 def friend_starts_over():
     """Delete the friend's reading, then save 10 pages for them on that same day.
 
-    The day comes from their save: a sheet can run past midnight, and on another day this
-    would read 0 likes even with the bug back.
+    The day comes from their save: a sheet can run past midnight, and on another day
+    this would read 0 likes even with the bug back.
     """
     friend = friend_user()
     item = book("Friend")

@@ -303,7 +303,7 @@ class BookStoriesTests(BookCalcBase):
         self.assertEqual(self.rows()[0], "2026-04-03 log +150")
 
     def test_edit_dates_then_a_log_goes_by_the_edited_start(self):
-        """Edited to November, a log in December is after first activity, so saves stay."""
+        """Edited to November, a log in December is after first activity: saves stay."""
         item = self.book("edited-log")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 100, d(2026, 3, 2))

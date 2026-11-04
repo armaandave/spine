@@ -385,7 +385,7 @@ def _opening(session, saves, length, *, finished):
 def _first_move_picks_up(saves):
     """Return whether a journey's first status move is a pick-up.
 
-    Nothing in it was paused, so it picked up something it no longer sits beside: a place
+    Nothing in it was paused, so it picked up what it no longer sits beside: a place
     with no journey, or a stopped attempt since deleted.
     """
     for change in saves:
@@ -445,8 +445,8 @@ def _walk_session(title, reading, session, saves, total, zone, *, continues):
 def _walk_journeys(title, sessions, saves, total, zone):
     """Fold a title's journeys into rows; return each journey's read.
 
-    A file's read is its own: whatever its id sits between, it doesn't end the read under
-    way or carry on from one, so a file's date never moves a read's pages.
+    A file's read is its own: whatever its id sits between, it doesn't end the read
+    under way or carry on from one, so a file's date never moves a read's pages.
     """
     by_session = {}
     reading = None
@@ -490,8 +490,8 @@ def _marked_at(tracking):
 def _read_before_mark(tracking, recorded_id, current_id, journeys, by_journey):
     """Return the stopped read a mark came after, or None.
 
-    A direct To Read or Paused clears the mark's record of it, so with no record it's the
-    last journey from before the mark, by moment, which no status move can change. A
+    A direct To Read or Paused clears the mark's record of it, so with no record it's
+    the last journey from before the mark, by moment, which no status move can change. A
     journey begun after a Read came after the mark, and so did one the title still sits
     on: a mark takes the title off its journey.
     """

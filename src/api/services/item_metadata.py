@@ -157,7 +157,7 @@ def fill_book_pages(item, pages):
 
 
 def bump_book_holders(item):
-    """Move the stats version of everyone holding a book whose length changed (STAT-006)."""
+    """Move the stats version of everyone holding a book of a new length (STAT-006)."""
     holders = {
         *Book.objects.filter(item=item).values_list("user_id", flat=True),
         *DiaryEntry.objects.filter(item=item).values_list("user_id", flat=True),
