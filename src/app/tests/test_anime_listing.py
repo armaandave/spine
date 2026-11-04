@@ -15,6 +15,7 @@ from app.providers import anilist, mal, services
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase, FakeAnimeProvider
 from app.tests.tv_fixtures import ProviderDown
 from events.calendar import anime as calendar_anime
+from events.calendar.main import process_items
 from events.calendar.selectors import filter_items_to_fetch
 from events.models import Event
 
@@ -571,6 +572,72 @@ class CalendarJobTests(AnimeTestCase):
         with mock.patch.object(calendar_anime, "process_other") as other:
             calendar_anime.process_anime_bulk([item], [])
         other.assert_called_once()
+
+    def test_an_202_a_failing_schedule_read_still_reads_a_raised_total(self):
+        title = self.fake.add(total=2)
+        item = self.title(title=title)
+        self.tick(item, 1, 2)
+        self.assertEqual(self.row(item).status, "Completed")
+        event = Event.objects.create(item=item, content_number=2, datetime=self.clock.moment - timedelta(days=400))
+        self.clock.advance(days=8)
+        title.total = 4
+        for failure in (requests.exceptions.Timeout, ProviderDown, KeyError):
+            with (
+                self.subTest(failure=failure.__name__),
+                mock.patch.object(services, "api_request", side_effect=failure),
+                mock.patch.object(calendar_anime, "process_other") as other,
+            ):
+                events_bulk = []
+                calendar_anime.process_anime_bulk([item], events_bulk)
+                self.assertEqual(events_bulk, [])
+                other.assert_not_called()
+        row = self.row(item)
+        self.assertEqual((row.status, row.up_next_episode, row.aired_count), ("In progress", 3, 4))
+        self.assertTrue(Event.objects.filter(pk=event.pk).exists(), "The events stay until the next run")
+
+    def test_an_202_a_failing_schedule_read_stops_nothing_else_in_the_job(self):
+        item = self.title(total=2)
+        movie = Item.objects.create(source="tmdb", media_type="movie", media_id="1", title="M", image="https://example.com/m.jpg")
+        with (
+            mock.patch.object(services, "api_request", side_effect=requests.exceptions.Timeout),
+            mock.patch("events.calendar.main.process_other") as other,
+        ):
+            self.assertEqual(process_items([item, movie]), [])
+        other.assert_called_once()
+        self.assertEqual(other.call_args.args[0], movie)
+
+    def test_an_202_one_titles_failed_read_keeps_the_others_events(self):
+        good = self.title(total=12)
+        bad = self.title(total=None)
+        airing_at = int(self.clock.moment.timestamp())
+        answer = {
+            "data": {
+                "Page": {
+                    "pageInfo": {"hasNextPage": False},
+                    "media": [
+                        {
+                            "idMal": int(good.media_id),
+                            "endDate": {"year": 2026, "month": 10, "day": 1},
+                            "episodes": 12,
+                            "airingSchedule": {"nodes": [{"episode": 12, "airingAt": airing_at}]},
+                        },
+                        {
+                            "idMal": int(bad.media_id),
+                            "endDate": {"year": None, "month": None, "day": None},
+                            "episodes": None,
+                            "airingSchedule": {"nodes": [{"episode": 3, "airingAt": airing_at}]},
+                        },
+                    ],
+                },
+            },
+        }
+        with (
+            mock.patch.object(services, "api_request", return_value=answer),
+            mock.patch.object(services, "get_media_metadata", side_effect=requests.exceptions.Timeout),
+        ):
+            events_bulk = []
+            calendar_anime.process_anime_bulk([good, bad], events_bulk)
+        self.assertEqual([(event.item, event.content_number) for event in events_bulk], [(good, 12)])
 
     def test_an_202_refreshing_asks_anilist_once_for_many_titles(self):
         items = [self.title(total=2) for _ in range(3)]

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from app import anime_tracking
+from app import anime_listing, anime_tracking
 from app.models import MediaTypes, Sources
 from app.providers import services
 from events.models import Event
@@ -35,11 +35,20 @@ def anilist_date_parser(start_date):
 
 
 def process_anime_bulk(items, events_bulk):
-    """Process multiple anime items and add events to the event list."""
+    """Process multiple anime items and add events to the event list.
+
+    A failed read costs only what it read: those titles' events stay as they are until
+    the next run, and the rest of the job goes on.
+    """
     if not items:
         return
 
-    anime_data = get_anime_schedule_bulk([item.media_id for item in items])
+    try:
+        anime_data = get_anime_schedule_bulk([item.media_id for item in items])
+    except anime_listing.PROVIDER_FAILURES:
+        logger.warning("AniList's schedule can't be read for the calendar job", exc_info=True)
+        refresh_tracking(items)
+        return
 
     for item in items:
         episodes = anime_data.get(item.media_id)
@@ -66,7 +75,10 @@ def process_anime_bulk(items, events_bulk):
                 item.title,
                 item.media_id,
             )
-            process_other(item, events_bulk)
+            try:
+                process_other(item, events_bulk)
+            except anime_listing.PROVIDER_FAILURES:
+                logger.warning("Can't read the releases of %s", item, exc_info=True)
 
     refresh_tracking(items)
 
@@ -236,7 +248,11 @@ def get_anime_schedule_bulk(media_ids):
         )
 
         for mal_id, media in media_by_id.items():
-            airing_schedule = _process_anilist_media_schedule(mal_id, media)
+            try:
+                airing_schedule = _process_anilist_media_schedule(mal_id, media)
+            except anime_listing.PROVIDER_FAILURES:
+                logger.warning("Can't work out the schedule of MAL ID %s", mal_id, exc_info=True)
+                continue
             if airing_schedule:
                 all_data[mal_id] = airing_schedule
 
