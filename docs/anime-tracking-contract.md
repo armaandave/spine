@@ -106,26 +106,34 @@ An episode counts as aired when any of these holds:
 - AniList's schedule says its time has passed;
 - AniList names a later episode as next to air;
 - the user has a viewing of it; or
-- the title has a total, AniList has answered with no schedule for it, as with an older title, and MAL doesn't list it as not yet aired; then every listed episode counts as aired.
+- AniList has answered with no schedule for the title, and MAL doesn't list it as not yet aired; then every episode within the total counts as aired, or with no total every episode up to the highest AniList lists, because a listed episode is evidence it aired.
+
+That last rule is for older titles, and it also catches an airing title AniList has no schedule for. Spine can't tell how far those have got, so on those titles it counts everything listed, whether or not it has aired. The alternative is an eye that does nothing and logs that can't be saved.
+
+During a break, when AniList names nothing next, its last past schedule entry says how far the title has aired.
+An entry more than half a year old means AniList has stopped following the title, so the title counts as having no schedule, and that entry as one more listed episode.
 
 Spine keeps a stored copy of the title's total, aired count, next episode and rows, updated whenever it fetches them, and uses that copy when a provider can't be reached.
 A page refreshes a copy that has gone stale: a day after it was read while the title is airing or announced, as soon as a known airing time has passed, and a week after it was read once the title has finished. Each provider gets one short try, and a failure keeps the copy and backs off.
 A copy needs MAL's numbers: one without them counts as no copy.
 A write that needs a title Spine has no copy of is refused with a retryable "Anime details are unavailable right now", and changes nothing.
+A write that needs no copy never asks for one: an untick, the filled eye, clearing stars, turning the heart off, stopping a rewatch, a log edit, or a form's notes.
 
 While MAL says a title is airing and AniList hasn't answered, Spine doesn't know how many have aired, whatever the total.
 The rows run to one past the last watched and a tick still works, but anything that fills the rest (the eye, stars or a heart that mark, a log, Mark watched up to here) is refused with that same retryable message.
 
-A manual title has no provider, so the number its owner writes is its total, kept on their own record. With no number, what's watched is the total once the eye, stars or a heart that mark, a log or a written Completed finishes it.
+A manual title has no provider, so the number its owner writes is its total, kept on their own record. With no number, what's watched is the total once the eye, stars or a heart that mark, a log or a written Completed finishes it. That total goes when the log or mark that set it is undone.
 
 ### AN-101: What a row shows
 
 The page and the Home sheet list one row per aired episode, then the unaired episodes Spine knows of.
 
 - A row shows the episode's number, its title and image when AniList lists them, and a tick. Without them it reads "Episode 5".
+- AniList can file one list under every season of a series. A list that runs past the total, or is the list of a title that came out before this one, isn't this title's, so its rows read "Episode 5".
 - Rows never wait for AniList. If a fetch fails, the number stays.
 - An unaired row shows its air date in place of a tick, or "TBA".
-- With no total and no schedule, the list runs from E1 to one past the last watched episode, so any of them can be ticked.
+- With no total and no schedule, the list runs from E1 to one past the last watched episode or to the highest episode AniList lists, whichever is later, with no gaps, so any of them can be ticked. With no list and nothing watched, that's one row.
+- A title with no total on a break runs the same way, from its last aired entry.
 - Tapping a row's tick ticks or unticks it. Tapping its body does nothing, because episodes have no pages.
 - A title with a thousand episodes opens at up next as fast as a short one, and every episode stays reachable.
 
@@ -140,7 +148,7 @@ Every write keeps the tracking record's progress equal to this count, on every e
 
 A tick, log or mark of an episode past a known total is refused, and the message names the total.
 A tick of an episode whose air time is more than one day away is refused; the one day covers time zones.
-With no total and no schedule, any episode number is accepted up to 20,000, past the longest anime there is. A number over that is refused as a clean error before anything is built from it, and an import drops it instead of filling it.
+With no total and nothing named next, any episode number is accepted up to 20,000, past the longest anime there is. A number over that is refused as a clean error before anything is built from it, and an import drops it instead of filling it.
 A log or mark of a title with nothing aired is refused.
 A refused write changes nothing.
 If a total later falls below an episode the user watched, that viewing stays and counts toward nothing.
@@ -318,12 +326,14 @@ MAL, MAL export, AniList, Kitsu, SIMKL and Yamtrack imports create one tracking 
 - Completed becomes an undated mark of everything aired. Any log the import makes today, it still makes, and that log's date dates its fills.
 - Each rewatch in the source becomes a finished earlier pass, never another record.
 - Planning, Paused and Dropped stay the user's choice. In progress means Watching. Spine never infers a stop from inactivity (GM-501).
-- Imported counts and marks create no progress or starts. An imported log is a log, on its own date (AC-1). A date past today on the user's calendar becomes today, because one date never aborts an import.
+- Imported counts and marks create no progress or starts. An imported log is a log, on its own date (AC-1).
+- Dates are judged on the user's calendar. A date one day past their today becomes today, because that's a time zone. A date further out isn't real, so it counts as no date, with no log and no start or end from it, because Spine never invents a date. One date never aborts an import.
 - Imports never ask the earlier-episodes question and never open anything.
 - A person's file never sets the stored copy anyone else reads. What it says stays on their own record until the calendar job, which the import's end queues, reads the real numbers.
 - A place after a finished pass is a rewatch, Paused or Dropped too, and keeps that place (AN-600).
 - They write in bulk, with no provider call per episode.
 - Overwrite replaces viewings, marks and choices with the source's. Logs survive and their fills are rebuilt in the pass each finished, never one the source says is still open (TV-800).
+- On an overwrite the source's place wins. A kept log that covers more than the source says is watched stays in a finished pass before that place, which reads as a rewatch: Watching at 3 of 12 reads "E4 next · 3 of 12", and On hold at 3 reads Paused at E4. Planning isn't available once something's been logged (TV-006), so Plan to watch with a kept log keeps the worked-out status.
 
 ### AN-801: A webhook play isn't a watch
 
@@ -344,6 +354,7 @@ What they send still works: a tracking write with a status or a progress number,
 
 - A written Completed means mark it watched. In progress means choose Watching. Planning, Paused and Dropped mean that choice.
 - A progress number from the web or the API means ticks. Raising it ticks the next unwatched episodes, dated now. Lowering it removes the latest unlogged viewings, and is refused when a log covers them.
+- A status sent with a progress of 0 applies once the viewings are gone, which it can now nothing's watched. With no status, or one that still can't apply, as on a single, the title leaves the library.
 - When a number leaves the status sent with it out of date, such as reaching the total with In progress, the number applies and the status doesn't fail it.
 
 Installed builds keep these limits until the next build: their anime eye does nothing, they have no rows, Home's card opens the page, and their stars and heart on a partway title show the server's reason.
@@ -382,7 +393,7 @@ Run each through the API, and through the web, a webhook or an import where one 
 | N-15 | Log an airing title with 7 of 12 aired. | Watching, "Caught up · E8 on Thu". Fills for what aired. | AN-400, AN-201 |
 | N-16 | Delete that log. | Its fills go, ticks stay, and the title returns to where it was. | AN-400 |
 | N-17 | Tick to the end of a long runner with no total. | Caught up. No log screen. Log on + still works. | AN-201, AN-203 |
-| N-18 | A title with no total and no schedule, nothing watched. | One row, E1. Tick it: two rows, and "1 episode". | AN-101, AN-102 |
+| N-18 | A title with no total, no schedule and no list, nothing watched. | One row, E1. Tick it: two rows, and "1 episode". | AN-101, AN-102 |
 | N-19 | Finish a title from Home's sheet, with a next title aired. Choose Not now. | The sheet shows the next title's rows. Closing adds nothing. A tick there puts it in Watching. | AN-501 |
 | N-20 | Open a finished title's page, with a next title. | "Next: …" opens its page. Nothing is added. | AN-500 |
 | N-21 | Finished title, Rewatch, tick E1 and E2, then Stop rewatching. | Rewatching read "1 of 25" and "2 of 25". Afterwards Completed with every tick from both passes kept. Stats counted the two again. | AN-600, AN-704 |
