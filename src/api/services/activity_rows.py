@@ -20,6 +20,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from functools import partial
+from types import SimpleNamespace
+
+from django.db.models import F
 
 from app import user_calendar
 from app.models import (
@@ -31,6 +34,7 @@ from app.models import (
     DiaryEntry,
     Game,
     GameSession,
+    Item,
     Manga,
     MangaAttempt,
     MediaTypes,
@@ -58,6 +62,17 @@ MULTI_TITLE_DAYS = "multi_title_days"
 EPISODES = "episodes"
 HOURS = "hours"
 STOPPING_MOVES = (ProgressChange.PAUSED, ProgressChange.STOPPED)
+# What the calculation reads of a Book.
+BOOK_FIELDS = (
+    "id",
+    "user_id",
+    "item_id",
+    "status",
+    "progress",
+    "completed_manually",
+    "current_session_id",
+    "undated_read_previous_session_id",
+)
 
 
 @dataclass
@@ -338,6 +353,17 @@ def saved_day(change, zone):
 # Books
 
 
+@dataclass(slots=True)
+class _Save:
+    """What a read needs of a ProgressChange."""
+
+    pk: int
+    created_at: datetime
+    saved_on: date | None
+    previous_progress: dict
+    current_progress: dict
+
+
 def _pages_of(snapshot, length):
     """Return a saved place in pages, or None for a percent of an unknown length."""
     if snapshot.get("kind") == "pages":
@@ -473,21 +499,22 @@ def _walk_journeys(title, sessions, saves, total, zone):
     return by_session
 
 
-def _marked_at(tracking):
+def _marked_at(model, tracking_id):
     """Return when this title's mark last went on, by its history rows in save order.
 
     None when no row says so: migration 0075 and the undated Reads step write none.
     """
+    rows = model.history.filter(id=tracking_id).order_by("history_id")
     marked_at = None
     marked = False
-    for now_marked, moment in tracking.history.order_by("history_id").values_list("completed_manually", "history_date"):
+    for now_marked, moment in rows.values_list("completed_manually", "history_date"):
         if now_marked and not marked:
             marked_at = moment
         marked = now_marked
     return marked_at
 
 
-def _read_before_mark(tracking, recorded_id, current_id, journeys, by_journey):
+def _read_before_mark(model, tracking_id, recorded_id, current_id, journeys, by_journey):  # noqa: PLR0913
     """Return the stopped read a mark came after, or None.
 
     A direct To Read or Paused clears the mark's record of it, so with no record it's
@@ -499,7 +526,7 @@ def _read_before_mark(tracking, recorded_id, current_id, journeys, by_journey):
         return by_journey.get(recorded_id)
     if not journeys:
         return None
-    marked_at = _marked_at(tracking)
+    marked_at = _marked_at(model, tracking_id)
     last = None
     for journey in journeys:
         if journey.previous_status == Status.COMPLETED.value or (marked_at and journey.created_at > marked_at):
@@ -527,7 +554,7 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
     if book and book.completed_manually:
         # A mark after a stop holds only what that read doesn't: a place with no day is
         # in the pile already.
-        stopped = _read_before_mark(book, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
+        stopped = _read_before_mark(Book, book.id, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
         held = stopped.counted.value if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
     finished = book and book.status == Status.COMPLETED.value and (entries or book.completed_manually)
@@ -541,43 +568,41 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
 def _book_rows(result, owners, _viewer, titles, piles):
     """Add books' rows. Book logs show to every viewer (AC-5), so all read alike."""
     only = {} if titles is None else {"item__in": titles}
+    # Plain values, not model rows: a Book's FieldTracker and thousands of saves were most of
+    # this walk, and every Stats miss runs it. Sessions don't load their book for the same
+    # reason. A plain save reads like a ProgressChange to everything below.
     changes = defaultdict(list)
-    for change in ProgressChange.objects.filter(
-        actor__in=owners,
-        item__media_type=MediaTypes.BOOK.value,
-        **only,
-    ).order_by("id"):
+    for pk, created_at, saved_on, previous, current in (
+        ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.BOOK.value, **only)
+        .order_by("id")
+        .values_list("pk", "created_at", "saved_on", "previous_progress", "current_progress")
+    ):
         # A row whose journey is gone never gets read.
-        journey_id = change.current_progress.get("journey_id")
+        journey_id = current.get("journey_id")
         if journey_id is not None:
-            changes[journey_id].append(change)
+            changes[journey_id].append(_Save(pk, created_at, saved_on, previous, current))
     sessions = defaultdict(list)
-    items = {}
     for session in (
         BookSession.objects.filter(
             related_book__user__in=owners,
             **({} if titles is None else {"related_book__item__in": titles}),
         )
-        .select_related("completion_diary_entry", "related_book__item")
+        .annotate(owner_id=F("related_book__user_id"), title_id=F("related_book__item_id"))
+        .select_related("completion_diary_entry")
         .order_by("id")
     ):
-        book = session.related_book
-        sessions[book.user_id, book.item_id].append(session)
-        items[book.item_id] = book.item
+        sessions[session.owner_id, session.title_id].append(session)
     entries = defaultdict(list)
-    for entry in (
-        DiaryEntry.objects.filter(user__in=owners, item__media_type=MediaTypes.BOOK.value, **only)
-        .select_related("item")
-        .order_by("id")
-    ):
+    for entry in DiaryEntry.objects.filter(user__in=owners, item__media_type=MediaTypes.BOOK.value, **only).order_by("id"):
         entries[entry.user_id, entry.item_id].append(entry)
-        items[entry.item_id] = entry.item
     books = {}
-    for book in Book.objects.filter(user__in=owners, **only).select_related("item"):
+    for fields in Book.objects.filter(user__in=owners, **only).values(*BOOK_FIELDS):
+        book = SimpleNamespace(**fields)
         books[book.user_id, book.item_id] = book
-        items[book.item_id] = book.item
+    keys = {*sessions, *entries, *books}
+    items = Item.objects.only("total_pages").in_bulk({item_id for _actor_id, item_id in keys})
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
-    for key in {*sessions, *entries, *books}:
+    for key in keys:
         actor_id, item_id = key
         title = _book_title(
             actor_id,
@@ -872,7 +897,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             _log_on_read(title, alone, entry, total, zone, sees)
             title.take(alone)
     if marked:
-        stopped = _read_before_mark(row, row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
+        stopped = _read_before_mark(type(row), row.pk, row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
         held = stopped.counted.value if stopped else ZERO
         if opening_over_mark is not None:
             base = opening_over_mark

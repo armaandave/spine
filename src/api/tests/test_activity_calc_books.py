@@ -1557,6 +1557,19 @@ class AdapterCostTests(BookCalcBase):
                 self.summary(YEAR_2026, tab=BOOK)
                 self.assertEqual(counted.call_count, 0, media_type)
 
+    def test_the_walk_builds_no_book_or_save_rows(self):
+        """A Book's FieldTracker and thousands of saves were most of a Stats miss (5.2)."""
+        item = self.book("cost")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 40, d(2026, 3, 2))
+        self.do(book_tracking.drop, item, d(2026, 3, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 3, 4))
+        with (
+            patch.object(Book, "from_db", side_effect=AssertionError("A Book row")),
+            patch.object(ProgressChange, "from_db", side_effect=AssertionError("A save row")),
+        ):
+            self.assert_numbers(0, 40, 400)
+
     def test_one_global_request_walks_once(self):
         patcher, counted = self.counted_adapter()
         with patcher:
