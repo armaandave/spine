@@ -1256,7 +1256,7 @@ def media_detail(  # noqa: C901, PLR0912, PLR0915
             summary["ref"]["item_id"] = item.id
             summary["user_state"] = user_state_for_item(user, item)
         summary["user_state"]["tv"] = tv_detail["state"]
-    anime_detail = _anime_detail(media_type, item, metadata=fetched_metadata, user=user)
+    anime_detail = _anime_detail(media_type, item, metadata=fetched_metadata, page_metadata=metadata, user=user)
     if anime_detail is not None:
         # The viewer's anime state and rows, whether or not they track the title.
         if summary["user_state"] is None:
@@ -1438,16 +1438,17 @@ def _tv_show_item_for(item, *, create):
     return show_item
 
 
-def _anime_detail(media_type, item, *, metadata, user):
+def _anime_detail(media_type, item, *, metadata, page_metadata, user):
     """Keep a title's stored copy current and return the viewer's state and rows.
 
-    Metadata fetched in this request updates the copy's numbers and next title (AN-100,
-    AN-500). The page never waits on AniList beyond a first open's one short try
-    (AN-101). No anime rule lives here.
+    Metadata fetched in this request updates the copy's numbers (AN-100), and the series
+    order the page holds, cached or not, its next title (AN-500). The page never waits
+    on AniList beyond a first open's one short try (AN-101). No anime rule lives here.
     """
     if media_type != MediaTypes.ANIME.value or item is None:
         return None
     anime_listing.update_from_metadata(item, metadata)
+    anime_listing.update_next_title(item, page_metadata)
     if not (user and user.is_authenticated):
         return None
     return anime_tracking.page_payload(user, item)

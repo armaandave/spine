@@ -133,7 +133,14 @@ class FakeAnimeProvider:
         self.calls.append("series")
         if "mal" in self.failing:
             raise ProviderDown
-        return {"items": self.titles[str(media_id)].series}
+        title = self.titles[str(media_id)]
+        return {
+            "series_id": title.media_id,
+            "source": Sources.MAL.value,
+            "media_type": MediaTypes.ANIME.value,
+            "name": title.title,
+            "items": title.series,
+        }
 
     def _anilist_episodes(self, mal_ids, *, timeout=None, retry_rate_limits=True):  # noqa: ARG002
         self.calls.append("anilist")

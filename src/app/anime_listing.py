@@ -323,19 +323,17 @@ EMPTY_EPISODES = {"next": None, "schedule": {}, "episodes": {}}
 
 
 def update_from_metadata(item, metadata):
-    """Store the numbers and next title from MAL metadata fetched elsewhere; never raises."""
+    """Store the numbers from MAL metadata fetched elsewhere; never raises."""
     if item.source == Sources.MANUAL.value or not metadata:
         return
     now = user_calendar.now()
     row = _stored_row(item)
-    has_series = bool((metadata.get("related") or {}).get("series"))
     if (
         row is not None
         and row.fetched_at is not None
         and now - row.fetched_at < NUMBERS_FRESH
         and row.total == (metadata.get("max_progress") or None)
         and row.provider_status == str((metadata.get("details") or {}).get("status") or "")[:20]
-        and not (has_series and row.series_checked_at is None)
     ):
         # The usual page view writes nothing.
         return
@@ -343,6 +341,25 @@ def update_from_metadata(item, metadata):
         _save(item, numbers=metadata, episodes=None, now=now)
     except (IntegrityError, *PROVIDER_FAILURES):
         logger.exception("Could not store the numbers of %s", item)
+
+
+def update_next_title(item, metadata):
+    """Store the next title from the series order a page holds (AN-500); never raises.
+
+    Only when the copy's is missing or has gone stale, so the usual page view writes nothing.
+    """
+    series_items = ((metadata or {}).get("related") or {}).get("series")
+    if item.source == Sources.MANUAL.value or not series_items:
+        return
+    now = user_calendar.now()
+    try:
+        row = _stored_row(item) or _create_row(item)
+        if _series_is_stale(row, now):
+            row.next_title = next_title_in(series_items, item.media_id)
+            row.series_checked_at = now
+            row.save(update_fields=["next_title", "series_checked_at"])
+    except (IntegrityError, *PROVIDER_FAILURES):
+        logger.exception("Could not store the next title of %s", item)
 
 
 def provisional_listing(item, total):
@@ -460,11 +477,6 @@ def _save(item, *, numbers, episodes, now, failed=False):
     if numbers is not None:
         _apply_numbers(row, numbers, now)
         fields.extend(["total", "provider_status", "media_format", "premiere_date", "fetched_at", "rows_fetched_at"])
-        series_items = (numbers.get("related") or {}).get("series")
-        if series_items:
-            row.next_title = next_title_in(series_items, item.media_id)
-            row.series_checked_at = now
-            fields.extend(["next_title", "series_checked_at"])
     if episodes is not None:
         _apply_episodes(row, episodes, now)
         fields.extend(["next_episode", "next_air_at", "rows", "rows_fetched_at", "retry_after"])

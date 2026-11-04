@@ -15,7 +15,7 @@ import requests
 from rest_framework.test import APIClient
 
 from app import anime_tracking
-from app.models import Anime, AnimeMark, Item
+from app.models import Anime, AnimeListing, AnimeMark, Item
 from app.providers import mal
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase
 from app.tests.tv_fixtures import make_user
@@ -310,6 +310,55 @@ class AcceptanceTests(AnimeTestCase):
         self.action(item, "mark_watched")
         self.assertEqual(self.state(item)["next_title"]["title"], "Attack on Titan Season 2")
         self.assertIsNone(self.row(sequel))
+
+    def _series_pair(self):
+        # A title with a sequel, and no job has read its place in the series yet.
+        sequel = self.fake.add(title="Attack on Titan Season 2", total=12, start_date="2017-04-01")
+        sequel_item = self.title(title=sequel)
+        first = self.fake.add(
+            total=2,
+            series=[
+                {"media_id": "x", "position": 1, "title": "Attack on Titan"},
+                {"media_id": sequel.media_id, "position": 2, "title": "Attack on Titan Season 2", "image": "https://example.com/s2.jpg", "release_date": "2017-04-01"},
+            ],
+        )
+        first.series[0]["media_id"] = first.media_id
+        return self.title(title=first), sequel_item
+
+    def test_n_20_opening_the_page_stores_the_next_title_with_no_job(self):
+        item, sequel = self._series_pair()
+        self.action(item, "mark_watched")
+        self.assertIsNone(self.state(item)["next_title"])
+        response = self.api.get(f"/api/v1/media/mal/anime/{item.media_id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["user_state"]["anime"]["next_title"]["media_id"], sequel.media_id)
+        stored = AnimeListing.objects.get(item=item)
+        self.assertEqual(stored.next_title["media_id"], sequel.media_id)
+        self.assertIsNotNone(stored.series_checked_at)
+        self.assertIsNone(self.row(sequel))
+
+    def test_n_20_a_page_with_cached_details_stores_the_next_title_too(self):
+        item, sequel = self._series_pair()
+        url = f"/api/v1/media/mal/anime/{item.media_id}/"
+        with mock.patch.object(mal, "anime_series", side_effect=requests.exceptions.Timeout):
+            self.assertEqual(self.api.get(url).status_code, 200)
+        self.assertIsNone(AnimeListing.objects.get(item=item).series_checked_at)
+        reads = self.fake.count("mal")
+        self.assertEqual(self.api.get(url).status_code, 200)
+        self.assertEqual(self.fake.count("mal"), reads, "The details came from the cache")
+        self.assertEqual(AnimeListing.objects.get(item=item).next_title["media_id"], sequel.media_id)
+
+    def test_n_20_a_usual_page_view_doesnt_write_the_next_title_again(self):
+        item, _ = self._series_pair()
+        url = f"/api/v1/media/mal/anime/{item.media_id}/"
+        self.assertEqual(self.api.get(url).status_code, 200)
+        checked = AnimeListing.objects.get(item=item).series_checked_at
+        self.clock.advance(days=1)
+        self.assertEqual(self.api.get(url).status_code, 200)
+        self.assertEqual(AnimeListing.objects.get(item=item).series_checked_at, checked)
+        self.clock.advance(days=7)
+        self.assertEqual(self.api.get(url).status_code, 200)
+        self.assertGreater(AnimeListing.objects.get(item=item).series_checked_at, checked)
 
     def test_n_21_rewatch_then_stop(self):
         item = self.title()
