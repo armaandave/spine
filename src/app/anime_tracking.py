@@ -2345,7 +2345,8 @@ def _row_numbers(calc, listing):
     numbers = list(calc.aired)
     numbers.extend(listing.known_unaired(calc.aired_set))
     if calc.may_have_aired:
-        numbers.append(_first_open_row(calc))
+        # Spine can't say how many have aired, so every one up to the next can be ticked.
+        numbers.extend(range(1, _first_open_row(calc) + 1))
         return sorted(set(numbers))
     return numbers
 
@@ -2630,8 +2631,9 @@ class _View:
     def rows(self):
         """Return the rows payload: one query-free pass over what's loaded (AN-101)."""
         calc = self.calc
-        first_unwatched = next((number for number in calc.aired if number not in calc.watched_pass), None)
         numbers = _row_numbers(calc, self.listing)
+        tickable = numbers if calc.may_have_aired else calc.aired
+        first_unwatched = next((number for number in tickable if number not in calc.watched_pass), None)
         index = self._row_index()
         return {
             "count": len(numbers),

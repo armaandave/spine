@@ -1629,10 +1629,22 @@ class NoNumbersTests(AnimeTestCase):
     def bare(self):
         return self.title(total=None, status="Airing")
 
-    def test_an_101_the_list_runs_to_one_past_the_last_watched(self):
+    def test_an_101_the_list_runs_from_e1_to_one_past_the_last_watched(self):
         item = self.bare()
         self.tick(item, 3)
-        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [3, 4])
+        rows = self.rows(item)
+        self.assertEqual([row["n"] for row in rows["episodes"]], [1, 2, 3, 4])
+        self.assertTrue(all(row["a"] == 1 for row in rows["episodes"]))
+        self.assertEqual(rows["first_unwatched"], 1)
+        self.assertEqual(rows["count"], 4)
+
+    def test_an_101_a_webhook_watch_of_e5_leaves_e1_to_e4_tickable(self):
+        item = self.bare()
+        anime_tracking.webhook_event(self.user, item, 5, event="watched", at=self.clock.moment)
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1, 2, 3, 4, 5, 6])
+        self.tick(item, 2)
+        self.assertEqual(self.watched(item), {2, 5})
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"] if row.get("w")], [2, 5])
 
     def test_an_102_it_reads_a_count_of_episodes(self):
         item = self.bare()
