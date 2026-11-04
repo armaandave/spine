@@ -172,7 +172,7 @@ class LogTests(AnimeCalcBase):
         self.assertEqual(self.lines(), ["2025-12-20 log +12"])
 
     def test_a_log_with_no_tracking_row_adds_nothing_and_is_unknown(self):
-        """A removed row's history names no title, and a log holds no number of its own."""
+        """A removed row's history names no title, and a log holds no number."""
         item = self.anime()
         row = self.track(item, d(2026, 2, 1), progress=12, status=Status.COMPLETED.value)
         entry = self.log_it(item, d(2026, 2, 2))
@@ -225,7 +225,7 @@ class MarkTests(AnimeCalcBase):
 
 
 class UnstampedRowsTests(AnimeCalcBase):
-    """Rows from before the stamps, or written during a rollback, have an empty reason."""
+    """Rows from before the stamps, or from a rollback, have an empty reason."""
 
     def clear_reasons(self, row):
         Anime.history.filter(id=row.pk).update(history_change_reason=None)

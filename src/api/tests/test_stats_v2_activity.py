@@ -747,8 +747,8 @@ class ActivityChartTests(ActivityBase):
         self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC))
         # Starting a title is activity, as in the feed.
         self.change(self.item(MediaTypes.ANIME.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
-        # A book's pages count, through a real save. TV ticks don't (its viewings are its
-        # events), but a TV start does.
+        # A book's pages count, through a real save. TV ticks don't (its viewings are
+        # its events), but a TV start does.
         novel = self.item(MediaTypes.BOOK.value, "novel")
         with patch("django.utils.timezone.now", return_value=datetime(2025, 3, 2, 18, tzinfo=UTC)):
             book_tracking.update_progress(self.owner, novel, progress_type="pages", value=40)

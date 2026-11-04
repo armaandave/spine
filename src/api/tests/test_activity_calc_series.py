@@ -1,7 +1,7 @@
 """The one calculation on manga and comics, switched off until Phase 2.
 
-docs/manga-comics-tracking-contract.md, MC-007 and MC-200 to MC-202, with the same stories
-the branch's probe told, on merged code. A New York server and a pinned clock.
+docs/manga-comics-tracking-contract.md, MC-007 and MC-200 to MC-202, with the same
+stories the branch's probe told, on merged code. A New York server and a pinned clock.
 """
 
 from datetime import UTC, datetime

@@ -1,10 +1,10 @@
 """Phase 1's phone sheet: Spine Dev's user, set up through the real tracking functions.
 
-scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy, and
-test_activity_checkpoints.py runs the same steps in CI. It clears the dev user first, so it
-can run again over anything, and it uses only manual titles, on one list, because search
-can't find those. Anything dated in the past, and anything another person does, is a step
-here: the sheet says when, and the phone does the rest.
+scripts/ios/seed-activity-checkpoint.sh runs this on the test backend's throwaway copy,
+and test_activity_checkpoints.py runs the same steps in CI. It clears the dev user
+first, so it can run again over anything, and it uses only manual titles, on one list,
+because search can't find those. Anything dated in the past, and anything another person
+does, is a step here: the sheet says when, and the phone does the rest.
 """
 
 from contextlib import contextmanager
@@ -36,7 +36,14 @@ from app.models import (
     Status,
 )
 from lists.models import CustomList, CustomListItem
-from social.models import Comment, ContentLike, Follow, FollowStatus, ProgressChange, ProgressPost
+from social.models import (
+    Comment,
+    ContentLike,
+    Follow,
+    FollowStatus,
+    ProgressChange,
+    ProgressPost,
+)
 
 DEV_USERNAME = "claude"
 FRIEND_USERNAME = "checkpoint-friend"
@@ -93,27 +100,32 @@ def media_id(name):
 
 
 def book(name):
+    """Return one of the sheet's books."""
     return title(MediaTypes.BOOK.value, name)
 
 
 def title(media_type, name):
+    """Return one of the sheet's titles."""
     return Item.objects.get(source=Sources.MANUAL.value, media_type=media_type, media_id=media_id(name))
 
 
 def show_z():
+    """Return show Z."""
     return title(MediaTypes.TV.value, "Z")
 
 
 def dev_user():
+    """Return Spine Dev's user."""
     return get_user_model().objects.get(username=DEV_USERNAME)
 
 
 def friend_user():
+    """Return the friend the dev user follows."""
     return get_user_model().objects.get(username=FRIEND_USERNAME)
 
 
 def _settle_users():
-    """Put every user on New York, and the dev user's settings where the sheet reads them."""
+    """Put every user on New York, and the dev user's settings as the sheet reads."""
     users = get_user_model()
     users.objects.update(calendar_timezone=NEW_YORK)
     dev, _ = users.objects.get_or_create(username=DEV_USERNAME)
@@ -185,7 +197,7 @@ def _make_titles(dev):
 
 
 def _make_show():
-    """Show Z, with its runtimes on each episode: every number would print ≈ otherwise."""
+    """Make show Z, with runtimes on each episode, or every number prints ≈."""
     show = Item.objects.create(
         source=Sources.MANUAL.value,
         media_type=MediaTypes.TV.value,
@@ -272,21 +284,24 @@ def _friend_reads(friend):
 
 
 def add_k_and_l():
+    """Add K (started in March) and L (started last December)."""
     dev = dev_user()
     _read(dev, "K", date(2026, 3, 1), (100, date(2026, 3, 10)))
     _read(dev, "L", date(2025, 12, 1), (100, date(2026, 1, 10)))
 
 
 def add_s():
+    """Add S, stopped at 120 of 400."""
     _read(dev_user(), "S", date(2026, 10, 1), (120, date(2026, 10, 2)), stop_on=date(2026, 10, 3))
 
 
 def add_u():
+    """Add U, with no page count, stopped at 25%."""
     _read(dev_user(), "U", date(2026, 7, 1), (25, date(2026, 7, 2), "percentage"), stop_on=date(2026, 7, 3))
 
 
 def add_r():
-    """A year with reading and no log, with a genre and an author from here."""
+    """Add R: a year with reading and no log, with its genre and author."""
     item = book("R")
     ItemFilterFacet.objects.get_or_create(item=item, facet_type=ItemFilterFacet.FacetType.GENRE, value="Fantasy")
     ItemCredit.objects.get_or_create(
@@ -337,7 +352,7 @@ def print_rows():
     for change in rows.select_related("item").filter(saved_on=today):
         saved = change.current_progress
         began_over = " began_over" if saved.get("began_over") else ""
-        print(change.saved_on, change.item.title, saved.get("kind"), saved.get("move", saved.get("value")), began_over)
+        print(change.saved_on, change.item.title, saved.get("kind"), saved.get("move", saved.get("value")), began_over)  # noqa: T201
 
 
 STEPS = {

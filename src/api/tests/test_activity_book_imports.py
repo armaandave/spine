@@ -1,7 +1,7 @@
 """Book imports and the numbers they leave (SW-500, SW-504, decisions 10 and 11).
 
-An undated Read is the same mark from every source. A dated one lands in its year. A file
-never closes a read under way, and your own file coming back adds nothing.
+An undated Read is the same mark from every source. A dated one lands in its year. A
+file never closes a read under way, and your own file coming back adds nothing.
 """
 
 import csv
@@ -50,6 +50,7 @@ class OneBook:
 
 
 def goodreads_file(**overrides):
+    """Return a Goodreads file with one row for the book."""
     return csv_payload(
         row_indexes=[0],
         overrides={"Title": TITLE, "Exclusive Shelf": "read", "Read Count": "1", **overrides},
@@ -57,6 +58,7 @@ def goodreads_file(**overrides):
 
 
 def storygraph_file(status="read", dates=""):
+    """Return a StoryGraph file with one row for the book."""
     last = dates.split("-")[-1] if dates else ""
     return STORYGRAPH_HEADER + (
         f"{TITLE},Someone,,,Paperback,{status},2024/01/01,{last},{dates},1,,,,,,,,,,,,,No\n".encode()
@@ -64,6 +66,7 @@ def storygraph_file(status="read", dates=""):
 
 
 def margins_file(end="Unknown"):
+    """Return a Margins file with one row for the book."""
     return MARGINS_HEADER + f"{TITLE},Someone,Finished,Unknown,{end},,,,No,Print,{PAGES},\n".encode()
 
 
@@ -257,7 +260,7 @@ class OverwriteYourOwnExportTests(BookImportBase):
     """A Spine export in overwrite mode: All Time holds, and what years do is pinned."""
 
     def everything(self):
-        """A finished read in 2025, a reread under way in 2026, a mark, a stopped read."""
+        """Seed a finished read, a reread under way, a mark, and a stopped read."""
         finished = self.book("finished", pages=300)
         Item.objects.filter(pk=finished.pk).update(image="https://example.com/a.jpg")
         self.finish(finished, d(2025, 6, 1))

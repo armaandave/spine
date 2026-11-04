@@ -16,10 +16,10 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
 - Books: the calculation's rows, plus its pile in All Time.
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
-change or with progress, sessions, undated completions) with a length, out of all. A type
-in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the calculation's
-rows instead of its counter. The old counters stay for the comparison until TV, movies
-and music have switched too.
+change or with progress, sessions, undated completions) with a length, out of all. A
+type in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the
+calculation's rows instead of its counter. The old counters stay for the comparison
+until TV, movies and music have switched too.
 """
 
 from __future__ import annotations

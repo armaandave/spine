@@ -379,7 +379,7 @@ class StopTests(BookCalcBase):
         self.assert_numbers(0, 250, 250)
 
     def test_deleting_the_stopped_attempt_leaves_its_place_with_no_date(self):
-        """The new journey opened at 200, so it adds only the rise: 200 now counts on no day."""
+        """The new journey opened at 200, so it adds the rise: 200 counts on no day."""
         item = self.book("delete-first")
         self.begin(item, d(2025, 11, 1))
         self.save(item, 200, d(2025, 11, 2))

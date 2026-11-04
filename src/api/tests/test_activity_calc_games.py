@@ -1,7 +1,7 @@
 """The one calculation on games, switched off: the comparison reads it until Phase 2.
 
-Each playthrough is its own total (GM-006, GM-102). Rows come from real tracking functions
-under a pinned clock on a New York server.
+Each playthrough is its own total (GM-006, GM-102). Rows come from real tracking
+functions under a pinned clock on a New York server.
 """
 
 from datetime import UTC, date, datetime

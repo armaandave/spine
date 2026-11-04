@@ -636,7 +636,7 @@ class StatsScope:
         if self.calculated_types:
             changes = changes.exclude(item__media_type__in=self.calculated_types)
         units = activity_service.UNITS
-        # A save counts on its fixed day; a row from before saved_on on the owner's calendar.
+        # A save counts on its fixed day; an older row reads the owner's calendar.
         changes = changes.annotate(
             event_day=Coalesce("saved_on", TruncDate("created_at", tzinfo=self.zone), output_field=DateField()),
         )

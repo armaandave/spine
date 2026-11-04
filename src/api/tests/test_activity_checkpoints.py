@@ -1,8 +1,8 @@
 """Each phone sheet, step by step, so a wrong number fails here before Armaan sees it.
 
-With the Stats cache on and each step run through commit, a write that misses a bump leaves
-the old number. Everything is read through the real endpoints, as JSON, so a Decimal
-rendered as 360.0 shows. The seed is the same one the phone test runs.
+With the Stats cache on and each step run through commit, a write that misses a bump
+leaves the old number. Everything is read through the real endpoints, as JSON, so a
+Decimal rendered as 360.0 shows. The seed is the same one the phone test runs.
 """
 
 from datetime import date, datetime
@@ -17,14 +17,27 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from api.services import stats_cache
-from api.services.activity_rows import DAYS, MULTI_TITLE_DAYS, TITLES, list_rows, piled, rows_for
+from api.services.activity_rows import (
+    DAYS,
+    MULTI_TITLE_DAYS,
+    TITLES,
+    list_rows,
+    piled,
+    rows_for,
+)
 from api.services.stats_v2_activity import longest_daily_streak_span
 from api.tests import activity_checkpoint_seed as seed
 from api.tests.test_stats_v2_shape import ALL_TIME, YEAR_2024, YEAR_2025
 from app import game_tracking, series_tracking, tv_tracking
 from app.models import TV, Book, DiaryEntry, Episode, Item, MediaTypes, Season
 from lists.models import CustomList, CustomListItem
-from social.models import ContentLike, Follow, FollowStatus, ProgressChange, ProgressPost
+from social.models import (
+    ContentLike,
+    Follow,
+    FollowStatus,
+    ProgressChange,
+    ProgressPost,
+)
 
 BOOK = MediaTypes.BOOK.value
 NEW_YORK = "America/New_York"
@@ -82,7 +95,7 @@ class CheckpointBase(TestCase):
         self.assert_adds_up()
 
     def assert_adds_up(self):
-        """The list adds up to the number, for the owner, a follower and a stranger (decision 2)."""
+        """Check the list adds up to the number, for three viewers (decision 2)."""
         for viewer in (self.dev, self.follower, self.other):
             calculation = rows_for([self.dev], viewer, types=[BOOK])
             for params, start, end in (
@@ -320,7 +333,7 @@ class TitlesOpenTests(CheckpointBase):
 
 
 class StoredRowsTests(CheckpointBase):
-    """The sheet's last row: each stored row is today's, with the right kind and move."""
+    """The sheet's last row: each stored row is today's, of the right kind and move."""
 
     def rows(self, item):
         stored = ProgressChange.objects.filter(actor=self.dev, item=item).order_by("id")

@@ -1,0 +1,187 @@
+"""Stories told across the calculation, and marks that never touch a year (decision 11).
+
+Matrix 11 joins each family at its switch, so this holds books: every way to mark a
+book, on a new title and on one first set to To Read, because today's leak needs a
+previous history row. Marking as watched, read, played or listened is never activity,
+never in a year and never on a feed. It only feeds All Time's undated pile.
+"""
+
+from io import BytesIO
+from unittest.mock import patch
+
+from django.test import override_settings
+
+from api.services.activity_rows import piled
+from api.tests.test_activity_book_imports import OneBook, goodreads_file
+from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
+from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
+from app import book_tracking
+from app.models import Book, Item, Sources, Status
+from integrations.imports import goodreads
+
+ACTIVITY = "/api/v1/users/owner/activity/"
+LIFETIME_SECTIONS = ("list_rings", "collections")
+
+
+def frozen(payload):
+    """Leave out the two sections STAT-213 and STAT-214 make lifetime on purpose."""
+    return {key: value for key, value in payload.items() if key not in LIFETIME_SECTIONS}
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class MarkMatrixTests(BookCalcBase):
+    """Each mark: every dated year identical, no row, All Time moves by the pile."""
+
+    PAGES = 350
+
+    def setUp(self):
+        super().setUp()
+        self.other = self.book("other", pages=100)
+        self.begin(self.other, d(2026, 2, 1))
+        self.save(self.other, 40, d(2026, 2, 2))
+        self.finish(self.book("finished", pages=200), d(2025, 3, 1))
+
+    def snapshot(self):
+        """Return what a mark can't change, as the phone reads it, for three viewers."""
+        seen = []
+        for viewer in (self.owner, self.follower, self.stranger):
+            for params in (YEAR_2025, YEAR_2026):
+                seen.append(frozen(self.summary(params, viewer=viewer)))
+                seen.append(frozen(self.summary(params, viewer=viewer, tab=BOOK)))
+            response = self.client_for(viewer).get(ACTIVITY)
+            self.assertEqual(response.status_code, 200, response.content)
+            seen.append(response.json())
+        return seen
+
+    def all_time(self):
+        rows = self.summary(ALL_TIME, tab=BOOK)["time"]["rows"]
+        return next(row for row in rows if row["media_type"] == BOOK)["value"]
+
+    def check(self, mark):
+        """Run a mark on a new title and on one first set to To Read."""
+        for planning in (False, True):
+            with self.subTest(planning=planning):
+                item = self.book(f"{mark.__name__}-{planning}", pages=self.PAGES)
+                if planning:
+                    self.do(book_tracking.assign_status, item, d(2026, 1, 20), Status.PLANNING.value)
+                before, value = self.snapshot(), self.all_time()
+                days = self.summary(ALL_TIME, tab=BOOK)["header"]["active_days"]
+                with self.on(d(2026, 3, 1)):
+                    mark(item)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.all_time(), value + self.PAGES)
+                self.assertEqual(self.summary(ALL_TIME, tab=BOOK)["header"]["active_days"], days)
+                self.assertFalse([row for row in self.calc().rows if row.title_id == item.pk])
+
+    def eye(self, item):
+        book_tracking.mark_read(self.owner, item)
+
+    def heart(self, item):
+        book_tracking.set_like(self.owner, item, liked=True)
+
+    def stars(self, item):
+        book_tracking.set_rating(self.owner, item, 7)
+
+    def status_completed(self, item):
+        book_tracking.assign_status(self.owner, item, Status.COMPLETED.value)
+
+    def test_the_eye(self):
+        self.check(self.eye)
+
+    def test_a_heart(self):
+        self.check(self.heart)
+
+    def test_stars(self):
+        self.check(self.stars)
+
+    def test_status_set_to_completed(self):
+        self.check(self.status_completed)
+
+    def test_unhearting_keeps_the_mark(self):
+        item = self.book("unheart", pages=self.PAGES)
+        with self.on(d(2026, 3, 1)):
+            self.heart(item)
+        before, value = self.snapshot(), self.all_time()
+        with self.on(d(2026, 3, 2)):
+            book_tracking.set_like(self.owner, item, liked=False)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value)
+
+    def test_an_undated_import(self):
+        Item.objects.create(
+            media_id="hc-1001",
+            source=Sources.HARDCOVER.value,
+            media_type=BOOK,
+            title="Atlas of Quiet Signals",
+            image="https://example.com/book.jpg",
+            total_pages=self.PAGES,
+        )
+        before, value = self.snapshot(), self.all_time()
+        with patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            goodreads.GoodReadsImporter(
+                BytesIO(goodreads_file(**{"Date Read": ""})),
+                self.owner,
+                "new",
+                resolver=OneBook(),
+            ).import_data()
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value + self.PAGES)
+
+    def test_the_phones_requests_too(self):
+        item = self.item(BOOK, "phone", source=Sources.MANUAL.value, title="phone")
+        self.set_item(item, total_pages=self.PAGES)
+        before, value = self.snapshot(), self.all_time()
+        client = self.client_for(self.owner, NEW_YORK)
+        with self.on(d(2026, 3, 1)):
+            response = client.post(f"/api/v1/tracking/manual/book/{item.media_id}/actions/mark_read/", {}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value + self.PAGES)
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class BookStoriesTests(BookCalcBase):
+    """Stories more than one rule has to get right together."""
+
+    def test_stopped_at_30_of_100_then_the_eye_is_100_not_130(self):
+        item = self.book("thirty", pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        self.assert_numbers(0, 30, 100)
+
+    def test_the_eye_then_a_reread_is_500_not_400(self):
+        item = self.book("eye-reread")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 100, d(2026, 2, 2))
+        self.assert_numbers(0, 100, 500)
+
+    def test_an_imported_place_then_a_typed_number(self):
+        item = self.book("place")
+        Book.objects.bulk_create([Book(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=120)])
+        self.save(item, 125, d(2026, 3, 1))
+        self.assert_numbers(0, 5, 125)
+        self.assertEqual(int(piled(self.calc().piles, BOOK).amount), 120)
+
+    def test_stopped_at_200_back_at_250_then_finished(self):
+        """Decision 8: 250 in total, a finish adds what's left, only Restart is zero."""
+        item = self.book("back")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, item, d(2025, 11, 15))
+        self.begin(item, d(2026, 4, 1))
+        self.save(item, 250, d(2026, 4, 2))
+        self.assert_numbers(200, 50, 250)
+        self.finish(item, d(2026, 4, 3))
+        self.assert_numbers(200, 200, 400)
+        self.assertEqual(self.rows()[0], "2026-04-03 log +150")
+
+    def test_a_first_save_counts_whole_and_a_year_exists_for_it(self):
+        """Decisions 9 and 16."""
+        item = self.book("first", pages=500)
+        self.save(item, 285, d(2024, 3, 10))
+        data = self.summary({"schema": "2", "start_date": "2024-01-01", "end_date": "2024-12-31"}, tab=BOOK)
+        self.assertEqual((data["header"]["titles"], data["header"]["logs"]), (1, 0))
+        self.assertEqual(data["years"]["first"], 2024)

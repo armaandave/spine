@@ -1,16 +1,17 @@
-"""Likes and comments go with the day or title they were on (docs/activity-contract.md, AC-7).
+"""Likes and comments go with their day or title (docs/activity-contract.md, AC-7).
 
-A post is what likes and comments on a day's progress attach to. It holds no foreign key to
-the saves, so without this a like outlives them and comes back on a later save that day.
+A post is what likes and comments on a day's progress attach to. It holds no foreign key
+to the saves, so without this a like outlives them and comes back on a later save that
+day.
 
-- A deleted attempt or season drops the posts of the days it leaves with no row, and never
-  any other day's: a plain log delete runs through here, and another day's post can sit on
-  a day its row moved from.
+- A deleted attempt or season drops the posts of the days it leaves with no row, and
+  never any other day's: a plain log delete runs through here, and another day's post
+  can sit on a day its row moved from.
 - A removed title loses its saves, posts, likes and comments. Each tracking row's delete
   queues its person and title once per transaction, and the work runs on commit in
   batches, because an overwrite deletes hundreds of rows at once. A row still there by
-  then means the title stayed. An overwrite deletes and re-creates inside one transaction,
-  so the importers call forget_titles themselves.
+  then means the title stayed. An overwrite deletes and re-creates inside one
+  transaction, so the importers call forget_titles themselves.
 """
 
 from collections import defaultdict
@@ -23,7 +24,13 @@ from django.db.models.signals import post_delete
 
 from app import user_calendar
 from app.models import Item, Media, MediaTypes
-from social.models import Activity, ContentLike, ProgressChange, ProgressPost, SocialAuditLog
+from social.models import (
+    Activity,
+    ContentLike,
+    ProgressChange,
+    ProgressPost,
+    SocialAuditLog,
+)
 
 SHOW_TYPES = (MediaTypes.TV.value, MediaTypes.SEASON.value)
 # Titles queued in the current transaction, kept on the connection.
@@ -33,13 +40,17 @@ BATCH = 500
 
 def _title_key(item):
     """Return the key posts are saved under, as the feed builds it."""
-    from api.services.activity import _title_key as title_key  # noqa: PLC0415 - it imports what imports this
+    from api.services.activity import (
+        _title_key as title_key,
+    )
 
     return title_key(item)
 
 
 def _progress_days(changes):
-    from api.services.activity import _progress_days as progress_days  # noqa: PLC0415 - as above
+    from api.services.activity import (
+        _progress_days as progress_days,
+    )
 
     return progress_days(changes)
 
@@ -79,7 +90,7 @@ def drop_empty_posts(actor_id, title_key, days):
 
 
 def delete_changes(actor_id, changes):
-    """Delete these change rows of one person; a post they leave with no row goes too."""
+    """Delete one person's change rows; a post they leave with no row goes too."""
     days = defaultdict(set)
     ids = []
     for change in changes.select_related("item"):
@@ -98,7 +109,7 @@ def _saved_day(change):
 
 
 def forget_titles(user_id, items):
-    """A person no longer has these titles: their saves, posts, likes and comments go."""
+    """Delete a person's saves, posts, likes and comments on titles they've left."""
     items = list(items)
     for start in range(0, len(items), BATCH):
         _forget_batch(user_id, items[start : start + BATCH])
@@ -122,14 +133,14 @@ def _forget_batch(user_id, items):
 
 
 def _started_from_user(origin):
-    """Return whether a delete began at the User: everything of theirs goes in a cascade."""
+    """Return whether a delete began at the User: all of theirs goes in a cascade."""
     if origin is None:
         return False
     model = origin.model if isinstance(origin, QuerySet) else type(origin)
     return model is get_user_model()
 
 
-def _tracking_row_deleted(sender, instance, origin=None, **kwargs):  # noqa: ARG001
+def _tracking_row_deleted(sender, instance, origin=None, **kwargs):
     if _started_from_user(origin):
         return
     connection = transaction.get_connection()

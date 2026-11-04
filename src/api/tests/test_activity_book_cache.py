@@ -1,8 +1,9 @@
 """Every write a book's number reads moves its owner's stats version (STAT-006).
 
-A `ProgressChange` write is covered only when a tracked row saves in the same transaction,
-so these check the writes that save something else: a length, a history row, a one-time
-step. With the cache on, a miss here leaves Stats on the old number for an hour.
+A `ProgressChange` write is covered only when a tracked row saves in the same
+transaction, so these check the writes that save something else: a length, a history
+row, a one-time step. With the cache on, a miss here leaves Stats on the old number for
+an hour.
 """
 
 import io
@@ -33,7 +34,7 @@ class BumpTests(BookCalcBase):
         super().setUp()
         cache.clear()
         self.addCleanup(cache.clear)
-        # Creating the users queued their bumps, in a transaction that never commits here.
+        # Creating the users queued bumps, in a transaction that never commits here.
         setattr(connection, stats_cache.PENDING_ATTR, (None, None))
 
     def version(self, user):

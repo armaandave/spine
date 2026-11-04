@@ -1,4 +1,4 @@
-"""What Phase 1 changes in how books save: a log's date, a new read, and where one opens.
+"""How books save from Phase 1: a log's date, a new read, and where one opens.
 
 Decisions 6, 8, 10 and 51, through the phone's real requests where a request is what
 decides. Each reads through the calculation as well as the rows it writes.
@@ -30,7 +30,7 @@ class LogDateTests(BookCalcBase):
         item = self.book("all-moves")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 100, d(2026, 3, 10))
-        _, entry = self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 12))
+        self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 12))
         self.assert_numbers(400, 0, 400)
         self.assertEqual(self.rows(), ["2025-12-20 log +400"])
         journey = self.journey(item)
@@ -94,7 +94,7 @@ class LogDateTests(BookCalcBase):
         self.assertEqual(change.saved_on, d(2026, 3, 1))
 
     def test_an_old_shape_log_keeps_its_start_when_it_goes(self):
-        """No journey_start_date key: blanking the start would break a live game, and a book's date."""
+        """An old-shape log has no journey_start_date, and blanking a start breaks."""
         item = self.book("old-shape")
         self.begin(item, d(2026, 3, 1))
         _, entry = self.finish(item, d(2026, 3, 5))
@@ -163,7 +163,7 @@ class LogAgainTests(BookCalcBase):
         return response.json()
 
     def test_a_log_naming_the_finished_journey_is_a_new_read(self):
-        """Build 61's Log on a Read book sends the finished journey's id, and got the old log back."""
+        """Log on a Read book sends the finished journey's id, and got the old log."""
         item = self.book("log-again", pages=300)
         first = self.complete(item, d(2025, 6, 1))
         journey = BookSession.objects.get(related_book__item=item).pk
@@ -200,7 +200,7 @@ class LogAgainTests(BookCalcBase):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class OpeningPlaceTests(BookCalcBase):
-    """Decisions 8 and 51: only Restart begins at zero, and the sheet reads the place."""
+    """Decisions 8 and 51: only Restart begins at zero; the sheet reads the place."""
 
     def api(self):
         return self.client_for(self.owner, NEW_YORK)

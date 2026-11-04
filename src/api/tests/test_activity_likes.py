@@ -15,7 +15,13 @@ from api.services import progress_posts
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import book_tracking, game_tracking, series_tracking
 from app.models import Book, GameSession, Manga, MediaTypes, Status
-from social.models import Comment, ContentLike, ProgressChange, ProgressPost, SocialAuditLog
+from social.models import (
+    Comment,
+    ContentLike,
+    ProgressChange,
+    ProgressPost,
+    SocialAuditLog,
+)
 
 NEW_YORK = "America/New_York"
 TOKYO = "Asia/Tokyo"
@@ -43,7 +49,7 @@ class LikesBase(BookCalcBase):
         self.assertEqual(response.status_code, 201, response.content)
 
     def feed_rows(self, zone=NEW_YORK, viewer=None):
-        """Return (day, summary, likes, comments) of each progress row the viewer sees."""
+        """Return (day, summary, likes, comments) of each progress row seen."""
         response = self.client_for(viewer or self.follower, zone).get(FEED)
         self.assertEqual(response.status_code, 200, response.content)
         return [
@@ -57,7 +63,7 @@ class OneDayForEveryViewerTests(LikesBase):
     """The first bug: the day came from the viewer's zone."""
 
     def test_noon_in_new_york_reads_two_dates_on_the_clock(self):
-        """What makes the bug show: noon New York is the next morning's 02:00 in Tokyo."""
+        """What makes the bug show: noon New York is the next day's 02:00 in Tokyo."""
         item = self.book("noon")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 40, d(2026, 3, 1))
@@ -226,7 +232,7 @@ class ATitleRemovedTests(LikesBase):
         self.assertEqual(ProgressChange.objects.filter(item=item, actor=self.follower).count(), 1)
 
     def test_a_row_recreated_in_the_same_transaction_keeps_its_saves(self):
-        """The receiver can't see an overwrite, which is why importers call the helper."""
+        """The receiver can't see an overwrite, so importers call the helper."""
         item = self.liked("recreated")
         with self.captureOnCommitCallbacks(execute=True):
             Book.objects.filter(user=self.owner, item=item).delete()
@@ -241,7 +247,7 @@ class ATitleRemovedTests(LikesBase):
         self.assertFalse(ProgressChange.objects.filter(item=item).exists())
 
     def test_a_show_keeps_its_likes_while_any_of_its_rows_is_left(self):
-        show, season_item, tv, season = self.tv_show()
+        show, _season_item, tv, season = self.tv_show()
         change = ProgressChange.record_start(self.owner, show)
         post = ProgressPost.objects.create(actor=self.owner, title_key=f"tv:{show.source}:{show.media_id}", day=d(2026, 3, 1))
         with self.captureOnCommitCallbacks(execute=True):
@@ -270,7 +276,7 @@ class OverwriteTests(LikesBase):
         self.assertEqual(self.feed_rows()[0][1:], ("read 10 pages", 0, 0))
 
     def test_the_budget_50_titles_cost_what_5_cost(self):
-        """Asserting the work ran: per row it's about 4,000 extra queries on 850 titles."""
+        """Assert the work ran: per row it's about 4,000 extra queries on 850 titles."""
 
         def seed(names):
             items = [self.book(name) for name in names]

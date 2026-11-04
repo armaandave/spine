@@ -282,7 +282,7 @@ class Title:
             row = self._day(amount.day)
             row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
         if unit == PERCENT:
-            # A day that moved in both is told in its own unit, and a percent adds nothing.
+            # A day that moved in both is told in its own unit; a percent adds nothing.
             if not row.amount:
                 row.told += amount.value
                 row.told_unit = PERCENT
@@ -445,7 +445,8 @@ def _read_before_mark(recorded_id, current_id, journeys, by_journey):
 
     A direct To Read or Paused clears the mark's record of it, so with no record it's
     the last journey from before the mark. A journey begun after a Read came after the
-    mark, and so did one the title still sits on: a mark takes the title off its journey.
+    mark, and so did one the title still sits on: a mark takes the title off its
+    journey.
     """
     if recorded_id:
         return by_journey.get(recorded_id)
@@ -553,7 +554,7 @@ def _collect(result, title, *, piles):
 
 
 def _who_sees(owners, viewer):
-    """Return a test of which logs this viewer sees (AC-5), on TV, anime, manga and comics."""
+    """Return a test of which logs this viewer sees (AC-5), where visibility counts."""
     viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
     followed = (
         set(
@@ -585,7 +586,7 @@ def _logs_by_title(owners, media_type, only):
 # Games
 
 
-def _walk_playthrough(title, session, saves, zone):
+def _walk_playthrough(title, session, saves, zone):  # noqa: C901
     """Fold one playthrough, its own total (GM-006, GM-102), into rows.
 
     Saves and the log are read in the order they were saved, so a save after a log stays
@@ -619,10 +620,9 @@ def _walk_playthrough(title, session, saves, zone):
         elif kind == "minutes":
             reading.touch(day, change)
             reading.counted.move_to(Decimal(str(saved["value"])), day, change.created_at)
-        elif kind == "percentage":
-            if not (entry and saved.get("log_id") == entry.pk):
-                reading.touch(day, change)
-                reading.percents.move_to(Decimal(str(saved["value"])), day, change.created_at)
+        elif kind == "percentage" and not (entry and saved.get("log_id") == entry.pk):
+            reading.touch(day, change)
+            reading.percents.move_to(Decimal(str(saved["value"])), day, change.created_at)
     if not logged:
         reading.finish(entry.pk, day_of_log, entry.created_at, None)
     if session.total_minutes is not None and Decimal(session.total_minutes) != reading.counted.value:
@@ -702,11 +702,11 @@ def _game_rows(result, owners, _viewer, titles, piles):
         _collect(result, title, piles=piles)
 
 
-# Manga and comics (docs/manga-comics-tracking-contract.md)
+# Manga and comics: docs/manga-comics-tracking-contract.md
 
 
 def _series_target(entry, total):
-    """Return what a log says was read: a typed number stays when a total arrives later."""
+    """Return what a log says was read: a typed number outlasts a later total."""
     value = (entry.progress_snapshot or {}).get("value")
     if value:
         return Decimal(value)
@@ -714,7 +714,7 @@ def _series_target(entry, total):
 
 
 def _series_opening(attempt, counts):
-    """Return where an attempt opened: above zero for a pick-up, Keep Reading or an import."""
+    """Return where an attempt opened: above zero if it picks up from a place."""
     if counts:
         return Decimal(counts[0].previous_progress["value"])
     if attempt.pre_completion:
@@ -768,7 +768,7 @@ def _log_on_read(title, reading, entry, total, zone, sees):
     reading.finish(entry.pk, day, entry.created_at, target)
 
 
-def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees):
+def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees):  # noqa: C901, PLR0912, PLR0915
     title = Title(actor_id, item, item.media_type, unit)
     total = item.series_total or None
     marked = bool(row and row.completed_manually)
@@ -811,7 +811,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
     if reading:
         title.take(reading)
     for entry in entries:
-        # A log with no attempt behind it counts whole: overwrite imports keep hand-made ones.
+        # A log with no attempt counts whole: overwrite imports keep hand-made ones.
         if entry.pk not in linked and sees(entry):
             alone = Reading()
             _log_on_read(title, alone, entry, total, zone, sees)
@@ -881,14 +881,14 @@ def _series_rows(model, attempt_model, unit, result, owners, viewer, titles, pil
         _collect(result, title, piles=piles)
 
 
-# Anime: its history rows are its saves (AC-2), each saying what it was.
+# Anime. Its history rows are its saves, and each says what it was (AC-2).
 
 # A log written before `log:` rows: its save follows the entry within this.
 LOG_SAVE_WINDOW = timedelta(seconds=5)
 
 
 def _anime_reason(row):
-    """Return (the day it counts on, the log that wrote it, whether it's stamped at all)."""
+    """Return (the day it counts on, the log that wrote it, whether it's stamped)."""
     reason = row.history_change_reason or ""
     if reason.startswith("day:"):
         return date.fromisoformat(reason[4:]), None, True
@@ -900,9 +900,9 @@ def _anime_reason(row):
 def _unstamped_anime_row(row, first, tracking, zone, logs):
     """Read a row from before the stamps, or written during a rollback.
 
-    Returns (day, log id). Completed is a mark, because web, API and rollback marks write
-    it with no stamp, unless it follows a log. A first row far from the tracking row's own
-    creation came from a file, and a file's numbers have no day.
+    Returns (day, log id). Completed is a mark, because web, API and rollback marks
+    write it with no stamp, unless it follows a log. A first row far from the tracking
+    row's own creation came from a file, and a file's numbers have no day.
     """
     if first and tracking is not None and abs(row.history_date - tracking.created_at) > timedelta(days=1):
         return None, None
@@ -935,7 +935,7 @@ class _AnimeFold:
         self.finished = False
 
     def log(self, entry, target):
-        """A log adds what's left; with nothing left on a finished read it's a new read.
+        """Add what's left on a log's date; with nothing left when finished, a new read.
 
         A log writes more than one row, and a later one can hold the rise.
         """
@@ -973,12 +973,12 @@ class _AnimeFold:
             self.reading.counted.move_to(Decimal(row.progress), None, None)
             self.finished = False
         if day and row.status == Status.IN_PROGRESS.value and status_before != Status.IN_PROGRESS.value:
-            # A pick-up isn't a start. Anime shows no paused or stopped rows (decision 21).
+            # A pick-up isn't a start. Anime shows no paused or stopped rows (AC-1).
             real = first or status_before not in (Status.PAUSED.value, Status.DROPPED.value)
             self.reading.touch(day, moment, started=real)
 
 
-def _anime_title(actor_id, item, tracking_rows, history, logs, zone, sees):
+def _anime_title(actor_id, item, tracking_rows, history, logs, zone, sees):  # noqa: C901, PLR0912
     title = Title(actor_id, item, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
     fold = _AnimeFold(title, logs, zone, sees)
     live_rows = {row.pk: row for row in tracking_rows}
@@ -1031,7 +1031,7 @@ def _anime_title(actor_id, item, tracking_rows, history, logs, zone, sees):
 
 
 def _anime_rows(result, owners, viewer, titles, piles):
-    """Add anime's rows. Anime's start rows are for installed builds, and aren't read here."""
+    """Add anime's rows. Its start rows are for installed builds, and aren't read."""
     only = {} if titles is None else {"item__in": titles}
     tracking = defaultdict(list)
     items = {}

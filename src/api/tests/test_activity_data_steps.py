@@ -270,10 +270,10 @@ class PastRestartsTests(StepBase):
 
 
 class PickedUpBooksTests(StepBase):
-    """Decision 60: books stopped and picked back up before Phase 1 get their place back."""
+    """Decision 60: books stopped and picked up before Phase 1 get their place back."""
 
     def picked_up_before(self, name="old", value=200, kind="pages", pages=400):
-        """A pick-up as it was before a new journey opened at its place."""
+        """Write a pick-up as it was before a new journey opened at its place."""
         item = self.book(name, pages=pages)
         self.begin(item, d(2025, 11, 1))
         self.save(item, value, d(2025, 11, 2), kind=kind)
@@ -285,7 +285,7 @@ class PickedUpBooksTests(StepBase):
         return item, journey
 
     def payloads(self):
-        """Return Stats' whole payload, as the phone reads it, for each year and All Time."""
+        """Return Stats' whole payload as the phone reads it, each year and All Time."""
         return [self.summary(params, tab="book") for params in (YEAR_2025, YEAR_2026, ALL_TIME)]
 
     def test_a_dry_run_changes_nothing_and_counts_per_account(self):
