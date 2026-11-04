@@ -1,4 +1,4 @@
-"""AC-3 at the year's edge: a save lands on the phone's date, which is never refused.
+"""AC-2 at the year's edge: a save lands on the phone's date, which is never refused.
 
 Production's server runs on New York. Saves go through the phone's real requests where
 it makes them. BK-304, BK-305, BK-306 and GM-013: a sent date equal to the phone's today

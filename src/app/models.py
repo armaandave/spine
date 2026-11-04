@@ -2631,7 +2631,7 @@ class Anime(Media):
 
     Anime has no change rows: its history rows are its saves. So each one says what it
     was in its change reason: `day:<date>`, the date it counts on; `log:<id>`, written by
-    that log; or `mark`, which counts on no day (docs/activity-contract.md, AC-3).
+    that log; or `mark`, which counts on no day (docs/activity-contract.md, AC-2).
     """
 
     tracker = FieldTracker()

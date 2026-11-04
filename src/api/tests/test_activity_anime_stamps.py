@@ -1,4 +1,4 @@
-"""AC-3 for anime: each history row says what the save was, which nothing can recover.
+"""AC-2 for anime: each history row says what the save was, which nothing can recover.
 
 `day:<date>`, `log:<id>` or `mark`. Old code ignores the reason. The phone can't save
 anime progress, so these reach anime through the API, the web form and imports.

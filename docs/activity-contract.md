@@ -43,6 +43,9 @@ hearts, follows, or adding to a list.
   row.
 - The day is the local day the progress was recorded. Each save also stores
   `saved_on`, the phone's date when saved, which nothing reads yet.
+- Anime has no steps: its history rows are its saves. So each one says what it was in
+  its change reason: `day:<date>`, the date it counts on; `log:<id>`, written by that
+  log; or `mark`, which counts on no day. Nothing reads these yet either.
 
 ## AC-3: Newest date first
 
@@ -129,5 +132,5 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 
 ## Review status
 
-AC-2's status moves, `began_over` and `saved_on` are provisional until the phone test of
-Activity's first phase accepts them.
+AC-2's status moves, `began_over`, `saved_on` and anime's change reasons are provisional
+until the phone test of Activity's first phase accepts them.

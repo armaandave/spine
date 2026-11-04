@@ -1,4 +1,4 @@
-"""AC-3: a progress change's fixed day (migration social.0005 and fill_progress_days).
+"""AC-2: a progress change's fixed day (migration social.0005 and fill_progress_days).
 
 Rows from before the column take their save moment's day on the owner's calendar. New
 York is the server, as in production; a blank or bad zone falls back to it. A

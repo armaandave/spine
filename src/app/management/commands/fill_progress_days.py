@@ -1,4 +1,4 @@
-"""Give progress changes a rollback left empty their day (docs/activity-contract.md, AC-3).
+"""Give progress changes a rollback left empty their day (docs/activity-contract.md, AC-2).
 
 Old code writes no ``saved_on``, so a rollback leaves new rows empty until this runs after
 the fix (scripts/ios/SHIP.md, Workflow B). It writes only empty rows, on each owner's
