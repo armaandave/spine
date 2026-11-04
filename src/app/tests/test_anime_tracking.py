@@ -1866,6 +1866,113 @@ class ManualTitleTests(AnimeTestCase):
         self.tick(item, 3)
         self.assertEqual(self.row(item).progress, 1)
 
+    def another_manual(self, name):
+        return Item.objects.create(
+            source="manual",
+            media_type="anime",
+            media_id=f"manual-{name}",
+            title="Mine",
+            image="https://example.com/p.jpg",
+        )
+
+    def assert_written_total_reads_a_gap(self, item):
+        state = self.state(item)
+        self.assertEqual(
+            (state["status"], state["total"], state["watched_count"], state["aired_count"], state["first_gap_episode"]),
+            ("In progress", 12, 11, 12, 5),
+        )
+        self.assertFalse(state["caught_up"])
+        self.assertEqual(state["up_next"]["episode_number"], 5)
+        self.assertEqual(self.rows(item)["count"], 12)
+
+    def test_an_100_a_typed_total_stays_through_a_filled_eye_and_an_untick(self):
+        item = self.manual()
+        self.tick(item, 1)
+        self.written(item, status="Completed", progress=12)
+        anime_tracking.unmark(self.user, item)
+        self.tick(item, *range(2, 13))
+        self.assertEqual(self.row(item).status, "Completed")
+        anime_tracking.untick(self.user, item, 5)
+        self.assert_written_total_reads_a_gap(item)
+
+    def test_an_100_a_typed_total_stays_through_a_deleted_log(self):
+        item = self.manual()
+        self.tick(item, 1)
+        self.written(item, status="Completed", progress=3)
+        anime_tracking.unmark(self.user, item)
+        self.tick(item, 2, 3)
+        entry = self.log(item).entry
+        anime_tracking.delete_log(self.user, entry)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.aired_count), ("Completed", 3, 3))
+
+    def test_an_100_an_imported_total_stays_through_an_untick(self):
+        item = self.manual()
+        anime_tracking.import_title(self.user, item, status="Completed", count=12)
+        anime_tracking.untick(self.user, item, 5)
+        self.assert_written_total_reads_a_gap(item)
+
+    def test_an_100_a_raised_total_is_written_and_a_lowered_number_is_not_a_total(self):
+        item = self.manual()
+        self.tick(item, 3)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertFalse(self.row(item).total_is_written, "The eye worked it out")
+        self.written(item, progress=2)
+        self.assertFalse(self.row(item).total_is_written, "A number below the total only removes")
+        self.written(item, progress=5)
+        self.assertTrue(self.row(item).total_is_written)
+        self.assertEqual(self.state(item)["total"], 5)
+
+    def test_an_100_a_worked_out_total_goes_when_nothing_is_left(self):
+        def by_log(item):
+            anime_tracking.delete_log(self.user, self.log(item).entry)
+
+        def by_eye(item):
+            anime_tracking.mark_watched(self.user, item)
+            anime_tracking.unmark(self.user, item)
+
+        def by_stars(item):
+            anime_tracking.set_rating(self.user, item, 8)
+            anime_tracking.unmark(self.user, item)
+
+        def by_heart(item):
+            anime_tracking.set_like(self.user, item, True)
+            anime_tracking.unmark(self.user, item)
+
+        for choice, undos in (
+            ("Planning", (by_log, by_eye, by_stars, by_heart)),
+            ("Paused", (by_log, by_eye, by_stars, by_heart)),
+            ("Dropped", (by_log, by_eye)),
+            # Stars and a heart on a title chosen as In progress are refused as partway (AN-301).
+            ("In progress", (by_log, by_eye)),
+        ):
+            for undo in undos:
+                with self.subTest(choice=choice, undo=undo.__name__):
+                    item = self.another_manual(f"{choice}-{undo.__name__}")
+                    self.written(item, status=choice)
+                    undo(item)
+                    state = self.state(item)
+                    self.assertEqual((state["status"], state["total"], state["single"]), (choice, None, False))
+                    self.assertEqual(self.row(item).aired_count, None)
+                    self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], [1])
+                    anime_tracking.choose(self.user, item, "In progress")
+                    self.assertEqual(self.row(item).status, "In progress")
+
+    def test_an_100_a_worked_out_total_with_nothing_behind_it_goes_with_an_untick(self):
+        item = self.manual()
+        self.tick(item, 1, 2, 3)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual(self.row(item).status, "Completed")
+        anime_tracking.untick(self.user, item, 3)
+        state = self.state(item)
+        self.assertEqual((state["status"], state["total"], state["watched_count"]), ("In progress", None, 2))
+
+    def test_an_100_a_stored_completed_on_a_manual_title_is_a_written_total(self):
+        item = self.manual()
+        Anime.objects.bulk_create([Anime(user=self.user, item=item, status="Completed", progress=12)])
+        anime_tracking.untick(self.user, item, 5)
+        self.assert_written_total_reads_a_gap(item)
+
     def test_an_100_a_number_the_owner_wrote_stays_when_a_mark_is_undone(self):
         item = self.manual()
         self.tick(item, 1)

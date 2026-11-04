@@ -580,6 +580,10 @@ class _Ctx:
         if number and number > MAX_EPISODE:
             raise TVInvalid(MSG_NO_NUMBER)
         total = max(number or 0, self.listing.total or 0, max(self.calc.viewed_any, default=0), 1)
+        if number == total:
+            # It's theirs now, and no undo erases it.
+            self.ensure_row()
+            self.set_row(total_is_written=True)
         if total != self.listing.total:
             self.listing = replace(self.listing, total=total)
             self.invalidate()
@@ -888,6 +892,9 @@ def _adopt_stored_row(ctx):
     if row is None or row.reconciled_at is not None:
         return
     numbers, choice = _stored_facts(row, ctx.listing, ctx.now)
+    if ctx.item.source == Sources.MANUAL.value and ctx.listing.total:
+        # What old code stored as a manual title's number was its owner's.
+        ctx.set_row(total_is_written=True)
     watched = {viewing.episode for viewing in ctx.facts.viewings}
     missing = [number for number in numbers if number not in watched]
     if missing:
@@ -1081,11 +1088,10 @@ def _leave_library(ctx):
 def _forget_worked_out_total(ctx):
     """A total a log or mark worked out on a manual title goes when that write is undone (AN-100).
 
-    It's the last episode watched, and nothing else could have set it once no log and no
-    mark that finishes a title is left. A number the owner wrote past what's watched stays.
+    Nothing says it once no log and no mark that finishes a title is left. A number the
+    owner wrote or a file gave is theirs, and stays.
     """
-    total = ctx.listing.total
-    if ctx.item.source != Sources.MANUAL.value or total is None or total != max(ctx.calc.viewed_any, default=0):
+    if ctx.item.source != Sources.MANUAL.value or ctx.listing.total is None or ctx.row.total_is_written:
         return
     finishing_marks = AnimeMark.objects.filter(
         anime=ctx.row,
@@ -1129,9 +1135,6 @@ def _after_removal(ctx, *, status_follows=False):
         ctx.status_before = None
         ctx.count_before = 0
         ctx.ticks_before = 0
-        if ctx.listing.fetched_at is None:
-            # A total kept on the row goes too: leaving would have taken it.
-            ctx.listing = replace(ctx.listing, total=None)
     ctx.invalidate()
     return False
 
@@ -2451,6 +2454,8 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
         # A kept log means a pass was finished, and the source's place comes after it (TV-800).
         passes = max(log.pass_number for log in kept_logs)
     values = {"pass_number": passes + 1, "earlier_question_at": ctx.now}
+    if item.source == Sources.MANUAL.value and listing.total:
+        values["total_is_written"] = True
     # Planning isn't available once something's been logged (TV-006).
     if status in HOLDING_CHOICES and not (status == PLANNING and kept_logs):
         values.update({"choice": status, "choice_at": ctx.now})

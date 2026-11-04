@@ -1337,6 +1337,8 @@ class Media(models.Model):
             "created_at",
             # TV and Season values worked out from the facts (TV-207); they write no history.
             *TV_STATE_CACHE_FIELD_NAMES,
+            # What an anime's stored total is; the total itself is one of those values.
+            "total_is_written",
         ],
     )
 
@@ -2668,6 +2670,9 @@ class Anime(Media):
     pass_number = models.PositiveIntegerField(default=1, db_default=1)
     earlier_question_at = models.DateTimeField(null=True, blank=True)
     log_offered_pass = models.PositiveIntegerField(null=True, blank=True)
+    # Set when the total a manual title keeps as its aired_count is a number its owner
+    # wrote or a file gave: no undo erases that (AN-100).
+    total_is_written = models.BooleanField(default=False, db_default=False)
 
     # Worked out from the facts (TV-207); see TV_STATE_CACHE_FIELD_NAMES. A row with no
     # reconciled_at has never been worked out: its stored numbers become facts at the

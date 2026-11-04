@@ -177,6 +177,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='anime',
+            name='total_is_written',
+            field=models.BooleanField(db_default=False, default=False),
+        ),
+        migrations.AddField(
+            model_name='anime',
             name='up_next_is_new',
             field=models.BooleanField(db_default=False, default=False),
         ),
