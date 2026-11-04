@@ -6,14 +6,17 @@ one applies (those run in their own files too). The server runs on America/New_Y
 and the account calendar on America/Los_Angeles; MAL and AniList are faked.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
+
+from rest_framework.test import APIClient
 
 from app import anime_tracking
 from app.models import Anime, AnimeMark, Item
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase
+from app.tests.tv_fixtures import make_user
 from integrations.imports.mal import MyAnimeListImporter
-from social.models import ProgressChange
+from social.models import Follow, FollowStatus, ProgressChange
 
 
 def line(state):
@@ -483,6 +486,75 @@ class AcceptanceTests(AnimeTestCase):
             self.assertEqual(row.status, status)
             self.assertEqual(row.progress, count)
             self.assertEqual(str(row.score) if row.score is not None else None, score)
+
+
+class OtherPeoplesListsTests(AnimeTestCase):
+    """AC-5, AC-6: another person's list says where a title stands, not what a hidden log said."""
+
+    def setUp(self):
+        super().setUp()
+        self.stranger = make_user()
+        self.other_api = APIClient()
+        self.other_api.force_authenticate(self.stranger)
+        self.item = self.title(total=12)
+
+    def listed(self, api=None):
+        response = (api or self.other_api).get(
+            f"/api/v1/users/{self.user.username}/tracking/",
+            {"media_type": "anime"},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data["results"][0]["tracking"]
+
+    def log(self, visibility):
+        anime_tracking.create_log(self.user, self.item, consumed_at=date(2026, 10, 20), rating=8, visibility=visibility)
+
+    def assert_hides_the_log(self, tracking):
+        self.assertIsNone(tracking["rating"])
+        self.assertIsNone(tracking["start_date"])
+        self.assertIsNone(tracking["end_date"])
+        self.assertIsNone(tracking["anime"]["last_watched_on"])
+        self.assertEqual(tracking["status"], "Completed")
+        self.assertEqual(tracking["anime"]["watched_count"], 12)
+        for key in ("liked", "diary_count", "rating_source_diary_entry_id", "like_source_diary_entry_id"):
+            self.assertNotIn(key, tracking)
+
+    def test_ac_5_a_followers_only_log_says_nothing_to_a_stranger(self):
+        self.log("followers")
+        self.assert_hides_the_log(self.listed())
+
+    def test_ac_5_a_private_log_says_nothing_to_a_stranger_or_a_follower(self):
+        self.log("private")
+        self.assert_hides_the_log(self.listed())
+        Follow.objects.create(from_user=self.stranger, to_user=self.user, status=FollowStatus.ACCEPTED)
+        self.assert_hides_the_log(self.listed())
+
+    def test_ac_5_a_follower_sees_a_followers_only_log(self):
+        self.log("followers")
+        Follow.objects.create(from_user=self.stranger, to_user=self.user, status=FollowStatus.ACCEPTED)
+        tracking = self.listed()
+        self.assertIsNotNone(tracking["rating"])
+        self.assertEqual(tracking["anime"]["last_watched_on"], "2026-10-20")
+
+    def test_ac_5_anyone_sees_a_public_log(self):
+        self.log("public")
+        tracking = self.listed()
+        self.assertIsNotNone(tracking["rating"])
+        self.assertIsNotNone(tracking["end_date"])
+        self.assertEqual(tracking["anime"]["last_watched_on"], "2026-10-20")
+
+    def test_ac_5_the_owner_still_sees_everything(self):
+        self.log("private")
+        tracking = self.listed(self.api)
+        self.assertIsNotNone(tracking["rating"])
+        self.assertIsNotNone(tracking["end_date"])
+        self.assertEqual(tracking["anime"]["last_watched_on"], "2026-10-20")
+
+    def test_ac_5_ticks_stay_visible_with_no_hidden_log(self):
+        self.tick(self.item, 1)
+        tracking = self.listed()
+        self.assertIsNotNone(tracking["start_date"])
+        self.assertEqual(tracking["anime"]["last_watched_on"], "2026-10-25")
 
 
 class RoutesTests(AnimeTestCase):

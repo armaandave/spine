@@ -165,11 +165,11 @@ class StatsTests(AnimeTestCase):
         anime_tracking.mark_watched(self.user, item)
         self.assertEqual(list(self.scope().titles.values_list("pk", flat=True)), [item.pk])
 
-    def most_watched(self, year=None):
+    def most_watched(self, year=None, viewer=None):
         params = {"media_type": "anime", "start_date": "all", "end_date": "all"}
         if year is not None:
             params.update({"start_date": f"{year}-01-01", "end_date": f"{year}-12-31"})
-        section = stats_v2_ratings.build_most_logged(build_scope(self.user, self.user, params))
+        section = stats_v2_ratings.build_most_logged(build_scope(self.user, viewer or self.user, params))
         return [(row["media"]["ref"]["media_id"], row["times"]) for row in section["items"]]
 
     def test_stat_215_most_watched_reads_viewings_as_a_shows_does(self):
@@ -184,6 +184,19 @@ class StatsTests(AnimeTestCase):
         self.assertEqual(self.most_watched(), [(rewatched.media_id, 2)])
         self.assertEqual(self.most_watched(2026), [(rewatched.media_id, 2)])
         self.assertEqual(self.most_watched(2025), [])
+
+    def test_stat_215_a_hidden_logs_fills_never_count_toward_most_watched(self):
+        from app.tests.tv_fixtures import make_user
+
+        item = self.title(total=2)
+        self.log(item)
+        anime_tracking.start_rewatch(self.user, item)
+        self.log(item, visibility="private")
+        self.assertEqual(self.most_watched(), [(item.media_id, 2)])
+        self.assertEqual(self.most_watched(2026), [(item.media_id, 2)])
+        stranger = make_user()
+        self.assertEqual(self.most_watched(viewer=stranger), [])
+        self.assertEqual(self.most_watched(2026, viewer=stranger), [])
 
     def test_stat_215_a_mark_counts_toward_most_watched_only_in_all_time(self):
         item = self.title(total=2)

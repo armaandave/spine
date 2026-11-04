@@ -22,7 +22,7 @@ from api.views.stats import visible_profile_owner
 from api.views.tracking import TrackingListView
 from app import exposure
 from app.curation import prime_curated_artwork
-from app.models import DiaryEntry, MediaLike
+from app.models import DiaryEntry, MediaLike, MediaTypes
 
 # What a manga's or comic's tracking row says about its logs.
 SERIES_LOG_FACTS = (
@@ -134,12 +134,13 @@ class UserTrackingListView(TrackingListView):
 
 
 def _hide_series_logs(rows, viewer, owner):
-    """Tell another person nothing of a manga's or comic's logs they can't see (AC-5).
+    """Tell another person nothing of a manga's, comic's or anime's logs they can't see (AC-5).
 
-    Those logs can set the rating and the end date. The attempts and log counts say the
-    rest, so another person gets where the series stands, as AC-6 has it.
+    Those logs can set the rating and the end date, and an anime's its start and last
+    watched day too. The attempts and log counts say the rest, so another person gets where
+    the title stands, as AC-6 has it.
     """
-    series = [row for row in rows if row["media"]["ref"]["media_type"] in SERIES_TYPES]
+    series = [row for row in rows if row["media"]["ref"]["media_type"] in (*SERIES_TYPES, MediaTypes.ANIME.value)]
     if not series:
         return
     visible, _ = activity_service.profile_sources(viewer, owner)
@@ -155,3 +156,6 @@ def _hide_series_logs(rows, viewer, owner):
         if row["media"]["ref"]["item_id"] in hidden:
             tracking["rating"] = None
             tracking["end_date"] = None
+            if "anime" in tracking:
+                tracking["start_date"] = None
+                tracking["anime"]["last_watched_on"] = None
