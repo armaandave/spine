@@ -41,16 +41,18 @@ hearts, follows, or adding to a list.
   never from an import, a mark, a restore or Restart. It adds nothing to any number,
   and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
   row.
-- The day is the local day the progress was recorded. Each save also stores
-  `saved_on`, the phone's date when saved, which nothing reads yet.
+- The day is the phone's date when the progress was saved, stored as `saved_on`, and it
+  never moves with the time zone of whoever reads it. A row from before that column
+  reads its moment on the server's zone.
 - Anime has no steps: its history rows are its saves. So each one says what it was in
   its change reason: `day:<date>`, the date it counts on; `log:<id>`, written by that
-  log; or `mark`, which counts on no day. Nothing reads these yet either.
+  log; or `mark`, which counts on no day. Only the comparison reads these yet.
 
 ## AC-3: Newest date first
 
 Activity is ordered by calendar day, newest first: a log by its log date, a day's
-progress by that day. Days are local, so a log at 9pm stays on its own day. Within
+progress by the day it was saved on (AC-2). Days are local, so a log at 9pm stays on its
+own day, and a save reads the same day for every viewer in every zone. Within
 one day, the most recently written comes first. When a log was posted doesn't
 matter, so backfilling old logs doesn't push them to the top: a log for 2019 sits
 at 2019.
