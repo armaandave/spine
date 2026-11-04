@@ -21,6 +21,7 @@ from app.models import (
     Season,
     Sources,
     DiaryEntry,
+    Status,
 )
 
 
@@ -399,6 +400,22 @@ class GameForm(MediaForm):
 
 class BookForm(MediaForm):
     """Form for books."""
+
+    def save(self, commit=True):
+        """Completed is the mark, as on the phone: the page fills in a date by itself (BK-101)."""
+        finished = self.cleaned_data["status"] == Status.COMPLETED.value and (
+            self.instance.pk is None or "status" in self.changed_data
+        )
+        if not commit or not finished:
+            return super().save(commit)
+        from app import book_tracking
+
+        book = book_tracking.mark_read(self.instance.user, self.instance.item)
+        book.score = self.cleaned_data.get("score")
+        book.notes = self.cleaned_data.get("notes", "")
+        book.save(update_fields=["score", "notes"])
+        self.instance = book
+        return book
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""

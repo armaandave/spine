@@ -6,18 +6,21 @@ previous history row. Marking as watched, read, played or listened is never acti
 never in a year and never on a feed. It only feeds All Time's undated pile.
 """
 
+from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
 
 from django.test import override_settings
+from django.urls import reverse
 
 from api.services.activity_rows import piled
 from api.tests.test_activity_book_imports import OneBook, goodreads_file
 from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
 from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
 from app import book_tracking
-from app.models import Book, Item, Sources, Status
-from integrations.imports import goodreads
+from app.models import Book, DiaryEntry, Item, Sources, Status
+from integrations import exports
+from integrations.imports import goodreads, yamtrack
 
 ACTIVITY = "/api/v1/users/owner/activity/"
 LIFETIME_SECTIONS = ("list_rings", "collections")
@@ -126,6 +129,127 @@ class MarkMatrixTests(BookCalcBase):
             ).import_data()
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.all_time(), value + self.PAGES)
+
+    def test_the_web_form_completed_with_the_date_it_fills_in(self):
+        """mediaStatusDateHandler.js fills today on any move to Completed."""
+        self.client.force_login(self.owner)
+        metadata = {"title": "t", "image": "https://example.com/a.jpg", "max_progress": self.PAGES}
+
+        def web_form(item):
+            with patch("app.views.services.get_media_metadata", return_value=metadata), patch("app.models.Item.fetch_releases"):
+                book = Book.objects.filter(user=self.owner, item=item).first()
+                response = self.client.post(
+                    reverse("media_save"),
+                    {
+                        "media_id": item.media_id,
+                        "source": item.source,
+                        "media_type": BOOK,
+                        "status": Status.COMPLETED.value,
+                        "end_date": "2026-03-01",
+                        "progress": "0",
+                        **({"instance_id": book.pk} if book else {}),
+                    },
+                )
+            self.assertLess(response.status_code, 400, response.content)
+            book = Book.objects.get(user=self.owner, item=item)
+            self.assertTrue(book.completed_manually)
+            self.assertIsNone(book.end_date)
+
+        self.check(web_form)
+
+    def test_the_web_form_mark_comes_back_from_your_own_file_as_a_mark(self):
+        item = self.book("web-export", pages=self.PAGES)
+        Item.objects.filter(pk=item.pk).update(image="https://example.com/a.jpg")
+        self.client.force_login(self.owner)
+        with patch("app.models.Item.fetch_releases"), self.on(d(2026, 3, 1)):
+            self.client.post(
+                reverse("media_save"),
+                {
+                    "instance_id": Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value).pk,
+                    "media_id": item.media_id,
+                    "source": item.source,
+                    "media_type": BOOK,
+                    "status": Status.COMPLETED.value,
+                    "end_date": "2026-03-01",
+                    "progress": "0",
+                },
+            )
+        marked = self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), self.number(pile=True)
+        payload = "".join(exports.generate_rows(self.owner)).encode()
+        with patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            yamtrack.importer(BytesIO(payload), self.owner, "new")
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual((self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), self.number(pile=True)), marked)
+        Book.objects.filter(user=self.owner, item=item).delete()
+        with patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            yamtrack.importer(BytesIO(payload), self.owner, "new")
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+        self.assertEqual((self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), self.number(pile=True)), marked)
+
+    def test_the_web_form_keeps_its_notes_and_score_on_the_mark(self):
+        item = self.book("web-notes", pages=self.PAGES)
+        book = Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value)
+        self.client.force_login(self.owner)
+        with patch("app.models.Item.fetch_releases"), self.on(d(2026, 3, 1)):
+            self.client.post(
+                reverse("media_save"),
+                {
+                    "instance_id": book.pk,
+                    "media_id": item.media_id,
+                    "source": item.source,
+                    "media_type": BOOK,
+                    "status": Status.COMPLETED.value,
+                    "score": "8.5",
+                    "notes": "kept",
+                    "progress": "0",
+                },
+            )
+        book.refresh_from_db()
+        self.assertTrue(book.completed_manually)
+        self.assertEqual((book.notes, book.score), ("kept", Decimal("8.5")))
+
+    def test_the_web_form_refuses_completed_on_a_read_under_way(self):
+        item = self.book("web-open", pages=self.PAGES)
+        self.begin(item, d(2026, 2, 1))
+        book = Book.objects.get(user=self.owner, item=item)
+        self.client.force_login(self.owner)
+        with patch("app.models.Item.fetch_releases"), self.on(d(2026, 3, 1)):
+            self.client.post(
+                reverse("media_save"),
+                {
+                    "instance_id": book.pk,
+                    "media_id": item.media_id,
+                    "source": item.source,
+                    "media_type": BOOK,
+                    "status": Status.COMPLETED.value,
+                    "progress": "0",
+                },
+            )
+        book.refresh_from_db()
+        self.assertEqual(book.status, Status.IN_PROGRESS.value)
+        self.assertFalse(book.completed_manually)
+
+    def test_the_web_form_saving_notes_on_a_read_book_marks_nothing(self):
+        item = self.book("web-read", pages=self.PAGES)
+        self.finish(item, d(2026, 2, 1))
+        book = Book.objects.get(user=self.owner, item=item)
+        self.client.force_login(self.owner)
+        with patch("app.models.Item.fetch_releases"), self.on(d(2026, 3, 1)):
+            self.client.post(
+                reverse("media_save"),
+                {
+                    "instance_id": book.pk,
+                    "media_id": item.media_id,
+                    "source": item.source,
+                    "media_type": BOOK,
+                    "status": Status.COMPLETED.value,
+                    "notes": "later",
+                    "progress": str(book.progress),
+                },
+            )
+        book.refresh_from_db()
+        self.assertEqual(book.notes, "later")
+        self.assertFalse(book.completed_manually)
 
     def test_the_phones_requests_too(self):
         item = self.item(BOOK, "phone", source=Sources.MANUAL.value, title="phone")
