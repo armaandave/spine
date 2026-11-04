@@ -126,6 +126,7 @@ MSG_DELETE_LOG = "Delete your log first."
 MSG_NAME_EPISODES = "Name the first and last episodes to mark."
 MSG_MARK_UP_TO = "Mark watched up to here works on aired episodes."
 MSG_NO_NUMBER = "Enter a valid episode number."
+MSG_SINGLE_CHOICE = "This has no episodes to keep your place in. Mark it watched or log it."
 
 
 def supports(value):
@@ -1385,6 +1386,8 @@ def mark_earlier(user, item, *, from_ref, to_ref, offer_log=False, entry_point=A
 def _choice_unavailable(calc, row, status):
     """Return why a choice is unavailable, or None (TV-005, TV-006)."""
     choice = row.choice if row is not None else ""
+    if calc.single and status != PLANNING:
+        return MSG_SINGLE_CHOICE
     if status == WATCHING:
         if not calc.aired:
             return MSG_NOTHING_AIRED

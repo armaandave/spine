@@ -1214,6 +1214,31 @@ class SingleTests(AnimeTestCase):
         anime_tracking.mark_watched(self.user, item)
         self.assertEqual(self.row(item).status, "Completed")
 
+    def test_an_002_a_single_has_no_watching_pause_or_drop(self):
+        for item in (self.movie(), self.title(total=1)):
+            for status in ("In progress", "Paused", "Dropped"):
+                with self.assertRaises(TVConflict) as refused:
+                    anime_tracking.choose(self.user, item, status)
+                self.assertEqual(refused.exception.message, anime_tracking.MSG_SINGLE_CHOICE)
+            self.assertIsNone(self.row(item))
+            anime_tracking.choose(self.user, item, "Planning")
+            self.assertEqual(self.row(item).status, "Planning")
+
+    def test_an_002_a_written_status_on_a_single_is_refused_and_kept_from_the_web(self):
+        item = self.title(total=1)
+        with self.assertRaises(TVConflict):
+            anime_tracking.apply_written_state(self.user, item, {"status": "Paused"}, entry_point=anime_tracking.LEGACY_APP)
+        anime_tracking.apply_written_state(self.user, item, {"status": "Paused"}, entry_point=anime_tracking.WEB)
+        self.assertIsNone(self.row(item))
+
+    def test_an_002_a_webhook_play_of_a_single_does_nothing(self):
+        item = self.title(total=1)
+        anime_tracking.webhook_event(self.user, item, 1, event="play", at=self.clock.moment)
+        self.assertIsNone(self.row(item))
+        anime_tracking.choose(self.user, item, "Planning")
+        anime_tracking.webhook_event(self.user, item, 1, event="play", at=self.clock.moment)
+        self.assertEqual(self.row(item).status, "Planning")
+
     def test_an_002_it_never_appears_in_in_progress(self):
         item = self.movie()
         anime_listing.get_listing(item)

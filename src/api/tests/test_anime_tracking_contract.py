@@ -566,6 +566,13 @@ class RoutesTests(AnimeTestCase):
         self.write(item, progress=2000000000, expect=400)
         self.assertIsNone(self.row(item))
 
+    def test_routes_a_single_refuses_watching_pause_and_drop_with_a_reason(self):
+        item = self.title(total=1)
+        for name in ("watching", "resume", "pause", "drop"):
+            response = self.action(item, name, expect=409)
+            self.assertEqual(response.data["error"]["message"], anime_tracking.MSG_SINGLE_CHOICE)
+        self.assertIsNone(self.row(item))
+
     def test_routes_details_unavailable_is_a_retryable_503(self):
         item = self.title()
         self.fake.fail()
