@@ -135,8 +135,20 @@ nonisolated extension UserMediaState {
     /// title isn't in the library.
     func applying(animeEnvelope envelope: TVWriteEnvelope, tracking: TrackingState?) -> UserMediaState {
         var state = tracking.map { applying($0) } ?? removed()
-        if let anime = envelope.anime { state.anime = anime }
+        if let anime = envelope.anime {
+            state.anime = anime
+            if let liked = anime.liked { state.hasLiked = liked }
+        }
         return state
+    }
+
+    /// An anime state from a read, a log or a heart becomes the page's: where it stands, and its heart, which its
+    /// TrackingState doesn't carry (AN-301).
+    mutating func adoptAnime(_ anime: AnimeState) {
+        self.anime = anime
+        isTracked = anime.inLibrary
+        status = anime.status
+        if let liked = anime.liked { hasLiked = liked }
     }
 
     /// Whether an episode shows as watched, counting a pending tick, untick or mark (TV-100, TV-705).

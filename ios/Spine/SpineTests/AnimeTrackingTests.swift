@@ -287,6 +287,7 @@ final class AnimeTrackingTests: XCTestCase {
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         XCTAssertEqual(query.first { $0.name == "media_type" }?.value, "anime")
         XCTAssertEqual(query.first { $0.name == "continue_watching" }?.value, "true", "AN-701 reads Continue Watching, as TV does")
+        XCTAssertEqual(query.first { $0.name == "status" }?.value, "In progress", "All a server older than this build reads")
     }
 
     func testAN701InProgressReadsContinueWatchingAndKeepsTheServersOrder() async throws {
@@ -1171,7 +1172,11 @@ final class AnimeTrackingTests: XCTestCase {
         let season2 = Self.card(mediaId: "25777", title: "Attack on Titan Season 2", anime: Self.watching(upNext: 12, watched: 11, aired: 12))
         let ticks = continueWatching()
         var cards: [AnimeState] = []
-        ticks.onAnimeUpdate = { _, anime in cards.append(anime) }
+        var written: [MediaRef] = []
+        ticks.onAnimeUpdate = { ref, anime in
+            written.append(ref)
+            cards.append(anime)
+        }
         tracking.rowsResponses[season2.media.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 12, watched: 11, aired: 12), rows: Self.rows(through: 12, watched: 11))
         ticks.openEpisodes(for: season2)
         let sheet = try XCTUnwrap(ticks.animeEpisodes)
@@ -1222,7 +1227,8 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertTrue(ticked)
         XCTAssertEqual(tracking.actions.last?.mediaId, "35760")
         XCTAssertEqual(tracking.actions.last?.action, .tick)
-        XCTAssertEqual(cards.count, cardCount, "It isn't the card's title")
+        XCTAssertEqual(cards.count, cardCount + 1, "Its card, if the rail has one, changes where it is (TV-701)")
+        XCTAssertEqual(written.last?.mediaId, "35760", "The title that was written, not the one the sheet opened on")
         XCTAssertTrue(ticks.needsReload, "The rail picks it up on its next visit")
     }
 
@@ -1250,6 +1256,32 @@ final class AnimeTrackingTests: XCTestCase {
             XCTAssertEqual(sheet.ref.mediaId, "25777")
             XCTAssertEqual(sheet.rows?.episodes.filter(\.isWatched).count, 12, "Every tick filled")
         }
+    }
+
+    func testAN501TheSheetStaysPutOnANextTitleThatIsASingle() async throws {
+        // A season whose sequel is a movie: there are no rows to move on to, and the page's Next: row still shows it.
+        let item = Self.card(mediaId: "38000", title: "Season 1", anime: Self.watching(upNext: 26, watched: 25, aired: 26))
+        let ticks = continueWatching()
+        tracking.rowsResponses[item.media.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 26, watched: 25, aired: 26), rows: Self.rows(through: 26, watched: 25))
+        ticks.openEpisodes(for: item)
+        let sheet = try XCTUnwrap(ticks.animeEpisodes)
+        await sheet.loadRowsIfNeeded()
+        let composer = TVComposer(defaultTarget: "title", targets: [TVComposerTarget(id: "title", level: .title, title: "Season 1", date: "2026-10-25")])
+        var finished = AnimeState(inLibrary: true, status: "Completed", finished: true)
+        finished.nextTitle = AnimeNextTitle(mediaId: "40456", title: "The Movie", hasAired: true, single: true)
+        tracking.actionResponses = [Self.response(
+            anime: finished,
+            row: AnimeRow(number: 26, aired: 1, watched: 1, viewingId: 9),
+            finished: TVFinished(level: .title, seasonNumber: nil, composer: composer)
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last)))
+        _ = await sheet.page.settled()
+        sheet.page.tvFollowUp.composerDismissed()
+        sheet.finishComposerClosed()
+        XCTAssertEqual(sheet.ref.mediaId, "38000", "It stays on the finished title")
+        XCTAssertEqual(sheet.title, "Season 1")
+        XCTAssertEqual(sheet.rows?.episodes.filter(\.isWatched).count, 26, "Every tick filled")
+        XCTAssertEqual(sheet.page.viewer?.anime?.nextTitle?.title, "The Movie", "The page's Next: row reads this")
     }
 
     func testAN501ThePagesSheetNeverMovesOn() async throws {
@@ -1332,10 +1364,52 @@ final class AnimeTrackingTests: XCTestCase {
     func testAN701TheRailKeepsACardsPlaceAfterAWrite() {
         let first = Self.card(mediaId: "1", title: "One", anime: Self.watching(upNext: 2, watched: 1, aired: 12))
         let second = Self.card(mediaId: "2", title: "Two", anime: Self.watching(upNext: 5, watched: 4, aired: 12))
-        let replaced = ContinueWatchingTicks.replacingAnime(Self.watching(upNext: 6, watched: 5, aired: 12), id: second.id, in: [first, second])
+        let replaced = ContinueWatchingTicks.replacingAnime(Self.watching(upNext: 6, watched: 5, aired: 12), ref: second.media.ref, in: [first, second])
         XCTAssertEqual(replaced.map(\.media.ref.mediaId), ["1", "2"])
         XCTAssertEqual(replaced[1].tracking.anime?.upNext?.episodeNumber, 6)
         XCTAssertEqual(replaced[0].tracking.anime?.upNext?.episodeNumber, 2)
+
+        let noCard = ContinueWatchingTicks.replacingAnime(Self.watching(upNext: 9, watched: 8, aired: 12), ref: Self.ref("3"), in: [first, second])
+        XCTAssertEqual(noCard.map { $0.tracking.anime?.upNext?.episodeNumber }, [2, 5], "A title with no card changes nothing")
+    }
+
+    func testTV701ASecondTitleOnTheRailMovesWhenTheSheetWritesIt() async throws {
+        // The rail has Season 1 and Season 2. Season 1's sheet moves on to Season 2, and a tick there shows on its card.
+        let season1 = Self.card(mediaId: "16498", title: "Season 1", anime: Self.watching(upNext: 12, watched: 11, aired: 12))
+        let season2 = Self.card(mediaId: "25777", title: "Season 2", anime: Self.watching(upNext: 3, watched: 2, aired: 12))
+        var rail = [season1, season2]
+        let ticks = continueWatching()
+        ticks.onAnimeUpdate = { ref, anime in rail = ContinueWatchingTicks.replacingAnime(anime, ref: ref, in: rail) }
+        tracking.rowsResponses[season1.media.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 12, watched: 11, aired: 12), rows: Self.rows(through: 12, watched: 11))
+        ticks.openEpisodes(for: season1)
+        let sheet = try XCTUnwrap(ticks.animeEpisodes)
+        await sheet.loadRowsIfNeeded()
+        var finished = AnimeState(version: 5, inLibrary: true, status: "Completed", finished: true, watchedCount: 12, airedCount: 12)
+        finished.nextTitle = AnimeNextTitle(mediaId: "25777", title: "Season 2", hasAired: true)
+        let composer = TVComposer(defaultTarget: "title", targets: [TVComposerTarget(id: "title", level: .title, title: "Season 1", date: "2026-10-25")])
+        tracking.actionResponses = [Self.response(
+            anime: finished,
+            row: AnimeRow(number: 12, aired: 1, watched: 1, viewingId: 9),
+            finished: TVFinished(level: .title, seasonNumber: nil, composer: composer)
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last)))
+        _ = await sheet.page.settled()
+        XCTAssertEqual(rail[0].tracking.anime?.status, "Completed", "Its own card")
+
+        sheet.page.tvFollowUp.composerDismissed()
+        sheet.finishComposerClosed()
+        XCTAssertEqual(sheet.ref.mediaId, "25777")
+        tracking.rowsResponses[sheet.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 3, watched: 2, aired: 12), rows: Self.rows(through: 12, watched: 2))
+        await sheet.loadRowsIfNeeded()
+        tracking.actionResponses = [Self.response(
+            anime: Self.watching(upNext: 4, watched: 3, aired: 12),
+            row: AnimeRow(number: 3, aired: 1, watched: 1, viewingId: 10)
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes[2])))
+        _ = await sheet.page.settled()
+        XCTAssertEqual(rail[1].tracking.anime?.upNext?.episodeNumber, 4, "Season 2's bar, badge and VoiceOver line")
+        XCTAssertEqual(rail[1].tracking.anime?.watchedCount, 3)
+        XCTAssertEqual(InProgressCardPresentation.progressFraction(for: rail[1]), 3.0 / 12.0)
     }
 
     // MARK: Projections
@@ -1375,6 +1449,128 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(airing.anime?.caughtUp, true)
     }
 
+    func testAN301TheEyeUndoingAHeartsMarkTakesTheHeartOffTheScreen() async throws {
+        // Planning, nothing watched. The heart marks it; the filled eye undoes the mark and the choice comes back.
+        var planning = AnimeState(version: 1, inLibrary: true, status: "Planning", choice: "Planning", watchedCount: 0, airedCount: 12)
+        planning.opinionAction = .mark
+        let page = model(Self.detail(anime: planning))
+        var completed = AnimeState(version: 2, inLibrary: true, status: "Completed", started: true, finished: true, watchedCount: 12, airedCount: 12)
+        completed.liked = true
+        completed.eye = TVEyeState(filled: true, tap: .unmarkMarks)
+        media.likeResponse = MediaLikeResponse(liked: true, media: nil, anime: completed)
+        _ = await page.toggleMediaLike(for: try XCTUnwrap(page.detail)).value
+        XCTAssertEqual(page.viewer?.hasLiked, true)
+        XCTAssertEqual(page.viewer?.status, "Completed")
+
+        var backToPlanning = planning
+        backToPlanning.version = 3
+        backToPlanning.liked = false
+        tracking.actionResponses = [Self.response(anime: backToPlanning)]
+        page.tapTVEye()
+        _ = await page.settled()
+        XCTAssertEqual(page.viewer?.status, "Planning")
+        XCTAssertNil(page.viewer?.rating)
+        XCTAssertEqual(page.viewer?.hasLiked, false, "The heart went with it, on screen too")
+
+        // So the next tap gives the heart rather than taking it away.
+        media.likeResponse = nil
+        _ = await page.toggleMediaLike(for: try XCTUnwrap(page.detail)).value
+        XCTAssertEqual(media.likeRequests.last?.liked, true)
+    }
+
+    func testAN301TheRowsRouteBringsTheHeartHomesSheetCantKnow() async throws {
+        let item = Self.card(mediaId: "16498", title: "Attack on Titan", anime: Self.watching(upNext: 8, watched: 7, aired: 24))
+        let ticks = continueWatching()
+        var loaded = Self.watching(upNext: 8, watched: 7, aired: 24)
+        loaded.liked = true
+        tracking.rowsResponses[item.media.ref.id] = AnimeRowsResponse(anime: loaded, rows: Self.rows(through: 24, watched: 7))
+        ticks.openEpisodes(for: item)
+        let sheet = try XCTUnwrap(ticks.animeEpisodes)
+        XCTAssertEqual(sheet.page.viewer?.hasLiked, false)
+        await sheet.loadRowsIfNeeded()
+        XCTAssertEqual(sheet.page.viewer?.hasLiked, true)
+    }
+
+    func testAStartReadsTheDayOnTheUsersCalendar() {
+        // A tick at 8:30 p.m. New York on Nov 3 is Nov 4 in UTC.
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-04T01:30:00Z", calendar: Self.calendar), "2026-11-03")
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-04T01:30:00.123456Z", calendar: Self.calendar), "2026-11-03")
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-03T20:30:00-05:00", calendar: Self.calendar), "2026-11-03")
+        // A log's day stays its day, at UTC midnight or plain, however a server in another zone writes it.
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-04T00:00:00Z", calendar: Self.calendar), "2026-11-04")
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-03T19:00:00-05:00", calendar: Self.calendar), "2026-11-04")
+        XCTAssertEqual(TVTrackingPresentation.startDay("2026-11-04", calendar: Self.calendar), "2026-11-04")
+
+        let state = UserMediaState(isTracked: true, status: "In progress", startDate: "2026-11-04T01:30:00Z", anime: Self.watching(upNext: 2, watched: 1, aired: 25))
+        let anime = MediaDetail(ref: Self.ref(), title: "Attack on Titan", userState: state)
+        XCTAssertTrue(TrackingSummarySection.lines(detail: anime, state: state, preferredMode: nil, calendar: Self.calendar).contains("Started November 3, 2026"))
+
+        // TV reads through the same line.
+        let showRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1399", seasonNumber: nil, episodeNumber: nil)
+        let showState = UserMediaState(isTracked: true, status: "In progress", startDate: "2026-11-04T01:30:00Z", tv: TVShowState(inLibrary: true, status: "In progress"))
+        let show = MediaDetail(ref: showRef, title: "A Show", userState: showState)
+        XCTAssertTrue(TrackingSummarySection.lines(detail: show, state: showState, preferredMode: nil, calendar: Self.calendar).contains("Started November 3, 2026"))
+
+        // A book's start is the date it was given.
+        let bookRef = MediaRef(itemId: nil, source: "openlibrary", mediaType: "book", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
+        let bookState = UserMediaState(isTracked: true, status: "In progress", startDate: "2026-11-04T01:30:00Z")
+        let book = MediaDetail(ref: bookRef, title: "A Book", userState: bookState)
+        XCTAssertTrue(TrackingSummarySection.lines(detail: book, state: bookState, preferredMode: nil, calendar: Self.calendar).contains("Started November 4, 2026"))
+    }
+
+    func testAN500AWriteOnTheNextTitleRefreshesThisPage() async throws {
+        var finished = AnimeState(version: 1, inLibrary: true, status: "Completed", finished: true)
+        finished.nextTitle = AnimeNextTitle(mediaId: "25777", title: "Season 2", hasAired: true)
+        let page = model(Self.detail(anime: finished), externalRefreshDelay: .zero)
+
+        page.handleMediaStateChange(["ref": Self.ref("99999"), "origin": UUID()])
+        await page.refreshFinished()
+        XCTAssertTrue(media.detailRequests.isEmpty, "Another title's write says nothing about this page")
+
+        page.handleMediaStateChange(["ref": Self.ref("25777"), "origin": UUID()])
+        await page.refreshFinished()
+        XCTAssertEqual(media.detailRequests.map(\.mediaId), ["16498"], "The page reads itself again, and Next: goes when that one's finished")
+    }
+
+    func testAServerOlderThanThisBuildLeavesThePageAsItWas() async throws {
+        // No anime state: the page isn't tracked by it, its stars and heart take the plain routes, and its lines read the row.
+        let state = UserMediaState(
+            isTracked: true,
+            status: "In progress",
+            progress: ProgressState(kind: "episodes", value: 3, max: 12, unit: "episode")
+        )
+        let detail = MediaDetail(ref: Self.ref(), title: "Attack on Titan", userState: state)
+        let page = model(detail)
+        XCTAssertFalse(page.tracksAnime)
+        XCTAssertNil(page.opinionAction)
+        XCTAssertEqual(
+            TrackingSummarySection.lines(detail: detail, state: state, preferredMode: nil),
+            [try XCTUnwrap(state.progress?.detailDisplayText(preferredMode: nil))],
+            "The row's progress, as before"
+        )
+
+        media.likeResponse = MediaLikeResponse(liked: true, media: nil)
+        _ = await page.toggleMediaLike(for: detail).value
+        XCTAssertEqual(media.likeRequests.count, 1)
+        XCTAssertEqual(page.viewer?.hasLiked, true)
+        tracking.updateResponse = TrackingState(trackingId: 3, status: "In progress", rating: "4.0", progress: nil, repeats: nil, startDate: nil, endDate: nil, notes: nil, updatedAt: nil)
+        _ = await page.setCurrentRating(for: detail, halfSteps: 8).value
+        XCTAssertTrue(tracking.actions.isEmpty, "No anime route, which that server doesn't have")
+        XCTAssertEqual(tracking.updates.count, 1)
+        XCTAssertEqual(page.viewer?.rating, "4.0")
+
+        // Home's card opens its page, and its Library line reads the status.
+        let card = Spine.LibraryItem(
+            media: MediaSummary(ref: Self.ref(), title: "Attack on Titan"),
+            tracking: TrackingState(trackingId: 3, status: "In progress", rating: nil, progress: nil, repeats: nil, startDate: nil, endDate: nil, notes: nil, updatedAt: nil)
+        )
+        XCTAssertEqual(InProgressUpdates.route(for: card), .page)
+        XCTAssertEqual(AnimeLibraryCard.line(for: card), TVLibraryCard.statusTitle("In progress"))
+
+        // With the state it's tracked by it again.
+        XCTAssertTrue(model(Self.detail(anime: Self.watching(upNext: 2, watched: 1, aired: 12))).tracksAnime)
+    }
+
     func testFoldingAWriteKeepsTheHeartAndLeavingTheLibraryClearsIt() {
         let ref = Self.ref()
         var current = UserMediaState(isTracked: true, status: "In progress", rating: "4.0", hasLiked: true, anime: Self.watching(upNext: 3, watched: 2, aired: 12))
@@ -1406,7 +1602,7 @@ final class AnimeTrackingTests: XCTestCase {
         try JSONDecoder.api.decode(type, from: Data(json.utf8))
     }
 
-    private func model(_ detail: MediaDetail) -> MediaDetailViewModel {
+    private func model(_ detail: MediaDetail, externalRefreshDelay: Duration = .seconds(60)) -> MediaDetailViewModel {
         // Writes refresh their community stats; this holds them away from the fixtures.
         let page = MediaDetailViewModel(
             ref: detail.ref,
@@ -1415,7 +1611,7 @@ final class AnimeTrackingTests: XCTestCase {
             diaryRepository: diary,
             onUnauthorized: {},
             writeRefreshDelay: .seconds(60),
-            externalRefreshDelay: .seconds(60)
+            externalRefreshDelay: externalRefreshDelay
         )
         page.detail = detail
         page.isLoading = false
@@ -1592,6 +1788,9 @@ final class AnimeTrackingRepository: TrackingRepository {
     var continueWatchingAnimeResponse: PagedResponse<Spine.LibraryItem>?
     var continueWatchingAnimeRequests = 0
     var listRequests: [String] = []
+    /// The plain tracking route, which a server older than this build answers for anime.
+    var updates: [TrackingWriteRequest] = []
+    var updateResponse: TrackingState?
 
     func performAnimeAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
         actions.append((source, mediaId, action, request))
@@ -1618,7 +1817,11 @@ final class AnimeTrackingRepository: TrackingRepository {
     }
 
     func detail(ref: MediaRef) async throws -> TrackingState { throw APIError.httpStatus(404, nil) }
-    func update(ref: MediaRef, request: TrackingWriteRequest) async throws -> TrackingState { fatalError("Not used") }
+    func update(ref: MediaRef, request: TrackingWriteRequest) async throws -> TrackingState {
+        updates.append(request)
+        guard let updateResponse else { throw APIError.httpStatus(404, nil) }
+        return updateResponse
+    }
     func consume(ref: MediaRef, consumedAt: Date?) async throws -> TrackingState { fatalError("Not used") }
     func watchSeason(source: String, mediaId: String, seasonNumber: Int) async throws -> TrackingState { fatalError("Not used") }
     func updateBookProgress(source: String, mediaId: String, progressType: String, value: Decimal, notes: String) async throws -> TrackingState { fatalError("Not used") }

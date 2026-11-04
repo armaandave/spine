@@ -21,8 +21,8 @@ final class ContinueWatchingTicks {
     let changeOrigin = UUID()
     /// Puts a card's new show state in place in the screen's rail.
     @ObservationIgnored var onUpdate: (_ itemId: String, _ tv: TVShowState) -> Void = { _, _ in }
-    /// Puts a card's new anime state in place in the screen's rail.
-    @ObservationIgnored var onAnimeUpdate: (_ itemId: String, _ anime: AnimeState) -> Void = { _, _ in }
+    /// Puts a title's new anime state in place on its card in the screen's rail, whichever title was written.
+    @ObservationIgnored var onAnimeUpdate: (_ ref: MediaRef, _ anime: AnimeState) -> Void = { _, _ in }
 
     @ObservationIgnored private let mediaRepository: MediaRepository
     @ObservationIgnored private let trackingRepository: TrackingRepository
@@ -69,10 +69,10 @@ final class ContinueWatchingTicks {
                 changeOrigin: changeOrigin
             )
         }
-        sheet.onStateChange = { [weak self] isCardTitle, anime in
+        sheet.onStateChange = { [weak self] ref, anime in
             guard let self else { return }
             needsReload = true
-            if isCardTitle { onAnimeUpdate(item.id, anime) }
+            onAnimeUpdate(ref, anime)
         }
         sheet.onOpen = { [weak self, weak sheet] selection in
             guard let self, let sheet else { return }
@@ -191,10 +191,10 @@ final class ContinueWatchingTicks {
         }
     }
 
-    /// The rail with one card's anime state replaced where it is.
-    static func replacingAnime(_ anime: AnimeState, id: String, in items: [LibraryItem]) -> [LibraryItem] {
+    /// The rail with one title's anime state replaced on its card, where it is. A title with no card changes nothing.
+    static func replacingAnime(_ anime: AnimeState, ref: MediaRef, in items: [LibraryItem]) -> [LibraryItem] {
         items.map { item in
-            guard item.id == id else { return item }
+            guard item.media.ref.id == ref.id else { return item }
             var tracking = item.tracking
             tracking.anime = anime
             return LibraryItem(media: item.media, tracking: tracking)

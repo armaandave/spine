@@ -110,6 +110,10 @@ final class MediaDetailViewModel {
     var hasPendingWrites: Bool { pendingWriteCount > 0 }
     var confirmingEyeWrite: Bool { eyeWritesInFlight > 0 }
 
+    /// An anime title this build can track by its state. A server older than this build sends none: the page then works
+    /// as it did before anime had rows, with + opening the log screen and a plain heart.
+    var tracksAnime: Bool { ref.isAnime && viewer?.anime != nil }
+
     /// Waits for every write queued so far and reports whether they all succeeded. Screens that capture ids read
     /// confirmed state after this, and don't open at all when a write they waited for failed.
     @discardableResult
@@ -336,6 +340,10 @@ final class MediaDetailViewModel {
 
     private func completionMayHaveChanged(in detail: MediaDetail, for changedRef: MediaRef) -> Bool {
         if changedRef.id == ref.id {
+            return true
+        }
+        // Finishing the next title ends this page's "Next:" row (AN-500).
+        if detail.userState?.anime?.nextTitle?.ref.id == changedRef.id {
             return true
         }
         // A show or season write elsewhere changes which episodes are watched, so episode pages refresh too (TV-705).
@@ -573,7 +581,7 @@ final class MediaDetailViewModel {
         let ref = detail.ref
         let liked = !((viewer ?? detail.userState)?.hasLiked ?? false)
         let repository = mediaRepository
-        if ref.isTVFamily || ref.isAnime {
+        if ref.isTVFamily || tracksAnime {
             return toggleTVLike(ref: ref, liked: liked)
         }
         return enqueue(
@@ -599,7 +607,7 @@ final class MediaDetailViewModel {
     @discardableResult
     func setCurrentRating(for detail: MediaDetail, halfSteps: Int) -> Task<Bool, Never> {
         let ref = detail.ref
-        if ref.isTVFamily || ref.isAnime {
+        if ref.isTVFamily || tracksAnime {
             return rateTV(steps: halfSteps)
         }
         let rating = halfSteps > 0 ? Decimal(halfSteps) / 2 : nil
@@ -864,9 +872,7 @@ final class MediaDetailViewModel {
                 return
             }
             var state = detail?.userState ?? .untracked
-            state.anime = loaded.anime
-            state.isTracked = loaded.anime.inLibrary
-            state.status = loaded.anime.status
+            state.adoptAnime(loaded.anime)
             detail?.userState = state
             detail?.animeRows = loaded.rows
             tvConfirmed = TVConfirmedWrites()
@@ -1212,11 +1218,7 @@ final class MediaDetailViewModel {
         } else {
             state.tv = current.tv
         }
-        if let anime = envelope.anime {
-            state.anime = anime
-            state.isTracked = anime.inLibrary
-            state.status = anime.status
-        }
+        if let anime = envelope.anime { state.adoptAnime(anime) }
         if let pageSeason = current.tv?.season, let season = envelope.season,
            season.seasonNumber == pageSeason.seasonNumber {
             state.isTracked = season.started
@@ -1459,9 +1461,7 @@ final class MediaDetailViewModel {
         if let envelope = result.tvEnvelope {
             if let anime = envelope.anime, detail != nil {
                 var state = detail?.userState ?? .untracked
-                state.anime = anime
-                state.isTracked = anime.inLibrary
-                state.status = anime.status
+                state.adoptAnime(anime)
                 stateGeneration += 1
                 if detail?.userState != state { detail?.userState = state }
             }
@@ -3259,7 +3259,7 @@ private struct MediaDetailPageView: View {
     private func trackAction(for detail: MediaDetail) {
         if detail.ref.isTVFamily {
             tvTrackAction(for: detail)
-        } else if detail.ref.isAnime {
+        } else if viewModel.tracksAnime {
             presentedSheet = .tvActions
         } else if usesBookGameActions(detail) {
             presentedSheet = .bookGameActions
@@ -3271,8 +3271,13 @@ private struct MediaDetailPageView: View {
     }
 
     private func eyeAction(for detail: MediaDetail) {
-        if detail.ref.isTVFamily || detail.ref.isAnime {
+        if detail.ref.isTVFamily || viewModel.tracksAnime {
             viewModel.tapTVEye()
+            return
+        }
+        if detail.ref.isAnime {
+            // With no anime state the log screen is the one way to say it's watched.
+            trackAction(for: detail)
             return
         }
         if detail.ref.isSingleWeight {
@@ -3328,7 +3333,7 @@ private struct MediaDetailPageView: View {
     }
 
     private func isEyeCompleted(_ detail: MediaDetail) -> Bool {
-        if detail.ref.isTVFamily || detail.ref.isAnime {
+        if detail.ref.isTVFamily || viewModel.tracksAnime {
             return isTVEyeFilled(detail)
         }
         return currentStatus(detail)?.caseInsensitiveCompare("Completed") == .orderedSame
@@ -3350,7 +3355,7 @@ private struct MediaDetailPageView: View {
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
-        if (detail.ref.isTVFamily && detail.ref.mediaType != "episode") || detail.ref.isAnime {
+        if (detail.ref.isTVFamily && detail.ref.mediaType != "episode") || viewModel.tracksAnime {
             routeOpinion(for: detail, isGiving: halfSteps > 0) {
                 // The stars on screen wait for the log: cancelling it leaves them as they were (TV-304, AN-301).
                 restoreRatingPicker()
@@ -3537,7 +3542,7 @@ private struct MediaDetailPageView: View {
 
     @ViewBuilder
     private func bottomActionRail(_ detail: MediaDetail) -> some View {
-        if detail.ref.isTVFamily || detail.ref.isAnime {
+        if detail.ref.isTVFamily || viewModel.tracksAnime {
             tvActionRail(detail)
         } else {
             standardActionRail(detail)
@@ -6915,7 +6920,12 @@ struct TrackingSummarySection: View {
         Self.lines(detail: detail, state: state, preferredMode: ProgressDisplayPreferences.mode(for: detail.ref))
     }
 
-    static func lines(detail: MediaDetail, state: UserMediaState?, preferredMode: ProgressUpdateMode?) -> [String] {
+    static func lines(
+        detail: MediaDetail,
+        state: UserMediaState?,
+        preferredMode: ProgressUpdateMode?,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [String] {
         let status = Self.status(detail: detail, state: state)
         var values: [String] = []
         if detail.ref.mediaType == "game", let game = state?.game,
@@ -6924,8 +6934,8 @@ struct TrackingSummarySection: View {
         }
         if detail.ref.isTVFamily, let tv = state?.tv {
             values += tvLines(detail: detail, tv: tv)
-        } else if detail.ref.isAnime {
-            values += state?.anime.map(AnimeTrackingPresentation.pageLines(for:)) ?? []
+        } else if detail.ref.isAnime, let anime = state?.anime {
+            values += AnimeTrackingPresentation.pageLines(for: anime)
         } else if detail.ref.mediaType != "game", (status == "In progress" || (detail.ref.readsLikeBook && status == "Paused")),
            detail.ref.mediaType != "movie",
             let progressText = state?.progress?.detailDisplayText(preferredMode: preferredMode) {
@@ -6939,7 +6949,10 @@ struct TrackingSummarySection: View {
         }
         if detail.ref.mediaType != "movie" {
             if let startDate = state?.displayStartDate {
-                values.append("Started \(startDate.longDateLabel)")
+                let day = detail.ref.isTVFamily || detail.ref.isAnime
+                    ? TVTrackingPresentation.startDay(startDate, calendar: calendar)
+                    : startDate
+                values.append("Started \(day.longDateLabel)")
             }
         }
         return values

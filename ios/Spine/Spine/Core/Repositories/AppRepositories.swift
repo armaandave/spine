@@ -1256,18 +1256,22 @@ struct APITrackingRepository: TrackingRepository {
     }
 
     func continueWatchingAnime(page: String?) async throws -> PagedResponse<LibraryItem> {
-        try await continueWatching(mediaType: "anime", page: page)
+        // A server older than this build reads the status and ignores `continue_watching` for anime.
+        try await continueWatching(mediaType: "anime", status: InProgressLibraryLoader.status, page: page)
     }
 
     func animeRows(ref: MediaRef) async throws -> AnimeRowsResponse {
         try await client.get("/tracking/\(ref.source)/anime/\(ref.mediaId)/rows/", authenticated: true)
     }
 
-    private func continueWatching(mediaType: String, page: String?) async throws -> PagedResponse<LibraryItem> {
+    private func continueWatching(mediaType: String, status: String? = nil, page: String?) async throws -> PagedResponse<LibraryItem> {
         var query = [
             URLQueryItem(name: "media_type", value: mediaType),
             URLQueryItem(name: "continue_watching", value: "true"),
         ]
+        if let status {
+            query.append(URLQueryItem(name: "status", value: status))
+        }
         if let page {
             query.append(URLQueryItem(name: "page", value: page))
         }

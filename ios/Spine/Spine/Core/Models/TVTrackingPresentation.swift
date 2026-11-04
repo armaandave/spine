@@ -97,6 +97,17 @@ nonisolated enum TVTrackingPresentation {
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
+    /// The `YYYY-MM-DD` a show or an anime title started on `calendar`. A tick starts it at a moment, whose day is the
+    /// user's, not the first ten characters of what the server sends. A log's day is already a day: it comes plain or at
+    /// UTC midnight, and keeps it (TV-407).
+    static func startDay(_ value: String, calendar: Calendar = .autoupdatingCurrent) -> String {
+        guard value.contains("T"), let moment = FeaturedDate.parse(value) else { return String(value.prefix(10)) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        if utc.startOfDay(for: moment) == moment { return calendarString(moment, calendar: utc) }
+        return calendarString(moment, calendar: calendar)
+    }
+
     /// The `YYYY-MM-DD` of `date` on `calendar`.
     static func calendarString(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)

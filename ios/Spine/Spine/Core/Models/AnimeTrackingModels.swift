@@ -109,17 +109,27 @@ nonisolated struct AnimeNextTitle: Codable, Hashable {
     var title: String
     var imageUrl: String?
     var hasAired: Bool
+    /// A movie or a one-episode title: it has no rows, so Home's sheet doesn't move on to it (AN-501).
+    var single: Bool
 
-    init(source: String = "mal", mediaId: String, title: String, imageUrl: String? = nil, hasAired: Bool = false) {
+    init(
+        source: String = "mal",
+        mediaId: String,
+        title: String,
+        imageUrl: String? = nil,
+        hasAired: Bool = false,
+        single: Bool = false
+    ) {
         self.source = source
         self.mediaId = mediaId
         self.title = title
         self.imageUrl = imageUrl
         self.hasAired = hasAired
+        self.single = single
     }
 
     private enum CodingKeys: String, CodingKey {
-        case source, mediaId, title, imageUrl, hasAired
+        case source, mediaId, title, imageUrl, hasAired, single
     }
 
     init(from decoder: Decoder) throws {
@@ -133,6 +143,7 @@ nonisolated struct AnimeNextTitle: Codable, Hashable {
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
         hasAired = try c.decodeIfPresent(Bool.self, forKey: .hasAired) ?? false
+        single = try c.decodeIfPresent(Bool.self, forKey: .single) ?? false
     }
 
     var ref: MediaRef {
@@ -167,6 +178,8 @@ nonisolated struct AnimeState: Codable, Hashable {
     var ratingSourceDiaryEntryId: Int?
     var likeSourceDiaryEntryId: Int?
     var likeIsIndependent: Bool?
+    /// Whether the heart is on. The detail variant has it; a TrackingState doesn't (AN-301).
+    var liked: Bool?
     var eye: TVEyeState?
     var availableActions: [String]
     var actionReasons: [String: String]
@@ -177,7 +190,7 @@ nonisolated struct AnimeState: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case version, inLibrary, status, choice, started, finished, caughtUp, single, total, watchedCount, airedCount
         case firstGapEpisode, upNext, nextAiring, premiere, rewatch, lastWatchedOn, selectedAction, removeCount
-        case ratingSourceDiaryEntryId, likeSourceDiaryEntryId, likeIsIndependent, eye, availableActions, actionReasons
+        case ratingSourceDiaryEntryId, likeSourceDiaryEntryId, likeIsIndependent, liked, eye, availableActions, actionReasons
         case opinionAction, composer, nextTitle
     }
 
@@ -204,6 +217,7 @@ nonisolated struct AnimeState: Codable, Hashable {
         ratingSourceDiaryEntryId: Int? = nil,
         likeSourceDiaryEntryId: Int? = nil,
         likeIsIndependent: Bool? = nil,
+        liked: Bool? = nil,
         eye: TVEyeState? = nil,
         availableActions: [String] = [],
         actionReasons: [String: String] = [:],
@@ -233,6 +247,7 @@ nonisolated struct AnimeState: Codable, Hashable {
         self.ratingSourceDiaryEntryId = ratingSourceDiaryEntryId
         self.likeSourceDiaryEntryId = likeSourceDiaryEntryId
         self.likeIsIndependent = likeIsIndependent
+        self.liked = liked
         self.eye = eye
         self.availableActions = availableActions
         self.actionReasons = actionReasons
@@ -265,6 +280,7 @@ nonisolated struct AnimeState: Codable, Hashable {
         ratingSourceDiaryEntryId = try c.decodeIfPresent(Int.self, forKey: .ratingSourceDiaryEntryId)
         likeSourceDiaryEntryId = try c.decodeIfPresent(Int.self, forKey: .likeSourceDiaryEntryId)
         likeIsIndependent = try c.decodeIfPresent(Bool.self, forKey: .likeIsIndependent)
+        liked = try c.decodeIfPresent(Bool.self, forKey: .liked)
         eye = try c.decodeIfPresent(TVEyeState.self, forKey: .eye)
         availableActions = try c.decodeIfPresent([String].self, forKey: .availableActions) ?? []
         actionReasons = try TVActionReasons.decode(from: c, forKey: .actionReasons)

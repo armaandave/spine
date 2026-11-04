@@ -18,20 +18,18 @@ final class AnimeEpisodes: Identifiable {
     private(set) var startEpisode: Int?
     /// The title of the alert a failed write shows: what the last tap asked for.
     private(set) var failureTitle = ContinueWatchingEpisodes.tickFailureTitle
-    /// Each write's state, and whether it is the card's title, for the card.
-    @ObservationIgnored var onStateChange: (_ isCardTitle: Bool, _ anime: AnimeState) -> Void = { _, _ in }
+    /// Each write's state and the title it's about, whose card may be on the rail (TV-701).
+    @ObservationIgnored var onStateChange: (_ ref: MediaRef, _ anime: AnimeState) -> Void = { _, _ in }
     /// Asks for a page: the screen closes the sheet first, then opens it.
     @ObservationIgnored var onOpen: (MediaBrowsingSelection) -> Void = { _ in }
 
     @ObservationIgnored private let makePage: (MediaRef) -> MediaDetailViewModel
-    @ObservationIgnored private let cardRef: MediaRef?
     /// A write on this title since the sheet opened on it: the list stays where it opened.
     @ObservationIgnored private var hasWritten = false
 
     /// Home's sheet, starting from what the card already shows: its row shows at once while the rest load.
     init(item: LibraryItem, makePage: @escaping (MediaRef) -> MediaDetailViewModel) {
         cardID = item.id
-        cardRef = item.media.ref
         ref = item.media.ref
         self.makePage = makePage
         upNext = item.tracking.anime?.upNext?.tvPointer
@@ -44,7 +42,6 @@ final class AnimeEpisodes: Identifiable {
     /// A long title's page opens the whole list, with the rows it already has.
     init(detail: MediaDetail, makePage: @escaping (MediaRef) -> MediaDetailViewModel) {
         cardID = nil
-        cardRef = nil
         ref = detail.ref
         self.makePage = makePage
         upNext = detail.userState?.anime?.upNext?.tvPointer
@@ -98,10 +95,11 @@ final class AnimeEpisodes: Identifiable {
     }
 
     /// The log screen from the title's last tick closed, saved or not (AN-501). Home's sheet moves on when the next title
-    /// has an aired episode, and otherwise stays on this one, every tick filled. Moving on adds nothing to the library.
+    /// has an aired episode and rows, and otherwise stays on this one, every tick filled. Moving on adds nothing to the
+    /// library.
     func finishComposerClosed() {
         guard cardID != nil, !page.tvFollowUp.isActive,
-              let next = page.viewer?.anime?.nextTitle, next.hasAired
+              let next = page.viewer?.anime?.nextTitle, next.hasAired, !next.single
         else { return }
         ref = next.ref
         upNext = nil
@@ -122,7 +120,7 @@ final class AnimeEpisodes: Identifiable {
         model.onAnimeChange = { [weak self] anime in
             guard let self else { return }
             hasWritten = true
-            onStateChange(ref == cardRef, anime)
+            onStateChange(ref, anime)
         }
     }
 
