@@ -13,8 +13,9 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
+from api.services import progress_posts
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import series_tracking, single_weight, user_calendar
+from app import single_weight, user_calendar
 from app.models import (
     Anime,
     DiaryEntry,
@@ -186,15 +187,16 @@ class MALExportImporter:
 
     def _cleanup(self, entries, items):
         """Remove prior state only for titles present in this file."""
-        item_ids_by_type = defaultdict(list)
+        items_by_type = defaultdict(list)
         for entry in entries:
             item = items.get(_key(entry))
             if item is not None:
-                item_ids_by_type[entry.media_type].append(item.id)
+                items_by_type[entry.media_type].append(item)
 
-        for media_type, item_ids in item_ids_by_type.items():
+        for media_type, title_items in items_by_type.items():
             model = TRACKING_MODELS[media_type]
-            for chunk in _chunks(item_ids):
+            for chunk_items in _chunks(title_items):
+                chunk = [item.id for item in chunk_items]
                 model.objects.filter(user=self.user, item_id__in=chunk).delete()
                 imported_entries = DiaryEntry.objects.filter(
                     user=self.user,
@@ -211,8 +213,8 @@ class MALExportImporter:
                     Tag.objects.filter(id=tag_id).update(
                         usage_count=Greatest(F("usage_count") - count, 0),
                     )
-                if media_type == MediaTypes.MANGA.value:
-                    series_tracking.forget_progress(self.user, chunk)
+                # The file replaces these titles, so their saves and likes don't come back.
+                progress_posts.forget_titles(self.user.pk, chunk_items)
 
     def _ensure_items(self, entries, items, metadata):
         for entry in entries:

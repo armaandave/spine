@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from app import single_weight, user_calendar
 from app.models import (
     Book,
@@ -1137,16 +1137,10 @@ def _splice_session(book, session):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity
-
-    changes = ProgressChange.objects.filter(
-        actor=user,
-        item=item,
-        current_progress__journey_id=journey_id,
+    progress_posts.delete_changes(
+        user.pk,
+        ProgressChange.objects.filter(actor=user, item=item, current_progress__journey_id=journey_id),
     )
-    ids = list(changes.values_list("id", flat=True))
-    Activity.objects.filter(target_type="progress_change", target_id__in=ids).delete()
-    changes.delete()
 
 
 @transaction.atomic

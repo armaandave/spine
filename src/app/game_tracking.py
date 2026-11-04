@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from api.services import progress_posts
 from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
 from app.models import DiaryEntry, Game, GameSession, Item, MediaLike, Status
@@ -511,11 +512,10 @@ def _record_status(user, item, session, move):
 
 def _delete_progress_history(user, item, playthrough_id):
     """Drop a deleted playthrough's recorded start and progress, as books do."""
-    ProgressChange.objects.filter(
-        actor=user,
-        item=item,
-        current_progress__playthrough_id=playthrough_id,
-    ).delete()
+    progress_posts.delete_changes(
+        user.pk,
+        ProgressChange.objects.filter(actor=user, item=item, current_progress__playthrough_id=playthrough_id),
+    )
 
 
 @transaction.atomic

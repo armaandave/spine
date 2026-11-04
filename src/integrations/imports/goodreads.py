@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from api.services import progress_posts
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.providers import hardcover, openlibrary, services
 from app.providers.search_rank import normalize_search_text
@@ -251,11 +252,15 @@ class GoodReadsImporter:
         return dict(self.counts), warnings or None
 
     def _cleanup(self):
+        books = Book.objects.filter(user=self.user)
+        items = list(Item.objects.filter(pk__in=books.values("item_id")))
         DiaryEntry.objects.filter(
             user=self.user,
             item__media_type=MediaTypes.BOOK.value,
         ).delete()
-        Book.objects.filter(user=self.user).delete()
+        books.delete()
+        # The file replaces these books, so their saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, items)
 
     def _import_row(self, row, result):
         label = row.title or f"Goodreads row {row.index}"

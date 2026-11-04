@@ -131,6 +131,10 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 - `object.id` of a day's progress addresses it: `/api/v1/progress/<id>/` is its page,
   with `like/` and `comments/` under it. A log uses `/api/v1/diary/<id>/like/` and
   `comments/`. `DELETE /api/v1/comments/<id>/` removes a comment.
+- Deleting a journey, attempt, playthrough or season's progress deletes the likes and
+  comments of each day it leaves with no progress. Removing a title deletes all of that
+  person's progress, likes and comments on it. Neither comes back on a later save that
+  day, and each post removed writes a `SocialAuditLog` row.
 
 ## Review status
 

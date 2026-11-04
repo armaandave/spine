@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
 
+from api.services import progress_posts
 from app import book_tracking, user_calendar
 from app.models import (
     Book,
@@ -183,7 +184,7 @@ class MarginsImporter:
 
     def _clear_book(self, item):
         """Delete what Spine has for this book so the file's version replaces it."""
-        from social.models import Activity, ProgressChange  # noqa: PLC0415
+        from social.models import Activity  # noqa: PLC0415
 
         entries = DiaryEntry.objects.filter(user=self.user, item=item)
         days = {consumed_at.date() for consumed_at in entries.values_list("consumed_at", flat=True)}
@@ -194,9 +195,10 @@ class MarginsImporter:
         for tag_id, count in tag_counts.items():
             Tag.objects.filter(id=tag_id).update(usage_count=Greatest(F("usage_count") - count, 0))
         Activity.objects.filter(actor=self.user, item=item).delete()
-        ProgressChange.objects.filter(actor=self.user, item=item).delete()
         MediaLike.objects.filter(user=self.user, item=item).delete()
         Book.objects.filter(user=self.user, item=item).delete()
+        # The file replaces this book, so its saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, [item])
         for day in days:
             transaction.on_commit(
                 lambda day=day: update_daily_statistics.delay(

@@ -4,6 +4,7 @@ from collections import defaultdict
 from django.conf import settings
 from django.db import transaction
 
+from api.services import progress_posts
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry
 from integrations.imports import helpers
@@ -43,8 +44,12 @@ class StoryGraphImporter:
         return dict(self.counts), warnings or None
 
     def _cleanup(self):
-        Book.objects.filter(user=self.user).delete()
+        books = Book.objects.filter(user=self.user)
+        items = list(Item.objects.filter(pk__in=books.values("item_id")))
+        books.delete()
         DiaryEntry.objects.filter(user=self.user, item__media_type=MediaTypes.BOOK.value).delete()
+        # The file replaces these books, so their saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, items)
 
     def _import_row(self, row, result):
         if row.status is None:

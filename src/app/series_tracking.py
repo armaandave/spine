@@ -26,7 +26,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from api.services.item_metadata import store_series_total
 from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
@@ -1186,16 +1186,10 @@ def _splice(row, attempt):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity
-
-    changes = ProgressChange.objects.filter(
-        actor=user,
-        item=item,
-        current_progress__journey_id=journey_id,
+    progress_posts.delete_changes(
+        user.pk,
+        ProgressChange.objects.filter(actor=user, item=item, current_progress__journey_id=journey_id),
     )
-    ids = list(changes.values_list("id", flat=True))
-    Activity.objects.filter(target_type="progress_change", target_id__in=ids).delete()
-    changes.delete()
 
 
 @transaction.atomic
@@ -1353,8 +1347,8 @@ def remove_tracking(user, item):
     if any(_is_real_history(attempt) for attempt in row.attempts.all()) or _has_logs(row):
         raise HistoryExists(HISTORY_MESSAGE)
     MediaLike.objects.filter(user=user, item=item).delete()
-    ProgressChange.objects.filter(actor=user, item=item).delete()
     row.delete()
+    progress_posts.forget_titles(user.pk, [item])
     return None
 
 
@@ -1600,19 +1594,10 @@ def import_title(
 def clear_for_import(user, media_type, source, media_ids):
     """Overwrite replaces these series and their imported logs; hand-made logs stay."""
     rows = MODELS[media_type].objects.filter(user=user, item__source=source, item__media_id__in=media_ids)
-    item_ids = list(rows.values_list("item_id", flat=True))
+    items = [row.item for row in rows.select_related("item")]
     rows.delete()
-    DiaryEntry.objects.filter(user=user, item_id__in=item_ids).exclude(import_source="").delete()
-    forget_progress(user, item_ids)
-
-
-def forget_progress(user, item_ids):
-    """The attempts these numbers belonged to are gone, so the feed drops them too."""
-    from social.models import Activity
-
-    changes = ProgressChange.objects.filter(actor=user, item_id__in=item_ids)
-    Activity.objects.filter(target_type="progress_change", target_id__in=changes.values("id")).delete()
-    changes.delete()
+    DiaryEntry.objects.filter(user=user, item__in=items).exclude(import_source="").delete()
+    progress_posts.forget_titles(user.pk, items)
 
 
 # A comic's new issue
