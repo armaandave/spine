@@ -2307,6 +2307,9 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
         numbers = list(range(1, int(count) + 1))
     if status in HOLDING_CHOICES:
         values.update({"choice": status, "choice_at": ctx.now})
+        if status != PLANNING and passes and numbers:
+            # A place after a finished pass is a rewatch paused or dropped: it keeps it (AN-600).
+            values["rewatch_started_at"] = ctx.now
     elif status == WATCHING:
         if passes:
             values["rewatch_started_at"] = ctx.now

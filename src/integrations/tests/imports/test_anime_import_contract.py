@@ -140,6 +140,27 @@ class MALImportTests(ImportTestCase):
         self.assertEqual(self.state(item)["rewatch"]["pass_number"], 2)
         self.assertEqual(len(self.viewings(item)), 16)
 
+    def test_an_800_paused_or_dropped_after_an_earlier_pass_keeps_its_place(self):
+        for mal_status, status in (("on_hold", "Paused"), ("dropped", "Dropped")):
+            with self.subTest(status=status):
+                title = self.fake.add(total=12)
+                self.import_mal(mal_entry(title, mal_status, count=5, rewatches=1))
+                item = self.item_of(title)
+                row = self.row(item)
+                self.assertEqual(
+                    (row.status, row.progress, row.up_next_episode, row.finished),
+                    (status, 5, 6, False),
+                )
+                self.assertEqual(self.row(item).pass_number, 2)
+                state = self.state(item)
+                self.assertEqual((state["status"], state["up_next"]["episode_number"]), (status, 6))
+
+    def test_an_800_paused_after_an_earlier_pass_with_no_number_has_no_place_to_keep(self):
+        title = self.fake.add(total=12)
+        self.import_mal(mal_entry(title, "on_hold", count=0, rewatches=1))
+        row = self.row(self.item_of(title))
+        self.assertEqual((row.status, row.rewatch_started_at), ("Paused", None))
+
     def test_an_800_planning_paused_and_dropped_stay_the_users_choice(self):
         for source_status, status in (("plan_to_watch", "Planning"), ("on_hold", "Paused"), ("dropped", "Dropped")):
             title = self.fake.add(total=12)
