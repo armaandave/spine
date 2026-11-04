@@ -558,6 +558,14 @@ class RoutesTests(AnimeTestCase):
         response = self.action(self.title(total=3), "tick", expect=400, episode_number=4)
         self.assertEqual(response.data["error"]["message"], "This anime has 3 episodes.")
 
+    def test_routes_an_absurd_episode_number_is_a_clean_400(self):
+        item = self.title(total=None)
+        self.action(item, "tick", episode_number=3000000000, expect=400)
+        self.action(item, "mark_up_to", episode_number=30000, expect=400)
+        self.action(item, "untick", episode_number=3000000000, expect=400)
+        self.write(item, progress=2000000000, expect=400)
+        self.assertIsNone(self.row(item))
+
     def test_routes_details_unavailable_is_a_retryable_503(self):
         item = self.title()
         self.fake.fail()

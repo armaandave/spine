@@ -111,6 +111,9 @@ STAMP_VERSION = 1
 TITLE = "title"
 # A tick may name an episode airing up to a day from now, which covers time zones (AN-103).
 AIR_TIME_SLACK = timedelta(days=1)
+# Past any real title: the longest anime has under 10,000 episodes (AN-103). It also keeps a
+# number from building a list that exhausts a worker, or overflowing the column.
+MAX_EPISODE = 20000
 
 MSG_NOT_ANIME = "This isn't an anime."
 MSG_EPISODE_UNAIRED = "This episode hasn't aired yet."
@@ -568,15 +571,21 @@ class _Ctx:
                 )
             self.dirty.clear()
 
-    def add_tick(self, number, *, watched_on, watched_at):
+    def add_ticks(self, numbers, *, watched_on, watched_at):
         self.ensure_row()
-        AnimeViewing.objects.create(
-            anime=self.row,
-            episode_number=number,
-            kind=TICK,
-            pass_number=self.row.pass_number,
-            watched_on=watched_on,
-            watched_at=watched_at,
+        AnimeViewing.objects.bulk_create(
+            [
+                AnimeViewing(
+                    anime=self.row,
+                    episode_number=number,
+                    kind=TICK,
+                    pass_number=self.row.pass_number,
+                    watched_on=watched_on,
+                    watched_at=watched_at,
+                )
+                for number in numbers
+            ],
+            batch_size=1000,
         )
         self.changed = True
 
@@ -1083,8 +1092,11 @@ def _plural_episodes(count):
 
 
 def _refuse_past_total(listing, number):
+    """Refuse a number past a known total, naming it, or past any real title's (AN-103)."""
     if listing.cap is not None and number > listing.cap:
         raise TVInvalid(f"This anime has {_plural_episodes(listing.cap)}.")
+    if number > MAX_EPISODE:
+        raise TVInvalid(MSG_NO_NUMBER)
 
 
 def _refuse_bad_number(number):
@@ -1129,7 +1141,7 @@ def _do_tick(ctx, number, *, at=None):
     watched_at, day = _tick_moment(ctx, at)
     first = _is_first_write(ctx)
     was_finished = ctx.calc.finished
-    ctx.add_tick(number, watched_on=day, watched_at=watched_at)
+    ctx.add_ticks([number], watched_on=day, watched_at=watched_at)
     ctx.end_choice()
     ctx.may_start = True
     ctx.reload()
@@ -1604,8 +1616,10 @@ def _next_unwatched(calc, count):
 def _do_write_progress(ctx, count):
     """A progress number means ticks (AN-900): raising ticks, lowering removes."""
     calc = ctx.calc
+    # Before anything is built from the number (AN-103).
     if count < 0:
         raise TVInvalid(MSG_NO_NUMBER)
+    _refuse_past_total(ctx.listing, count)
     current = calc.watched_count
     if count > current:
         ctx.ensure_row()
@@ -1614,8 +1628,7 @@ def _do_write_progress(ctx, count):
         for number in numbers:
             _validate_tick(ctx, number)
         watched_at, day = _tick_moment(ctx, None)
-        for number in numbers:
-            ctx.add_tick(number, watched_on=day, watched_at=watched_at)
+        ctx.add_ticks(numbers, watched_on=day, watched_at=watched_at)
         ctx.end_choice()
         ctx.may_start = True
         if first:
@@ -2205,6 +2218,9 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     """
     if Anime.objects.filter(user=user, item=item).exists():
         return None
+    count = _sane_number(count)
+    total = _sane_number(total)
+    earlier = [{"count": _sane_number(entry.get("count"))} for entry in earlier]
     listing = anime_listing.provisional_listing(item, total or _implied_total(status, count, earlier))
     rating = _validate_rating(score, IMPORT) if score not in (None, "", 0, "0", "0.0") else None
     ctx = _Ctx(user, item, listing, IMPORT, None)
@@ -2274,6 +2290,15 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     _reconcile(ctx)
     write_history()
     return row
+
+
+def _sane_number(value):
+    """Return a source's number, or 0 when it's past any real title's: it isn't filled (AN-103)."""
+    number = int(value or 0)
+    if number > MAX_EPISODE:
+        logger.warning("Ignored an imported anime number past the ceiling: %s", number)
+        return 0
+    return max(number, 0)
 
 
 def _implied_total(status, count, earlier):

@@ -12,7 +12,7 @@ import app.forms  # noqa: F401 - the Yamtrack importer reads app.forms
 
 from app import anime_tracking
 from app.models import Anime, AnimeMark, AnimeViewing, DiaryEntry, Item
-from app.tests.anime_fixtures import AnimeTestCase
+from app.tests.anime_fixtures import AnimeTestCase, make_item
 from app.tests.test_anime_export_round_trip import round_trip
 from integrations import exports
 from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
@@ -195,6 +195,13 @@ class MALImportTests(ImportTestCase):
         entry["list_status"].update({"start_date": "2020-03-01"})
         self.import_mal(entry)
         self.assertIsNone(self.row(self.item_of(title)).start_date)
+
+    def test_an_103_a_sources_number_past_the_ceiling_is_dropped_not_filled(self):
+        title = self.fake.add(total=None)
+        item = make_item(self.fake, title=title)
+        anime_tracking.import_title(self.user, item, status="In progress", count=30000, earlier=[{"count": 30000}])
+        self.assertFalse(AnimeViewing.objects.filter(anime__user=self.user).exists())
+        self.assertEqual(self.row(item).status, "In progress")
 
     def test_an_800_no_provider_call_per_episode_and_no_anilist_at_all(self):
         title = self.fake.add(total=500)

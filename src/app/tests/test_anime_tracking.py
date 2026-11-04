@@ -225,6 +225,39 @@ class TickTests(AnimeTestCase):
         with self.assertRaises(TVInvalid):
             self.tick(item, 9)
 
+    def test_an_103_the_ceiling_is_past_the_longest_anime(self):
+        self.assertEqual(anime_tracking.MAX_EPISODE, 20000)
+
+    def test_an_103_a_tick_past_the_ceiling_is_refused_with_no_numbers(self):
+        item = self.title(total=None)
+        with self.assertRaises(TVInvalid):
+            anime_tracking.tick(self.user, item, 3000000000)
+        self.assertIsNone(self.row(item))
+
+    def test_an_103_mark_up_to_past_the_ceiling_is_refused_and_writes_nothing(self):
+        item = self.title(total=None)
+        with self.assertRaises(TVInvalid):
+            anime_tracking.mark_up_to(self.user, item, 30000)
+        self.assertFalse(AnimeViewing.objects.exists())
+
+    def test_an_103_a_number_past_the_total_is_refused_before_anything_is_built(self):
+        item = self.title(total=12)
+        with (
+            mock.patch.object(anime_tracking, "_next_unwatched", side_effect=AssertionError("It built the list")),
+            self.assertRaises(TVInvalid) as refused,
+        ):
+            anime_tracking.write_progress(self.user, item, 8000000)
+        self.assertIn("12 episodes", refused.exception.message)
+
+    def test_an_103_a_number_past_the_ceiling_is_refused_before_anything_is_built(self):
+        item = self.title(total=None)
+        with (
+            mock.patch.object(anime_tracking, "_next_unwatched", side_effect=AssertionError("It built the list")),
+            self.assertRaises(TVInvalid),
+        ):
+            anime_tracking.write_progress(self.user, item, 2000000000)
+        self.assertIsNone(self.row(item))
+
     def test_an_103_with_no_total_and_no_schedule_any_number_is_accepted(self):
         item = self.title(total=None, status="Airing")
         self.tick(item, 500)

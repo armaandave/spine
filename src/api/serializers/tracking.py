@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from app import single_weight
+from app.anime_tracking import MAX_EPISODE
 from app.models import Status
 
 
@@ -138,7 +139,7 @@ class TVActionSerializer(serializers.Serializer):
 class AnimeEpisodeSerializer(serializers.Serializer):
     """One end of the range an earlier-episodes Yes names (TV-107)."""
 
-    episode_number = GameIntegerField(min_value=1)
+    episode_number = GameIntegerField(min_value=1, max_value=MAX_EPISODE)
 
 
 class AnimeActionSerializer(serializers.Serializer):
@@ -148,7 +149,7 @@ class AnimeActionSerializer(serializers.Serializer):
     Python keyword, so it is declared in get_fields().
     """
 
-    episode_number = GameIntegerField(min_value=1, required=False, allow_null=True)
+    episode_number = GameIntegerField(min_value=1, max_value=MAX_EPISODE, required=False, allow_null=True)
     viewing_id = GameIntegerField(min_value=1, required=False, allow_null=True)
     mutation_id = serializers.UUIDField(required=False, allow_null=True)
     expected_version = GameIntegerField(
