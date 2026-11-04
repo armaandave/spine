@@ -504,9 +504,9 @@ class NoHeaderTests(NewYearBase):
                     self.assertEqual(response.status_code, 400)
 
     def test_the_web_log_takes_no_manga_or_comic_on_any_date(self):
-        """The log modal's types leave these out, so its end-of-day moment never reaches them.
+        """The modal's types leave these out, so its end-of-day moment can't reach them.
 
-        If they're ever added, the date goes through as sent, as update_diary_entry does:
+        If they're ever added, the date goes through as sent, as a date edit's does:
         that moment is already the next day in Tokyo.
         """
         self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))

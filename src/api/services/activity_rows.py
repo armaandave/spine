@@ -305,7 +305,7 @@ def saved_day(change, zone):
 
 
 def saved_number(value):
-    """Return a snapshot's number, or None for a null or anything else that isn't one."""
+    """Return a snapshot's number, or None for a null or anything that isn't one."""
     try:
         number = Decimal(str(value))
     except InvalidOperation:
@@ -314,7 +314,10 @@ def saved_number(value):
 
 
 def _pages_of(snapshot, length):
-    """Return a saved place in pages, or None with no number or a percent of an unknown length."""
+    """Return a saved place in pages.
+
+    None with no number, or for a percent of an unknown length.
+    """
     value = saved_number(snapshot.get("value"))
     if value is None:
         return None

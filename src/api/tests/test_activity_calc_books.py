@@ -621,7 +621,7 @@ class OneUnitTests(BookCalcBase):
     """AC-2 tells a row in one unit: on a day with pages and a percent, the pages."""
 
     def told(self, item):
-        """Return each of the title's rows: its day, what it says, in what, and what it adds."""
+        """Return each of the title's rows: day, what it says, in what, what it adds."""
         rows = [row for row in list_rows(self.calc().rows, media_type=BOOK) if row.title_id == item.pk]
         return [(row.day, row.told, row.told_unit, row.amount) for row in rows if row.told]
 
@@ -666,7 +666,7 @@ class OneUnitTests(BookCalcBase):
 
 
 class UnusableNumberTests(BookCalcBase):
-    """A saved number can be null, 0 or no number at all: the old counter's guards hold."""
+    """A saved number can be null, 0 or not a number: the old counter's guards hold."""
 
     def logged(self, name, snapshot, *, pages=300, journey=True):
         """Return a book logged Mar 2 2025, with this on its log."""

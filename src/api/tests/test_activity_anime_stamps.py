@@ -187,7 +187,7 @@ class WebhookTests(AnimeBase):
     def play(self, episode, user=None):
         """Play an episode of the one anime here, and return its row."""
         user = user or self.user
-        PlexWebhookProcessor()._handle_anime("229", episode, {"event": "media.scrobble"}, user)  # noqa: SLF001
+        PlexWebhookProcessor()._handle_anime("229", episode, {"event": "media.scrobble"}, user)
         return Anime.objects.get(user=user, item__media_id="229", item__source=Sources.MAL.value)
 
     def watching(self, progress=11, user=None):
