@@ -477,6 +477,7 @@ class NoHeaderTests(NewYearBase):
             )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(DiaryEntry.objects.get(user=west, item=book).consumed_at, datetime(2026, 12, 31, tzinfo=UTC))
+        self.assertEqual(Book.objects.get(user=west, item=book).end_date, datetime(2026, 12, 31, tzinfo=UTC))
 
     def test_a_web_finish_for_a_los_angeles_account_at_1am_new_york(self):
         west = make_user(calendar=LOS_ANGELES)
