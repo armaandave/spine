@@ -440,7 +440,12 @@ class RealCommitTests(TransactionTestCase):
     """No wrapping transaction, as an import task runs, so the receiver's hook fires."""
 
     def setUp(self):
-        for target in ("app.models.Item.fetch_releases", "app.signals.update_daily_statistics.delay"):
+        # No wrapping transaction also means a new MAL Item's ratings task really runs.
+        for target in (
+            "app.models.Item.fetch_releases",
+            "app.signals.update_daily_statistics.delay",
+            "app.signals.enrich_external_ratings",
+        ):
             patcher = patch(target)
             patcher.start()
             self.addCleanup(patcher.stop)
