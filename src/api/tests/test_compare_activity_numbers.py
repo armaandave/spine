@@ -18,6 +18,7 @@ from django.test.utils import CaptureQueriesContext
 
 from api.services import activity as activity_service
 from api.services import activity_rows, stats_time
+from api.services.stats_scope import StatsScope
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import book_tracking
 from app.management.commands.compare_activity_numbers import _qualifying_days
@@ -61,6 +62,22 @@ class CompareTests(BookCalcBase):
         everything = self.line(lines, f"user {self.owner.pk} book all:")
         self.assertIn("value=0->285", everything)
         self.assertIn("pile=None->0", everything)
+
+    def test_known_says_what_the_reader_says_when_an_older_row_is_unknown(self):
+        """A percent with no length, then pages: the newest row is known, the title isn't."""
+        item = self.book("no-length", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 25, d(2026, 3, 2), kind="percentage")
+        self.save(item, 60, d(2026, 3, 3))
+        line = self.line(self.compare(), f"user {self.owner.pk} book 2026:")
+        self.assertIn("value=0->60", line)
+        self.assertIn("known=0->0", line)
+        self.assertIn("total=0->1", line)
+        scope = StatsScope(owner=self.owner, viewer=self.owner).with_media_type(MediaTypes.BOOK.value)
+        ranged = scope._sibling(start_date=d(2026, 1, 1), end_date=d(2026, 12, 31))
+        with patch.object(activity_rows, "CALCULATED_TYPES", frozenset({MediaTypes.BOOK.value})):
+            reader = stats_time.type_time(ranged, MediaTypes.BOOK.value)
+        self.assertEqual((reader.value, reader.known, reader.total), (60, 0, 1))
 
     def test_a_number_that_agrees_reads_the_same_on_both_sides(self):
         logged = self.book("logged")
