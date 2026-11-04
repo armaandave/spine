@@ -16,10 +16,14 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+# Show Z's choice queues its calendar on commit through events.tasks, which the served
+# backend has loaded and `manage.py shell` hasn't.
+import events.tasks  # noqa: F401
 from api.services import activity as activity_service
 from api.services import social as social_service
 from api.services import stats_cache
@@ -243,7 +247,15 @@ def _log(user, item, day):
 
 
 def seed():
-    """Write the sheet's opening state: 830, 360 and 1,540."""
+    """Write the sheet's opening state: 830, 360 and 1,540.
+
+    It rewrites every account's timezone and makes users, so it refuses anywhere but the
+    test backend's SQLite copy. The image holds this module, and CI's Database checks run
+    this suite on Postgres.
+    """
+    if connection.vendor != "sqlite" and not settings.TESTING:
+        msg = f"The checkpoint seed runs only on the test backend's SQLite copy, not {connection.vendor}."
+        raise RuntimeError(msg)
     with transaction.atomic():
         dev = _settle_users()
         for person in (dev, friend_user()):

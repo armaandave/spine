@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -284,6 +285,24 @@ class SeedTests(CheckpointBase):
             {"book", "game", "manga", "comic", "anime", "movie", "music", "tv"},
         )
         self.assertEqual({item.source for item in items}, {"manual"})
+
+    def test_the_list_opens_on_j_v_x_in_that_order(self):
+        """Their tiles look alike, so the script says the order, and it has to hold."""
+        listed = CustomList.objects.get(owner=self.dev, name=seed.LIST_NAME)
+        response = self.phone().get(f"/api/v1/lists/{listed.pk}/items/")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual([row["title"] for row in response.json()["results"][:3]], ["Book J", "Book V", "Book X"])
+
+    def test_it_refuses_a_database_that_isnt_sqlite(self):
+        """It would make a claude user and rewrite every account's timezone."""
+        before = set(get_user_model().objects.values_list("pk", "calendar_timezone"))
+        with (
+            patch.object(seed, "connection", SimpleNamespace(vendor="postgresql")),
+            override_settings(TESTING=False),
+            self.assertRaises(RuntimeError),
+        ):
+            seed.seed()
+        self.assertEqual(set(get_user_model().objects.values_list("pk", "calendar_timezone")), before)
 
     def test_a_shows_runtimes_sit_on_its_episodes(self):
         episodes = seed.title(MediaTypes.TV.value, "Z")
@@ -655,8 +674,9 @@ class SeedScriptTests(SimpleTestCase):
         self.install(checkout)
         return checkout
 
-    def run_it(self, checkout, *, served):
-        self.write_script(checkout / "scripts" / "ios" / "test-backend.sh", f'echo "SERVED_CHECKOUT: {served}"\n')
+    def run_it(self, checkout, *, served, **extra):
+        status = f'echo "SERVED_CHECKOUT: {served}"\necho "SERVING: feature from {served}, until Wed 21:40"\n'
+        self.write_script(checkout / "scripts" / "ios" / "test-backend.sh", status)
         environment = {key: value for key, value in os.environ.items() if key != "DB_HOST"}
         environment["PATH"] = f"{self.bin}{os.pathsep}{environment['PATH']}"
         return subprocess.run(  # noqa: S603
@@ -675,6 +695,29 @@ class SeedScriptTests(SimpleTestCase):
         self.assertIn("Ran seed", result.stdout)
         self.assertIn("never from search", result.stdout)
 
+        self.assertIn("Book J, Book V and Book X, in that order", result.stdout)
+        self.assertIn("until Wed 21:40", result.stdout)
+
+    def seeded(self):
+        """Return whether the stand-in for uv was asked to run a step."""
+        calls = self.root / "uv-calls"
+        return calls.exists() and "STEPS" in calls.read_text()
+
+    def test_a_database_that_isnt_sqlite_is_refused(self):
+        feature = self.worktree(".claude/worktrees/feature")
+        self.write_script(self.bin / "uv", f'echo "$*" >> "{self.root}/uv-calls"\necho postgresql\n')
+        result = self.run_it(feature, served=feature)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("postgresql", result.stderr)
+        self.assertFalse(self.seeded())
+
+    def test_db_host_is_refused(self):
+        feature = self.worktree(".claude/worktrees/feature")
+        self.write_script(self.bin / "uv", f'echo "$*" >> "{self.root}/uv-calls"\necho sqlite\n')
+        result = self.run_it(feature, served=feature, DB_HOST="somewhere")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("DB_HOST", result.stderr)
+        self.assertFalse(self.seeded())
     def test_the_test_backends_own_checkout_is_refused_though_its_served(self):
         own = self.worktree(".claude/test-backend")
         result = self.run_it(own, served=own)
