@@ -308,6 +308,40 @@ class MALImportTests(ImportTestCase):
         self.assertEqual(row.progress, 4)
         self.assertEqual(self.stats_time(2026)[1], 4)
 
+    def test_an_800_overwrite_rebuilds_a_kept_log_in_the_pass_it_finished(self):
+        title = self.fake.add(total=12)
+        item = self.title(title=title)
+        entry = self.log(item).entry
+        self.import_mal(mal_entry(title, "watching", count=3, rewatches=1), mode="overwrite")
+        row = self.row(item)
+        self.assertEqual(
+            (row.status, row.progress, row.up_next_episode, row.pass_number, row.finished),
+            ("In progress", 3, 4, 2, False),
+        )
+        self.assertIsNotNone(row.rewatch_started_at)
+        earlier = [viewing for viewing in self.viewings(item) if viewing.pass_number == 1]
+        self.assertEqual(sorted(viewing.episode_number for viewing in earlier), list(range(1, 13)))
+        self.assertTrue(all(viewing.diary_entry_id == entry.pk for viewing in earlier))
+        current = [viewing for viewing in self.viewings(item) if viewing.pass_number == 2]
+        self.assertEqual(sorted(viewing.episode_number for viewing in current), [1, 2, 3])
+        # The log's date still dates what it covers (AN-704).
+        self.assertEqual(self.stats_time(2026)[1], 12)
+        self.assertEqual(self.stats_time()[1], 15)
+
+    def test_an_800_overwrite_moves_a_kept_rewatch_log_out_of_a_pass_the_source_says_is_open(self):
+        title = self.fake.add(total=3)
+        item = self.title(title=title)
+        self.log(item)
+        anime_tracking.start_rewatch(self.user, item)
+        entry = self.log(item).entry
+        self.assertEqual(entry.progress_snapshot["anime"]["pass"], 2)
+        self.import_mal(mal_entry(title, "watching", count=1, rewatches=1), mode="overwrite")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.pass_number), ("In progress", 1, 2))
+        entry.refresh_from_db()
+        self.assertEqual(entry.progress_snapshot["anime"]["pass"], 1)
+        self.assertEqual(self.rows(item)["episodes"][1], {"n": 2, "a": 1})
+
     def test_an_800_new_mode_leaves_a_tracked_title_alone(self):
         title = self.fake.add(total=4)
         item = self.title(title=title)

@@ -25,6 +25,7 @@ the AN-102 count.
 import copy
 import logging
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
@@ -616,22 +617,23 @@ class _Ctx:
         )
         self.changed = True
 
-    def add_fills(self, numbers, *, origin=None, entry=None):
+    def add_fills(self, numbers, *, origin=None, entry=None, pass_number=None):
         """Add undated viewings as one mark (origin), or as a log's own (entry), in bulk."""
         numbers = sorted(set(numbers))
         if not numbers:
             return 0
         self.ensure_row()
+        pass_number = pass_number or self.row.pass_number
         mark = None
         if entry is None:
-            mark = AnimeMark.objects.create(anime=self.row, origin=origin, pass_number=self.row.pass_number)
+            mark = AnimeMark.objects.create(anime=self.row, origin=origin, pass_number=pass_number)
         AnimeViewing.objects.bulk_create(
             [
                 AnimeViewing(
                     anime=self.row,
                     episode_number=number,
                     kind=FILL,
-                    pass_number=self.row.pass_number,
+                    pass_number=pass_number,
                     mark=mark,
                     diary_entry=entry,
                 )
@@ -2290,15 +2292,6 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     row = ctx.row
     now_aired = list(range(1, listing.aired_through(ctx.now) + 1))
     passes = len(earlier)
-    fills = []
-    for offset, earlier_pass in enumerate(earlier, start=1):
-        numbers = list(range(1, (earlier_pass.get("count") or listing.cap or 0) + 1))
-        if numbers:
-            mark = AnimeMark.objects.create(anime=row, origin=AnimeMark.Origin.IMPORT, pass_number=offset)
-            fills.extend(
-                AnimeViewing(anime=row, episode_number=number, kind=FILL, pass_number=offset, mark=mark)
-                for number in numbers
-            )
     values = {"pass_number": passes + 1, "earlier_question_at": ctx.now}
     numbers = []
     if status == COMPLETED:
@@ -2331,19 +2324,29 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     def write_history():
         Anime.history.bulk_history_create([row], default_user=user, default_date=history_date or ctx.now)
 
-    if status == COMPLETED and not numbers and not fills:
+    earlier_numbers = [
+        list(range(1, (earlier_pass.get("count") or listing.cap or 0) + 1)) for earlier_pass in earlier
+    ]
+    if status == COMPLETED and not numbers and not any(earlier_numbers) and not ctx.facts.logs:
         # Nothing says how many it has: it stays on its shelf as a stored Completed,
         # worked out at the user's first write (AN-902).
         ctx.set_row(status=COMPLETED)
         ctx.flush_row()
         write_history()
         return row
-    if fills:
-        AnimeViewing.objects.bulk_create(fills, batch_size=1000)
-    # Logs an overwrite kept get their fills back first; the source's number fills the
-    # rest (TV-800).
+    # Logs an overwrite kept get their fills back first; the source's numbers fill the
+    # rest of each pass (TV-800).
     held = _rebuild_kept_logs(ctx)
-    ctx.add_fills([number for number in numbers if number not in held], origin=AnimeMark.Origin.IMPORT)
+    for offset, pass_numbers in enumerate(earlier_numbers, start=1):
+        ctx.add_fills(
+            [number for number in pass_numbers if number not in held[offset]],
+            origin=AnimeMark.Origin.IMPORT,
+            pass_number=offset,
+        )
+    ctx.add_fills(
+        [number for number in numbers if number not in held[row.pass_number]],
+        origin=AnimeMark.Origin.IMPORT,
+    )
     # Nothing here counts against progress: the number arrives with the row.
     ctx.reload()
     ctx.ticks_before = None
@@ -2370,13 +2373,23 @@ def _implied_total(status, count, earlier):
 
 
 def _rebuild_kept_logs(ctx):
-    """Give each kept log its fills again; return the episodes they hold (TV-800)."""
-    held = set()
+    """Give each kept log its fills again; return {pass: the episodes they hold} (TV-800).
+
+    A log means a pass was finished, so it goes back in the pass it finished, and never in
+    one the source says is still open.
+    """
+    row = ctx.row
+    last_finished = row.pass_number - 1 if row.rewatch_started_at is not None else row.pass_number
+    held = defaultdict(set)
     for log in ctx.facts.logs:
-        missing = sorted(log.covers - held)
+        log_pass = min(log.pass_number, last_finished)
+        if log.stamped and log_pass != log.pass_number:
+            snapshot = {**log.snapshot, "anime": {**log.snapshot["anime"], "pass": log_pass}}
+            DiaryEntry.objects.filter(pk=log.id).update(progress_snapshot=snapshot)
+        missing = sorted(log.covers - held[log_pass])
         if missing:
-            ctx.add_fills(missing, entry=DiaryEntry(pk=log.id))
-            held.update(missing)
+            ctx.add_fills(missing, entry=DiaryEntry(pk=log.id), pass_number=log_pass)
+            held[log_pass].update(missing)
     return held
 
 
