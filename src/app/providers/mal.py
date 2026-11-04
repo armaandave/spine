@@ -36,7 +36,7 @@ ANIME_CAST_CACHE_VERSION = "v1"
 ANIME_CAST_FRESH_TTL = 60 * 60 * 24
 ANIME_CAST_STALE_TTL = 60 * 60 * 24 * 30
 ANIME_CAST_FAILURE_TTL = 60 * 5
-ANIME_SERIES_CACHE_VERSION = "v2"
+ANIME_SERIES_CACHE_VERSION = "v3"
 ANIME_SERIES_FRESH_TTL = 60 * 60 * 24
 ANIME_SERIES_STALE_TTL = 60 * 60 * 24 * 30
 ANIME_SERIES_FAILURE_TTL = 60 * 5
@@ -1292,10 +1292,12 @@ def _anime_series_item(metadata, position):
     details = metadata.get("details") or {}
     start_date = details.get("start_date")
     year = str(start_date)[:4] if start_date else None
+    media_format = metadata.get("series_format") or details.get("format")
+    episodes = details.get("episodes")
     subtitle = " · ".join(
         value
         for value in (
-            metadata.get("series_format") or details.get("format"),
+            media_format,
             year,
             f"{details['episodes']} episodes" if details.get("episodes") else None,
         )
@@ -1311,6 +1313,8 @@ def _anime_series_item(metadata, position):
         "release_date": start_date,
         "subtitle": subtitle or None,
         "position": position,
+        # A title whose total is one, or a movie with no total (AN-002).
+        "single": episodes == 1 or (not episodes and str(media_format or "").strip().lower() == "movie"),
     }
 
 

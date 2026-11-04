@@ -177,6 +177,7 @@ It opens at most once per pass, so unticking and re-ticking the last episode doe
 It doesn't open when a mark, a log, a webhook or an import finishes the title, or when the title already has a log in this pass.
 A long runner with no total never opens it. The user taps Log when they choose.
 During a rewatch it opens with Rewatch on.
+Leaving the page while the last tick is on its way loses the log screen, as on TV's season page, and Log stays on the + menu.
 
 ## The eye, stars and the heart
 
@@ -245,7 +246,7 @@ Nothing is added to the library until the user acts on that title.
 When the log screen from AN-203 closes on Home's sheet, saved or not, and the next title has an aired episode, the sheet shows the next title's rows, with up next at the top.
 Closing the sheet without ticking adds nothing.
 The first tick there puts the next title in Watching, under the rules of any first tick.
-With no next title, or none that has aired, the sheet stays on the finished title, every tick filled.
+With no next title, one that hasn't aired, or one that's a single, which has no rows, the sheet stays on the finished title, every tick filled. The page's "Next:" row still shows a single.
 
 ## Rewatch
 

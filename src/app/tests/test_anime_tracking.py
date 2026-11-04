@@ -830,6 +830,17 @@ class OpinionTests(AnimeTestCase):
         anime_tracking.unmark(self.user, item)
         self.assertIsNone(self.row(item))
 
+    def test_an_301_the_state_says_whether_the_heart_is_on(self):
+        item = self.title(total=3)
+        anime_tracking.choose(self.user, item, "Planning")
+        self.assertFalse(self.state(item)["liked"])
+        anime_tracking.set_like(self.user, item, True)
+        self.assertTrue(self.state(item)["liked"])
+        self.assertEqual(self.row(item).status, "Completed")
+        undone = anime_tracking.write_envelope(anime_tracking.unmark(self.user, item))
+        self.assertEqual(self.row(item).status, "Planning", "The eye undoes the mark and the choice comes back")
+        self.assertFalse(undone["anime"]["liked"], "The heart goes with it")
+
     def test_an_301_a_title_not_started_on_an_airing_title_is_caught_up(self):
         item = self.airing(aired=3)
         anime_tracking.set_rating(self.user, item, 8)
@@ -1334,6 +1345,31 @@ class NextTitleTests(AnimeTestCase):
         self.state(sequel)
         self.assertFalse(self.state(item)["next_title"]["has_aired"])
 
+    def test_an_501_a_next_title_that_is_a_single_says_so(self):
+        movie = self.fake.add(title="The Movie", total=1, format="Movie", start_date="2017-04-01", status="Finished")
+        movie_item = self.title(title=movie)
+        first = self.fake.add(total=2)
+        first.series = [
+            {"media_id": first.media_id, "position": 1, "title": "Season 1"},
+            {"media_id": movie.media_id, "position": 2, "title": "The Movie", "release_date": "2017-04-01", "single": True},
+        ]
+        item = self.title(title=first)
+        anime_tracking.refresh_after_calendar([item])
+        anime_tracking.mark_watched(self.user, item)
+        next_title = self.state(item)["next_title"]
+        self.assertTrue(next_title["single"], "From MAL's series order, with no copy of the movie")
+        self.assertTrue(next_title["has_aired"], "The page's Next: row still shows it")
+
+        first.series[1]["single"] = False
+        anime_tracking.refresh_after_calendar([item])
+        self.state(movie_item)
+        self.assertTrue(self.state(item)["next_title"]["single"], "The movie's own copy goes first")
+
+    def test_an_501_a_next_title_with_rows_isnt_a_single(self):
+        item, _ = self.pair()
+        anime_tracking.mark_watched(self.user, item)
+        self.assertFalse(self.state(item)["next_title"]["single"])
+
     def test_an_501_the_finish_response_names_the_next_title(self):
         item, sequel = self.pair()
         self.tick(item, 1)
@@ -1766,6 +1802,16 @@ class NoNumbersTests(AnimeTestCase):
         self.assertTrue(all(row["a"] == 1 for row in rows["episodes"]))
         self.assertEqual(rows["first_unwatched"], 1)
         self.assertEqual(rows["count"], 4)
+
+    def test_an_101_a_write_that_changes_the_list_sends_it(self):
+        item = self.bare()
+        ticked = anime_tracking.write_envelope(self.tick(item, 1))
+        self.assertEqual([row["n"] for row in ticked["rows"]["episodes"]], [1, 2])
+        unchanged = anime_tracking.write_envelope(self.tick(item, 1))
+        self.assertIsNone(unchanged["rows"], "Ticking it again lists the same rows")
+        left = anime_tracking.write_envelope(anime_tracking.untick(self.user, item, 1))
+        self.assertIsNone(self.row(item), "It left the library")
+        self.assertEqual([row["n"] for row in left["rows"]["episodes"]], [1], "So E2 goes from the list")
 
     def test_an_101_a_webhook_watch_of_e5_leaves_e1_to_e4_tickable(self):
         item = self.bare()

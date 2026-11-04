@@ -11,7 +11,7 @@ from django.urls import reverse
 from app import anime_listing, anime_tracking
 from app.anime_listing import AnimeDetailsUnavailable
 from app.models import AnimeListing, AnimeMark, Item
-from app.providers import anilist, services
+from app.providers import anilist, mal, services
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase, FakeAnimeProvider
 from app.tests.tv_fixtures import ProviderDown
 from events.calendar import anime as calendar_anime
@@ -441,7 +441,23 @@ class AiringUnknownTests(AnimeTestCase):
     def test_an_500_an_airing_next_title_with_no_answer_goes_by_its_release_date(self):
         anime_listing.get_listing(self.item)
         stored = {"media_id": self.item.media_id, "release_date": "2026-01-01"}
-        self.assertTrue(anime_tracking._next_title_has_aired(stored, OCT_25))  # noqa: SLF001
+        copy_of_next = anime_tracking._next_title_copy(stored)  # noqa: SLF001
+        self.assertIsNotNone(copy_of_next)
+        self.assertTrue(copy_of_next.awaiting_schedule)
+        self.assertTrue(anime_tracking._next_title_has_aired(stored, OCT_25, copy_of_next))  # noqa: SLF001
+
+    def test_an_501_a_series_item_says_whether_it_is_a_single(self):
+        def single(episodes, media_format):
+            metadata = {"media_id": "1", "series_format": media_format, "details": {"episodes": episodes}}
+            item = mal._anime_series_item(metadata, 1)  # noqa: SLF001
+            return anime_listing.next_title_in([{"media_id": "0", "position": 0}, item], "0")["single"]
+
+        self.assertTrue(single(1, "TV"), "A total of one")
+        self.assertTrue(single(None, "Movie"), "A movie with no total")
+        self.assertTrue(single(1, "Movie"))
+        self.assertFalse(single(3, "Movie"), "A film in three parts has rows")
+        self.assertFalse(single(12, "TV"))
+        self.assertFalse(single(None, "TV"), "Airing, with no total yet")
 
 
 class EmptyCopyTests(AnimeTestCase):

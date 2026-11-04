@@ -434,6 +434,7 @@ def next_title_in(series_items, media_id):
         "display_title": entry.get("display_title"),
         "image": entry.get("image"),
         "release_date": entry.get("release_date"),
+        "single": bool(entry.get("single")),
     }
 
 

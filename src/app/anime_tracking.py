@@ -801,7 +801,7 @@ def _run_locked(  # noqa: PLR0913
     if entry_point != JOB:
         _adopt_stored_row(ctx)
     ctx.ticks_before = _tick_count(ctx.facts)
-    rows_before = len(_row_numbers(ctx.calc, ctx.listing))
+    rows_before = _row_numbers(ctx.calc, ctx.listing)
     outcome = body(ctx) or {}
     result = WriteResult(
         user=user,
@@ -823,8 +823,11 @@ def _run_locked(  # noqa: PLR0913
         ctx.row.refresh_from_db()
         result.row = ctx.row
         _record_start(ctx)
-        if not rows_changed and len(_row_numbers(ctx.calc, ctx.listing)) != rows_before:
-            result.rows_changed = True
+    if not rows_changed:
+        if ctx.row is None:
+            # It left the library: the list is worked out with nothing recorded.
+            ctx.reload()
+        result.rows_changed = _row_numbers(ctx.calc, ctx.listing) != rows_before
     if mutation_id is not None or outcome.get("record_mutation"):
         TVMutation.objects.create(
             user=user,
@@ -2645,6 +2648,7 @@ class _View:
                 "rating_source_diary_entry_id": self._source_id(row, "rating_source_id"),
                 "like_source_diary_entry_id": self._source_id(row, "like_source_id"),
                 "like_is_independent": row.like_is_independent if row is not None else (True if self.facts.liked else None),
+                "liked": bool(self.facts.liked),
                 "eye": self.eye(),
                 "available_actions": actions,
                 "action_reasons": reasons,
@@ -2734,21 +2738,24 @@ def _next_title_payload(user, stored, today):
     source = stored.get("source") or Sources.MAL.value
     if Anime.objects.filter(user=user, item__source=source, item__media_id=media_id, finished=True).exists():
         return None
+    copy_of_next = _next_title_copy(stored)
     return {
         "source": source,
         "media_type": MediaTypes.ANIME.value,
         "media_id": media_id,
         "title": stored.get("display_title") or stored.get("title") or "",
         "image_url": stored.get("image"),
-        "has_aired": _next_title_has_aired(stored, today),
+        "has_aired": _next_title_has_aired(stored, today, copy_of_next),
+        # A single has no rows, so Home's sheet doesn't move on to it (AN-501).
+        "single": copy_of_next.is_single if copy_of_next is not None else bool(stored.get("single")),
     }
 
 
-def _next_title_has_aired(stored, today):
-    """Return whether the next title has an aired episode (AN-501), from what's stored."""
+def _next_title_copy(stored):
+    """Return the next title's own stored copy as a listing, or None with none read."""
     from app.models import AnimeListing  # noqa: PLC0415
 
-    copy_of_next = (
+    row = (
         AnimeListing.objects.filter(
             item__source=stored.get("source") or Sources.MAL.value,
             item__media_type=MediaTypes.ANIME.value,
@@ -2757,10 +2764,15 @@ def _next_title_has_aired(stored, today):
         .select_related("item")
         .first()
     )
-    if copy_of_next is not None and copy_of_next.fetched_at is not None:
-        listing = anime_listing._listing_from_row(copy_of_next)  # noqa: SLF001
-        if not listing.awaiting_schedule:
-            return listing.aired_through(user_calendar.now()) > 0
+    if row is None or row.fetched_at is None:
+        return None
+    return anime_listing._listing_from_row(row)  # noqa: SLF001
+
+
+def _next_title_has_aired(stored, today, copy_of_next):
+    """Return whether the next title has an aired episode (AN-501), from what's stored."""
+    if copy_of_next is not None and not copy_of_next.awaiting_schedule:
+        return copy_of_next.aired_through(user_calendar.now()) > 0
     released = stored.get("release_date")
     return bool(released) and str(released) <= today.isoformat()
 

@@ -632,6 +632,12 @@ class RoutesTests(AnimeTestCase):
         response = self.api.get("/api/v1/tracking/", {"media_type": "anime", "continue_watching": "true"})
         results = response.data["results"]
         self.assertEqual([result["media"]["ref"]["media_id"] for result in results], [watching.media_id])
+        # The app sends In progress too, for a server older than this one to read.
+        with_status = self.api.get(
+            "/api/v1/tracking/",
+            {"media_type": "anime", "continue_watching": "true", "status": "In progress"},
+        )
+        self.assertEqual([result["media"]["ref"]["media_id"] for result in with_status.data["results"]], [watching.media_id])
         up_next = results[0]["tracking"]["anime"]["up_next"]
         self.assertEqual((up_next["episode_number"], up_next["title"], up_next["image_url"]), (2, "Two", "https://example.com/2.jpg"))
 
