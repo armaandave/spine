@@ -446,6 +446,10 @@ so standalone rating rows are not shown.
   A book row marked Completed with no date is the undated mark, from every source.
 - An imported diary rating remains attached to its diary entry.
 - Imports do not emit social feed activity.
+- Your own export coming back in overwrite mode leaves a book's All Time alone, except
+  where one row per book can't say it: the pages of a read stopped under a later Read, and
+  of an attempt a Restart closed, have no column to come back in, so All Time falls by
+  them. A stopped read since moved to To Read or Paused says its place in that row.
 
 Imports may use bulk implementation paths, but their final state must be
 indistinguishable from state created under this contract.
@@ -538,6 +542,6 @@ Behavior omitted from this working contract is not implicitly decided.
 
 ## Review status
 
-SW-500's dated book rows, and a Read with no date staying unflagged on a title that has a
-log (your own export coming back), are provisional until the phone test of Activity's
-first phase accepts them.
+SW-500's dated book rows, what your own export can't bring back, and a Read with no date
+staying unflagged on a title that has a log (your own export coming back), are provisional
+until the phone test of Activity's first phase accepts them.

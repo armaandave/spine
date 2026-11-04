@@ -550,6 +550,62 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
         self.assert_numbers(400, 0, 400)
         self.assertFalse(Book.objects.get(item=item).completed_manually)
 
+    def test_a_restart_then_a_finish_loses_the_attempt_it_closed(self):
+        """One row can't hold a closed attempt beside a Read: SW-500 says so."""
+        item = self.titled("restarted")
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.restart, item, d(2026, 2, 3))
+        self.finish(item, d(2026, 2, 4))
+        self.assert_numbers(0, 600, 600)
+        self.overwrite()
+        self.assert_numbers(0, 400, 400)
+
+    def stopped_at_200(self, name):
+        item = self.titled(name)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        return item
+
+    def test_a_stop_then_to_read_or_paused_holds_its_place(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value):
+            with self.subTest(status=status):
+                item = self.stopped_at_200(f"moved-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 2, 4), status)
+                before = self.number(pile=True)
+                self.overwrite()
+                self.assertEqual(self.number(pile=True), before)
+                book = Book.objects.get(item=item)
+                self.assertEqual((book.status, book.progress), (status, 200))
+
+    def test_it_only_says_so_on_the_file(self):
+        """The row keeps 0, and only the export reads the journey it stopped on."""
+        item = self.stopped_at_200("stays-zero")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+
+    def test_a_stop_a_mark_then_to_read_holds_all_time_once(self):
+        """The mark holds the pages past the stop, so the file's row holds no place too."""
+        item = self.stopped_at_200("then-marked")
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
+        before = self.number(pile=True)
+        self.assertEqual(before, 400)
+        self.overwrite()
+        self.assertEqual(self.number(pile=True), before)
+
+    def test_the_eye_a_stopped_reread_then_to_read_holds_its_place(self):
+        item = self.titled("eye-stop-move")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 100, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.assertEqual(self.number(pile=True), 500)
+        self.overwrite()
+        self.assertEqual(self.number(pile=True), 500)
+
     def test_a_mark_with_no_log_stays_a_mark(self):
         item = self.titled("just-marked")
         self.do(book_tracking.mark_read, item, d(2026, 1, 1))

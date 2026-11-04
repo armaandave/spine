@@ -419,7 +419,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
 
 def _last_read(book):
     """Return the last journey really read: a file's read is its own, whatever its id."""
-    for session in book.reading_sessions.order_by("-id"):
+    for session in sorted(book.reading_sessions.all(), key=lambda journey: journey.pk, reverse=True):
         if not session.from_file:
             return session
     return None
@@ -471,6 +471,18 @@ def _opening_place(book):
     if last.status == Status.DROPPED.value:
         return last.pages_read, last.percentage_read
     return None, None
+
+
+def place_on_file(book):
+    """Return the place your own file's row holds for a book (SW-500).
+
+    A status move off a stopped read leaves the book's own progress at 0. The file has only
+    this column, and the journey it stopped on doesn't come back, so it says where that
+    read would open.
+    """
+    if book.progress or book.current_session_id:
+        return book.progress
+    return _opening_place(book)[0] or 0
 
 
 @transaction.atomic
