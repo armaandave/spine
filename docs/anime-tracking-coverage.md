@@ -216,7 +216,7 @@ Everything below is additive. All of it is on the server now.
 
 - `GET /api/v1/media/mal/anime/{id}/`: `user_state.anime` is the [state](#state), and the top-level `anime_rows` is the [rows payload](#rows). Signed out, neither is there.
 - `GET /api/v1/tracking/mal/anime/{id}/rows/`: `{"anime": state, "rows": rows}`. Home's sheet uses it. A first open with no stored copy tries AniList once, for about 3 seconds; after that it reads the stored copy.
-- `GET /api/v1/tracking/?media_type=anime&continue_watching=true`: Home's and Profile's In progress: Watching, with an aired up next, most recently watched first. Each row's TrackingState has the list state under `anime`, with up next's title and image.
+- `GET /api/v1/tracking/?media_type=anime&continue_watching=true`: Home's and Profile's In progress: Watching, with an aired up next, most recently watched first. The app also sends `status=In progress`, because a server older than this branch ignores `continue_watching` for anime. Each row's TrackingState has the list state under `anime`, with up next's title and image.
 - An anime's TrackingState and its media summary's `user_state` have the list state under `anime`, from stored values only. Other media types have no such key.
 
 ### Writes
