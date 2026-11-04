@@ -190,8 +190,8 @@ The contract replaced what these described:
 
 ## Final runs
 
-- `scripts/check.sh` (run `a9bbc05c`, at `dc50fe6e`, after the second independent review's fixes): ruff clean, no missing migrations, 4,835 tests OK, 38 skipped. The four extra skips are `concurrency`, which needs row locks.
-- A throwaway PostgreSQL 15: every migration on an empty database, then every anime file including `concurrency`, the TV acceptance, payload and API files, all of `integrations` and `events`, the stats files, `test_api_v1` and the web views: 1,622 tests OK, 1 skipped, at `cf57dbae`. Then the anime files, the MAL export, Kitsu and Yamtrack vendor suites, the history page and the calendar: 668 tests OK, at `dc50fe6e`. The history page's 500 is pinned there with a real clock. `concurrency` failed there before its fix in the first review: two first ticks made two viewings, and one person's write held up another on the same title. The cluster was deleted afterwards.
+- `scripts/check.sh` (run `31f95843`, at `0e304ca5`, after the third round's fixes): ruff clean, no missing migrations, 4,864 tests OK, 38 skipped. The four extra skips are `concurrency`, which needs row locks.
+- A throwaway PostgreSQL 15: every migration on an empty database, then every anime file including `concurrency`, the TV acceptance, payload and API files, all of `integrations` and `events`, the stats files, `test_api_v1` and the web views: 1,622 tests OK, 1 skipped, at `cf57dbae`. Then the anime files, the MAL export, Kitsu and Yamtrack vendor suites, the history page and the calendar: 668 tests OK, at `dc50fe6e`; and with the series import contract, with 0095's new column, 719 tests OK, at `61b37f5a`. The history page's 500 is pinned there with a real clock. `concurrency` failed there before its fix in the first review: two first ticks made two viewings, and one person's write held up another on the same title. The cluster was deleted afterwards.
 
 ## Limits
 
