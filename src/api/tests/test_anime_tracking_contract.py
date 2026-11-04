@@ -519,7 +519,7 @@ class AcceptanceTests(AnimeTestCase):
 
 
 class OtherPeoplesListsTests(AnimeTestCase):
-    """AC-5, AC-6: another's list says where a title stands, not what a hidden log said."""
+    """AC-5, AC-6: a list says where a title stands, not what a hidden log said."""
 
     def setUp(self):
         super().setUp()
