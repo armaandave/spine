@@ -1145,6 +1145,14 @@ class AdapterCostTests(BookCalcBase):
         counted = MagicMock(wraps=activity_rows.ADAPTERS[media_type])
         return patch.dict(activity_rows.ADAPTERS, {media_type: counted}), counted
 
+    def test_switched_off_adapters_never_run_on_a_stats_request(self):
+        for media_type in (MediaTypes.GAME.value, MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+            patcher, counted = self.counted_adapter(media_type)
+            with patcher:
+                self.summary(ALL_TIME)
+                self.summary(YEAR_2026, tab=BOOK)
+                self.assertEqual(counted.call_count, 0, media_type)
+
     def test_one_global_request_walks_once(self):
         patcher, counted = self.counted_adapter()
         with patcher:

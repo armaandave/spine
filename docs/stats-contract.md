@@ -689,7 +689,7 @@ Every section key is always present; STAT-302 says when it is null.
 
   | Section | Empty when |
   | --- | --- |
-  | `header` | `titles` and `logs` are 0. A book tab holding only a start keeps it through `active_days` from Phase 2's build. |
+  | `header` | `titles` and `logs` are 0 |
   | `time` | `rows` is empty |
   | `top`, `highest_rated`, `most_logged` | `items` is empty |
   | `activity` | `busiest_day` is null |

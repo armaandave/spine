@@ -194,9 +194,12 @@ def _untracked(user_id, items):
 
 
 def connect():
-    """Connect the receiver to every tracking row; called once from AppConfig.ready."""
+    """Connect the receiver to every tracking row; called once from AppConfig.ready.
+
+    A season isn't one: it goes with its show, and on its own it leaves the title there.
+    """
     for model in apps.get_models():
-        if issubclass(model, Media):
+        if issubclass(model, Media) and model._meta.model_name != MediaTypes.SEASON.value:
             post_delete.connect(
                 _tracking_row_deleted,
                 sender=model,

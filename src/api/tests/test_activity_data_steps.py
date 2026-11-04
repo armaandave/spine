@@ -321,6 +321,13 @@ class PickedUpBooksTests(StepBase):
         self.assertEqual(self.payloads(), before)
         self.assertEqual(ProgressChange.objects.count(), rows)
 
+    def test_a_percent_place_changes_no_number_either(self):
+        """Decision 51: every Stats payload reads alike with and without the copy."""
+        self.picked_up_before("percent-stats", value=25, kind="percentage", pages=None)
+        before = self.payloads()
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.payloads(), before)
+
     def test_a_restart_and_a_reread_keep_their_zero(self):
         restarted = self.book("restarted")
         self.begin(restarted, d(2026, 3, 1))
