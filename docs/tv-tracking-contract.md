@@ -2,10 +2,10 @@
 
 Status: **agent-ready product contract**
 
-Last reviewed: **2026-10-26**
+Last reviewed: **2026-11-03**
 
 This contract covers TV shows, their seasons and their episodes in Spine.
-It does not cover anime, which Spine tracks as its own media type.
+It does not cover anime, which Spine tracks as its own media type ([Anime Tracking Contract](anime-tracking-contract.md)).
 Only the numbered laws below contain accepted product decisions.
 Read this contract with the inherited rules named in TV-000 before implementation.
 
@@ -41,12 +41,12 @@ The following rules are inherited without another approval step:
 | Logs imply tracking; dates; repeated logs | SW-002 and SW-003 (with the worked-out status in place of "completed"), SW-005 (extended to tick dates), SW-006 (a claim defaults to its tick's day, TV-404), SW-007 | Every log at every level puts the show in the library and counts its target as watched (TV-400 to TV-402). Log dates are calendar dates on the user's calendar, required, and never in the future (TV-407). Same-day logs of the same show, season or episode are valid. The last-watched date of an episode, season or show is the latest calendar day among its dated viewings and logs; fills and marks never supply one. |
 | Deleting logs, and removal | SW-009, SW-012, BK-002 (except that a real journey blocks removal), GM-304 | Deleting a log removes only its own viewing and fills (TV-406). The show leaves the library only when nothing under TV-003 remains, and only logs block Remove from Library. Removing tracking, or an undo that leaves nothing recorded, clears current stars and hearts and keeps custom-list membership (TV-208). |
 | Restoring earlier states | GM-015, BK-102, BK-404 | Undo and deletion never bring back deleted history. They restore an earlier Planning, Watching, Paused or Dropped choice only under TV-208. |
-| Show and season stars and hearts | SW-100 to SW-108, SW-200 to SW-203, BK-200 (its picker and unhearting sentences only), BK-202, GM-301, GM-303 | The show and each season have their own current stars and heart, with the shared source rules (TV-501). Stars or a heart mark an unstarted show watched (TV-303) and are opinion only on a started one (TV-304). Clearing stars or turning a heart off never changes status, viewings or marks. |
+| Show and season stars and hearts | SW-100 to SW-108, SW-200 to SW-203, BK-200 (its picker and unhearting sentences only), BK-202, GM-301, GM-303 | The show and each season have their own current stars and heart, with the shared source rules (TV-501). Stars or a heart mean the user finished what the page shows: they mark something not started (TV-303), open its log when it's partway, and just save once it's finished or caught up (TV-304). Clearing stars or turning a heart off never changes status, viewings or marks. |
 | Rewatch defaults | SW-010 (except that a claimed tick defaults off, TV-404), GM-217 | The server works out the composer's Rewatch default when it opens; the user can change it before saving (TV-404). On a season or show log the saved toggle controls only the badge. On an episode log it also decides whether the log claims a tick (TV-402). |
 | Saving, cancelling, one editor | SW-300 to SW-303 | A write, its fills and the worked-out state succeed together or not at all. Cancelling a composer saves nothing, including "Not now" on the season-finish composer (TV-403). The visible draft is what saves. Every surface opens the same editor. |
 | The + menu and statuses | BK-001 (its sections and single current status; TV-700 sets the card lines), BK-100, BK-101, GM-009, GM-011 (its first paragraph), GM-012 | The show's + menu holds the status actions, with base options always visible and unavailable ones explained (TV-005). Planning, Paused and Dropped can be chosen without inventing dates or viewings. Pause saves at once; Drop asks first (TV-007). Planning follows TV-006, which is stricter than GM-011. |
 | Pause and Drop keep progress | BK-303, BK-305 (their progress-keeping rules only) | Pausing or dropping keeps every viewing, log and mark. Coming back continues from the same place (TV-007). |
-| Imports | SW-500 to SW-504 (an imported rating or like follows TV-303 and TV-304, not SW-501's direct consumption), GM-501 (its rule against inferring status from inactivity) | Imports use the same state model and create no feed activity. Spine never infers Paused or Dropped from provider inactivity. TV-800 to TV-804 add the TV rules. |
+| Imports | SW-500 to SW-504 (an imported rating or like follows TV-800, not SW-501's direct consumption), GM-501 (its rule against inferring status from inactivity) | Imports use the same state model and create no feed activity. Spine never infers Paused or Dropped from provider inactivity. TV-800 to TV-804 add the TV rules. |
 | Consistency | BK-500, BK-501, SW-700 | The backend decides every transition. Retries and double taps never duplicate viewings or marks, and logs from the new build never duplicate (TV-705). Every surface shows the same state after a write. |
 | Privacy and activity | SW-400 (as the target; this contract doesn't change TV visibility), SW-401 | Activity follows [the activity contract](activity-contract.md): logs, a day's ticks as progress on the show, and starting the show (TV-703). Moving TV logs from per-entry visibility to account-level visibility is outside this contract (Scope boundary). |
 
@@ -55,9 +55,9 @@ Do not inherit:
 - **Stored attempts.** Book journeys and game playthroughs, with their start dates, drop dates, Restart, attempt deletion and History screens (BK-104's start date, BK-300 to BK-310, GM-003 to GM-008, GM-010, GM-013, GM-014, GM-400 to GM-403). The progress-keeping rules of BK-303 and BK-305 are the exception, inherited above. For TV, viewings are the history, and a rewatch is a pass rather than an attempt.
 - **Hand-entered progress.** Pages, percentages, hours, and progress snapshots on logs (GM-100 to GM-106, GM-203, GM-211, GM-212, GM-222, BK-400's final progress). TV progress is counted from viewings, never typed.
 - **"Final progress alone never completes" and "finishing requires the log"** (BK-302, BK-400, BK-401, GM-200, GM-204). A watched episode is a counted fact, so watching every aired episode finishes a season. The log is offered (TV-403), not required.
-- **The finish form during a live attempt.** The eye, a heart or stars on a started show do not open a composer (BK-102's live-journey paragraph, BK-201, BK-203, GM-206, GM-300). On a started show the eye marks the rest watched (TV-300), and stars and a heart are opinion only (TV-304).
+- **The finish form behind the eye.** The eye on a started show or season doesn't open a composer (BK-102's live-journey paragraph, GM-206): it marks the rest watched (TV-300). Stars and a heart do open one when partway (TV-304), as BK-201 and BK-203 do.
 - **BK-103's other eye rules:** "filled exactly when Completed", the eye moving a book to Read from DNF, and the status-only undo. The TV eye follows what's watched in the current pass (TV-300), and Watching or Resume returns a finished show to Completed (TV-007).
-- **Direct consumption from opinions on a started show.** Stars or a heart on a started show, or on any of its seasons, establish no mark (the direct-consumption parts of SW-105, SW-200 and SW-203).
+- **Direct consumption from opinions on something started.** Stars or a heart on a show or season that's partway, finished or caught up establish no mark (the direct-consumption parts of SW-105, SW-200 and SW-203).
 - **An undated episode eye** (SW-001 and SW-004 at the episode level). A tick is dated progress. The episode heart still marks an unwatched episode undated (TV-305).
 - **A current rating for episodes** (SW-100 to SW-108 at the episode level). TV-502 defines episode stars.
 - **A source log for an episode's heart** (SW-202's source link and SW-203 at the episode level). TV-502 defines the episode heart.
@@ -393,7 +393,7 @@ A caught-up show's filled eye follows TV-302; its card line says when the next e
 
 Planning, Paused and Dropped are the user's choices about the show; Spine never sets or clears them by itself.
 A choice stays until the user's next tick, log, mark or status action on the show, or a webhook play (TV-802).
-New episodes airing, provider refreshes, calendar jobs, and stars or hearts on a started show never end it.
+New episodes airing, provider refreshes, calendar jobs, and stars or hearts that only save (TV-304) never end it.
 
 When a tick, log or mark ends a choice, the show moves to Watching, or to Completed when it is finished.
 
@@ -525,7 +525,7 @@ For example:
 - Marking the show watched and then tapping the filled Season 2 eye unmarks only Season 2.
 - Tapping the filled eye of a show finished by ticking asks "Mark all 62 episodes unwatched?" under case 3.
 
-### TV-303: Stars or a heart on a show you haven't started mark it watched
+### TV-303: Stars or a heart on something you haven't started mark it watched
 
 This is the movie rule (SW-105, SW-200) for a show with nothing watched.
 On a show the user hasn't started, setting its stars or turning its heart on does all of these in one atomic step:
@@ -534,8 +534,7 @@ On a show the user hasn't started, setting its stars or turning its heart on doe
 - puts the show in the library as Completed, or in Watching as caught up; and
 - sets the show's stars or heart, independent of any log.
 
-On a show the user hasn't started, a season's stars or heart do the same for that season alone, and TV-107 then asks about earlier seasons.
-On a started show, a season's stars and heart are opinion only (TV-304), whether or not that season has anything watched.
+A season the user hasn't started follows the same rule on its own page, whether or not the show is started: its stars or heart do the same for that season alone, and TV-107 then asks about earlier seasons.
 The eye can undo the mark (TV-302).
 Clearing the stars or turning the heart off never unmarks anything (SW-201, GM-301).
 The optional star picker may follow the heart; dismissing it keeps the mark and the heart (SW-011).
@@ -545,12 +544,20 @@ While nothing under a show or season has aired, its heart is opinion only: it sa
 Its stars are unavailable then, with the reason "Nothing has aired yet."
 Installed builds get this law as soon as the server ships: their heart on a show the user hasn't started marks it watched.
 
-### TV-304: On a started show, stars and a heart are your opinion only
+### TV-304: Stars and a heart mean you finished what the page shows
 
-On a show the user has started, setting, changing or clearing the stars of the show or of any of its seasons, or turning their hearts on or off, changes only that opinion.
-It never marks, finishes or reopens anything, never changes status, never ends a choice and never moves up next.
-It establishes no mark.
-While the user is watching, the show's stars are a rating so far.
+Stars or a heart on a show or season page are about that show or that season, and saying what you thought means you finished it.
+
+- **Partway.** The show or season is started and its eye isn't filled. Setting its stars or turning its heart on opens that level's log composer with that value set: Whole show on the show page, that season on the season page. Nothing changes until the log saves. Saving it marks the rest watched (TV-401) and ends a Planning, Paused or Dropped choice (TV-203). Cancelling saves nothing, including the value.
+- **Finished or caught up.** The eye is filled: everything that has aired under it is watched (TV-300). Setting or changing the stars or heart changes only that value. It never marks, finishes or reopens anything, never changes status, never ends a choice and never moves up next.
+
+During a rewatch, partway means partway through the rewatch, and the composer opens with Rewatch on (TV-404).
+When a new episode airs, the stars and heart stay. The show or season is partway again until the user catches up.
+Clearing the stars or turning the heart off is only that, at any time (SW-201, GM-301).
+Stars and hearts given partway before this law stay as they are; nothing rewrites them.
+A show with no aired regular episode isn't partway, whatever specials it has: TV-303's last paragraph applies.
+
+The server refuses a direct set on something partway, with a reason the app shows: "Log this first." Installed builds show that reason, and their logs still work.
 
 ### TV-305: A heart on an unwatched episode marks it watched
 
@@ -894,10 +901,11 @@ The title and that line open the title's own progress UI over the screen, the on
 
 - a book: the page's progress panel, with pages or percent and its Reading, Paused, Finished and DNF row (BK-301); saving the last page or tapping Finished opens the completion log (BK-302);
 - a game: the page's progress sheet, with hours or percent, its Playing, Paused, Finished and Dropped row, Edit Dates, Restart and Delete; Finished opens the completion log;
-- a manga or a comic: the page's log composer, opened on Progress.
+- a manga or a comic: the page's progress sheet (MC-300);
+- an anime: its episode sheet, as a show's above (AN-701).
 
 Each runs on the title's page model, with the page's writes and follow-ups: one request per change; a status change shows at once and rolls back on failure with the page's alert, and a progress save that fails says so in the panel or sheet; every failure comes with an error haptic.
-A book that isn't being read or paused, a game without a playthrough to update, and anime, movies and music, whose pages have no progress UI, open the title's page instead.
+A book that isn't being read or paused, a game without a playthrough to update, and movies and music, whose pages have no progress UI, open the title's page instead.
 The title's page loads before its progress UI opens. If the user taps another card, opens anything else or leaves the screen first, neither the progress UI nor the page opens.
 After a change the card stays where it is until the row reloads on the next visit, and Home's activity reloads, as after a tick (TV-703).
 VoiceOver reads the button with where the title stands, for example "Project Hail Mary, update progress, 40 of 476 pages", and reads the new progress as soon as a change is saved.
@@ -969,7 +977,7 @@ Imports may write in bulk, but Spine works out each imported show once afterward
 - Imported season statuses other than Completed are ignored, and an imported season with nothing under TV-205 isn't started.
 - Imported Planning, Paused and Dropped on a show become the user's choice; imported In progress means Watching.
 - Each imported play becomes its own viewing, with the date supplied or none, even of an episode already watched; TV-101 applies only to taps and webhooks.
-- An imported rating or like with no status follows TV-303 and TV-304 against the imported history.
+- An imported rating or like with no status marks a show or season with no imported history (TV-303). On one with history it only sets the value: imports never open anything.
 - Imports create no feed activity and never ask the earlier-episodes question.
 - Spine never infers Paused or Dropped from provider inactivity (GM-501).
 - Overwrite replaces the show's viewings, marks and choices with the source's, as today, so it drops marks, choices, a rewatch in progress and star sources made in Spine.
@@ -1073,6 +1081,7 @@ Installed builds get these laws as soon as the server ships:
 Installed builds keep these limits until the next build:
 
 - Their show and season eyes do nothing, and they can't untick (`ios/Spine/Spine/Features/MediaDetail/MediaDetailView.swift:2347-2352`). So a heart that marks a show watched can't be undone from them.
+- Their stars and heart on a partway show or season don't open a composer: the server refuses them with the reason in TV-304. Their logs still work.
 - They never open the season-finish composer or ask the earlier-episodes question, so nothing earlier is filled.
 - They send a date and time for TV logs; the server converts it to the user's calendar date, and a future date returns a validation error. Their logs of a season or show with nothing aired fail (TV-106).
 - A season log made from the show page may save with Rewatch on (`ios/Spine/Spine/Features/MediaDetail/MediaLogView.swift:89`), which only labels the log (TV-404).
@@ -1126,8 +1135,8 @@ Run date cases under a non-UTC timezone, including a server on America/New_York 
 | A-26 | Tap the filled eye of a show finished by ticking, with and without an episode log. | Without logs it asks "Mark all 62 episodes unwatched?". With a log the option is unavailable. | TV-302 |
 | A-27 | Tap the filled eye of a show with a show log. | Nothing changes: "Delete your show log first." | TV-302 |
 | A-28 | Heart a show the user hasn't started, from the new build and from an installed build. Dismiss the star picker. | The show is marked watched, Completed and hearted in both. The new build's eye can undo the mark; the installed build's can't. | TV-303, TV-900 |
-| A-29 | Set stars on a show at S2 E3. | Opinion only. Status and up next are unchanged. A rating activity row is written, which activity doesn't show. | TV-304, TV-703 |
-| A-30 | Set stars on an unwatched Season 4 while watching Season 2. | Opinion only. Season 4 stays unwatched, and up next stays in Season 2. | TV-303, TV-304 |
+| A-29 | Set stars on a show at S2 E3, and heart a Season 2 that's partway. | Each opens its log composer with that value set: Whole show, then Season 2. Cancelling changes nothing. Saving marks the rest of that show or season watched. | TV-304, TV-401 |
+| A-30 | Set stars on an unwatched Season 4 while watching Season 2. | Season 4 is marked watched undated with those stars, TV-107 asks about the seasons before it, and no composer opens. The eye undoes the mark. | TV-303 |
 | A-31 | Heart an unwatched episode, then unheart it. | The episode is marked watched undated, then stays watched. | TV-305 |
 | A-32 | Save a rated season log, change the season's stars directly, then edit the log's stars. | The log sets and links the stars. The direct change unlinks them. The edit leaves the current stars alone. | TV-501 |
 | A-33 | Save a rated season log. | The show's stars are unchanged. | TV-500 |
@@ -1137,7 +1146,7 @@ Run date cases under a non-UTC timezone, including a server on America/New_York 
 | A-37 | Pause at S2 E3, tick S2 E4 by mistake, then untick it. | Watching, then Paused again. | TV-007, TV-208 |
 | A-38 | Drop a show, then let a new episode air. | It stays Dropped, with no events or notifications. | TV-203, TV-704 |
 | A-39 | Choose Planning on a show with a viewing. | Unavailable, with its reason. | TV-006 |
-| A-40 | Tick a special on an untracked show, then heart the show. | Watching, with S1 E1 up next and progress unchanged. Planning is unavailable, and the heart is opinion only. | TV-004, TV-006, TV-304 |
+| A-40 | Tick a special on an untracked show, then heart the show. | Watching, with S1 E1 up next and progress unchanged. Planning is unavailable, and the heart opens the whole-show log. | TV-004, TV-006, TV-304 |
 | A-41 | Send a webhook play that isn't a watch, for a Completed show and for a Paused one. | The Completed show doesn't change. The Paused show moves to Watching. Neither gets a viewing or season tracking. | TV-802, TV-203 |
 | A-42 | Let the hourly job run on a stored Completed show with no episode history that has never been worked out, then tick its S1 E1. | The job leaves it as stored. After the tick it is still Completed: the legacy mark fills it, and the tick records nothing. | TV-801, TV-101 |
 | A-43 | Import a Completed show, then reimport. | One undated mark with fills. No duplicates, and no feed activity. | TV-800 |
@@ -1176,7 +1185,7 @@ The user approved the design on 2026-10-25 and chose the recommended answer to e
 - finishing a season offers its log once (TV-403);
 - a show caught up between seasons waits in Completed and returns to Watching when the next regular episode airs, and one caught up mid-season stays in Watching (TV-202, TV-206);
 - starting partway asks once about earlier episodes (TV-107); and
-- stars or a heart mark an unstarted show watched, and are opinion only on a started one (TV-303, TV-304).
+- stars or a heart mark an unstarted show watched (TV-303). On 2026-11-03 the user replaced what they do on a started one (below).
 
 After trying the app on 2026-10-26, the user asked for four changes, now in the laws:
 
@@ -1189,6 +1198,8 @@ Then the user chose how to mark progress from Home: a Continue Watching card's t
 After trying it on 2026-10-27, the user asked for one line under every In progress card, "Update progress ›", for every media type, opening each title's own progress UI, and for the sheet always to open with up next at the top (TV-701).
 Later on 2026-10-27 the user asked for three more: a Paused show's + menu shows Resume in place of Watching (TV-005, TV-007); during a rewatch, season + menus leave Rewatch Season out instead of greying it (TV-005, TV-600); and an ended show with one season logs that season as the whole show (TV-403, TV-404, TV-408).
 
+On 2026-11-03 the user set one rule for every media type: stars and the heart mean "I finished this" (TV-303, TV-304). On TV, "this" is the page: not started marks it, partway opens its log, and finished or caught up just saves. Seeing everything that has aired counts as finished, so a weekly show can be rated without a log saying it's over.
+
 Whether ticks post to friends' feeds was first settled by AGENTS.md section 9, whose feed then held logs, ratings and list activity, so ticks didn't post.
 The activity contract (`docs/activity-contract.md`) replaced that on 2026-10-26: a day's ticks are progress on the show, and TV-703 now follows it.
 
@@ -1196,7 +1207,7 @@ Writing the laws settled details the approved design leaves open.
 Two reviews, one for consistency and one for feasibility against the code, checked each detail against the design, the five decisions and the inherited contracts; the laws above include their corrections.
 Two details go beyond those sources and are provisional until the user confirms them:
 
-- watched specials start a show, so a heart on a show with only specials watched is opinion only (Terms, TV-004, TV-303); and
+- watched specials start a show, so a heart on a show with only specials watched opens its log (Terms, TV-004, TV-304); and
 - an episode's heart has no source log, so editing an episode log's heart never changes it (TV-502), because the approved storage plan gives heart sources only to shows and seasons.
 
 No other product questions remain from this review.

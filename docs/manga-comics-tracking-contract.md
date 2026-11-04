@@ -5,7 +5,7 @@ Status: **agent-ready product contract**
 Last reviewed: **2026-11-02**
 
 This contract covers manga (MyAnimeList, MangaUpdates) and comics (Comic Vine) in Spine.
-It does not cover anime.
+It does not cover anime ([Anime Tracking Contract](anime-tracking-contract.md)).
 Only the numbered laws below contain accepted product decisions.
 Read it with the inherited rules named in MC-000 before implementation.
 
@@ -47,7 +47,7 @@ The following rules are inherited without another approval step.
 
 - Pages, percent, and page-to-percent conversion (BK-300, BK-400's 100 percent). MC-001 replaces them.
 - A new attempt at zero after Did Not Finish (BK-305). MC-201 replaces it.
-- From TV: the optional finish log (TV-403), stars and hearts as opinion only during an attempt (TV-304), Mark watched up to here (TV-108), Caught up (TV-202), and ticking single units (TV-100).
+- From TV: the optional finish log (TV-403), Mark watched up to here (TV-108), Caught up (TV-202), and ticking single units (TV-100).
 - From games: finishing that never follows from reaching the end (GM-200) and progress saves after finishing (GM-202).
 
 ## Terms
