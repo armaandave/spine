@@ -189,8 +189,8 @@ The contract replaced what these described:
 
 ## Final runs
 
-- `scripts/check.sh` (run `649062dc`, at `3ae55588`, after the independent review's fixes): ruff clean, no missing migrations, 4,731 tests OK, 38 skipped. The four extra skips are `concurrency`, which needs row locks.
-- A throwaway PostgreSQL 15 (runs `61d5fcb3` and `963677aa`, at `3ae55588`): every migration on an empty database, then every anime file including `concurrency`, the TV acceptance, payload and API files, all of `integrations` and `events`, the stats files, `test_api_v1` and the web views: 1,747 tests OK. `concurrency` failed there before its fix: two first ticks made two viewings, and one person's write held up another on the same title. The cluster was deleted afterwards.
+- `scripts/check.sh` (run `a9bbc05c`, at `dc50fe6e`, after the second independent review's fixes): ruff clean, no missing migrations, 4,835 tests OK, 38 skipped. The four extra skips are `concurrency`, which needs row locks.
+- A throwaway PostgreSQL 15: every migration on an empty database, then every anime file including `concurrency`, the TV acceptance, payload and API files, all of `integrations` and `events`, the stats files, `test_api_v1` and the web views: 1,622 tests OK, 1 skipped, at `cf57dbae`. Then the anime files, the MAL export, Kitsu and Yamtrack vendor suites, the history page and the calendar: 668 tests OK, at `dc50fe6e`. The history page's 500 is pinned there with a real clock. `concurrency` failed there before its fix in the first review: two first ticks made two viewings, and one person's write held up another on the same title. The cluster was deleted afterwards.
 
 ## Limits
 
@@ -200,7 +200,7 @@ The contract replaced what these described:
 - An airing title AniList has no schedule for counts everything listed, in about 7% of the releasing titles the review sampled (AN-100 says so; kept on purpose).
 - A page GET or the job moving a status adds a history row, which the old web heatmap counts. The app doesn't read that (kept on purpose).
 - Tick every episode of a manual title, tap the eye (which adds no fill, so no mark), log, delete the log: the total goes with the log, though the eye hadn't been undone. It reads "3 episodes" until the eye is tapped again.
-- Locally PostgreSQL ran those 1,747 tests only, on version 15 because 16 isn't installed here, with Django's connection pool off. Three attempts at the whole suite on it stopped partway, because agent-cleanup ended the server with a RuntimeError each time; the likely cause is its process watch racing backends that leave the server's group, which isn't proven. CI's Database checks run the whole suite on 16 on the first push.
+- Locally PostgreSQL ran those chunks only, on version 15 because 16 isn't installed here, with Django's connection pool off. Three attempts at the whole suite on it stopped partway, because agent-cleanup ended the server with a RuntimeError each time; the likely cause is its process watch racing backends that leave the server's group, which isn't proven. CI's Database checks run the whole suite on 16 on the first push.
 - No installed (TestFlight) build ran against this backend. AN-900 rests on tests that send the installed builds' request shapes.
 - AN-902's production count wasn't re-checked: this work doesn't touch production. Migration 0095 adds a unique constraint on one record per person and title with no data step, so it fails on a database holding duplicate anime rows. Re-check right before shipping.
 - TV-800 still says imports create no feed activity, as AN-800 did. AC-1 and the shared feed say an imported log is a log, for TV too; only AN-800 and N-24 were corrected here.
