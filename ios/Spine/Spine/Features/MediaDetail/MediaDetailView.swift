@@ -4600,6 +4600,11 @@ private struct MediaDetailPageView: View {
             .background(.white.opacity(0.12), in: Capsule())
     }
 
+    /// The episode count the chips and Details name. A single has no number anywhere (AN-002).
+    private func episodeCount(_ detail: MediaDetail) -> String? {
+        detail.userState?.anime?.single == true ? nil : detailString(detail, "episodes")
+    }
+
     private func primaryChips(_ detail: MediaDetail) -> [MediaDetailChip] {
         var chips = [MediaDetailChip(label: mediaTypeChipLabel(detail.ref.mediaType), discoverRequest: nil)]
         if detail.ref.mediaType == "anime", let season = detailString(detail, "season")?.nilIfEmpty {
@@ -4616,7 +4621,7 @@ private struct MediaDetailPageView: View {
         if let contentRating = contentRating(detail) {
             chips.append(MediaDetailChip(label: contentRating, discoverRequest: nil))
         }
-        if ["tv", "anime"].contains(detail.ref.mediaType), let episodes = detailString(detail, "episodes") {
+        if ["tv", "anime"].contains(detail.ref.mediaType), let episodes = episodeCount(detail) {
             chips.append(MediaDetailChip(label: "\(episodes) episodes", discoverRequest: nil))
         }
         if detail.ref.mediaType == "book", let pages = detailString(detail, "number_of_pages") ?? detailString(detail, "pages") {
@@ -4810,7 +4815,7 @@ private struct MediaDetailPageView: View {
             ]
         case "anime":
             rows += [
-                DetailFactRow(label: "Episodes", value: detailString(detail, "episodes")),
+                DetailFactRow(label: "Episodes", value: episodeCount(detail)),
                 DetailFactRow(label: "Aired", value: detailString(detail, "season")),
                 DetailFactRow(label: "Broadcast", value: detailString(detail, "broadcast")),
                 DetailFactRow(label: "Source", value: detailString(detail, "source")),
@@ -9045,7 +9050,7 @@ private struct AnimeEpisodesSection: View {
                 onSelect: nil
             )
             if rows.isLong {
-                MediaDetailNavigationRow(title: "All \(rows.episodes.count.formatted()) Episodes", action: onShowAll)
+                MediaDetailNavigationRow(title: "All \(rows.episodes.count) Episodes", action: onShowAll)
                     .accessibilityIdentifier("anime.all-episodes")
             }
         }
@@ -9301,7 +9306,7 @@ private struct EpisodeCardStill: View {
             .frame(width: fillsWidth ? nil : 148, height: fillsWidth ? nil : 84)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(alignment: .bottomLeading) {
-                Text("E\(episodeNumber)")
+                Text(verbatim: "E\(episodeNumber)")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)

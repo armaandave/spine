@@ -671,6 +671,12 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(page.detail?.animeRows?.episodes.allSatisfy(\.isWatched), true)
     }
 
+    func testAN400TheLogScreenReadsTheTitleThePageReads() {
+        let state = UserMediaState(isTracked: true, anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log))
+        let detail = MediaDetail(ref: Self.ref(), title: "Shingeki no Kyojin", preferredTitle: "Attack on Titan", userState: state)
+        XCTAssertEqual(logModel(detail).selectedTitle, "Attack on Titan")
+    }
+
     func testAN402EditAndDeleteMirrorTV() async throws {
         let entry = try decode(DiaryEntry.self, TVTrackingModelsTests.diaryEntryJSON(mediaType: "anime", extra: #","anime_log":{"unmarks_count":7,"covers_count":12,"state_version":44}"#))
         diary.detailResults = [entry]
