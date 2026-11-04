@@ -172,6 +172,23 @@ class LogAgainTests(BookCalcBase):
         self.assertEqual(DiaryEntry.objects.filter(item=item).count(), 2)
         self.assert_numbers(300, 300, 600)
 
+    def test_a_log_naming_a_finished_journey_finishes_the_reread_under_way(self):
+        """A stale page sends the old id, and this stranded the reread where nothing could reach it."""
+        item = self.book("stale-page")
+        self.complete(item, d(2025, 6, 1))
+        finished = BookSession.objects.get(related_book__item=item).pk
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 40, d(2026, 2, 2))
+        self.complete(item, d(2026, 2, 3), journey_id=finished)
+        self.assert_numbers(400, 400, 800)
+        self.assertEqual(self.rows(item)[:2], ["2026-02-03 log +360", "2026-02-02 read 40"])
+        book = Book.objects.get(item=item)
+        self.assertEqual(book.status, Status.COMPLETED.value)
+        self.assertEqual({journey.status for journey in book.reading_sessions.all()}, {Status.COMPLETED.value})
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 60, d(2026, 3, 2))
+        self.assert_numbers(400, 460, 860)
+
     def test_the_same_request_again_is_a_retry_of_a_live_finish(self):
         item = self.book("retry-live", pages=300)
         self.begin(item, d(2026, 1, 1))

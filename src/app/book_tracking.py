@@ -961,9 +961,10 @@ def complete(
             raise ValidationError("Reading journey not found.")
         if session and session.status == Status.COMPLETED.value and not session.completion_diary_entry_id:
             raise ValidationError("This journey is already completed.")
-        # A retry returned above. Logging a finished journey again is a new read (BK-400).
+        # A retry returned above. A stale page can name a closed journey: a read under way
+        # is what a log finishes, and with none it's a new read (BK-400).
         if session and session.status not in OPEN_STATUSES:
-            session = None
+            session = _open_session(book)
 
     true_reread = _has_prior_completion(
         book,
