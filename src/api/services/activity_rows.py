@@ -368,11 +368,15 @@ def _book_target(snapshot, total):
 
 
 def _opening(session, saves, length, *, finished):
-    """Return a place a journey holds with no day: from before its saves began."""
+    """Return a place a journey holds with no day: from before its saves began.
+
+    A Completed journey with no log holds none. The old Book.save hook wrote those at the
+    book's length, migration 0075 kept them, and they were never reading.
+    """
     for change in saves:
         if change.current_progress.get("kind") in ("pages", "percentage"):
             return _pages_of(change.previous_progress, length)
-    if finished or session.pages_read is None:
+    if finished or session.status == Status.COMPLETED.value or session.pages_read is None:
         return None
     return Decimal(session.pages_read)
 

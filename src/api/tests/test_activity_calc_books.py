@@ -822,6 +822,63 @@ class PileTests(BookCalcBase):
         self.assertEqual(self.calc(piles=False).piles, [])
 
 
+class LegacyJourneyTests(BookCalcBase):
+    """Rows migration 0075 left: a Completed journey with no log, which is no reading."""
+
+    def legacy(self, item, *, marked=True, status=Status.COMPLETED.value, pages=400):
+        Book.objects.bulk_create(
+            [
+                Book(
+                    user=self.owner,
+                    item=item,
+                    status=status,
+                    completed_manually=marked,
+                    progress=pages if status == Status.COMPLETED.value else 0,
+                ),
+            ],
+        )
+        BookSession.objects.bulk_create(
+            [
+                BookSession(
+                    related_book=Book.objects.get(user=self.owner, item=item),
+                    status=Status.COMPLETED.value,
+                    origin=BookSession.Origin.LEGACY,
+                    pages_read=pages,
+                    percentage_read=100,
+                    end_date=datetime(2024, 3, 2, tzinfo=UTC),
+                ),
+            ],
+        )
+
+    def test_a_marked_book_counts_once(self):
+        self.legacy(self.book("marked"))
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_logged_book_with_an_extra_journey_counts_once(self):
+        item = self.book("logged")
+        self.legacy(item, marked=False)
+        BookSession.objects.create(
+            related_book=Book.objects.get(item=item),
+            status=Status.COMPLETED.value,
+            origin=BookSession.Origin.LEGACY,
+            pages_read=400,
+            percentage_read=100,
+            end_date=datetime(2024, 3, 2, tzinfo=UTC),
+            completion_diary_entry=self.log(item, datetime(2024, 3, 2, tzinfo=UTC)),
+        )
+        self.assertEqual(self.number(pile=True), 400)
+
+    def test_on_a_to_read_book_it_counts_nothing(self):
+        self.legacy(self.book("to-read"), marked=False, status=Status.PLANNING.value)
+        self.assert_numbers(0, 0, 0)
+
+    def test_undoing_the_mark_leaves_nothing(self):
+        item = self.book("undone")
+        self.legacy(item)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+
+
 class DayTests(BookCalcBase):
     """Decision 3: a save's day is fixed as the phone's date when saved."""
 
