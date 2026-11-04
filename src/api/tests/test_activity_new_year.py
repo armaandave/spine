@@ -503,6 +503,27 @@ class NoHeaderTests(NewYearBase):
                     response = browser.post(url, {"watch_date": "2027-01-02"})
                     self.assertEqual(response.status_code, 400)
 
+    def test_the_web_log_takes_no_manga_or_comic_on_any_date(self):
+        """The log modal's types leave these out, so its end-of-day moment never reaches them.
+
+        If they're ever added, the date goes through as sent, as update_diary_entry does:
+        that moment is already the next day in Tokyo.
+        """
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        for zone, today in ((TOKYO, JAN_1), (NEW_YORK, DEC_31), (LOS_ANGELES, DEC_31)):
+            user = make_user(calendar=zone)
+            browser = Client()
+            browser.force_login(user)
+            for media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+                for sent in (date(2026, 12, 20), today):
+                    with self.subTest(media_type=media_type, zone=zone, sent=sent):
+                        item = self.item(media_type, series_total=100)
+                        args = [item.source, item.media_type, item.media_id]
+                        response = browser.post(reverse("add_movie_diary_entry", args=args), {"watch_date": str(sent)})
+                        self.assertEqual(response.status_code, 400, response.content)
+                        self.assertIn(b"only available for", response.content)
+                        self.assertFalse(DiaryEntry.objects.filter(user=user, item=item).exists())
+
     def test_the_web_manga_and_comic_form_keeps_the_dates_it_was_sent(self):
         """The form reads the browser's wall clock on the server's zone (BK-306)."""
         self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
