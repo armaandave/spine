@@ -727,6 +727,11 @@ def _resolve_item(item):
     return item
 
 
+def _listing_on_hand(item):
+    """Return what's stored, for a write that needs no provider: it never waits on or is refused for one."""
+    return anime_listing.stored_listing(item) or Listing(item=item)
+
+
 def _replay(user, item, mutation_id, action):
     record = TVMutation.objects.filter(user=user, mutation_id=mutation_id).first()
     if record is None:
@@ -769,7 +774,7 @@ def _perform(  # noqa: PLR0913
             return replay
     if listing is None and entry_point == IMPORT:
         # An import reads what is stored, whatever that holds (AN-800).
-        listing = anime_listing.stored_listing(item) or Listing(item=item)
+        listing = _listing_on_hand(item)
     if listing is None:
         listing = anime_listing.get_listing(item)
     for attempt in range(2):
@@ -1306,6 +1311,7 @@ def untick(user, item, episode_number, *, viewing_id=None, entry_point=APP, muta
         mutation_id=mutation_id,
         episode_number=number,
         rows_changed=False,
+        listing=_listing_on_hand(item),
     )
 
 
@@ -1414,7 +1420,15 @@ def unmark(user, item, *, confirm=False, expected_version=None, entry_point=APP,
         left = _after_removal(ctx)
         return {"changed": True, "left_library": left}
 
-    return _perform(user, item, "unmark", body, entry_point=entry_point, mutation_id=mutation_id)
+    return _perform(
+        user,
+        item,
+        "unmark",
+        body,
+        entry_point=entry_point,
+        mutation_id=mutation_id,
+        listing=_listing_on_hand(item),
+    )
 
 
 def mark_up_to(user, item, episode_number, *, entry_point=APP, mutation_id=None):
@@ -1567,7 +1581,15 @@ def stop_rewatch(user, item, *, entry_point=APP, mutation_id=None):
         ctx.changed = True
         return {"changed": True}
 
-    return _perform(user, item, "stop_rewatch", body, entry_point=entry_point, mutation_id=mutation_id)
+    return _perform(
+        user,
+        item,
+        "stop_rewatch",
+        body,
+        entry_point=entry_point,
+        mutation_id=mutation_id,
+        listing=_listing_on_hand(item),
+    )
 
 
 def _remove_count(facts):
@@ -1606,7 +1628,7 @@ def remove(user, item, *, expected_version=None, entry_point=APP, mutation_id=No
         body,
         entry_point=entry_point,
         mutation_id=mutation_id,
-        listing=anime_listing.stored_listing(item) or Listing(item=item),
+        listing=_listing_on_hand(item),
     )
 
 
@@ -1666,6 +1688,8 @@ def set_rating(user, item, rating, *, entry_point=APP, mutation_id=None):
         lambda ctx: _do_set_rating(ctx, rating),
         entry_point=entry_point,
         mutation_id=mutation_id,
+        # Clearing needs no copy, so it works at any time.
+        listing=_listing_on_hand(item) if rating is None else None,
     )
 
 
@@ -1697,6 +1721,8 @@ def set_like(user, item, liked, *, entry_point=APP, mutation_id=None):
         lambda ctx: _do_set_like(ctx, liked),
         entry_point=entry_point,
         mutation_id=mutation_id,
+        # Turning it off needs no copy, so it works at any time.
+        listing=None if liked else _listing_on_hand(item),
     )
 
 
@@ -1867,7 +1893,16 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
             ctx.changed = True
         return outcome
 
-    return _perform(user, item, "written_state", body, entry_point=entry_point, mutation_id=mutation_id)
+    return _perform(
+        user,
+        item,
+        "written_state",
+        body,
+        entry_point=entry_point,
+        mutation_id=mutation_id,
+        # Notes and clearing stars need no copy, so they work at any time.
+        listing=_listing_on_hand(item) if status is None and progress is None and rating is None else None,
+    )
 
 
 # ---------------------------------------------------------------------------------
@@ -2098,7 +2133,7 @@ def update_log(entry, data, *, tags=None, entry_point=APP):
         ctx.changed = bool(fields) or tags is not None
         return {"changed": ctx.changed, "entry": locked}
 
-    return _perform(user, entry.item, "update_log", body, entry_point=entry_point)
+    return _perform(user, entry.item, "update_log", body, entry_point=entry_point, listing=_listing_on_hand(entry.item))
 
 
 def _keeping_log(ctx, viewing, deleted_id, calc):
@@ -2194,7 +2229,7 @@ def delete_log(user, entry, *, expected_version=None, entry_point=APP, mutation_
         body,
         entry_point=entry_point,
         mutation_id=mutation_id,
-        listing=anime_listing.stored_listing(entry.item) or Listing(item=entry.item),
+        listing=_listing_on_hand(entry.item),
     )
 
 
@@ -2205,8 +2240,7 @@ def log_info(entry):
     """
     if not supports(entry.item):
         return None
-    listing = anime_listing.stored_listing(entry.item) or Listing(item=entry.item)
-    view = _View.load(entry.user, entry.item, listing)
+    view = _View.load(entry.user, entry.item, _listing_on_hand(entry.item))
     log = next((log for log in view.facts.logs if log.id == entry.pk), None)
     if log is None:
         return None

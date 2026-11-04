@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from app import anime_listing, anime_tracking
 from app.anime_listing import AnimeDetailsUnavailable
-from app.models import AnimeListing, AnimeMark, Item
+from app.models import AnimeListing, AnimeMark, Item, MediaLike
 from app.providers import anilist, mal, services
 from app.tests.anime_fixtures import OCT_25, AnimeTestCase, FakeAnimeProvider
 from app.tests.tv_fixtures import ProviderDown
@@ -664,6 +664,110 @@ class CalendarJobTests(AnimeTestCase):
         anime_tracking.refresh_after_calendar([item])
         self.assertEqual(AnimeListing.objects.get(item=item).total, 2)
         self.assertEqual(self.row(item).progress, 1)
+
+
+class NoCopyNeededTests(AnimeTestCase):
+    """AN-301: what needs no copy works at any time, with no copy and every provider down."""
+
+    def imported(self, **values):
+        # An imported title holds its own numbers until the job first reads MAL's.
+        item = self.title(total=12)
+        anime_tracking.import_title(self.user, item, status="In progress", count=3, total=12, **values)
+        self.assertIsNone(anime_listing.stored_listing(item))
+        self.fake.fail()
+        self.fake.calls.clear()
+        return item
+
+    def assert_no_call(self):
+        self.assertEqual(self.fake.calls, [])
+
+    def test_an_301_clearing_stars(self):
+        item = self.imported(score=8)
+        anime_tracking.set_rating(self.user, item, None)
+        self.assertIsNone(self.row(item).score)
+        self.assert_no_call()
+
+    def test_an_301_turning_the_heart_off(self):
+        item = self.imported()
+        MediaLike.objects.create(user=self.user, item=item)
+        anime_tracking.set_like(self.user, item, False)
+        self.assertFalse(self.liked(item))
+        self.assert_no_call()
+
+    def test_tv_102_an_untick(self):
+        item = self.imported()
+        anime_tracking.untick(self.user, item, 3)
+        self.assertEqual(self.row(item).progress, 2)
+        self.assert_no_call()
+
+    def test_an_300_the_filled_eye(self):
+        item = self.imported()
+        anime_tracking.unmark(self.user, item, confirm=True)
+        self.assertIsNone(self.row(item))
+        self.assert_no_call()
+
+    def test_an_600_stopping_a_rewatch(self):
+        item = self.title(total=12)
+        anime_tracking.import_title(self.user, item, status="In progress", count=3, total=12, earlier=[{"count": 12}])
+        self.fake.fail()
+        self.fake.calls.clear()
+        anime_tracking.stop_rewatch(self.user, item)
+        self.assertIsNone(self.row(item).rewatch_started_at)
+        self.assert_no_call()
+
+    def test_tv_405_a_log_edit(self):
+        item = self.imported()
+        entry = anime_tracking.create_log(
+            self.user,
+            item,
+            consumed_at=OCT_25,
+            import_source="myanimelist",
+            entry_point=anime_tracking.IMPORT,
+        ).entry
+        self.fake.calls.clear()
+        anime_tracking.update_log(entry, {"review": "Fine", "rating": None})
+        entry.refresh_from_db()
+        self.assertEqual(entry.review, "Fine")
+        self.assert_no_call()
+
+    def test_an_900_writing_notes_or_clearing_stars(self):
+        item = self.imported(score=8)
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
+        anime_tracking.apply_written_state(self.user, item, {"rating": None}, entry_point=anime_tracking.WEB)
+        row = self.row(item)
+        self.assertEqual((row.notes, row.score), ("Mine", None))
+        self.assert_no_call()
+
+    def test_an_301_through_the_api(self):
+        item = self.imported(score=8)
+        self.action(item, "rate", rating=None)
+        self.action(item, "untick", episode_number=3)
+        self.write(item, notes="Mine")
+        row = self.row(item)
+        self.assertEqual((row.score, row.progress, row.notes), (None, 2, "Mine"))
+        self.assert_no_call()
+
+    def test_an_100_a_stale_copy_isnt_read_again_for_them_either(self):
+        item = self.title(total=12)
+        self.tick(item, 1, 2)
+        self.clock.advance(days=8)
+        self.fake.calls.clear()
+        anime_tracking.untick(self.user, item, 2)
+        anime_tracking.set_rating(self.user, item, None)
+        anime_tracking.apply_written_state(self.user, item, {"notes": "Mine"}, entry_point=anime_tracking.WEB)
+        self.assert_no_call()
+
+    def test_an_100_what_needs_the_numbers_is_still_refused(self):
+        item = self.imported()
+        for write in (
+            lambda: anime_tracking.mark_watched(self.user, item),
+            lambda: anime_tracking.tick(self.user, item, 4),
+            lambda: anime_tracking.set_rating(self.user, item, 8),
+            lambda: anime_tracking.apply_written_state(self.user, item, {"status": "Paused"}, entry_point=anime_tracking.WEB),
+        ):
+            with self.assertRaises(AnimeDetailsUnavailable):
+                write()
+        self.assertEqual(self.row(item).progress, 3)
 
 
 class ProviderFailureShapesTests(AnimeTestCase):
