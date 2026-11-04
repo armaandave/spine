@@ -5,7 +5,7 @@ from django.apps import apps
 from django.db.models import Field, Prefetch
 
 from app import helpers
-from app.models import Episode, Item, MediaTypes, Season
+from app.models import Episode, Item, MediaTypes, Season, Status
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,9 @@ TV_TRACKING_FIELD_NAMES = frozenset(
         "last_activity_at",
         "is_started",
         "first_gap_episode",
+        # The anime contract's bookkeeping: viewings aren't exported either (AN-802).
+        "pass_number",
+        "log_offered_pass",
     },
 )
 TV_MEDIA_TYPES = frozenset(
@@ -156,12 +159,24 @@ def track_value(media, media_type, field):
     """Return one tracking column's value for a row."""
     if media_type in SERIES_MEDIA_TYPES and field in SERIES_TRACKING_FIELD_NAMES:
         return ""
+    if media_type == MediaTypes.ANIME.value:
+        if field in TV_EMPTY_COLUMNS:
+            return ""
+        if media.rewatch_started_at is not None and field in ("status", "progress"):
+            return anime_rewatch_value(media, field)
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         if field in TV_EMPTY_COLUMNS:
             return ""
         if field == "progress":
             return tv_progress(media, media_type)
     return getattr(media, field, "")
+
+
+def anime_rewatch_value(media, field):
+    """A rewatch in progress isn't exported, so its title re-imports as finished (AN-802)."""
+    if field == "status":
+        return Status.COMPLETED.value
+    return media.viewings.values("episode_number").distinct().count()
 
 
 def tv_progress(media, media_type):
@@ -199,6 +214,7 @@ def get_track_fields():
                 field in TV_TRACKING_FIELD_NAMES
                 or field in SERIES_NOT_EXPORTED
                 or (media_type in TV_MEDIA_TYPES and field in TV_EMPTY_COLUMNS)
+                or (media_type == MediaTypes.ANIME.value and field in TV_EMPTY_COLUMNS)
                 or (media_type in SERIES_MEDIA_TYPES and field in SERIES_TRACKING_FIELD_NAMES)
             ):
                 continue

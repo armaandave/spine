@@ -61,12 +61,17 @@ def update_diary_entry_tags(entry, tag_names):
 
 def set_media_like(user, item: Item, liked: bool, *, audit=True, sync_diary=True):
     """Set the canonical user/title like."""
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(item):
         # TV-303 to TV-305: a heart can mark an unstarted show, season or episode watched;
         # it never copies onto logs (SW-202).
         tv_tracking.set_like(user, item, liked, entry_point=tv_tracking.WEB)
+        return MediaLike.objects.filter(user=user, item=item).first()
+
+    if anime_tracking.supports(item):
+        # AN-301: a heart marks a title not started, and is refused partway.
+        anime_tracking.set_like(user, item, liked, entry_point=anime_tracking.WEB)
         return MediaLike.objects.filter(user=user, item=item).first()
 
     if game_tracking.supports(item):
@@ -147,7 +152,31 @@ def create_diary_entry(
     """
     from uuid import uuid4
 
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+
+    if anime_tracking.supports(item):
+        # AN-400: every log means finished; auto_mark_consumed is ignored. An import's
+        # log dates the fills of its mark (AN-800).
+        return anime_tracking.create_log(
+            user,
+            item,
+            consumed_at=consumed_at,
+            rating=rating,
+            review=review,
+            liked=liked,
+            is_rewatch=is_rewatch,
+            tags=tags,
+            review_title=review_title,
+            contains_spoilers=contains_spoilers,
+            visibility=visibility,
+            emit_activity=emit_activity,
+            update_current=update_current,
+            import_source=import_source,
+            import_source_id=import_source_id,
+            import_source_order=import_source_order,
+            entry_point=anime_tracking.IMPORT if import_source else anime_tracking.WEB,
+            mutation_id=mutation_id,
+        ).entry
 
     if tv_tracking.supports(item):
         # TV-400 to TV-407: the log puts the show in the library, counts its target
@@ -324,9 +353,9 @@ def create_diary_entry(
 
 def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
     """Sync completed tracking dates from a diary entry date edit."""
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
-    if tv_tracking.supports(entry.item):
+    if tv_tracking.supports(entry.item) or anime_tracking.supports(entry.item):
         # TV-405: a log's date moves only its own viewing, in tv_tracking.update_log.
         return
 
@@ -364,11 +393,15 @@ def sync_tracking_from_diary_entry(entry, *, previous_consumed_at=None):
 
 def update_diary_entry(entry, data, *, tags=None):
     """Update a diary entry and keep title-level state in sync."""
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(entry.item):
         # TV-405, TV-407, TV-501, TV-502.
         result = tv_tracking.update_log(entry, data, tags=tags, entry_point=tv_tracking.WEB)
+        return result.entry or entry
+
+    if anime_tracking.supports(entry.item):
+        result = anime_tracking.update_log(entry, data, tags=tags, entry_point=anime_tracking.WEB)
         return result.entry or entry
 
     if game_tracking.supports(entry.item):
@@ -445,11 +478,15 @@ def update_diary_entry(entry, data, *, tags=None):
 
 def delete_diary_entry(user, entry):
     """Delete a diary entry and mirror web tracking side effects."""
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_tracking
 
     if tv_tracking.supports(entry.item):
         # TV-406: only the log's own viewing and fills go; TV-208 then applies.
         return tv_tracking.delete_log(user, entry, entry_point=tv_tracking.WEB)
+
+    if anime_tracking.supports(entry.item):
+        # AN-400: only the log's own fills go; TV-208 then applies.
+        return anime_tracking.delete_log(user, entry, entry_point=anime_tracking.WEB)
 
     if game_tracking.supports(entry.item):
         return game_tracking.delete_completion(user, entry)
@@ -514,7 +551,13 @@ def mark_consumed(user, media_instance: Media, when=None):
         media_instance: The Media instance to mark
         when: Optional datetime for when it was consumed (defaults to now)
     """
-    from app import book_tracking, game_tracking, series_tracking, single_weight, tv_listing, tv_tracking
+    from app import anime_tracking, book_tracking, game_tracking, series_tracking, single_weight, tv_listing, tv_tracking
+
+    if anime_tracking.supports(media_instance.item):
+        # AN-300: every aired episode watched, undated, as one mark.
+        result = anime_tracking.mark_watched(user, media_instance.item, entry_point=anime_tracking.WEB)
+        media_instance.refresh_from_db()
+        return result
 
     if tv_tracking.supports(media_instance.item):
         # TV-300: every aired episode under the eye watched, undated, as one mark.

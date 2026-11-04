@@ -22,6 +22,8 @@ from api.serializers.common import (
 )
 from api.serializers.tracking import validate_tv_rating
 from app import (
+    anime_listing,
+    anime_tracking,
     book_tracking,
     game_tracking,
     series_tracking,
@@ -29,7 +31,17 @@ from app import (
     tv_listing,
     tv_tracking,
 )
-from app.models import TV, BasicMedia, Book, Item, MediaTypes, Season, Sources, Status
+from app.models import (
+    TV,
+    Anime,
+    BasicMedia,
+    Book,
+    Item,
+    MediaTypes,
+    Season,
+    Sources,
+    Status,
+)
 from app.providers import services as provider_services
 from social.models import Activity, ProgressChange
 
@@ -92,7 +104,7 @@ def get_tracking(user, *, source, media_type, media_id, season_number=None, epis
     ).first()
 
 
-def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):
+def create_or_update_tracking(user, *, source, media_type, media_id, data, partial=True):  # noqa: C901, PLR0911
     """Create or update tracking using existing model behavior.
 
     TV shows and seasons go through tv_tracking.apply_written_state and return its
@@ -108,6 +120,8 @@ def create_or_update_tracking(user, *, source, media_type, media_id, data, parti
             media_id=media_id,
             data=data,
         )
+    if anime_tracking.supports(media_type):
+        return write_anime_tracking(user, source=source, media_id=media_id, data=data)
     season_number = data.get("season_number")
     media = get_tracking(
         user,
@@ -236,6 +250,14 @@ def delete_tracking(
             expected_version=expected_version,
             mutation_id=mutation_id,
         )
+    if anime_tracking.supports(media_type):
+        return delete_anime_tracking(
+            user,
+            source=source,
+            media_id=media_id,
+            expected_version=expected_version,
+            mutation_id=mutation_id,
+        )
     media = get_tracking(
         user,
         source=source,
@@ -313,6 +335,13 @@ def consume_media(
             show_item,
             season_number=item.season_number,
             entry_point=tv_tracking.LEGACY_APP,
+        )
+    if anime_tracking.supports(media_type):
+        return _call_tv(
+            anime_tracking.mark_watched,
+            user,
+            anime_item(source, media_id),
+            entry_point=anime_tracking.LEGACY_APP,
         )
     media = get_tracking(user, source=source, media_type=media_type, media_id=media_id)
     if media is None:
@@ -623,8 +652,9 @@ def serialize_tracking(media, *, tv=None, tv_detail=False):
     """
     if media is None:
         return None
-    tv_counted = media.item.media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value)
-    if not tv_counted and not hasattr(media, "max_progress"):
+    # TV and anime count from their viewings (TV-104, AN-102), never calendar events.
+    counted = media.item.media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value, MediaTypes.ANIME.value)
+    if not counted and not hasattr(media, "max_progress"):
         with suppress(Exception):
             BasicMedia.objects.annotate_max_progress([media], media.item.media_type)
     return tracking_state(media, tv=tv, tv_detail=tv_detail)
@@ -727,7 +757,12 @@ def _record_progress_change(user, media, previous_progress):
     Never for TV: tv_tracking records season progress changes without feed activity
     (TV-703).
     """
-    if media is None or previous_progress is None or tv_tracking.supports(media.item):
+    if (
+        media is None
+        or previous_progress is None
+        or tv_tracking.supports(media.item)
+        or anime_tracking.supports(media.item)
+    ):
         return None
     current_progress = _progress_snapshot(media)
     if not current_progress or previous_progress == current_progress:
@@ -1122,4 +1157,170 @@ def tv_action_response(result, page=None):
     if result.tv is not None:
         tv = TV.objects.select_related("item", "user").get(pk=result.tv.pk)
         tracking = serialize_tracking(tv, tv=envelope["tv"])
+    return {"tracking": tracking, **envelope}
+
+
+# ---------------------------------------------------------------------------------
+# Anime (docs/anime-tracking-contract.md). Every rule lives in app.anime_tracking; this
+# layer resolves the Item, calls it and builds responses. Errors are TV's, so _call_tv
+# translates them the same way.
+# ---------------------------------------------------------------------------------
+
+# Every action of POST tracking/{source}/anime/{id}/actions/{action}/.
+ANIME_ACTIONS = frozenset(
+    {
+        "watching",
+        "resume",
+        "planning",
+        "pause",
+        "drop",
+        "rewatch",
+        "stop_rewatch",
+        "remove",
+        "mark_watched",
+        "consume",
+        "unmark",
+        "mark_up_to",
+        "mark_earlier",
+        "tick",
+        "untick",
+        "rate",
+    },
+)
+ANIME_EPISODE_ACTIONS = frozenset({"tick", "untick", "mark_up_to"})
+
+
+def anime_item(source, media_id, *, create=True):
+    """Return the title's Item, creating it from the provider when missing."""
+    lookup = {
+        "source": source,
+        "media_type": MediaTypes.ANIME.value,
+        "media_id": str(media_id),
+        "season_number": None,
+        "episode_number": None,
+    }
+    item = Item.objects.filter(**lookup).first()
+    if item is not None or not create:
+        return item
+    if source == Sources.MANUAL.value:
+        raise NotFound
+    try:
+        metadata = provider_services.get_media_metadata(MediaTypes.ANIME.value, media_id, source)
+    except provider_services.ProviderAPIError as error:
+        if error.status_code == 404:
+            raise NotFound from error
+        raise TVDetailsUnavailableError(detail=anime_listing.UNAVAILABLE_MESSAGE) from error
+    return get_or_create_item_from_metadata(lookup, metadata)
+
+
+def write_anime_tracking(user, *, source, media_id, data):
+    """Apply PUT/PATCH of a title's tracking: installed builds and the API (AN-900)."""
+    payload = {key: value for key, value in data.items() if key in ("status", "progress", "notes")}
+    if "rating" in data:
+        payload["rating"] = _tv_rating(data["rating"])
+    return _call_tv(
+        anime_tracking.apply_written_state,
+        user,
+        anime_item(source, media_id),
+        payload,
+        entry_point=anime_tracking.LEGACY_APP,
+        mutation_id=data.get("mutation_id"),
+    )
+
+
+def delete_anime_tracking(user, *, source, media_id, expected_version=None, mutation_id=None):
+    """DELETE tracking/{source}/anime/{id}/: Remove from Library (TV-003)."""
+    item = anime_item(source, media_id, create=False)
+    if item is None:
+        return None
+    return _call_tv(
+        anime_tracking.remove,
+        user,
+        item,
+        expected_version=int_param(expected_version, "expected_version"),
+        mutation_id=mutation_id,
+        entry_point=anime_tracking.LEGACY_APP,
+    )
+
+
+def perform_anime_action(user, *, source, media_id, action, data):  # noqa: C901, PLR0911, PLR0912
+    """Apply one action of POST tracking/{source}/anime/{id}/actions/{action}/.
+
+    Returns anime_tracking's WriteResult. The view answers 404 for an unknown action.
+    """
+    if action not in ANIME_ACTIONS:
+        raise NotFound
+    episode_number = data.get("episode_number")
+    if action in ANIME_EPISODE_ACTIONS and episode_number is None:
+        raise TVValidationError(detail={"episode_number": ["This field is required."]})
+    if action == "rate" and "rating" not in data:
+        raise TVValidationError(detail={"rating": ["Send a rating from 1 to 10, or null to clear it."]})
+    item = anime_item(source, media_id)
+    common = {"entry_point": anime_tracking.APP, "mutation_id": data.get("mutation_id")}
+    if action in TV_CHOICE_ACTIONS:
+        return _call_tv(anime_tracking.choose, user, item, TV_CHOICE_ACTIONS[action], **common)
+    if action == "rewatch":
+        return _call_tv(anime_tracking.start_rewatch, user, item, **common)
+    if action == "stop_rewatch":
+        return _call_tv(anime_tracking.stop_rewatch, user, item, **common)
+    if action == "remove":
+        return _call_tv(anime_tracking.remove, user, item, expected_version=data.get("expected_version"), **common)
+    if action in ("mark_watched", "consume"):
+        return _call_tv(anime_tracking.mark_watched, user, item, **common)
+    if action == "unmark":
+        return _call_tv(
+            anime_tracking.unmark,
+            user,
+            item,
+            confirm=bool(data.get("confirm")),
+            expected_version=data.get("expected_version"),
+            **common,
+        )
+    if action == "mark_up_to":
+        return _call_tv(anime_tracking.mark_up_to, user, item, episode_number, **common)
+    if action == "mark_earlier":
+        return _call_tv(
+            anime_tracking.mark_earlier,
+            user,
+            item,
+            from_ref=data.get("from"),
+            to_ref=data.get("to"),
+            offer_log=bool(data.get("offer_log")),
+            **common,
+        )
+    if action == "tick":
+        return _call_tv(anime_tracking.tick, user, item, episode_number, **common)
+    if action == "untick":
+        return _call_tv(
+            anime_tracking.untick,
+            user,
+            item,
+            episode_number,
+            viewing_id=data.get("viewing_id"),
+            **common,
+        )
+    return _call_tv(anime_tracking.set_rating, user, item, data["rating"], **common)
+
+
+def anime_envelope(result):
+    """Return an anime write's envelope keys."""
+    return _call_tv(anime_tracking.write_envelope, result)
+
+
+def anime_tracking_response(result):
+    """Return the row's TrackingState, when it's still tracked, plus the envelope."""
+    envelope = anime_envelope(result)
+    if result.row is None:
+        return envelope
+    row = Anime.objects.select_related("item", "user").get(pk=result.row.pk)
+    return {**serialize_tracking(row), **envelope}
+
+
+def anime_action_response(result):
+    """Return the actions endpoint's body: the row's TrackingState and the envelope."""
+    envelope = anime_envelope(result)
+    tracking = None
+    if result.row is not None:
+        row = Anime.objects.select_related("item", "user").get(pk=result.row.pk)
+        tracking = serialize_tracking(row)
     return {"tracking": tracking, **envelope}

@@ -219,6 +219,7 @@ class KitsuImporter:
                     notes=attributes["notes"] or "",
                 )
                 instance._history_date = updated_at
+                instance._anime_total = kitsu_metadata["attributes"].get("episodeCount")
                 self.bulk_media[media_type].append(instance)
 
         instance = model(
@@ -236,6 +237,7 @@ class KitsuImporter:
             instance.status = Status.IN_PROGRESS.value
 
         instance._history_date = updated_at
+        instance._anime_total = kitsu_metadata["attributes"].get("episodeCount")
         self.bulk_media[media_type].append(instance)
 
     def _fetch_media_from_related_url(self, relationship, media_type):

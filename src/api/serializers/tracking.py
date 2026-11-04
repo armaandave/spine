@@ -135,6 +135,39 @@ class TVActionSerializer(serializers.Serializer):
         return fields
 
 
+class AnimeEpisodeSerializer(serializers.Serializer):
+    """One end of the range an earlier-episodes Yes names (TV-107)."""
+
+    episode_number = GameIntegerField(min_value=1)
+
+
+class AnimeActionSerializer(serializers.Serializer):
+    """The body of POST tracking/{source}/anime/{id}/actions/{action}/.
+
+    TV's, with no season. Every key is optional unless the action needs it; `from` is a
+    Python keyword, so it is declared in get_fields().
+    """
+
+    episode_number = GameIntegerField(min_value=1, required=False, allow_null=True)
+    viewing_id = GameIntegerField(min_value=1, required=False, allow_null=True)
+    mutation_id = serializers.UUIDField(required=False, allow_null=True)
+    expected_version = GameIntegerField(
+        min_value=0,
+        max_value=9223372036854775807,
+        required=False,
+        allow_null=True,
+    )
+    confirm = serializers.BooleanField(required=False, default=False)
+    to = AnimeEpisodeSerializer(required=False, allow_null=True)
+    offer_log = serializers.BooleanField(required=False, default=False)
+    rating = TVRatingField(required=False)
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields["from"] = AnimeEpisodeSerializer(required=False, allow_null=True)
+        return fields
+
+
 class ConsumeSerializer(serializers.Serializer):
     """Validate consume action payloads."""
 

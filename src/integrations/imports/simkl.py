@@ -482,6 +482,7 @@ class SimklImporter:
                     notes=anime["memo"]["text"] if anime["memo"] != {} else "",
                 )
                 anime_instance._history_date = self._get_history_date(anime)
+                anime_instance._anime_total = metadata.get("max_progress")
 
                 self.bulk_media[MediaTypes.ANIME.value].append(anime_instance)
                 existing_anime_ids.add(mal_id)

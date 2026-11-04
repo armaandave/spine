@@ -1,113 +1,56 @@
 import logging
 
-from django.utils import timezone
-
 import app
 from api.services.item_metadata import store_item_metadata
-from app.models import MediaTypes, Sources, Status
+from app import anime_tracking, user_calendar
+from app.models import MediaTypes, Sources
 
 logger = logging.getLogger(__name__)
 
 
 class AnimeWebhookMixin:
-    """Anime-specific webhook processing."""
+    """Anime-specific webhook processing (AN-801)."""
 
     def _handle_anime(self, media_id, episode_number, payload, user):
-        """Handle anime playback event."""
-        if not self._is_played(payload):
-            episode_number = max(0, episode_number - 1)
+        """Apply a playback event through the same rules as the app's (AN-801, TV-802).
 
+        A watch ticks the episode at the event time, an unplayed event unticks it, and
+        any other play counts as choosing Watching. A rejected event is logged and
+        acknowledged. Webhooks never ask a question or open anything.
+        """
         if self._is_unplayed(payload):
-            current_instance = self._get_current_instance(
-                app.models.Anime,
-                media_id,
-                Sources.MAL.value,
-                MediaTypes.ANIME.value,
-                user,
-            )
-            self._mark_anime_unplayed(current_instance, episode_number)
+            event = "unplayed"
+        elif self._is_played(payload):
+            event = "watched"
+        else:
+            event = "play"
+
+        item = self._get_anime_item(media_id, create=event != "unplayed")
+        if item is None:
+            logger.debug("Ignoring anime %s event for a title that isn't tracked: %s", event, media_id)
             return
 
-        anime_metadata = app.providers.mal.anime(media_id)
-        anime_item, _ = app.models.Item.objects.get_or_create(
-            media_id=media_id,
-            source=Sources.MAL.value,
-            media_type=MediaTypes.ANIME.value,
-            defaults={
-                "title": anime_metadata["title"],
-                "image": anime_metadata["image"],
-            },
-        )
-        store_item_metadata(anime_item, anime_metadata)
-
-        current_instance = self._get_current_instance(
-            app.models.Anime,
-            media_id,
-            Sources.MAL.value,
-            MediaTypes.ANIME.value,
+        result = anime_tracking.webhook_event(
             user,
+            item,
+            episode_number,
+            event=event,
+            at=user_calendar.now(),
         )
-
-        now = timezone.now().replace(second=0, microsecond=0)
-        is_completed = episode_number == anime_metadata["max_progress"]
-        status = Status.COMPLETED.value if is_completed else Status.IN_PROGRESS.value
-
-        if current_instance and current_instance.status != Status.COMPLETED.value:
-            current_instance.progress = episode_number
-
-            if is_completed:
-                current_instance.end_date = now
-                current_instance.status = status
-
-            elif current_instance.status != Status.IN_PROGRESS.value:
-                current_instance.start_date = now
-                current_instance.status = status
-
-            if current_instance.tracker.changed():
-                current_instance.save()
-                logger.info(
-                    "Updated existing anime instance to status: %s with progress %d",
-                    current_instance.status,
-                    episode_number,
-                )
-            else:
-                logger.debug(
-                    "No changes detected for existing anime instance: %s",
-                    current_instance.item,
-                )
+        if result is not None and result.changed:
+            logger.info("Applied anime %s event: %s E%s", event, item.title, episode_number)
         else:
-            app.models.Anime.objects.create(
-                item=anime_item,
-                user=user,
-                progress=episode_number,
-                status=status,
-                start_date=now if not is_completed else None,
-                end_date=now if is_completed else None,
-            )
-            logger.info(
-                "Created new anime instance with status: %s and progress %d",
-                status,
-                episode_number,
-            )
+            logger.debug("Anime %s event changed nothing: %s E%s", event, item.title, episode_number)
 
-    def _mark_anime_unplayed(self, current_instance, episode_number):
-        """Update an existing anime instance for an unplayed event."""
-        if not current_instance:
-            logger.debug("Anime marked as unplayed but no instance exists")
-            return
-
-        current_instance.progress = episode_number
-        current_instance.status = Status.IN_PROGRESS.value
-        current_instance.end_date = None
-
-        if current_instance.tracker.changed():
-            current_instance.save()
-            logger.info(
-                "Marked existing anime instance as unplayed with progress %d",
-                episode_number,
-            )
-        else:
-            logger.debug(
-                "No changes detected for unplayed anime instance: %s",
-                current_instance.item,
-            )
+    def _get_anime_item(self, media_id, *, create):
+        lookup = {"media_id": media_id, "source": Sources.MAL.value, "media_type": MediaTypes.ANIME.value}
+        item = app.models.Item.objects.filter(**lookup).first()
+        if item is not None or not create:
+            return item
+        metadata = app.providers.mal.anime(media_id)
+        item, _ = app.models.Item.objects.get_or_create(
+            **lookup,
+            defaults={"title": metadata["title"], "image": metadata["image"]},
+        )
+        store_item_metadata(item, metadata)
+        return item

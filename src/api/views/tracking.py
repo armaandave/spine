@@ -16,6 +16,7 @@ from api.serializers.common import (
     tv_season_started,
 )
 from api.serializers.tracking import (
+    AnimeActionSerializer,
     BookActionSerializer,
     BookCompletionSerializer,
     BookJourneyWriteSerializer,
@@ -35,7 +36,7 @@ from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
-from app import series_tracking, tv_tracking
+from app import anime_tracking, series_tracking, tv_tracking
 from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
 from streaming import filters as streaming_filters
 
@@ -48,7 +49,7 @@ class TrackingListView(MediaExposureMixin, APIView):
     def get(self, request):
         return self.list_response(request, request.user)
 
-    def list_response(self, request, owner):
+    def list_response(self, request, owner):  # noqa: C901
         """Return one page of ``owner``'s tracked media of the requested type."""
         media_type = request.query_params.get("media_type")
         if not media_type:
@@ -57,7 +58,7 @@ class TrackingListView(MediaExposureMixin, APIView):
         manager_status_filter = "All" if str(status_filter).lower() == "tracked" else status_filter
         # Continue Watching (TV-701): shows in Watching with an aired up next that
         # aren't caught up, most recently watched first; `ordering` is ignored.
-        continue_watching = media_type == MediaTypes.TV.value and str(
+        continue_watching = media_type in (MediaTypes.TV.value, MediaTypes.ANIME.value) and str(
             request.query_params.get("continue_watching", ""),
         ).lower() in {"true", "1"}
         if continue_watching:
@@ -116,7 +117,10 @@ class TrackingListView(MediaExposureMixin, APIView):
         paginator = StandardResultsSetPagination()
         page = list(paginator.paginate_queryset(queryset, request, view=self))
         _prime_progress(page, media_type)
-        if continue_watching:
+        if continue_watching and media_type == MediaTypes.ANIME.value:
+            # One query: up next's title and image (AN-701).
+            anime_tracking.prime_up_next_episodes(page)
+        elif continue_watching:
             # One query: up next's title and still, for the hold preview (TV-701).
             tv_tracking.prime_up_next_episodes(page)
         # The rows are the owner's, as the owner sees them. Another user's leave out
@@ -183,6 +187,8 @@ class TrackingDetailView(MediaExposureMixin, APIView):
         )
         if tv_tracking.supports(media_type):
             return Response(_tv_written_response(media, media_type))
+        if anime_tracking.supports(media_type):
+            return Response(tracking_service.anime_tracking_response(media))
         return Response(tracking_service.serialize_tracking(media))
 
     def patch(self, request, source, media_type, media_id):
@@ -197,6 +203,8 @@ class TrackingDetailView(MediaExposureMixin, APIView):
         )
         if tv_tracking.supports(media_type):
             return Response(_tv_written_response(media, media_type))
+        if anime_tracking.supports(media_type):
+            return Response(tracking_service.anime_tracking_response(media))
         return Response(tracking_service.serialize_tracking(media))
 
     def delete(self, request, source, media_type, media_id):
@@ -221,6 +229,8 @@ class TrackingActionView(MediaExposureMixin, APIView):
     def post(self, request, source, media_type, media_id, action):
         if media_type == MediaTypes.TV.value:
             return self._tv_action(request, source, media_id, action)
+        if anime_tracking.supports(media_type):
+            return self._anime_action(request, source, media_id, action)
         if tv_tracking.supports(media_type):
             return self._tv_part_action(request, source, media_type, media_id, action)
         perform = _domain_action(media_type)
@@ -300,6 +310,26 @@ class TrackingActionView(MediaExposureMixin, APIView):
             body = {**body["tracking"], **body}
         return Response(body)
 
+    def _anime_action(self, request, source, media_id, action):
+        """Every anime action, TV's shapes with no season; unknown actions are 404."""
+        if action not in tracking_service.ANIME_ACTIONS:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = AnimeActionSerializer(data=request.data)
+        if not serializer.is_valid():
+            raise TVValidationError(detail=serializer.errors)
+        result = tracking_service.perform_anime_action(
+            request.user,
+            source=source,
+            media_id=media_id,
+            action=action,
+            data=serializer.validated_data,
+        )
+        body = tracking_service.anime_action_response(result)
+        if action in tracking_service.TV_PRE_CONTRACT_ACTIONS and body["tracking"] is not None:
+            # Installed builds read a top-level TrackingState here (AN-900).
+            body = {**body["tracking"], **body}
+        return Response(body)
+
     def _tv_part_action(self, request, source, media_type, media_id, action):
         """Apply consume, pause, resume or drop to a season or episode (TV-207)."""
         season_number = request.data.get("season_number", request.query_params.get("season_number"))
@@ -348,6 +378,9 @@ def _tv_list_filters(queryset, media_type, *, continue_watching):
     """Leave out unstarted seasons; Continue Watching lists shows (TV-205, TV-701)."""
     if media_type == MediaTypes.SEASON.value:
         queryset = _started_seasons(queryset)
+    if continue_watching and media_type == MediaTypes.ANIME.value:
+        # In progress: Watching with an aired up next; a single never has one (AN-701).
+        return queryset.filter(caught_up=False, up_next_episode__isnull=False)
     if continue_watching:
         # Shows not yet worked out are absent until the repair or the user's next write.
         queryset = queryset.filter(
@@ -404,6 +437,16 @@ def _tv_written_response(result, media_type):
     else:
         row = tracking_service.tv_season_row(result)
     return tracking_service.tv_tracking_response(result, row=row)
+
+
+class AnimeRowsView(APIView):
+    """A title's rows and state, for Home's sheet: never waits on AniList (AN-701)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, source, media_id):
+        page = anime_tracking.page_payload(request.user, tracking_service.anime_item(source, media_id))
+        return Response({"anime": page["state"], "rows": page["rows"]})
 
 
 class TVStartView(APIView):

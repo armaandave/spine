@@ -192,6 +192,7 @@ class MyAnimeListImporter:
                 )
 
                 instance._history_date = updated_at
+                instance._anime_total = content["node"].get("num_episodes")
                 self.bulk_media[media_type].append(instance)
 
         # Add current status entry
@@ -206,6 +207,7 @@ class MyAnimeListImporter:
             notes=list_status["comments"],
         )
         instance._history_date = updated_at
+        instance._anime_total = content["node"].get("num_episodes")
         self.bulk_media[media_type].append(instance)
 
     def _metadata(self, node):

@@ -22,7 +22,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from api.services.item_metadata import store_item_metadata
 from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
-from app import tv_listing, tv_tracking, user_calendar
+from app import anime_tracking, tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
 from app.forms import EpisodeForm, ManualItemForm, get_form_class, BookProgressForm, BookLogForm, BookStartReadingForm, manual_parent_seasons
 from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status, Movie, Episode, Book, BookSession, UserMessage, UserMessageLevel
@@ -109,6 +109,16 @@ def progress_edit(request, media_type, instance_id):
                 _tv_finish_messages(request.user, show_item, target[0], before)
             elif target is not None and operation == "decrease":
                 tv_tracking.untick(request.user, show_item, *target, entry_point=tv_tracking.WEB)
+        except TV_WRITE_ERRORS as error:
+            return _tv_error_response(error)
+    elif anime_tracking.supports(media_type):
+        # A progress number means ticks: raising ticks the next unwatched episode, and
+        # lowering removes the latest unlogged viewing (AN-900).
+        try:
+            if operation == "increase":
+                media.increase_progress()
+            elif operation == "decrease":
+                media.decrease_progress()
         except TV_WRITE_ERRORS as error:
             return _tv_error_response(error)
     elif series_tracking.supports(media_type) and media.status != Status.IN_PROGRESS.value:
@@ -892,6 +902,10 @@ def media_save(request):
         else:
             try:
                 saved = form.save()
+            except TV_WRITE_ERRORS as error:
+                # Anime goes through the same rules as the app's (AN-900).
+                messages.error(request, _tv_error_message(error))
+                return helpers.redirect_back(request)
             except (BookTrackingConflict, ValidationError) as error:
                 messages.error(request, str(error))
                 return helpers.redirect_back(request)
@@ -948,6 +962,13 @@ def media_delete(request):
                     if not result.changed:
                         messages.error(request, MSG_NOT_LATEST_WATCH)
                         return helpers.redirect_back(request)
+            except TV_WRITE_ERRORS as error:
+                messages.error(request, _tv_error_message(error))
+                return helpers.redirect_back(request)
+        elif anime_tracking.supports(media_type):
+            # Remove from Library, with the same log guard as the app (TV-003).
+            try:
+                anime_tracking.remove(request.user, media.item, entry_point=anime_tracking.WEB)
             except TV_WRITE_ERRORS as error:
                 messages.error(request, _tv_error_message(error))
                 return helpers.redirect_back(request)
@@ -1124,6 +1145,9 @@ def create_entry(request):
     else:
         try:
             media_form.save()
+        except TV_WRITE_ERRORS as error:
+            messages.error(request, _tv_error_message(error))
+            return redirect("create_entry")
         except (BookTrackingConflict, ValidationError) as error:
             messages.error(request, str(error))
             return redirect("create_entry")
@@ -3105,6 +3129,7 @@ def edit_diary_entry(request, entry_id):
                     single_weight.supports(entry.item)
                     or game_tracking.supports(entry.item)
                     or tv_tracking.supports(entry.item)
+                    or anime_tracking.supports(entry.item)
                 ) and entry.rating is not None
                 else entry.rating
             ),
@@ -3167,7 +3192,7 @@ def update_diary_entry(request, entry_id):
         # An omitted date preserves history; an explicit game date must be valid.
         raw_date = request.POST.get("watch_date")
         consumed_at = parse_date(raw_date) if raw_date is not None else None
-        is_tv = tv_tracking.supports(entry.item)
+        is_tv = tv_tracking.supports(entry.item) or anime_tracking.supports(entry.item)
         if game_tracking.supports(entry.item) and raw_date is not None and not consumed_at:
             return JsonResponse({"error": "A valid completion date is required."}, status=400)
         if is_tv:
@@ -3577,6 +3602,33 @@ def book_completed_modal(request, source, media_id):
         raise Http404("Book not found")
 
 
+def _anime_choice_response(request, source, media_id, status, message):
+    """Pause, resume or drop an anime: the same choice as the app's (TV-007)."""
+    media_type = MediaTypes.ANIME.value
+    metadata = services.get_media_metadata(media_type, media_id, source)
+    item, _ = Item.objects.get_or_create(
+        media_id=media_id,
+        source=source,
+        media_type=media_type,
+        defaults={"title": metadata["title"], "image": metadata["image"]},
+    )
+    store_item_metadata(item, metadata)
+    try:
+        result = anime_tracking.choose(request.user, item, status, entry_point=anime_tracking.WEB)
+    except TV_WRITE_ERRORS as error:
+        return _tv_error_response(error)
+    metadata.update(media_type=media_type, source=source, media_id=media_id)
+    response = render(request, "app/components/media_actions.html", {
+        "media": metadata,
+        "media_type": media_type,
+        "current_instance": result.row,
+        "diary_entries": DiaryEntry.objects.filter(user=request.user, item=item).order_by("-consumed_at"),
+    })
+    response["X-Notification-Message"] = message
+    response["X-Notification-Type"] = "success"
+    return response
+
+
 def _tv_choice_response(request, source, media_type, media_id, status, message):
     """Pause, resume or drop a show: a choice about the whole show (TV-007, TV-204)."""
     if media_type == MediaTypes.SEASON.value:
@@ -3597,6 +3649,8 @@ def pause_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.pause)
+    if anime_tracking.supports(media_type):
+        return _anime_choice_response(request, source, media_id, Status.PAUSED.value, "Media paused")
     if series_tracking.supports(media_type):
         return _series_action_response(request, source, media_type, media_id, series_tracking.pause, "Media paused")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
@@ -3683,6 +3737,8 @@ def resume_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.resume)
+    if anime_tracking.supports(media_type):
+        return _anime_choice_response(request, source, media_id, Status.IN_PROGRESS.value, "Media resumed")
     if series_tracking.supports(media_type):
         return _series_action_response(request, source, media_type, media_id, series_tracking.start, "Media resumed")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
@@ -3777,6 +3833,8 @@ def drop_media(request, source, media_type, media_id):
     exposure.require_media_type(media_type)
     if media_type == MediaTypes.GAME.value:
         return _game_action_response(request, source, media_id, game_tracking.drop)
+    if anime_tracking.supports(media_type):
+        return _anime_choice_response(request, source, media_id, Status.DROPPED.value, "Media dropped")
     if series_tracking.supports(media_type):
         return _series_action_response(request, source, media_type, media_id, series_tracking.drop, "Media dropped")
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):

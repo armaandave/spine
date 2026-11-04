@@ -346,6 +346,7 @@ class AniListImporter:
                     notes=content["notes"] or "",
                 )
                 instance._history_date = updated_at
+                instance._anime_total = content["media"].get("episodes")
                 self.bulk_media[media_type].append(instance)
 
         instance = model(
@@ -359,6 +360,7 @@ class AniListImporter:
             notes=content["notes"] or "",
         )
         instance._history_date = updated_at
+        instance._anime_total = content["media"].get("episodes")
 
         self.bulk_media[media_type].append(instance)
 

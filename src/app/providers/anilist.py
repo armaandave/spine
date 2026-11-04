@@ -74,6 +74,33 @@ query ($malIds: [Int]) {
 }
 """
 
+ANIME_EPISODES_QUERY = """
+query ($malIds: [Int], $page: Int) {
+  Page(page: $page, perPage: 25) {
+    pageInfo {
+      hasNextPage
+    }
+    media(idMal_in: $malIds, type: ANIME) {
+      idMal
+      nextAiringEpisode {
+        episode
+        airingAt
+      }
+      airingSchedule(notYetAired: true, perPage: 50) {
+        nodes {
+          episode
+          airingAt
+        }
+      }
+      streamingEpisodes {
+        title
+        thumbnail
+      }
+    }
+  }
+}
+"""
+
 STUDIO_ANIME_QUERY = """
 query (
   $studioId: Int!
@@ -711,6 +738,73 @@ def anime_series_nodes(mal_ids, *, timeout=REQUEST_TIMEOUT):
                     "series_links": _series_links(node),
                 }
     return results
+
+
+def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
+    """Return what AniList says about MAL anime IDs' episodes, by MAL ID as text.
+
+    One request per 25 titles, never one per episode. Each value is {"next": {"episode",
+    "airing_at"} or None, "schedule": {episode: airing Unix seconds}, "episodes":
+    {episode: {"title", "image"}}}. A title AniList doesn't have is left out.
+    """
+    ids = sorted({int(value) for value in mal_ids if str(value).isdigit()})
+    results = {}
+    for offset in range(0, len(ids), 25):
+        chunk = ids[offset : offset + 25]
+        page = 1
+        while True:
+            response = services.api_request(
+                "ANILIST",
+                "POST",
+                API_URL,
+                params={
+                    "query": ANIME_EPISODES_QUERY,
+                    "variables": {"malIds": chunk, "page": page},
+                },
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                timeout=timeout or REQUEST_TIMEOUT,
+                retry_rate_limits=retry_rate_limits,
+            )
+            connection = (response.get("data") or {}).get("Page") or {}
+            for media in connection.get("media") or []:
+                if media.get("idMal"):
+                    results[str(media["idMal"])] = _anime_episodes(media)
+            if not (connection.get("pageInfo") or {}).get("hasNextPage"):
+                break
+            page += 1
+    return results
+
+
+def _anime_episodes(media):
+    next_airing = media.get("nextAiringEpisode") or {}
+    schedule = {
+        node["episode"]: node["airingAt"]
+        for node in (media.get("airingSchedule") or {}).get("nodes") or []
+        if node.get("episode") and node.get("airingAt")
+    }
+    episodes = {}
+    for streaming in media.get("streamingEpisodes") or []:
+        number, title = parse_episode_title(streaming.get("title"))
+        # Order isn't guaranteed, and a title can come once per streaming site.
+        if number is not None and number not in episodes:
+            episodes[number] = {"title": title, "image": streaming.get("thumbnail") or None}
+    return {
+        "next": (
+            {"episode": next_airing["episode"], "airing_at": next_airing.get("airingAt")}
+            if next_airing.get("episode")
+            else None
+        ),
+        "schedule": schedule,
+        "episodes": episodes,
+    }
+
+
+def parse_episode_title(value):
+    """Return (episode number, title) from AniList's "Episode 5 - Title", or (None, "")."""
+    match = re.match(r"^\s*(?:episode|ep\.?)\s*(\d+)\b[\s\-–—:.]*(.*)$", str(value or ""), re.IGNORECASE)
+    if match is None:
+        return None, ""
+    return int(match.group(1)), match.group(2).strip()
 
 
 def studio_anime_ids(

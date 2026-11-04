@@ -7,10 +7,13 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   undated completion once in All Time.
 - TV: viewings in the range (dated ones; every one, fills included, in All Time), each
   the episode's runtime, else its season's, else its show's.
-- Anime, manga and comics: in a dated range, positive progress changes between
-  consecutive history rows of one tracking row, dated by ``history_date`` on the
-  owner's calendar; the row that created the tracking row is never a change. In All
-  Time, ``progress`` over every tracking row. Anime multiplies by its runtime.
+- Anime: as TV, each viewing the title's runtime (AN-704). A tick counts on its day and
+  a log's fills on the log's day; a mark's fills count only in All Time. All Time adds
+  a stored progress number with no viewings.
+- Manga and comics: in a dated range, positive progress changes between consecutive
+  history rows of one tracking row, dated by ``history_date`` on the owner's calendar;
+  the row that created the tracking row is never a change. In All Time, ``progress``
+  over every tracking row.
 - Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
   Steam's imported lifetime playtime is never read (GM-500).
 - Books: pages over visible book logs (the completion snapshot's pages, else the
@@ -30,6 +33,7 @@ from django.apps import apps
 from django.db.models import (
     Case,
     Count,
+    Exists,
     ExpressionWrapper,
     F,
     IntegerField,
@@ -44,7 +48,7 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce, NullIf
 
 from app import exposure
-from app.models import Book, Game, GameSession, Item, MediaTypes
+from app.models import Anime, AnimeViewing, Book, Game, GameSession, Item, MediaTypes
 
 MINUTES = "minutes"
 UNITS = {
@@ -59,7 +63,7 @@ UNITS = {
 }
 # Types counted in minutes, which add up to the total hours (STAT-202).
 HOURS_TYPES = tuple(media_type for media_type, unit in UNITS.items() if unit == MINUTES)
-PROGRESS_TYPES = (MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value)
+PROGRESS_TYPES = (MediaTypes.MANGA.value, MediaTypes.COMIC.value)
 LOG_RUNTIME_TYPES = (MediaTypes.MOVIE.value, MediaTypes.MUSIC.value)
 
 _CACHE_KEY = "_stats_time_cache"
@@ -155,8 +159,39 @@ def _tv_runtime(scope, media_type):
     return result
 
 
+def _anime_runtime(scope, media_type):
+    """Count anime viewings: each the title's runtime (AN-704).
+
+    All Time adds a stored progress number with no viewings, which counts as it always
+    did, and only there.
+    """
+    result = TypeTime(media_type)
+    totals = scope.anime_viewings.annotate(stats_runtime=_positive("anime__item__runtime_minutes")).aggregate(
+        value=Sum("stats_runtime"),
+        known=Count("stats_runtime"),
+        total=Count("id"),
+    )
+    _add(result, totals)
+    result.progress = totals["total"] or 0
+    if scope.is_all_time:
+        stored = (
+            Anime.objects.filter(user=scope.owner, progress__gt=0)
+            .exclude(Exists(AnimeViewing.objects.filter(anime=OuterRef("pk"))))
+            .annotate(stats_count=F("progress"), stats_runtime=_positive("item__runtime_minutes"))
+            .aggregate(
+                episodes=Sum("stats_count"),
+                value=Sum(ExpressionWrapper(F("stats_count") * F("stats_runtime"), output_field=IntegerField())),
+                known=Count("id", filter=Q(stats_runtime__isnull=False)),
+                total=Count("id"),
+            )
+        )
+        result.progress += stored["episodes"] or 0
+        _add(result, stored)
+    return result
+
+
 def _progress(scope, media_type):
-    """Count anime, manga and comics: progress changes, or all progress in All Time."""
+    """Count manga and comics: progress changes, or all progress in All Time."""
     result = TypeTime(media_type)
     model = apps.get_model("app", media_type)
     counts_minutes = media_type == MediaTypes.ANIME.value
@@ -271,7 +306,7 @@ _COUNTERS = {
     MediaTypes.MOVIE.value: _log_runtime,
     MediaTypes.MUSIC.value: _log_runtime,
     MediaTypes.TV.value: _tv_runtime,
-    MediaTypes.ANIME.value: _progress,
+    MediaTypes.ANIME.value: _anime_runtime,
     MediaTypes.MANGA.value: _progress,
     MediaTypes.COMIC.value: _progress,
     MediaTypes.GAME.value: _game_minutes,

@@ -15,7 +15,7 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 
 import app
 from api.services.item_metadata import is_metadata_current, store_item_metadata
-from app import series_tracking, single_weight, tv_tracking
+from app import anime_tracking, series_tracking, single_weight, tv_tracking
 from app.models import MediaTypes
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,11 @@ def cleanup_existing_media(to_delete, user):
         if series_tracking.supports(media_type):
             for source, media_ids in sources.items():
                 series_tracking.clear_for_import(user, media_type, source, media_ids)
+            continue
+
+        if anime_tracking.supports(media_type):
+            for source, media_ids in sources.items():
+                anime_tracking.clear_for_import(user, source, media_ids)
             continue
 
         for source, media_ids in sources.items():
@@ -251,10 +256,12 @@ def bulk_create_media(bulk_media_list, user, *, source=""):
 
 
 def imported_counts(bulk_media_list):
-    """Count what an import brought in: a series once, however many reads it has (MC-400)."""
+    """Count what an import brought in: a title once, however many reads it has (MC-400, AN-800)."""
     return {
         media_type: (
-            len({row.item_id for row in rows}) if series_tracking.supports(media_type) else len(rows)
+            len({row.item_id for row in rows})
+            if series_tracking.supports(media_type) or anime_tracking.supports(media_type)
+            else len(rows)
         )
         for media_type, rows in bulk_media_list.items()
     }
@@ -280,6 +287,10 @@ def _bulk_create_media(bulk_media_list, user, source=""):
 
         if series_tracking.supports(media_type):
             _import_series_rows(bulk_media, user, source)
+            continue
+
+        if anime_tracking.supports(media_type):
+            _import_anime_rows(bulk_media, user)
             continue
 
         # Update references for seasons and episodes
@@ -386,6 +397,30 @@ def _import_series_rows(rows, user, source):
             import_source=source,
             import_source_id=getattr(current, "_import_source_id", ""),
             tags=getattr(current, "_import_tags", None),
+        )
+
+
+def _import_anime_rows(rows, user):
+    """Keep one tracking record per title: a title's earlier rows are earlier passes (AN-800)."""
+    rows_by_item = defaultdict(list)
+    for row in rows:
+        rows_by_item[row.item_id].append(row)
+    for item_rows in rows_by_item.values():
+        # Old Yamtrack exports list a title's newest row first. Rows with no date stay
+        # in file order, ahead of those with one.
+        item_rows.sort(
+            key=lambda row: getattr(row, "_history_date", None) or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        )
+        *earlier, current = item_rows
+        anime_tracking.import_title(
+            user,
+            current.item,
+            status=current.status,
+            count=current.progress,
+            score=current.score,
+            notes=current.notes,
+            earlier=[{"count": row.progress} for row in earlier if row.status == app.models.Status.COMPLETED.value],
+            total=next((getattr(row, "_anime_total", None) for row in item_rows if getattr(row, "_anime_total", None)), None),
         )
 
 

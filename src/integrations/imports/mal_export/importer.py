@@ -14,7 +14,7 @@ from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import series_tracking, single_weight
+from app import anime_tracking, series_tracking, single_weight
 from app.models import (
     Anime,
     DiaryEntry,
@@ -211,8 +211,7 @@ class MALExportImporter:
                     Tag.objects.filter(id=tag_id).update(
                         usage_count=Greatest(F("usage_count") - count, 0),
                     )
-                if media_type == MediaTypes.MANGA.value:
-                    series_tracking.forget_progress(self.user, chunk)
+                series_tracking.forget_progress(self.user, chunk)
 
     def _ensure_items(self, entries, items, metadata):
         for entry in entries:
@@ -262,6 +261,11 @@ class MALExportImporter:
                 store_series_total(items[key], {"max_progress": total})
                 row._import_tags = entry.tags  # noqa: SLF001
                 row._import_source_id = f"{entry.media_type}:{entry.media_id}:finish"  # noqa: SLF001
+                bulk_media[entry.media_type].extend(_earlier_reads(entry, model, items[key], self.user, total))
+            else:
+                # Each rewatch is a finished earlier pass (AN-800), as a reread is for a
+                # manga. The log below dates what the current one fills.
+                row._anime_total = total or None  # noqa: SLF001
                 bulk_media[entry.media_type].extend(_earlier_reads(entry, model, items[key], self.user, total))
             bulk_media[entry.media_type].append(row)
             self.counts[entry.media_type] += 1
@@ -365,7 +369,7 @@ def backfill_metadata(item_ids, fetcher=fetch_mal_metadata):
 
 
 def _earlier_reads(entry, model, item, user, total):
-    """Return a manga's earlier finished reads, each another row for one record (MC-400).
+    """Return a title's earlier finished reads or passes, one row each (MC-400, AN-800).
 
     A reader on a reread has finished at least once, on the finish date the file gives.
     """

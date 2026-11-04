@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from app import anime_tracking
 from app.models import MediaTypes, Sources
 from app.providers import services
 from events.models import Event
@@ -66,6 +67,20 @@ def process_anime_bulk(items, events_bulk):
                 item.media_id,
             )
             process_other(item, events_bulk)
+
+    refresh_tracking(items)
+
+
+def refresh_tracking(items):
+    """Refresh these titles' stored rows and work out every user's row (AN-202).
+
+    This is how a new episode or a raised total reopens a title. Never raises: the events
+    still update when a provider or a row fails.
+    """
+    try:
+        anime_tracking.refresh_after_calendar(items)
+    except Exception:
+        logger.exception("Could not refresh anime tracking")
 
 
 def _collect_airing_schedule_pages(query, url, media_ids, page):

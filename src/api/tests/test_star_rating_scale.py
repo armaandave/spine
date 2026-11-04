@@ -15,7 +15,9 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.tests.test_tv_tracking_api import TVAPITestCase
+from app import anime_tracking
 from app.models import Anime, DiaryEntry, Item, MediaTypes, Movie, Sources, Status
+from app.tests.anime_fixtures import FakeAnimeProvider, make_item
 
 
 class TVStarScaleTests(TVAPITestCase):
@@ -28,7 +30,7 @@ class TVStarScaleTests(TVAPITestCase):
 
     def test_rate_action_takes_and_returns_stars(self):
         show = self.make_show()
-        self.tick(show, 1, 1)
+        self.action(show, "mark_watched")
 
         rated = self.action(show, "rate", client=self.stars, rating=4.5)
         season = self.action(show, "rate", client=self.stars, season_number=1, rating="3.5")
@@ -54,7 +56,7 @@ class TVStarScaleTests(TVAPITestCase):
 
     def test_installed_builds_keep_the_0_to_10_scale(self):
         show = self.make_show()
-        self.tick(show, 1, 1)
+        self.action(show, "mark_watched")
 
         rated = self.action(show, "rate", rating=9)
 
@@ -124,27 +126,28 @@ class TVStarScaleTests(TVAPITestCase):
         return response.data["user_state"]
 
 
-@patch("app.models.providers.services.get_media_metadata", return_value={"max_progress": None})
 class AnimeStarScaleTests(TestCase):
-    """Anime (and so manga and comics) through the generic tracking and diary writes."""
+    """Anime through the generic tracking and diary writes, on the stars it now takes."""
 
     def setUp(self):
         cache.clear()
+        fake = FakeAnimeProvider().__enter__()
+        self.addCleanup(fake.__exit__, None, None, None)
+        patcher = patch("app.models.Item.fetch_releases")
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.user = get_user_model().objects.create_user(username="stars", password="strong-password-123")
-        self.item = Item.objects.create(
-            source=Sources.MAL.value,
-            media_type=MediaTypes.ANIME.value,
-            media_id="1",
-            title="Anime",
-        )
-        self.anime = Anime.objects.create(user=self.user, item=self.item, status=Status.IN_PROGRESS.value)
+        title = fake.add(media_id="1", title="Anime", total=2)
+        self.item = make_item(fake, title=title)
+        anime_tracking.mark_watched(self.user, self.item)
+        self.anime = Anime.objects.get(user=self.user, item=self.item)
         self.stars = APIClient()
         self.stars.force_authenticate(self.user)
         self.stars.credentials(HTTP_X_SPINE_RATING_SCALE="stars")
         self.legacy = APIClient()
         self.legacy.force_authenticate(self.user)
 
-    def test_tracking_takes_and_returns_stars(self, _metadata):
+    def test_tracking_takes_and_returns_stars(self):
         response = self.stars.patch("/api/v1/tracking/mal/anime/1/", {"rating": "4.5"}, format="json")
         bad = self.stars.patch("/api/v1/tracking/mal/anime/1/", {"rating": "9"}, format="json")
 
@@ -154,18 +157,23 @@ class AnimeStarScaleTests(TestCase):
         self.assertEqual(self.anime.score, Decimal("9.0"))
         self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_installed_builds_keep_the_0_to_10_scale(self, _metadata):
-        response = self.legacy.patch("/api/v1/tracking/mal/anime/1/", {"rating": "7.5"}, format="json")
+    def test_installed_builds_keep_the_0_to_10_scale(self):
+        response = self.legacy.patch("/api/v1/tracking/mal/anime/1/", {"rating": "7"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertEqual(response.data["rating"], "7.5")
+        self.assertEqual(response.data["rating"], "7.0")
         self.anime.refresh_from_db()
-        self.assertEqual(self.anime.score, Decimal("7.5"))
+        self.assertEqual(self.anime.score, Decimal("7.0"))
         stars = self.stars.get("/api/v1/tracking/mal/anime/1/")
-        self.assertEqual(stars.data["rating"], "3.75")
+        self.assertEqual(stars.data["rating"], "3.5")
 
-    @patch("api.services.diary.provider_services.get_media_metadata", return_value={"title": "Anime"})
-    def test_logs_take_and_return_stars(self, _diary_metadata, _metadata):
+    def test_an_000_a_new_write_off_the_half_star_grid_is_refused(self):
+        """TV-504, as AN-000 inherits it: only the ten values from the app and the API."""
+        response = self.legacy.patch("/api/v1/tracking/mal/anime/1/", {"rating": "7.5"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_logs_take_and_return_stars(self):
         ref = {"source": Sources.MAL.value, "media_type": MediaTypes.ANIME.value, "media_id": "1"}
 
         created = self.stars.post("/api/v1/diary/", {"ref": ref, "rating": "4"}, format="json")

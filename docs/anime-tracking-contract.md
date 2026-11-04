@@ -105,7 +105,7 @@ An episode counts as aired when any of these holds:
 - AniList's schedule says its time has passed;
 - AniList names a later episode as next to air;
 - the user has a viewing of it; or
-- the title has a total and AniList has no schedule for it, as with an older title, and then every listed episode counts as aired.
+- the title has a total, AniList has no schedule for it, as with an older title, and MAL doesn't list it as not yet aired; then every listed episode counts as aired.
 
 Spine keeps a stored copy of the title's total, aired count, next episode and rows, updated whenever it fetches them, and uses that copy when a provider can't be reached.
 A write that needs a title Spine has no copy of is refused with a retryable "Anime details are unavailable right now", and changes nothing.

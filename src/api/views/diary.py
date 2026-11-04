@@ -13,7 +13,7 @@ from api.services import filters as filter_service
 from api.services import stats as stats_service
 from api.services import tracking as tracking_service
 from api.services.social import set_like
-from app import exposure, tv_tracking
+from app import anime_tracking, exposure, tv_tracking
 from app.curation import curated_prefetches
 from app.models import CustomBackdropPreference, CustomPosterPreference, DiaryEntry
 from app.services import delete_diary_entry
@@ -132,12 +132,15 @@ class DiaryListView(APIView):
             exposure.require_media_type(ref["media_type"])
         entry = diary_service.create_entry(request.user, serializer.validated_data)
         tv_write = getattr(entry, "tv_write", None)
+        anime_write = getattr(entry, "anime_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
         payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
         if tv_write is not None:
             # A TV log's response adds the show's state, the log target's season and
             # episode, and what the log finished or left unwatched (plan 2.3.7).
             payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=True))
+        if anime_write is not None:
+            payload.update(diary_service.anime_write_payload(anime_write, created=True))
         return Response(payload, status=status.HTTP_201_CREATED)
 
 
@@ -171,10 +174,13 @@ class DiaryDetailView(APIView):
             exposure.require_media_type(ref["media_type"])
         entry = diary_service.update_entry(entry, serializer.validated_data)
         tv_write = getattr(entry, "tv_write", None)
+        anime_write = getattr(entry, "anime_write", None)
         entry = DiaryEntry.objects.select_related("item", "user").prefetch_related("tags").get(id=entry.id)
         payload = diary_service.diary_payload(entry, request=request, viewer=request.user, include_tv_log=True)
         if tv_write is not None:
             payload.update(diary_service.tv_write_payload(tv_write, serializer.validated_data, created=False))
+        if anime_write is not None:
+            payload.update(diary_service.anime_write_payload(anime_write, created=False))
         return Response(payload)
 
     def delete(self, request, entry_id):
@@ -193,6 +199,21 @@ class DiaryDetailView(APIView):
                 ),
                 mutation_id=request.query_params.get("mutation_id") or None,
                 entry_point=tv_tracking.APP,
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if anime_tracking.supports(entry.item):
+            # AN-400: only the log's own fills go; a stale version that would unmark
+            # episodes is a 409, as for TV.
+            tracking_service._call_tv(
+                anime_tracking.delete_log,
+                request.user,
+                entry,
+                expected_version=tracking_service.int_param(
+                    request.query_params.get("expected_version"),
+                    "expected_version",
+                ),
+                mutation_id=request.query_params.get("mutation_id") or None,
+                entry_point=anime_tracking.APP,
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
         delete_diary_entry(request.user, entry)

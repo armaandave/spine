@@ -55,7 +55,15 @@ from api.services.filters import (
     person_rating_source,
 )
 from api.services.item_metadata import _persist_detail_series, store_item_metadata
-from app import config, music_catalog, single_weight, tv_listing, tv_tracking
+from app import (
+    anime_listing,
+    anime_tracking,
+    config,
+    music_catalog,
+    single_weight,
+    tv_listing,
+    tv_tracking,
+)
 from app.curation import (
     curated_image_url,
     is_curator,
@@ -1248,6 +1256,13 @@ def media_detail(  # noqa: C901, PLR0912, PLR0915
             summary["ref"]["item_id"] = item.id
             summary["user_state"] = user_state_for_item(user, item)
         summary["user_state"]["tv"] = tv_detail["state"]
+    anime_detail = _anime_detail(media_type, item, metadata=fetched_metadata, user=user)
+    if anime_detail is not None:
+        # The viewer's anime state and rows, whether or not they track the title.
+        if summary["user_state"] is None:
+            summary["ref"]["item_id"] = item.id
+            summary["user_state"] = user_state_for_item(user, item)
+        summary["user_state"]["anime"] = anime_detail["state"]
     from streaming import payloads as streaming_payloads
     from streaming import sync as streaming_sync
 
@@ -1381,6 +1396,7 @@ def media_detail(  # noqa: C901, PLR0912, PLR0915
         "seasons": seasons,
         "episodes": episodes,
         **_tv_unlisted_keys(media_type, tv_detail),
+        **({"anime_rows": anime_detail["rows"]} if anime_detail is not None else {}),
         "completion": completion,
         "custom_backdrop_url": custom_backdrop_url,
         "custom_poster_url": absolute_url(request, viewer_poster.custom_image_url) if viewer_poster else None,
@@ -1420,6 +1436,21 @@ def _tv_show_item_for(item, *, create):
     if show_item is None and create:
         show_item = tv_listing.show_item_for(item)
     return show_item
+
+
+def _anime_detail(media_type, item, *, metadata, user):
+    """Keep a title's stored copy current and return the viewer's state and rows.
+
+    Metadata fetched in this request updates the copy's numbers and next title (AN-100,
+    AN-500). The page never waits on AniList beyond a first open's one short try
+    (AN-101). No anime rule lives here.
+    """
+    if media_type != MediaTypes.ANIME.value or item is None:
+        return None
+    anime_listing.update_from_metadata(item, metadata)
+    if not (user and user.is_authenticated):
+        return None
+    return anime_tracking.page_payload(user, item)
 
 
 def _tv_listing(show_item):
