@@ -597,7 +597,7 @@ class StoredRowsTests(CheckpointBase):
         )
 
     def test_show_z_ticked_and_unticked(self):
-        """tickTVEpisode, then untickTVEpisode naming the viewing the episode's state names."""
+        """tickTVEpisode, then untickTVEpisode with the viewing the episode names."""
         show = seed.show_z()
         episode = {"season_number": 1, "episode_number": 1}
         self.step(self.post, "tv", "Z", "actions/tick/", {**episode, "mutation_id": str(uuid4())})

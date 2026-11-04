@@ -586,7 +586,7 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
         self.assertEqual(Book.objects.get(item=item).progress, 0)
 
     def test_a_stop_a_mark_then_to_read_holds_all_time_once(self):
-        """The mark holds the pages past the stop, so the file's row holds no place too."""
+        """The mark holds the pages past the stop, so the row holds no place too."""
         item = self.stopped_at_200("then-marked")
         self.do(book_tracking.mark_read, item, d(2026, 2, 4))
         self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
@@ -648,7 +648,7 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
 
 
 class AnEyeOverALogWithNoJourneyTests(BookImportBase):
-    """The eye over any log adds nothing (BK-103): your own file leaves logs with no journey."""
+    """The eye over any log adds nothing (BK-103), with a journey or without one."""
 
     def logged_with_no_journey(self):
         self.finish(self.item_row, d(2025, 3, 1))
@@ -692,7 +692,7 @@ class ALogDeletedThenYourOwnFileTests(BookImportBase):
         self.assertFalse(Book.objects.get(item=self.item_row).completed_manually)
 
     def test_an_eye_that_leaned_on_the_log_becomes_the_mark(self):
-        """A log, To Read, the eye: the eye said Read, and a log's delete takes back only its own."""
+        """A log, To Read, the eye: a log's delete takes back only what's its own."""
         _, entry = self.finish(self.item_row, d(2025, 3, 1))
         self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
         self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
@@ -728,7 +728,7 @@ class ALogDeletedThenYourOwnFileTests(BookImportBase):
 
 
 class AMarkOverAPlaceTests(BookImportBase):
-    """A mark moves All Time only by the pile: the eye, a heart or stars never wipe a place."""
+    """A mark moves All Time only by the pile: nothing that marks wipes a place."""
 
     def place_and_a_files_log(self, status=Status.IN_PROGRESS.value):
         Book.objects.create(user=self.owner, item=self.item_row, status=status, progress=120)

@@ -252,8 +252,8 @@ def seed():
     """Write the sheet's opening state: 830, 360 and 1,540.
 
     It rewrites every account's timezone and makes users, so it refuses anywhere but the
-    test backend's SQLite copy. The image holds this module, and CI's Database checks run
-    this suite on Postgres.
+    test backend's SQLite copy. The image holds this module, and CI's Database checks
+    run this suite on Postgres.
     """
     if connection.vendor != "sqlite" and not settings.TESTING:
         msg = f"The checkpoint seed runs only on the test backend's SQLite copy, not {connection.vendor}."
@@ -368,7 +368,7 @@ def friend_starts_over():
 
 
 def print_rows():
-    """Print every row the sheet's last row stored, and say so of any not saved today."""
+    """Print every row the sheet's last row stored, and flag any not saved today."""
     names = [media_id(name) for name in STORED_TITLES]
     rows = ProgressChange.objects.filter(actor=dev_user(), item__media_id__in=names).select_related("item").order_by("id")
     today = timezone.now().astimezone(ZoneInfo(NEW_YORK)).date()

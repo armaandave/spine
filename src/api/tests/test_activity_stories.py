@@ -210,7 +210,7 @@ class MarkMatrixTests(BookCalcBase):
         self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
 
     def test_the_web_form_moving_an_old_mark_on_doubles_nothing(self):
-        """A mark from before the book contract holds its length, and the form posts it back."""
+        """A mark from before the contract holds its length, and the form posts it."""
         item = self.book("web-old-mark", pages=self.PAGES)
         Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, completed_manually=True, progress=self.PAGES)
         before, value = self.snapshot(), self.all_time()

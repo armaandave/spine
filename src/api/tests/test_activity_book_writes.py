@@ -173,7 +173,7 @@ class LogAgainTests(BookCalcBase):
         self.assert_numbers(300, 300, 600)
 
     def test_a_log_naming_a_finished_journey_finishes_the_reread_under_way(self):
-        """A stale page sends the old id, and this stranded the reread where nothing could reach it."""
+        """A stale page sends the old id, which stranded the reread out of reach."""
         item = self.book("stale-page")
         self.complete(item, d(2025, 6, 1))
         finished = BookSession.objects.get(related_book__item=item).pk

@@ -437,7 +437,7 @@ class RealOverwriteTests(LikesBase, BookImportBase):
 
 
 class EditDatesThenDeleteTests(LikesBase):
-    """Edit Dates moves a start row's day, but its post stays where the like was (5.8)."""
+    """Edit Dates moves a start row's day, and its post stays where the like was."""
 
     def test_a_book_starts_at_nothing_on_a_new_save_that_day(self):
         item = self.book("edited")
@@ -486,7 +486,7 @@ class EditDatesThenDeleteTests(LikesBase):
 
 
 class ATitleRemovedThenTrackedAgainTests(LikesBase):
-    """Removing a title through the phone's own request, and tracking it again that day."""
+    """Removing a title through the phone's request, then tracking it again that day."""
 
     def test_an_anime_starts_at_nothing(self):
         item = Item.objects.create(

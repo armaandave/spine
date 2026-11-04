@@ -151,7 +151,7 @@ class BumpTests(BookCalcBase):
 
 @override_settings(TIME_ZONE=NEW_YORK, CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
 class SeriesEditDatesTests(BookCalcBase):
-    """A series' attempts aren't in OWNERS, so moving a start row has to bump by itself."""
+    """A series' attempts aren't in OWNERS, so moving a start row bumps by itself."""
 
     def setUp(self):
         super().setUp()

@@ -410,13 +410,13 @@ def _opening(session, saves, length, *, finished):
 
 
 def _first_move_picks_up(saves):
-    """Return whether a journey opened by picking up: the row right after its start says.
+    """Return whether a journey opened by picking up: the row after its start says.
 
     It picked up what it no longer sits beside: a place with no journey, or a stopped
     attempt since deleted. A pick-up any later resumes a pause from before status rows
     were recorded, and its start stays a start.
     """
-    if len(saves) < 2 or saves[0].current_progress.get("kind") != ProgressChange.START:  # noqa: PLR2004
+    if len(saves) < 2 or saves[0].current_progress.get("kind") != ProgressChange.START:
         return False
     following = saves[1].current_progress
     return following.get("kind") == ProgressChange.STATUS and following.get("move") == ProgressChange.PICKED_BACK_UP
@@ -448,8 +448,8 @@ def _walk_journey(reading, session, saves, length, zone, *, continues, finished)
 def marked_between(prior, later, marked_at):
     """Return whether a mark went on after one journey began and before a later one did.
 
-    A mark closes the read before it, whatever status moves follow: decision 21 says they
-    change no number, so To Read in between can't turn a reread into carrying on.
+    A mark closes the read before it, whatever status moves follow: they change no
+    number (decision 21), so To Read in between can't turn a reread into carrying on.
     """
     return bool(marked_at and prior.created_at <= marked_at < later.created_at)
 
@@ -514,8 +514,8 @@ def _walk_journeys(title, sessions, saves, total, zone, marked_at):
 def marked_moments(model, tracking_ids):
     """Return when each title's mark last went on, by its history rows in save order.
 
-    One query however many titles ask, because every Stats miss walks them all. A title is
-    left out when no row says so: migration 0075 and the undated Reads step write none.
+    One query however many titles ask, because every Stats miss walks them all. A title
+    is left out when no row says so: migration 0075 and the undated Reads step write none.
     """
     moments = {}
     marked = {}

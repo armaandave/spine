@@ -528,7 +528,7 @@ class PickUpRowTests(BookCalcBase):
         self.assertTrue(self.row_on(item, d(2026, 1, 1)).started)
 
     def test_a_journey_paused_before_status_rows_keeps_its_start(self):
-        """Its pause wrote no row, so resuming writes a pick-up as its first status row."""
+        """Its pause wrote no row, so resuming writes a pick-up as its first move."""
         item = self.book("paused-before-rows")
         self.begin(item, d(2026, 10, 28))
         self.save(item, 100, d(2026, 10, 29))
@@ -1003,10 +1003,10 @@ class PileTests(BookCalcBase):
 
 
 class AReadRowTests(BookCalcBase):
-    """A Read's progress is its length, not a place: with no log or mark it counts nowhere."""
+    """A Read's progress is its length, not a place: alone it counts nowhere."""
 
     def read_row(self, name="read-row", end_date=None):
-        """Return a Read as old Yamtrack rows left it: its length and nothing behind it."""
+        """Return a Read as old Yamtrack rows left it: its length, nothing behind it."""
         item = self.book(name)
         Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400, end_date=end_date)
         return item
@@ -1043,7 +1043,7 @@ class AReadRowTests(BookCalcBase):
 
 
 class ALogWithNoJourneyDeletedTests(BookCalcBase):
-    """Your own file and old rows leave logs with no journey: the read goes with its log."""
+    """Your own file and old rows leave these: the read goes with its log."""
 
     def logged(self, name="logged", **fields):
         item = self.book(name)
@@ -1156,7 +1156,7 @@ class StatusMovesAroundAMarkTests(BookCalcBase):
 
 
 class AMarkBetweenTwoReadsTests(BookCalcBase):
-    """A mark closes the read before it, and To Read after it changes nothing (decision 21)."""
+    """A mark closes the read before it, and To Read after changes nothing (21)."""
 
     def marked_after_a_stop(self, name):
         item = self.book(name, pages=100)
@@ -1205,8 +1205,8 @@ class AMarkBetweenTwoReadsTests(BookCalcBase):
         self.assert_numbers(0, 130, 200)
         self.assertEqual(self.pile(), 70)
 
-    def test_a_read_begun_before_the_mark_with_no_row_of_its_own_reads_it_too(self):
-        """A journey picked up across a mark before this rule: it opened at its place."""
+    def test_a_read_from_before_this_rule_reads_the_same(self):
+        """Picked up across a mark before this ship: no flag, and it held no place."""
         item = self.marked_after_a_stop("old-shape")
         self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
         self.begin(item, d(2026, 3, 1))

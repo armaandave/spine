@@ -112,8 +112,8 @@ def _days_held(change):
     """Return the days a post on this row can sit on.
 
     Edit Dates moves a start row's day and its post stays on the old one, which only the
-    moment still says. Only a start row's day can move, and drop_empty_posts deletes only a
-    post with no row left, so this stays a check and not a sweep.
+    moment still says. Only a start row's day can move, and drop_empty_posts deletes only
+    a post with no row left, so this stays a check and not a sweep.
     """
     held = {_saved_day(change)}
     if change.current_progress.get("kind") == ProgressChange.START:
