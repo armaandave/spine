@@ -2,26 +2,42 @@
 
 Goodreads and StoryGraph import a Read with no date as a Completed book with no log and
 no mark, which no number counts. On every account, each such book gets what the eye writes,
-directly, because mark_read returns at once on a Completed book. All Time rises and no
-year moves.
+history row included, through book_tracking.mark_imported_read, because mark_read returns
+at once on a Completed book. All Time rises and no year moves.
 
 It also prints the rest of the plan's count 10 and writes none of it: Reads with a date and
 no log, which count nowhere or only in All Time, and marks holding a date.
 
 A dry run by default. With --apply it changes rows, and it's idempotent. Counts go to
-standard error. With --apply each old value goes to standard output as a JSON line, so the
-host wrapper can keep them outside the container (scripts/activity-steps-production.sh).
+standard error. With --apply each row's old values, all that writing the mark changes, go to
+standard output as a JSON line, so the host wrapper can keep them outside the container
+(scripts/activity-steps-production.sh).
 """
 
 import json
 from collections import Counter
 
 from django.core.management.base import BaseCommand
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
 from api.services import stats_cache
+from app import book_tracking
 from app.models import Book, DiaryEntry, Game, Status
+
+# What writing the mark changes on one of these rows: its status, session and override
+# are already what the mark leaves.
+OLD_VALUES = (
+    "completed_manually",
+    "progress",
+    "start_date",
+    "end_date",
+    "undated_read_previous_tracked",
+    "undated_read_previous_status",
+    "undated_read_previous_session_id",
+    "undated_read_previous_override",
+)
 
 
 def undated_reads():
@@ -68,10 +84,12 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        books = list(undated_reads().select_related("item"))
+        reads = undated_reads().select_related("item")
+        books = list(reads.select_for_update(of=("self",)) if options["apply"] else reads)
         if options["apply"]:
             for book in books:
-                self.stdout.write(json.dumps({"book": book.pk, "completed_manually": False}))
+                old = {name: getattr(book, name) for name in OLD_VALUES}
+                self.stdout.write(json.dumps({"book": book.pk, **old}, cls=DjangoJSONEncoder))
         self.stderr.write(f"undated reads: {len(books)}, {_sources_and_pages(books)}")
         # The rest of count 10, for Armaan to see. No step writes any of it.
         dated = list(dated_reads().select_related("item"))
@@ -81,13 +99,7 @@ class Command(BaseCommand):
         if not options["apply"]:
             self.stderr.write("dry run: nothing changed")
             return
-        # The importer made the row, so undoing it keeps the row, at To Read.
-        Book.objects.filter(pk__in=[book.pk for book in books]).update(
-            completed_manually=True,
-            undated_read_previous_tracked=True,
-            undated_read_previous_status=None,
-            undated_read_previous_session=None,
-            undated_read_previous_override=False,
-        )
+        for book in books:
+            book_tracking.mark_imported_read(book)
         for user_id in {book.user_id for book in books}:
             stats_cache.bump_user(user_id)

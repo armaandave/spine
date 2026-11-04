@@ -592,6 +592,25 @@ def mark_read(user, item):
         book.undated_read_previous_status = None if created else book.status
         book.undated_read_previous_session = None if created else book.current_session
         book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book)
+    return book
+
+
+def mark_imported_read(book):
+    """Give an undated imported Read what the eye writes (one-time step, decision 49).
+
+    mark_read returns at once on a Completed book. The importer made the row, so turning
+    the eye off keeps it, at To Read.
+    """
+    book.completed_manually = True
+    book.undated_read_previous_tracked = True
+    book.undated_read_previous_status = Status.PLANNING.value
+    book.undated_read_previous_session = None
+    book.undated_read_previous_override = _deactivate_override(book)
+    _save_marked(book)
+
+
+def _save_marked(book):
     book.status = Status.COMPLETED.value
     book.current_session = None
     book.progress = 0
@@ -615,7 +634,6 @@ def mark_read(user, item):
             "end_date",
         ],
     )
-    return book
 
 
 def _restore_marker_state(book):
