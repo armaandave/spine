@@ -207,7 +207,7 @@ class KitsuImporter:
             repeats_count = 1
 
         if repeats_count >= 1:
-            for _ in range(attributes["reconsumeCount"]):
+            for _ in range(repeats_count):
                 instance = model(
                     item=item,
                     user=self.user,

@@ -527,6 +527,42 @@ class OtherImporterTests(ImportTestCase):
         row = self.row(self.item_of(title))
         self.assertEqual((row.pass_number, row.progress, str(row.score)), (3, 12, "8.0"))
 
+    def test_an_800_kitsu_reconsuming_with_no_count_has_a_finished_pass_before_it(self):
+        title = self.fake.add(total=12)
+        importer = kitsu.KitsuImporter("1", self.user, "new")
+        entry = {
+            "attributes": {
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "reconsumeCount": 0,
+                "reconsuming": True,
+                "ratingTwenty": None,
+                "progress": 3,
+                "startedAt": None,
+                "finishedAt": None,
+                "notes": None,
+                "status": "current",
+            },
+            "relationships": {"anime": {"data": {"id": "5"}}},
+        }
+        media = {
+            "attributes": {
+                "canonicalTitle": title.title,
+                "posterImage": {"medium": "https://example.com/p.jpg"},
+                "episodeCount": 12,
+                "startDate": "2013-04-07",
+                "episodeLength": 24,
+            },
+            "relationships": {"mappings": {"data": [{"id": "9"}]}},
+        }
+        mapping = {"attributes": {"externalSite": "myanimelist/anime", "externalId": title.media_id}}
+        importer._process_entry(entry, "anime", {"5": media}, {"9": mapping})  # noqa: SLF001
+        helpers.bulk_create_media(importer.bulk_media, self.user, source="kitsu")
+        item = self.item_of(title)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.pass_number), ("In progress", 3, 2))
+        self.assertIsNotNone(row.rewatch_started_at)
+        self.assertEqual(len(self.viewings(item)), 15)
+
     def test_an_800_simkl_is_one_record_with_undated_fills(self):
         title = self.fake.add(total=12)
         importer = simkl.SimklImporter.__new__(simkl.SimklImporter)
@@ -564,6 +600,33 @@ class OtherImporterTests(ImportTestCase):
         yamtrack.YamtrackImporter(file, self.user, "new").import_data()
         row = Anime.objects.get(user=self.user)
         self.assertEqual((row.pass_number, row.progress, row.status), (2, 3, "Completed"))
+
+    def test_an_800_a_later_yamtrack_row_with_no_stars_or_notes_keeps_the_newest_it_has(self):
+        title = self.fake.add(total=12)
+        Item.objects.create(source="mal", media_type="anime", media_id=title.media_id, title="T", image="https://example.com/p.jpg")
+        header = ",".join(("media_id", "source", "media_type", "title", "image", "season_number", "episode_number", "score", "progress", "status", "start_date", "end_date", "notes", "progressed_at"))
+        rows = [
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,,3,In progress,,,,2026-02-01T00:00:00+00:00",
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,9,12,Completed,,,A note,2026-01-01T00:00:00+00:00",
+        ]
+        file = io.BytesIO("\n".join([header, *rows]).encode())
+        yamtrack.YamtrackImporter(file, self.user, "new").import_data()
+        row = Anime.objects.get(user=self.user)
+        self.assertEqual((row.pass_number, row.progress, row.status), (2, 3, "In progress"))
+        self.assertEqual((str(row.score), row.notes), ("9.0", "A note"))
+
+    def test_an_800_a_later_yamtrack_rows_own_stars_and_notes_win(self):
+        title = self.fake.add(total=12)
+        Item.objects.create(source="mal", media_type="anime", media_id=title.media_id, title="T", image="https://example.com/p.jpg")
+        header = ",".join(("media_id", "source", "media_type", "title", "image", "season_number", "episode_number", "score", "progress", "status", "start_date", "end_date", "notes", "progressed_at"))
+        rows = [
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,7,3,In progress,,,Later,2026-02-01T00:00:00+00:00",
+            f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,9,12,Completed,,,A note,2026-01-01T00:00:00+00:00",
+        ]
+        file = io.BytesIO("\n".join([header, *rows]).encode())
+        yamtrack.YamtrackImporter(file, self.user, "new").import_data()
+        row = Anime.objects.get(user=self.user)
+        self.assertEqual((str(row.score), row.notes), ("7.0", "Later"))
 
     def _export(self, *entries, mode="new"):
         from integrations.tests.imports.test_mal_export import _xml
