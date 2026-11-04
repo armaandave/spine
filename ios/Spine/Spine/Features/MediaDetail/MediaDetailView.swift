@@ -2980,12 +2980,49 @@ private struct MediaDetailPageView: View {
     }
 
     /// Opens Log Show, Log Season or Log Episode with the server's defaults (TV-404), once the write queue has
-    /// settled so the defaults are current. `ratingSteps` are an episode's stars (TV-502).
-    private func openTVComposer(ratingSteps: Int? = nil) {
+    /// settled so the defaults are current. `ratingSteps` are an episode's stars (TV-502), or the stars given on a
+    /// partway show or season, and `liked` its heart (TV-304). Nothing changes until the log saves.
+    private func openTVComposer(ratingSteps: Int? = nil, liked: Bool? = nil) {
         if presentedSheet != nil { closeSheetForChoice() }
         presentAfterSettling {
-            present(MediaLogPresentation(ratingSteps: ratingSteps))
+            present(MediaLogPresentation(liked: liked, ratingSteps: ratingSteps))
         }
+    }
+
+    /// What stars and the heart do on this page now, as the server says (TV-303, TV-304). Nil where the page has no
+    /// such rule: an episode page, or another media type.
+    private func opinionAction(for detail: MediaDetail) -> OpinionAction? {
+        guard let viewer = viewModel.viewer else { return nil }
+        switch detail.ref.mediaType {
+        case "tv": return viewer.tv?.opinionAction
+        case "season": return viewer.tv?.season?.opinionAction
+        default: return nil
+        }
+    }
+
+    /// Stars or a heart: the log screen holding the value when the page is partway, otherwise the direct set. A write
+    /// still on its way can change which, so the answer waits for it (a first tick makes a show partway).
+    private func routeOpinion(
+        for detail: MediaDetail,
+        isGiving: Bool,
+        opensLog: @escaping () -> Void,
+        sets: @escaping () -> Void
+    ) {
+        let route = {
+            if opinionAction(for: detail)?.opensLog(isGiving: isGiving) == true { opensLog() } else { sets() }
+        }
+        guard viewModel.hasPendingWrites, opinionAction(for: detail) != nil else {
+            route()
+            return
+        }
+        Task {
+            if await viewModel.settled() { route() } else { restoreRatingPicker() }
+        }
+    }
+
+    /// The stars on screen go back to the confirmed value.
+    private func restoreRatingPicker() {
+        ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
     }
 
     /// The log composer closed: a TV log's question or season composer can follow now (TV-107, TV-403).
@@ -3143,16 +3180,24 @@ private struct MediaDetailPageView: View {
             openBookCompletion(for: detail, liked: true)
             return
         }
-        rollBackWatchIfFails(viewModel.toggleMediaLike(for: detail))
+        routeOpinion(for: detail, isGiving: isGiving) {
+            openTVComposer(liked: true)
+        } sets: {
+            rollBackWatchIfFails(viewModel.toggleMediaLike(for: detail))
+        }
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
         if detail.ref.isTVFamily, detail.ref.mediaType != "episode" {
-            // Show and season stars, with the season number on a season page (TV-504).
-            let write = viewModel.rateTV(steps: halfSteps)
-            Task {
-                if !(await write.value) {
-                    ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
+            routeOpinion(for: detail, isGiving: halfSteps > 0) {
+                // The stars on screen wait for the log: cancelling it leaves them as they were (TV-304).
+                restoreRatingPicker()
+                openTVComposer(ratingSteps: halfSteps)
+            } sets: {
+                // Show and season stars, with the season number on a season page (TV-504).
+                let write = viewModel.rateTV(steps: halfSteps)
+                Task {
+                    if !(await write.value) { restoreRatingPicker() }
                 }
             }
             return

@@ -33,15 +33,36 @@ nonisolated enum TVSeasonProgress: String, Codable, Hashable {
     }
 }
 
-/// The level of a log, a composer target, a rewatch or a finished write.
+/// The level of a log, a composer target, a rewatch or a finished write. `title` is an anime title (AN-400).
 nonisolated enum TVLevel: String, Codable, Hashable {
     case show
     case season
     case episode
+    case title
     case unknown
 
     init(from decoder: Decoder) throws {
         self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// What stars and a heart do at this level now, with no second request (`opinion_action`, TV-303, TV-304, AN-301).
+nonisolated enum OpinionAction: String, Codable, Hashable {
+    /// Not started: the set marks it watched at once.
+    case mark
+    /// Partway: the set opens that level's log screen holding the value, and nothing changes until it saves.
+    case log
+    /// Finished, caught up or nothing aired: the set only saves the value.
+    case save
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+
+    /// Whether giving stars or a heart opens the log screen. Taking them away is always only that.
+    func opensLog(isGiving: Bool) -> Bool {
+        isGiving && self == .log
     }
 }
 
@@ -192,6 +213,8 @@ nonisolated struct TVShowState: Codable, Hashable {
     var eye: TVEyeState?
     var availableActions: [String]
     var actionReasons: [String: String]
+    /// What stars and the heart do on the show page; `season.opinionAction` on a season page.
+    var opinionAction: OpinionAction?
     var composer: TVComposer?
     var season: TVSeasonState?
     var episode: TVEpisodeState?
@@ -199,7 +222,8 @@ nonisolated struct TVShowState: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case version, inLibrary, status, choice, selectedAction, started, finished, caughtUp, watchedCount, airedCount
         case upNext, nextAiring, premiere, rewatch, lastWatchedOn, removeCount, ratingSourceDiaryEntryId
-        case likeSourceDiaryEntryId, likeIsIndependent, eye, availableActions, actionReasons, composer, season, episode
+        case likeSourceDiaryEntryId, likeIsIndependent, eye, availableActions, actionReasons, opinionAction, composer
+        case season, episode
     }
 
     init(
@@ -225,6 +249,7 @@ nonisolated struct TVShowState: Codable, Hashable {
         eye: TVEyeState? = nil,
         availableActions: [String] = [],
         actionReasons: [String: String] = [:],
+        opinionAction: OpinionAction? = nil,
         composer: TVComposer? = nil,
         season: TVSeasonState? = nil,
         episode: TVEpisodeState? = nil
@@ -251,6 +276,7 @@ nonisolated struct TVShowState: Codable, Hashable {
         self.eye = eye
         self.availableActions = availableActions
         self.actionReasons = actionReasons
+        self.opinionAction = opinionAction
         self.composer = composer
         self.season = season
         self.episode = episode
@@ -280,6 +306,7 @@ nonisolated struct TVShowState: Codable, Hashable {
         eye = try c.decodeIfPresent(TVEyeState.self, forKey: .eye)
         availableActions = try c.decodeIfPresent([String].self, forKey: .availableActions) ?? []
         actionReasons = try TVActionReasons.decode(from: c, forKey: .actionReasons)
+        opinionAction = try c.decodeIfPresent(OpinionAction.self, forKey: .opinionAction)
         composer = try c.decodeIfPresent(TVComposer.self, forKey: .composer)
         season = try c.decodeIfPresent(TVSeasonState.self, forKey: .season)
         episode = try c.decodeIfPresent(TVEpisodeState.self, forKey: .episode)
@@ -317,11 +344,13 @@ nonisolated struct TVSeasonState: Codable, Hashable {
     var eye: TVEyeState?
     var availableActions: [String]
     var actionReasons: [String: String]
+    /// What stars and the heart do on this season's page.
+    var opinionAction: OpinionAction?
 
     enum CodingKeys: String, CodingKey {
         case seasonNumber, isSpecials, listed, started, status, state, watchedCount, airedCount, episodeCount
         case firstGapEpisode, nextAirDate, rewatching, rating, liked, ratingSourceDiaryEntryId, likeSourceDiaryEntryId
-        case likeIsIndependent, logCount, eye, availableActions, actionReasons
+        case likeIsIndependent, logCount, eye, availableActions, actionReasons, opinionAction
     }
 
     init(
@@ -345,7 +374,8 @@ nonisolated struct TVSeasonState: Codable, Hashable {
         logCount: Int? = nil,
         eye: TVEyeState? = nil,
         availableActions: [String] = [],
-        actionReasons: [String: String] = [:]
+        actionReasons: [String: String] = [:],
+        opinionAction: OpinionAction? = nil
     ) {
         self.seasonNumber = seasonNumber
         self.isSpecials = isSpecials ?? (seasonNumber == 0)
@@ -368,6 +398,7 @@ nonisolated struct TVSeasonState: Codable, Hashable {
         self.eye = eye
         self.availableActions = availableActions
         self.actionReasons = actionReasons
+        self.opinionAction = opinionAction
     }
 
     init(from decoder: Decoder) throws {
@@ -393,6 +424,7 @@ nonisolated struct TVSeasonState: Codable, Hashable {
         eye = try c.decodeIfPresent(TVEyeState.self, forKey: .eye)
         availableActions = try c.decodeIfPresent([String].self, forKey: .availableActions) ?? []
         actionReasons = try TVActionReasons.decode(from: c, forKey: .actionReasons)
+        opinionAction = try c.decodeIfPresent(OpinionAction.self, forKey: .opinionAction)
     }
 }
 
@@ -578,9 +610,11 @@ nonisolated struct TVComposerTarget: Codable, Hashable, Identifiable {
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
     }
 
-    /// The ref a log of this target saves against, under the show's source and id.
+    /// The ref a log of this target saves against, under the show's source and id. An anime log is about the title.
     func ref(show: MediaRef) -> MediaRef {
         switch level {
+        case .title:
+            show
         case .season:
             MediaRef(itemId: nil, source: show.source, mediaType: "season", mediaId: show.mediaId,
                      seasonNumber: seasonNumber, episodeNumber: nil)
