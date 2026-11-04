@@ -460,9 +460,9 @@ def update_progress(
     saved_on = single_weight.sent_day(progressed_on or today, today)
     day = saved_on
     if saved_on == today:
-        # Never refused: after a flight west today can be before the start. The save
-        # keeps the phone's date, and the session's stays in order.
-        day = max(filter(None, (today, session.start_date)))
+        # Never refused: after a flight west today can be before the start or last save.
+        # The save keeps the phone's date, and the session's stays in order.
+        day = max(filter(None, (today, session.start_date, session.minutes_updated_on, session.percentage_updated_on)))
     elif session.start_date and day < session.start_date:
         raise ValidationError("Progress cannot predate the start date.")
     _record_progress_change(user, item, session, "minute", session.total_minutes, minutes, saved_on)

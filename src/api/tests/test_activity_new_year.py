@@ -263,6 +263,32 @@ class FlightWestTests(NewYearBase):
         self.assertEqual(GameSession.objects.get(related_game__item=self.game).minutes_updated_on, JAN_1)
         self.assertEqual(Manga.objects.get(item=self.manga).current_attempt.progressed_on, JAN_1)
 
+    def test_a_save_stays_no_earlier_than_the_last_one(self):
+        """Started before the flight, so only the last save holds it up (GM-013)."""
+        self.clock.set(datetime(2026, 12, 20, 12, 0, tzinfo=NEW_YORK_TZ))
+        home = self.phone(NEW_YORK)
+        game = self.item(MediaTypes.GAME.value)
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        manga = self.item(MediaTypes.MANGA.value, series_total=100)
+        for item in (game, book, manga):
+            self.post(home, item, "actions/start/", start_date="2026-12-20")
+        self.clock.set(IN_TOKYO)
+        tokyo = self.phone(TOKYO)
+        self.post(tokyo, game, "progress/", total_minutes=60, progressed_on=str(JAN_1))
+        self.post(tokyo, book, "progress/", progress_type="pages", value=40)
+        self.post(tokyo, manga, "progress/", value=5)
+        self.clock.set(AFTER_FLYING_WEST)
+        self.post(self.west, game, "progress/", total_minutes=90, percentage=10, progressed_on=str(DEC_31))
+        self.post(self.west, book, "progress/", progress_type="pages", value=50)
+        self.post(self.west, manga, "progress/", value=6)
+        session = GameSession.objects.get(related_game__item=game)
+        self.assertEqual(session.minutes_updated_on, JAN_1)
+        self.assertEqual(session.percentage_updated_on, JAN_1)
+        self.assertEqual(BookSession.objects.get(related_book__item=book).progressed_on, JAN_1)
+        self.assertEqual(Manga.objects.get(item=manga).current_attempt.progressed_on, JAN_1)
+        for item in (game, book, manga):
+            self.assertEqual(self.latest_day(item), DEC_31)
+
     def test_stop_with_the_phones_request_body_lands_on_the_start(self):
         for item in (self.book, self.game, self.manga, self.comic):
             self.post(self.west, item, "actions/drop/", end_date=str(DEC_31))
