@@ -311,27 +311,155 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertFalse(OpinionAction.unknown.opensLog(isGiving: true))
     }
 
-    func testAN301TheStarsAndHeartRouteByWhatThePageSays() {
-        // Anime: from the title's own state.
-        for action in [OpinionAction.mark, .log, .save] {
-            let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: action)))
-            XCTAssertEqual(page.opinionAction, action)
-            XCTAssertEqual(page.opinionAction?.opensLog(isGiving: true), action == .log)
-        }
+    func testAN301PartwayStarsOpenTheLogHoldingThemAndLeaveTheScreenAsItWas() throws {
+        // The rail has set the stars on screen by the time it calls back.
+        let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log)))
+        let opinion = OpinionFixture(page: page)
+        opinion.pick(halfSteps: 8)
+        XCTAssertEqual(opinion.box.picker.confirmedHalfSteps, 8)
 
+        opinion.router.rate(halfSteps: 8)
+
+        XCTAssertEqual(opinion.logs, [.init(ratingSteps: 8, liked: nil)], "The log screen holds the value")
+        XCTAssertEqual(opinion.box.picker.confirmedHalfSteps, 0, "Cancelling it leaves the stars as they were, on screen too")
+        XCTAssertEqual(opinion.box.picker.draftHalfSteps, 0)
+        XCTAssertTrue(tracking.actions.isEmpty, "Nothing is sent until it saves")
+        XCTAssertNil(page.viewer?.rating)
+    }
+
+    func testAN301MarkAndSaveSendTheStarsAndAFailurePutsThemBack() async throws {
+        for action in [OpinionAction.mark, .save] {
+            let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: action)))
+            let opinion = OpinionFixture(page: page)
+            tracking.actions = []
+            tracking.actionError = nil
+            tracking.actionResponses = [Self.response(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .save), rating: "4.0")]
+            opinion.pick(halfSteps: 8)
+            opinion.router.rate(halfSteps: 8)
+            XCTAssertTrue(opinion.logs.isEmpty, "No log screen")
+            _ = await page.settled()
+            XCTAssertEqual(tracking.actions.map(\.action), [.rate])
+            XCTAssertEqual(page.viewer?.rating, "4.0")
+
+            tracking.actionError = APIError.httpStatus(503, nil)
+            opinion.pick(halfSteps: 10)
+            opinion.router.rate(halfSteps: 10)
+            let failed = await page.settled()
+            XCTAssertFalse(failed)
+            await Task.yield()
+            await Task.yield()
+            XCTAssertEqual(opinion.box.picker.confirmedHalfSteps, 8, "The stars go back to what the server has")
+        }
+    }
+
+    func testAN301ClearingStarsIsOnlyThatEvenPartway() async throws {
+        let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log)))
+        let opinion = OpinionFixture(page: page)
+        tracking.actionResponses = [Self.response(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log))]
+        opinion.router.rate(halfSteps: 0)
+        XCTAssertTrue(opinion.logs.isEmpty)
+        _ = await page.settled()
+        XCTAssertEqual(tracking.actions.map(\.action), [.rate])
+    }
+
+    func testAN301TheHeartGoesWhereThePageSays() async throws {
+        // Partway: the log screen holds it, and nothing is sent.
+        let partway = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log)))
+        let opinion = OpinionFixture(page: partway)
+        opinion.router.like(try XCTUnwrap(partway.detail))
+        XCTAssertEqual(opinion.logs, [.init(ratingSteps: nil, liked: true)])
+        XCTAssertTrue(media.likeRequests.isEmpty)
+        XCTAssertEqual(partway.viewer?.hasLiked, false, "It stays as it was, on screen too")
+
+        // Not started, or finished: the heart itself.
+        for action in [OpinionAction.mark, .save] {
+            media.likeRequests = []
+            let page = model(Self.detail(anime: Self.watching(upNext: 3, watched: 2, aired: 12, opinion: action)))
+            let direct = OpinionFixture(page: page)
+            direct.router.like(try XCTUnwrap(page.detail))
+            XCTAssertTrue(direct.logs.isEmpty)
+            _ = await page.settled()
+            XCTAssertEqual(media.likeRequests.map(\.liked), [true])
+        }
+    }
+
+    func testAN301ATickOnItsWayDecidesWhereTheStarsGo() async throws {
+        // Not started when the stars were given, and partway once the tick lands.
+        let rows = Self.rows(through: 12)
+        let page = model(Self.detail(anime: Self.watching(upNext: 1, watched: 0, aired: 12, opinion: .mark), rows: rows))
+        let opinion = OpinionFixture(page: page)
+        let gate = RefreshGate()
+        heldGates.append(gate)
+        tracking.actionGate = gate
+        tracking.actionResponses = [Self.response(
+            anime: Self.watching(upNext: 2, watched: 1, aired: 12, opinion: .log),
+            row: AnimeRow(number: 1, aired: 1, watched: 1, viewingId: 1)
+        )]
+        page.toggleTVEpisode(rows.state(of: rows.episodes[0]))
+        opinion.pick(halfSteps: 8)
+        opinion.router.rate(halfSteps: 8)
+        XCTAssertTrue(opinion.logs.isEmpty, "It waits")
+        await gate.open()
+        _ = await page.settled()
+        await Task.yield()
+        await Task.yield()
+        XCTAssertEqual(opinion.logs, [.init(ratingSteps: 8, liked: nil)])
+        XCTAssertEqual(tracking.actions.map(\.action), [.tick], "No direct set")
+        XCTAssertEqual(opinion.box.picker.confirmedHalfSteps, 0)
+
+        // A tick that fails puts the stars back and opens nothing.
+        let failing = model(Self.detail(anime: Self.watching(upNext: 1, watched: 0, aired: 12, opinion: .mark), rows: rows))
+        let second = OpinionFixture(page: failing)
+        let held = RefreshGate()
+        heldGates.append(held)
+        tracking.actionGate = held
+        tracking.actionError = APIError.httpStatus(503, nil)
+        failing.toggleTVEpisode(rows.state(of: rows.episodes[0]))
+        second.pick(halfSteps: 8)
+        second.router.rate(halfSteps: 8)
+        await held.open()
+        _ = await failing.settled()
+        await Task.yield()
+        await Task.yield()
+        XCTAssertTrue(second.logs.isEmpty)
+        XCTAssertEqual(second.box.picker.confirmedHalfSteps, 0, "Back to what the server has")
+    }
+
+    func testTV304AShowOrSeasonGoesWhereItsOwnRuleSays() async throws {
         // TV: the show page reads the show's, and a season page that season's, never the other's.
         let showRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1399", seasonNumber: nil, episodeNumber: nil)
-        let season = TVSeasonState(seasonNumber: 2, opinionAction: .mark)
-        let tv = TVShowState(opinionAction: .log, season: season)
-        let show = model(MediaDetail(ref: showRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: tv)))
-        XCTAssertEqual(show.opinionAction, .log, "Partway show: Whole show opens")
         let seasonRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "season", mediaId: "1399", seasonNumber: 2, episodeNumber: nil)
-        let seasonPage = model(MediaDetail(ref: seasonRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: tv)))
-        XCTAssertEqual(seasonPage.opinionAction, .mark, "An unstarted season marks, whatever the show is")
+        let unstarted = TVSeasonState(seasonNumber: 2, opinionAction: .mark)
+        let partwayShow = TVShowState(opinionAction: .log, season: unstarted)
+        let show = model(MediaDetail(ref: showRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: partwayShow)))
+        let onShow = OpinionFixture(page: show)
+        onShow.pick(halfSteps: 7)
+        onShow.router.rate(halfSteps: 7)
+        XCTAssertEqual(onShow.logs, [.init(ratingSteps: 7, liked: nil)], "Partway show: Whole show opens")
+        XCTAssertEqual(onShow.box.picker.confirmedHalfSteps, 0)
+        XCTAssertTrue(tracking.tvActions.isEmpty)
+
+        let season = model(MediaDetail(ref: seasonRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: partwayShow)))
+        let onSeason = OpinionFixture(page: season)
+        tracking.tvActionResponses = [TVActionResponse(tracking: nil, envelope: TVWriteEnvelope(tv: partwayShow, changed: true))]
+        onSeason.pick(halfSteps: 7)
+        onSeason.router.rate(halfSteps: 7)
+        _ = await season.settled()
+        XCTAssertTrue(onSeason.logs.isEmpty, "An unstarted season marks, whatever the show is")
+        XCTAssertEqual(tracking.tvActions.map(\.action), [.rate])
+        XCTAssertEqual(tracking.tvActions.first?.request.seasonNumber, 2)
+
+        // A heart on a partway season opens that season's composer.
+        let partwaySeason = TVSeasonState(seasonNumber: 2, opinionAction: .log)
+        let heartPage = model(MediaDetail(ref: seasonRef, title: "A Show", userState: UserMediaState(isTracked: true, tv: TVShowState(opinionAction: .mark, season: partwaySeason))))
+        let onHeart = OpinionFixture(page: heartPage)
+        onHeart.router.like(try XCTUnwrap(heartPage.detail))
+        XCTAssertEqual(onHeart.logs, [.init(ratingSteps: nil, liked: true)])
+        XCTAssertTrue(media.likeRequests.isEmpty)
 
         // An episode page and other media types keep their own rules.
         let episodeRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "episode", mediaId: "1399", seasonNumber: 2, episodeNumber: 1)
-        XCTAssertNil(model(MediaDetail(ref: episodeRef, title: "E", userState: UserMediaState(isTracked: true, tv: tv))).opinionAction)
+        XCTAssertNil(model(MediaDetail(ref: episodeRef, title: "E", userState: UserMediaState(isTracked: true, tv: partwayShow))).opinionAction)
         let movieRef = MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
         XCTAssertNil(model(MediaDetail(ref: movieRef, title: "M", userState: .untracked)).opinionAction)
     }
@@ -371,24 +499,15 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertTrue(body?["rating"] is NSNull, "Clearing the stars sends null")
     }
 
-    func testAN301ACancelledLogScreenChangesNothing() async throws {
-        // Partway: the log screen opens holding the value, and nothing is sent until it saves.
+    func testAN301TheLogScreenOpensHoldingTheValue() async throws {
         let state = Self.watching(upNext: 3, watched: 2, aired: 12, opinion: .log)
-        let detail = Self.detail(anime: state)
-        let page = model(detail)
-        let log = logModel(detail, preselectedRatingSteps: 8, preselectedLiked: true)
+        let log = logModel(Self.detail(anime: state), preselectedRatingSteps: 8, preselectedLiked: true)
         XCTAssertEqual(log.ratingSteps, 8, "It opens with the value set")
         XCTAssertTrue(log.liked)
         XCTAssertFalse(log.isSaving)
-        // Cancelling is closing the screen: no save, no action, no state.
-        XCTAssertTrue(diary.tvCreates.isEmpty)
-        XCTAssertTrue(tracking.actions.isEmpty)
-        XCTAssertNil(page.viewer?.rating, "The stars stay as they were")
-        XCTAssertEqual(page.viewer?.hasLiked, false, "The heart stays as it was")
-        XCTAssertEqual(page.viewer?.anime?.watchedCount, 2)
     }
 
-    func testTV304ACancelledShowOrSeasonComposerChangesNothing() {
+    func testTV304AShowOrSeasonComposerOpensOnItsOwnLevelHoldingTheValue() {
         // The show page opens on Whole show, and a season page on that season, each holding the value.
         let show = MediaRef(itemId: nil, source: "tmdb", mediaType: "tv", mediaId: "1399", seasonNumber: nil, episodeNumber: nil)
         let composer = TVComposer(defaultTarget: "show", targets: [
@@ -896,16 +1015,28 @@ final class AnimeTrackingTests: XCTestCase {
 
     func testAN101TheListWorksOutEachRowsPlace() {
         let metrics = AnimeListMetrics(count: 1_189)
-        XCTAssertEqual(metrics.stride, 100)
-        XCTAssertEqual(metrics.offset(ofRow: 800), 80_000)
+        let rowHeight = TVEpisodeRows.rowHeight
+        let spacing = TVEpisodeRows.spacing
+        XCTAssertEqual(metrics.stride, rowHeight + spacing)
+        XCTAssertEqual(metrics.offset(ofRow: 800), 800 * (rowHeight + spacing))
 
         // It builds what's on screen and a chunk or more either side, never the whole list.
-        let window = metrics.built(metrics.window(openingOnRow: 800))
-        XCTAssertTrue(window.contains(800))
-        XCTAssertLessThan(window.count, 40)
-        XCTAssertEqual(metrics.heightAbove(window), CGFloat(window.lowerBound) * 100)
-        let total = metrics.heightAbove(window) + CGFloat(window.count) * 100 + metrics.heightBelow(window)
-        XCTAssertEqual(total, 1_189 * 100, "The spacers and the rows always add up to the whole list")
+        let opening = metrics.built(metrics.window(openingOnRow: 800))
+        XCTAssertTrue(opening.contains(800))
+        XCTAssertLessThan(opening.count, 40)
+
+        // Laid out as the list lays them out, a spacer, the rows with their spacing, a spacer: wherever the window is, every
+        // row sits where it would in the whole list, and the list is as long as all its rows.
+        let wholeList = 1_189 * rowHeight + 1_188 * spacing
+        for y in stride(from: CGFloat(0), through: wholeList, by: 777) {
+            let window = metrics.built(metrics.window(y: y, height: 700))
+            let builtRows = CGFloat(window.count) * rowHeight + CGFloat(window.count - 1) * spacing
+            XCTAssertEqual(metrics.heightAbove(window) + builtRows + metrics.heightBelow(window), wholeList)
+            for row in window {
+                let top = metrics.heightAbove(window) + CGFloat(row - window.lowerBound) * (rowHeight + spacing)
+                XCTAssertEqual(top, metrics.offset(ofRow: row))
+            }
+        }
 
         // Scrolling a little changes nothing: the rows are built in chunks, so most frames build nothing.
         var changes = 0
@@ -914,8 +1045,8 @@ final class AnimeTrackingTests: XCTestCase {
             let next = metrics.built(metrics.window(y: y, height: 700))
             if next != last { changes += 1 }
             last = next
-            XCTAssertTrue(next.contains(Int(y / 100)), "The row at the top is always built")
-            XCTAssertTrue(next.contains(min(Int((y + 700) / 100), 1_188)), "So is the one at the bottom")
+            XCTAssertTrue(next.contains(Int(y / metrics.stride)), "The row at the top is always built")
+            XCTAssertTrue(next.contains(min(Int((y + 700) / metrics.stride), 1_188)), "So is the one at the bottom")
         }
         XCTAssertLessThanOrEqual(changes, 10, "80 rows scrolled, about ten changes")
 
@@ -936,7 +1067,23 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(metrics.roomBelowRows(viewportHeight: 340, openingOnRow: 100), 0)
 
         // The accessibility text sizes' rows have a fixed height too.
-        XCTAssertEqual(AnimeListMetrics(isAccessibilitySize: true, count: 10).stride, AnimeListMetrics.accessibilityRowHeight + 16)
+        XCTAssertEqual(AnimeListMetrics(isAccessibilitySize: true, count: 10).stride, AnimeListMetrics.accessibilityRowHeight + spacing)
+    }
+
+    func testAN701TheListNamesUpNextsRowToScrollTo() async throws {
+        // It scrolls to a row, whatever an OS version counts as the top of the list.
+        let item = Self.card(mediaId: "16498", title: "Attack on Titan", anime: Self.watching(upNext: 8, watched: 7, aired: 24))
+        let ticks = continueWatching()
+        tracking.rowsResponses[item.media.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 8, watched: 7, aired: 24), rows: Self.rows(through: 24, watched: 7))
+        ticks.openEpisodes(for: item)
+        let sheet = try XCTUnwrap(ticks.animeEpisodes)
+        let beforeRows = sheet.startRowID
+        XCTAssertEqual(sheet.startIndex, 0, "Up next's row alone")
+        await sheet.loadRowsIfNeeded()
+        XCTAssertEqual(sheet.startRowID, beforeRows, "The same row before and after the rows load")
+        let rows = try XCTUnwrap(sheet.rows)
+        XCTAssertEqual(sheet.startRowID, rows.rowModel(at: 7).id)
+        XCTAssertEqual(sheet.startIndex, 7)
     }
 
     // MARK: Library (AN-700)
@@ -1198,9 +1345,8 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertNotNil(follow.composer, "The log screen opens over the sheet at once")
         XCTAssertEqual(cards.last?.status, "Completed", "The card changes where it is")
 
-        // Not now.
+        // Not now: the log screen's cover closes, and that alone moves the sheet on.
         follow.composerDismissed()
-        sheet.finishComposerClosed()
         XCTAssertEqual(sheet.ref.mediaId, "35760", "The sheet shows the next title")
         XCTAssertEqual(sheet.title, "Attack on Titan Season 3")
         XCTAssertNil(sheet.rows, "Its rows load next")
@@ -1252,7 +1398,6 @@ final class AnimeTrackingTests: XCTestCase {
             let settled = await sheet.page.settled()
             XCTAssertTrue(settled)
             sheet.page.tvFollowUp.composerDismissed()
-            sheet.finishComposerClosed()
             XCTAssertEqual(sheet.ref.mediaId, "25777")
             XCTAssertEqual(sheet.rows?.episodes.filter(\.isWatched).count, 12, "Every tick filled")
         }
@@ -1277,7 +1422,6 @@ final class AnimeTrackingTests: XCTestCase {
         sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last)))
         _ = await sheet.page.settled()
         sheet.page.tvFollowUp.composerDismissed()
-        sheet.finishComposerClosed()
         XCTAssertEqual(sheet.ref.mediaId, "38000", "It stays on the finished title")
         XCTAssertEqual(sheet.title, "Season 1")
         XCTAssertEqual(sheet.rows?.episodes.filter(\.isWatched).count, 26, "Every tick filled")
@@ -1285,24 +1429,135 @@ final class AnimeTrackingTests: XCTestCase {
     }
 
     func testAN501ThePagesSheetNeverMovesOn() async throws {
+        // The last tick in the page's own sheet opens the log screen, and closing it leaves the sheet where it is.
+        let composer = TVComposer(defaultTarget: "title", targets: [TVComposerTarget(id: "title", level: .title, title: "T", date: "2026-10-25")])
         var finished = AnimeState(inLibrary: true, status: "Completed", finished: true)
         finished.nextTitle = AnimeNextTitle(mediaId: "35760", title: "Season 3", hasAired: true)
-        let sheet = AnimeEpisodes(detail: Self.detail(anime: finished, rows: Self.rows(through: 12, watched: 12))) { [self] ref in
-            model(MediaDetail(ref: ref, title: "Seed"))
-        }
+        let page = model(Self.detail(anime: Self.watching(upNext: 60, watched: 59, aired: 60), rows: Self.rows(through: 60, watched: 59)))
+        let sheet = AnimeEpisodes(page: page)
         XCTAssertFalse(sheet.offersOpenPage, "It's over the page already")
-        sheet.finishComposerClosed()
+        tracking.actionResponses = [Self.response(
+            anime: finished,
+            row: AnimeRow(number: 60, aired: 1, watched: 1, viewingId: 9),
+            finished: TVFinished(level: .title, seasonNumber: nil, composer: composer)
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last)))
+        _ = await page.settled()
+        XCTAssertNotNil(page.tvFollowUp.composer)
+        page.tvFollowUp.composerDismissed()
         XCTAssertEqual(sheet.ref.mediaId, "16498")
+        XCTAssertTrue(sheet.page === page)
     }
 
     func testAN101ThePagesSheetStartsFromTheRowsItHas() async throws {
         let rows = Self.rows(through: 1_189, watched: 800)
-        let detail = Self.detail(anime: Self.watching(upNext: 801, watched: 800, aired: 1_189), rows: rows)
-        let sheet = AnimeEpisodes(detail: detail) { [self] ref in model(MediaDetail(ref: ref, title: "Seed")) }
+        let page = model(Self.detail(anime: Self.watching(upNext: 801, watched: 800, aired: 1_189), rows: rows))
+        let sheet = AnimeEpisodes(page: page)
         XCTAssertEqual(sheet.startEpisode, 801)
         XCTAssertEqual(sheet.rows?.episodes.count, 1_189)
         await sheet.loadRowsIfNeeded()
         XCTAssertTrue(tracking.rowsRequests.isEmpty, "Nothing to load")
+    }
+
+    func testTV701ALastTickInThePagesSheetStillOpensItsLogScreenAfterTheSheetCloses() async throws {
+        // Tick the last row and tap the sheet's close button before the answer. The server offers the log screen once.
+        let rows = Self.rows(through: 60, watched: 59)
+        let page = model(Self.detail(anime: Self.watching(upNext: 60, watched: 59, aired: 60), rows: rows))
+        let sheet = AnimeEpisodes(page: page)
+        let gate = RefreshGate()
+        heldGates.append(gate)
+        tracking.actionGate = gate
+        let composer = TVComposer(defaultTarget: "title", targets: [TVComposerTarget(id: "title", level: .title, title: "T", date: "2026-10-25")])
+        tracking.actionResponses = [Self.response(
+            anime: AnimeState(inLibrary: true, status: "Completed", finished: true),
+            row: AnimeRow(number: 60, aired: 1, watched: 1, viewingId: 9),
+            finished: TVFinished(level: .title, seasonNumber: nil, composer: composer)
+        )]
+        sheet.toggle(try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last)))
+        XCTAssertTrue(sheet.page === page, "A write in the sheet is the page's own")
+        XCTAssertTrue(page.hasPendingWrites)
+
+        await gate.open()
+        _ = await page.settled()
+        XCTAssertNotNil(page.tvFollowUp.composer, "The page's screen presents it once the sheet has gone")
+        XCTAssertEqual(page.detail?.animeRows?.episodes.last?.isWatched, true, "The page's row is up to date, with no refresh")
+        XCTAssertEqual(page.viewer?.status, "Completed")
+        XCTAssertTrue(media.detailRequests.isEmpty)
+    }
+
+    func testTV705AFailedTickInThePagesSheetSaysSoOnThePage() async throws {
+        let page = model(Self.detail(anime: Self.watching(upNext: 60, watched: 59, aired: 60), rows: Self.rows(through: 60, watched: 59)))
+        let sheet = AnimeEpisodes(page: page)
+        let gate = RefreshGate()
+        heldGates.append(gate)
+        tracking.actionGate = gate
+        tracking.actionError = APIError.httpStatus(503, #"{"error":{"code":"provider_unavailable","reason":"tv_details_unavailable","message":"Anime details are unavailable right now"}}"#)
+        let last = try XCTUnwrap(sheet.rows).state(of: try XCTUnwrap(sheet.rows?.episodes.last))
+        sheet.toggle(last)
+        XCTAssertEqual(page.viewer?.tvIsWatched(last), true, "It shows at once")
+        await gate.open()
+        let succeeded = await page.settled()
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(page.quickActionErrorMessage, "Anime details are unavailable right now", "The page's alert has it")
+        XCTAssertEqual(page.viewer?.tvIsWatched(last), false, "The row went back, on the page too")
+    }
+
+    func testTV705AllEpisodesOpensWithATickStillOnItsWay() async throws {
+        // Tick E801 in the page's list, then tap All Episodes before the answer.
+        let rows = Self.rows(through: 1_189, watched: 800)
+        let page = model(Self.detail(anime: Self.watching(upNext: 801, watched: 800, aired: 1_189), rows: rows))
+        let gate = RefreshGate()
+        heldGates.append(gate)
+        tracking.actionGate = gate
+        tracking.actionResponses = [Self.response(
+            anime: Self.watching(upNext: 802, watched: 801, aired: 1_189),
+            row: AnimeRow(number: 801, aired: 1, watched: 1, viewingId: 801)
+        )]
+        let e801 = rows.state(of: rows.episodes[800])
+        page.toggleTVEpisode(e801)
+
+        let sheet = AnimeEpisodes(page: page)
+        XCTAssertEqual(sheet.page.viewer?.tvIsWatched(e801), true, "It opens showing the tick")
+        XCTAssertEqual(sheet.startEpisode, 801, "On the row it opened for")
+
+        await gate.open()
+        _ = await page.settled()
+        XCTAssertEqual(sheet.rows?.episodes[800].isWatched, true, "And then the answer, with nothing to reload")
+        XCTAssertEqual(sheet.page.viewer?.anime?.upNext?.episodeNumber, 802)
+        XCTAssertTrue(tracking.rowsRequests.isEmpty)
+    }
+
+    func testAN203LogWaitsAndOpensOneScreenOnly() async throws {
+        // Tick the last row, then choose Log before the answer: the last tick's log screen opens, and Log stays closed.
+        let rows = Self.rows(through: 12, watched: 11)
+        let page = model(Self.detail(anime: Self.watching(upNext: 12, watched: 11, aired: 12), rows: rows))
+        let sheet = AnimeEpisodes(page: page)
+        let gate = RefreshGate()
+        heldGates.append(gate)
+        tracking.actionGate = gate
+        let composer = TVComposer(defaultTarget: "title", targets: [TVComposerTarget(id: "title", level: .title, title: "T", date: "2026-10-25")])
+        tracking.actionResponses = [Self.response(
+            anime: AnimeState(inLibrary: true, status: "Completed", finished: true),
+            row: AnimeRow(number: 12, aired: 1, watched: 1, viewingId: 9),
+            finished: TVFinished(level: .title, seasonNumber: nil, composer: composer)
+        )]
+        sheet.toggle(rows.state(of: rows.episodes[11]))
+        let log = Task { await sheet.readyForLog() }
+        await gate.open()
+        let opens = await log.value
+        XCTAssertFalse(opens, "One screen only")
+        XCTAssertNotNil(page.tvFollowUp.composer, "The one the last tick asked for")
+
+        // With nothing on its way, Log opens.
+        page.tvFollowUp.composerDismissed()
+        let opensNow = await sheet.readyForLog()
+        XCTAssertTrue(opensNow)
+
+        // A write that fails says so, and Log stays closed: the tap came from a state that never landed.
+        tracking.actionError = APIError.httpStatus(503, nil)
+        page.rateTV(steps: 8)
+        let afterFailure = await sheet.readyForLog()
+        XCTAssertFalse(afterFailure)
     }
 
     func testTV705AFailedTickInTheSheetRestoresTheRowAndSaysSo() async throws {
@@ -1397,7 +1652,6 @@ final class AnimeTrackingTests: XCTestCase {
         XCTAssertEqual(rail[0].tracking.anime?.status, "Completed", "Its own card")
 
         sheet.page.tvFollowUp.composerDismissed()
-        sheet.finishComposerClosed()
         XCTAssertEqual(sheet.ref.mediaId, "25777")
         tracking.rowsResponses[sheet.ref.id] = AnimeRowsResponse(anime: Self.watching(upNext: 3, watched: 2, aired: 12), rows: Self.rows(through: 12, watched: 2))
         await sheet.loadRowsIfNeeded()
@@ -1769,6 +2023,42 @@ final class AnimeTrackingTests: XCTestCase {
     """
 }
 
+/// The stars on screen and the router a page's rail calls, recording what it opens.
+@MainActor
+final class OpinionFixture {
+    struct LogRequest: Equatable {
+        let ratingSteps: Int?
+        let liked: Bool?
+    }
+
+    final class PickerBox {
+        var picker = MediaRatingPickerState()
+    }
+
+    let box = PickerBox()
+    var logs: [LogRequest] = []
+    let page: MediaDetailViewModel
+
+    init(page: MediaDetailViewModel) {
+        self.page = page
+        box.picker.syncConfirmed(page.viewer?.rating?.ratingHalfSteps ?? 0)
+    }
+
+    lazy var router = MediaOpinionRouter(
+        page: page,
+        picker: Binding(get: { [box] in box.picker }, set: { [box] in box.picker = $0 })
+    ) { [unowned self] ratingSteps, liked in
+        logs.append(LogRequest(ratingSteps: ratingSteps, liked: liked))
+    }
+
+    /// What the rail has done by the time it calls back: the stars are set on screen.
+    func pick(halfSteps: Int) {
+        box.picker.open()
+        box.picker.draftHalfSteps = halfSteps
+        box.picker.confirm()
+    }
+}
+
 struct MediaLikeRequest: Equatable {
     let ref: MediaRef
     let liked: Bool
@@ -1778,6 +2068,8 @@ struct MediaLikeRequest: Equatable {
 final class AnimeTrackingRepository: TrackingRepository {
     var actions: [(source: String, mediaId: String, action: TVAction, request: TVActionRequest)] = []
     var actionResponses: [TVActionResponse] = []
+    var tvActions: [(source: String, mediaId: String, action: TVAction, request: TVActionRequest)] = []
+    var tvActionResponses: [TVActionResponse] = []
     var actionError: Error?
     /// Holds each action's answer until it opens.
     var actionGate: RefreshGate?
@@ -1791,6 +2083,11 @@ final class AnimeTrackingRepository: TrackingRepository {
     /// The plain tracking route, which a server older than this build answers for anime.
     var updates: [TrackingWriteRequest] = []
     var updateResponse: TrackingState?
+
+    func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        tvActions.append((source, mediaId, action, request))
+        return tvActionResponses.isEmpty ? TVActionResponse(tracking: nil, envelope: .empty) : tvActionResponses.removeFirst()
+    }
 
     func performAnimeAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
         actions.append((source, mediaId, action, request))

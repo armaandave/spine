@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The sheet of one anime title's rows (AN-701), run by the title's page model: a tick, an untick, Mark watched up to
-/// here and what they ask next work exactly as they do on its page. Home's In progress card opens it, and a long title's
-/// page opens it for the whole list (AN-101).
+/// here and what they ask next work exactly as they do on its page. Home's In progress card opens it with a model of its
+/// own, and a long title's page opens it for the whole list on the page's model (AN-101).
 @MainActor
 @Observable
 final class AnimeEpisodes: Identifiable {
@@ -39,16 +39,16 @@ final class AnimeEpisodes: Identifiable {
         attach(page)
     }
 
-    /// A long title's page opens the whole list, with the rows it already has.
-    init(detail: MediaDetail, makePage: @escaping (MediaRef) -> MediaDetailViewModel) {
+    /// A long title's page opens the whole list on its own model: a write made before the sheet opened shows in it, and
+    /// one still on its way when the sheet closes lands on the page, whose screen shows what it asks next or its failure
+    /// (TV-701, TV-705).
+    init(page: MediaDetailViewModel) {
         cardID = nil
-        ref = detail.ref
-        self.makePage = makePage
-        upNext = detail.userState?.anime?.upNext?.tvPointer
-        startEpisode = detail.animeRows?.startEpisode
-        page = makePage(detail.ref)
-        page.seedAnime(detail)
-        attach(page)
+        ref = page.ref
+        self.page = page
+        makePage = { _ in page }
+        upNext = page.viewer?.anime?.upNext?.tvPointer
+        startEpisode = page.detail?.animeRows?.startEpisode
     }
 
     var id: String { cardID ?? ref.id }
@@ -67,6 +67,19 @@ final class AnimeEpisodes: Identifiable {
         ref.id + (page.detail?.animeRows == nil ? "-up-next" : "")
     }
 
+    /// The row at the top of the list as it opens: up next's, or the row a page's list opened on.
+    var startRowID: String {
+        guard let rows else { return upNext.map { TVEpisodeRowModel.upNext($0).id } ?? "" }
+        let index = rows.episodes.firstIndex { $0.number == startEpisode } ?? rows.startIndex
+        return rows.rowModel(at: index).id
+    }
+
+    /// Where that row is in the list.
+    var startIndex: Int {
+        guard let rows else { return 0 }
+        return rows.episodes.firstIndex { $0.number == startEpisode } ?? rows.startIndex
+    }
+
     /// Log… in the ··· menu: once the rows have loaded with the composer, when the title's page would offer it (AN-400).
     var canLog: Bool {
         guard let anime = page.viewer?.anime, anime.composer != nil else { return false }
@@ -78,6 +91,11 @@ final class AnimeEpisodes: Identifiable {
         await page.loadAnimeRows()
         guard let rows = page.detail?.animeRows else { return }
         if !hasWritten { startEpisode = rows.startEpisode }
+    }
+
+    /// Whether Log… can open: once the title's writes have settled, and not over what they asked next (AN-203).
+    func readyForLog() async -> Bool {
+        await page.settledForScreen()
     }
 
     /// A row's tick: ticks the episode, or unticks a ticked one (TV-100, TV-102).
@@ -97,7 +115,7 @@ final class AnimeEpisodes: Identifiable {
     /// The log screen from the title's last tick closed, saved or not (AN-501). Home's sheet moves on when the next title
     /// has an aired episode and rows, and otherwise stays on this one, every tick filled. Moving on adds nothing to the
     /// library.
-    func finishComposerClosed() {
+    private func finishComposerClosed() {
         guard cardID != nil, !page.tvFollowUp.isActive,
               let next = page.viewer?.anime?.nextTitle, next.hasAired, !next.single
         else { return }
@@ -122,6 +140,7 @@ final class AnimeEpisodes: Identifiable {
             hasWritten = true
             onStateChange(ref, anime)
         }
+        model.tvFollowUp.onComposerClosed = { [weak self] in self?.finishComposerClosed() }
     }
 
     /// What the card knows of its title: enough to show up next's row and a log screen's header.
@@ -223,7 +242,8 @@ nonisolated struct AnimeListMetrics: Equatable {
 private struct AnimeEpisodeList: View {
     let episodes: AnimeEpisodes
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// How far the list is scrolled: on up next's row, until the user scrolls it.
+    /// Where the list is scrolled: on up next's row, until the user scrolls it. It names a row, not an offset, so the list
+    /// doesn't depend on how an OS version counts the bars over it.
     @State private var position: ScrollPosition
     /// The rows built around what's on screen.
     @State private var window: Range<Int>
@@ -236,15 +256,9 @@ private struct AnimeEpisodeList: View {
             isAccessibilitySize: isAccessibilitySize,
             count: episodes.rows?.episodes.count ?? 0
         )
-        let start = Self.startIndex(in: episodes)
-        _position = State(initialValue: ScrollPosition(y: metrics.offset(ofRow: start)))
-        _window = State(initialValue: metrics.window(openingOnRow: start))
+        _position = State(initialValue: ScrollPosition(id: episodes.startRowID, anchor: .top))
+        _window = State(initialValue: metrics.window(openingOnRow: episodes.startIndex))
         _shownListID = State(initialValue: episodes.listID)
-    }
-
-    private static func startIndex(in episodes: AnimeEpisodes) -> Int {
-        guard let rows = episodes.rows else { return 0 }
-        return rows.episodes.firstIndex { $0.number == episodes.startEpisode } ?? rows.startIndex
     }
 
     private var metrics: AnimeListMetrics {
@@ -259,7 +273,7 @@ private struct AnimeEpisodeList: View {
         let viewer = page.viewer
         let metrics = metrics
         let rows = shownListID == episodes.listID ? episodes.rows : nil
-        let start = Self.startIndex(in: episodes)
+        let start = episodes.startIndex
         ScrollView {
             VStack(spacing: 0) {
                 if let rows {
@@ -270,6 +284,7 @@ private struct AnimeEpisodeList: View {
                     VStack(spacing: metrics.spacing) {
                         rowList(built.map { rows.rowModel(at: $0) }, viewer: viewer, page: page, height: metrics.rowHeight)
                     }
+                    .scrollTargetLayout()
                     Color.clear
                         .frame(height: metrics.heightBelow(built))
                         .accessibilityHidden(true)
@@ -279,6 +294,7 @@ private struct AnimeEpisodeList: View {
                             rowList([TVEpisodeRowModel.upNext(upNext)], viewer: viewer, page: page, height: metrics.rowHeight)
                         }
                     }
+                    .scrollTargetLayout()
                     if page.detail?.animeRows == nil {
                         loadingState(page)
                             .padding(.top, metrics.spacing)
@@ -295,7 +311,7 @@ private struct AnimeEpisodeList: View {
         .contentMargins(.horizontal, 16, for: .scrollContent)
         .contentMargins(.top, 4, for: .scrollContent)
         .contentMargins(.bottom, 24, for: .scrollContent)
-        .scrollPosition($position)
+        .scrollPosition($position, anchor: .top)
         .onScrollGeometryChange(for: Range<Int>.self) { geometry in
             metrics.window(
                 y: geometry.contentOffset.y + geometry.contentInsets.top,
@@ -307,10 +323,8 @@ private struct AnimeEpisodeList: View {
         .onChange(of: episodes.listID) { _, listID in
             // Every row and up next's place, in one update.
             shownListID = listID
-            let metrics = self.metrics
-            let start = Self.startIndex(in: episodes)
-            window = metrics.window(openingOnRow: start)
-            position.scrollTo(y: metrics.offset(ofRow: start))
+            window = metrics.window(openingOnRow: episodes.startIndex)
+            position.scrollTo(id: episodes.startRowID, anchor: .top)
         }
     }
 
@@ -451,9 +465,6 @@ struct AnimeEpisodesSheet: View {
                 onUnauthorized: onUnauthorized
             )
         }
-        .onChange(of: page.tvFollowUp.composer?.id) { closed, open in
-            if closed != nil, open == nil { episodes.finishComposerClosed() }
-        }
         .fullScreenCover(isPresented: $isLogPresented, onDismiss: { page.releaseDeferredTVFollowUp() }) {
             if let detail = page.detail {
                 MediaLogView(
@@ -469,11 +480,11 @@ struct AnimeEpisodesSheet: View {
         }
     }
 
-    /// Log… opens the page's log screen once the title's writes have settled, as on its page (AN-400).
+    /// Log… opens the page's log screen once the title's writes have settled, as on its page (AN-400). A last tick still
+    /// on its way opens its own log screen instead (AN-203).
     private func openLog() {
-        let page = episodes.page
         Task {
-            guard await page.settled() else { return }
+            guard await episodes.readyForLog() else { return }
             isLogPresented = true
         }
     }

@@ -36,6 +36,8 @@ final class TVWriteFollowUp {
     @ObservationIgnored var context: () -> MediaDetail? = { nil }
     /// Receives the Yes response, so the presenting screen can fold it in and refresh.
     @ObservationIgnored var onResponse: ((TVActionResponse) -> Void)?
+    /// The composer has closed, saved or not.
+    @ObservationIgnored var onComposerClosed: (() -> Void)?
     /// The last question shown, so the alert keeps its title while it animates away.
     @ObservationIgnored private(set) var lastQuestionText = ""
     /// The answer in flight, if any.
@@ -94,7 +96,9 @@ final class TVWriteFollowUp {
 
     /// The composer closed, saved or not ("Not now" saves nothing, SW-301).
     func composerDismissed() {
+        guard composer != nil else { return }
         composer = nil
+        onComposerClosed?()
     }
 
     private func run(_ work: @escaping () async -> Void) {
@@ -242,17 +246,20 @@ final class TVWriteFollowUp {
 
 extension View {
     /// Presents a `TVWriteFollowUp`: the earlier-episodes question as a native alert, then the caller's composer
-    /// (normally `MediaLogView(..., tvComposer: item.finished.composer)`) as a full-screen cover.
+    /// (normally `MediaLogView(..., tvComposer: item.finished.composer)`) as a full-screen cover. While `presents` is
+    /// false another screen over this one is presenting it, and what's left to show waits for that screen to go.
     func tvWriteFollowUp<Composer: View>(
         _ followUp: TVWriteFollowUp,
+        presents: Bool = true,
         @ViewBuilder composer: @escaping (TVFollowUpComposer) -> Composer
     ) -> some View {
-        modifier(TVWriteFollowUpModifier(followUp: followUp, composer: composer))
+        modifier(TVWriteFollowUpModifier(followUp: followUp, presents: presents, composer: composer))
     }
 }
 
 private struct TVWriteFollowUpModifier<Composer: View>: ViewModifier {
     let followUp: TVWriteFollowUp
+    let presents: Bool
     let composer: (TVFollowUpComposer) -> Composer
 
     func body(content: Content) -> some View {
@@ -260,7 +267,7 @@ private struct TVWriteFollowUpModifier<Composer: View>: ViewModifier {
             .alert(
                 followUp.question?.question ?? followUp.lastQuestionText,
                 isPresented: Binding(
-                    get: { followUp.question != nil },
+                    get: { presents && followUp.question != nil },
                     set: { isPresented in
                         if !isPresented { followUp.respond(yes: false) }
                     }
@@ -276,7 +283,7 @@ private struct TVWriteFollowUpModifier<Composer: View>: ViewModifier {
             }
             .fullScreenCover(
                 item: Binding(
-                    get: { followUp.composer },
+                    get: { presents ? followUp.composer : nil },
                     set: { item in
                         if item == nil { followUp.composerDismissed() }
                     }

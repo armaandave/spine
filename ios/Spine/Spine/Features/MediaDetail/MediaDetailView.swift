@@ -123,6 +123,14 @@ final class MediaDetailViewModel {
         return failedWriteCount == failures
     }
 
+    /// `settled`, for a screen asked for while those writes were on their way: it can't open over what they asked next,
+    /// the earlier-episodes question or the log screen from a last tick (TV-107, AN-203).
+    func settledForScreen() async -> Bool {
+        guard await settled() else { return false }
+        await tvFollowUp.loading?.value
+        return !tvFollowUp.isActive
+    }
+
     func refreshFinished() async {
         while let task = refreshTask {
             await task.value
@@ -1576,6 +1584,62 @@ struct MediaRatingPickerState: Equatable {
     }
 }
 
+/// Where stars and a heart go on a page with a rule for them (TV-303, TV-304, AN-301): the log screen holding the value
+/// when the page is partway, otherwise the direct set. A write still on its way can change which, so the answer waits for
+/// it (a first tick makes a show partway). Nothing changes until the log saves, so the stars on screen go back to what
+/// they were before it opens, and cancelling it leaves them there.
+@MainActor
+struct MediaOpinionRouter {
+    let page: MediaDetailViewModel
+    /// The stars on screen.
+    let picker: Binding<MediaRatingPickerState>
+    /// Opens the log screen holding the stars or the heart.
+    let openLog: (_ ratingSteps: Int?, _ liked: Bool?) -> Void
+
+    /// Stars on a show, a season or an anime title.
+    func rate(halfSteps: Int) {
+        route(isGiving: halfSteps > 0) {
+            restoreStars()
+            openLog(halfSteps, nil)
+        } sets: {
+            let write = page.rateTV(steps: halfSteps)
+            Task {
+                if !(await write.value) { restoreStars() }
+            }
+        }
+    }
+
+    /// The heart, on any page: only a page with a rule for it can open the log screen.
+    func like(_ detail: MediaDetail) {
+        route(isGiving: page.viewer?.hasLiked != true) {
+            openLog(nil, true)
+        } sets: {
+            let write = page.toggleMediaLike(for: detail)
+            Task {
+                if !(await write.value) { picker.wrappedValue.rollbackWatch() }
+            }
+        }
+    }
+
+    private func route(isGiving: Bool, opensLog: @escaping () -> Void, sets: @escaping () -> Void) {
+        let route = {
+            if page.opinionAction?.opensLog(isGiving: isGiving) == true { opensLog() } else { sets() }
+        }
+        guard page.hasPendingWrites, page.opinionAction != nil else {
+            route()
+            return
+        }
+        Task {
+            if await page.settled() { route() } else { restoreStars() }
+        }
+    }
+
+    /// The stars on screen go back to the confirmed value.
+    private func restoreStars() {
+        picker.wrappedValue.syncConfirmed(page.viewer?.rating?.ratingHalfSteps ?? 0)
+    }
+}
+
 private struct GameCompletionPresentation: Identifiable {
     let id = UUID()
     let playthroughId: Int?
@@ -2260,6 +2324,8 @@ private struct MediaDetailPageView: View {
     @State private var pendingLogPresentation: MediaLogPresentation?
     /// A long anime title's whole episode list, over its page (AN-101).
     @State private var animeEpisodes: AnimeEpisodes?
+    /// That list is on screen or still sliding away: it shows what a write asks next until it has gone (TV-701).
+    @State private var isAnimeSheetUp = false
     /// True from a choice that closes a tracking sheet until that sheet's onDismiss, so an alert or the next
     /// screen waits for the dismissal instead of colliding with it.
     @State private var isClosingPresentation = false
@@ -2516,7 +2582,7 @@ private struct MediaDetailPageView: View {
                 }
             }
         }
-        .sheet(item: $animeEpisodes, onDismiss: { viewModel.scheduleRefresh(.full, after: .zero) }) { episodes in
+        .sheet(item: $animeEpisodes, onDismiss: animeSheetClosed) { episodes in
             AnimeEpisodesSheet(
                 episodes: episodes,
                 trackingRepository: trackingRepository,
@@ -2627,7 +2693,7 @@ private struct MediaDetailPageView: View {
             }
             Button("Cancel", role: .cancel) { viewModel.tvConfirmation = nil }
         }
-        .tvWriteFollowUp(viewModel.tvFollowUp) { item in
+        .tvWriteFollowUp(viewModel.tvFollowUp, presents: !isAnimeSheetUp) { item in
             MediaLogView(
                 detail: item.detail,
                 trackingRepository: trackingRepository,
@@ -3152,29 +3218,10 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    /// Stars or a heart: the log screen holding the value when the page is partway, otherwise the direct set. A write
-    /// still on its way can change which, so the answer waits for it (a first tick makes a show partway).
-    private func routeOpinion(
-        for detail: MediaDetail,
-        isGiving: Bool,
-        opensLog: @escaping () -> Void,
-        sets: @escaping () -> Void
-    ) {
-        let route = {
-            if viewModel.opinionAction?.opensLog(isGiving: isGiving) == true { opensLog() } else { sets() }
+    private var opinionRouter: MediaOpinionRouter {
+        MediaOpinionRouter(page: viewModel, picker: $ratingPicker) { ratingSteps, liked in
+            openTVComposer(ratingSteps: ratingSteps, liked: liked)
         }
-        guard viewModel.hasPendingWrites, viewModel.opinionAction != nil else {
-            route()
-            return
-        }
-        Task {
-            if await viewModel.settled() { route() } else { restoreRatingPicker() }
-        }
-    }
-
-    /// The stars on screen go back to the confirmed value.
-    private func restoreRatingPicker() {
-        ratingPicker.syncConfirmed(ratingHalfSteps(viewModel.viewer?.rating))
     }
 
     /// The log composer closed: a TV log's question or season composer can follow now (TV-107, TV-403).
@@ -3347,26 +3394,13 @@ private struct MediaDetailPageView: View {
             openBookCompletion(for: detail, liked: true)
             return
         }
-        routeOpinion(for: detail, isGiving: isGiving) {
-            openTVComposer(liked: true)
-        } sets: {
-            rollBackWatchIfFails(viewModel.toggleMediaLike(for: detail))
-        }
+        opinionRouter.like(detail)
     }
 
     private func ratingAction(for detail: MediaDetail, halfSteps: Int) {
         if (detail.ref.isTVFamily && detail.ref.mediaType != "episode") || viewModel.tracksAnime {
-            routeOpinion(for: detail, isGiving: halfSteps > 0) {
-                // The stars on screen wait for the log: cancelling it leaves them as they were (TV-304, AN-301).
-                restoreRatingPicker()
-                openTVComposer(ratingSteps: halfSteps)
-            } sets: {
-                // Show and season stars, with the season number on a season page (TV-504).
-                let write = viewModel.rateTV(steps: halfSteps)
-                Task {
-                    if !(await write.value) { restoreRatingPicker() }
-                }
-            }
+            // Show and season stars, with the season number on a season page (TV-504).
+            opinionRouter.rate(halfSteps: halfSteps)
             return
         }
         // Episodes have no stars of their own; their stars open Log Episode (TV-502).
@@ -3449,7 +3483,7 @@ private struct MediaDetailPageView: View {
     /// during the wait, since SwiftUI shows only one at a time.
     private func presentAfterSettling(_ present: @escaping () -> Void) {
         Task {
-            guard await viewModel.settled(),
+            guard await viewModel.settledForScreen(),
                   !isPresentingTrackingScreen, !isQuickActionAlertPresented, !isLikeAlertPresented
             else { return }
             present()
@@ -3471,7 +3505,7 @@ private struct MediaDetailPageView: View {
     private var isPresentingTrackingScreen: Bool {
         presentedSheet != nil || progressGamePlaythrough != nil || progressUpdateDetail != nil
             || editingGamePlaythrough != nil || editingBookJourney != nil
-            || gameCompletionPresentation != nil || logPresentation != nil
+            || gameCompletionPresentation != nil || logPresentation != nil || isAnimeSheetUp
     }
 
     /// Closes the tracking sheet in the tap's frame. Its onDismiss, `presentPendingSheet`, ends the closing.
@@ -4269,7 +4303,7 @@ private struct MediaDetailPageView: View {
                         isWatched: { episode in viewModel.viewer?.tvIsWatched(episode) ?? episode.watched },
                         onTick: { viewModel.toggleTVEpisode($0) },
                         onMarkUpTo: { viewModel.askMarkTVUpTo($0) },
-                        onShowAll: { openAnimeEpisodes(for: detail) }
+                        onShowAll: { openAnimeEpisodes() }
                     )
                 }
                 if detail.ref.mediaType == "season" {
@@ -4373,22 +4407,16 @@ private struct MediaDetailPageView: View {
         }
     }
 
-    /// A long title's whole list, in the sheet Home's card opens, on the rows the page already has (AN-101). Its writes
-    /// post as this page, and the page takes them all in when the sheet closes.
-    private func openAnimeEpisodes(for detail: MediaDetail) {
-        guard let confirmed = viewModel.detail else { return }
-        animeEpisodes = AnimeEpisodes(detail: confirmed) { [
-            mediaRepository, trackingRepository, diaryRepository, onUnauthorized, changeOrigin = viewModel.changeOrigin
-        ] ref in
-            MediaDetailViewModel(
-                ref: ref,
-                mediaRepository: mediaRepository,
-                trackingRepository: trackingRepository,
-                diaryRepository: diaryRepository,
-                onUnauthorized: onUnauthorized,
-                changeOrigin: changeOrigin
-            )
-        }
+    /// A long title's whole list, in the sheet Home's card opens, on this page's model (AN-101).
+    private func openAnimeEpisodes() {
+        isAnimeSheetUp = true
+        animeEpisodes = AnimeEpisodes(page: viewModel)
+    }
+
+    /// The list has gone: what a write still on its way asks next, or its failure, shows over the page (TV-701, TV-705).
+    private func animeSheetClosed() {
+        isAnimeSheetUp = animeEpisodes != nil
+        presentDeferredAlerts()
     }
 
     private func presentEpisode(_ episode: EpisodeSummary, from season: MediaDetail) {
