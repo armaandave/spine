@@ -311,9 +311,9 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
     if book.status == status and book.current_session_id:
         return book
 
-    _clear_override(book)
     # A place with no journey stays: a status move changes no number (decision 21).
     place = book.progress if _holds_a_place(book) else 0
+    _clear_override(book)
     book.status = status
     book.current_session = None
     book.progress = place
@@ -427,9 +427,11 @@ def _last_read(book):
 def _holds_a_place(book):
     """Return whether a book's progress is a place with no journey, as a file leaves (5.2).
 
-    A Read's progress is its length, not a place.
+    A Read's progress is its length, not a place, unless the eye only leans on a log: that
+    adds nothing, so a place stays under it.
     """
-    return bool(book.progress) and book.status != Status.COMPLETED.value and _last_read(book) is None
+    on_a_read = book.status == Status.COMPLETED.value and not book.read_override_active
+    return bool(book.progress) and not on_a_read and _last_read(book) is None
 
 
 def _over_a_finished_read(book):
@@ -669,6 +671,8 @@ def mark_read(user, item):
         raise CompletionRequired(open_journey.id)
     if book.status == Status.COMPLETED.value:
         return book
+    # Over a log the eye adds nothing, so a place stays. A new mark holds it in its length.
+    place = book.progress if _has_completed_history(book) and _holds_a_place(book) else 0
     if _has_completed_history(book):
         book.read_override_active = True
         book.read_override_previous_tracked = not created
@@ -682,7 +686,7 @@ def mark_read(user, item):
         book.undated_read_previous_override = _deactivate_override(book)
     book.status = Status.COMPLETED.value
     book.current_session = None
-    book.progress = 0
+    book.progress = place
     book.start_date = None
     book.end_date = None
     book.save(
@@ -744,7 +748,8 @@ def undo_read(user, item):
         book.status = book.read_override_previous_status or Status.PLANNING.value
         book.current_session = book.read_override_previous_session
         _clear_override(book)
-        book.progress = book.current_session.pages_read or 0 if book.current_session else 0
+        # With no journey, whatever it holds is the place the eye left alone.
+        book.progress = book.current_session.pages_read or 0 if book.current_session else book.progress
         book.start_date = book.current_session.start_date if book.current_session else None
         book.end_date = book.current_session.end_date if book.current_session else None
         book.save(
@@ -782,6 +787,9 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         and not book.read_override_active
     )
     restored = _restore_marker_state(book) if marker_is_current else book
+    if not marker_is_current and book.status != Status.COMPLETED.value and not book.progress and _last_read(book) is None:
+        # A status move since the mark cleared the place it replaced.
+        book.progress = _place_before_mark(book)
     book.completed_manually = False
     book.undated_read_previous_tracked = False
     book.undated_read_previous_status = None
@@ -799,6 +807,7 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         return None
     fields = [
         "completed_manually",
+        "progress",
         "undated_read_previous_tracked",
         "undated_read_previous_status",
         "undated_read_previous_session",
@@ -809,7 +818,6 @@ def delete_undated_read(user, item, *, clear_current_state=True):
             [
                 "status",
                 "current_session",
-                "progress",
                 "start_date",
                 "end_date",
                 "read_override_active",
@@ -817,7 +825,7 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         )
     if clear_current_state:
         fields.extend(["score", "rating_source", "like_source", "like_is_independent"])
-    book.save(update_fields=list(dict.fromkeys(fields)))
+    book.save(update_fields=fields)
     return book
 
 

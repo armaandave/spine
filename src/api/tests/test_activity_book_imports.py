@@ -648,6 +648,67 @@ class ALogDeletedThenYourOwnFileTests(BookImportBase):
         self.assert_numbers(PAGES, 0, PAGES)
 
 
+class AMarkOverAPlaceTests(BookImportBase):
+    """A mark moves All Time only by the pile: the eye, a heart or stars never wipe a place."""
+
+    def place_and_a_files_log(self, status=Status.IN_PROGRESS.value):
+        Book.objects.create(user=self.owner, item=self.item_row, status=status, progress=120)
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        book = Book.objects.get(item=self.item_row)
+        self.assertEqual((book.status, book.progress), (status, 120))
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+
+    def test_the_eye_over_the_log_holds_it(self):
+        self.place_and_a_files_log()
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 3, 1))
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+        self.assertEqual(self.rows(), ["2024-05-01 log +321"])
+
+    def test_undoing_that_eye_gives_it_back(self):
+        self.place_and_a_files_log()
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 3, 1))
+        self.do(book_tracking.undo_read, self.item_row, d(2026, 3, 2))
+        book = Book.objects.get(item=self.item_row)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+
+    def test_a_heart_and_stars_over_the_log_hold_it(self):
+        self.place_and_a_files_log(Status.DROPPED.value)
+        self.do(book_tracking.set_like, self.item_row, d(2026, 3, 1), liked=True)
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+        self.do(book_tracking.undo_read, self.item_row, d(2026, 3, 2))
+        self.do(book_tracking.set_rating, self.item_row, d(2026, 3, 3), 8)
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+
+    def test_a_status_move_off_that_eye_holds_it(self):
+        self.place_and_a_files_log()
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 3, 1))
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 3, 2), Status.PLANNING.value)
+        self.assertEqual(self.number(pile=True), 120 + PAGES)
+        self.assertEqual(Book.objects.get(item=self.item_row).progress, 120)
+
+    def test_your_own_file_holding_a_mark_and_a_reread_then_the_eye(self):
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 1))
+        self.begin(self.item_row, d(2026, 2, 1))
+        self.save(self.item_row, 100, d(2026, 2, 2))
+        self.from_file(self.export(), mode="overwrite")
+        self.assertEqual(self.number(pile=True), PAGES + 100)
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 3, 1))
+        self.assertEqual(self.number(pile=True), PAGES + 100)
+        self.do(book_tracking.undo_read, self.item_row, d(2026, 3, 2))
+        self.assertEqual(self.number(pile=True), PAGES + 100)
+        self.assertEqual(Book.objects.get(item=self.item_row).progress, 100)
+
+    def test_deleting_a_mark_after_to_read_gives_the_place_it_replaced_back(self):
+        Book.objects.create(user=self.owner, item=self.item_row, status=Status.IN_PROGRESS.value, progress=120)
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 3, 1))
+        self.assertEqual(self.number(pile=True), PAGES)
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 3, 2), Status.PLANNING.value)
+        self.do(book_tracking.delete_undated_read, self.item_row, d(2026, 3, 3))
+        self.assertEqual(self.number(pile=True), 120)
+        self.assertEqual(Book.objects.get(item=self.item_row).progress, 120)
+
+
 class WebDiaryAddTests(BookImportBase):
     """A web diary add stops clearing the undated mark."""
 
