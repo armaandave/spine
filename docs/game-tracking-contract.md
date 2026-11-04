@@ -442,6 +442,7 @@ The new log form defaults to today.
 Users can choose any date that is not in the future.
 If the playthrough has a start date, completion cannot precede that date.
 Apply these limits when creating or editing a completion log.
+A date equal to the phone's today is never refused: after a flight west today can fall before the start, so the log lands on the start.
 
 Progress-update dates do not restrict the completion date.
 Users can log a past completion even after recording more playtime.
@@ -717,7 +718,7 @@ Check the media page, progress editor, diary editor, library sections, and profi
 
 ## Review status
 
-GM-013's rule for the phone's own date, and GM-014's cap on a start, are provisional until the phone test of Activity's first phase accepts them.
+GM-013's and GM-213's rule for the phone's own date, and GM-014's cap on a start, are provisional until the phone test of Activity's first phase accepts them.
 
 The product interview is complete for this scope.
 Shared behavior is inherited under GM-000; game-specific decisions and their acceptance cases are recorded above.

@@ -206,6 +206,21 @@ class PhoneAheadTests(NewYearBase):
         for item in (self.book, self.game, self.manga):
             self.post(self.phone(), item, "actions/drop/", expected=400, end_date=str(JAN_2))
 
+    def test_a_games_start_caps_at_today(self):
+        game = self.item(MediaTypes.GAME.value)
+        self.post(self.phone(), game, "actions/start/", start_date=str(JAN_1), mutation_id=str(uuid4()))
+        self.assertEqual(Game.objects.get(item=game).current_session.start_date, DEC_31)
+
+    def test_a_games_start_after_a_stop_caps_at_today(self):
+        self.post(self.phone(), self.game, "actions/drop/", end_date=str(JAN_1))
+        self.post(self.phone(), self.game, "actions/start/", start_date=str(JAN_1), mutation_id=str(uuid4()))
+        self.assertEqual(Game.objects.get(item=self.game).current_session.start_date, DEC_31)
+
+    def test_a_games_start_further_ahead_stays_refused(self):
+        game = self.item(MediaTypes.GAME.value)
+        self.post(self.phone(), game, "actions/start/", expected=400, start_date=str(JAN_2), mutation_id=str(uuid4()))
+        self.assertFalse(GameSession.objects.filter(related_game__item=game).exists())
+
     def test_a_restart_caps_both_its_dates(self):
         body = {"start_date": str(JAN_1), "end_date": str(JAN_1), "mutation_id": str(uuid4())}
         self.post(self.phone(), self.book, "actions/restart/", **body)
@@ -283,6 +298,23 @@ class FlightWestTests(NewYearBase):
         self.post(self.west, self.book, "complete/", expected=201, completion_date=str(DEC_31), mutation_id=str(uuid4()))
         self.assertEqual(BookSession.objects.get(related_book__item=self.book).end_date.date(), JAN_1)
 
+    def test_a_game_log_on_the_phones_date_stays_in_order(self):
+        self.post(self.west, self.game, "progress/", total_minutes=60, progressed_on=str(DEC_31))
+        self.post(self.west, self.game, "complete/", expected=201, completion_date=str(DEC_31), mutation_id=str(uuid4()))
+        session = GameSession.objects.get(related_game__item=self.game)
+        self.assertEqual(session.end_date, JAN_1)
+        self.assertEqual(session.completion_diary_entry.consumed_at, datetime(2027, 1, 1, tzinfo=UTC))
+        self.assertTrue(session.minutes_linked)
+
+    def test_a_game_logs_date_edit_to_the_phones_date_stays_in_order(self):
+        self.clock.set(IN_TOKYO)
+        self.post(self.phone(TOKYO), self.game, "complete/", expected=201, completion_date=str(JAN_1), mutation_id=str(uuid4()))
+        self.clock.set(AFTER_FLYING_WEST)
+        entry = GameSession.objects.get(related_game__item=self.game).completion_diary_entry
+        response = self.west.patch(f"/api/v1/diary/{entry.pk}/", {"consumed_at": str(DEC_31)}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(GameSession.objects.get(related_game__item=self.game).end_date, JAN_1)
+
     def test_a_different_date_before_the_start_keeps_the_refusal(self):
         self.post(self.west, self.book, "actions/drop/", expected=400, end_date=str(DEC_30))
         self.post(self.west, self.game, "actions/drop/", expected=400, end_date=str(DEC_30))
@@ -290,6 +322,7 @@ class FlightWestTests(NewYearBase):
         self.post(self.west, self.game, "progress/", expected=400, total_minutes=60, progressed_on=str(DEC_30))
         self.post(self.west, self.book, "progress/", expected=400, progress_type="pages", value=40, progressed_on=str(DEC_30))
         self.post(self.west, self.manga, "progress/", expected=400, value=5, progressed_on=str(DEC_30))
+        self.post(self.west, self.game, "complete/", expected=400, completion_date=str(DEC_30), mutation_id=str(uuid4()))
 
 
 @override_settings(TIME_ZONE=NEW_YORK)

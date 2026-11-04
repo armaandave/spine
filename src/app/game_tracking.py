@@ -415,6 +415,17 @@ def _validate_dates(session, *, start_date=UNSET, end_date=UNSET):
         )
 
 
+def _log_day(user, session, day):
+    """Return the day a log lands on (GM-213).
+
+    The phone's own date is never refused: after a flight west today can be before the
+    start, so the log stays no earlier than that. Saves don't restrict a log's date.
+    """
+    if session.start_date and day == user_calendar.today(user):
+        return max(day, session.start_date)
+    return day
+
+
 def _validate_completion_date(session, day):
     if session.start_date and day < session.start_date:
         raise ValidationError(
@@ -611,6 +622,7 @@ def complete(
         )
     if start_date is not UNSET:
         session.start_date = _day(start_date, user) if start_date is not None else None
+    day = _log_day(user, session, day)
     _validate_completion_date(session, day)
     minutes = (
         session.total_minutes if total_minutes is UNSET else _integer(total_minutes)
@@ -684,6 +696,7 @@ def update_completion(entry, data, *, tags=UNSET):
     if "consumed_at" in data:
         day = _day(data["consumed_at"], entry.user)
         if session:
+            day = _log_day(entry.user, session, day)
             _validate_completion_date(session, day)
             session.end_date = day
         entry.consumed_at = _carrier(day)
