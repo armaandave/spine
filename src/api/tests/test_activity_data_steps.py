@@ -239,6 +239,28 @@ class PastRestartsTests(StepBase):
         _, err = run("flag_past_restarts", apply=True)
         self.assertIn("past restarts: 0", err)
 
+    def test_a_restart_paused_later_is_still_a_restart(self):
+        """A later pause or pick-up writes a status row, which isn't about its start."""
+        item = self.old_restart()
+        self.do(book_tracking.pause, item, d(2026, 5, 12))
+        self.do(book_tracking.resume, item, d(2026, 5, 13))
+        _, err = run("flag_past_restarts", apply=True)
+        self.assertIn("past restarts: 1", err)
+        self.assert_numbers(0, 170, 170)
+
+    def test_a_restart_paused_before_any_save_is_still_a_restart(self):
+        item = self.book("paused-at-once")
+        self.begin(item, d(2026, 5, 1))
+        self.save(item, 120, d(2026, 5, 2))
+        self.do(book_tracking.restart, item, d(2026, 5, 10))
+        latest = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START).latest("id")
+        for field in ("previous_progress", "current_progress"):
+            getattr(latest, field).pop("began_over")
+        latest.save(update_fields=["previous_progress", "current_progress"])
+        self.do(book_tracking.pause, item, d(2026, 5, 10))
+        _, err = run("flag_past_restarts", apply=True)
+        self.assertIn("past restarts: 1", err)
+
     def test_it_says_how_many_per_account(self):
         self.old_restart()
         self.assertEqual(BookSession.objects.filter(related_book__item__media_type=MediaTypes.BOOK.value).count(), 2)

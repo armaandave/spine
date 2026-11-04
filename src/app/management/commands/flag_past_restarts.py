@@ -2,9 +2,10 @@
 
 Only Restart begins a read at zero, and its start row has said so only since the
 preparatory ship. An older one: a journey whose last journey ended Dropped the day this one
-started, with a start row and no flag. A pick-up recorded since then says so with a status
-row, and that's no Restart. It's an upper bound, because a stop and a tap on Currently
-Reading the same day look the same.
+started, with a start row and no flag. A pick-up recorded since then writes its status row
+right after its start, and that's no Restart; a later pause or pick-up says nothing of how
+it began. It's an upper bound, because a stop and a tap on Currently Reading the same day
+look the same.
 
 A dry run by default. With --apply it changes rows, and it's idempotent. Counts go to
 standard error. With --apply each old value goes to standard output as a JSON line, so the
@@ -37,10 +38,11 @@ def past_restarts():
             item_id=session.related_book.item_id,
             current_progress__journey_id=session.pk,
         )
-        if rows.filter(current_progress__kind=ProgressChange.STATUS).exists():
-            continue
         start = rows.filter(current_progress__kind=ProgressChange.START).order_by("id").first()
-        if start is not None and not start.current_progress.get("began_over"):
+        if start is None or start.current_progress.get("began_over"):
+            continue
+        following = rows.filter(pk__gt=start.pk).order_by("id").first()
+        if following is None or following.current_progress.get("move") != ProgressChange.PICKED_BACK_UP:
             found.append((start, session.related_book.user_id))
     return found
 
