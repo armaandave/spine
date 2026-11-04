@@ -694,9 +694,10 @@ def mark_read(user, item):
         raise CompletionRequired(open_journey.id)
     if book.status == Status.COMPLETED.value:
         return book
+    over_history = _has_completed_history(book)
     # Over a log the eye adds nothing, so a place stays. A new mark holds it in its length.
-    place = book.progress if _has_completed_history(book) and _holds_a_place(book) else 0
-    if _has_completed_history(book):
+    place = book.progress if over_history and _holds_a_place(book) else 0
+    if over_history:
         book.read_override_active = True
         book.read_override_previous_tracked = not created
         book.read_override_previous_status = book.status
@@ -858,6 +859,7 @@ def delete_undated_read(user, item, *, clear_current_state=True):
             [
                 "status",
                 "current_session",
+                "progress",
                 "start_date",
                 "end_date",
                 "read_override_active",
@@ -865,7 +867,7 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         )
     if clear_current_state:
         fields.extend(["score", "rating_source", "like_source", "like_is_independent"])
-    book.save(update_fields=fields)
+    book.save(update_fields=list(dict.fromkeys(fields)))
     return book
 
 
@@ -1530,6 +1532,8 @@ def delete_journey(user, item, journey_id):
         book.progress = place
         if _holds_a_place(book):
             book.save(update_fields=["progress"])
+        else:
+            book.progress = 0
     return book
 
 
