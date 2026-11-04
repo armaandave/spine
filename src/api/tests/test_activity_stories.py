@@ -302,6 +302,17 @@ class BookStoriesTests(BookCalcBase):
         self.assert_numbers(200, 200, 400)
         self.assertEqual(self.rows()[0], "2026-04-03 log +150")
 
+    def test_edit_dates_then_a_log_goes_by_the_edited_start(self):
+        """Edited to November, a log in December is after first activity, so saves stay."""
+        item = self.book("edited-log")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 100, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            book_tracking.update_journey(self.owner, item, Book.objects.get(item=item).current_session_id, start_date=d(2025, 11, 1))
+        self.finish(item, d(2025, 12, 20), saved_on=d(2026, 3, 4))
+        self.assertEqual(self.rows(), ["2026-03-02 read 100", "2025-12-20 log +300", "2025-11-01 started"])
+        self.assert_numbers(300, 100, 400)
+
     def test_a_first_save_counts_whole_and_a_year_exists_for_it(self):
         """Decisions 9 and 16."""
         item = self.book("first", pages=500)

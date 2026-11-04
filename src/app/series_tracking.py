@@ -1305,6 +1305,15 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
             raise ValidationError("A start date can't follow the end date.")
         attempt.start_date = day
         fields.append("start_date")
+        if day:
+            # A hand edit of a start is the person saying when it began, so it's first
+            # activity too (decision 10), where a log's own move isn't.
+            ProgressChange.objects.filter(
+                actor=user,
+                item=item,
+                current_progress__journey_id=attempt.pk,
+                current_progress__kind=ProgressChange.START,
+            ).update(saved_on=day)
     if end_date is not UNSET:
         day = _user_day(user, end_date) if end_date is not None else None
         if day:

@@ -220,6 +220,24 @@ class ContinuingTests(SeriesCalcBase):
         self.do(series.delete_journey, item, d(2026, 4, 2), first)
         self.assertEqual(self.lines(), ["2026-04-01 picked back up"])
 
+    def test_edit_dates_moves_the_start_row(self):
+        item = self.title("edited", total=400)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 10, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            series.update_journey(self.owner, item, Manga.objects.get(item=item).current_attempt_id, start_date=d(2025, 11, 1))
+        self.assertEqual(self.lines(), ["2026-03-02 read 10", "2025-11-01 started"])
+
+    def test_edit_dates_then_a_log_goes_by_the_edited_start(self):
+        """Edited to November, a log in December is after first activity, so nothing moves."""
+        item = self.title("edited-log", total=400)
+        self.begin(item, d(2026, 3, 1))
+        with self.on(d(2026, 3, 3)):
+            series.update_journey(self.owner, item, Manga.objects.get(item=item).current_attempt_id, start_date=d(2025, 11, 1))
+        self.finish(item, d(2025, 12, 1), saved_on=d(2026, 3, 4))
+        self.assertEqual(self.lines(), ["2025-12-01 log +400", "2025-11-01 started"])
+        self.assert_years(400, 0, 400)
+
     def test_restart_begins_at_zero(self):
         item = self.title("restart", total=100)
         self.save(item, 30, d(2026, 2, 1))
