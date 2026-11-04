@@ -1857,7 +1857,8 @@ def _do_create_log(  # noqa: PLR0913
 ):
     _refuse_unknown_airing(ctx)
     ctx.set_own_total()
-    _require_aired(ctx)
+    if ctx.entry_point != IMPORT:
+        _require_aired(ctx)
     if day > ctx.today:
         raise TVInvalid(MSG_FUTURE_LOG)
     ctx.use_question()
@@ -1946,11 +1947,15 @@ def create_log(  # noqa: PLR0913
 
     consumed_at is a calendar date, or a datetime that converts to the user's calendar;
     a future one is TVInvalid. is_rewatch None takes TV-404's default; liked None takes
-    the title's current heart. Posts one diary activity (AN-703).
+    the title's current heart. Posts one diary activity (AN-703). An import's date past the
+    user's today becomes today: one date never aborts an import (AN-800).
     """
     day = _parse_log_day(consumed_at, user)
-    if day > user_calendar.today(user):
-        raise TVInvalid(MSG_FUTURE_LOG)
+    today = user_calendar.today(user)
+    if day > today:
+        if entry_point != IMPORT:
+            raise TVInvalid(MSG_FUTURE_LOG)
+        day = today
     rating = _validate_rating(rating, entry_point)
     return _perform(
         user,

@@ -599,6 +599,37 @@ class OtherImporterTests(ImportTestCase):
         anime_tracking.delete_log(self.user, entry)
         self.assertEqual(self.stats_time(2020)[1], 0)
 
+    def test_an_800_a_date_past_the_users_today_becomes_today_and_aborts_nothing(self):
+        # 22:30 in Los Angeles, with the server in New York already on the 26th.
+        self.clock.advance(hours=10, minutes=30)
+        late = self.fake.add(total=12)
+        other = self.fake.add(total=12)
+        self._export(
+            (late.media_id, "Completed", {"my_watched_episodes": "12", "my_finish_date": "2026-10-26"}),
+            (other.media_id, "Completed", {"my_watched_episodes": "12", "my_finish_date": "2020-05-01"}),
+        )
+        entry = self.logs(self.item_of(late))[0]
+        self.assertEqual(entry.consumed_at, datetime(2026, 10, 25, tzinfo=UTC))
+        self.assertEqual(self.logs(self.item_of(other))[0].consumed_at, datetime(2020, 5, 1, tzinfo=UTC))
+
+    def test_an_800_a_new_builds_future_log_is_still_refused(self):
+        item = self.title(total=12)
+        with self.assertRaises(anime_tracking.TVInvalid):
+            anime_tracking.create_log(self.user, item, consumed_at=date(2026, 10, 26))
+
+    def test_an_800_an_imported_log_of_a_title_with_nothing_aired_aborts_nothing(self):
+        title = self.fake.add(total=12, status="Upcoming", start_date="2027-03-12")
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        result = anime_tracking.create_log(
+            self.user,
+            item,
+            consumed_at=date(2020, 5, 1),
+            import_source="myanimelist",
+            entry_point=anime_tracking.IMPORT,
+        )
+        self.assertEqual(result.entry.consumed_at, datetime(2020, 5, 1, tzinfo=UTC))
+
     def test_an_800_the_mal_exports_rewatches_are_earlier_passes(self):
         title = self.fake.add(total=12)
         self._export(
