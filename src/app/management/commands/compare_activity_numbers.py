@@ -1,9 +1,11 @@
-"""Print today's numbers beside the calculation's, for every account (read-only).
+"""Print today's numbers beside the calculation's, for every account.
 
 docs/activity-contract.md and AGENTS.md section 16: this is the read-only count decision
 29 approved, so it prints only counts and user ids, in a transaction it rolls back, with
-the Stats cache out of the way. Its row side goes through the list's own filter function,
-never through the Stats reader, or it would compare a number with itself.
+the Stats cache out of the way. It writes nothing to the database, though the Stats build
+may store list sizes in Redis, as any Stats page does. Its row side goes through the
+list's own filter function, never through the Stats reader, or it would compare a number
+with itself.
 """
 
 import time
