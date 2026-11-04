@@ -576,16 +576,17 @@ class FlowBSeasonsOnlyTests(AcceptanceHelpers, TVAcceptanceTestCase):
     def test_a_17_deleting_the_only_log_removes_the_show_and_clears_opinions(self):
         """TV-406, TV-208.
 
-        The show leaves the library; its stars and hearts are cleared.
+        The show leaves the library; its stars and hearts are cleared. One season, so
+        the log finishes the show and its own stars and heart only save (TV-304).
         """
-        show = self.make_show({1: 3, 2: 3})
+        show = self.make_show({1: 3})
 
         def steps(driver):
             response = driver.log(show, 1, rating=8, liked=True)
             driver.rate(show, 7)
             if driver.path != "web":
                 driver.like(show)
-            entry = DiaryEntry.objects.get(user=driver.user, item__season_number=1)
+            entry = DiaryEntry.objects.get(user=driver.user)
             self.assertIsNotNone(response)
             driver.delete_log(entry.pk)
 
@@ -662,7 +663,8 @@ class FlowBSeasonsOnlyTests(AcceptanceHelpers, TVAcceptanceTestCase):
 
         def steps(driver):
             driver.log(show, 1)
-            driver.rate(show, 9)
+            # Partway, so only an import can have set these stars (TV-304, TV-800).
+            tv_tracking.set_rating(driver.user, show, 9, entry_point=tv_tracking.IMPORT)
             driver.log(show, 2, rating=4)
 
         drivers = self.run_paths(show, steps, LOG_PATHS)
@@ -1013,9 +1015,9 @@ class FlowCWholeShowTests(AcceptanceHelpers, TVAcceptanceTestCase):
                 driver.remove(show)
             self.assertEqual(snapshot(driver.user, show), before)
             driver.delete_log(entry_id)
-            driver.rate(show, 8)
-            if driver.path != "web":
-                driver.like(show)
+            # Partway, so only an import can have set these (TV-304, TV-800).
+            tv_tracking.set_rating(driver.user, show, 8, entry_point=tv_tracking.IMPORT)
+            tv_tracking.set_like(driver.user, show, True, entry_point=tv_tracking.IMPORT)
             if driver.path == "api":
                 counts["remove"] = driver.state(show)["remove_count"]
             driver.remove(show)
@@ -1626,6 +1628,7 @@ class FlowFNewEpisodesTests(AcceptanceHelpers, TVAcceptanceTestCase):
             response = driver.tick(show, 3, 1)
             if path == "api":
                 driver.answer(show, response.data["earlier_unwatched"], yes=False)
+            driver.tick(show, 3, 2)
             driver.rate(show, 6, season=3)
 
         self.fake.show(show.media_id).remove_season(3)
@@ -2183,7 +2186,8 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
         source = self.driver("api")
         ticks(source, shows["watching"], 1, (1, 2, 3))
         source.tick(shows["watching"], 2, 1)
-        source.rate(shows["watching"], 8)
+        # Partway, so only an import can have set these stars (TV-304, TV-800).
+        tv_tracking.set_rating(source.user, shows["watching"], 8, entry_point=tv_tracking.IMPORT)
         source.mark(shows["completed"])
         source.rate(shows["completed"], 9)
         source.tick(shows["paused"], 1, 1)
@@ -2650,6 +2654,7 @@ class TV000InheritedRulesTests(AcceptanceHelpers, TVAcceptanceTestCase):
         tracking_delete = app.request("delete", app.tracking_url(show), expect=409)
         self.assertEqual(tracking_delete.data["error"]["message"], "Delete this show's logs first.")
         app.delete_log(second)
+        app.mark(show)
         app.rate(show, 7)
         app.like(show)
         custom_list = CustomList.objects.create(owner=app.user, name="Later")

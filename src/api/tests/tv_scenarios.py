@@ -1193,6 +1193,10 @@ class TVAcceptanceTestCase(TestCase):
         """
         state = {}
         for name, value in self.__dict__.items():
+            if name == "_subtest":
+                # A running subtest points back at this case: following it never ends.
+                state[name] = None
+                continue
             try:
                 pickle.dumps(value)
             except Exception:  # noqa: BLE001, S112 - anything unpicklable stays behind
