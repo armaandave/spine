@@ -754,6 +754,22 @@ class RoutesTests(AnimeTestCase):
                     self.assertEqual(response.data["error"]["code"], "provider_unavailable")
         self.assertFalse(Item.objects.filter(media_id="424242").exists())
 
+    def test_routes_a_heart_on_a_title_with_no_item_and_mal_timing_out_is_a_retryable_503(self):
+        body = {"ref": {"source": "mal", "media_type": "anime", "media_id": "424242"}}
+        with mock.patch.object(mal, "anime", side_effect=requests.exceptions.Timeout):
+            response = self.api.post("/api/v1/me/liked-media/", body, format="json")
+        self.assertEqual(response.status_code, 503, getattr(response, "data", None))
+        self.assertEqual(response.data["error"]["code"], "provider_unavailable")
+        self.assertEqual(response.data["error"]["message"], "Anime details are unavailable right now")
+        self.assertFalse(Item.objects.filter(media_id="424242").exists())
+
+    def test_routes_a_heart_on_a_title_with_no_item_still_creates_it(self):
+        title = self.fake.add(total=2)
+        body = {"ref": {"source": "mal", "media_type": "anime", "media_id": title.media_id}}
+        response = self.api.post("/api/v1/me/liked-media/", body, format="json")
+        self.assertEqual(response.status_code, 200, getattr(response, "data", None))
+        self.assertEqual(response.data["anime"]["status"], "Completed")
+
     def test_routes_a_stale_version_says_the_new_count(self):
         item = self.title(total=2)
         self.action(item, "tick", episode_number=1)

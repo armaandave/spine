@@ -188,6 +188,9 @@ class LikedMediaView(APIView):
                 ref.get("season_number"),
                 ref.get("episode_number"),
             )
+        if anime_tracking.supports(ref["media_type"]):
+            # A provider it can't reach is the retryable answer, as on any anime write.
+            return tracking_service.anime_item(ref["source"], ref["media_id"], create=create)
         item = find_item(ref)
         if item is not None or not create:
             return item
