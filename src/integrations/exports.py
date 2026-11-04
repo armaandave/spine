@@ -47,6 +47,7 @@ TV_TRACKING_FIELD_NAMES = frozenset(
         # The anime contract's bookkeeping: viewings aren't exported either (AN-802).
         "pass_number",
         "log_offered_pass",
+        "total_is_written",
     },
 )
 TV_MEDIA_TYPES = frozenset(

@@ -960,8 +960,8 @@ class ExportTests(AnimeTestCase):
 
     def test_an_802_the_new_fields_arent_columns(self):
         header = next(iter(exports.generate_rows(self.user)))
-        for name in ("pass_number", "log_offered_pass", "choice", "reconciled_at", "up_next_episode"):
-            self.assertNotIn(f'"{name}"', header)
+        for name in ("pass_number", "log_offered_pass", "choice", "reconciled_at", "up_next_episode", "total_is_written"):
+            self.assertNotIn(name, header)
 
     def test_an_802_a_round_trip_keeps_counts_shelves_and_stars(self):
         finished = self.title(total=3)
