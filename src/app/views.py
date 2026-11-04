@@ -2965,7 +2965,7 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                 return JsonResponse({"error": "A consumption date is required."}, status=400)
             consumed_at = timezone.now()
             if media_type == MediaTypes.BOOK.value:
-                # A book reads a moment on the server's zone, which can be past its owner's today.
+                # The book's row takes this date too, so it's its owner's day, as a carrier.
                 today = user_calendar.today(request.user)
                 consumed_at = single_weight.calendar_datetime(today, today=today)
         elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.today(request.user):
@@ -3513,10 +3513,12 @@ def log_book_completed(request, source, media_id):
 
         from app import book_tracking
 
+        # The day the browser sent: Django read its wall clock on the server's zone.
+        end_date = form.cleaned_data.get('end_date')
         book_instance, _ = book_tracking.complete(
             request.user,
             item,
-            completion_date=form.cleaned_data.get('end_date') or user_calendar.today(request.user),
+            completion_date=timezone.localtime(end_date).date() if end_date else user_calendar.today(request.user),
             rating=form.cleaned_data.get('score'),
             review=form.cleaned_data.get('notes', ''),
             mutation_id=uuid4(),

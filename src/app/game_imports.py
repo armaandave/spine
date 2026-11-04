@@ -19,7 +19,7 @@ def import_logs(user, item, rows, *, source):
     ordered = sorted(
         enumerate(rows),
         key=lambda pair: (
-            single_weight.calendar_date(single_weight.calendar_datetime(pair[1]["consumed_at"], today=today)),
+            single_weight.calendar_date(single_weight.calendar_datetime(pair[1]["consumed_at"], today=today, user=user)),
             pair[1].get("source_order") if pair[1].get("source_order") is not None else pair[0],
         ),
     )

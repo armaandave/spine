@@ -32,8 +32,7 @@ def supports(value):
 
 
 def _day(value, user):
-    today = user_calendar.today(user)
-    return single_weight.calendar_date(single_weight.calendar_datetime(value, today=today))
+    return single_weight.calendar_date(single_weight.calendar_datetime(value, user=user))
 
 
 def _carrier(day):

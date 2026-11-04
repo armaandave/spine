@@ -378,7 +378,9 @@ class GameForm(MediaForm):
         if "score" in self.changed_data:
             payload["rating"] = single_weight.rating_from_wire(self.cleaned_data.get("score")) if self.public_rating_scale else self.cleaned_data.get("score")
         if "start_date" in self.changed_data:
-            payload["start_date"] = self.cleaned_data.get("start_date")
+            # The day the browser sent: Django read its wall clock on the server's zone.
+            start_date = self.cleaned_data.get("start_date")
+            payload["start_date"] = timezone.localtime(start_date).date() if start_date else None
         if "end_date" in self.changed_data and self.cleaned_data.get("end_date"):
             raise forms.ValidationError("Edit completion dates through the completion log.")
         self.instance = game_tracking.apply_tracking_state(self.instance.user, self.instance.item, **payload)

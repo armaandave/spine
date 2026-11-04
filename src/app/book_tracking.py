@@ -73,7 +73,7 @@ def supports(value):
 def _calendar_datetime(value, user, *, required=True):
     if value is None and not required:
         return None
-    return single_weight.calendar_datetime(value, today=user_calendar.today(user))
+    return single_weight.calendar_datetime(value, user=user)
 
 
 def _carrier(day):

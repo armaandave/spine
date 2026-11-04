@@ -107,15 +107,21 @@ def validate_storage_rating(value):
     return rating
 
 
-def calendar_datetime(value, *, today=None):
-    """Normalize a user calendar date to a stable UTC date carrier."""
+def calendar_datetime(value, *, today=None, user=None):
+    """Normalize a user calendar date to a stable UTC date carrier.
+
+    With `user`, the calendar is theirs (SW-006): it says what a moment's day is, and
+    what's in the future.
+    """
     if value is None:
         raise ValidationError("A consumption date is required.")
+    if today is None:
+        today = user_calendar.today(user) if user else timezone.localdate()
     if is_calendar_datetime(value):
         # Already normalized; read in local time, west of UTC, it would be the day before.
         day = value.date()
     elif isinstance(value, datetime):
-        day = timezone.localdate(value) if timezone.is_aware(value) else value.date()
+        day = _moment_day(value, user, today) if timezone.is_aware(value) else value.date()
     elif isinstance(value, date):
         day = value
     else:
@@ -123,9 +129,22 @@ def calendar_datetime(value, *, today=None):
             day = date.fromisoformat(str(value))
         except (TypeError, ValueError) as error:
             raise ValidationError("Enter a valid calendar date.") from error
-    if day > (today or timezone.localdate()):
+    if day > today:
         raise ValidationError("Consumption dates cannot be in the future.")
     return datetime.combine(day, time.min, tzinfo=UTC)
+
+
+def _moment_day(value, user, today):
+    """Return an aware moment's day on its owner's calendar.
+
+    What the server builds from a date is that date's first or last moment on its own
+    zone, as a file's date and the website's are. That stays the date on any calendar,
+    unless it's past the owner's today, which makes it a real moment after all.
+    """
+    local = timezone.localtime(value)
+    if user is None or (local.time() in (time.min, time.max) and local.date() <= today):
+        return local.date()
+    return user_calendar.day_of(value, user)
 
 
 def sent_day(value, today):
@@ -300,7 +319,7 @@ def import_logs(user, item, rows, *, source):
     normalized_rows = sorted(
         enumerate(rows),
         key=lambda pair: (
-            calendar_date(calendar_datetime(pair[1]["consumed_at"], today=today)),
+            calendar_date(calendar_datetime(pair[1]["consumed_at"], today=today, user=user)),
             pair[1].get("source_order")
             if pair[1].get("source_order") is not None
             else pair[0],
@@ -516,7 +535,7 @@ def create_log(
     update_current=True,
 ):
     """Create one dated log and atomically apply its coupled current state."""
-    consumed_at = calendar_datetime(consumed_at, today=user_calendar.today(user))
+    consumed_at = calendar_datetime(consumed_at, user=user)
     rating = validate_storage_rating(rating)
     if import_source and import_source_id:
         existing = DiaryEntry.objects.filter(
@@ -564,7 +583,7 @@ def update_log(entry, data, *, tags=None):
     previous_rating = entry.rating
     fields = []
     if "consumed_at" in data:
-        entry.consumed_at = calendar_datetime(data["consumed_at"], today=user_calendar.today(entry.user))
+        entry.consumed_at = calendar_datetime(data["consumed_at"], user=entry.user)
         fields.append("consumed_at")
     if "rating" in data:
         entry.rating = validate_storage_rating(data["rating"])
