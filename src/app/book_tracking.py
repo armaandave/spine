@@ -387,6 +387,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
 
     picks_back_up = _picks_back_up(book)
     began_over = _over_a_finished_read(book)
+    over_a_place = book.progress if _holds_a_place(book) else None
     started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
     pages_read, percentage_read = _opening_place(book)
     session = BookSession.objects.create(
@@ -403,7 +404,13 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, session)
-    _record_start(user, item, session, **({"began_over": True} if began_over else {}))
+    _record_start(
+        user,
+        item,
+        session,
+        **({"began_over": True} if began_over else {}),
+        **({"over_a_place": over_a_place} if over_a_place else {}),
+    )
     if picks_back_up:
         _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
@@ -1460,6 +1467,7 @@ def delete_journey(user, item, journey_id):
         return book
     if session.completion_diary_entry_id or session.status == Status.COMPLETED.value:
         raise HistoryExists("Delete the completion log instead of the completed journey.")
+    place = _opened_over(user, item, session)
     current = book.current_session_id == session.id
     if current:
         restored = _restore_previous(book, session)
@@ -1469,7 +1477,26 @@ def delete_journey(user, item, journey_id):
         _splice_session(restored, session)
     _delete_progress_history(user, item, session.id)
     session.delete()
-    return Book.objects.filter(id=book.id).first()
+    book = Book.objects.filter(id=book.id).first()
+    if book and place and not book.progress:
+        book.progress = place
+        if _holds_a_place(book):
+            book.save(update_fields=["progress"])
+    return book
+
+
+def _opened_over(user, item, session):
+    """Return the place with no journey this journey opened on, which its delete gives back.
+
+    Its start row holds it: a log and that log's delete rewrite the journey's own note.
+    """
+    start_row = ProgressChange.objects.filter(
+        actor=user,
+        item=item,
+        current_progress__journey_id=session.pk,
+        current_progress__kind=ProgressChange.START,
+    ).first()
+    return start_row.current_progress.get("over_a_place") if start_row else None
 
 
 @transaction.atomic

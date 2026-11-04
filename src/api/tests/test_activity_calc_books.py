@@ -1243,6 +1243,59 @@ class ImportedPlaceTests(BookCalcBase):
         book = Book.objects.get(item=item)
         self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
 
+    def test_deleting_an_attempt_opened_over_it_gives_it_back(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value, Status.IN_PROGRESS.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"attempt-{status}", status)
+                self.begin(item, d(2026, 3, 1))
+                self.assertEqual(Book.objects.get(item=item).progress, 120)
+                self.do(book_tracking.delete_journey, item, d(2026, 3, 2), Book.objects.get(item=item).current_session_id)
+                self.assert_numbers(0, 0, 120)
+                book = Book.objects.get(item=item)
+                self.assertEqual((book.status, book.progress), (status, 120))
+
+    def test_with_no_page_count_it_gives_it_back_too(self):
+        item = self.book("no-count", pages=None)
+        Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value, progress=120)
+        self.begin(item, d(2026, 3, 1))
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 2), Book.objects.get(item=item).current_session_id)
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+
+    def test_it_survives_a_log_and_that_logs_delete(self):
+        item = self.place("through-a-log")
+        self.begin(item, d(2026, 3, 1))
+        journey = Book.objects.get(item=item).current_session_id
+        _, entry = self.finish(item, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 4), journey)
+        self.assert_numbers(0, 0, 120)
+
+    def test_it_comes_back_after_a_stop_and_to_read_too(self):
+        item = self.place("stopped-then-gone", Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        journey = Book.objects.get(item=item).current_session_id
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.do(book_tracking.assign_status, item, d(2026, 3, 3), Status.PLANNING.value)
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 4), journey)
+        self.assert_numbers(0, 0, 120)
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+
+    def test_a_stopped_attempt_since_deleted_leaves_no_place_behind(self):
+        """Only a place with no journey comes back: a deleted read's pages don't."""
+        item = self.book("both-gone")
+        Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value)
+        self.begin(item, d(2026, 2, 1))
+        first = Book.objects.get(item=item).current_session_id
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.begin(item, d(2026, 2, 4))
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 5), first)
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 6), Book.objects.get(item=item).current_session_id)
+        self.assert_numbers(0, 0, 0)
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+
     def test_the_same_finish_on_a_series_reads_the_same(self):
         """5.2's same-story test: a series' attempt holds its place the same way."""
         manga = self.item(MediaTypes.MANGA.value, "same-story", title="same-story")
