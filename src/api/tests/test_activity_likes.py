@@ -4,20 +4,44 @@ Both bugs of the feed shipped on Nov 2: one like split across two viewers' days,
 old like coming back on a new save that day. The feed here is still the old reader.
 """
 
+from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from django.contrib.auth import get_user_model
 from django.db import connection, transaction
-from django.test import override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
+from rest_framework.test import APIClient
 
 from api.services import progress_posts
+from api.tests.test_activity_book_imports import (
+    BookImportBase,
+    goodreads_file,
+    margins_file,
+    storygraph_file,
+)
 from api.tests.test_activity_calc_books import BookCalcBase, d
-from app import book_tracking, game_tracking, series_tracking
-from app.models import Book, GameSession, Manga, MediaTypes, Status
+from app import book_tracking, game_tracking, series_tracking, tv_tracking
+from app.models import (
+    TV,
+    Anime,
+    Book,
+    GameSession,
+    Item,
+    Manga,
+    MediaTypes,
+    Sources,
+    Status,
+)
+from app.tests.tv_fixtures import FakeTVProvider, make_show, make_user, patch_now
+from integrations.imports import helpers
+from integrations.imports.mal_export.importer import MALExportImporter
 from social.models import (
     Comment,
     ContentLike,
+    Follow,
+    FollowStatus,
     ProgressChange,
     ProgressPost,
     SocialAuditLog,
@@ -26,6 +50,24 @@ from social.models import (
 NEW_YORK = "America/New_York"
 TOKYO = "Asia/Tokyo"
 FEED = "/api/v1/feed/"
+MAL_EXPORT = (
+    b'<?xml version="1.0" encoding="UTF-8" ?><myanimelist><anime><series_animedb_id>1</series_animedb_id>'
+    b"<series_title><![CDATA[Bebop]]></series_title><series_episodes>12</series_episodes>"
+    b"<my_watched_episodes>3</my_watched_episodes><my_start_date>0000-00-00</my_start_date>"
+    b"<my_finish_date>0000-00-00</my_finish_date><my_score>0</my_score><my_status>Watching</my_status>"
+    b"</anime></myanimelist>"
+)
+
+
+def _anime_save(owner, item):
+    """Write what a like reaches on an anime: anime's own saves have no change row here."""
+    return ProgressChange.objects.create(
+        actor=owner,
+        item=item,
+        previous_progress={"kind": "count", "value": 0, "max": 12, "unit": "episode"},
+        current_progress={"kind": "count", "value": 3, "max": 12, "unit": "episode"},
+        saved_on=d(2026, 3, 2),
+    )
 
 
 @override_settings(TIME_ZONE=NEW_YORK)
@@ -275,6 +317,17 @@ class OverwriteTests(LikesBase):
         self.assertEqual(ContentLike.objects.count(), 0)
         self.assertEqual(self.feed_rows()[0][1:], ("read 10 pages", 0, 0))
 
+    def test_the_receiver_alone_can_not_see_an_overwrite(self):
+        """Why each importer below calls the helper itself."""
+        item = self.book("recreated")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 40, d(2026, 3, 2))
+        self.like(self.change(item))
+        with transaction.atomic(), self.captureOnCommitCallbacks(execute=True):
+            Book.objects.filter(user=self.owner, item=item).delete()
+            book_tracking.start(self.owner, item)
+        self.assertEqual(ContentLike.objects.count(), 1)
+
     def test_the_budget_50_titles_cost_what_5_cost(self):
         """Assert the work ran: per row it's about 4,000 extra queries on 850 titles."""
 
@@ -308,3 +361,189 @@ class OverwriteTests(LikesBase):
                 Book.objects.filter(user=self.owner).delete()
         self.assertEqual(forget.call_count, 1)
         self.assertEqual(len(forget.call_args.args[1]), 20)
+
+
+class RealOverwriteTests(LikesBase, BookImportBase):
+    """Each importer's real overwrite: no like, comment, post or save comes back."""
+
+    def liked_read(self):
+        self.begin(self.item_row, d(2026, 3, 1))
+        self.save(self.item_row, 40, d(2026, 3, 2))
+        change = self.change(self.item_row)
+        self.like(change)
+        self.comment(change)
+
+    def assert_nothing_came_back(self):
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(Comment.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.assertFalse(ProgressChange.objects.filter(actor=self.owner, item=self.item_row).exists())
+        self.assertTrue(SocialAuditLog.objects.filter(action="progress_post_removed").exists())
+
+    def test_goodreads(self):
+        self.liked_read()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}), mode="overwrite")
+        self.assert_nothing_came_back()
+
+    def test_storygraph(self):
+        self.liked_read()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.from_storygraph(storygraph_file(dates="2024/05/01"), mode="overwrite")
+        self.assert_nothing_came_back()
+
+    def test_margins(self):
+        self.liked_read()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.from_margins(margins_file("2024-05-01"), mode="overwrite")
+        self.assert_nothing_came_back()
+
+    def test_a_new_save_that_day_after_goodreads_starts_at_nothing(self):
+        self.liked_read()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.from_goodreads(goodreads_file(**{"Date Read": ""}), mode="overwrite")
+        with self.on(d(2026, 3, 2)):
+            book_tracking.start(self.owner, self.item_row)
+            book_tracking.update_progress(self.owner, self.item_row, progress_type="pages", value=10)
+        self.assertEqual(self.feed_rows()[0], ("2026-03-02", "read 10 pages", 0, 0))
+
+    def test_the_mal_export(self):
+        item = Item.objects.create(
+            media_id="1",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Bebop",
+            image="https://example.com/a.jpg",
+        )
+        Anime.objects.bulk_create([Anime(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=0)])
+        self.like(_anime_save(self.owner, item))
+        with self.captureOnCommitCallbacks(execute=True), patch("app.signals.update_daily_statistics.delay"):
+            MALExportImporter(
+                MAL_EXPORT,
+                self.owner,
+                "overwrite",
+                metadata_fetcher=lambda *_args, **_kwargs: {
+                    "media_id": "1",
+                    "title": "Bebop",
+                    "image": "https://example.com/a.jpg",
+                    "max_progress": 12,
+                },
+            ).import_data()
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.assertFalse(ProgressChange.objects.filter(item=item).exists())
+        self.assertEqual(Anime.objects.filter(user=self.owner, item=item).count(), 1)
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class RealCommitTests(TransactionTestCase):
+    """No wrapping transaction, as an import task runs, so the receiver's hook really fires."""
+
+    def setUp(self):
+        for target in ("app.models.Item.fetch_releases", "app.signals.update_daily_statistics.delay"):
+            patcher = patch(target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        users = get_user_model().objects
+        self.owner = users.create_user(username="overwrite-owner", password="strong-password-123")
+        self.friend = users.create_user(username="overwrite-friend", password="strong-password-123")
+        self.item = Item.objects.create(
+            media_id="1",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Bebop",
+            image="https://example.com/a.jpg",
+        )
+        Anime.objects.bulk_create([Anime(user=self.owner, item=self.item, status=Status.IN_PROGRESS.value, progress=0)])
+        client = APIClient()
+        client.force_authenticate(self.friend)
+        response = client.post(f"/api/v1/progress/{_anime_save(self.owner, self.item).pk}/like/")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_the_generic_overwrite_cleanup_brings_no_like_back(self):
+        helpers.cleanup_existing_media({MediaTypes.ANIME.value: {self.item.source: [self.item.media_id]}}, self.owner)
+        Anime.objects.bulk_create([Anime(user=self.owner, item=self.item, status=Status.IN_PROGRESS.value, progress=0)])
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.assertFalse(ProgressChange.objects.filter(item=self.item).exists())
+
+
+@override_settings(TIME_ZONE=NEW_YORK)
+class TVSeasonDeleteTests(TestCase):
+    """A season is left out of the receiver, so its delete is what drops a post (plan 5.4)."""
+
+    def setUp(self):
+        self.provider = FakeTVProvider().__enter__()
+        self.addCleanup(self.provider.__exit__, None, None, None)
+        self.clock = patch_now(datetime(2026, 10, 25, 20, 0, tzinfo=ZoneInfo(NEW_YORK))).__enter__()
+        self.addCleanup(self.clock.__exit__, None, None, None)
+        for target in ("app.models.Item.fetch_releases", "app.tv_tracking._queue_external_ratings"):
+            patcher = patch(target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.owner = make_user(calendar=NEW_YORK)
+        self.friend = make_user(calendar=NEW_YORK)
+        Follow.objects.create(from_user=self.friend, to_user=self.owner, status=FollowStatus.ACCEPTED)
+        self.show = make_show(self.provider, title="Severance", seasons={1: 3, 2: 3})
+
+    def tick(self, season, episode):
+        self.clock.advance(minutes=1)
+        return tv_tracking.tick(self.owner, self.show, season, episode)
+
+    def phone(self):
+        client = APIClient()
+        client.force_authenticate(self.friend)
+        client.credentials(HTTP_X_SPINE_TIMEZONE=NEW_YORK)
+        return client
+
+    def rows(self):
+        """Return (day, summary, likes, comments, change id) of each progress row."""
+        response = self.phone().get(FEED)
+        self.assertEqual(response.status_code, 200, response.content)
+        return [
+            (row["consumed_at"], row["object"]["summary"], row["like_count"], row["comment_count"], row["object"]["id"])
+            for row in response.json()["results"]
+            if row["type"] == "progress_updated"
+        ]
+
+    def like_the_top_row(self):
+        change = self.rows()[0][4]
+        self.assertEqual(self.phone().post(f"/api/v1/progress/{change}/like/").status_code, 200)
+        self.assertEqual(self.phone().post(f"/api/v1/progress/{change}/comments/", {"body": "x"}, format="json").status_code, 201)
+
+    def delete_season(self, number):
+        with self.captureOnCommitCallbacks(execute=True):
+            tv_tracking.delete_season_tracking(self.owner, self.show, number)
+
+    def test_a_day_with_another_seasons_row_left_keeps_its_like(self):
+        self.tick(1, 1)
+        self.tick(1, 2)
+        self.tick(2, 1)
+        self.like_the_top_row()
+        self.delete_season(1)
+        self.assertEqual([row[:4] for row in self.rows()], [("2026-10-25", "watched 1 episode", 1, 1)])
+        self.assertEqual(ContentLike.objects.count(), 1)
+
+    def test_a_day_left_with_no_row_while_the_show_stays_loses_its_like(self):
+        self.tick(2, 1)
+        self.clock.advance(days=1)
+        self.tick(1, 1)
+        self.like_the_top_row()
+        self.delete_season(1)
+        self.assertTrue(TV.objects.filter(user=self.owner, item=self.show).exists())
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(Comment.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.assertEqual([row[:4] for row in self.rows()], [("2026-10-25", "watched 1 episode", 0, 0)])
+
+    def test_a_shows_only_season_deleted_then_ticked_again_starts_at_nothing(self):
+        self.tick(1, 1)
+        self.tick(1, 2)
+        self.like_the_top_row()
+        self.delete_season(1)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.assertEqual(self.rows(), [])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.tick(1, 1)
+        self.assertEqual(self.rows()[0][2:4], (0, 0))
+        self.assertEqual(ContentLike.objects.count(), 0)
