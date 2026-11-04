@@ -75,7 +75,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
         // Other types are unchanged.
         XCTAssertEqual(LibraryShelf.available(for: "movie"), [.tracked, .planning])
-        XCTAssertEqual(LibraryShelf.available(for: "anime"), [.tracked, .planning])
         XCTAssertEqual(LibraryShelf.available(for: "book"), [.planning, .currentlyReading, .paused, .didNotFinish, .read])
         XCTAssertEqual(LibraryShelf.defaultShelf(for: "movie"), .tracked)
         XCTAssertEqual(LibraryShelf.defaultShelf(for: "game"), .currentlyReading)
@@ -947,10 +946,10 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
     func testTV407LogDatesAreCappedAtTodayAndSentAsCalendarDates() throws {
         let now = Date(timeIntervalSince1970: 1_793_000_000)
-        for mediaType in ["tv", "season", "episode", "movie", "book"] {
+        for mediaType in ["tv", "season", "episode", "anime", "movie", "book"] {
             XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref(mediaType), now: now), now, mediaType)
         }
-        XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref("anime"), now: now), .distantFuture)
+        XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref("boardgame"), now: now), .distantFuture)
         XCTAssertEqual(DiaryLogDateLimit.range(for: Self.ref("episode"), now: now).upperBound, now)
 
         // Editing a TV log sends the day only.
@@ -976,6 +975,8 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertTrue(diary.tvCreates.isEmpty)
 
         viewModel.select(Self.summary("anime"))
+        XCTAssertTrue(viewModel.usesCalendarDate, "AN-400")
+        viewModel.select(Self.summary("boardgame"))
         XCTAssertFalse(viewModel.usesCalendarDate)
     }
 
@@ -1030,7 +1031,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(sent["is_rewatch"] as? Bool, true)
 
         // Other types always send their toggle.
-        viewModel.select(Self.summary("anime"))
+        viewModel.select(Self.summary("movie"))
         XCTAssertEqual(viewModel.isRewatchForRequest, false)
     }
 
@@ -1079,7 +1080,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
     func testOtherTypesKeepTheirDiaryCreate() async throws {
         let viewModel = DiaryCreateViewModel(diaryRepository: diary, mediaRepository: media, trackingRepository: tracking,
                                              onUnauthorized: {})
-        viewModel.select(Self.summary("anime"))
+        viewModel.select(Self.summary("boardgame"))
         await viewModel.loadRewatchDefault()
         _ = await viewModel.create()
         XCTAssertTrue(diary.tvCreates.isEmpty)

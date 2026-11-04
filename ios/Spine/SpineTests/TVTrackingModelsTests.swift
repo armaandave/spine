@@ -354,12 +354,19 @@ final class TVTrackingModelsTests: XCTestCase {
             XCTAssertEqual(json["consumed_at"] as? String, "2026-10-25", mediaType)
         }
         let anime = MediaRef(itemId: nil, source: "mal", mediaType: "anime", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
-        XCTAssertFalse(anime.usesCalendarLogDate)
+        XCTAssertTrue(anime.usesCalendarLogDate, "AN-400")
         let animeJSON = try object(DiaryEntryWriteRequest(
             ref: anime, consumedAt: date, rating: nil, review: "", reviewTitle: "", liked: false, isRewatch: false,
             autoMarkConsumed: true, containsSpoilers: false, visibility: "public", tags: []
         ))
-        XCTAssertGreaterThan((animeJSON["consumed_at"] as? String)?.count ?? 0, 10, "Other types keep their datetime.")
+        XCTAssertEqual(animeJSON["consumed_at"] as? String, "2026-10-25", "AN-400")
+        let boardGame = MediaRef(itemId: nil, source: "bgg", mediaType: "boardgame", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
+        XCTAssertFalse(boardGame.usesCalendarLogDate)
+        let boardGameJSON = try object(DiaryEntryWriteRequest(
+            ref: boardGame, consumedAt: date, rating: nil, review: "", reviewTitle: "", liked: false, isRewatch: false,
+            autoMarkConsumed: true, containsSpoilers: false, visibility: "public", tags: []
+        ))
+        XCTAssertGreaterThan((boardGameJSON["consumed_at"] as? String)?.count ?? 0, 10, "Other types keep their datetime.")
         let movie = MediaRef(itemId: nil, source: "tmdb", mediaType: "movie", mediaId: "1", seasonNumber: nil, episodeNumber: nil)
         XCTAssertTrue(movie.usesCalendarLogDate)
     }
