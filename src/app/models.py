@@ -2686,13 +2686,13 @@ class Anime(Media):
         return server_time.date() if server_time.time() == time.min else user_calendar.day_of(value, self.user)
 
     def import_reason(self):
-        """Only a Completed row's end date dates an imported number.
+        """Only a Completed row's end date dates an imported number, and never a future one.
 
         A row's `progressed_at` and a provider's `updated_at` are when it was written,
         never when it was watched.
         """
         day = self.sent_end_day() if self.status == Status.COMPLETED.value else None
-        return f"day:{day}" if day else "mark"
+        return f"day:{day}" if day and day <= user_calendar.today(self.user) else "mark"
 
 
 class Movie(Media):
