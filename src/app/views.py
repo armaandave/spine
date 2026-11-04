@@ -2963,7 +2963,8 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
         elif not consumed_at:
             if (single_weight.supports(media_type) or game_tracking.supports(media_type)):
                 return JsonResponse({"error": "A consumption date is required."}, status=400)
-            consumed_at = timezone.now()
+            # A book reads a moment on the server's zone, which can be past its owner's today.
+            consumed_at = user_calendar.today(request.user) if media_type == MediaTypes.BOOK.value else timezone.now()
         elif (single_weight.supports(media_type) or game_tracking.supports(media_type)) and consumed_at > user_calendar.today(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
         else:

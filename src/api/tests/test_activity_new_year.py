@@ -20,6 +20,7 @@ from app import (
     book_tracking,
     game_tracking,
     series_tracking,
+    single_weight,
     tv_tracking,
     user_calendar,
 )
@@ -28,6 +29,7 @@ from app.models import (
     Book,
     BookSession,
     Comic,
+    DiaryEntry,
     Game,
     GameSession,
     Item,
@@ -388,6 +390,93 @@ class NoHeaderTests(NewYearBase):
         # A date after the person's today counts as unknown, as any future date does.
         tomorrow = Book.objects.get(user=west, item__media_id="Tomorrow's Read")
         self.assertTrue(tomorrow.completed_manually)
+
+    def diary_post(self, user, item, consumed_at):
+        client = APIClient()
+        client.force_authenticate(user)
+        ref = {"source": item.source, "media_type": item.media_type, "media_id": item.media_id}
+        return client.post(
+            "/api/v1/diary/",
+            {"ref": ref, "consumed_at": consumed_at, "mutation_id": str(uuid4())},
+            format="json",
+        )
+
+    def test_a_tokyo_accounts_log_through_the_diary_uses_its_new_day(self):
+        tokyo = make_user(calendar=TOKYO)
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        response = self.diary_post(tokyo, book, str(JAN_1))
+        self.assertEqual(response.status_code, 201, response.data)
+        entry = DiaryEntry.objects.get(user=tokyo, item=book)
+        self.assertEqual(entry.consumed_at, datetime(2027, 1, 1, tzinfo=UTC))
+        client = APIClient()
+        client.force_authenticate(tokyo)
+        response = client.patch(f"/api/v1/diary/{entry.pk}/", {"consumed_at": str(JAN_1)}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_a_los_angeles_accounts_moment_through_the_diary_stays_on_its_day(self):
+        west = make_user(calendar=LOS_ANGELES)
+        self.clock.set(datetime(2027, 1, 1, 1, 0, tzinfo=NEW_YORK_TZ))
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        response = self.diary_post(west, book, datetime(2027, 1, 1, 6, 0, tzinfo=UTC).isoformat())
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(DiaryEntry.objects.get(user=west, item=book).consumed_at, datetime(2026, 12, 31, tzinfo=UTC))
+
+    def web_get_and_post_log(self, user, item):
+        """Post the log modal's own date, as its form does."""
+        browser = Client()
+        browser.force_login(user)
+        metadata = {"title": item.title, "image": item.image, "max_progress": 1, "details": {}, "total_pages": None}
+        args = [item.source, item.media_type, item.media_id]
+        with mock.patch("app.views.services.get_media_metadata", return_value=metadata):
+            default = browser.get(reverse("log_modal", args=args)).context["today"]
+            return browser, default, browser.post(reverse("add_movie_diary_entry", args=args), {"watch_date": str(default)})
+
+    def test_a_tokyo_accounts_web_film_and_album_log_with_the_modals_own_date(self):
+        tokyo = make_user(calendar=TOKYO)
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        for media_type in (MediaTypes.MOVIE.value, MediaTypes.MUSIC.value):
+            with self.subTest(media_type):
+                item = self.item(media_type)
+                _, default, response = self.web_get_and_post_log(tokyo, item)
+                self.assertEqual(default, JAN_1)
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(DiaryEntry.objects.get(user=tokyo, item=item).consumed_at, datetime(2027, 1, 1, tzinfo=UTC))
+
+    def test_a_tokyo_accounts_web_film_log_date_edit(self):
+        tokyo = make_user(calendar=TOKYO)
+        self.clock.set(datetime(2026, 12, 30, 20, 0, tzinfo=NEW_YORK_TZ))
+        film = self.item(MediaTypes.MOVIE.value)
+        browser, _, _ = self.web_get_and_post_log(tokyo, film)
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        entry = DiaryEntry.objects.get(user=tokyo, item=film)
+        response = browser.post(reverse("update_diary_entry", args=[entry.pk]), {"watch_date": str(JAN_1)})
+        self.assertEqual(response.status_code, 200, response.content)
+        entry.refresh_from_db()
+        self.assertEqual(entry.consumed_at, datetime(2027, 1, 1, tzinfo=UTC))
+
+    def test_a_tokyo_accounts_imported_film_log_on_its_new_day(self):
+        tokyo = make_user(calendar=TOKYO)
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        film = self.item(MediaTypes.MOVIE.value)
+        rows = [{"source_id": "1", "source_order": 0, "consumed_at": JAN_1, "is_rewatch": False}]
+        created = single_weight.import_logs(tokyo, film, rows, source="letterboxd")
+        self.assertEqual([entry.consumed_at for entry in created], [datetime(2027, 1, 1, tzinfo=UTC)])
+
+    def test_a_web_book_log_with_no_date_for_a_los_angeles_account_at_1am_new_york(self):
+        west = make_user(calendar=LOS_ANGELES)
+        self.clock.set(datetime(2027, 1, 1, 1, 0, tzinfo=NEW_YORK_TZ))
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        browser = Client()
+        browser.force_login(west)
+        metadata = {"title": book.title, "image": book.image, "max_progress": 400, "total_pages": 400}
+        with mock.patch("app.views.services.get_media_metadata", return_value=metadata):
+            response = browser.post(
+                reverse("add_movie_diary_entry", args=[book.source, book.media_type, book.media_id]),
+                {"auto_mark_consumed": "true", "book_complete": "true", "watch_date": ""},
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(DiaryEntry.objects.get(user=west, item=book).consumed_at, datetime(2026, 12, 31, tzinfo=UTC))
 
     def test_a_web_finish_for_a_los_angeles_account_at_1am_new_york(self):
         west = make_user(calendar=LOS_ANGELES)

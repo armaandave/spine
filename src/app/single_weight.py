@@ -11,6 +11,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from api.services import stats_cache
+from app import user_calendar
 from app.models import (
     DiaryEntry,
     DiaryEntryTag,
@@ -295,10 +296,11 @@ def import_logs(user, item, rows, *, source):
         tracking and tracking.direct_consumption
     ) or DiaryEntry.objects.filter(user=user, item=item).exists()
     created_entries = []
+    today = user_calendar.today(user)
     normalized_rows = sorted(
         enumerate(rows),
         key=lambda pair: (
-            calendar_date(calendar_datetime(pair[1]["consumed_at"])),
+            calendar_date(calendar_datetime(pair[1]["consumed_at"], today=today)),
             pair[1].get("source_order")
             if pair[1].get("source_order") is not None
             else pair[0],
@@ -514,7 +516,7 @@ def create_log(
     update_current=True,
 ):
     """Create one dated log and atomically apply its coupled current state."""
-    consumed_at = calendar_datetime(consumed_at)
+    consumed_at = calendar_datetime(consumed_at, today=user_calendar.today(user))
     rating = validate_storage_rating(rating)
     if import_source and import_source_id:
         existing = DiaryEntry.objects.filter(
@@ -562,7 +564,7 @@ def update_log(entry, data, *, tags=None):
     previous_rating = entry.rating
     fields = []
     if "consumed_at" in data:
-        entry.consumed_at = calendar_datetime(data["consumed_at"])
+        entry.consumed_at = calendar_datetime(data["consumed_at"], today=user_calendar.today(entry.user))
         fields.append("consumed_at")
     if "rating" in data:
         entry.rating = validate_storage_rating(data["rating"])
