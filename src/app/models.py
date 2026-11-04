@@ -2629,9 +2629,11 @@ class Manga(SeriesMedia):
 class Anime(Media):
     """Model for anime.
 
-    Anime has no change rows: its history rows are its saves. So each one says what it
-    was in its change reason: `day:<date>`, the date it counts on; `log:<id>`, written by
-    that log; or `mark`, which counts on no day (docs/activity-contract.md, AC-2).
+    The generic path writes change rows for its starts and numbers, for installed builds
+    and the old feed, but the calculation's adapter will ignore them and read the history
+    rows. So each history row says what it was in its change reason: `day:<date>`, the
+    date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no day
+    (docs/activity-contract.md, AC-2).
     """
 
     tracker = FieldTracker()

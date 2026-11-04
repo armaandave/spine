@@ -43,9 +43,11 @@ hearts, follows, or adding to a list.
   row.
 - The day is the local day the progress was recorded. Each save also stores
   `saved_on`, the phone's date when saved, which nothing reads yet.
-- Anime has no steps: its history rows are its saves. So each one says what it was in
-  its change reason: `day:<date>`, the date it counts on; `log:<id>`, written by that
-  log; or `mark`, which counts on no day. Nothing reads these yet either.
+- Anime's generic path writes start and progress steps, for installed builds and the
+  old feed, but the calculation's adapter will ignore them and read anime's history
+  rows. So each history row says what it was in its change reason: `day:<date>`, the
+  date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no
+  day. Nothing reads these yet either.
 
 ## AC-3: Newest date first
 
