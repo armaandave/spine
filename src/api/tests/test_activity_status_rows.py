@@ -7,7 +7,7 @@ either path.
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest import mock
 from uuid import uuid4
 
@@ -319,6 +319,38 @@ class ShowMoveTests(StatusRowBase):
         self.later()
         tv_tracking.choose(self.user, self.show, tv_tracking.DROPPED)
         self.assertEqual(self.moves(self.show), [])
+
+    def test_choosing_watching_with_no_ticks_starts_the_show(self):
+        tv_tracking.choose(self.user, self.show, tv_tracking.WATCHING)
+        self.later()
+        tv_tracking.choose(self.user, self.show, tv_tracking.PAUSED)
+        self.later()
+        tv_tracking.choose(self.user, self.show, tv_tracking.WATCHING)
+        self.later()
+        tv_tracking.choose(self.user, self.show, tv_tracking.DROPPED)
+        self.assertEqual(self.moves(self.show), [PAUSED, BACK, STOPPED])
+
+    def test_a_marked_show_was_never_started(self):
+        show = make_show(self.fake, title="Dark", seasons={1: 3, 2: 3})
+        tv_tracking.mark_watched(self.user, show, season_number=1)
+        self.later()
+        tv_tracking.choose(self.user, show, tv_tracking.DROPPED)
+        self.assertEqual(self.moves(show), [])
+
+    def test_a_logged_show_was_started(self):
+        show = make_show(self.fake, title="Dark", seasons={1: 3, 2: 3})
+        season = Item.objects.create(
+            media_id=show.media_id,
+            source=show.source,
+            media_type=MediaTypes.SEASON.value,
+            season_number=1,
+            title=show.title,
+            image=show.image,
+        )
+        tv_tracking.create_log(self.user, season, consumed_at=date(2026, 10, 25))
+        self.later()
+        tv_tracking.choose(self.user, show, tv_tracking.DROPPED)
+        self.assertEqual(self.moves(show), [STOPPED])
 
     def test_a_tick_that_ends_a_pause_is_just_the_tick(self):
         tv_tracking.tick(self.user, self.show, 1, 1)
