@@ -435,6 +435,55 @@ class RealOverwriteTests(LikesBase, BookImportBase):
         self.assertEqual(Anime.objects.filter(user=self.owner, item=item).count(), 1)
 
 
+class EditDatesThenDeleteTests(LikesBase):
+    """Edit Dates moves a start row's day, but its post stays where the like was (5.8)."""
+
+    def test_a_book_starts_at_nothing_on_a_new_save_that_day(self):
+        item = self.book("edited")
+        today = d(2026, 3, 5)
+        self.begin(item, today)
+        change = ProgressChange.objects.filter(item=item).latest("id")
+        self.like(change)
+        self.comment(change)
+        journey = Book.objects.get(item=item).current_session_id
+        with self.on(today):
+            book_tracking.update_journey(self.owner, item, journey, start_date=d(2026, 3, 1))
+            book_tracking.delete_journey(self.owner, item, journey)
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(Comment.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+        self.begin(item, today)
+        self.save(item, 10, today)
+        self.assertEqual(self.feed_rows()[0], ("2026-03-05", "read 10 pages", 0, 0))
+
+    def test_a_manga_starts_at_nothing_too(self):
+        item = self.item(MediaTypes.MANGA.value, "edited-manga")
+        today = d(2026, 3, 5)
+        with self.on(today):
+            series_tracking.start(self.owner, item)
+        self.like(ProgressChange.objects.filter(item=item).latest("id"))
+        attempt = Manga.objects.get(user=self.owner, item=item).current_attempt_id
+        with self.on(today):
+            series_tracking.update_journey(self.owner, item, attempt, start_date=d(2026, 3, 1))
+            series_tracking.delete_journey(self.owner, item, attempt)
+        self.assertEqual(ContentLike.objects.count(), 0)
+        self.assertEqual(ProgressPost.objects.count(), 0)
+
+    def test_a_row_left_on_that_day_keeps_the_post(self):
+        """Another journey's row that day holds the post: it's a check, not a sweep."""
+        item = self.book("edited-kept")
+        today = d(2026, 3, 5)
+        self.begin(item, today)
+        self.save(item, 40, today)
+        self.do(book_tracking.restart, item, today)
+        self.save(item, 10, today)
+        self.like(self.change(item))
+        old = Book.objects.get(item=item).current_session.previous_session_id
+        with self.on(today):
+            book_tracking.delete_journey(self.owner, item, old)
+        self.assertEqual(ContentLike.objects.count(), 1)
+
+
 @override_settings(TIME_ZONE=NEW_YORK)
 class RealCommitTests(TransactionTestCase):
     """No wrapping transaction, as an import task runs, so the receiver's hook fires."""

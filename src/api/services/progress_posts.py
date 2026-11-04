@@ -93,9 +93,9 @@ def delete_changes(actor_id, changes):
     """Delete one person's change rows; a post they leave with no row goes too."""
     days = defaultdict(set)
     ids = []
-    for change in changes.select_related("item"):
+    for change in changes.select_related("item", "actor"):
         ids.append(change.pk)
-        days[_title_key(change.item)].add(_saved_day(change))
+        days[_title_key(change.item)].update(_days_held(change))
     if not ids:
         return
     Activity.objects.filter(target_type="progress_change", target_id__in=ids).delete()
@@ -106,6 +106,19 @@ def delete_changes(actor_id, changes):
 
 def _saved_day(change):
     return change.saved_on or change.created_at.astimezone(user_calendar.server_tz()).date()
+
+
+def _days_held(change):
+    """Return the days a post on this row can sit on.
+
+    Edit Dates moves a start row's day and its post stays on the old one, which only the
+    moment still says. Only a start row's day can move, and drop_empty_posts deletes only a
+    post with no row left, so this stays a check and not a sweep.
+    """
+    held = {_saved_day(change)}
+    if change.current_progress.get("kind") == ProgressChange.START:
+        held.add(change.created_at.astimezone(user_calendar.calendar_tz(change.actor)).date())
+    return held
 
 
 def forget_titles(user_id, items):
