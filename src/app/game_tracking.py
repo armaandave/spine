@@ -210,10 +210,12 @@ def start(user, item, *, start_date=None, mutation_id=None):
             _push(game, session.status, "playthrough", session)
             _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
         return _sync_state(game)
+    # A phone's Start and Restart send its own date; a day ahead caps at today.
+    today = user_calendar.today(user)
     session = GameSession.objects.create(
         related_game=game,
         status=Status.IN_PROGRESS,
-        start_date=_day(start_date or user_calendar.today(user), user),
+        start_date=single_weight.sent_day(start_date or today, today),
         mutation_id=mutation_id,
     )
     _push(game, session.status, "playthrough", session)
@@ -289,9 +291,6 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     if not game or not _open_session(game):
         raise ValidationError("Only a Playing or Paused playthrough can restart.")
     drop(user, item, end_date=end_date, record_status=False)
-    # A phone's Restart sends its own date for both; a day ahead caps at today.
-    if start_date:
-        start_date = single_weight.sent_day(start_date, user_calendar.today(user))
     return start(user, item, start_date=start_date, mutation_id=mutation_id)
 
 
