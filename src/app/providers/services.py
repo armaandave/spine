@@ -423,12 +423,18 @@ def get_media_metadata(
             media_type = MediaTypes.TV.value
         return manual.metadata(media_id, media_type)
 
+    anime_limits = {}
+    if timeout is not None:
+        anime_limits["timeout"] = timeout
+    if not retry_rate_limits:
+        anime_limits["retry_rate_limits"] = False
+
     # Defensive handling: if a season is requested without season_numbers, fall back to TV
     if media_type == MediaTypes.SEASON.value and not season_numbers:
         return tmdb.tv(media_id)
 
     metadata_retrievers = {
-        MediaTypes.ANIME.value: lambda: mal.anime(media_id, timeout=timeout, retry_rate_limits=retry_rate_limits),
+        MediaTypes.ANIME.value: lambda: mal.anime(media_id, **anime_limits),
         MediaTypes.MANGA.value: lambda: (
             mangaupdates.manga(media_id)
             if source == Sources.MANGAUPDATES.value
