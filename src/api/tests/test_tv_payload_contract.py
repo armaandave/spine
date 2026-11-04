@@ -11,6 +11,7 @@ from datetime import date
 from rest_framework import status
 
 from api.tests.test_tv_tracking_api import OCT_25, TVAPITestCase
+from app import tv_tracking
 from app.tests.tv_fixtures import FakeEpisode
 
 SHOW_LIST_KEYS = {
@@ -38,6 +39,7 @@ SHOW_DETAIL_KEYS = SHOW_LIST_KEYS | {
     "eye",
     "available_actions",
     "action_reasons",
+    "opinion_action",
     "composer",
     "season",
     "episode",
@@ -72,6 +74,7 @@ SEASON_DETAIL_KEYS = SEASON_CARD_KEYS | {
     "eye",
     "available_actions",
     "action_reasons",
+    "opinion_action",
 }
 SEASON_STATES = {"watched", "airing", "in_progress", "not_started", "unaired", "unknown"}
 EPISODE_KEYS = {
@@ -138,6 +141,7 @@ SHOW_DETAIL_EXAMPLE = json.loads(
          "message": null},
  "available_actions": ["pause", "drop", "log", "remove", "rate"],
  "action_reasons": {"planning": "You've started this show. Pause or drop it instead."},
+ "opinion_action": "log",
  "composer": {"default_target": "show", "targets": [
    {"id": "season:1", "level": "season", "season_number": 1, "episode_number": null, "title": "Season 1",
     "date": "2026-10-26", "rating": "8.0", "liked": true, "is_rewatch": false, "claims_viewing_id": null,
@@ -344,7 +348,8 @@ class TVPayloadExampleTests(TVAPITestCase):
         self.ticks(show, 2, [1, 2, 3])
         self.action(show, "rate", season_number=1, rating=8)
         self.like(show, 1)
-        self.action(show, "rate", rating=9)
+        # The show is partway, so its stars come from before TV-304 or from an import.
+        tv_tracking.set_rating(self.user, show, 9, entry_point=tv_tracking.IMPORT)
 
         state = self.detail(show).data["user_state"]["tv"]
 
@@ -507,7 +512,7 @@ class TVInstalledBuildKeyTests(TVAPITestCase):
     def test_tv_900_user_state_and_tracking_state_keys(self):
         show = self.make_show()
         self.tick(show, 1, 1)
-        self.action(show, "rate", rating=8)
+        tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.IMPORT)
 
         user_state = self.detail(show).data["user_state"]
         tracking = self.client.get(f"/api/v1/tracking/tmdb/tv/{show.media_id}/").data
@@ -524,18 +529,18 @@ class TVInstalledBuildKeyTests(TVAPITestCase):
         self.assertTrue(set(listed["tracking"]) >= self.TRACKING_KEYS)
 
     def test_tv_205_an_unstarted_season_reports_untracked_but_keeps_its_opinions(self):
-        show = self.make_show()
+        # A heart with nothing aired only saves (TV-303), so the season stays not started.
+        show = self.make_show(seasons={1: 2, 2: [date(2030, 1, 1)]})
         self.tick(show, 1, 1)
-        self.action(show, "rate", season_number=2, rating=7)
         self.like(show, 2)
 
         user_state = self.detail(show, 2).data["user_state"]
 
         self.assertFalse(user_state["is_tracked"])
         self.assertIsNone(user_state["status"])
-        self.assertEqual(user_state["rating"], "7.0")
         self.assertTrue(user_state["has_liked"])
         self.assertFalse(user_state["tv"]["season"]["started"])
+        self.assertEqual(user_state["tv"]["season"]["opinion_action"], "save")
 
     def test_tv_900_episode_is_tracked_means_a_viewing(self):
         show = self.make_show()

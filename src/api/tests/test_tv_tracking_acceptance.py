@@ -1751,7 +1751,7 @@ class FlowGStartingPartwayTests(AcceptanceHelpers, TVAcceptanceTestCase):
         """TV-004, TV-006, TV-304.
 
         Watching with S1 E1 next and no progress; Planning is unavailable; a heart on
-        the show is opinion only.
+        the show opens the whole-show log, so a direct one is refused.
         """
         show = self.make_show({0: 2, 1: 3})
 
@@ -1761,17 +1761,18 @@ class FlowGStartingPartwayTests(AcceptanceHelpers, TVAcceptanceTestCase):
                 return
             driver.tick(show, 0, 1)
             if driver.path in ("api", "installed"):
-                driver.like(show)
+                refused = driver.like(show, expect=409)
+                self.assertEqual(refused.data["error"]["message"], "Log this first.")
 
         drivers = self.run_paths(show, steps, (*TICK_PATHS, "import"))
 
         snap = self.assert_same_state(show, {path: drivers[path] for path in ("api", "installed")})
-        self.assert_same_state(show, drivers, keys=tuple(key for key in ALL_KEYS if key != "hearts"))
+        self.assert_same_state(show, drivers)
         self.assertEqual(snap["status"], WATCHING)
         self.assertEqual(snap["up_next"][:2], (1, 1))
         self.assertEqual(snap["counts"], (0, 3))
-        self.assertEqual(snap["viewings"], [(0, 1, "tick", None, "2026-10-25")])  # the heart marked nothing
-        self.assertTrue(snap["hearts"]["show"])
+        self.assertEqual(snap["viewings"], [(0, 1, "tick", None, "2026-10-25")])
+        self.assertFalse(snap["hearts"]["show"])
         state = drivers["api"].state(show)
         self.assertEqual(state["action_reasons"]["planning"], "You've started this show. Pause or drop it instead.")
         self.assert_surfaces_agree_for(show, drivers)
@@ -2004,8 +2005,13 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
         self.assertEqual(refused.data["error"]["message"], "This episode hasn't aired yet.")
         self.assertFalse(self.snap_of(api, show)["in_library"])
 
-    def test_a_29_stars_on_a_started_show_are_opinion_only(self):
-        """TV-304, TV-703: status and up next are unchanged; rating activity on 0-10."""
+    def test_a_29_stars_on_a_partway_show_and_a_heart_on_a_partway_season(self):
+        """TV-304, TV-401.
+
+        Each is refused with the reason, and nothing changes: the app opens that level's
+        log composer holding the value. Cancelling is the app not saving. Saving marks
+        the rest of that show or season watched.
+        """
         show = self.make_show({1: 3, 2: 6})
         before = {}
 
@@ -2013,30 +2019,45 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
             ticks(driver, show, 1, (1, 2, 3))
             ticks(driver, show, 2, (1, 2))
             before[driver.name] = snapshot(driver.user, show)
-            driver.rate(show, 8)
+            refused = driver.rate(show, 8, expect=409)
+            self.assertEqual(refused.data["error"]["message"], "Log this first.")
+            heart = driver.like(show, 2, expect=409)
+            self.assertEqual(heart.data["error"]["message"], "Log this first.")
 
-        drivers = self.run_paths(show, steps, LOG_PATHS)
+        drivers = self.run_paths(show, steps, ("api", "installed"))
 
         snap = self.assert_same_state(show, drivers)
         for path, driver in drivers.items():
-            keys = ("status", "up_next", "counts", "viewings", "seasons")
-            self.assertEqual(pick(self.snap_of(driver, show), keys), pick(before[path], keys), path)
+            self.assertEqual(self.snap_of(driver, show), before[path], path)
         self.assertEqual(snap["up_next"][:2], (2, 3))
-        self.assertEqual(snap["stars"]["show"], ("8.0", None))
-        self.assertEqual(snap["activity_detail"], [("rating_updated", "8.0", "public")])
+        self.assertEqual(snap["stars"]["show"], (None, None))
+        self.assertEqual(snap["activity_detail"], [])
+
+        api = drivers["api"]
+        self.assertEqual(api.state(show)["opinion_action"], "log")
+        api.log(show, 2, liked=True, is_rewatch=False)
+        self.assertEqual(api.state(show, 2)["season"]["state"], "watched")
+        self.assertEqual(self.snap_of(api, show)["counts"], (9, 9))
+        api.log(show, rating=8, is_rewatch=False)
+        self.assertEqual(self.snap_of(api, show)["stars"]["show"][0], "8.0")
         self.assert_surfaces_agree_for(show, drivers)
 
     def test_a_30_stars_on_an_unwatched_season_while_watching_another(self):
-        """TV-303, TV-304.
+        """TV-303.
 
-        Opinion only; Season 4 stays unwatched; up next stays in S2.
+        Season 4 is marked watched undated with those stars, TV-107 asks about the seasons
+        before it, and no composer opens. The eye undoes the mark.
         """
         show = self.make_show({1: 2, 2: 3, 3: 2, 4: 2})
+        asked = {}
 
         def steps(driver):
             ticks(driver, show, 1, (1, 2))
             driver.tick(show, 2, 1)
-            driver.rate(show, 6, season=4)
+            response = driver.rate(show, 6, season=4)
+            if driver.path == "api":
+                asked["earlier"] = response.data["earlier_unwatched"]
+                asked["finished"] = response.data["finished"]
 
         drivers = self.run_paths(show, steps, ("api", "web"))
 
@@ -2045,10 +2066,14 @@ class CrossCuttingTests(AcceptanceHelpers, TVAcceptanceTestCase):
         # shows nowhere while the show is started, so the paths agree on the rest.
         snap = self.assert_same_state(show, drivers, keys=tuple(key for key in ALL_KEYS if key != "choice"))
         self.assertEqual(snap["stars"]["seasons"][4], ("6.0", None))
-        self.assertNotIn(4, snap["seasons"])  # not started (TV-205)
-        self.assertEqual(snap["watched_all"], [(1, 1), (1, 2), (2, 1)])
+        self.assertEqual(snap["watched_all"], [(1, 1), (1, 2), (2, 1), (4, 1), (4, 2)])
         self.assertEqual(snap["up_next"][:2], (2, 2))
+        self.assertEqual(asked["earlier"]["question"], "Also mark S2 E2–S3 E2 watched?")  # noqa: RUF001
+        self.assertIsNone(asked["finished"])
         self.assert_surfaces_agree_for(show, drivers)
+        api = drivers["api"]
+        api.unmark(show, 4)
+        self.assertEqual(self.snap_of(api, show)["watched_all"], [(1, 1), (1, 2), (2, 1)])
         # Installed builds send season stars without a season number: a 400, not a 500.
         installed = self.driver("installed", user=drivers["api"].user)
         refused = installed.request(
