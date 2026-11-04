@@ -1738,7 +1738,9 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
             else:
                 merge(_do_mark(ctx, ctx.calc.aired, origin=AnimeMark.Origin.EYE))
         elif status is not None:
-            merge(_do_choose(ctx, status, quiet=not strict))
+            # A number sent with it can leave the status out of date: reaching the total
+            # with In progress, say. The number stands, and that's no conflict.
+            merge(_do_choose(ctx, status, quiet=not strict or progress is not None))
         if has_rating:
             merge(_do_set_rating(ctx, rating) if strict else _quiet(lambda: _do_set_rating(ctx, rating)))
         if notes is not None and ctx.row is not None and ctx.row.notes != notes:

@@ -674,6 +674,12 @@ class InstalledBuildTests(AnimeTestCase):
         self.assertEqual(set(data["progress"]), {"kind", "value", "max", "unit"})
         self.assertEqual(data["progress"]["unit"], "episode")
 
+    def test_an_900_a_patch_that_reaches_the_total_with_in_progress_is_a_200(self):
+        item = self.title(total=12)
+        response = self.write(item, status="In progress", progress=12)
+        self.assertEqual((response.data["status"], response.data["progress"]["value"]), ("Completed", 12))
+        self.assertEqual(self.row(item).progress, 12)
+
     def test_an_900_a_put_with_a_status_works(self):
         item = self.title(total=3)
         response = self.api.put(self.url(item), {"status": "Planning"}, format="json")

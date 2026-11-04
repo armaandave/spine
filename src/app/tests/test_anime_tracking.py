@@ -1495,6 +1495,29 @@ class WrittenStateTests(AnimeTestCase):
         self.assertEqual(raised.exception.message, "This anime has 3 episodes.")
         self.assertIsNone(self.row(item))
 
+    def test_an_900_a_number_that_finishes_it_outlives_the_status_sent_with_it(self):
+        item = self.title(total=12)
+        anime_tracking.apply_written_state(
+            self.user,
+            item,
+            {"status": "In progress", "progress": 12},
+            entry_point=anime_tracking.LEGACY_APP,
+        )
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 12))
+        self.assertTrue(all(viewing.kind == "tick" for viewing in self.viewings(item)))
+
+    def test_an_900_a_number_makes_a_sent_planning_out_of_date_too(self):
+        item = self.title(total=12)
+        anime_tracking.apply_written_state(
+            self.user,
+            item,
+            {"status": "Planning", "progress": 3},
+            entry_point=anime_tracking.LEGACY_APP,
+        )
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("In progress", 3))
+
     def test_an_900_status_and_number_together(self):
         item = self.title(total=5)
         self.write(item, status="Paused", progress=2)
