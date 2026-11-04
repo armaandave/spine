@@ -235,6 +235,13 @@ class MarkMatrixTests(BookCalcBase):
         self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 0))
         self.assertEqual(self.rows(item), ["2026-03-01 started", "2025-06-01 log +350"])
 
+    def test_the_web_form_writes_a_new_row_at_another_status_as_it_did(self):
+        """A new row's default status is Completed, and it hasn't left any Read."""
+        item = self.book("web-new-row", pages=self.PAGES)
+        self.web_form(item, Status.IN_PROGRESS.value, progress="50")
+        book = Book.objects.get(user=self.owner, item=item)
+        self.assertEqual((book.status, book.progress, book.current_session_id), (Status.IN_PROGRESS.value, 50, None))
+
     def test_the_web_form_mark_comes_back_from_your_own_file_as_a_mark(self):
         item = self.book("web-export", pages=self.PAGES)
         Item.objects.filter(pk=item.pk).update(image="https://example.com/a.jpg")

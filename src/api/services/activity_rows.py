@@ -515,7 +515,8 @@ def marked_moments(model, tracking_ids):
     """Return when each title's mark last went on, by its history rows in save order.
 
     One query however many titles ask, because every Stats miss walks them all. A title
-    is left out when no row says so: migration 0075 and the undated Reads step write none.
+    is left out when no row says so: migration 0075 and the undated Reads step write
+    none.
     """
     moments = {}
     marked = {}

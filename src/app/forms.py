@@ -408,9 +408,10 @@ class BookForm(MediaForm):
         the row as a place.
         """
         status = self.cleaned_data["status"]
-        moved = self.instance.pk is None or "status" in self.changed_data
+        is_new = self.instance.pk is None
+        moved = is_new or "status" in self.changed_data
         finished = status == Status.COMPLETED.value
-        off_a_read = self.initial.get("status") == Status.COMPLETED.value
+        off_a_read = not is_new and self.initial.get("status") == Status.COMPLETED.value
         if not commit or not moved or not (finished or off_a_read):
             return super().save(commit)
         from app import book_tracking
