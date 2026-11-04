@@ -2347,14 +2347,14 @@ def _lock_and_reconcile(row_id, *, listing=None):
         return before != (row.status, row.up_next_episode, row.caught_up)
 
 
-def refresh_after_calendar(items):
+def refresh_after_calendar(items, reads=None):
     """Refresh these titles' listings and work out every user's row (the calendar job).
 
     This is how a new episode or a raised total reopens a title (AN-202). Choices never
     move (TV-203). Never raises for one row.
     """
     items = list(items)
-    listings = anime_listing.refresh(items)
+    listings = anime_listing.refresh(items, reads)
     for item in items:
         listing = listings.get(item.pk)
         if listing is None:

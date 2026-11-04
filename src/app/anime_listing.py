@@ -37,6 +37,8 @@ UNAVAILABLE_MESSAGE = "Anime details are unavailable right now"
 # alone after a failure.
 FIRST_OPEN_TIMEOUT = 3
 FAILURE_BACKOFF = timedelta(minutes=15)
+# How long the calendar job waits on one read: a hung provider holds up a Celery worker.
+JOB_TIMEOUT = 10
 # How long a read of a title stays good (as TV's do): a title still airing or announced
 # can change any day, and a finished one hardly ever. The calendar job looks again at a
 # title it doesn't otherwise pick up, and at a title's place in its series, as often.
@@ -59,6 +61,23 @@ class AnimeDetailsUnavailable(TVDetailsUnavailable):
     def __init__(self, message=UNAVAILABLE_MESSAGE):
         """Keep the user copy."""
         super().__init__(message)
+
+
+class JobReads:
+    """One run of the calendar job's MAL reads: short, and none once MAL has timed out."""
+
+    def __init__(self):
+        self.mal_timed_out = False
+
+    def mal(self, read):
+        """Return read(timeout); after a timeout, the rest of the run asks MAL nothing."""
+        if self.mal_timed_out:
+            raise requests.exceptions.Timeout("MAL has already timed out in this run")
+        try:
+            return read(JOB_TIMEOUT)
+        except requests.exceptions.Timeout:
+            self.mal_timed_out = True
+            raise
 
 
 class Row(NamedTuple):
@@ -376,7 +395,7 @@ def provisional_listing(item, total):
     return stored if stored is not None else Listing(item=item, total=total or None)
 
 
-def refresh(items):
+def refresh(items, reads=None):
     """Read MAL and AniList again for these titles; return {item id: Listing} (the job).
 
     One AniList request per 25 titles. A failure keeps what is stored and backs off.
@@ -384,17 +403,18 @@ def refresh(items):
     items = [item for item in items if item.source != Sources.MANUAL.value]
     if not items:
         return {}
+    reads = reads or JobReads()
     now = user_calendar.now()
     episodes_by_id = None
     try:
-        episodes_by_id = anilist.anime_episodes([item.media_id for item in items])
+        episodes_by_id = anilist.anime_episodes([item.media_id for item in items], timeout=JOB_TIMEOUT)
     except PROVIDER_FAILURES:
         logger.warning("AniList can't be read for the calendar job; keeping stored rows")
     listings = {}
     for item in items:
         numbers = None
         try:
-            numbers = mal.anime(item.media_id)
+            numbers = reads.mal(lambda timeout: mal.anime(item.media_id, timeout=timeout))
         except PROVIDER_FAILURES:
             logger.warning("MAL can't be read for %s; keeping its numbers", item)
         episodes = None
@@ -404,7 +424,7 @@ def refresh(items):
         if row is None:
             continue
         if _series_is_stale(row, now):
-            _refresh_next_title(row, numbers, now)
+            _refresh_next_title(row, numbers, now, reads)
         if _has_numbers(row):
             listings[item.pk] = _listing_from_row(row)
     return listings
@@ -414,7 +434,7 @@ def _series_is_stale(row, now):
     return row.series_checked_at is None or now - row.series_checked_at >= STALE_SETTLED
 
 
-def _refresh_next_title(row, numbers, now):
+def _refresh_next_title(row, numbers, now, reads):
     """Store the title after this one in MAL's order (AN-500); never breaks the job.
 
     The same fallbacks as api.services.media._add_anime_series: a title with no prequel
@@ -426,7 +446,7 @@ def _refresh_next_title(row, numbers, now):
     next_title = None
     if any(relation.get("relation") in {"Prequel", "Sequel"} for relation in relations):
         try:
-            series = mal.anime_series(row.item.media_id)
+            series = reads.mal(lambda _timeout: mal.anime_series(row.item.media_id))
         except (requests.exceptions.RequestException, services.ProviderAPIError):
             logger.warning("MAL's series order can't be read for %s", row.item)
             return

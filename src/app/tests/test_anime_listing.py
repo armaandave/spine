@@ -870,6 +870,71 @@ class CalendarJobTests(AnimeTestCase):
         self.assertEqual(kept.rows_fetched_at, before.rows_fetched_at, "It keeps what it had")
         self.assertIsNotNone(kept.retry_after)
 
+    def test_an_202_a_hanging_mal_costs_one_short_read_in_a_run(self):
+        moment = int(self.clock.moment.timestamp())
+        no_total = [self.title(total=None, status="Airing") for _ in range(3)]
+        no_schedule = [self.title(total=12, status="Airing") for _ in range(3)]
+        for name, items, media in (
+            # AniList has no total for these, so the job would ask MAL for it, then for the numbers.
+            (
+                "no total",
+                no_total,
+                [
+                    {
+                        "idMal": int(item.media_id),
+                        "endDate": {"year": None, "month": None, "day": None},
+                        "episodes": None,
+                        "airingSchedule": {"nodes": [{"episode": 3, "airingAt": moment}]},
+                    }
+                    for item in no_total
+                ],
+            ),
+            # AniList has no schedule for these, so the job would ask MAL for releases, then for the numbers.
+            ("no schedule", no_schedule, []),
+        ):
+            answer = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": media}}}
+            with (
+                self.subTest(name=name),
+                mock.patch.object(services, "api_request", return_value=answer),
+                mock.patch.object(mal, "anime", side_effect=requests.exceptions.Timeout) as read,
+            ):
+                events_bulk = []
+                calendar_anime.process_anime_bulk(items, events_bulk)
+                self.assertEqual(read.call_count, 1)
+                self.assertEqual(read.call_args.kwargs["timeout"], anime_listing.JOB_TIMEOUT)
+                self.assertEqual(events_bulk, [])
+
+    def test_an_202_a_mal_timeout_in_one_run_doesnt_stop_the_next(self):
+        item = self.title(total=2)
+        with mock.patch.object(mal, "anime", side_effect=requests.exceptions.Timeout) as read:
+            calendar_anime.process_anime_bulk([item], [])
+        self.assertEqual(read.call_count, 1)
+        self.fake.calls.clear()
+        calendar_anime.process_anime_bulk([item], [])
+        self.assertGreater(self.fake.count("mal"), 0)
+        self.assertEqual(AnimeListing.objects.get(item=item).total, 2)
+
+    def test_an_202_a_refused_mal_keeps_being_asked(self):
+        # Only a hang holds up the worker; a refusal costs nothing and one title's says little.
+        items = [self.title(total=2) for _ in range(2)]
+        with mock.patch.object(mal, "anime", side_effect=ProviderDown) as read:
+            anime_tracking.refresh_after_calendar(items)
+        self.assertEqual(read.call_count, 2)
+
+    def test_an_202_the_jobs_reads_are_short(self):
+        answer = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
+        item = self.title(total=2)
+        with (
+            mock.patch.object(services, "api_request", return_value=answer) as schedule,
+            mock.patch.object(anilist, "anime_episodes", wraps=anilist.anime_episodes) as episodes,
+            mock.patch.object(mal, "anime", wraps=mal.anime) as numbers,
+        ):
+            calendar_anime.process_anime_bulk([item], [])
+        self.assertEqual(schedule.call_args.kwargs["timeout"], anime_listing.JOB_TIMEOUT)
+        self.assertEqual(episodes.call_args.kwargs["timeout"], anime_listing.JOB_TIMEOUT)
+        self.assertTrue(all(call.kwargs["timeout"] == anime_listing.JOB_TIMEOUT for call in numbers.call_args_list))
+        self.assertGreater(numbers.call_count, 0)
+
     def test_an_202_refreshing_asks_anilist_once_for_many_titles(self):
         items = [self.title(total=2) for _ in range(3)]
         self.fake.calls.clear()
