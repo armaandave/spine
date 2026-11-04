@@ -47,6 +47,7 @@ class MarginsRow:
     end_date: date | None
     rating: Decimal | None
     review: str
+    pages: int | None = None
 
     @property
     def author(self):
@@ -85,6 +86,7 @@ def _normalize_row(index, row, today):
         end_date=_date(row.get("End Date"), today),
         rating=_rating(row.get("Rating")),
         review=row.get("Review", ""),
+        pages=_pages(row.get("Pages")),
     )
 
 
@@ -95,6 +97,11 @@ def _date(value, today):
     except (TypeError, ValueError):
         return None
     return parsed if parsed <= today else None
+
+
+def _pages(value):
+    """Return the file's page count, when it holds a whole number above zero."""
+    return int(value) if value and value.isdecimal() and int(value) else None
 
 
 def _rating(value):

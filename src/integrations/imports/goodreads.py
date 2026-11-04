@@ -374,11 +374,7 @@ class GoodReadsImporter:
                 )
             return None, False
 
-        existing = DiaryEntry.objects.filter(
-            user=self.user,
-            item=item,
-            consumed_at__date=row.date_read.date(),
-        ).first()
+        existing = helpers.book_log_on(self.user, item, row.date_read.date())
         if existing:
             return existing, False
 

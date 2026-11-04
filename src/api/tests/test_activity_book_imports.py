@@ -22,6 +22,7 @@ from integrations.imports.storygraph.importer import StoryGraphImporter
 from integrations.tests.imports.test_goodreads import csv_payload
 
 MEDIA_ID = "hc-1001"
+NEW_MEDIA_ID = "hc-1002"
 TITLE = "Atlas of Quiet Signals"
 PAGES = 321
 STORYGRAPH_HEADER = (
@@ -119,6 +120,26 @@ class BookImportBase(BookCalcBase):
         return out.getvalue().encode()
 
 
+class ABookSpineHasNeverSeen:
+    """Resolve any row to a book with no Item yet, the provider's page count on it."""
+
+    def __init__(self, pages):
+        self.pages = pages
+
+    def resolve_rows(self, rows):
+        return {
+            row.index: {
+                "media_id": NEW_MEDIA_ID,
+                "source": Sources.HARDCOVER.value,
+                "title": TITLE,
+                "image": "https://example.com/book.jpg",
+                "max_progress": self.pages,
+                "total_pages": self.pages,
+            }
+            for row in rows
+        }
+
+
 class UndatedReadTests(BookImportBase):
     """An undated Read is the mark, whichever file it came from (decision 49)."""
 
@@ -145,6 +166,34 @@ class UndatedReadTests(BookImportBase):
     def test_yamtrack(self):
         self.from_file(self.yamtrack_row(status=Status.COMPLETED.value, progress=0))
         self.assert_the_mark()
+
+    def new_book_number(self, importer):
+        """Import an undated Read of a book Spine has never seen; return its pile."""
+        with patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            importer()
+        item = Item.objects.get(media_id=NEW_MEDIA_ID, media_type=BOOK)
+        self.assertTrue(Book.objects.get(user=self.owner, item=item).completed_manually)
+        return self.number(pile=True)
+
+    def test_a_new_book_from_goodreads_holds_its_pages_at_once(self):
+        resolver = ABookSpineHasNeverSeen(PAGES)
+        payload = BytesIO(goodreads_file(**{"Date Read": ""}))
+        self.assertEqual(self.new_book_number(goodreads.GoodReadsImporter(payload, self.owner, "new", resolver=resolver).import_data), PAGES)
+
+    def test_a_new_book_from_storygraph_holds_its_pages_at_once(self):
+        resolver = ABookSpineHasNeverSeen(PAGES)
+        importer = StoryGraphImporter(storygraph_file(), self.owner, "new", resolver=resolver)
+        self.assertEqual(self.new_book_number(importer.import_data), PAGES)
+
+    def test_a_new_book_from_margins_holds_its_pages_at_once(self):
+        resolver = ABookSpineHasNeverSeen(PAGES)
+        importer = MarginsImporter(margins_file(), self.owner, "new", resolver=resolver)
+        self.assertEqual(self.new_book_number(importer.import_data), PAGES)
+
+    def test_a_new_book_from_margins_with_no_count_from_the_provider_reads_the_file(self):
+        resolver = ABookSpineHasNeverSeen(None)
+        importer = MarginsImporter(margins_file(), self.owner, "new", resolver=resolver)
+        self.assertEqual(self.new_book_number(importer.import_data), PAGES)
 
     def test_undoing_an_imported_mark_keeps_the_row(self):
         self.from_goodreads(goodreads_file(**{"Date Read": ""}))
@@ -377,6 +426,65 @@ class OverwriteYourOwnExportTests(BookImportBase):
             self.from_file(self.export(), mode="overwrite")
         self.assert_numbers(300, 0, 990)
         self.assertEqual(DiaryEntry.objects.filter(user=self.owner).count(), 1)
+
+
+class FilesComingBackTests(BookImportBase):
+    """The same day is the same read, on a server west of UTC too (SW-504)."""
+
+    def assert_one_log(self):
+        self.assertEqual(DiaryEntry.objects.filter(item=self.item_row).count(), 1)
+        self.assertEqual(self.number(start=d(2024, 1, 1), end=d(2024, 12, 31)), PAGES)
+        self.assertEqual(self.number(pile=True), PAGES)
+
+    def test_the_same_goodreads_file_twice(self):
+        payload = goodreads_file(**{"Date Read": "2024/05/01"})
+        self.from_goodreads(payload)
+        self.from_goodreads(payload)
+        self.assert_one_log()
+
+    def test_the_same_storygraph_file_twice(self):
+        payload = storygraph_file(dates="2024/05/01")
+        self.from_storygraph(payload)
+        self.from_storygraph(payload)
+        self.assert_one_log()
+
+    def test_a_goodreads_file_over_a_phone_log_that_day(self):
+        self.finish(self.item_row, d(2024, 5, 1), saved_on=d(2026, 3, 1))
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.assert_one_log()
+
+    def test_a_storygraph_file_over_a_phone_log_that_day(self):
+        self.finish(self.item_row, d(2024, 5, 1), saved_on=d(2026, 3, 1))
+        self.from_storygraph(storygraph_file(dates="2024/05/01"))
+        self.assert_one_log()
+
+    def test_the_next_day_is_another_read(self):
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/01"}))
+        self.from_goodreads(goodreads_file(**{"Date Read": "2024/05/02"}))
+        self.assertEqual(DiaryEntry.objects.filter(item=self.item_row).count(), 2)
+
+
+class YamtrackScoresTests(BookImportBase):
+    """A file's score off the half stars keeps its log, and says so (docs/media-imports.md)."""
+
+    def test_it_keeps_the_log_and_rounds_the_rating(self):
+        payload = self.yamtrack_row(status=Status.COMPLETED.value, end_date="2024-05-01 00:00:00+00:00", score="8.5")
+        _, warnings = self.from_file(payload)
+        self.assertEqual(self.number(start=d(2024, 1, 1), end=d(2024, 12, 31)), PAGES)
+        self.assertEqual(DiaryEntry.objects.get(item=self.item_row).rating, 9)
+        self.assertIn("8.5", warnings)
+        self.assertIn(TITLE, warnings)
+
+    def test_a_half_star_value_needs_no_rounding_or_warning(self):
+        payload = self.yamtrack_row(status=Status.COMPLETED.value, end_date="2024-05-01 00:00:00+00:00", score="8")
+        _, warnings = self.from_file(payload)
+        self.assertEqual(DiaryEntry.objects.get(item=self.item_row).rating, 8)
+        self.assertFalse(warnings)
+
+    def test_a_score_below_the_lowest_rating_rounds_up_to_it(self):
+        payload = self.yamtrack_row(status=Status.COMPLETED.value, end_date="2024-05-01 00:00:00+00:00", score="0.2")
+        self.from_file(payload)
+        self.assertEqual(DiaryEntry.objects.get(item=self.item_row).rating, 1)
 
 
 class AMarkAndALogInYourOwnExportTests(BookImportBase):

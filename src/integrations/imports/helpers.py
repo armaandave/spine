@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from collections import defaultdict
+from decimal import ROUND_HALF_UP
 
 from cryptography.fernet import Fernet
 from django.apps import apps
@@ -244,9 +245,12 @@ def reconcile_imported_tv(bulk_media_list, user):
     )
 
 
-def bulk_create_media(bulk_media_list, user, *, source=""):
-    """Bulk create all media objects; `source` names the import on any logs it writes."""
-    _bulk_create_media(bulk_media_list, user, source)
+def bulk_create_media(bulk_media_list, user, *, source="", warnings=None):
+    """Bulk create all media objects; `source` names the import on any logs it writes.
+
+    What a row couldn't keep as it stood goes on `warnings`, when the import has a list.
+    """
+    _bulk_create_media(bulk_media_list, user, source, [] if warnings is None else warnings)
     reconcile_imported_tv(bulk_media_list, user)
 
 
@@ -267,7 +271,7 @@ def _stamp_anime_rows(media_type, rows):
             row._change_reason = row.import_reason()
 
 
-def _bulk_create_media(bulk_media_list, user, source=""):
+def _bulk_create_media(bulk_media_list, user, source, warnings):
     """Bulk create each media type's rows as the importer built them."""
     for media_type, bulk_media in bulk_media_list.items():
         if not bulk_media:
@@ -286,7 +290,7 @@ def _bulk_create_media(bulk_media_list, user, source=""):
             continue
 
         if media_type == MediaTypes.BOOK.value:
-            bulk_media = _import_book_rows(bulk_media, user, source)
+            bulk_media = _import_book_rows(bulk_media, user, source, warnings)
 
         if series_tracking.supports(media_type):
             _import_series_rows(bulk_media, user, source)
@@ -340,7 +344,32 @@ def _import_single_weight_rows(rows, user, model):
             tracking.save(update_fields=["notes"])
 
 
-def _import_book_rows(rows, user, source):
+def book_log_on(user, item, day):
+    """Return this title's log on a calendar day, or None (SW-504).
+
+    A log's date is a UTC-midnight carrier, so it's read as stored: on the server's zone
+    it would be the day before, and a file would come back as a second read.
+    """
+    for entry in DiaryEntry.objects.filter(user=user, item=item):
+        if single_weight.calendar_date(entry.consumed_at) == day:
+            return entry
+    return None
+
+
+def _log_rating(row, warnings):
+    """Return a file's score as a log's rating, which holds only half stars.
+
+    One off them rounds to the nearest, as a bad row is reported rather than stopping the
+    import (docs/media-imports.md gives 8.5 as an example).
+    """
+    if row.score in (None, 0) or row.score in single_weight.STORAGE_RATINGS:
+        return row.score
+    rounded = max(row.score.to_integral_value(rounding=ROUND_HALF_UP), 1)
+    warnings.append(f"{row.item.title}: a score of {row.score} isn't a half star, so its log holds {rounded}")
+    return rounded
+
+
+def _import_book_rows(rows, user, source, warnings):
     """Log the dated reads of a file's book rows, and return the rows left to create.
 
     A dated Read lands on its date as a log, unless the title has a log that day: that's
@@ -360,15 +389,14 @@ def _import_book_rows(rows, user, source):
                 row.undated_read_previous_tracked = True
             plain.append(row)
             continue
-        logs = DiaryEntry.objects.filter(user=user, item=row.item).values_list("consumed_at", flat=True)
-        if day in {single_weight.calendar_date(moment) for moment in logs}:
+        if book_log_on(user, row.item, day):
             plain.append(row)
             continue
         _, entry = book_tracking.complete(
             user,
             row.item,
             completion_date=day,
-            rating=row.score,
+            rating=_log_rating(row, warnings),
             import_source=source,
             import_source_id=f"{row.item.source}:{row.item.media_id}:{day.isoformat()}",
             emit_activity=False,

@@ -80,7 +80,7 @@ class YamtrackImporter:
                 raise MediaImportUnexpectedError(error_msg) from error
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user, source="yamtrack")
+        helpers.bulk_create_media(self.bulk_media, self.user, source="yamtrack", warnings=self.warnings)
 
         deduplicated_messages = "\n".join(dict.fromkeys(self.warnings))
         return helpers.imported_counts(self.bulk_media), deduplicated_messages

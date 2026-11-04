@@ -129,7 +129,7 @@ class StoryGraphImporter:
         latest_date = max(read_date.end for read_date in row.read_dates)
         latest_entry = None
         for index, read_date in enumerate(sorted(row.read_dates, key=lambda date: date.end)):
-            if self._diary_for_date(item, read_date.end):
+            if helpers.book_log_on(self.user, item, read_date.end.date()):
                 continue
             is_latest = read_date.end == latest_date
             entry = create_diary_entry(
@@ -147,13 +147,6 @@ class StoryGraphImporter:
             if is_latest:
                 latest_entry = entry
         return latest_entry
-
-    def _diary_for_date(self, item, consumed_at):
-        return DiaryEntry.objects.filter(
-            user=self.user,
-            item=item,
-            consumed_at__date=consumed_at.date(),
-        ).first()
 
     def _notes(self, row):
         lines = ["Imported from StoryGraph"]

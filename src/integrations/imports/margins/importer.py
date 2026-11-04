@@ -10,6 +10,7 @@ from django.db.models import F
 from django.db.models.functions import Greatest
 
 from api.services import progress_posts
+from api.services.item_metadata import fill_book_pages
 from app import book_tracking, user_calendar
 from app.models import (
     Book,
@@ -77,7 +78,7 @@ class MarginsImporter:
 
         with transaction.atomic():
             for key, book_rows in rows_by_book.items():
-                item = self._get_or_create_item(results[key])
+                item = self._get_or_create_item(results[key], book_rows)
                 counts = self.counts.copy()
                 try:
                     # One book breaking a reading rule is reported, not the whole import.
@@ -91,7 +92,7 @@ class MarginsImporter:
         warnings = "\n".join(dict.fromkeys(self.warnings))
         return {key: count for key, count in self.counts.items() if count}, warnings or None
 
-    def _get_or_create_item(self, result):
+    def _get_or_create_item(self, result, rows):
         item = Item.objects.get_or_create(
             media_id=str(result["media_id"]),
             source=result["source"],
@@ -104,6 +105,9 @@ class MarginsImporter:
         # Only the search result's first publication year; the metadata fill
         # completes the Item later.
         helpers.store_free_metadata(item, {"first_publish_year": result.get("first_publish_year")})
+        # A mark's pile is this count, so it's here at once, not after the metadata fill.
+        file_pages = next((row.pages for row in rows if row.pages), None)
+        fill_book_pages(item, result.get("max_progress") or result.get("total_pages") or file_pages)
         return item
 
     def _import_book(self, item, rows):
