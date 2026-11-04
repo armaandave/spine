@@ -4,6 +4,7 @@ It's the read-only count decision 29 approved. It prints counts and user ids, wr
 nothing and calls no provider. It holds counts 2 and 14, so they run in CI.
 """
 
+import contextlib
 import io
 import re
 from datetime import UTC, date, datetime
@@ -304,6 +305,22 @@ class BadRowTests(BookCalcBase):
         with patch("api.services.activity_rows.rows_for", side_effect=rows_for):
             lines = self.compare_failing()
         self.assertIn("failed", self.line(lines, f"user {self.owner.pk}:"))
+        self.assert_every_count_reports(lines)
+
+    def test_a_value_the_database_cant_cast_leaves_the_rest_reported(self):
+        """Postgres refuses the old counter's cast of it, and SQLite reads it as 0."""
+        item = self.book("words", pages=300)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 40, d(2026, 3, 5))
+        self.blank(self.change(item, 40), "current_progress", "abc")
+        _, entry = self.finish(item, d(2026, 3, 9))
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": "abc", "max": 300})
+        out = io.StringIO()
+        with contextlib.suppress(CommandError):
+            call_command("compare_activity_numbers", stdout=out)
+        lines = out.getvalue().splitlines()
+        self.assertTrue(self.line(lines, f"user {self.owner.pk}:"))
+        self.assertTrue(self.line(lines, f"user {self.follower.pk}:"))
         self.assert_every_count_reports(lines)
 
     def test_one_range_failing_leaves_the_others(self):
