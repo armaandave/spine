@@ -353,6 +353,21 @@ class PickedUpBooksTests(StepBase):
         _, err = run("fill_picked_up_books")
         self.assertIn("no place: 0", err)
 
+    def test_a_mark_in_between_keeps_its_zero(self):
+        item = self.book("mark-between")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.do(book_tracking.mark_read, item, d(2025, 11, 4))
+        self.do(book_tracking.assign_status, item, d(2025, 11, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 4, 1))
+        start_row = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START).latest("id")
+        for field in ("previous_progress", "current_progress"):
+            getattr(start_row, field).pop("began_over")
+        start_row.save(update_fields=["previous_progress", "current_progress"])
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
     def blank(self, item):
         """Empty the journey just picked up, as before one opened at its place."""
         journey = Book.objects.get(item=item).current_session

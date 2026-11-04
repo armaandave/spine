@@ -17,6 +17,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.services import stats_cache
+from api.services.activity_rows import marked_between, marked_moments
 from app.models import Book, BookSession, Status
 from social.models import ProgressChange
 
@@ -25,9 +26,9 @@ def _stopped_place(journey):
     """Return the stopped journey whose place this open one carries on from, or None.
 
     It walks back one journey at a time with the calculation's own test
-    (activity_rows._carries_on): a Restart or a reread began at zero, so nothing behind one
-    is this read's place. A stopped journey holding nothing passes it on. A file's read is
-    its own, so the walk steps past it.
+    (activity_rows._carries_on): a Restart, a reread or a mark in between began at zero, so
+    nothing behind one is this read's place. A stopped journey holding nothing passes it on.
+    A file's read is its own, so the walk steps past it.
     """
     book = journey.related_book
     began_over = {
@@ -38,11 +39,17 @@ def _stopped_place(journey):
             current_progress__began_over=True,
         )
     }
+    marked_at = marked_moments(Book, [book.pk]).get(book.pk) if book.completed_manually else None
     newer = journey
     for prior in book.reading_sessions.filter(pk__lt=journey.pk).order_by("-id"):
         if prior.from_file:
             continue
-        if newer.pk in began_over or newer.previous_status == Status.COMPLETED.value or prior.status != Status.DROPPED.value:
+        if (
+            newer.pk in began_over
+            or newer.previous_status == Status.COMPLETED.value
+            or prior.status != Status.DROPPED.value
+            or marked_between(prior, newer, marked_at)
+        ):
             return None
         if prior.pages_read is not None or prior.percentage_read is not None:
             return prior

@@ -1155,6 +1155,82 @@ class StatusMovesAroundAMarkTests(BookCalcBase):
         self.assertEqual(pile(), before)
 
 
+class AMarkBetweenTwoReadsTests(BookCalcBase):
+    """A mark closes the read before it, and To Read after it changes nothing (decision 21)."""
+
+    def marked_after_a_stop(self, name):
+        item = self.book(name, pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        self.assertEqual(piled(self.calc().piles, BOOK).amount, 70)
+        return item
+
+    def pile(self):
+        return piled(self.calc().piles, BOOK).amount
+
+    def test_a_log_reads_the_same_with_to_read_or_without(self):
+        direct = self.marked_after_a_stop("direct")
+        self.finish(direct, d(2026, 3, 1))
+        self.assertEqual(self.rows(direct)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 130, 200)
+        through = self.marked_after_a_stop("through")
+        self.do(book_tracking.assign_status, through, d(2026, 2, 5), Status.PLANNING.value)
+        self.finish(through, d(2026, 3, 1))
+        self.assertEqual(self.rows(through)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 260, 400)
+
+    def test_the_mark_can_come_after_to_read_too(self):
+        item = self.book("to-read-first", pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 6), Status.PLANNING.value)
+        self.finish(item, d(2026, 3, 1))
+        self.assertEqual(self.rows(item)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 130, 200)
+
+    def test_reading_on_holds_the_pile_and_begins_at_zero(self):
+        item = self.marked_after_a_stop("read-on")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assertEqual(self.rows(item)[0], "2026-03-01 started")
+        self.save(item, 80, d(2026, 3, 2))
+        self.assert_numbers(0, 110, 180)
+        self.assertEqual(self.pile(), 70)
+        self.finish(item, d(2026, 3, 3))
+        self.assert_numbers(0, 130, 200)
+        self.assertEqual(self.pile(), 70)
+
+    def test_a_read_begun_before_the_mark_with_no_row_of_its_own_reads_it_too(self):
+        """A journey picked up across a mark before this rule: it opened at its place."""
+        item = self.marked_after_a_stop("old-shape")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        latest = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START).latest("id")
+        for field in ("previous_progress", "current_progress"):
+            getattr(latest, field).pop("began_over")
+        latest.save(update_fields=["previous_progress", "current_progress"])
+        self.assertEqual(self.pile(), 70)
+        self.assert_numbers(0, 30, 100)
+
+    def test_with_the_mark_taken_off_a_stop_carries_on_again(self):
+        item = self.book("mark-gone", pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        self.do(book_tracking.undo_read, item, d(2026, 2, 5))
+        self.begin(item, d(2026, 3, 1))
+        self.assertEqual(Book.objects.get(item=item).progress, 30)
+        self.save(item, 50, d(2026, 3, 2))
+        self.assert_numbers(0, 50, 50)
+
+
 class LegacyJourneyTests(BookCalcBase):
     """What migration 0075 left: a Completed journey with no log is no reading."""
 

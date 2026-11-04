@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from api.services import progress_posts, stats_cache
+from api.services.activity_rows import marked_moments
 from app import single_weight, user_calendar
 from app.models import (
     Book,
@@ -434,15 +435,25 @@ def _holds_a_place(book):
     return bool(book.progress) and not on_a_read and _last_read(book) is None
 
 
+def _marked_since(book, journey):
+    """Return whether a mark went on after this journey began, so it closed that read."""
+    if not book.completed_manually:
+        return False
+    marked_at = marked_moments(Book, [book.pk]).get(book.pk)
+    return bool(marked_at and marked_at >= journey.created_at)
+
+
 def _over_a_finished_read(book):
     """Return whether a new journey is a reread, which begins at zero (decision 6).
 
-    Its start row keeps this, because deleting that log later can't change where it began.
+    A log or a mark since the last read makes one, with To Read in between or not: a status
+    move changes no number (decision 21). Its start row keeps this, because deleting that
+    log later can't change where it began.
     """
     if book.status == Status.COMPLETED.value:
         return True
     last = _last_read(book)
-    return bool(last and last.status == Status.COMPLETED.value)
+    return bool(last and (last.status == Status.COMPLETED.value or _marked_since(book, last)))
 
 
 def _opening_place(book):
@@ -452,7 +463,7 @@ def _opening_place(book):
     To Read or Paused in between, and an imported place with no journey does too. Starting
     over a Read is a reread. It's the calculation's test (activity_rows._carries_on).
     """
-    if book.status == Status.COMPLETED.value:
+    if _over_a_finished_read(book):
         return None, None
     last = _last_read(book)
     if last is None:
@@ -1571,7 +1582,7 @@ def _picks_back_up(book):
     one finished, whose next journey is a new read. To Read in between changes neither,
     as where the journey opens says (_opening_place).
     """
-    if book.status not in {Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value}:
+    if book.status not in {Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value} or _over_a_finished_read(book):
         return False
     last = _last_read(book)
     return last.status == Status.DROPPED.value if last else bool(book.progress)
