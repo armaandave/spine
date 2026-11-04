@@ -769,7 +769,9 @@ def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
             for media in connection.get("media") or []:
                 if media.get("idMal"):
                     results[str(media["idMal"])] = _anime_episodes(media)
-            if not (connection.get("pageInfo") or {}).get("hasNextPage"):
+            # A full page reports a next one even with nothing left to ask for.
+            answered = all(str(mal_id) in results for mal_id in chunk)
+            if answered or not (connection.get("pageInfo") or {}).get("hasNextPage"):
                 break
             page += 1
     return results

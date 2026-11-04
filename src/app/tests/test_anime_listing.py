@@ -105,6 +105,36 @@ class AniListParsingTests(SimpleTestCase):
         self.assertEqual(request.call_count, 2)
         self.assertEqual(len(request.call_args.kwargs["params"]["variables"]["malIds"]), 25)
 
+    def test_an_101_a_full_page_stops_once_every_title_has_answered(self):
+        # A page of 25 reports hasNextPage even with nothing left.
+        media = [
+            {"idMal": number, "nextAiringEpisode": None, "airingSchedule": {"nodes": []}, "streamingEpisodes": []}
+            for number in range(1, 26)
+        ]
+        full = {"data": {"Page": {"pageInfo": {"hasNextPage": True}, "media": media}}}
+        empty = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
+        with mock.patch.object(services, "api_request", side_effect=[full, empty]) as request:
+            result = anilist.anime_episodes([str(number) for number in range(1, 26)])
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(len(result), 25)
+
+    def test_an_101_a_title_still_to_answer_is_looked_for_on_the_next_page(self):
+        first = {
+            "data": {
+                "Page": {
+                    "pageInfo": {"hasNextPage": True},
+                    "media": [
+                        {"idMal": 1, "nextAiringEpisode": None, "airingSchedule": {"nodes": []}, "streamingEpisodes": []},
+                    ],
+                },
+            },
+        }
+        second = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
+        with mock.patch.object(services, "api_request", side_effect=[first, second]) as request:
+            result = anilist.anime_episodes(["1", "2"])
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(list(result), ["1"])
+
 
 class ListingTests(AnimeTestCase):
     """AN-100, AN-101: the copy, a first open and backing off."""
