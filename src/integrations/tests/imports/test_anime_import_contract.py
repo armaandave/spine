@@ -10,9 +10,10 @@ from unittest import mock
 
 import app.forms  # noqa: F401 - the Yamtrack importer reads app.forms
 
-from app import anime_tracking
-from app.models import Anime, AnimeMark, AnimeViewing, DiaryEntry, Item
+from app import anime_listing, anime_tracking
+from app.models import Anime, AnimeListing, AnimeMark, AnimeViewing, DiaryEntry, Item
 from app.tests.anime_fixtures import AnimeTestCase, make_item
+from app.tests.tv_fixtures import make_user
 from app.tests.test_anime_export_round_trip import round_trip
 from integrations import exports
 from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
@@ -195,6 +196,37 @@ class MALImportTests(ImportTestCase):
         entry["list_status"].update({"start_date": "2020-03-01"})
         self.import_mal(entry)
         self.assertIsNone(self.row(self.item_of(title)).start_date)
+
+    def test_an_800_a_persons_file_never_sets_the_shared_copy(self):
+        title = self.fake.add(total=None, status="Airing", next_episode=1150)
+        self.import_mal(mal_entry(title, "completed", count=500))
+        item = self.item_of(title)
+        self.assertFalse(AnimeListing.objects.filter(item=item).exists())
+        # Their own numbers stay on their own record.
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.aired_count), ("Completed", 500, 500))
+        # Someone else sees only what MAL and AniList say.
+        other = make_user()
+        self.fake.fail()
+        self.assertIsNone(anime_tracking.state_payload(other, item)["aired_count"])
+        self.fake.recover()
+        self.assertEqual(anime_tracking.state_payload(other, item)["aired_count"], 1149)
+
+    def test_an_800_with_no_copy_the_page_shows_their_own_numbers(self):
+        title = self.fake.add(total=12)
+        self.import_mal(mal_entry(title, "completed", count=12))
+        item = self.item_of(title)
+        self.fake.fail()
+        state = self.state(item)
+        self.assertEqual((state["status"], state["finished"], state["aired_count"]), ("Completed", True, 12))
+
+    def test_an_800_a_stored_copy_wins_over_the_number_in_a_file(self):
+        title = self.fake.add(total=12)
+        item = make_item(self.fake, title=title)
+        anime_listing.get_listing(item)
+        anime_tracking.import_title(self.user, item, status="Completed", count=12, total=500)
+        self.assertEqual(AnimeListing.objects.get(item=item).total, 12)
+        self.assertEqual(self.row(item).aired_count, 12)
 
     def test_an_100_an_imported_manual_title_stays_completed_at_the_next_save(self):
         item = Item.objects.create(

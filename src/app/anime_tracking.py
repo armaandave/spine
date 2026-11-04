@@ -468,12 +468,13 @@ def _opinion_action(calc):
 
 
 def _with_own_total(listing, row):
-    """Return the listing with a manual title's total, kept on its owner's row (AN-100).
+    """Return a listing no copy backs with the total kept on this person's row (AN-100).
 
-    A manual title has no provider, so the number its owner wrote is its total, stored as
-    the row's aired count.
+    A manual title has no provider, so the number its owner wrote is its total; an imported
+    title has what its file said until the first read of MAL. Both stay on the row, as its
+    aired count, and never reach anyone else.
     """
-    if row is None or listing.item.source != Sources.MANUAL.value or listing.total is not None:
+    if row is None or listing.fetched_at is not None or listing.total is not None:
         return listing
     total = row.aired_count
     if total is None and row.reconciled_at is None and row.status == COMPLETED:
@@ -947,7 +948,7 @@ def _reconcile(ctx):  # noqa: C901
         Anime.objects.filter(pk=row.pk).update(**cache_changes)
         for name, value in cache_changes.items():
             setattr(row, name, value)
-    # An import's titles wait for the daily job, which reads them in bulk (AN-800).
+    # An import's end reloads the calendar, which reads its titles in bulk (AN-800).
     if ctx.entry_point != IMPORT and (
         ctx.created or (ctx.status_before in (PAUSED, DROPPED) and row.status not in (PAUSED, DROPPED))
     ):
@@ -2708,7 +2709,7 @@ def _next_title_has_aired(stored, today):
         .select_related("item")
         .first()
     )
-    if copy_of_next is not None:
+    if copy_of_next is not None and copy_of_next.fetched_at is not None:
         return anime_listing._listing_from_row(copy_of_next).aired_through(user_calendar.now()) > 0  # noqa: SLF001
     released = stored.get("release_date")
     return bool(released) and str(released) <= today.isoformat()

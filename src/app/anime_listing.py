@@ -83,6 +83,8 @@ class Listing:
     next_air_at: datetime | None = None
     rows: tuple = ()
     next_title: dict | None = None
+    # When MAL was last read; None means no copy backs this, only what's in memory.
+    fetched_at: datetime | None = None
     # When AniList's rows were last read; None means the numbers stand alone.
     rows_fetched_at: datetime | None = None
 
@@ -221,6 +223,7 @@ def _listing_from_row(row):
             for stored in row.rows or ()
         ),
         next_title=row.next_title,
+        fetched_at=row.fetched_at,
         rows_fetched_at=row.rows_fetched_at,
     )
 
@@ -229,12 +232,17 @@ def _stored_row(item):
     return AnimeListing.objects.filter(item=item).select_related("item").first()
 
 
+def _has_numbers(row):
+    """Whether MAL's numbers ever reached this row. Until they do it's no copy (AN-100)."""
+    return row is not None and row.fetched_at is not None
+
+
 def stored_listing(item):
     """Return the stored copy without any network call, or None when there is none."""
     if item.source == Sources.MANUAL.value:
         return Listing(item=item)
     row = _stored_row(item)
-    return _listing_from_row(row) if row is not None else None
+    return _listing_from_row(row) if _has_numbers(row) else None
 
 
 def get_listing(item):
@@ -248,18 +256,18 @@ def get_listing(item):
         return Listing(item=item)
     now = user_calendar.now()
     row = _stored_row(item)
-    if row is not None and row.fetched_at is not None and row.rows_fetched_at is not None:
+    has_numbers = _has_numbers(row)
+    if has_numbers and row.rows_fetched_at is not None:
         return _listing_from_row(row)
-    if row is not None and row.retry_after is not None and row.retry_after > now:
+    if has_numbers and row.retry_after is not None and row.retry_after > now:
         return _listing_from_row(row)
     numbers = None
-    if row is None or row.fetched_at is None:
+    if not has_numbers:
         try:
             numbers = mal.anime(item.media_id, timeout=FIRST_OPEN_TIMEOUT, retry_rate_limits=False)
-        except PROVIDER_FAILURES:
+        except PROVIDER_FAILURES as error:
             logger.warning("MAL can't be read for %s", item)
-            if row is None:
-                raise AnimeDetailsUnavailable from None
+            raise AnimeDetailsUnavailable from error
     episodes = None
     try:
         episodes = anilist.anime_episodes(
@@ -306,20 +314,14 @@ def update_from_metadata(item, metadata):
 
 
 def provisional_listing(item, total):
-    """Return the copy an import works from: no provider call, ever (AN-800).
+    """Return the listing an import works from: no provider call, ever (AN-800).
 
-    A title with no copy gets one holding the total the source gave, for the calendar job
-    or the first open to fill in.
+    A title with no copy gets one holding the total the source gave, in memory only: a
+    person's file never sets the copy everyone else reads. What it says stays on their own
+    record until the calendar job, which the import's end queues, reads the real numbers.
     """
-    if item.source == Sources.MANUAL.value:
-        return Listing(item=item, total=total)
-    row = _stored_row(item)
-    if row is None:
-        row = _create_row(item, total=total)
-    elif total and row.fetched_at is None and row.total != total:
-        row.total = total
-        row.save(update_fields=["total"])
-    return _listing_from_row(row)
+    stored = None if item.source == Sources.MANUAL.value else stored_listing(item)
+    return stored if stored is not None else Listing(item=item, total=total or None)
 
 
 def refresh(items):
@@ -347,9 +349,12 @@ def refresh(items):
         if episodes_by_id is not None:
             episodes = episodes_by_id.get(str(item.media_id), EMPTY_EPISODES)
         row = _save(item, numbers=numbers, episodes=episodes, now=now)
+        if row is None:
+            continue
         if _series_is_stale(row, now):
             _refresh_next_title(row, numbers, now)
-        listings[item.pk] = _listing_from_row(row)
+        if _has_numbers(row):
+            listings[item.pk] = _listing_from_row(row)
     return listings
 
 
@@ -409,8 +414,15 @@ def _create_row(item, **values):
 
 
 def _save(item, *, numbers, episodes, now, backoff=True):
-    """Write what was read onto the stored row; nothing read leaves its part as it is."""
-    row = _stored_row(item) or _create_row(item)
+    """Write what was read onto the stored row; nothing read leaves its part as it is.
+
+    With nothing read and no row, returns None: an empty row would be a copy of nothing.
+    """
+    row = _stored_row(item)
+    if row is None:
+        if numbers is None and episodes is None:
+            return None
+        row = _create_row(item)
     fields = []
     if numbers is not None:
         _apply_numbers(row, numbers, now)
@@ -423,7 +435,7 @@ def _save(item, *, numbers, episodes, now, backoff=True):
     if episodes is not None:
         _apply_episodes(row, episodes, now)
         fields.extend(["next_episode", "next_air_at", "rows", "rows_fetched_at", "retry_after"])
-    if backoff and (episodes is None or row.fetched_at is None):
+    if backoff and (episodes is None or not _has_numbers(row)):
         row.retry_after = now + FAILURE_BACKOFF
         fields.append("retry_after")
     if fields:

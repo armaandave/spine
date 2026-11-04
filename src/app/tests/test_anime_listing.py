@@ -11,7 +11,7 @@ from app import anime_listing, anime_tracking
 from app.anime_listing import AnimeDetailsUnavailable
 from app.models import AnimeListing, Item
 from app.providers import anilist, services
-from app.tests.anime_fixtures import AnimeTestCase, FakeAnimeProvider
+from app.tests.anime_fixtures import OCT_25, AnimeTestCase, FakeAnimeProvider
 from app.tests.tv_fixtures import ProviderDown
 from events.calendar import anime as calendar_anime
 from events.calendar.selectors import filter_items_to_fetch
@@ -206,6 +206,58 @@ class ListingTests(AnimeTestCase):
         with self.assertNumQueries(1):
             anime_listing.update_from_metadata(item, metadata)
         self.assertEqual(AnimeListing.objects.get(item=item).fetched_at, stored.fetched_at)
+
+
+class EmptyCopyTests(AnimeTestCase):
+    """AN-100's last line: a copy MAL's numbers never reached is no copy."""
+
+    def test_an_100_a_job_with_every_provider_down_leaves_no_copy(self):
+        item = self.title(total=12)
+        self.fake.fail()
+        anime_listing.refresh([item])
+        self.assertFalse(AnimeListing.objects.filter(item=item).exists())
+        self.assertIsNone(anime_listing.stored_listing(item))
+
+    def test_an_100_a_write_on_an_empty_copy_is_refused_when_mal_is_down(self):
+        item = self.title(total=12)
+        AnimeListing.objects.create(item=item)
+        self.fake.fail()
+        for write in (
+            lambda: anime_tracking.mark_watched(self.user, item),
+            lambda: anime_tracking.tick(self.user, item, 1),
+            lambda: anime_tracking.create_log(self.user, item, consumed_at=OCT_25),
+        ):
+            with self.assertRaises(AnimeDetailsUnavailable):
+                write()
+        self.assertIsNone(self.row(item))
+
+    def test_an_100_an_empty_copy_backing_off_still_reads_mal_for_a_write(self):
+        item = self.title(total=12)
+        AnimeListing.objects.create(item=item, retry_after=self.clock.moment + timedelta(minutes=15))
+        anime_tracking.mark_watched(self.user, item)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress), ("Completed", 12))
+
+    def test_an_100_anilists_answer_alone_is_no_copy(self):
+        item = self.title(total=12)
+        self.fake.fail("mal")
+        anime_listing.refresh([item])
+        self.assertIsNone(anime_listing.stored_listing(item))
+        with self.assertRaises(AnimeDetailsUnavailable):
+            anime_tracking.mark_watched(self.user, item)
+        self.fake.recover()
+        anime_tracking.mark_watched(self.user, item)
+        self.assertEqual(self.row(item).progress, 12)
+
+    def test_an_100_a_job_works_nobody_out_from_an_empty_copy(self):
+        title = self.fake.add(total=12)
+        item = self.title(title=title)
+        self.tick(item, 1)
+        AnimeListing.objects.filter(item=item).update(fetched_at=None, rows_fetched_at=None, total=None)
+        before = self.row(item).aired_count
+        self.fake.fail()
+        anime_tracking.refresh_after_calendar([item])
+        self.assertEqual(self.row(item).aired_count, before)
 
 
 class CalendarJobTests(AnimeTestCase):

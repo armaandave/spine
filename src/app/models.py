@@ -2833,7 +2833,7 @@ class AnimeListing(models.Model):
     # The episode count MAL lists; null when it lists none.
     total = models.PositiveIntegerField(null=True, blank=True)
     # MAL's status as the app shows it: "Finished", "Airing" or "Upcoming". Blank until
-    # MAL has been read: an import can store a total first.
+    # MAL has been read; until then the row counts as no copy (AN-100).
     provider_status = models.CharField(max_length=20, blank=True, default="", db_default="")
     # MAL's format, such as "TV" or "Movie".
     media_format = models.CharField(max_length=20, blank=True, default="", db_default="")
