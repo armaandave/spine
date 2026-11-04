@@ -466,6 +466,7 @@ In a dated range the app shows `in_range` instead of the complete and almost com
 
 A title is in Most logged when it has 2 or more visible logs in the scope; `times` is that count.
 For TV, `times` is the most viewings of any one episode of the show in the scope (STAT-104), and the show is in the list when that is 2 or more.
+Anime counts the same way, by the title's own episodes (AN-704), so a rewatch ticked with no log counts and a second log of one pass doesn't.
 Rows are sorted by `times`, most first, then by the newest log day, then by Item ID.
 The label is "Most watched" for movies, TV and anime, "Most read" for books, manga and comics, "Most played" for games, "Most listened" for music, and "Most logged" on Global.
 The section sends the first 12 rows and the total; the show-all endpoint pages through the rest (STAT-310).

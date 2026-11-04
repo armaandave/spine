@@ -507,9 +507,9 @@ class MostLoggedTests(RatingsBase):
         self.assertEqual((follower["total"], follower["items"]), (0, []))
 
     def test_hidden_logs_never_count(self):
-        anime = self.item(MediaTypes.ANIME.value, "anime")
-        self.log(anime)
-        self.log(anime, JUN_2025, visibility="private")
+        manga = self.item(MediaTypes.MANGA.value, "manga")
+        self.log(manga)
+        self.log(manga, JUN_2025, visibility="private")
         self.assertEqual(self.stats(self.owner, YEAR_2025)["most_logged"]["total"], 1)
         self.assertEqual(self.stats(self.stranger, YEAR_2025, path=self.user_path())["most_logged"]["total"], 0)
 

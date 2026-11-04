@@ -2154,14 +2154,6 @@ def refresh_due_titles(now=None):
 # ---------------------------------------------------------------------------------
 
 
-def _import_day(user, value):
-    """Return an imported date's calendar day; a future one isn't a real watch's date."""
-    if value is None:
-        return None
-    day = _log_day_of(value, user) if isinstance(value, datetime) else value
-    return day if day <= user_calendar.today(user) else None
-
-
 @transaction.atomic
 def import_title(  # noqa: C901, PLR0912, PLR0913
     user,

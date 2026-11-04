@@ -201,11 +201,6 @@ class Listing:
         return (row.image or None) if row is not None else None
 
 
-def supports(value):
-    """Return whether an item or media-type value is an anime."""
-    return getattr(value, "media_type", value) == MediaTypes.ANIME.value
-
-
 def _listing_from_row(row):
     return Listing(
         item=row.item,

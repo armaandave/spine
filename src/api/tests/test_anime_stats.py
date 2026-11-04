@@ -7,11 +7,11 @@ every path a mark can take and every number that could show it.
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from api.services import stats_time, stats_v2, stats_v2_activity
+from api.services import stats_time, stats_v2, stats_v2_activity, stats_v2_ratings
 from api.services.stats_scope import build_scope
 from app import anime_tracking
 from app.models import Anime, DiaryEntry
-from app.tests.anime_fixtures import AnimeTestCase, make_item
+from app.tests.anime_fixtures import OCT_25, AnimeTestCase, make_item
 from social.models import Activity, ProgressChange
 
 
@@ -164,6 +164,34 @@ class StatsTests(AnimeTestCase):
         item = self.title(total=2)
         anime_tracking.mark_watched(self.user, item)
         self.assertEqual(list(self.scope().titles.values_list("pk", flat=True)), [item.pk])
+
+    def most_watched(self, year=None):
+        params = {"media_type": "anime", "start_date": "all", "end_date": "all"}
+        if year is not None:
+            params.update({"start_date": f"{year}-01-01", "end_date": f"{year}-12-31"})
+        section = stats_v2_ratings.build_most_logged(build_scope(self.user, self.user, params))
+        return [(row["media"]["ref"]["media_id"], row["times"]) for row in section["items"]]
+
+    def test_stat_215_most_watched_reads_viewings_as_a_shows_does(self):
+        rewatched = self.title(total=2)
+        for number in (1, 2):
+            anime_tracking.tick(self.user, rewatched, number)
+        anime_tracking.start_rewatch(self.user, rewatched)
+        anime_tracking.tick(self.user, rewatched, 1)
+        logged_twice = self.title(total=2)
+        anime_tracking.create_log(self.user, logged_twice, consumed_at=OCT_25)
+        anime_tracking.create_log(self.user, logged_twice, consumed_at=OCT_25)
+        self.assertEqual(self.most_watched(), [(rewatched.media_id, 2)])
+        self.assertEqual(self.most_watched(2026), [(rewatched.media_id, 2)])
+        self.assertEqual(self.most_watched(2025), [])
+
+    def test_stat_215_a_mark_counts_toward_most_watched_only_in_all_time(self):
+        item = self.title(total=2)
+        anime_tracking.mark_watched(self.user, item)
+        anime_tracking.start_rewatch(self.user, item)
+        anime_tracking.tick(self.user, item, 1)
+        self.assertEqual(self.most_watched(), [(item.media_id, 2)])
+        self.assertEqual(self.most_watched(2026), [])
 
     def test_an_704_the_global_tab_counts_anime_viewings_too(self):
         item = self.title(total=2)
