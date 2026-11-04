@@ -768,6 +768,48 @@ class PileTests(BookCalcBase):
         BookSession.objects.filter(related_book__item=item).update(pages_read=120)
         self.assert_numbers(0, 0, 120)
 
+    def imported_place(self, name, place=120):
+        """Return a book at a place with no journey, as a file leaves one."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=place)
+        return item
+
+    def test_a_place_then_a_stop_then_the_eye_holds_that_place_once(self):
+        item = self.imported_place("place-stop-eye")
+        self.begin(item, d(2026, 3, 1))
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 120)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_place_a_save_a_stop_then_the_eye_holds_that_place_once(self):
+        item = self.imported_place("place-save-eye")
+        self.save(item, 125, d(2026, 3, 1))
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 5, 125)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 5, 400)
+
+    def test_a_deleted_stopped_attempt_then_a_stop_then_the_eye_is_the_length(self):
+        item = self.stopped_at_200("deleted-first")
+        first = Book.objects.get(item=item).current_session_id
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 250, d(2026, 2, 2))
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 3), first)
+        self.do(book_tracking.drop, item, d(2026, 2, 4))
+        self.assert_numbers(0, 50, 250)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.assert_numbers(0, 50, 400)
+
+    def test_stopped_with_no_saved_rows_then_the_eye_is_the_length(self):
+        item = self.book("no-rows", pages=100)
+        self.begin(item, d(2026, 3, 1))
+        BookSession.objects.filter(related_book__item=item).update(pages_read=30)
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 30)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 0, 100)
+
     def test_imports_land_where_their_dates_say(self):
         dated = self.book("imported-log")
         stopped = self.book("imported-dnf")

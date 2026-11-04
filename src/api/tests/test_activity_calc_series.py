@@ -319,6 +319,15 @@ class ImportTests(SeriesCalcBase):
         self.save(item, 125, d(2026, 10, 2))
         self.assert_years(0, 5, 125)
 
+    def test_a_place_a_save_a_stop_then_the_eye_holds_that_place_once(self):
+        item = self.title("place-save-eye", total=400)
+        self.imported(item, status=Status.IN_PROGRESS.value, place=120)
+        self.save(item, 150, d(2026, 10, 2))
+        self.do(series.drop, item, d(2026, 10, 3))
+        self.assert_years(0, 30, 150)
+        self.do(series.mark_read, item, d(2026, 10, 4))
+        self.assert_years(0, 30, 400)
+
     def test_a_paused_place_with_no_attempt_sits_in_the_pile(self):
         item = self.title("paused-place")
         self.imported(item, status=Status.PAUSED.value, place=40)

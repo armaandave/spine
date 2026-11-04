@@ -199,11 +199,6 @@ class Reading:
             self.counted.amounts.append(Amount(day, target - self.counted.value, at, log_id))
             self.counted.value = target
 
-    @property
-    def dated(self):
-        """Return what this read has on a day, leaving out any opening with no date."""
-        return sum((amount.value for amount in self.counted.amounts if amount.day is not None), ZERO)
-
 
 class Title:
     """One person's rows on one title: one a day, each log beside them, and the pile."""
@@ -478,10 +473,11 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
             alone.finish(entry.pk, day, entry.created_at, target)
             title.take(alone)
     if book and book.completed_manually:
-        # A mark after a stop holds only what that read didn't date.
+        # A mark after a stop holds only what that read doesn't: a place with no day is
+        # in the pile already.
         stopped = _read_before_mark(book.undated_read_previous_session_id, book.current_session_id, sessions, by_session)
-        dated = stopped.dated if stopped else ZERO
-        title.add_to_pile(max(Decimal(total or 0) - dated, ZERO), known=bool(total))
+        held = stopped.counted.value if stopped else ZERO
+        title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
     elif book and book.progress and not sessions and not (entries and book.status == Status.COMPLETED.value):
         # A place with no journey. A Read with a log holds that log's pages, not more.
         title.add_to_pile(Decimal(book.progress))
@@ -781,7 +777,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
     linked = set()
     # What the mark holds: a read going on over it holds that number once (plan 5.9).
     opening_over_mark = None
-    dated_before_mark = ZERO
+    held_before_mark = ZERO
     stored_on_mark = None
     for attempt in attempts:
         entry = attempt.completion_diary_entry
@@ -802,7 +798,7 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             reading = Reading()
         if after_mark and attempt.continues and opening_over_mark is None:
             opening_over_mark = opening
-            dated_before_mark = reading.dated
+            held_before_mark = reading.counted.value
             reading.counted.value = max(reading.counted.value, opening)
         elif opening > reading.counted.value:
             # A place with no day: an import's, on no date (MC-400).
@@ -822,17 +818,17 @@ def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, see
             title.take(alone)
     if marked:
         stopped = _read_before_mark(row.undated_read_previous_attempt_id, row.current_attempt_id, attempts, by_attempt)
-        dated = stopped.dated if stopped else ZERO
+        held = stopped.counted.value if stopped else ZERO
         if opening_over_mark is not None:
             base = opening_over_mark
-            dated = dated_before_mark
+            held = held_before_mark
         elif stored_on_mark:
             base = stored_on_mark
         elif row.current_attempt_id is None and row.progress:
             base = Decimal(row.progress)
         else:
             base = Decimal(total or 0)
-        title.add_to_pile(max(base - dated, ZERO), known=bool(base or total))
+        title.add_to_pile(max(base - held, ZERO), known=bool(base or total))
     elif row and row.progress and not attempts and not (entries and row.status == Status.COMPLETED.value):
         title.add_to_pile(Decimal(row.progress))
     return title
