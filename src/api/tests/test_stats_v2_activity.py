@@ -7,6 +7,7 @@ York, Los Angeles and Auckland.
 """
 
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
@@ -27,6 +28,7 @@ from api.tests.test_stats_v2_shape import (
     StatsV2Base,
     clear_library,
 )
+from app import book_tracking
 from app.models import (
     TV,
     Anime,
@@ -604,10 +606,10 @@ class TimeTests(ActivityBase):
         year = time_row(self.summary(YEAR_2025, tab="book"), "book")
         self.assertEqual(
             year,
-            {"media_type": "book", "unit": "pages", "value": 620, "known": 2, "total": 3, "approximate": False},
+            {"media_type": "book", "unit": "pages", "value": 620, "known": 1, "total": 2, "approximate": False},
         )
         all_time = self.summary(ALL_TIME)
-        self.assertEqual((time_row(all_time, "book")["value"], time_row(all_time, "book")["total"]), (820, 4))
+        self.assertEqual((time_row(all_time, "book")["value"], time_row(all_time, "book")["total"]), (820, 3))
         # Books never add to the total hours.
         self.assertEqual(all_time["time"]["hours_total"]["minutes"], 0)
 
@@ -745,9 +747,11 @@ class ActivityChartTests(ActivityBase):
         self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC))
         # Starting a title is activity, as in the feed.
         self.change(self.item(MediaTypes.ANIME.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
-        # A book's pages count. TV ticks don't (its viewings are its events), but a TV
-        # start does.
-        self.change(self.item(MediaTypes.BOOK.value, "novel"), 10, 40, datetime(2025, 3, 2, 18, tzinfo=UTC), "page")
+        # A book's pages count, through a real save. TV ticks don't (its viewings are its
+        # events), but a TV start does.
+        novel = self.item(MediaTypes.BOOK.value, "novel")
+        with patch("django.utils.timezone.now", return_value=datetime(2025, 3, 2, 18, tzinfo=UTC)):
+            book_tracking.update_progress(self.owner, novel, progress_type="pages", value=40)
         show = self.item(MediaTypes.TV.value, "show")
         self.change(show, 0, 3, datetime(2025, 5, 5, 15, tzinfo=UTC))
         self.change(show, 0, 1, datetime(2025, 5, 6, 15, tzinfo=UTC), "start")

@@ -1,15 +1,15 @@
 """The one calculation on books: the numbers each decision asks for.
 
-Rows come from real tracking functions under a pinned clock on a New York server. The
-calculation is switched off in production until Phase 1, so these read it directly, and
-Stats through a patched CALCULATED_TYPES. Phase 1's sheet opens at 830, 360 and 1,540.
+Rows come from real tracking functions under a pinned clock on a New York server. Most
+read the rows directly, and StatsThroughTheSwitchTests reads Stats as the phone does.
+Phase 1's sheet opens at 830, 360 and 1,540.
 """
 
 import json
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
@@ -100,8 +100,8 @@ class BookCalcBase(ActivityBase):
             return book_tracking.complete(self.owner, item, completion_date=day, **kwargs)
 
     def backdate(self, entry, day):
-        """Date a log before its read began, which only Phase 1's writes can do."""
-        DiaryEntry.objects.filter(pk=entry.pk).update(consumed_at=datetime(day.year, day.month, day.day, tzinfo=UTC))
+        """Date a log before its read began, through the same edit the phone sends."""
+        book_tracking.update_completion(entry, {"consumed_at": day})
         entry.refresh_from_db()
 
     def do(self, function, item, day, *args, **kwargs):
@@ -378,7 +378,8 @@ class StopTests(BookCalcBase):
         self.save(item, 250, d(2026, 2, 5))
         self.assert_numbers(0, 250, 250)
 
-    def test_deleting_the_stopped_attempt_counts_the_new_one_whole(self):
+    def test_deleting_the_stopped_attempt_leaves_its_place_with_no_date(self):
+        """The new journey opened at 200, so it adds only the rise: 200 now counts on no day."""
         item = self.book("delete-first")
         self.begin(item, d(2025, 11, 1))
         self.save(item, 200, d(2025, 11, 2))
@@ -387,7 +388,7 @@ class StopTests(BookCalcBase):
         self.begin(item, d(2026, 2, 1))
         self.save(item, 250, d(2026, 2, 2))
         self.do(book_tracking.delete_journey, item, d(2026, 2, 3), old)
-        self.assert_numbers(0, 250, 250)
+        self.assert_numbers(0, 50, 250)
 
     def test_deleting_the_new_attempt_leaves_the_old_amounts(self):
         item = self.book("delete-second")
@@ -501,14 +502,14 @@ class BackdatedLogTests(BookCalcBase):
             ["2026-01-10 read 100", "2025-12-20 log +300", "2025-12-01 started"],
         )
 
-    def test_an_edited_journey_start_moves_no_row(self):
+    def test_an_edited_journey_start_moves_that_starts_row(self):
         item = self.book("edited-start")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 100, d(2026, 3, 2))
         journey = Book.objects.get(item=item).current_session_id
         with self.on(d(2026, 3, 3)):
             book_tracking.update_journey(self.owner, item, journey, start_date=d(2025, 11, 1))
-        self.assertEqual(self.rows(), ["2026-03-02 read 100", "2026-03-01 started"])
+        self.assertEqual(self.rows(), ["2026-03-02 read 100", "2025-11-01 started"])
 
     def test_a_stop_then_a_log_dated_last_year_moves_everything(self):
         item = self.book("stop-backdate")
@@ -981,13 +982,7 @@ class SheetTests(SheetBase):
 
 
 class StatsThroughTheSwitchTests(SheetBase):
-    """Stats with books switched on, as Phase 1 will: read as the phone reads them."""
-
-    def setUp(self):
-        super().setUp()
-        patcher = patch.object(activity_rows, "CALCULATED_TYPES", frozenset({BOOK}))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+    """Stats with books switched on: read as the phone reads them."""
 
     def phone(self, params, *, viewer=None, tab=BOOK):
         """Return the Stats payload as JSON."""
@@ -1145,19 +1140,13 @@ class MovedViewingTests(BookCalcBase):
 class AdapterCostTests(BookCalcBase):
     """A switched-off adapter costs nothing, and one request walks once."""
 
-    def counted_adapter(self):
-        """Return a mock that counts the book adapter's calls."""
-        return patch.dict(activity_rows.ADAPTERS, {BOOK: patch.object(activity_rows, "_book_rows", wraps=activity_rows._book_rows).start()})
-
-    def test_switched_off_stats_never_walk(self):
-        self.addCleanup(patch.stopall)
-        with self.counted_adapter():
-            self.summary(ALL_TIME)
-            self.summary(YEAR_2026, tab=BOOK)
-            self.assertEqual(activity_rows.ADAPTERS[BOOK].call_count, 0)
+    def counted_adapter(self, media_type=BOOK):
+        """Return a mock that counts one adapter's calls."""
+        counted = MagicMock(wraps=activity_rows.ADAPTERS[media_type])
+        return patch.dict(activity_rows.ADAPTERS, {media_type: counted}), counted
 
     def test_one_global_request_walks_once(self):
-        self.addCleanup(patch.stopall)
-        with self.counted_adapter(), patch.object(activity_rows, "CALCULATED_TYPES", frozenset({BOOK})):
+        patcher, counted = self.counted_adapter()
+        with patcher:
             self.summary(ALL_TIME)
-            self.assertEqual(activity_rows.ADAPTERS[BOOK].call_count, 1)
+            self.assertEqual(counted.call_count, 1)

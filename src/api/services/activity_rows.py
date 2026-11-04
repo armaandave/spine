@@ -24,9 +24,9 @@ from app import user_calendar
 from app.models import Book, BookSession, DiaryEntry, MediaTypes, Status
 from social.models import ProgressChange
 
-# The types Stats reads through this calculation. Empty: every reader uses its old
-# counter.
-CALCULATED_TYPES = frozenset()
+# The types Stats reads through this calculation. Every other type's readers use their
+# old counters.
+CALCULATED_TYPES = frozenset({MediaTypes.BOOK.value})
 
 PROGRESS = "progress"
 LOG = "log"
@@ -433,7 +433,8 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
         stopped = _read_before_mark(book, sessions, by_session)
         dated = stopped.dated if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - dated, ZERO), known=bool(total))
-    elif book and book.progress and not sessions:
+    elif book and book.progress and not sessions and not (entries and book.status == Status.COMPLETED.value):
+        # A place with no journey. A Read with a log holds that log's pages, not more.
         title.add_to_pile(Decimal(book.progress))
     return title
 

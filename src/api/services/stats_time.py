@@ -13,15 +13,13 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   Time, ``progress`` over every tracking row. Anime multiplies by its runtime.
 - Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
   Steam's imported lifetime playtime is never read (GM-500).
-- Books: pages over visible book logs (the completion snapshot's pages, else the
-  book's ``total_pages``), plus ``total_pages`` once per ``completed_manually`` book in
-  All Time.
+- Books: the calculation's rows, plus its pile in All Time.
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
-change or with progress, sessions, undated completions) with a length, out of all.
-
-A type in api.services.activity_rows.CALCULATED_TYPES reads the calculation's rows
-instead.
+change or with progress, sessions, undated completions) with a length, out of all. A type
+in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the calculation's
+rows instead of its counter. The old counters stay for the comparison until TV, movies
+and music have switched too.
 """
 
 from __future__ import annotations

@@ -50,7 +50,8 @@ class CompareTests(BookCalcBase):
         self.assertIn("value=0->285", line)
         self.assertIn("known=0->1", line)
         self.assertIn("total=0->1", line)
-        self.assertIn("titles=0->1", line)
+        # Books are switched on, so today's titles and days read the rows already.
+        self.assertIn("titles=1->1", line)
         self.assertIn("active_days=2->2", line)
         everything = self.line(lines, f"user {self.owner.pk} book all:")
         self.assertIn("value=0->285", everything)
