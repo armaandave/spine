@@ -11,6 +11,7 @@ from uuid import uuid4
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from api.services import media as media_service
 from app import anime_listing, anime_tracking
 from app.anime_tracking import TVConflict, TVInvalid, TVLogBlocks, TVLogFirst, TVStateChanged
 from app.models import Anime, AnimeMark, AnimeViewing, DiaryEntry, MediaLike, TVMutation
@@ -887,6 +888,14 @@ class OpinionTests(AnimeTestCase):
         anime_tracking.set_rating(self.user, item, 8)
         anime_tracking.set_like(self.user, item, True)
         self.assertEqual(self.row(item).progress, 2)
+
+    def test_tv_503_the_community_rating_counts_each_person_once(self):
+        item = self.title(total=2)
+        anime_tracking.set_rating(self.user, item, 8)
+        anime_tracking.create_log(self.user, item, consumed_at=OCT_25, rating=6)
+        anime_tracking.create_log(self.user, item, consumed_at=OCT_25, rating=4, is_rewatch=True)
+        stats = media_service.community_stats(source=item.source, media_type="anime", media_id=item.media_id)
+        self.assertEqual((stats["rating_count"], stats["diary_count"]), (1, 2))
 
     def test_tv_504_off_scale_ratings_are_refused(self):
         item = self.title(total=3)
