@@ -114,6 +114,20 @@ class UndatedReadsTests(StepBase):
         self.assertFalse(book.completed_manually)
         self.assert_numbers(0, 0, 0)
 
+    def test_undoing_a_read_that_held_its_length_leaves_no_place(self):
+        """The step writes no history row, so the row before it still says 400."""
+        item = self.book("held-length")
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400)
+        run("fill_undated_reads", apply=True)
+        self.assert_numbers(0, 0, 400)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.PLANNING.value, 0))
+        self.begin(item, d(2026, 3, 2))
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assertEqual(self.rows(item), ["2026-03-02 started"])
+
     def test_a_read_holding_a_stopped_journey_holds_only_what_is_left(self):
         """Stopped, To Read, then a status written on the row, as the web form does."""
         item = self.book("stopped")

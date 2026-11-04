@@ -557,10 +557,10 @@ def _book_title(actor_id, item, book, sessions, saves, entries, zone):
         stopped = _read_before_mark(Book, book.id, book.undated_read_previous_session_id, book.current_session_id, own, by_session)
         held = stopped.counted.value if stopped else ZERO
         title.add_to_pile(max(Decimal(total or 0) - held, ZERO), known=bool(total))
-    finished = book and book.status == Status.COMPLETED.value and (entries or book.completed_manually)
-    if book and book.progress and not own and not finished:
+    if book and book.progress and not own and book.status != Status.COMPLETED.value:
         # A place with no journey, a mark's too: your own file holds a reread under way
-        # that way. A Read with a log or a mark holds those pages, not more.
+        # that way. A Read's progress is its length, not a place: only a log or a mark
+        # counts it, so an old row with neither counts nowhere.
         title.add_to_pile(Decimal(book.progress))
     return title
 

@@ -991,6 +991,46 @@ class PileTests(BookCalcBase):
         self.assertEqual(self.calc(piles=False).piles, [])
 
 
+class AReadRowTests(BookCalcBase):
+    """A Read's progress is its length, not a place: with no log or mark it counts nowhere."""
+
+    def read_row(self, name="read-row", end_date=None):
+        """Return a Read as old Yamtrack rows left it: its length and nothing behind it."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400, end_date=end_date)
+        return item
+
+    def test_dated_or_not_it_counts_nowhere(self):
+        self.read_row("dated", end_date=datetime(2024, 5, 1, tzinfo=UTC))
+        self.read_row("undated")
+        self.assert_numbers(0, 0, 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_a_status_move_holds_every_number(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.read_row(f"move-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.assert_numbers(0, 0, 0)
+                self.assertEqual(Book.objects.get(item=item).progress, 0)
+
+    def test_currently_reading_begins_at_zero(self):
+        item = self.read_row()
+        self.begin(item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+        self.save(item, 40, d(2026, 3, 2))
+        self.assert_numbers(0, 40, 40)
+
+    def test_a_log_and_its_delete_end_where_they_began(self):
+        item = self.read_row()
+        _, entry = self.finish(item, d(2026, 3, 1))
+        self.assert_numbers(0, 400, 400)
+        with self.on(d(2026, 3, 2)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(0, 0, 0)
+
+
 class StatusMovesAroundAMarkTests(BookCalcBase):
     """A status move adds nothing to any number (decision 21), whenever the mark was."""
 

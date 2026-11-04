@@ -6,7 +6,7 @@ directly, because mark_read returns at once on a Completed book. All Time rises 
 year moves.
 
 It also prints the rest of the plan's count 10 and writes none of it: Reads with a date and
-no log, which count nowhere or only in All Time, and marks holding a date.
+no log, which count nowhere, and marks holding a date.
 
 A dry run by default. With --apply it changes rows, and it's idempotent. Counts go to
 standard error. With --apply each old value goes to standard output as a JSON line, so the

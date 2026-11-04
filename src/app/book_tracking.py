@@ -700,10 +700,15 @@ def mark_read(user, item):
 
 
 def _place_before_mark(book):
-    """Return the place the mark replaced: no column holds one, so its history says."""
-    for marked, progress in book.history.order_by("-history_id").values_list("completed_manually", "progress"):
+    """Return the place the mark replaced: no column holds one, so its history says.
+
+    A Read's progress is its length, not a place, and the undated Reads step flags one
+    without writing a history row.
+    """
+    rows = book.history.order_by("-history_id").values_list("completed_manually", "status", "progress")
+    for marked, status, progress in rows:
         if not marked:
-            return progress or 0
+            return 0 if status == Status.COMPLETED.value else progress or 0
     return 0
 
 
