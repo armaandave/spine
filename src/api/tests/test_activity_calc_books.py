@@ -802,6 +802,16 @@ class UnusableNumberTests(BookCalcBase):
         DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": 400, "max": "abc"})
         self.assertEqual(self.rows(item), ["2026-03-05 log +300", "2026-03-02 read 100", "2026-03-01 started"])
 
+    def test_a_save_stored_as_a_percent_ignores_a_length_on_its_log_that_is_no_number(self):
+        """A save is stored as a percent only while the book has no length."""
+        item = self.book("stored-percent-no-max", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 25, d(2026, 3, 2), kind="percentage")
+        self.set_item(item, total_pages=400)
+        _, entry = self.finish(item, d(2026, 3, 5))
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": 400, "max": "abc"})
+        self.assertEqual(self.rows(item), ["2026-03-05 log +300", "2026-03-02 read 100", "2026-03-01 started"])
+
     def test_a_save_with_no_number_moves_nothing(self):
         for value in (None, "abc"):
             with self.subTest(value=value):
