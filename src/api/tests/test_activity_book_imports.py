@@ -12,7 +12,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from api.tests.test_activity_calc_books import BOOK, NEW_YORK, BookCalcBase, d
-from api.tests.test_stats_v2_activity import YEAR_2026
+from api.tests.test_stats_v2_activity import YEAR_2025, YEAR_2026
 from app import book_tracking
 from app.models import Book, BookSession, DiaryEntry, Item, Sources, Status
 from integrations import exports
@@ -377,6 +377,86 @@ class OverwriteYourOwnExportTests(BookImportBase):
             self.from_file(self.export(), mode="overwrite")
         self.assert_numbers(300, 0, 990)
         self.assertEqual(DiaryEntry.objects.filter(user=self.owner).count(), 1)
+
+
+class AMarkAndALogInYourOwnExportTests(BookImportBase):
+    """Your own file coming back: All Time and every year hold (5.11, SW-500)."""
+
+    def titled(self, media_id, pages=400):
+        item = self.book(media_id, pages=pages)
+        Item.objects.filter(pk=item.pk).update(image="https://example.com/a.jpg")
+        item.refresh_from_db()
+        return item
+
+    def overwrite(self):
+        self.from_file(self.export(), mode="overwrite")
+
+    def test_a_log_then_to_read_then_a_heart_invents_no_mark(self):
+        """The heart on a title with a log writes Completed, undated and unflagged."""
+        item = self.titled("logged-heart")
+        self.finish(item, d(2025, 3, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.set_like, item, d(2026, 1, 2), liked=True)
+        self.assertTrue(Book.objects.get(item=item).read_override_active)
+        before_2025 = self.summary(YEAR_2025, tab=BOOK)
+        self.assert_numbers(400, 0, 400)
+        self.overwrite()
+        self.assert_numbers(400, 0, 400)
+        self.assertFalse(Book.objects.get(item=item).completed_manually)
+        self.assertEqual(self.summary(YEAR_2025, tab=BOOK), before_2025)
+
+    def test_a_reread_stopped_then_the_eye_invents_no_mark(self):
+        """The file holds no place on a Completed row, so the stopped reread's 50 goes."""
+        item = self.titled("reread-eye")
+        self.finish(item, d(2025, 3, 1))
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, 50, d(2026, 1, 2))
+        self.do(book_tracking.drop, item, d(2026, 1, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 1, 4))
+        self.assert_numbers(400, 50, 450)
+        self.overwrite()
+        self.assert_numbers(400, 0, 400)
+        self.assertFalse(Book.objects.get(item=item).completed_manually)
+
+    def test_a_mark_with_no_log_stays_a_mark(self):
+        item = self.titled("just-marked")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.overwrite()
+        self.assert_numbers(0, 0, 400)
+        self.assertTrue(Book.objects.get(item=item).completed_manually)
+
+    def test_a_mark_and_a_log_both_stay(self):
+        item = self.titled("both")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.finish(item, d(2026, 2, 1))
+        self.assert_numbers(0, 400, 800)
+        self.overwrite()
+        self.assert_numbers(0, 400, 800)
+
+    def test_the_eye_then_a_reread_under_way_holds_its_place_too(self):
+        item = self.titled("eye-reread")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 100, d(2026, 2, 2))
+        self.assert_numbers(0, 100, 500)
+        self.overwrite()
+        self.assertEqual(self.number(pile=True), 500)
+        self.assertEqual(self.rows(), [])
+
+    def test_the_eye_then_a_stopped_reread_holds_its_place_too(self):
+        item = self.titled("eye-stop")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 100, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.overwrite()
+        self.assertEqual(self.number(pile=True), 500)
+
+    def test_a_marked_read_holds_its_length_once(self):
+        """A mark from before the book contract holds its length in progress."""
+        item = self.book("old-mark")
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, completed_manually=True, progress=400)
+        self.assert_numbers(0, 0, 400)
 
 
 class WebDiaryAddTests(BookImportBase):

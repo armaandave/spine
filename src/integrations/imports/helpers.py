@@ -346,13 +346,16 @@ def _import_book_rows(rows, user, source):
     A dated Read lands on its date as a log, unless the title has a log that day: that's
     your own file coming back (SW-504). A Read with no date, or a row already marked, is
     the undated mark, whatever date it holds: eye taps from before the book contract can
-    still hold one.
+    still hold one. A Read with no date on a title with a log isn't: the eye over a log
+    writes that row, and the log already says it was read.
     """
     plain = []
     for row in rows:
         day = _read_day(row, user)
         if row.status != app.models.Status.COMPLETED.value or row.completed_manually or day is None:
-            if row.status == app.models.Status.COMPLETED.value:
+            if row.status == app.models.Status.COMPLETED.value and (
+                row.completed_manually or not DiaryEntry.objects.filter(user=user, item=row.item).exists()
+            ):
                 row.completed_manually = True
                 row.undated_read_previous_tracked = True
             plain.append(row)
