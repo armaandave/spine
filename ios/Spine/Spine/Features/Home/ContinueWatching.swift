@@ -8,15 +8,21 @@ import SwiftUI
 final class ContinueWatchingTicks {
     /// The episode sheet on screen.
     var episodes: ContinueWatchingEpisodes?
+    /// An anime title's episode sheet on screen (AN-701).
+    var animeEpisodes: AnimeEpisodes?
     /// A sheet that closed while its season still had a write on its way or a question or composer to show. The
     /// screen shows what that write asks next (TV-107, TV-403), or its failure (TV-705).
     private(set) var closedEpisodes: ContinueWatchingEpisodes?
+    /// The same for an anime title's sheet.
+    private(set) var closedAnimeEpisodes: AnimeEpisodes?
     /// A write changed a card since the rail last loaded: the screen re-sorts the rail on its next visit.
     private(set) var needsReload = false
     /// Recognizes this screen's own state-change posts, the sheet's included.
     let changeOrigin = UUID()
     /// Puts a card's new show state in place in the screen's rail.
     @ObservationIgnored var onUpdate: (_ itemId: String, _ tv: TVShowState) -> Void = { _, _ in }
+    /// Puts a card's new anime state in place in the screen's rail.
+    @ObservationIgnored var onAnimeUpdate: (_ itemId: String, _ anime: AnimeState) -> Void = { _, _ in }
 
     @ObservationIgnored private let mediaRepository: MediaRepository
     @ObservationIgnored private let trackingRepository: TrackingRepository
@@ -24,6 +30,7 @@ final class ContinueWatchingTicks {
     @ObservationIgnored private let onUnauthorized: () -> Void
     /// The sheet as it was presented, kept until its dismissal has finished.
     @ObservationIgnored private var presented: ContinueWatchingEpisodes?
+    @ObservationIgnored private var presentedAnime: AnimeEpisodes?
     /// The page the sheet asked for. It opens once the sheet has gone.
     @ObservationIgnored private var destination: MediaBrowsingSelection?
     /// A page asked for while a write was on its way, waiting for that write.
@@ -46,9 +53,71 @@ final class ContinueWatchingTicks {
         item.media.ref.mediaType == "tv" ? item.tracking.tv : nil
     }
 
+    /// Opens an anime card's episode sheet (AN-701): its up next's row at once from the card, while the rest load.
+    private func openAnimeEpisodes(for item: LibraryItem) {
+        guard item.tracking.anime?.upNext != nil else { return }
+        let sheet = AnimeEpisodes(item: item) { [
+            mediaRepository, trackingRepository, diaryRepository, onUnauthorized, changeOrigin
+        ] ref in
+            // The title's page model, posting as this screen, so the screen keeps the card where it is.
+            MediaDetailViewModel(
+                ref: ref,
+                mediaRepository: mediaRepository,
+                trackingRepository: trackingRepository,
+                diaryRepository: diaryRepository,
+                onUnauthorized: onUnauthorized,
+                changeOrigin: changeOrigin
+            )
+        }
+        sheet.onStateChange = { [weak self] isCardTitle, anime in
+            guard let self else { return }
+            needsReload = true
+            if isCardTitle { onAnimeUpdate(item.id, anime) }
+        }
+        sheet.onOpen = { [weak self, weak sheet] selection in
+            guard let self, let sheet else { return }
+            open(selection, from: sheet)
+        }
+        presentedAnime = sheet
+        animeEpisodes = sheet
+    }
+
+    /// As for a show's sheet: a page waits for a write still on its way, and doesn't open when that write asks
+    /// something or fails (TV-701).
+    private func open(_ selection: MediaBrowsingSelection, from sheet: AnimeEpisodes) {
+        let page = sheet.page
+        guard page.hasPendingWrites || page.tvFollowUp.isActive else {
+            destination = selection
+            animeEpisodes = nil
+            return
+        }
+        opening = Task { [weak self] in
+            let succeeded = await page.settled()
+            await page.tvFollowUp.loading?.value
+            guard let self, succeeded, animeEpisodes === sheet, sheet.page === page,
+                  !page.tvFollowUp.isActive else { return }
+            destination = selection
+            animeEpisodes = nil
+        }
+    }
+
+    /// An anime card's sheet has gone. Returns the page it asked for, if any.
+    func animeSheetDidClose() -> MediaBrowsingSelection? {
+        if let presentedAnime, presentedAnime.page.hasPendingWrites || presentedAnime.page.tvFollowUp.isActive {
+            closedAnimeEpisodes = presentedAnime
+        }
+        presentedAnime = nil
+        defer { destination = nil }
+        return destination
+    }
+
     /// Opens the card's episode sheet on up next's season. A show without up next has nothing to open there: its
     /// card opens the show.
     func openEpisodes(for item: LibraryItem) {
+        if item.media.ref.isAnime {
+            openAnimeEpisodes(for: item)
+            return
+        }
         guard let upNext = Self.state(of: item)?.upNext else { return }
         let sheet = ContinueWatchingEpisodes(item: item, upNext: upNext) { [
             mediaRepository, trackingRepository, diaryRepository, onUnauthorized, changeOrigin
@@ -118,6 +187,16 @@ final class ContinueWatchingTicks {
             guard item.id == id else { return item }
             var tracking = item.tracking
             tracking.tv = tv
+            return LibraryItem(media: item.media, tracking: tracking)
+        }
+    }
+
+    /// The rail with one card's anime state replaced where it is.
+    static func replacingAnime(_ anime: AnimeState, id: String, in items: [LibraryItem]) -> [LibraryItem] {
+        items.map { item in
+            guard item.id == id else { return item }
+            var tracking = item.tracking
+            tracking.anime = anime
             return LibraryItem(media: item.media, tracking: tracking)
         }
     }
@@ -340,6 +419,30 @@ private struct ContinueWatchingPresentations: ViewModifier {
                             message != nil
                         }
                 }
+                if ticks.animeEpisodes == nil, let closed = ticks.closedAnimeEpisodes {
+                    let page = closed.page
+                    Color.clear
+                        .tvWriteFollowUp(page.tvFollowUp) { item in
+                            AnimeFinishComposer(
+                                item: item,
+                                page: page,
+                                trackingRepository: trackingRepository,
+                                diaryRepository: diaryRepository,
+                                onUnauthorized: onUnauthorized
+                            )
+                        }
+                        .alert(closed.failureTitle, isPresented: Binding(
+                            get: { page.quickActionErrorMessage != nil },
+                            set: { if !$0 { page.quickActionErrorMessage = nil } }
+                        )) {
+                            Button("OK", role: .cancel) {}
+                        } message: {
+                            Text(page.quickActionErrorMessage ?? "")
+                        }
+                        .sensoryFeedback(.error, trigger: page.quickActionErrorMessage) { _, message in
+                            message != nil
+                        }
+                }
             }
             .sheet(item: $ticks.episodes, onDismiss: {
                 if let selection = ticks.sheetDidClose() { onOpen(selection) }
@@ -351,7 +454,18 @@ private struct ContinueWatchingPresentations: ViewModifier {
                     onUnauthorized: onUnauthorized
                 )
             }
+            .sheet(item: $ticks.animeEpisodes, onDismiss: {
+                if let selection = ticks.animeSheetDidClose() { onOpen(selection) }
+            }) { episodes in
+                AnimeEpisodesSheet(
+                    episodes: episodes,
+                    trackingRepository: trackingRepository,
+                    diaryRepository: diaryRepository,
+                    onUnauthorized: onUnauthorized
+                )
+            }
             .sensoryFeedback(.selection, trigger: ticks.episodes?.id) { _, opened in opened != nil }
+            .sensoryFeedback(.selection, trigger: ticks.animeEpisodes?.id) { _, opened in opened != nil }
     }
 }
 
@@ -523,6 +637,7 @@ private struct ContinueWatchingEpisodeList: View {
                 VStack(spacing: TVEpisodeRows.spacing) {
                     TVEpisodeRows(
                         rows: rows,
+                        rowHeight: nil,
                         state: { season.tvEpisodeState($0.tv) },
                         isWatched: { season.tvIsWatched($0) },
                         onTick: { episodes.toggle($0) },

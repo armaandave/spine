@@ -105,7 +105,7 @@ final class DiaryLogDetailViewModel {
 
     /// The delete confirmation's title. A TV log that unmarks episodes says how many (TV-406).
     var deletePrompt: String {
-        entry?.tvLog.flatMap { TVTrackingPresentation.deleteLogPrompt(unmarksCount: $0.unmarksCount) }
+        entry?.trackedLog.flatMap { TVTrackingPresentation.deleteLogPrompt(unmarksCount: $0.unmarksCount) }
             ?? "Delete this diary entry?"
     }
 
@@ -124,7 +124,7 @@ final class DiaryLogDetailViewModel {
 
         do {
             let ref = entry.media.ref
-            if let tvLog = entry.tvLog {
+            if let tvLog = entry.trackedLog {
                 // The version the dialog showed: if the show changed since, nothing is deleted (TV-705).
                 let mutationId = deleteMutationId ?? UUID()
                 deleteMutationId = mutationId
@@ -358,7 +358,7 @@ struct DiaryLogDetailView: View {
             isDeleteConfirmationPresented = true
         }
         .confirmationDialog(viewModel.deletePrompt, isPresented: $isDeleteConfirmationPresented, titleVisibility: .visible) {
-            Button(viewModel.entry?.tvLog == nil ? "Delete Entry" : "Delete Log", role: .destructive) {
+            Button(viewModel.entry?.trackedLog == nil ? "Delete Entry" : "Delete Log", role: .destructive) {
                 Task {
                     if await viewModel.confirmDelete() {
                         dismiss()

@@ -307,6 +307,36 @@ nonisolated enum TVTrackingPresentation {
         return items
     }
 
+    /// An anime title's + menu (TV-005, AN-000): the show's, with Rewatch or Stop Rewatching as one row. A single has
+    /// Planning, Log and Remove from Library (AN-002).
+    static func animeMenu(for anime: AnimeState) -> [TVMenuItem] {
+        let menu = MenuSource(available: anime.availableActions, reasons: anime.actionReasons, selected: anime.selectedAction)
+        var items: [TVMenuItem] = []
+        if !anime.single {
+            if anime.status == "Paused" {
+                items.append(menu.optionalItem("resume", "Resume", "play.fill", .action(.resume))
+                    ?? menu.item("watching", "Resume", "play.fill", .action(.watching)))
+            } else {
+                items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
+            }
+        }
+        items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
+        if !anime.single {
+            items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
+            items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+            if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
+                items.append(stop)
+            } else if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
+                items.append(rewatch)
+            }
+        }
+        items.append(menu.item("log", "Log", "square.and.pencil", .log))
+        if anime.inLibrary {
+            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
+        }
+        return items
+    }
+
     /// A season's + menu: Log Season, and Rewatch Season once the season is finished. During a rewatch Rewatch
     /// Season is left out rather than greyed out (TV-600).
     static func seasonMenu(for season: TVSeasonState) -> [TVMenuItem] {

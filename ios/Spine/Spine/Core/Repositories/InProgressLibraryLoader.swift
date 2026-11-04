@@ -3,7 +3,8 @@ import Foundation
 enum InProgressLibraryLoader {
     static let status = "In progress"
 
-    /// TV loads shows through Continue Watching; seasons and episodes are never library rows (TV-001, TV-701).
+    /// TV and anime load through Continue Watching; seasons and episodes are never library rows (TV-001, TV-701,
+    /// AN-701).
     static func mediaTypes(from profile: UserProfile?) -> [String] {
         let enabledTypes = profile?.preferences.enabledMediaTypes ?? []
         let baseTypes = enabledTypes.isEmpty ? APIConstants.fallbackMediaTypes : enabledTypes
@@ -30,10 +31,13 @@ enum InProgressLibraryLoader {
         guard limit > 0 else { return [] }
 
         var shows: [LibraryItem] = []
+        var anime: [LibraryItem] = []
         var otherItems: [LibraryItem] = []
         for mediaType in mediaTypes {
             if mediaType == "tv" {
                 shows += try await trackingRepository.continueWatching(page: nil).results
+            } else if mediaType == "anime" {
+                anime += try await trackingRepository.continueWatchingAnime(page: nil).results
             } else {
                 let response = try await trackingRepository.list(
                     mediaType: mediaType,
@@ -44,29 +48,33 @@ enum InProgressLibraryLoader {
             }
         }
 
-        return Array(mergedItems(shows: shows, others: otherItems).prefix(limit))
+        return Array(mergedItems(shows: interleaved(shows, anime), others: otherItems).prefix(limit))
     }
 
-    /// Continue Watching keeps the server's order of shows (TV-701: calendar day, then recorded time). Other types
-    /// are sorted by `updatedAt`, and a stable two-list merge interleaves the shows among them by `updatedAt`
-    /// without reordering either list.
+    /// Continue Watching keeps the server's order of shows and of anime (TV-701, AN-701: calendar day, then recorded
+    /// time). Other types are sorted by `updatedAt`, and a stable two-list merge interleaves the shows among them by
+    /// `updatedAt` without reordering either list.
     static func mergedItems(shows: [LibraryItem], others: [LibraryItem]) -> [LibraryItem] {
-        let sortedOthers = others.sorted(by: inProgressSort)
+        interleaved(shows, others.sorted(by: inProgressSort))
+    }
+
+    /// A stable merge by `updatedAt`: neither list is reordered, and on a tie the first list's item comes first.
+    private static func interleaved(_ first: [LibraryItem], _ second: [LibraryItem]) -> [LibraryItem] {
         var merged: [LibraryItem] = []
-        merged.reserveCapacity(shows.count + sortedOthers.count)
-        var showIndex = 0
-        var otherIndex = 0
-        while showIndex < shows.count, otherIndex < sortedOthers.count {
-            if isMoreRecent(sortedOthers[otherIndex], than: shows[showIndex]) {
-                merged.append(sortedOthers[otherIndex])
-                otherIndex += 1
+        merged.reserveCapacity(first.count + second.count)
+        var firstIndex = 0
+        var secondIndex = 0
+        while firstIndex < first.count, secondIndex < second.count {
+            if isMoreRecent(second[secondIndex], than: first[firstIndex]) {
+                merged.append(second[secondIndex])
+                secondIndex += 1
             } else {
-                merged.append(shows[showIndex])
-                showIndex += 1
+                merged.append(first[firstIndex])
+                firstIndex += 1
             }
         }
-        merged += shows[showIndex...]
-        merged += sortedOthers[otherIndex...]
+        merged += first[firstIndex...]
+        merged += second[secondIndex...]
         return merged
     }
 

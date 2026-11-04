@@ -96,6 +96,13 @@ nonisolated struct TVEpisodeCoordinate: Codable, Hashable {
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
     }
+
+    /// An anime title names its episodes with no season: it works like one season (AN-000).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        seasonNumber = try c.decodeIfPresent(Int.self, forKey: .seasonNumber) ?? AnimeRows.seasonNumber
+        episodeNumber = try c.decode(Int.self, forKey: .episodeNumber)
+    }
 }
 
 /// `up_next`: the next episode to watch (TV-105, TV-701).
@@ -680,6 +687,8 @@ nonisolated struct TVEarlierUnwatched: Codable, Hashable {
     var seasons: [Int]?
     var question: String
     var offerSeasonNumber: Int?
+    /// An anime title's Yes: the response names the log screen when the Yes finishes the title (AN-203).
+    var offerLog: Bool?
 
     init(
         from: TVEpisodeCoordinate,
@@ -687,7 +696,8 @@ nonisolated struct TVEarlierUnwatched: Codable, Hashable {
         count: Int,
         seasons: [Int]? = nil,
         question: String,
-        offerSeasonNumber: Int? = nil
+        offerSeasonNumber: Int? = nil,
+        offerLog: Bool? = nil
     ) {
         self.from = from
         self.to = to
@@ -695,10 +705,12 @@ nonisolated struct TVEarlierUnwatched: Codable, Hashable {
         self.seasons = seasons
         self.question = question
         self.offerSeasonNumber = offerSeasonNumber
+        self.offerLog = offerLog
     }
 }
 
-/// The keys every TV write response adds (plan section 2.3.5).
+/// The keys every TV write response adds (plan section 2.3.5). An anime write answers the same envelope with `anime`,
+/// `row` and `rows` in place of `tv`, `season` and `episode`.
 nonisolated struct TVWriteEnvelope: Codable, Hashable {
     var tv: TVShowState?
     var season: TVSeasonState?
@@ -709,6 +721,12 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
     /// A write from a season page also carries that season's episode states, so its rows show the write at once
     /// (TV-302, TV-705). Nil elsewhere.
     var seasonEpisodes: [TVEpisodeState]?
+    /// An anime title's state after the write.
+    var anime: AnimeState?
+    /// The episode an anime write named.
+    var row: AnimeRow?
+    /// Every row, when an anime write changed more than the one it named.
+    var rows: AnimeRows?
 
     static let empty = TVWriteEnvelope()
 
@@ -719,7 +737,10 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         changed: Bool = false,
         finished: TVFinished? = nil,
         earlierUnwatched: TVEarlierUnwatched? = nil,
-        seasonEpisodes: [TVEpisodeState]? = nil
+        seasonEpisodes: [TVEpisodeState]? = nil,
+        anime: AnimeState? = nil,
+        row: AnimeRow? = nil,
+        rows: AnimeRows? = nil
     ) {
         self.tv = tv
         self.season = season
@@ -728,6 +749,9 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         self.finished = finished
         self.earlierUnwatched = earlierUnwatched
         self.seasonEpisodes = seasonEpisodes
+        self.anime = anime
+        self.row = row
+        self.rows = rows
     }
 
     init(from decoder: Decoder) throws {
@@ -739,20 +763,25 @@ nonisolated struct TVWriteEnvelope: Codable, Hashable {
         finished = try c.decodeIfPresent(TVFinished.self, forKey: .finished)
         earlierUnwatched = try c.decodeIfPresent(TVEarlierUnwatched.self, forKey: .earlierUnwatched)
         seasonEpisodes = try c.decodeIfPresent([TVEpisodeState].self, forKey: .seasonEpisodes)
+        anime = try c.decodeIfPresent(AnimeState.self, forKey: .anime)
+        row = try c.decodeIfPresent(AnimeRow.self, forKey: .row)
+        rows = try c.decodeIfPresent(AnimeRows.self, forKey: .rows)
     }
 
     /// A diary create or update returns the entry plus `tv`, the log target's `season` and `episode`, `finished`
-    /// and `earlier_unwatched` (and `season_episodes` from a season page).
+    /// and `earlier_unwatched` (and `season_episodes` from a season page). An anime log's has `anime` and `rows`.
     @MainActor
     init(diaryEntry entry: DiaryEntry) {
         self.init(
             tv: entry.tv,
             season: entry.season,
             episode: entry.episode,
-            changed: entry.tv != nil,
+            changed: entry.tv != nil || entry.anime != nil,
             finished: entry.finished,
             earlierUnwatched: entry.earlierUnwatched,
-            seasonEpisodes: entry.seasonEpisodes
+            seasonEpisodes: entry.seasonEpisodes,
+            anime: entry.anime,
+            rows: entry.rows
         )
     }
 
@@ -816,6 +845,8 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
     var from: TVEpisodeCoordinate?
     var to: TVEpisodeCoordinate?
     var offerSeasonNumber: Int?
+    /// An anime title's earlier-episodes Yes, copied from the question (AN-203).
+    var offerLog: Bool?
     var rating: Int?
     var includesRating: Bool
     /// The season or episode page the action comes from, so the response's `tv` carries that page's state and
@@ -833,6 +864,7 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
         from: TVEpisodeCoordinate? = nil,
         to: TVEpisodeCoordinate? = nil,
         offerSeasonNumber: Int? = nil,
+        offerLog: Bool? = nil,
         rating: Int? = nil,
         includesRating: Bool = false
     ) {
@@ -845,13 +877,14 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
         self.from = from
         self.to = to
         self.offerSeasonNumber = offerSeasonNumber
+        self.offerLog = offerLog
         self.rating = rating
         self.includesRating = includesRating
     }
 
     enum CodingKeys: String, CodingKey {
         case seasonNumber, episodeNumber, viewingId, mutationId, expectedVersion, confirm, from, to
-        case offerSeasonNumber, rating, pageSeasonNumber, pageEpisodeNumber
+        case offerSeasonNumber, offerLog, rating, pageSeasonNumber, pageEpisodeNumber
     }
 
     func encode(to encoder: Encoder) throws {
@@ -865,6 +898,7 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
         try c.encodeIfPresent(from, forKey: .from)
         try c.encodeIfPresent(to, forKey: .to)
         try c.encodeIfPresent(offerSeasonNumber, forKey: .offerSeasonNumber)
+        try c.encodeIfPresent(offerLog, forKey: .offerLog)
         if includesRating || rating != nil {
             try c.encode(rating.map { Decimal($0) / 2 }, forKey: .rating)
         }
@@ -874,7 +908,8 @@ nonisolated struct TVActionRequest: Encodable, Hashable {
 }
 
 /// `{tracking, tv, season, episode, changed, finished, earlier_unwatched}` from a TV action. `tracking` is the show's
-/// TrackingState, or nil when the show isn't in the library.
+/// TrackingState, or nil when the show isn't in the library. An anime action answers `anime`, `row` and `rows` in place
+/// of `tv`, `season` and `episode`.
 struct TVActionResponse: Decodable, Equatable {
     let tracking: TrackingState?
     let envelope: TVWriteEnvelope

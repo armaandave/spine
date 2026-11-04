@@ -4,6 +4,7 @@ import SwiftUI
 /// one button that opens the title's own progress UI over Home, as the title's page has it:
 ///
 /// - a show: its episode sheet, on up next's season (`ContinueWatchingTicks`);
+/// - an anime: its episode sheet, as a show's (`AnimeEpisodes`, AN-701);
 /// - a book, a manga or a comic: the page's progress sheet, with Finished Reading and the read's other choices in ⋯
 ///   (MC-300);
 /// - a game: the page's progress sheet, with Finished Playing, and Edit Dates and the rest in ⋯.
@@ -13,14 +14,14 @@ import SwiftUI
 ///
 /// Each runs on the page's own model (`MediaDetailViewModel`) posting as Home, so the card stays where it is, Home
 /// reloads only its activity, and the rail re-sorts on the next visit. Finishing a book or a game opens
-/// the page's completion log. A card with nothing to update, or a type whose page has no progress UI (anime, movies,
-/// music), opens the title's page.
+/// the page's completion log. A card with nothing to update, or a type whose page has no progress UI (movies, music),
+/// opens the title's page.
 @MainActor
 @Observable
 final class InProgressUpdates {
     /// Where a card's "Update progress ›" goes.
     enum Route: Equatable {
-        /// A show's episode sheet.
+        /// A show's or an anime's episode sheet.
         case episodes
         /// The title's progress UI from its page, once the page has loaded.
         case progress
@@ -33,6 +34,9 @@ final class InProgressUpdates {
         if mediaType == "tv" {
             // A show a tick just caught up or finished has no up next to open until the rail reloads.
             return item.tracking.tv?.upNext == nil ? .page : .episodes
+        }
+        if mediaType == "anime" {
+            return item.tracking.anime?.upNext == nil ? .page : .episodes
         }
         if item.media.ref.readsLikeBook || mediaType == "game" || MediaLogViewModel.supportsProgress(mediaType: mediaType) {
             return .progress
@@ -173,7 +177,8 @@ final class InProgressUpdates {
                 diaryCount: tracking.diaryCount,
                 book: state.book,
                 game: state.game,
-                tv: tracking.tv
+                tv: tracking.tv,
+                anime: tracking.anime
             ))
         }
     }
@@ -473,8 +478,8 @@ final class InProgressUpdate {
 }
 
 /// What VoiceOver reads for a card's title and "Update progress ›", with where the title stands, which the line
-/// doesn't show: "Breaking Bad, update progress, S2 E2 next, 8 of 62", "Project Hail Mary, update progress, 40 of
-/// 476 pages".
+/// doesn't show: "Breaking Bad, update progress, S2 E2 next, 8 of 62", "Attack on Titan, update progress, E8 next, 7 of
+/// 24", "Project Hail Mary, update progress, 40 of 476 pages".
 enum InProgressCardPresentation {
     static let line = "Update progress"
 
@@ -482,6 +487,9 @@ enum InProgressCardPresentation {
         let title = item.media.displayTitle
         if item.media.ref.mediaType == "tv", let tv = item.tracking.tv {
             return TVTrackingPresentation.continueWatchingAccessibilityLabel(show: title, tv: tv)
+        }
+        if item.media.ref.isAnime, let anime = item.tracking.anime {
+            return AnimeTrackingPresentation.continueWatchingAccessibilityLabel(title: title, anime: anime)
         }
         let progress: String?
         if let game = item.tracking.game {
@@ -497,15 +505,19 @@ enum InProgressCardPresentation {
     }
 
     /// How far along the title is, for the bar on its poster, from stored values only: a show's watched over aired
-    /// regular episodes (TV-104), a book's pages or percent in its current journey, a game playthrough's percent, or
-    /// chapters, issues or episodes over the total. Nil, so no bar, without a known total or with nothing done yet;
-    /// never more than 1.
+    /// regular episodes (TV-104), an anime's the same (AN-701), a book's pages or percent in its current journey, a game
+    /// playthrough's percent, or chapters or issues over the total. Nil, so no bar, without a known total or with nothing
+    /// done yet; never more than 1.
     static func progressFraction(for item: LibraryItem) -> Double? {
         let tracking = item.tracking
         switch item.media.ref.mediaType {
         case "tv":
             if let tv = tracking.tv {
                 return fraction(tv.watchedCount.map(Double.init), of: tv.airedCount.map(Double.init))
+            }
+        case "anime":
+            if let anime = tracking.anime {
+                return fraction(anime.watchedCount.map(Double.init), of: anime.airedCount.map(Double.init))
             }
         case "book":
             if let journey = tracking.book?.currentJourney?.progress { return fraction(of: journey) }

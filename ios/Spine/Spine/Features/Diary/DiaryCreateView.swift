@@ -67,8 +67,13 @@ final class DiaryCreateViewModel {
     /// The Rewatch value a log saves with. Nil for a TV log whose server default (TV-404) hasn't loaded while the
     /// toggle is untouched: the request then leaves `is_rewatch` out and the server's default applies.
     var isRewatchForRequest: Bool? {
-        guard selectedMedia?.ref.isTVFamily == true, !hasServerRewatchDefault, !isRewatchEdited else { return isRewatch }
+        guard selectedIsTVLike, !hasServerRewatchDefault, !isRewatchEdited else { return isRewatch }
         return nil
+    }
+
+    /// A show, season, episode or anime title: its log saves under the same rules (TV-404, TV-705, AN-400).
+    private var selectedIsTVLike: Bool {
+        selectedMedia?.ref.isTVFamily == true || selectedMedia?.ref.isAnime == true
     }
 
     func loadMeta() async {
@@ -140,7 +145,7 @@ final class DiaryCreateViewModel {
             if selectedMedia.ref.usesCalendarLogDate, CalendarDateCodec.isFuture(consumedAt) {
                 throw DiaryCreateError.futureDate
             }
-            let isTV = selectedMedia.ref.isTVFamily
+            let isTV = selectedIsTVLike
             let tags = tagsText
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -197,7 +202,7 @@ final class DiaryCreateViewModel {
         selectionID += 1
         hasServerRewatchDefault = false
         isRewatchEdited = false
-        if media.ref.isTVFamily {
+        if media.ref.isTVFamily || media.ref.isAnime {
             // Until the server's default loads, nothing is guessed (TV-404).
             isRewatch = false
         } else if media.ref.isSingleWeight {

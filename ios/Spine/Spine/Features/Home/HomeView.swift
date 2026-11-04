@@ -62,6 +62,10 @@ final class HomeViewModel {
             guard let self else { return }
             inProgressItems = ContinueWatchingTicks.replacingTV(tv, id: id, in: inProgressItems)
         }
+        continueWatching.onAnimeUpdate = { [weak self] id, anime in
+            guard let self else { return }
+            inProgressItems = ContinueWatchingTicks.replacingAnime(anime, id: id, in: inProgressItems)
+        }
         // So does a write from another card's progress UI.
         progressUpdates.onUpdate = { [weak self] id, state in
             guard let self else { return }

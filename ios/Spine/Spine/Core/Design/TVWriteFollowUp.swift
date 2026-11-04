@@ -132,23 +132,33 @@ final class TVWriteFollowUp {
                 mutationId: taken.mutationId,
                 from: taken.question.from,
                 to: taken.question.to,
-                offerSeasonNumber: taken.question.offerSeasonNumber
+                offerSeasonNumber: taken.question.offerSeasonNumber,
+                offerLog: taken.question.offerLog
             )
             do {
-                let response = try await trackingRepository.performTVAction(
-                    source: showRef.source,
-                    mediaId: showRef.mediaId,
-                    action: .markEarlier,
-                    request: request
-                )
+                let response = showRef.isAnime
+                    ? try await trackingRepository.performAnimeAction(
+                        source: showRef.source,
+                        mediaId: showRef.mediaId,
+                        action: .markEarlier,
+                        request: request
+                    )
+                    : try await trackingRepository.performTVAction(
+                        source: showRef.source,
+                        mediaId: showRef.mediaId,
+                        action: .markEarlier,
+                        request: request
+                    )
                 isSending = false
                 errorMessage = nil
                 onResponse?(response)
-                if offer == nil,
-                   let offered = taken.question.offerSeasonNumber,
-                   let finished = response.finished,
-                   finished.seasonNumber == offered {
-                    offer = finished
+                if offer == nil, let finished = response.finished {
+                    // An anime title's Yes offers the log screen when it finishes the title (AN-203).
+                    if taken.question.offerLog == true
+                        || (taken.question.offerSeasonNumber != nil
+                            && finished.seasonNumber == taken.question.offerSeasonNumber) {
+                        offer = finished
+                    }
                 }
             } catch is CancellationError {
                 isSending = false

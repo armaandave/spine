@@ -333,6 +333,8 @@ struct TVActionSheet: View {
     let items: [TVMenuItem]
     /// "Remove this show? Your 13 watched episodes will be unmarked."
     let removePrompt: String
+    /// "Drop this show? Your progress will be kept."
+    var dropPrompt = TVTrackingPresentation.dropPrompt
     let onCommand: (TVMenuItem.Command) -> Void
     /// What the sheet showed when a choice was made, kept while it slides away so rows don't change under the
     /// finger and a second tap is ignored.
@@ -361,7 +363,7 @@ struct TVActionSheet: View {
             .fitsSheetToContent()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog(TVTrackingPresentation.dropPrompt, isPresented: $confirmsDrop, titleVisibility: .visible) {
+            .confirmationDialog(dropPrompt, isPresented: $confirmsDrop, titleVisibility: .visible) {
                 Button("Drop", role: .destructive) { commit(.action(.drop)) }
                 Button("Cancel", role: .cancel) {}
             }

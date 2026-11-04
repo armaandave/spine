@@ -87,6 +87,7 @@ nonisolated extension UserMediaState {
         state.book = nil
         state.game = nil
         state.tv = nil
+        state.anime = nil
         state.directConsumption = nil
         state.ratingSourceDiaryEntryId = nil
         state.likeSourceDiaryEntryId = nil
@@ -130,6 +131,14 @@ nonisolated extension UserMediaState {
         return state
     }
 
+    /// Folds an anime write's envelope into its page (TV-705). `tracking` is the title's TrackingState, nil when the
+    /// title isn't in the library.
+    func applying(animeEnvelope envelope: TVWriteEnvelope, tracking: TrackingState?) -> UserMediaState {
+        var state = tracking.map { applying($0) } ?? removed()
+        if let anime = envelope.anime { state.anime = anime }
+        return state
+    }
+
     /// Whether an episode shows as watched, counting a pending tick, untick or mark (TV-100, TV-705).
     func tvIsWatched(_ episode: TVEpisodeState) -> Bool {
         tvPending.isWatched(episode)
@@ -160,12 +169,15 @@ nonisolated struct TVPendingWatches: Hashable {
     var markedSeasons: Set<Int> = []
     /// A pending show eye mark (regular episodes only, TV-004).
     var markedShow = false
+    /// A pending Mark watched up to here on an anime title: one number, however long its list (AN-101).
+    var markedUpTo: Int?
 
     func isWatched(_ episode: TVEpisodeState) -> Bool {
         if let pending = episodes[episode.coordinate] { return pending }
         if episode.aired, episode.listed {
             if markedSeasons.contains(episode.seasonNumber) { return true }
             if markedShow, !episode.isSpecial { return true }
+            if let markedUpTo, episode.episodeNumber <= markedUpTo { return true }
         }
         return episode.watched
     }
@@ -192,6 +204,18 @@ nonisolated extension TVShowState {
         return next
     }
 
+    /// A tick, log or mark ends a Planning, Paused or Dropped choice (TV-203).
+    mutating func endChoiceForWatch() {
+        inLibrary = true
+        started = true
+        guard status == nil || ["Planning", "Paused", "Dropped"].contains(choice ?? status ?? "") else { return }
+        choice = nil
+        status = finished ? "Completed" : "In progress"
+        selectedAction = finished ? nil : "watching"
+    }
+}
+
+nonisolated extension AnimeState {
     /// A tick, log or mark ends a Planning, Paused or Dropped choice (TV-203).
     mutating func endChoiceForWatch() {
         inLibrary = true
@@ -537,6 +561,83 @@ enum TrackingProjection {
             }
             state.adoptShowStatus(of: tv)
             state.tv = tv
+        }
+    }
+
+    // MARK: Anime (AN-000, TV-705)
+
+    /// A tick shows at once: the row reads watched and the title is in the library and started. Up next waits for the
+    /// server, as TV's does.
+    static func animeTick(episode: Int) -> Projection {
+        { state in
+            state.tvPending.episodes[AnimeRows.coordinate(episode)] = true
+            state.isTracked = true
+            guard var anime = state.anime else { return }
+            anime.endChoiceForWatch()
+            anime.watchedCount = (anime.watchedCount ?? 0) + 1
+            state.status = anime.status
+            state.anime = anime
+        }
+    }
+
+    /// An untick shows at once. The status waits for the server, which may restore an earlier choice (TV-208).
+    static func animeUntick(episode: Int) -> Projection {
+        { state in
+            state.tvPending.episodes[AnimeRows.coordinate(episode)] = false
+            if let watched = state.anime?.watchedCount, watched > 0 { state.anime?.watchedCount = watched - 1 }
+        }
+    }
+
+    /// Watching, Planning, Pause or Drop from the + menu (TV-005 to TV-007). Watching on a finished title shows
+    /// Completed.
+    static func animeChoice(status: String) -> Projection {
+        { state in
+            state.isTracked = true
+            guard var anime = state.anime else {
+                state.status = status
+                return
+            }
+            let shown = status == "In progress" && anime.finished ? "Completed" : status
+            anime.inLibrary = true
+            anime.choice = status
+            anime.status = shown
+            anime.selectedAction = TVTrackingPresentation.selectedActionKey(forStatus: shown)
+            state.status = shown
+            state.anime = anime
+        }
+    }
+
+    /// The eye marks every aired episode (AN-300): Completed, or Watching as caught up, until the server answers.
+    static var animeMarked: Projection {
+        { state in
+            state.isTracked = true
+            state.tvPending.markedShow = true
+            guard var anime = state.anime else { return }
+            let moreComing = anime.nextAiring != nil
+            anime.inLibrary = true
+            anime.started = true
+            anime.watchedCount = anime.airedCount ?? anime.watchedCount
+            anime.upNext = nil
+            anime.eye?.filled = true
+            anime.finished = !moreComing
+            anime.caughtUp = moreComing
+            anime.choice = nil
+            anime.status = moreComing ? "In progress" : "Completed"
+            anime.selectedAction = moreComing ? "watching" : nil
+            state.status = anime.status
+            state.anime = anime
+        }
+    }
+
+    /// Mark watched up to here (TV-108): the rows show it at once, and the title's numbers wait for the server.
+    static func animeMarked(upTo episode: Int) -> Projection {
+        { state in
+            state.isTracked = true
+            state.tvPending.markedUpTo = episode
+            guard var anime = state.anime else { return }
+            anime.endChoiceForWatch()
+            state.status = anime.status
+            state.anime = anime
         }
     }
 }
