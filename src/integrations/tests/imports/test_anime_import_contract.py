@@ -587,6 +587,22 @@ class WebhookTests(AnimeTestCase):
         processor._handle_anime(title.media_id, 2, {}, self.user)  # noqa: SLF001
         self.assertEqual(self.watched(item), set())
 
+    def test_an_801_a_title_with_no_item_and_mal_down_is_logged_and_acknowledged(self):
+        from integrations.webhooks.anime import AnimeWebhookMixin
+
+        class Processor(AnimeWebhookMixin):
+            def _is_played(self, _payload):
+                return True
+
+            def _is_unplayed(self, _payload):
+                return False
+
+        title = self.fake.add(total=5)
+        self.fake.fail("mal")
+        Processor()._handle_anime(title.media_id, 2, {}, self.user)  # noqa: SLF001
+        self.assertFalse(Item.objects.filter(media_id=title.media_id, media_type="anime").exists())
+        self.assertFalse(AnimeViewing.objects.exists())
+
     def test_an_801_an_unplayed_event_for_an_unknown_title_creates_nothing(self):
         from integrations.webhooks.anime import AnimeWebhookMixin
 

@@ -3,6 +3,7 @@ import logging
 import app
 from api.services.item_metadata import store_item_metadata
 from app import anime_tracking, user_calendar
+from app.anime_listing import PROVIDER_FAILURES
 from app.models import MediaTypes, Sources
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,11 @@ class AnimeWebhookMixin:
         item = app.models.Item.objects.filter(**lookup).first()
         if item is not None or not create:
             return item
-        metadata = app.providers.mal.anime(media_id)
+        try:
+            metadata = app.providers.mal.anime(media_id)
+        except PROVIDER_FAILURES:
+            logger.warning("Acknowledged an anime webhook MAL can't name right now: %s", media_id)
+            return None
         item, _ = app.models.Item.objects.get_or_create(
             **lookup,
             defaults={"title": metadata["title"], "image": metadata["image"]},
