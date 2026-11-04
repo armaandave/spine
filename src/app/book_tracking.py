@@ -311,9 +311,11 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
         return book
 
     _clear_override(book)
+    # A place with no journey stays: a status move changes no number (decision 21).
+    place = book.progress if _holds_a_place(book) else 0
     book.status = status
     book.current_session = None
-    book.progress = 0
+    book.progress = place
     book.start_date = None
     book.end_date = None
     book.save(
@@ -412,6 +414,14 @@ def _last_read(book):
         if not session.from_file:
             return session
     return None
+
+
+def _holds_a_place(book):
+    """Return whether a book's progress is a place with no journey, as a file leaves (5.2).
+
+    A Read's progress is its length, not a place.
+    """
+    return bool(book.progress) and book.status != Status.COMPLETED.value and _last_read(book) is None
 
 
 def _over_a_finished_read(book):
@@ -688,15 +698,19 @@ def mark_read(user, item):
     return book
 
 
+def _place_before_mark(book):
+    """Return the place the mark replaced: no column holds one, so its history says."""
+    for marked, progress in book.history.order_by("-history_id").values_list("completed_manually", "progress"):
+        if not marked:
+            return progress or 0
+    return 0
+
+
 def _restore_marker_state(book):
     if book.undated_read_previous_tracked:
         book.status = book.undated_read_previous_status or Status.PLANNING.value
         book.current_session = book.undated_read_previous_session
-        book.progress = (
-            book.current_session.pages_read
-            if book.current_session and book.current_session.pages_read is not None
-            else 0
-        )
+        book.progress = (book.current_session.pages_read or 0) if book.current_session else _place_before_mark(book)
         book.start_date = book.current_session.start_date if book.current_session else None
         book.end_date = book.current_session.end_date if book.current_session else None
         book.read_override_active = book.undated_read_previous_override
@@ -990,7 +1004,7 @@ def complete(
             previous_session=None if created else book.current_session,
             previous_read_override=_deactivate_override(book),
             mutation_id=mutation_id,
-            pre_completion_progress={"from_file": True} if force_direct else None,
+            pre_completion_progress=_direct_read_note(book, from_file=force_direct),
         )
 
     total_pages = item.total_pages
@@ -1063,6 +1077,17 @@ def complete(
         _create_activity(entry)
     _queue_statistics(user.id, completed_at)
     return book, entry
+
+
+def _direct_read_note(book, *, from_file):
+    """Return what a read with no journey stands on, as its journey's note says it.
+
+    A file's read is its own. A log over a place with no journey keeps that place, so it
+    adds only what's left (decision 8) and its delete can give the place back.
+    """
+    if from_file:
+        return {"from_file": True}
+    return {"pages_read": book.progress} if _holds_a_place(book) else None
 
 
 @transaction.atomic
@@ -1162,7 +1187,8 @@ def _restore_previous(book, session):
     if session.previous_tracked:
         book.status = session.previous_status or Status.PLANNING.value
         book.current_session = previous
-        book.progress = previous.pages_read or 0 if previous else 0
+        place = (session.pre_completion_progress or {}).get("pages_read")
+        book.progress = previous.pages_read or 0 if previous else place or 0
         book.start_date = previous.start_date if previous else None
         book.end_date = previous.end_date if previous else None
         book.read_override_active = session.previous_read_override

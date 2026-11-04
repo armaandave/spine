@@ -31,7 +31,7 @@ from api.tests.test_stats_v2_activity import (
     ActivityBase,
     details,
 )
-from app import book_tracking
+from app import book_tracking, series_tracking
 from app.models import (
     Book,
     BookSession,
@@ -39,6 +39,7 @@ from app.models import (
     ItemCredit,
     ItemFilterFacet,
     MediaTypes,
+    Sources,
     Status,
 )
 from social.models import ProgressChange
@@ -986,6 +987,109 @@ class LegacyJourneyTests(BookCalcBase):
         self.legacy(item)
         self.do(book_tracking.undo_read, item, d(2026, 3, 1))
         self.assert_numbers(0, 0, 0)
+
+
+class ImportedPlaceTests(BookCalcBase):
+    """A place with no journey sits in the pile, and stays as the opening (5.2)."""
+
+    def place(self, name="place", status=Status.IN_PROGRESS.value):
+        """Return a book at page 120 of 400 with no journey, as a file leaves one."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=status, progress=120)
+        return item
+
+    def test_finishing_with_no_save_between_adds_only_what_is_left(self):
+        item = self.place()
+        self.begin(item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 120)
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 280, 400)
+
+    def test_a_direct_log_adds_only_what_is_left(self):
+        item = self.place()
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 280, 400)
+        self.assertEqual(self.rows(), ["2026-03-02 log +280"])
+
+    def test_deleting_that_log_gives_the_place_back(self):
+        item = self.place()
+        _, entry = self.finish(item, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(0, 0, 120)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
+
+    def test_the_same_finish_on_a_series_reads_the_same(self):
+        """5.2's same-story test: a series' attempt holds its place the same way."""
+        manga = self.item(MediaTypes.MANGA.value, "same-story", title="same-story")
+        self.set_item(manga, series_total=400)
+        with self.on(d(2026, 3, 1)):
+            series_tracking.import_title(self.owner, manga, status=Status.IN_PROGRESS.value, place=120)
+        with self.on(d(2026, 3, 2)):
+            series_tracking.complete(self.owner, manga, completion_date=d(2026, 3, 2))
+        calculation = rows_for([self.owner], self.owner, types=[MediaTypes.MANGA.value])
+        rows = list_rows(calculation.rows, media_type=MediaTypes.MANGA.value)
+        self.assertEqual([int(row.amount) for row in rows], [280])
+        self.assertEqual(int(piled(calculation.piles, MediaTypes.MANGA.value).amount), 120)
+
+    def test_a_status_move_holds_it(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"move-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.assert_numbers(0, 0, 120)
+                book = Book.objects.get(item=item)
+                self.assertEqual((book.status, book.progress), (status, 120))
+                self.assertEqual(self.rows(), [])
+
+    def test_back_from_a_status_move_opens_at_it(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"back-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.begin(item, d(2026, 3, 2))
+                self.assertEqual(Book.objects.get(item=item).progress, 120)
+                self.save(item, 130, d(2026, 3, 3))
+                self.assert_numbers(0, 10, 130)
+
+    def test_the_phones_plain_status_write_holds_it(self):
+        item = self.item(BOOK, "phone-place", source=Sources.MANUAL.value, title="phone-place")
+        self.set_item(item, total_pages=400)
+        Book.objects.create(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=120)
+        client = self.client_for(self.owner, NEW_YORK)
+        with self.on(d(2026, 3, 1)):
+            response = client.patch(f"/api/v1/tracking/manual/book/{item.media_id}/", {"status": Status.DROPPED.value}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assert_numbers(0, 0, 120)
+
+    def test_the_eye_then_undo_gives_it_back(self):
+        item = self.place()
+        self.do(book_tracking.mark_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 400)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 120)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
+
+    def test_a_status_move_on_a_marked_book_never_counts_its_length_twice(self):
+        """A mark from before the book contract holds its length in progress."""
+        item = self.book("old-mark")
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, completed_manually=True, progress=400)
+        self.do(book_tracking.assign_status, item, d(2026, 3, 1), Status.PLANNING.value)
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_journey_from_before_saves_were_recorded_still_counts_whole_on_its_log(self):
+        """Nothing says where it opened, so its log counts whole, as it always has."""
+        item = self.book("before-rows")
+        self.begin(item, d(2026, 3, 1))
+        ProgressChange.objects.filter(item=item).delete()
+        BookSession.objects.filter(related_book__item=item).update(pages_read=100)
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 400, 400)
 
 
 class DayTests(BookCalcBase):
