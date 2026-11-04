@@ -100,8 +100,17 @@ def type_time(scope, media_type):
     """Return one type's TypeTime in the scope's range, computed once per scope."""
     cache = scope.__dict__.setdefault(_CACHE_KEY, {})
     if media_type not in cache:
-        counter = _from_rows if media_type in activity_rows.CALCULATED_TYPES else _COUNTERS[media_type]
-        cache[media_type] = counter(scope, media_type)
+        if media_type in activity_rows.CALCULATED_TYPES:
+            calculation = scope.calculation()
+            rows = activity_rows.in_range(
+                calculation.rows,
+                media_type=media_type,
+                start_date=scope.start_date,
+                end_date=scope.end_date,
+            )
+            cache[media_type] = _from_rows(rows, calculation.piles if scope.is_all_time else [], media_type)
+        else:
+            cache[media_type] = _COUNTERS[media_type](scope, media_type)
     return cache[media_type]
 
 
@@ -126,19 +135,12 @@ def hours_total(rows):
     }
 
 
-def _from_rows(scope, media_type):
-    """Add up the calculation's rows in the range, plus the undated pile in All Time.
+def _from_rows(rows, piles, media_type):
+    """Add up one type's rows and undated piles.
 
     Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
     """
-    calculation = scope.calculation()
-    rows = activity_rows.in_range(
-        calculation.rows,
-        media_type=media_type,
-        start_date=scope.start_date,
-        end_date=scope.end_date,
-    )
-    pile = activity_rows.piled(calculation.piles if scope.is_all_time else [], media_type)
+    pile = activity_rows.piled(piles, media_type)
     titles = {row.title_id for row in rows if row.counts_title} | pile.titles
     unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known)
     result = TypeTime(media_type)
