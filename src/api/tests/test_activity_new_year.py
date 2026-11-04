@@ -24,6 +24,7 @@ from app import (
     tv_tracking,
     user_calendar,
 )
+from app.forms import ComicForm, MangaForm
 from app.models import (
     Anime,
     Book,
@@ -480,6 +481,56 @@ class NoHeaderTests(NewYearBase):
         self.assertEqual(response.status_code, 200, response.content)
         entry.refresh_from_db()
         self.assertEqual(entry.consumed_at, datetime(2027, 1, 1, tzinfo=UTC))
+
+    def test_a_web_manga_and_comic_log_date_edit_keeps_the_date_it_was_sent(self):
+        """A moment at the end of that day is already the next day in Tokyo."""
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        for zone, today in ((TOKYO, JAN_1), (NEW_YORK, DEC_31)):
+            user = make_user(calendar=zone)
+            browser = Client()
+            browser.force_login(user)
+            for media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+                with self.subTest(media_type=media_type, zone=zone):
+                    item = self.item(media_type, series_total=100)
+                    series_tracking.start(user, item, start_date=date(2026, 12, 1))
+                    _, entry = series_tracking.complete(user, item, completion_date=date(2026, 12, 25))
+                    url = reverse("update_diary_entry", args=[entry.pk])
+                    for sent in (date(2026, 12, 20), today):
+                        response = browser.post(url, {"watch_date": str(sent)})
+                        self.assertEqual(response.status_code, 200, response.content)
+                        entry.refresh_from_db()
+                        self.assertEqual(entry.consumed_at.date(), sent)
+                    response = browser.post(url, {"watch_date": "2027-01-02"})
+                    self.assertEqual(response.status_code, 400)
+
+    def test_the_web_manga_and_comic_form_keeps_the_dates_it_was_sent(self):
+        """The form reads the browser's wall clock on the server's zone (BK-306)."""
+        self.clock.set(datetime(2026, 12, 31, 20, 0, tzinfo=NEW_YORK_TZ))
+        for zone in (TOKYO, NEW_YORK):
+            user = make_user(calendar=zone)
+            for media_type, form_class in ((MediaTypes.MANGA.value, MangaForm), (MediaTypes.COMIC.value, ComicForm)):
+                with self.subTest(media_type=media_type, zone=zone):
+                    item = self.item(media_type, series_total=100)
+                    row = series_tracking.start(user, item, start_date=date(2026, 12, 1))
+                    series_tracking.drop(user, item, end_date=date(2026, 12, 25))
+                    row.refresh_from_db()
+                    form = form_class(
+                        {
+                            "media_type": item.media_type,
+                            "source": item.source,
+                            "media_id": item.media_id,
+                            "status": row.status,
+                            "progress": row.progress,
+                            "start_date": "2026-12-20T15:00",
+                            "end_date": "2026-12-22T23:30",
+                        },
+                        instance=row,
+                    )
+                    self.assertTrue(form.is_valid(), form.errors)
+                    form.save()
+                    attempt = type(row).objects.get(pk=row.pk).current_attempt
+                    self.assertEqual(attempt.start_date, date(2026, 12, 20))
+                    self.assertEqual(attempt.end_date, date(2026, 12, 22))
 
     def test_a_tokyo_accounts_imported_film_log_on_its_new_day(self):
         tokyo = make_user(calendar=TOKYO)

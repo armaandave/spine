@@ -3184,7 +3184,8 @@ def update_diary_entry(request, entry_id):
             consumed_at = entry.consumed_at
         elif (single_weight.supports(entry.item) or game_tracking.supports(entry.item)) and consumed_at > user_calendar.today(request.user):
             return JsonResponse({"error": "Consumption dates cannot be in the future."}, status=400)
-        else:
+        elif not series_tracking.supports(entry.item):
+            # A series takes the date as sent: this moment is already the next day east of the server.
             # Convert date to datetime at end of day to allow multiple entries per day
             consumed_at = timezone.datetime.combine(consumed_at, timezone.datetime.max.time())
             consumed_at = timezone.make_aware(consumed_at)

@@ -301,8 +301,9 @@ class SeriesForm(MediaForm):
         from app import series_tracking
 
         attempt = self.instance.current_attempt if self.instance else None
+        # The day the browser sent: Django read its wall clock on the server's zone.
         dates = {
-            field: self.cleaned_data[field]
+            field: timezone.localtime(self.cleaned_data[field]).date()
             for field in ("start_date", "end_date")
             if field in self.changed_data and self.cleaned_data.get(field)
         }
