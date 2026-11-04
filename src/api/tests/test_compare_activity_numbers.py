@@ -79,6 +79,17 @@ class CompareTests(BookCalcBase):
             reader = stats_time.type_time(ranged, MediaTypes.BOOK.value)
         self.assertEqual((reader.value, reader.known, reader.total), (60, 0, 1))
 
+    def test_a_year_todays_code_counts_and_the_rows_leave_empty_gets_its_line(self):
+        """A save a later fix took back to nothing: its pill would go at the switch."""
+        item = self.book("taken-back")
+        self.begin(item, d(2023, 3, 1))
+        self.save(item, 100, d(2024, 3, 1))
+        self.save(item, 0, d(2025, 3, 1))
+        lines = self.compare()
+        self.assertIn("active_days=1->0", self.line(lines, f"user {self.owner.pk} book 2024:"))
+        self.assertTrue(self.line(lines, f"user {self.owner.pk} book 2023:"))
+        self.assertIn("active_days=2->1", self.line(lines, f"user {self.owner.pk} book all:"))
+
     def test_a_number_that_agrees_reads_the_same_on_both_sides(self):
         logged = self.book("logged")
         self.finish(logged, d(2025, 3, 1))
@@ -339,6 +350,26 @@ class BadRowTests(BookCalcBase):
         self.assertTrue(self.line(lines, f"user {self.owner.pk}:"))
         self.assertTrue(self.line(lines, f"user {self.follower.pk}:"))
         self.assert_every_count_reports(lines)
+
+    def test_todays_events_failing_leaves_the_rest_of_the_account(self):
+        """Postgres refuses their cast of a bad value, so they get a step of their own."""
+        item = self.book("events")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 40, d(2026, 3, 5))
+        real = StatsScope.progress_events
+
+        def progress_events(scope):
+            if scope.is_all_time and scope.owner == self.owner and scope.media_type == MediaTypes.BOOK.value:
+                raise ValueError("A bad row")
+            return real(scope)
+
+        with patch.object(StatsScope, "progress_events", progress_events):
+            lines = self.compare_failing()
+        self.assertIn("failed ValueError", self.line(lines, f"user {self.owner.pk} book years:"))
+        self.assertIn("value=", self.line(lines, f"user {self.owner.pk} book 2026:"))
+        self.assertIn("failed ValueError", self.line(lines, f"user {self.owner.pk} book all:"))
+        self.assertTrue(self.line(lines, f"user {self.owner.pk}: "))
+        self.assertIn("value=", self.line(lines, f"user {self.follower.pk} book all:"))
 
     def test_one_range_failing_leaves_the_others(self):
         item = self.book("ranges")

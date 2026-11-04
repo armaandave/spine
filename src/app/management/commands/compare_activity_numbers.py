@@ -119,6 +119,8 @@ class Command(BaseCommand):
         logs = scope.all_entries.values_list("consumed_at", flat=True)
         zone = user_calendar.calendar_tz(user)
         years = {row.day.year for row in rows} | {activity_rows.log_day(moment, zone).year for moment in logs}
+        # A year today's code counts and the rows leave empty would lose its pill at the switch.
+        years |= self._guarded(f"user {user.pk} {media_type} years", _event_years, scope) or set()
         for year in sorted(years):
             ranged = scope._sibling(start_date=date(year, 1, 1), end_date=date(year, 12, 31))
             self._guarded(f"user {user.pk} {media_type} {year}", self._range, user, ranged, media_type, str(year), calculation)
@@ -218,6 +220,11 @@ def _moment(value):
     if moment is None:
         raise CommandError("--since takes an ISO moment, such as 2026-11-04T12:00:00-05:00.")
     return timezone.make_aware(moment) if timezone.is_naive(moment) else moment
+
+
+def _event_years(scope):
+    """Return the years today's code counts an active day in."""
+    return {day.year for day, _title, _bucket in scope.events}
 
 
 def _stats_ms(scope):
