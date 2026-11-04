@@ -528,6 +528,7 @@ class _Ctx:
         self.version_before = row.state_version if row is not None else 0
         self.status_before = row.status if row is not None else None
         self.count_before = row.progress if row is not None else 0
+        self._history_rows = 0
         # Ticks before the write: activity counts only how ticks moved (TV-703). None
         # outside a write: nothing counts.
         self.ticks_before = None
@@ -552,6 +553,16 @@ class _Ctx:
     def invalidate(self):
         self._calc = None
 
+    def history_moment(self):
+        """Return the date of this write's next history row: each its own, in order.
+
+        A row's place in the history goes by its date, and the creation row would otherwise
+        read the clock after the write's first row.
+        """
+        moment = self.now + timedelta(microseconds=self._history_rows)
+        self._history_rows += 1
+        return moment
+
     def set_own_total(self, number=None):
         """Settle a manual title's total: the number its owner wrote, or what's watched (AN-100)."""
         if self.item.source != Sources.MANUAL.value:
@@ -565,7 +576,11 @@ class _Ctx:
 
     def ensure_row(self):
         if self.row is None:
-            self.row = _create_row(self.user, self.item, history=self.entry_point != IMPORT)
+            self.row = _create_row(
+                self.user,
+                self.item,
+                history_date=self.history_moment() if self.entry_point != IMPORT else None,
+            )
             self.created = True
             self.version_before = self.row.state_version
             self.status_before = None
@@ -596,7 +611,7 @@ class _Ctx:
                     Anime,
                     fields=sorted(self.dirty),
                     default_user=self.user,
-                    default_date=self.now,
+                    default_date=self.history_moment(),
                 )
             self.dirty.clear()
 
@@ -674,8 +689,8 @@ def _locked_row(user, item):
     return Anime.objects.select_for_update(of=("self",)).filter(user=user, item=item).order_by("pk").first()
 
 
-def _create_row(user, item, *, history=True):
-    """Create the user's tracking row (inside the lock).
+def _create_row(user, item, *, history_date):
+    """Create the user's tracking row (inside the lock), with history at that date, or none.
 
     When a simultaneous first write got here first, IntegrityError goes up: this write's
     facts are out of date, so _perform runs it again against that row (TV-705).
@@ -687,12 +702,17 @@ def _create_row(user, item, *, history=True):
         .first()
     )
     row = Anime(user=user, item=item, status=WATCHING, state_version=int((seed or {}).get("state_version") or 0))
-    if not history:
+    if history_date is None:
         row.skip_history_when_saving = True
+    else:
+        row._history_date = history_date  # noqa: SLF001
     with transaction.atomic():
         row.save_base(force_insert=True)
-    if not history:
+    # Both would carry over to the row's later history.
+    if history_date is None:
         del row.skip_history_when_saving
+    else:
+        del row._history_date  # noqa: SLF001
     return row
 
 

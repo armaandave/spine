@@ -1,6 +1,7 @@
 """The web's forms, progress buttons, delete and log modal (AN-900, TV-207)."""
 
-from datetime import date
+from datetime import UTC, date, datetime
+from unittest import mock
 
 from django.urls import reverse
 
@@ -163,3 +164,99 @@ class AnimeWebContractTests(AnimeTestCase):
         self.assertEqual(Anime.objects.get(item=item, user=self.user).status, "Completed")
         self.assertEqual(self.row(item).progress, 3)
         self.assertEqual(anime_tracking.state_payload(self.user, item)["eye"]["tap"], "unmark_marks")
+
+
+class AnimeHistoryPageTests(AnimeTestCase):
+    """The web's history page: one row per write, in order, in plain words."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.user)
+
+    def real_clock(self):
+        # As production runs: each history row reads the clock when it's written.
+        return mock.patch("django.utils.timezone.now", side_effect=lambda: datetime.now(UTC))
+
+    def timeline(self, item):
+        url = reverse("history_modal", kwargs={"source": item.source, "media_type": "anime", "media_id": item.media_id})
+        response = self.client.get(f"{url}?return_url=/home")
+        self.assertEqual(response.status_code, 200)
+        return response.context["timeline"]
+
+    def said(self, item):
+        return [change["description"] for entry in self.timeline(item) for change in entry["changes"]]
+
+    def test_an_400_history_opens_after_a_log_is_deleted(self):
+        item = self.title(total=12)
+        with self.real_clock():
+            self.tick(item, 1)
+            entry = self.log(item).entry
+            anime_tracking.delete_log(self.user, entry)
+            self.timeline(item)
+            self.timeline(item)
+        self.assertEqual(self.row(item).progress, 1)
+
+    def test_an_400_each_history_row_of_a_write_has_its_own_moment_in_order(self):
+        item = self.title(total=12)
+        with self.real_clock():
+            self.tick(item, 1)
+            entry = self.log(item).entry
+            anime_tracking.delete_log(self.user, entry)
+        rows = list(self.row(item).history.all())
+        dates = [row.history_date for row in rows]
+        self.assertEqual(len(set(dates)), len(dates))
+        self.assertEqual(dates, sorted(dates, reverse=True))
+        self.assertEqual([row.history_id for row in rows], sorted((row.history_id for row in rows), reverse=True))
+
+    def test_an_400_the_creation_row_is_dated_first(self):
+        item = self.title(total=12)
+        with self.real_clock():
+            self.tick(item, 1)
+        rows = list(self.row(item).history.all())
+        self.assertEqual(rows[-1].history_type, "+")
+        self.assertEqual(rows[-1].progress, 0)
+        self.assertEqual(rows[0].progress, 1)
+        with self.real_clock():
+            newest = [change["description"] for change in self.timeline(item)[0]["changes"]]
+        self.assertIn("Progress set to 1 episode", newest)
+        self.assertFalse(any("Removed" in line or "0 episodes" in line for line in newest), newest)
+
+    def test_an_400_rows_at_one_moment_dont_stop_the_page_and_each_shows(self):
+        # An older row, or two writes in one microsecond: nothing here may depend on it.
+        item = self.title(total=12)
+        self.tick(item, 1)
+        self.tick(item, 2)
+        row = self.row(item)
+        moment = row.history.first().history_date
+        row.history.update(history_date=moment)
+        said = " ".join(self.said(item))
+        self.assertIn("Progress set to 1 episode", said)
+        self.assertIn("Progress set to 2 episodes", said)
+
+    def test_an_400_internal_fields_arent_shown(self):
+        item = self.title(total=2)
+        with self.real_clock():
+            self.post_like(item)
+            self.tick(item, 1)
+            anime_tracking.set_rating(self.user, item, 8)
+            anime_tracking.choose(self.user, item, "Paused")
+            anime_tracking.choose(self.user, item, "In progress")
+            entry = self.log(item, rating=9, liked=True).entry
+            anime_tracking.start_rewatch(self.user, item)
+            self.tick(item, 1)
+            anime_tracking.stop_rewatch(self.user, item)
+            anime_tracking.delete_log(self.user, entry)
+            said = " ".join(self.said(item)).lower()
+        for internal in (
+            "earlier question",
+            "like source",
+            "rating source",
+            "like is independent",
+            "ended choice",
+            "choice",
+            "rewatch started",
+            "pass number",
+            "log offered",
+        ):
+            self.assertNotIn(internal, said)
+        self.assertIn("rated", said)
