@@ -255,6 +255,36 @@ def _validate_journey_date(session, value, user, *, ending=False):
     return moment
 
 
+def _log_date(session, value, user):
+    """Return a log's date as a carrier (BK-306, decision 10).
+
+    A log can carry any date. The phone's own date stays no earlier than the start and
+    saves, because after a flight west today can be before them.
+    """
+    moment = _calendar_datetime(value, user)
+    day = _day(moment)
+    if day == user_calendar.today(user):
+        return _carrier(max(filter(None, (day, _day(session.start_date), session.progressed_on))))
+    return moment
+
+
+def _fit_start_to_log(session, moment):
+    """Move a start to its log's date when the log is before it (decision 10).
+
+    It goes in the same write as the end date, or the dates-ordered constraint refuses.
+    A log's date edited later brings the start back, no further than where it was. Only
+    a log finished since the start was saved remembers it, so an old-shape log keeps its
+    start unless this move changes it.
+    """
+    snapshot = session.pre_completion_progress or {}
+    original = _day(snapshot.get("journey_start_date")) or _day(session.start_date)
+    if original is None:
+        return
+    if "journey_start_date" not in snapshot and session.pre_completion_progress is not None and _day(moment) < original:
+        session.pre_completion_progress = {**snapshot, "journey_start_date": _date_string(original)}
+    session.start_date = _carrier(min(original, _day(moment)))
+
+
 @transaction.atomic
 def assign_status(user, item, status, *, start_date=None, mutation_id=None):
     """Apply one canonical direct or live book status transition."""
@@ -354,10 +384,13 @@ def start(user, item, *, start_date=None, mutation_id=None):
 
     picks_back_up = _picks_back_up(book)
     started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
+    pages_read, percentage_read = _opening_place(book)
     session = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
         start_date=started_at,
+        pages_read=pages_read,
+        percentage_read=percentage_read,
         origin=BookSession.Origin.LIVE,
         previous_tracked=not created,
         previous_status=None if created else book.status,
@@ -370,6 +403,23 @@ def start(user, item, *, start_date=None, mutation_id=None):
     if picks_back_up:
         _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
+
+
+def _opening_place(book):
+    """Return where a new journey opens, as (pages, percent) (BK-305, decision 8).
+
+    Only Restart begins at zero, so a read that was stopped opens at its place, even with
+    To Read or Paused in between, and an imported place with no journey does too. Starting
+    over a Read is a reread. It's the calculation's test (activity_rows._carries_on).
+    """
+    if book.status == Status.COMPLETED.value:
+        return None, None
+    last = book.reading_sessions.order_by("-id").first()
+    if last is None:
+        return book.progress or None, None
+    if last.status == Status.DROPPED.value:
+        return last.pages_read, last.percentage_read
+    return None, None
 
 
 @transaction.atomic
@@ -837,8 +887,13 @@ def complete(
     import_source_order=None,
     emit_activity=True,
     update_current=True,
+    force_direct=False,
 ):
-    """Atomically create one completion log and complete its journey."""
+    """Atomically create one completion log and complete its journey.
+
+    With force_direct, as an import asks, it's a read of its own: a file's date never
+    closes a read under way or moves its pages.
+    """
     rating = single_weight.validate_storage_rating(rating)
     completed_at = _calendar_datetime(completion_date, user)
     mutation_id = _mutation(mutation_id)
@@ -857,19 +912,24 @@ def complete(
             return existing_book, existing_entry
     book, created = _ensure_book(user, item)
     if mutation_id:
-        prior = book.reading_sessions.filter(mutation_id=mutation_id).first()
+        prior = book.reading_sessions.filter(
+            Q(mutation_id=mutation_id) | Q(pre_completion_progress__completion_mutation_id=str(mutation_id)),
+        ).first()
         if prior and prior.completion_diary_entry_id:
             return book, prior.completion_diary_entry
 
-    session = _locked_session(book, journey_id) if journey_id else _open_session(book)
-    if journey_id and session is None:
-        raise ValidationError("Reading journey not found.")
-    if session and session.status == Status.COMPLETED.value:
-        if session.completion_diary_entry_id:
-            return book, session.completion_diary_entry
-        raise ValidationError("This journey is already completed.")
-    if session and session.status not in OPEN_STATUSES:
+    if force_direct:
         session = None
+        update_current = update_current and not _open_session(book)
+    else:
+        session = _locked_session(book, journey_id) if journey_id else _open_session(book)
+        if journey_id and session is None:
+            raise ValidationError("Reading journey not found.")
+        if session and session.status == Status.COMPLETED.value and not session.completion_diary_entry_id:
+            raise ValidationError("This journey is already completed.")
+        # A retry returned above. Logging a finished journey again is a new read (BK-400).
+        if session and session.status not in OPEN_STATUSES:
+            session = None
 
     true_reread = _has_prior_completion(
         book,
@@ -877,7 +937,7 @@ def complete(
         exclude_session=session,
     )
     if session:
-        completed_at = _validate_journey_date(session, completed_at, user, ending=True)
+        completed_at = _log_date(session, completed_at, user)
         session.pre_completion_status = session.status
         session.pre_completion_progress = {
             "pages_read": session.pages_read,
@@ -895,7 +955,10 @@ def complete(
             "title_liked": MediaLike.objects.filter(user=user, item=item).exists(),
             "like_source_id": book.like_source_id,
             "like_is_independent": book.like_is_independent,
+            "journey_start_date": _date_string(session.start_date),
+            "completion_mutation_id": str(mutation_id) if mutation_id else None,
         }
+        _fit_start_to_log(session, completed_at)
     else:
         session = BookSession.objects.create(
             related_book=book,
@@ -937,6 +1000,7 @@ def complete(
     session.save(
         update_fields=[
             "status",
+            "start_date",
             "end_date",
             "pages_read",
             "percentage_read",
@@ -949,6 +1013,7 @@ def complete(
         book.status = Status.COMPLETED.value
         book.current_session = session
         book.progress = total_pages or session.pages_read or 0
+        book.start_date = session.start_date
         book.end_date = completed_at
         book.completion_diary_entry = entry
         if rating is not None:
@@ -962,6 +1027,7 @@ def complete(
                 "status",
                 "current_session",
                 "progress",
+                "start_date",
                 "end_date",
                 "completion_diary_entry",
                 "score",
@@ -997,16 +1063,13 @@ def update_completion(entry, data, *, tags=UNSET):
     previous_consumed_at = entry.consumed_at
     fields = []
     if "consumed_at" in data:
-        entry.consumed_at = _validate_journey_date(
-            session,
-            data["consumed_at"],
-            entry.user,
-            ending=True,
-        )
+        entry.consumed_at = _log_date(session, data["consumed_at"], entry.user)
+        _fit_start_to_log(session, entry.consumed_at)
         session.end_date = entry.consumed_at
-        session.save(update_fields=["end_date"])
+        session.save(update_fields=["start_date", "end_date", "pre_completion_progress"])
         fields.append("consumed_at")
         if book.current_session_id == session.id:
+            book.start_date = session.start_date
             book.end_date = entry.consumed_at
     if "rating" in data:
         previous_rating = entry.rating
@@ -1035,7 +1098,7 @@ def update_completion(entry, data, *, tags=UNSET):
         _add_tags(entry, tags)
     if like_is_source and "liked" in data:
         _set_like_row(entry.user, entry.item, entry.liked)
-    book.save(update_fields=["score", "rating_source", "end_date"])
+    book.save(update_fields=["score", "rating_source", "start_date", "end_date"])
     _update_activity(entry)
     single_weight._audit_diary(entry, "diary_updated")
     _queue_statistics(entry.user_id, previous_consumed_at)
@@ -1177,6 +1240,9 @@ def delete_completion(user, entry):
         session.pages_read = snapshot.get("pages_read")
         session.percentage_read = snapshot.get("percentage_read")
         session.progressed_on = snapshot.get("progressed_on")
+        # Only when the key is there: an old-shape log never moved its start.
+        if "journey_start_date" in snapshot:
+            session.start_date = _carrier(_day(snapshot["journey_start_date"])) if snapshot["journey_start_date"] else None
         session.end_date = None
         session.completion_diary_entry = None
         session.pre_completion_status = None
@@ -1187,6 +1253,7 @@ def delete_completion(user, entry):
                 "pages_read",
                 "percentage_read",
                 "progressed_on",
+                "start_date",
                 "end_date",
                 "completion_diary_entry",
                 "pre_completion_status",
@@ -1257,6 +1324,17 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
             raise ValidationError("Journey starts cannot follow their end date.")
         session.start_date = started_at
         fields.append("start_date")
+        # A hand edit of a start is the person saying when it began, so it's first
+        # activity too (decision 10), where a log's own move isn't.
+        ProgressChange.objects.filter(
+            actor=user,
+            item=item,
+            current_progress__journey_id=session.pk,
+            current_progress__kind=ProgressChange.START,
+        ).update(saved_on=_day(started_at))
+        if "journey_start_date" in (session.pre_completion_progress or {}):
+            session.pre_completion_progress["journey_start_date"] = _date_string(started_at)
+            fields.append("pre_completion_progress")
     if end_date is not UNSET:
         session.end_date = _validate_journey_date(session, end_date, user, ending=True)
         fields.append("end_date")

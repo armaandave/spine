@@ -35,6 +35,7 @@ RELATED = "progress_changes"
 NAMING = {
     "api/serializers/common.py",
     "api/services/activity.py",
+    "api/services/progress_posts.py",
     "api/services/activity_rows.py",
     "api/services/stats_scope.py",
     "api/services/tracking.py",
@@ -46,7 +47,6 @@ NAMING = {
     "app/music_move.py",
     "app/series_tracking.py",
     "app/tv_tracking.py",
-    "integrations/imports/margins/importer.py",
     "social/models.py",
 }
 # Every place a progress change is written.

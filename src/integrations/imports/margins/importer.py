@@ -157,6 +157,7 @@ class MarginsImporter:
             import_source=IMPORT_SOURCE,
             import_source_id=f"{item.source}:{item.media_id}:{row.end_date.isoformat()}",
             emit_activity=False,
+            force_direct=True,
         )
         if _start(row):
             book_tracking.update_journey(self.user, item, entry.book_journey.id, start_date=row.start_date)

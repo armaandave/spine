@@ -441,6 +441,9 @@ so standalone rating rows are not shown.
 - An imported consumed item without a date creates completed, undated tracking
   with direct consumption.
 - An imported diary row creates a dated diary entry and ensures tracking.
+- A book row marked Completed with a date is a dated diary entry too, with a source
+  identity, unless the title has a log that day or the row says it's an undated mark.
+  A book row marked Completed with no date is the undated mark, from every source.
 - An imported diary rating remains attached to its diary entry.
 - Imports do not emit social feed activity.
 

@@ -178,9 +178,9 @@ Choosing Currently Reading represents reading the book now rather than
 reconstructing an old library state. It starts or establishes the live journey
 used by progress tracking.
 
-The action saves immediately at zero progress with a start date defaulted to
-the user's current local date. The start date may be edited later but cannot be
-in the future. It does not require a setup sheet.
+The action saves immediately with a start date defaulted to the user's current
+local date, at zero progress unless BK-305 opens it at a place. The start date may
+be edited later but cannot be in the future. It does not require a setup sheet.
 
 Choosing Currently Reading from Completed creates a new journey at zero,
 defaults its start date to the user's current local date, and displays it as
@@ -336,8 +336,9 @@ Pausing moves the book to the Paused library section and preserves its current
 progress. Resume returns it to Currently Reading with that progress intact.
 
 If Paused was assigned retrospectively and no journey exists, Resume creates a
-new live journey at zero progress and defaults its start date to the user's
-current local date.
+new live journey and defaults its start date to the user's current local date. It
+opens at zero, unless the book was stopped before it was set to Paused: BK-305 opens
+it at that place.
 
 For a real paused journey, the contextual Resume action and the Currently
 Reading option both continue that same journey with preserved progress. Neither
@@ -375,9 +376,13 @@ ahead caps at today. That DNF end date may be edited later under BK-306. A retro
 without a journey remains undated.
 
 DNF permanently closes that journey. Choosing Currently Reading later creates a
-new journey at zero progress with a start date defaulting to the user's current
-local date. The closed journey and its progress remain historical and are not
-carried into the new journey.
+new journey with a start date defaulting to the user's current local date. The
+closed journey and its progress remain historical.
+
+The new journey opens at the stopped journey's place, in pages or in percent, even
+with To Read or Paused in between (the maintainer's decisions 8 and 51: only Restart
+begins at zero). So does a new journey over an imported place that has no journey.
+The next save adds only the rise. Starting from Completed still opens at zero.
 
 The new journey is not a reread unless at least one earlier journey was
 Completed.
@@ -386,9 +391,16 @@ Completed.
 
 - A live journey start date is required and cannot be in the future.
 - A progress update cannot predate its journey start.
-- A completion or DNF date cannot predate the journey start or its latest
-  progress update.
-- Editing dates must preserve the same ordering.
+- A DNF date cannot predate the journey start or its latest progress update.
+- A completion log can carry any date up to today (the maintainer's decision 10). A
+  date before the journey start moves the start with it, and deleting the log puts the
+  start back. Before the journey's first activity, everything read moves to the log's
+  date. Otherwise saves stay on their days and the rest lands on the log's date.
+- Editing a journey's dates must preserve the ordering. A hand edit of a start moves
+  that start's day in activity; a log's own move doesn't. A log's date is edited
+  through the log, as above.
+- An import's dated read is a read of its own. It never closes a journey under way or
+  moves its pages.
 - Direct retrospective statuses remain undated.
 - Direct Log requires a completion date but no start date.
 - A sent date equal to the phone's today is never refused: after a flight west
@@ -503,8 +515,8 @@ read and restores the journey's exact pre-finish state:
 The completion log and journey completion are coupled in both directions.
 
 Editing a completion log's date updates its linked journey finish date in the
-same transaction. The edit is rejected if the new date predates the journey
-start or its latest progress update.
+same transaction. A date before the journey start moves the start under BK-306, and
+deleting the log restores it.
 
 The reopening behavior applies only when that completion is still the latest
 tracking event for the book. If newer status or journey history exists,
@@ -585,5 +597,6 @@ contract before implementation begins.
 
 ## Review status
 
-BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead
-are provisional until the phone test of Activity's first phase accepts them.
+BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead,
+BK-305's opening at a place, and BK-306's rules for a log's date, are provisional until
+the phone test of Activity's first phase accepts them.

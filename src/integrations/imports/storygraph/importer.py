@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import transaction
 
 from api.services import progress_posts
+from api.services.item_metadata import fill_book_pages
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry
 from integrations.imports import helpers
@@ -92,14 +93,13 @@ class StoryGraphImporter:
             "title": result.get("title") or row.title or str(result["media_id"]),
             "image": result.get("image") or settings.IMG_NONE,
         }
-        if total_pages:
-            defaults["total_pages"] = total_pages
         item = Item.objects.update_or_create(
             media_id=str(result["media_id"]),
             source=source,
             media_type=MediaTypes.BOOK.value,
             defaults=defaults,
         )[0]
+        fill_book_pages(item, total_pages)
         # Only the search result's first publication year; the metadata fill
         # completes the Item later.
         helpers.store_free_metadata(item, {"first_publish_year": result.get("first_publish_year")})
@@ -108,6 +108,8 @@ class StoryGraphImporter:
     def _create_book(self, item, row):
         read_dates = [read_date.end for read_date in row.read_dates]
         end_date = max(read_dates) if row.status == Status.COMPLETED.value and read_dates else None
+        # A Read with no date is the undated mark, with the same pile as the eye's.
+        undated_read = row.status == Status.COMPLETED.value and not read_dates
         return Book.objects.create(
             user=self.user,
             item=item,
@@ -116,7 +118,8 @@ class StoryGraphImporter:
             end_date=end_date,
             score=row.rating,
             notes=self._notes(row),
-            completed_manually=False,
+            completed_manually=undated_read,
+            undated_read_previous_tracked=undated_read,
         )
 
     def _import_diary_entries(self, item, row, *, update_current):
@@ -138,6 +141,7 @@ class StoryGraphImporter:
                 is_rewatch=index > 0,
                 tags=row.tags if is_latest else [],
                 update_current=update_current and is_latest,
+                force_direct=True,
             )
             self.counts["diary"] += 1
             if is_latest:

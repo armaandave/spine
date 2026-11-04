@@ -15,8 +15,8 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 
 import app
 from api.services.item_metadata import is_metadata_current, store_item_metadata
-from app import series_tracking, single_weight, tv_tracking
-from app.models import MediaTypes
+from app import book_tracking, series_tracking, single_weight, tv_tracking, user_calendar
+from app.models import DiaryEntry, MediaTypes
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +285,9 @@ def _bulk_create_media(bulk_media_list, user, source=""):
             _import_game_rows(bulk_media, user)
             continue
 
+        if media_type == MediaTypes.BOOK.value:
+            bulk_media = _import_book_rows(bulk_media, user, source)
+
         if series_tracking.supports(media_type):
             _import_series_rows(bulk_media, user, source)
             continue
@@ -335,6 +338,54 @@ def _import_single_weight_rows(rows, user, model):
         if notes and tracking.notes != notes:
             tracking.notes = notes
             tracking.save(update_fields=["notes"])
+
+
+def _import_book_rows(rows, user, source):
+    """Log the dated reads of a file's book rows, and return the rows left to create.
+
+    A dated Read lands on its date as a log, unless the title has a log that day: that's
+    your own file coming back (SW-504). A Read with no date, or a row already marked, is
+    the undated mark, whatever date it holds: eye taps from before the book contract can
+    still hold one.
+    """
+    plain = []
+    for row in rows:
+        day = _read_day(row, user)
+        if row.status != app.models.Status.COMPLETED.value or row.completed_manually or day is None:
+            if row.status == app.models.Status.COMPLETED.value:
+                row.completed_manually = True
+                row.undated_read_previous_tracked = True
+            plain.append(row)
+            continue
+        logs = DiaryEntry.objects.filter(user=user, item=row.item).values_list("consumed_at", flat=True)
+        if day in {single_weight.calendar_date(moment) for moment in logs}:
+            plain.append(row)
+            continue
+        _, entry = book_tracking.complete(
+            user,
+            row.item,
+            completion_date=day,
+            rating=row.score,
+            import_source=source,
+            import_source_id=f"{row.item.source}:{row.item.media_id}:{day.isoformat()}",
+            emit_activity=False,
+            force_direct=True,
+        )
+        start = row.start_date and user_calendar.day_of(row.start_date, user)
+        if start and start <= day:
+            book_tracking.update_journey(user, row.item, entry.book_journey.id, start_date=start)
+        if row.notes:
+            app.models.Book.objects.filter(user=user, item=row.item).update(notes=row.notes)
+    return plain
+
+
+def _read_day(row, user):
+    """Return the day a file's row says it was read; a day still to come isn't one."""
+    if row.end_date is None:
+        return None
+    moment = row.end_date
+    day = moment.date() if single_weight.is_calendar_datetime(moment) else user_calendar.day_of(moment, user)
+    return day if day <= user_calendar.today(user) else None
 
 
 def _import_game_rows(rows, user):
