@@ -906,21 +906,7 @@ def _reconcile(ctx):  # noqa: C901
     ctx.set_row(**written)
     calc = ctx.calc
 
-    cache = {
-        "watched_count": calc.watched_count,
-        "aired_count": calc.aired_count if calc.aired_known else None,
-        "up_next_episode": calc.up_next,
-        "up_next_air_date": calc.up_next_air_date,
-        "up_next_is_new": calc.up_next_is_new,
-        "next_air_episode": calc.next_airing[0] if calc.next_airing else None,
-        "next_air_date": calc.next_airing[1] if calc.next_airing else None,
-        "first_gap_episode": calc.first_gap,
-        "finished": calc.finished,
-        "caught_up": calc.caught_up,
-        "last_watched_on": calc.last_watched_on,
-        "last_activity_on": calc.last_activity_on,
-        "last_activity_at": calc.last_activity_at,
-    }
+    cache = _stored_values(calc)
     cache_changes = {name: value for name, value in cache.items() if getattr(row, name) != value}
 
     moved = _tick_count(ctx.facts) - ctx.ticks_before if ctx.ticks_before is not None else 0
@@ -954,6 +940,25 @@ def _reconcile(ctx):  # noqa: C901
     ):
         item = ctx.item
         transaction.on_commit(lambda: item.fetch_releases(delay=True), robust=True)
+
+
+def _stored_values(calc):
+    """Return what the row stores of the working out, for lists to read (TV-207)."""
+    return {
+        "watched_count": calc.watched_count,
+        "aired_count": calc.aired_count if calc.aired_known else None,
+        "up_next_episode": calc.up_next,
+        "up_next_air_date": calc.up_next_air_date,
+        "up_next_is_new": calc.up_next_is_new,
+        "next_air_episode": calc.next_airing[0] if calc.next_airing else None,
+        "next_air_date": calc.next_airing[1] if calc.next_airing else None,
+        "first_gap_episode": calc.first_gap,
+        "finished": calc.finished,
+        "caught_up": calc.caught_up,
+        "last_watched_on": calc.last_watched_on,
+        "last_activity_on": calc.last_activity_on,
+        "last_activity_at": calc.last_activity_at,
+    }
 
 
 def _start_date(current, before, after):
@@ -2746,11 +2751,37 @@ def rows_payload(user, item, *, listing=None):
     return _View.load(user, item, listing).rows()
 
 
+def _catch_up(view):
+    """Store what this read worked out when the row has fallen behind its copy (TV-207).
+
+    The calendar job does it for tracked titles, but a page can know first: a new episode,
+    or an imported title's real numbers. Lists read the row, so it has to agree. Returns
+    whether the row was worked out again; a failure here never fails the read.
+    """
+    row = view.row
+    if row is None or row.reconciled_at is None or view.listing.fetched_at is None:
+        return False
+    calc = view.calc
+    behind = (calc.status or row.status) != row.status or any(
+        getattr(row, name) != value for name, value in _stored_values(calc).items()
+    )
+    if not behind:
+        return False
+    try:
+        _lock_and_reconcile(row.pk, listing=view.listing)
+    except Exception:
+        logger.exception("Could not store the worked-out state of anime row %s", row.pk)
+        return False
+    return True
+
+
 def page_payload(user, item, *, listing=None):
     """Return a page's state and rows from one read of the title's facts."""
     if listing is None:
         listing = anime_listing.page_listing(item)
     view = _View.load(user, item, listing)
+    if _catch_up(view):
+        view = _View.load(user, item, listing)
     return {"state": view.state(detail=True), "rows": view.rows()}
 
 

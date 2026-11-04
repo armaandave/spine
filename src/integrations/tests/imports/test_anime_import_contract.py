@@ -5,7 +5,7 @@ in bulk and never call a provider per episode.
 """
 
 import io
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 
 import app.forms  # noqa: F401 - the Yamtrack importer reads app.forms
@@ -13,11 +13,15 @@ import app.forms  # noqa: F401 - the Yamtrack importer reads app.forms
 from app import anime_listing, anime_tracking
 from app.models import Anime, AnimeListing, AnimeMark, AnimeViewing, DiaryEntry, Item
 from app.tests.anime_fixtures import AnimeTestCase, make_item
+from app.providers import services
 from app.tests.tv_fixtures import make_user
+from events import tasks as event_tasks
+from events.calendar import anime as calendar_anime
 from app.tests.test_anime_export_round_trip import round_trip
 from integrations import exports
 from integrations.imports import anilist, helpers, kitsu, mal, simkl, yamtrack
 from integrations.imports.mal_export.importer import MALExportImporter
+from integrations.tasks import import_media
 from social.models import ProgressChange
 
 
@@ -322,6 +326,98 @@ class MALImportTests(ImportTestCase):
         anime_tracking.import_title(self.user, item, status="In progress", count=1, score=8, total=3)
         row = self.row(item)
         self.assertEqual((row.status, str(row.score), row.progress), ("In progress", "8.0", 1))
+
+
+class ImportedCopyTests(ImportTestCase):
+    """AN-800: an imported title's copy is read soon, and its row catches up with what's known."""
+
+    def airing(self):
+        return self.fake.add(
+            total=12,
+            status="Airing",
+            next_episode=8,
+            next_air_at=self.clock.moment + timedelta(days=3),
+        )
+
+    def imported(self, title, **values):
+        item = make_item(self.fake, title=title)
+        anime_tracking.import_title(self.user, item, **{"status": "In progress", "count": 5, **values})
+        return item
+
+    def in_progress(self):
+        response = self.api.get("/api/v1/tracking/", {"media_type": "anime", "continue_watching": "true"})
+        return response.data["results"]
+
+    def test_an_800_a_page_stores_what_it_knows_about_an_imported_title(self):
+        item = self.imported(self.airing())
+        row = self.row(item)
+        self.assertEqual((row.up_next_episode, row.caught_up, row.aired_count), (None, True, None))
+        self.assertEqual(self.in_progress(), [])
+        state = self.get_rows(item)["anime"]
+        self.assertEqual((state["up_next"]["episode_number"], state["aired_count"]), (6, 7))
+        row = self.row(item)
+        self.assertEqual((row.up_next_episode, row.caught_up, row.aired_count), (6, False, 7))
+        self.assertEqual(len(self.in_progress()), 1)
+
+    def test_an_800_the_detail_page_does_too(self):
+        item = self.imported(self.airing())
+        response = self.api.get(f"/api/v1/media/mal/anime/{item.media_id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.row(item).up_next_episode, 6)
+
+    def test_an_202_a_page_can_reopen_a_caught_up_title_before_the_job(self):
+        title = self.airing()
+        item = make_item(self.fake, title=title)
+        anime_tracking.mark_watched(self.user, item)
+        self.assertTrue(self.row(item).caught_up)
+        self.clock.advance(days=4)
+        title.next_episode = 9
+        title.next_air_at = self.clock.moment + timedelta(days=3)
+        self.get_rows(item)
+        row = self.row(item)
+        self.assertEqual((row.caught_up, row.up_next_episode, row.aired_count), (False, 8, 8))
+
+    def test_an_800_a_page_with_nothing_new_writes_nothing(self):
+        item = make_item(self.fake, title=self.airing())
+        anime_tracking.tick(self.user, item, 1)
+        version = self.row(item).state_version
+        self.clock.advance(minutes=1)
+        self.get_rows(item)
+        self.assertEqual(self.row(item).state_version, version)
+
+    def test_an_800_a_read_that_cant_store_it_still_answers(self):
+        item = self.imported(self.airing())
+        with mock.patch.object(anime_tracking, "_lock_and_reconcile", side_effect=RuntimeError):
+            state = self.get_rows(item)["anime"]
+        self.assertEqual(state["up_next"]["episode_number"], 6)
+
+    def test_an_800_no_copy_changes_no_row(self):
+        item = self.imported(self.airing())
+        before = self.row(item).state_version
+        self.fake.fail()
+        self.get_rows(item)
+        self.assertEqual(self.row(item).state_version, before)
+
+    def test_an_800_the_imports_end_reads_its_titles_copies(self):
+        title = self.airing()
+        make_item(self.fake, title=title)
+        header = ",".join(("media_id", "source", "media_type", "title", "image", "season_number", "episode_number", "score", "progress", "status", "start_date", "end_date", "notes", "progressed_at"))
+        row = f"{title.media_id},mal,anime,T,https://example.com/p.jpg,,,,5,In progress,,,,2026-02-01T00:00:00+00:00"
+        file = io.BytesIO("\n".join([header, row]).encode())
+        schedule = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": []}}}
+        with (
+            mock.patch.object(services, "api_request", return_value=schedule),
+            mock.patch.object(calendar_anime, "process_other"),
+            mock.patch("integrations.tasks.sweep_item_metadata"),
+            # Tests turn this task off (events.apps), so run what the import queued.
+            mock.patch.object(event_tasks.reload_calendar, "delay") as queued,
+        ):
+            import_media(yamtrack.importer, file, self.user.id, "new")
+            queued.assert_called_once_with()
+            event_tasks.reload_calendar()
+        stored = Anime.objects.get(user=self.user)
+        self.assertEqual((stored.up_next_episode, stored.caught_up, stored.aired_count), (6, False, 7))
+        self.assertEqual(len(self.in_progress()), 1)
 
 
 class OtherImporterTests(ImportTestCase):
