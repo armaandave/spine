@@ -6,9 +6,11 @@ is on America/New_York and the account calendar on America/Los_Angeles.
 
 import json
 from datetime import UTC, date, datetime, timedelta
+from unittest import mock
 from uuid import uuid4
 
 from django.db import connection
+from django.db.models import QuerySet
 from django.test.utils import CaptureQueriesContext
 
 from api.services import media as media_service
@@ -1483,6 +1485,62 @@ class WrittenStateTests(AnimeTestCase):
         anime_tracking.set_rating(self.user, item, None)
         row = self.row(item)
         self.assertEqual((row.status, row.choice, row.progress), ("Paused", "Paused", 3))
+
+
+class SimultaneousWriteTests(AnimeTestCase):
+    """TV-705 on any database. app.tests.test_anime_concurrency has real threads on Postgres."""
+
+    def race(self, rival):
+        """Run rival just before this write's row is created, as if it committed first."""
+        real = anime_tracking._create_row  # noqa: SLF001
+        calls = []
+
+        def rival_goes_first(*args, **kwargs):
+            if not calls:
+                calls.append(1)
+                with mock.patch.object(anime_tracking, "_create_row", real):
+                    rival()
+            return real(*args, **kwargs)
+
+        return mock.patch.object(anime_tracking, "_create_row", rival_goes_first)
+
+    def test_tv_705_a_first_tick_that_loses_the_race_runs_again(self):
+        item = self.title(total=3)
+        with self.race(lambda: anime_tracking.tick(self.user, item, 1, entry_point=anime_tracking.WEB)):
+            anime_tracking.tick(self.user, item, 1, entry_point=anime_tracking.WEB)
+        self.assertEqual([viewing.episode_number for viewing in self.viewings(item)], [1])
+        self.assertEqual(self.row(item).progress, 1)
+        changes = ProgressChange.objects.filter(actor=self.user).exclude(current_progress__kind="start")
+        self.assertEqual(
+            [(change.previous_progress["value"], change.current_progress["value"]) for change in changes],
+            [(0, 1)],
+        )
+
+    def test_tv_705_a_first_log_that_loses_the_race_sees_the_tick(self):
+        item = self.title(total=3)
+        with self.race(lambda: anime_tracking.tick(self.user, item, 1, entry_point=anime_tracking.WEB)):
+            anime_tracking.create_log(self.user, item, consumed_at=OCT_25)
+        self.assertEqual(sorted(viewing.episode_number for viewing in self.viewings(item)), [1, 2, 3])
+
+    def test_tv_705_a_write_locks_only_its_own_row(self):
+        item = self.title(total=3)
+        anime_tracking.tick(self.user, item, 1)
+        real = QuerySet.select_for_update
+        locks = []
+
+        def recording(queryset, *args, **kwargs):
+            if queryset.model is Anime:
+                locks.append((kwargs.get("of"), queryset))
+            return real(queryset, *args, **kwargs)
+
+        with mock.patch.object(QuerySet, "select_for_update", recording):
+            anime_tracking.tick(self.user, item, 2)
+            anime_tracking.refresh_due_titles(self.clock.moment + timedelta(days=400))
+            anime_tracking._lock_and_reconcile(self.row(item).pk)  # noqa: SLF001
+            other = self.title(total=3)
+            anime_tracking.tick(self.user, other, 1)
+        self.assertGreaterEqual(len(locks), 3)
+        self.assertEqual({of for of, _ in locks}, {("self",)})
 
 
 class AgreementTests(AnimeTestCase):

@@ -527,7 +527,8 @@ class _Ctx:
 
     def ensure_row(self):
         if self.row is None:
-            self.row, self.created = _create_row(self.user, self.item, history=self.entry_point != IMPORT)
+            self.row = _create_row(self.user, self.item, history=self.entry_point != IMPORT)
+            self.created = True
             self.version_before = self.row.state_version
             self.status_before = None
             self.count_before = 0
@@ -619,11 +620,21 @@ class _Ctx:
             self.set_row(earlier_question_at=self.now)
 
 
+def _locked_row(user, item):
+    """Lock and return the user's row, and only it (TV-705).
+
+    Meta's ordering would join the title and the user, and FOR UPDATE would lock those
+    too, so one person's write would hold up everyone else on the same title.
+    """
+    return Anime.objects.select_for_update(of=("self",)).filter(user=user, item=item).order_by("pk").first()
+
+
 def _create_row(user, item, *, history=True):
-    """Create the user's tracking row (inside the lock). Return (row, created)."""
-    existing = Anime.objects.select_for_update().filter(user=user, item=item).first()
-    if existing is not None:
-        return existing, False
+    """Create the user's tracking row (inside the lock).
+
+    When a simultaneous first write got here first, IntegrityError goes up: this write's
+    facts are out of date, so _perform runs it again against that row (TV-705).
+    """
     seed = (
         TVMutation.objects.filter(user=user, show_item=item, action="remove")
         .order_by("-created_at", "-id")
@@ -633,14 +644,11 @@ def _create_row(user, item, *, history=True):
     row = Anime(user=user, item=item, status=WATCHING, state_version=int((seed or {}).get("state_version") or 0))
     if not history:
         row.skip_history_when_saving = True
-    try:
-        with transaction.atomic():
-            row.save_base(force_insert=True)
-    except IntegrityError:
-        return Anime.objects.select_for_update().get(user=user, item=item), False
+    with transaction.atomic():
+        row.save_base(force_insert=True)
     if not history:
         del row.skip_history_when_saving
-    return row, True
+    return row
 
 
 # ---------------------------------------------------------------------------------
@@ -738,7 +746,7 @@ def _run_locked(  # noqa: PLR0913
     episode_number,
     rows_changed,
 ):
-    row = Anime.objects.select_for_update().filter(user=user, item=item).first()
+    row = _locked_row(user, item)
     if mutation_id is not None:
         replay = _replay(user, item, mutation_id, action)
         if replay is not None:
@@ -2092,7 +2100,13 @@ def webhook_event(user, item, episode_number, *, event, at):
 def _lock_and_reconcile(row_id, *, listing=None):
     """Work out one row with entry point JOB; return whether what lists show moved."""
     with transaction.atomic():
-        row = Anime.objects.select_for_update().select_related("item", "user").filter(pk=row_id).first()
+        row = (
+            Anime.objects.select_for_update(of=("self",))
+            .select_related("item", "user")
+            .filter(pk=row_id)
+            .order_by("pk")
+            .first()
+        )
         # A row never worked out waits for the user's first write (AN-902).
         if row is None or row.reconciled_at is None:
             return False
@@ -2183,7 +2197,11 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     listing = anime_listing.provisional_listing(item, total or _implied_total(status, count, earlier))
     rating = _validate_rating(score, IMPORT) if score not in (None, "", 0, "0", "0.0") else None
     ctx = _Ctx(user, item, listing, IMPORT, None)
-    ctx.ensure_row()
+    try:
+        ctx.ensure_row()
+    except IntegrityError:
+        # A simultaneous import of the same file got here first.
+        return None
     row = ctx.row
     now_aired = list(range(1, listing.aired_through(ctx.now) + 1))
     passes = len(earlier)
