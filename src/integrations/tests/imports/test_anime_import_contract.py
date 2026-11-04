@@ -305,8 +305,86 @@ class MALImportTests(ImportTestCase):
         # The log's fills are rebuilt, so its date dates them again.
         fills = {viewing.episode_number for viewing in self.viewings(item) if viewing.diary_entry_id == entry.pk}
         self.assertEqual(fills, {1, 2, 3, 4})
-        self.assertEqual(row.progress, 4)
+        # The source's place wins: the log stays in the pass it finished, before that place.
+        self.assertEqual((row.status, row.progress, row.up_next_episode, row.pass_number), ("In progress", 1, 2, 2))
         self.assertEqual(self.stats_time(2026)[1], 4)
+
+    def kept_log_then_import(self, status, count=0, **fields):
+        title = self.fake.add(total=12)
+        item = self.title(title=title)
+        entry = self.log(item).entry
+        self.import_mal(mal_entry(title, status, count=count, **fields), mode="overwrite")
+        entry.refresh_from_db()
+        return item, entry
+
+    def test_an_800_a_place_the_source_gives_wins_over_a_kept_log(self):
+        for status, shelf, choice in (
+            ("watching", "In progress", ""),
+            ("on_hold", "Paused", "Paused"),
+            ("dropped", "Dropped", "Dropped"),
+        ):
+            with self.subTest(status=status):
+                item, entry = self.kept_log_then_import(status, count=3)
+                row = self.row(item)
+                self.assertEqual(
+                    (row.status, row.choice, row.progress, row.up_next_episode, row.aired_count, row.finished),
+                    (shelf, choice, 3, 4, 12, False),
+                )
+                self.assertEqual(row.pass_number, 2)
+                self.assertIsNotNone(row.rewatch_started_at)
+                state = self.state(item)
+                self.assertEqual((state["watched_count"], state["aired_count"]), (3, 12))
+                # The log keeps what it finished, on its own day; the place lands in no year.
+                self.assertEqual(entry.progress_snapshot["anime"]["pass"], 1)
+                earlier = [viewing for viewing in self.viewings(item) if viewing.pass_number == 1]
+                self.assertEqual(sorted(viewing.episode_number for viewing in earlier), list(range(1, 13)))
+                self.assertTrue(all(viewing.diary_entry_id == entry.pk for viewing in earlier))
+                current = [viewing for viewing in self.viewings(item) if viewing.pass_number == 2]
+                self.assertEqual(sorted(viewing.episode_number for viewing in current), [1, 2, 3])
+                self.assertTrue(all(viewing.diary_entry_id is None for viewing in current))
+                self.assertEqual(self.stats_time(2026)[1], 12 * (1 + ["watching", "on_hold", "dropped"].index(status)))
+
+    def test_an_800_watching_with_no_number_and_a_kept_log_starts_over(self):
+        item, _ = self.kept_log_then_import("watching")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.up_next_episode, row.pass_number), ("In progress", 0, 1, 2))
+
+    def test_an_800_paused_with_no_number_and_a_kept_log_has_no_place_to_keep(self):
+        item, _ = self.kept_log_then_import("on_hold")
+        row = self.row(item)
+        self.assertEqual((row.status, row.choice, row.progress, row.pass_number), ("Paused", "Paused", 12, 1))
+        self.assertIsNone(row.rewatch_started_at)
+
+    def test_an_800_plan_to_watch_with_a_kept_log_keeps_the_worked_out_status(self):
+        item, entry = self.kept_log_then_import("plan_to_watch")
+        row = self.row(item)
+        self.assertEqual((row.status, row.choice, row.progress, row.pass_number), ("Completed", "", 12, 1))
+        state = self.state(item)
+        self.assertEqual(state["eye"]["tap"], "blocked")
+        self.assertEqual(state["eye"]["message"], anime_tracking.MSG_DELETE_LOG)
+        self.assertEqual(state["action_reasons"]["planning"], anime_tracking.MSG_STARTED)
+        self.assertEqual(entry.progress_snapshot["anime"]["pass"], 1)
+
+    def test_an_800_a_number_that_reaches_what_the_log_covers_stays_in_its_pass(self):
+        item, _ = self.kept_log_then_import("watching", count=12)
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.pass_number), ("Completed", 12, 1))
+        self.assertIsNone(row.rewatch_started_at)
+
+    def test_an_800_a_place_after_two_kept_logs_leaves_each_in_its_own_pass(self):
+        title = self.fake.add(total=3)
+        item = self.title(title=title)
+        first = self.log(item).entry
+        anime_tracking.start_rewatch(self.user, item)
+        second = self.log(item).entry
+        self.import_mal(mal_entry(title, "watching", count=1), mode="overwrite")
+        row = self.row(item)
+        self.assertEqual((row.status, row.progress, row.up_next_episode, row.pass_number), ("In progress", 1, 2, 3))
+        for entry, expected in ((first, 1), (second, 2)):
+            entry.refresh_from_db()
+            self.assertEqual(entry.progress_snapshot["anime"]["pass"], expected)
+            self.assertEqual(len([viewing for viewing in self.viewings(item) if viewing.diary_entry_id == entry.pk]), 3)
+        self.assertEqual(self.stats_time(2026)[1], 6)
 
     def test_an_800_overwrite_rebuilds_a_kept_log_in_the_pass_it_finished(self):
         title = self.fake.add(total=12)

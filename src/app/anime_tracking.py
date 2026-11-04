@@ -2346,13 +2346,23 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     row = ctx.row
     now_aired = list(range(1, listing.aired_through(ctx.now) + 1))
     passes = len(earlier)
-    values = {"pass_number": passes + 1, "earlier_question_at": ctx.now}
     numbers = []
     if status == COMPLETED:
         numbers = now_aired or list(range(1, (count or 0) + 1))
     elif count:
         numbers = list(range(1, int(count) + 1))
-    if status in HOLDING_CHOICES:
+    kept_logs = ctx.facts.logs
+    if (
+        not passes
+        and not listing.is_single
+        and (status == WATCHING or (status in (PAUSED, DROPPED) and numbers))
+        and any(log.covers.difference(numbers) for log in kept_logs)
+    ):
+        # A kept log means a pass was finished, and the source's place comes after it (TV-800).
+        passes = max(log.pass_number for log in kept_logs)
+    values = {"pass_number": passes + 1, "earlier_question_at": ctx.now}
+    # Planning isn't available once something's been logged (TV-006).
+    if status in HOLDING_CHOICES and not (status == PLANNING and kept_logs):
         values.update({"choice": status, "choice_at": ctx.now})
         if status != PLANNING and passes and numbers:
             # A place after a finished pass is a rewatch paused or dropped: it keeps it (AN-600).
