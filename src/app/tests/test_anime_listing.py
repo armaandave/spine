@@ -208,6 +208,103 @@ class ListingTests(AnimeTestCase):
         self.assertEqual(AnimeListing.objects.get(item=item).fetched_at, stored.fetched_at)
 
 
+class StaleCopyTests(AnimeTestCase):
+    """AN-100: a page open refreshes a stale copy, under the same timeout and back-off."""
+
+    def airing_title(self, total=24, next_episode=8):
+        return self.fake.add(
+            total=total,
+            status="Airing",
+            next_episode=next_episode,
+            next_air_at=self.clock.moment + timedelta(days=3),
+        )
+
+    def test_an_100_ninety_days_on_an_untracked_title_counts_what_has_aired(self):
+        title = self.airing_title()
+        item = self.title(title=title)
+        self.assertEqual(self.state(item)["aired_count"], 7)
+        self.clock.advance(days=90)
+        title.next_episode = 21
+        title.next_air_at = self.clock.moment + timedelta(days=3)
+        self.assertEqual(self.state(item)["aired_count"], 20)
+        self.tick(item, 15)
+        self.assertEqual(self.watched(item), {15})
+
+    def test_an_100_a_copy_read_today_makes_no_call(self):
+        item = self.title(title=self.airing_title())
+        anime_listing.get_listing(item)
+        self.fake.calls.clear()
+        self.clock.advance(hours=23)
+        anime_listing.get_listing(item)
+        self.assertEqual(self.fake.calls, [])
+
+    def test_an_100_an_airing_copy_is_stale_after_a_day(self):
+        item = self.title(title=self.airing_title())
+        anime_listing.get_listing(item)
+        self.fake.calls.clear()
+        self.clock.advance(hours=25)
+        anime_listing.get_listing(item)
+        self.assertEqual(sorted(self.fake.calls), ["anilist", "mal"])
+
+    def test_an_100_an_airing_time_passing_makes_it_stale_at_once(self):
+        title = self.fake.add(total=24, status="Airing", next_episode=8, next_air_at=self.clock.moment + timedelta(hours=1))
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        self.fake.calls.clear()
+        self.clock.advance(hours=2)
+        title.next_episode = 9
+        title.next_air_at = self.clock.moment + timedelta(days=7)
+        self.assertEqual(anime_listing.get_listing(item).next_episode, 9)
+        self.assertIn("anilist", self.fake.calls)
+
+    def test_an_100_a_finished_copy_waits_a_week(self):
+        item = self.title(total=2)
+        anime_listing.get_listing(item)
+        self.fake.calls.clear()
+        self.clock.advance(days=6)
+        anime_listing.get_listing(item)
+        self.assertEqual(self.fake.calls, [])
+        self.clock.advance(days=2)
+        anime_listing.get_listing(item)
+        self.assertEqual(sorted(self.fake.calls), ["anilist", "mal"])
+
+    def test_an_100_a_stale_read_keeps_to_the_short_timeout(self):
+        item = self.title(title=self.airing_title())
+        anime_listing.get_listing(item)
+        self.clock.advance(days=2)
+        with (
+            mock.patch.object(anilist, "anime_episodes", wraps=anilist.anime_episodes) as episodes,
+            mock.patch.object(anime_listing.mal, "anime", wraps=anime_listing.mal.anime) as numbers,
+        ):
+            anime_listing.get_listing(item)
+        for call in (episodes, numbers):
+            self.assertEqual(call.call_args.kwargs["timeout"], anime_listing.FIRST_OPEN_TIMEOUT)
+            self.assertFalse(call.call_args.kwargs["retry_rate_limits"])
+
+    def test_an_100_a_stale_read_that_fails_keeps_the_copy_and_backs_off(self):
+        title = self.airing_title()
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        self.clock.advance(days=2)
+        self.fake.fail()
+        self.assertEqual(anime_listing.get_listing(item).total, 24)
+        self.fake.calls.clear()
+        self.fake.recover()
+        anime_listing.get_listing(item)
+        self.assertEqual(self.fake.calls, [])
+        self.clock.advance(minutes=16)
+        anime_listing.get_listing(item)
+        self.assertEqual(sorted(self.fake.calls), ["anilist", "mal"])
+
+    def test_an_100_a_read_of_only_one_provider_backs_off_only_when_it_fails(self):
+        title = self.airing_title()
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        self.clock.advance(hours=25)
+        anime_listing.get_listing(item)
+        self.assertIsNone(AnimeListing.objects.get(item=item).retry_after)
+
+
 class EmptyCopyTests(AnimeTestCase):
     """AN-100's last line: a copy MAL's numbers never reached is no copy."""
 
