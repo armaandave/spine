@@ -3605,18 +3605,22 @@ def book_completed_modal(request, source, media_id):
 def _anime_choice_response(request, source, media_id, status, message):
     """Pause, resume or drop an anime: the same choice as the app's (TV-007).
 
-    With MAL down, a title Spine has goes on from its stored copy, as the API's does; the
-    choice says when there's none to go on from.
+    A title Spine has needs nothing from MAL here: the choice reads its copy, or says when
+    there's none to go on from. Only a title with no Item asks, under a short timeout.
     """
     media_type = MediaTypes.ANIME.value
     item = Item.objects.filter(media_id=media_id, source=source, media_type=media_type).first()
-    metadata = {}
-    try:
-        metadata = services.get_media_metadata(media_type, media_id, source)
-    except anime_listing.PROVIDER_FAILURES:
-        if item is None:
+    if item is None:
+        try:
+            metadata = services.get_media_metadata(
+                media_type,
+                media_id,
+                source,
+                timeout=anime_listing.FIRST_OPEN_TIMEOUT,
+                retry_rate_limits=False,
+            )
+        except anime_listing.PROVIDER_FAILURES:
             return _tv_error_response(anime_listing.AnimeDetailsUnavailable())
-    if metadata:
         item, _ = Item.objects.get_or_create(
             media_id=media_id,
             source=source,
@@ -3629,7 +3633,7 @@ def _anime_choice_response(request, source, media_id, status, message):
     except TV_WRITE_ERRORS as error:
         return _tv_error_response(error)
     response = render(request, "app/components/media_actions.html", {
-        "media": {**metadata, "media_type": media_type, "source": source, "media_id": media_id},
+        "media": {"media_type": media_type, "source": source, "media_id": media_id},
         "media_type": media_type,
         "current_instance": result.row,
         "diary_entries": DiaryEntry.objects.filter(user=request.user, item=item).order_by("-consumed_at"),

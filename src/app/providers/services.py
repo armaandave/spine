@@ -405,11 +405,14 @@ def get_media_metadata(
     *,
     include_music_enrichment=True,
     include_music_related=False,
+    timeout=None,
+    retry_rate_limits=True,
 ):
     """Return the metadata for the selected media.
 
     ``include_music_related`` also fills an Apple Music album page's related sections,
-    which only album pages show.
+    which only album pages show. ``timeout`` and ``retry_rate_limits`` bound an anime's
+    read from MAL, for callers that can't wait.
     """
     if source == Sources.MANUAL.value:
         if media_type == MediaTypes.SEASON.value:
@@ -425,7 +428,7 @@ def get_media_metadata(
         return tmdb.tv(media_id)
 
     metadata_retrievers = {
-        MediaTypes.ANIME.value: lambda: mal.anime(media_id),
+        MediaTypes.ANIME.value: lambda: mal.anime(media_id, timeout=timeout, retry_rate_limits=retry_rate_limits),
         MediaTypes.MANGA.value: lambda: (
             mangaupdates.manga(media_id)
             if source == Sources.MANGAUPDATES.value

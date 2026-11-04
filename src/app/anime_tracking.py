@@ -1570,6 +1570,8 @@ def choose(user, item, status, *, entry_point=APP, mutation_id=None):
         lambda ctx: _do_choose(ctx, status),
         entry_point=entry_point,
         mutation_id=mutation_id,
+        # A choice is a click: with a copy it doesn't wait on a provider, stale or not.
+        listing=anime_listing.stored_listing(item),
     )
 
 

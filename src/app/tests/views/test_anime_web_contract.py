@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from app import anime_listing, anime_tracking
 from app.models import Anime, Item
-from app.providers import mal
+from app.providers import mal, services
 from app.tests.anime_fixtures import AnimeTestCase
 from app.tests.tv_fixtures import ProviderDown
 
@@ -157,6 +157,40 @@ class AnimeWebContractTests(AnimeTestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(self.row(item).status, status)
                     self.assertTemplateUsed(response, "app/components/media_actions.html")
+
+    def test_tv_007_with_an_item_and_a_copy_they_never_ask_mal(self):
+        item = self.title(total=3)
+        self.tick(item, 1)
+        self.clock.advance(days=8)
+        self.fake.calls.clear()
+        with mock.patch.object(services, "get_media_metadata", side_effect=AssertionError("Asked for metadata")):
+            for name, status in (("pause_media", "Paused"), ("resume_media", "In progress"), ("drop_media", "Dropped")):
+                response = self.client.post(self.choice_url(name, item.media_id))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self.row(item).status, status)
+        self.assertEqual(self.fake.calls, [])
+
+    def test_tv_007_a_title_with_an_item_and_no_copy_asks_once_with_a_short_timeout(self):
+        title = self.fake.add(total=3)
+        item = self.title(title=title)
+        with mock.patch.object(mal, "anime", wraps=mal.anime) as read:
+            response = self.client.post(self.choice_url("pause_media", item.media_id))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.row(item).status, "Paused")
+        read.assert_called_once()
+        self.assertEqual(read.call_args.kwargs["timeout"], anime_listing.FIRST_OPEN_TIMEOUT)
+        self.assertFalse(read.call_args.kwargs["retry_rate_limits"])
+
+    def test_tv_007_a_title_with_no_item_asks_mal_with_a_short_timeout(self):
+        title = self.fake.add(total=3)
+        with mock.patch.object(mal, "anime", wraps=mal.anime) as read:
+            response = self.client.post(self.choice_url("pause_media", title.media_id))
+        self.assertEqual(response.status_code, 200)
+        item = Item.objects.get(media_id=title.media_id, media_type="anime")
+        self.assertEqual(self.row(item).status, "Paused")
+        for call in read.call_args_list:
+            self.assertEqual(call.kwargs["timeout"], anime_listing.FIRST_OPEN_TIMEOUT)
+            self.assertFalse(call.kwargs["retry_rate_limits"])
 
     def test_tv_007_a_title_spine_doesnt_have_with_mal_down_says_to_try_again(self):
         with mock.patch.object(mal, "anime", side_effect=requests.exceptions.Timeout):
