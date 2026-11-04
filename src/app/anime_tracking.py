@@ -484,6 +484,17 @@ def _with_own_total(listing, row):
     return replace(listing, total=total) if total else listing
 
 
+def _completed_numbers(listing, now, count):
+    """Return what a stored or imported Completed marks: everything aired (AN-800, AN-902).
+
+    With nothing aired to go on, or no way to know how many have, its own number says more.
+    """
+    aired = listing.aired_through(now)
+    if not aired or listing.may_have_aired:
+        aired = max(aired, count or 0)
+    return list(range(1, aired + 1))
+
+
 def _stored_facts(row, listing, now):
     """Return (episodes, choice) a row's stored numbers become at its first write (AN-902).
 
@@ -493,9 +504,8 @@ def _stored_facts(row, listing, now):
     """
     if row is None or row.reconciled_at is not None:
         return [], ""
-    aired = range(1, listing.aired_through(now) + 1)
     if row.status == COMPLETED:
-        numbers = list(aired) or list(range(1, row.progress + 1))
+        numbers = _completed_numbers(listing, now, row.progress)
     else:
         numbers = list(range(1, row.progress + 1))
     choice = ""
@@ -2425,7 +2435,7 @@ def import_title(  # noqa: C901, PLR0912, PLR0913
     passes = len(earlier)
     numbers = []
     if status == COMPLETED:
-        numbers = now_aired or list(range(1, (count or 0) + 1))
+        numbers = _completed_numbers(listing, ctx.now, count)
     elif count:
         numbers = list(range(1, int(count) + 1))
     kept_logs = ctx.facts.logs
@@ -2551,16 +2561,14 @@ def clear_for_import(user, source, media_ids):
 
 
 def _row_numbers(calc, listing):
-    """Return the episode numbers the rows list, in order (AN-101)."""
+    """Return the episode numbers the rows list, in order and with no gaps (AN-101)."""
     if calc.single:
         return []
-    numbers = list(calc.aired)
-    numbers.extend(listing.known_unaired(calc.aired_set))
+    numbers = [*calc.aired, *listing.known_unaired(calc.aired_set)]
     if calc.may_have_aired:
         # Spine can't say how many have aired, so every one up to the next can be ticked.
-        numbers.extend(range(1, _first_open_row(calc) + 1))
-        return sorted(set(numbers))
-    return numbers
+        numbers.append(_first_open_row(calc))
+    return list(range(1, max(numbers) + 1)) if numbers else []
 
 
 class _View:

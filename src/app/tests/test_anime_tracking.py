@@ -1953,6 +1953,32 @@ class NoNumbersTests(AnimeTestCase):
         self.assertEqual([row["n"] for row in rows["episodes"]], [1, 2])
         self.assertFalse(any(row.get("a") for row in rows["episodes"]))
 
+    def test_an_101_a_list_past_the_next_episode_leaves_no_gaps(self):
+        item = self.runner(aired=7, episodes={25: ("Later", ""), 26: ("Later still", "")})
+        rows = self.rows(item)["episodes"]
+        self.assertEqual([row["n"] for row in rows], list(range(1, 27)))
+        self.assertEqual(rows[7], {"n": 8, "d": "2026-10-29"})
+        self.assertEqual(rows[8], {"n": 9}, "It reads TBA")
+        self.assertEqual(rows[24], {"n": 25, "t": "Later"})
+
+    def test_an_101_a_viewing_past_the_next_episode_leaves_no_gaps_and_stays_in_order(self):
+        title = self.fake.add(total=None, status="Airing", last_aired=(3, self.clock.moment - timedelta(days=10)))
+        item = self.title(title=title)
+        self.tick(item, 9)
+        title.last_aired = None
+        title.next_episode = 5
+        title.next_air_at = self.clock.moment + timedelta(days=1)
+        title.schedule = {5: title.next_air_at}
+        anime_tracking.refresh_after_calendar([item])
+        self.assertEqual([row["n"] for row in self.rows(item)["episodes"]], list(range(1, 10)))
+
+    def test_an_902_a_stored_completed_past_what_anilist_lists_keeps_its_number(self):
+        item = self.listed(1, 2, 3)
+        Anime.objects.bulk_create([Anime(user=self.user, item=item, status="Completed", progress=12)])
+        self.assertEqual(self.state(item)["watched_count"], 12)
+        anime_tracking.set_like(self.user, item, True)
+        self.assertEqual(self.watched(item), set(range(1, 13)))
+
     def test_an_101_a_write_that_changes_the_list_sends_it(self):
         item = self.bare()
         ticked = anime_tracking.write_envelope(self.tick(item, 1))

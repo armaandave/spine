@@ -438,6 +438,19 @@ class MALImportTests(ImportTestCase):
         anime_tracking.refresh_after_calendar([item])
         self.assertEqual(self.row(item).aired_count, 3)
 
+    def test_an_800_completed_past_what_anilist_lists_keeps_the_sources_number(self):
+        title = self.fake.add(total=None, status="Airing", episodes={number: (f"Title {number}", "") for number in (1, 2, 3)})
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        anime_tracking.import_title(self.user, item, status="Completed", count=12)
+        self.assertEqual(self.watched(item), set(range(1, 13)))
+
+        short = self.fake.add(total=None, status="Airing", episodes={number: (f"Title {number}", "") for number in (1, 2, 3)})
+        item = self.title(title=short)
+        anime_listing.get_listing(item)
+        anime_tracking.import_title(self.user, item, status="Completed", count=2)
+        self.assertEqual(self.watched(item), {1, 2, 3}, "Completed marks everything aired")
+
     def test_an_800_a_completed_row_with_no_numbers_keeps_its_shelf(self):
         title = self.fake.add(total=None)
         item = self.title(title=title)
