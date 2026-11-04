@@ -150,8 +150,11 @@ the deploy unless he says stop to the counts message below, and only if its coun
 1. **Dry runs and the counts message,** after the deploy is verified (step 8):
    `scripts/activity-steps-production.sh undated-reads` and
    `scripts/activity-steps-production.sh past-restarts`. Each prints counts only. Send him a
-   short message with both counts and what `--apply` will do. If both are zero, the steps
-   are done. Otherwise wait 10 minutes before `--apply`, and don't run it if he says stop.
+   short message with every count they print and what `--apply` will do. The first also prints
+   Reads with a date and no log, and marked books and games holding an `end_date`: no step
+   writes those, and nothing later repairs the dated Reads, so say so if any exist. If the
+   undated Reads and past Restarts counts are both zero, the steps are done. Otherwise wait
+   10 minutes before `--apply`, and don't run it if he says stop.
 2. **Undated imported Reads,** only if the count isn't zero:
    `scripts/activity-steps-production.sh undated-reads --apply`. Goodreads and StoryGraph
    Reads with no date, no log and no mark become marks, on every account. All Time rises and

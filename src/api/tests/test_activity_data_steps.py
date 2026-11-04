@@ -20,7 +20,7 @@ from django.test import override_settings
 from api.services import stats_cache
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from app import book_tracking
-from app.models import Book, BookSession, MediaTypes, Status
+from app.models import Book, BookSession, Game, MediaTypes, Status
 from social.models import ProgressChange
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-steps"}}
@@ -124,6 +124,49 @@ class UndatedReadsTests(StepBase):
         self.assert_numbers(200, 0, 200)
         run("fill_undated_reads", apply=True)
         self.assert_numbers(200, 0, 400)
+
+    def test_the_dry_run_prints_the_rest_of_count_10_and_writes_none_of_it(self):
+        """Dated Reads with no log, and marks holding a date: no step writes these."""
+        self.imported_read("undated")
+        dated = self.imported_read("dated", end_date=datetime(2024, 3, 2, tzinfo=UTC))
+        self.set_item(self.imported_read("no-length", end_date=datetime(2024, 3, 3, tzinfo=UTC)), total_pages=None)
+        marked = self.book("marked", pages=300)
+        Book.objects.bulk_create(
+            [
+                Book(
+                    user=self.owner,
+                    item=marked,
+                    status=Status.COMPLETED.value,
+                    completed_manually=True,
+                    end_date=datetime(2024, 3, 4, tzinfo=UTC),
+                ),
+            ],
+        )
+        game = self.item(MediaTypes.GAME.value, "marked-game", title="marked game")
+        Game.objects.bulk_create(
+            [
+                Game(
+                    user=self.follower,
+                    item=game,
+                    status=Status.COMPLETED.value,
+                    completed_manually=True,
+                    end_date=datetime(2024, 3, 5, tzinfo=UTC),
+                ),
+            ],
+        )
+        before = list(Book.objects.order_by("id").values())
+        out, err = run("fill_undated_reads")
+        self.assertEqual(out, "")
+        self.assertEqual(list(Book.objects.order_by("id").values()), before)
+        source = dated.source
+        self.assertIn(f"undated reads: 1, by source: {{'{source}': 1}}", err)
+        self.assertIn(f"dated reads with no log, not written: 2, by source: {{'{source}': 2}}, pages per account: {{{self.owner.pk}: 400}}", err)
+        self.assertIn(f"marked books with end_date, not written: {{{self.owner.pk}: 1}}", err)
+        self.assertIn(f"marked games with end_date, not written: {{{self.follower.pk}: 1}}", err)
+        out, err = run("fill_undated_reads", apply=True)
+        self.assertIn("dated reads with no log, not written: 2", err)
+        self.assertFalse(Book.objects.get(item=dated).completed_manually)
+        self.assertEqual(Book.objects.get(item=marked).end_date, datetime(2024, 3, 4, tzinfo=UTC))
 
     def test_it_leaves_alone_a_log_a_date_a_journey_and_a_mark(self):
         logged = self.book("logged")
