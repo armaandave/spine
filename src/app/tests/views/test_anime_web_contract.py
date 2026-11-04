@@ -3,11 +3,14 @@
 from datetime import UTC, date, datetime
 from unittest import mock
 
+import requests
 from django.urls import reverse
 
-from app import anime_tracking
+from app import anime_listing, anime_tracking
 from app.models import Anime, Item
+from app.providers import mal
 from app.tests.anime_fixtures import AnimeTestCase
+from app.tests.tv_fixtures import ProviderDown
 
 
 class AnimeWebContractTests(AnimeTestCase):
@@ -140,6 +143,35 @@ class AnimeWebContractTests(AnimeTestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(self.row(item).status, status)
             self.assertEqual(self.row(item).progress, 1)
+
+    def choice_url(self, name, media_id):
+        return reverse(name, kwargs={"source": "mal", "media_type": "anime", "media_id": media_id})
+
+    def test_tv_007_pause_resume_and_drop_work_from_the_copy_with_mal_down(self):
+        item = self.title(total=3)
+        self.tick(item, 1)
+        for failure in (requests.exceptions.Timeout, ProviderDown):
+            with mock.patch.object(mal, "anime", side_effect=failure), self.subTest(failure=failure.__name__):
+                for name, status in (("pause_media", "Paused"), ("resume_media", "In progress"), ("drop_media", "Dropped")):
+                    response = self.client.post(self.choice_url(name, item.media_id))
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(self.row(item).status, status)
+                    self.assertTemplateUsed(response, "app/components/media_actions.html")
+
+    def test_tv_007_a_title_spine_doesnt_have_with_mal_down_says_to_try_again(self):
+        with mock.patch.object(mal, "anime", side_effect=requests.exceptions.Timeout):
+            response = self.client.post(self.choice_url("pause_media", "424242"))
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": anime_listing.UNAVAILABLE_MESSAGE})
+        self.assertFalse(Item.objects.filter(media_id="424242").exists())
+
+    def test_tv_007_a_title_with_no_copy_and_mal_down_is_refused_and_nothing_is_saved(self):
+        item = self.title(total=3)
+        self.fake.fail()
+        response = self.client.post(self.choice_url("pause_media", item.media_id))
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": anime_listing.UNAVAILABLE_MESSAGE})
+        self.assertIsNone(self.row(item))
 
     def test_tv_405_the_webs_log_edit_goes_through_the_module(self):
         item = self.title(total=2)

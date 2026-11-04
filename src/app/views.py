@@ -22,7 +22,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from api.services.item_metadata import store_item_metadata
 from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
-from app import anime_tracking, tv_listing, tv_tracking, user_calendar
+from app import anime_listing, anime_tracking, tv_listing, tv_tracking, user_calendar
 from app.book_tracking import BookTrackingConflict
 from app.forms import EpisodeForm, ManualItemForm, get_form_class, BookProgressForm, BookLogForm, BookStartReadingForm, manual_parent_seasons
 from app.models import TV, BasicMedia, Item, MediaTypes, Season, Sources, Status, Movie, Episode, Book, BookSession, UserMessage, UserMessageLevel
@@ -3603,23 +3603,33 @@ def book_completed_modal(request, source, media_id):
 
 
 def _anime_choice_response(request, source, media_id, status, message):
-    """Pause, resume or drop an anime: the same choice as the app's (TV-007)."""
+    """Pause, resume or drop an anime: the same choice as the app's (TV-007).
+
+    With MAL down, a title Spine has goes on from its stored copy, as the API's does; the
+    choice says when there's none to go on from.
+    """
     media_type = MediaTypes.ANIME.value
-    metadata = services.get_media_metadata(media_type, media_id, source)
-    item, _ = Item.objects.get_or_create(
-        media_id=media_id,
-        source=source,
-        media_type=media_type,
-        defaults={"title": metadata["title"], "image": metadata["image"]},
-    )
-    store_item_metadata(item, metadata)
+    item = Item.objects.filter(media_id=media_id, source=source, media_type=media_type).first()
+    metadata = {}
+    try:
+        metadata = services.get_media_metadata(media_type, media_id, source)
+    except anime_listing.PROVIDER_FAILURES:
+        if item is None:
+            return _tv_error_response(anime_listing.AnimeDetailsUnavailable())
+    if metadata:
+        item, _ = Item.objects.get_or_create(
+            media_id=media_id,
+            source=source,
+            media_type=media_type,
+            defaults={"title": metadata["title"], "image": metadata["image"]},
+        )
+        store_item_metadata(item, metadata)
     try:
         result = anime_tracking.choose(request.user, item, status, entry_point=anime_tracking.WEB)
     except TV_WRITE_ERRORS as error:
         return _tv_error_response(error)
-    metadata.update(media_type=media_type, source=source, media_id=media_id)
     response = render(request, "app/components/media_actions.html", {
-        "media": metadata,
+        "media": {**metadata, "media_type": media_type, "source": source, "media_id": media_id},
         "media_type": media_type,
         "current_instance": result.row,
         "diary_entries": DiaryEntry.objects.filter(user=request.user, item=item).order_by("-consumed_at"),
