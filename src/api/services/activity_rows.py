@@ -409,15 +409,16 @@ def _opening(session, saves, length, *, finished):
 
 
 def _first_move_picks_up(saves):
-    """Return whether a journey's first status move is a pick-up.
+    """Return whether a journey opened by picking up: the row right after its start says.
 
-    Nothing in it was paused, so it picked up what it no longer sits beside: a place
-    with no journey, or a stopped attempt since deleted.
+    It picked up what it no longer sits beside: a place with no journey, or a stopped
+    attempt since deleted. A pick-up any later resumes a pause from before status rows
+    were recorded, and its start stays a start.
     """
-    for change in saves:
-        if change.current_progress.get("kind") == ProgressChange.STATUS:
-            return change.current_progress.get("move") == ProgressChange.PICKED_BACK_UP
-    return False
+    if len(saves) < 2 or saves[0].current_progress.get("kind") != ProgressChange.START:  # noqa: PLR2004
+        return False
+    following = saves[1].current_progress
+    return following.get("kind") == ProgressChange.STATUS and following.get("move") == ProgressChange.PICKED_BACK_UP
 
 
 def _walk_journey(reading, session, saves, length, zone, *, continues, finished):

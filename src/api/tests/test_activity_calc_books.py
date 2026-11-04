@@ -527,6 +527,17 @@ class PickUpRowTests(BookCalcBase):
         self.do(book_tracking.resume, item, d(2026, 1, 3))
         self.assertTrue(self.row_on(item, d(2026, 1, 1)).started)
 
+    def test_a_journey_paused_before_status_rows_keeps_its_start(self):
+        """Its pause wrote no row, so resuming writes a pick-up as its first status row."""
+        item = self.book("paused-before-rows")
+        self.begin(item, d(2026, 10, 28))
+        self.save(item, 100, d(2026, 10, 29))
+        book = Book.objects.get(item=item)
+        BookSession.objects.filter(pk=book.current_session_id).update(status=Status.PAUSED.value)
+        Book.objects.filter(pk=book.pk).update(status=Status.PAUSED.value)
+        self.do(book_tracking.resume, item, d(2026, 11, 1))
+        self.assertEqual(self.rows(item), ["2026-11-01 picked back up", "2026-10-29 read 100", "2026-10-28 started"])
+
 
 class BackdatedLogTests(BookCalcBase):
     """Decision 10: before the first activity everything moves; else only the rest."""
