@@ -568,6 +568,32 @@ class AMarkAndALogInYourOwnExportTests(BookImportBase):
         self.assert_numbers(0, 0, 400)
 
 
+class AnEyeOverALogWithNoJourneyTests(BookImportBase):
+    """The eye over any log adds nothing (BK-103): your own file leaves logs with no journey."""
+
+    def logged_with_no_journey(self):
+        self.finish(self.item_row, d(2025, 3, 1))
+        self.do(book_tracking.assign_status, self.item_row, d(2026, 1, 1), Status.PLANNING.value)
+        self.from_file(self.export(), mode="overwrite")
+        self.assertFalse(BookSession.objects.filter(related_book__item=self.item_row).exists())
+        self.assert_numbers(0, 0, PAGES)
+
+    def test_the_eye_uses_the_log(self):
+        self.logged_with_no_journey()
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
+        self.assert_numbers(0, 0, PAGES)
+        book = Book.objects.get(item=self.item_row)
+        self.assertTrue(book.read_override_active)
+        self.assertFalse(book.completed_manually)
+
+    def test_undoing_it_gives_to_read_back(self):
+        self.logged_with_no_journey()
+        self.do(book_tracking.mark_read, self.item_row, d(2026, 1, 2))
+        self.do(book_tracking.undo_read, self.item_row, d(2026, 1, 3))
+        self.assert_numbers(0, 0, PAGES)
+        self.assertEqual(Book.objects.get(item=self.item_row).status, Status.PLANNING.value)
+
+
 class WebDiaryAddTests(BookImportBase):
     """A web diary add stops clearing the undated mark."""
 

@@ -216,13 +216,14 @@ def _queue_statistics(user_id, value):
 
 
 def _has_completed_history(book, *, exclude_session=None):
-    sessions = book.reading_sessions.filter(
-        status=Status.COMPLETED.value,
-        completion_diary_entry__isnull=False,
-    )
+    """Return whether a Read is on record: a mark or a log, with a journey or not.
+
+    Your own file and logs from before the contract have none, and they're still reads.
+    """
+    logs = DiaryEntry.objects.filter(user=book.user, item=book.item)
     if exclude_session is not None:
-        sessions = sessions.exclude(id=exclude_session.id)
-    return book.completed_manually or sessions.exists()
+        logs = logs.exclude(id=exclude_session.completion_diary_entry_id)
+    return book.completed_manually or logs.exists()
 
 
 def _has_prior_completion(book, completed_at, *, exclude_session=None):
