@@ -535,3 +535,9 @@ may change without editing this document, but behavior that contradicts a law
 requires an explicit product decision and contract update first.
 
 Behavior omitted from this working contract is not implicitly decided.
+
+## Review status
+
+SW-500's dated book rows, and a Read with no date staying unflagged on a title that has a
+log (your own export coming back), are provisional until the phone test of Activity's
+first phase accepts them.

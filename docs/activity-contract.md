@@ -40,7 +40,9 @@ hearts, follows, or adding to a list.
   or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
   never from an import, a mark, a restore or Restart. It adds nothing to any number,
   and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
-  row.
+  row, and so does a reread, which opens over a finished read: deleting that log later
+  can't change where it began. A pick-up with nothing before it to carry on from, a
+  deleted attempt or an imported place, still isn't a start.
 - The day is the phone's date when the progress was saved, stored as `saved_on`, and it
   never moves with the time zone of whoever reads it. A row from before that column
   reads its moment on the server's zone.
@@ -138,5 +140,6 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 
 ## Review status
 
-AC-2's status moves, `began_over`, `saved_on` and anime's change reasons are provisional
-until the phone test of Activity's first phase accepts them.
+AC-2's status moves, `began_over`, `saved_on` and anime's change reasons, and AC-7's
+deletion of the likes and comments a removed journey, season or title leaves behind, are
+provisional until the phone test of Activity's first phase accepts them.

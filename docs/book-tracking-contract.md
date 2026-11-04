@@ -114,8 +114,13 @@ Direct assignment:
 
 - changes the current library section;
 - creates no diary entry;
-- invents no progress, start date, end date, or status date; and
+- invents no progress, start date, end date, or status date;
+- keeps a place an import left on a book with no journey (the maintainer's decision 21:
+  a status move changes no number); and
 - does not claim that the state change happened today.
+
+The website's status form follows this too: Completed there is Mark as Read, and the date
+the page fills in by itself isn't kept.
 
 For example, a user may place a book they abandoned before installing Spine in
 the DNF section without creating a dated journey or log.
@@ -381,8 +386,11 @@ closed journey and its progress remain historical.
 
 The new journey opens at the stopped journey's place, in pages or in percent, even
 with To Read or Paused in between (the maintainer's decisions 8 and 51: only Restart
-begins at zero). So does a new journey over an imported place that has no journey.
-The next save adds only the rise. Starting from Completed still opens at zero.
+begins at zero). So does a new journey over an imported place that has no journey, and
+a log finishing that place adds only what's left. The next save adds only the rise.
+Starting from Completed still opens at zero, and a journey opening over a finished read
+says so on its start row. Picking up through To Read records the same pick-up. An import's
+read beside the stopped journey changes none of this.
 
 The new journey is not a reread unless at least one earlier journey was
 Completed.
@@ -598,5 +606,6 @@ contract before implementation begins.
 ## Review status
 
 BK-304, BK-305 and BK-306's rules for the phone's own date and a date one day ahead,
-BK-305's opening at a place, and BK-306's rules for a log's date, are provisional until
-the phone test of Activity's first phase accepts them.
+BK-101's kept place and website Completed, BK-305's opening at a place, and BK-306's rules
+for a log's date, are provisional until the phone test of Activity's first phase accepts
+them.

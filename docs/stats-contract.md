@@ -99,7 +99,7 @@ The owner's own requests carry their app's zone in `X-Spine-Timezone`, which is 
 ### STAT-006: A write shows on the next request
 
 Stats responses may be cached.
-A change the owner makes (a log, a tick, a status, a rating or like, a session, a list or its items, or a setting), or a collaborator makes to one of the owner's lists, shows in the owner's stats on the next request, for every viewer. So does a book's page count arriving or a history row deleted on the web.
+A change the owner makes (a log, a tick, a status, a rating or like, a session, a list or its items, or a setting), or a collaborator makes to one of the owner's lists, shows in the owner's stats on the next request, for every viewer. So does a book's page count arriving, from a provider or edited in admin, or a history row deleted on the web.
 Changes that come from elsewhere, such as the metadata fill or a featured list sync, can take up to an hour to appear.
 
 ## Counting
@@ -270,7 +270,7 @@ Only increases count. The row that created the tracking row is never a change, s
 Steam's imported lifetime playtime is never added (GM-500).
 Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them. On books they count titles: how many in the range have a known length, out of all of them. A percent with no page count, and a log with no length anywhere, are the unknown ones.
 
-Books read `api.services.activity_rows`, the same calculation the Activity list reads, so a list adds up to its number. Saves are read in the order they were saved. A rise adds to that save's fixed day, and a drop comes off the newest amounts first, even last year's. A log adds what's left, on its own date, up to the length on its snapshot, else `total_pages`, else the last typed page. A log dated before its read's first activity takes all of that read's amounts onto its date (BK-306). Stopped and picked back up is one read; only Restart begins at zero. A reread counts again. A place with no journey, and `completed_manually`'s `total_pages` less what the read before the mark dated, sit in the undated pile: All Time only, never a row and never in a year.
+Books read `api.services.activity_rows`, the same calculation the Activity list reads, so a list adds up to its number. Saves are read in the order they were saved. A rise adds to that save's fixed day, and a drop comes off the newest amounts first, even last year's. A log adds what's left, on its own date, up to the length on its snapshot, else `total_pages`, else the last typed page. A log dated before its read's first activity takes all of that read's amounts onto its date (BK-306). Stopped and picked back up is one read; only Restart begins at zero. A reread counts again. A place with no journey, and `completed_manually`'s `total_pages` less what the read before the mark holds, sit in the undated pile: All Time only, never a row and never in a year. A finish on such a place adds only what's left. A file's read is its own: it joins no read beside it, so its date moves none of that read's pages (BK-306).
 
 ### STAT-202: Total hours adds up the types counted in minutes
 
@@ -360,7 +360,7 @@ The app titles this section "By year", because its Logs switch doesn't go by rel
 - `recent`: released 1 to 7 years earlier;
 - `older`: released 8 or more years earlier.
 
-Titles without a release year, and undated completions, aren't counted there.
+Titles without a release year, and undated completions, aren't counted there. Nor is a book with reading and no log in the range: it counts in the rows above and not on this card, so on a year with reading and no logs the card hides itself.
 
 ### STAT-210: A type tab shows that type's own genre names
 
@@ -675,7 +675,7 @@ GET /api/v1/users/{username}/stats/summary/?schema=2&start_date=…&end_date=…
 | `range.is_all_time` | bool | |
 | `media_type` | string or null | The tab: null on Global. |
 | `audience` | string | `owner`, `follower` or `public`. |
-| `years.first` | int or null | The year of the earliest log day or dated viewing the viewer can count, of any type; null when there is none. |
+| `years.first` | int or null | The year of the earliest log day, dated viewing or book day with an amount or percent the viewer can count, of any type; null when there is none. A mark never makes one. |
 | `years.current` | int | Today's year on the owner's calendar. |
 | `media_types[]` | array | One row per exposed primary type the owner has turned on in Media & Preferences, in `primary_media_types()` order, whatever the tab, with that type's `titles` (STAT-105) and `logs` (STAT-103) in the range. The app builds its type picker from it. A type the owner turned off has no row, yet Global still counts it. |
 
@@ -1253,7 +1253,7 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
 
-Activity's first phase (2026-11-03) moved books onto one calculation. STAT-105, STAT-106 and STAT-201's book row, with `known` and `total`, are provisional until its phone test accepts them. Every other type keeps its row here until its own phase.
+Activity's first phase (2026-11-03) moved books onto one calculation. STAT-005's fixed day for a save, STAT-006's page count arriving, STAT-105, STAT-106, STAT-201's book row with `known` and `total`, `years.first` reading a book's day (STAT-302) and New vs older leaving out a book with no log (STAT-209) are provisional until its phone test accepts them. Every other type keeps its row here until its own phase.
 
 Round 2 (2026-10-29: drills, range progress, milestones within a range) settled these details the round 2 plan left open; they are provisional too:
 

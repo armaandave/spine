@@ -188,24 +188,31 @@ decode them and never show them: a book's `known` and `total` count titles, `yea
 `header.titles` count reading with no log, and a book's `progress` after a pick-up is its
 place (BK-305).
 
-**Before you say this is ready to ship:** run `docker exec spine python manage.py
-compare_activity_numbers` and read each account's `book` lines. The plan pins Books 2026 at
-about 5,182 and All Time at about 59,483 on account 1, and Books 2025 at 3,762. If the real
-number differs, it doesn't ship until that's explained. Then run the dry run below for count
-15 and read count 2.
+**Before you say this is ready to ship:** the speed gate must have passed on this branch (plan
+5.2, against section 6's limits): a Stats miss on Global and Books, All Time and one year,
+median of 5, on a throwaway Postgres, under 1.5 seconds and under 2 times today's. This phase
+is the first ship that makes `CALCULATED_TYPES` non-empty, so it's the ship that gate guards.
+
+Then run `docker exec spine python manage.py compare_activity_numbers` and read each account's
+`book` lines. The plan pins Books 2026 at about 5,182 and All Time at about 59,483 on account
+1, and Books 2025 at 3,762. If the real number differs, it doesn't ship until that's explained.
+Read count 2 too, the `count 2 class` lines. If class b or c isn't zero, the likes repair goes
+with this ship, so it doesn't ship until that's written, with its test first (plan 5.8).
 
 **Each step below waits for the user's request; the ship request doesn't cover it.** The ship
-message (step 5) names each as waiting and prints its count. Armaan's yes is on record
-(Activity plan, decisions 50 and 60), and that yes is the request, so each runs after the
-deploy unless he says stop to that message, and only if its count finds any.
+message (step 5) names each as waiting. It can't print count 15 yet, because that dry run needs
+the deployed code. Armaan's yes is on record (Activity plan, decisions 50 and 60), and that yes
+is the request, so each runs after the deploy unless he says stop to the counts message below,
+and only if its count finds any.
 
-1. **Books already picked up,** only if count 15 isn't zero:
-   `scripts/activity-steps-production.sh picked-up-books` for the count, then wait 10 minutes,
-   then `--apply`. Those journeys get the place they stopped at. No number and no row changes.
-2. **Likes repair.** Count 2 is the `count 2 class` lines of `compare_activity_numbers`. Read
-   it just before and just after this deploy. If classes b and c are zero both times, there's
-   nothing to do and no repair code was written. Otherwise the repair is its own change, with
-   its test first (plan 5.8), and it goes with a later ship.
+1. **Books already picked up,** after the deploy is verified (step 8):
+   `scripts/activity-steps-production.sh picked-up-books` prints count 15. Send him a short
+   message with the count and what `--apply` will do. If it's zero, the step is done. Otherwise
+   wait 10 minutes, then `--apply`, and don't run it if he says stop. Those journeys get the
+   place they stopped at. No number and no row changes.
+2. **Likes repair.** Read count 2 again just after this deploy. If classes b and c are zero both
+   times, there's nothing to do and no repair code was written. If they only turn up on this
+   second read, the repair goes with the next ship, as its own change, with its test first.
 
 Remove this section once Phase 2 has shipped.
 
