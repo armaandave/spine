@@ -120,7 +120,9 @@ Direct assignment:
 - does not claim that the state change happened today.
 
 The website's status form follows this too: Completed there is Mark as Read, and the date
-the page fills in by itself isn't kept.
+the page fills in by itself isn't kept. A date before today is a log on that date, as a
+file's row is, and a date past today is no date. Moving a Read to another status there zeroes
+its progress, as the phone's move does: a Read's progress is its length, not a place.
 
 For example, a user may place a book they abandoned before installing Spine in
 the DNF section without creating a dated journey or log.

@@ -733,6 +733,23 @@ def mark_read(user, item):
     return book
 
 
+@transaction.atomic
+def assign_read(user, item, *, sent_day=None):
+    """Move a book to Read from the website's status form (BK-101).
+
+    It's Mark as Read, unless the form sent a date before today: the page fills in today by
+    itself, so a typed today can't be told from it, and a date before it is a read on that
+    date, as a file's is. A read under way goes through its log either way.
+    """
+    book, _ = _ensure_book(user, item)
+    open_journey = _open_session(book)
+    if open_journey:
+        raise CompletionRequired(open_journey.id)
+    if sent_day and sent_day < user_calendar.today(user):
+        return complete(user, item, completion_date=sent_day)[0]
+    return mark_read(user, item)
+
+
 def _place_before_mark(book):
     """Return the place the mark replaced: no column holds one, so its history says.
 

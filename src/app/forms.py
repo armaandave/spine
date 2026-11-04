@@ -402,20 +402,34 @@ class BookForm(MediaForm):
     """Form for books."""
 
     def save(self, commit=True):
-        """Completed is the mark, as on the phone: the page fills in a date by itself (BK-101)."""
-        finished = self.cleaned_data["status"] == Status.COMPLETED.value and (
-            self.instance.pk is None or "status" in self.changed_data
-        )
-        if not commit or not finished:
+        """A move to or off Read goes through the book's rules, as the phone's does (BK-101).
+
+        A Read's progress is its length, so leaving one can't write the posted number onto
+        the row as a place.
+        """
+        status = self.cleaned_data["status"]
+        moved = self.instance.pk is None or "status" in self.changed_data
+        finished = status == Status.COMPLETED.value
+        off_a_read = self.initial.get("status") == Status.COMPLETED.value
+        if not commit or not moved or not (finished or off_a_read):
             return super().save(commit)
         from app import book_tracking
 
-        book = book_tracking.mark_read(self.instance.user, self.instance.item)
+        user, item = self.instance.user, self.instance.item
+        if finished:
+            book = book_tracking.assign_read(user, item, sent_day=self._sent_end_day())
+        else:
+            book = book_tracking.assign_status(user, item, status, start_date=self.cleaned_data.get("start_date"))
         book.score = self.cleaned_data.get("score")
         book.notes = self.cleaned_data.get("notes", "")
         book.save(update_fields=["score", "notes"])
         self.instance = book
         return book
+
+    def _sent_end_day(self):
+        """Return the day the browser sent: Django read its wall clock on the server's zone."""
+        end_date = self.cleaned_data.get("end_date")
+        return timezone.localtime(end_date).date() if end_date and "end_date" in self.changed_data else None
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""

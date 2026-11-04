@@ -157,6 +157,84 @@ class MarkMatrixTests(BookCalcBase):
 
         self.check(web_form)
 
+    def web_form(self, item, status=Status.COMPLETED.value, **fields):
+        """Post the status form as the browser does, on Mar 1."""
+        book = Book.objects.filter(user=self.owner, item=item).first()
+        metadata = {"title": "t", "image": "https://example.com/a.jpg", "max_progress": self.PAGES}
+        self.client.force_login(self.owner)
+        with (
+            patch("app.views.services.get_media_metadata", return_value=metadata),
+            patch("app.models.Item.fetch_releases"),
+            self.on(d(2026, 3, 1)),
+        ):
+            response = self.client.post(
+                reverse("media_save"),
+                {
+                    "media_id": item.media_id,
+                    "source": item.source,
+                    "media_type": BOOK,
+                    "status": status,
+                    "progress": "0",
+                    **({"instance_id": book.pk} if book else {}),
+                    **fields,
+                },
+            )
+        self.assertLess(response.status_code, 400, response.content)
+
+    def test_the_web_form_completed_with_an_earlier_date_is_a_log_on_it(self):
+        """The person typed it: a date before today is a read, as a file's row is."""
+        item = self.book("web-typed", pages=self.PAGES)
+        self.web_form(item, end_date="2025-06-01", score="8", notes="kept")
+        self.assertEqual(self.rows(item), ["2025-06-01 log +350"])
+        book = Book.objects.get(user=self.owner, item=item)
+        self.assertEqual((book.status, book.completed_manually, book.notes, book.score), (Status.COMPLETED.value, False, "kept", 8))
+        self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 40)
+
+    def test_the_web_form_keeps_that_date_on_a_book_at_to_read(self):
+        item = self.book("web-typed-planned", pages=self.PAGES)
+        self.do(book_tracking.assign_status, item, d(2026, 1, 20), Status.PLANNING.value)
+        self.web_form(item, end_date="2025-06-01")
+        self.assertEqual(self.rows(item), ["2025-06-01 log +350"])
+
+    def test_the_web_form_with_a_date_past_today_is_the_mark(self):
+        item = self.book("web-ahead", pages=self.PAGES)
+        self.web_form(item, end_date="2026-03-02")
+        self.assertTrue(Book.objects.get(user=self.owner, item=item).completed_manually)
+        self.assertEqual(self.rows(item), [])
+
+    def test_the_web_form_refuses_an_earlier_date_on_a_read_under_way(self):
+        item = self.book("web-typed-open", pages=self.PAGES)
+        self.begin(item, d(2026, 2, 1))
+        self.web_form(item, end_date="2025-06-01")
+        self.assertEqual(Book.objects.get(user=self.owner, item=item).status, Status.IN_PROGRESS.value)
+        self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+
+    def test_the_web_form_moving_an_old_mark_on_doubles_nothing(self):
+        """A mark from before the book contract holds its length, and the form posts it back."""
+        item = self.book("web-old-mark", pages=self.PAGES)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, completed_manually=True, progress=self.PAGES)
+        before, value = self.snapshot(), self.all_time()
+        self.web_form(item, Status.PLANNING.value, progress=str(self.PAGES), notes="kept")
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.all_time(), value)
+        book = Book.objects.get(user=self.owner, item=item)
+        self.assertEqual((book.status, book.progress, book.notes), (Status.PLANNING.value, 0, "kept"))
+
+    def test_the_web_form_moving_a_read_row_on_invents_no_place(self):
+        item = self.book("web-read-row", pages=self.PAGES)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=self.PAGES)
+        value = self.all_time()
+        self.web_form(item, Status.DROPPED.value, progress=str(self.PAGES))
+        self.assertEqual(self.all_time(), value)
+
+    def test_the_web_form_moving_a_read_to_currently_reading_begins_a_reread(self):
+        item = self.book("web-reread", pages=self.PAGES)
+        self.finish(item, d(2025, 6, 1))
+        self.web_form(item, Status.IN_PROGRESS.value, progress=str(self.PAGES))
+        book = Book.objects.get(user=self.owner, item=item)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 0))
+        self.assertEqual(self.rows(item), ["2026-03-01 started", "2025-06-01 log +350"])
+
     def test_the_web_form_mark_comes_back_from_your_own_file_as_a_mark(self):
         item = self.book("web-export", pages=self.PAGES)
         Item.objects.filter(pk=item.pk).update(image="https://example.com/a.jpg")
