@@ -71,7 +71,7 @@ class MyAnimeListImporter:
         logger.info("Fetching %s from MyAnimeList", media_type)
         params = {
             "fields": (
-                "num_episodes,num_chapters,start_date,average_episode_duration,genres,"
+                "num_episodes,num_chapters,start_date,average_episode_duration,genres,alternative_titles,"
                 "list_status{comments,num_times_rewatched,num_times_reread}"
             ),
             "nsfw": "true",
@@ -219,6 +219,8 @@ class MyAnimeListImporter:
             "runtime": int(duration / 60) if duration else None,
             "genres": [genre["name"] for genre in node.get("genres") or []],
             "max_progress": node.get("num_chapters"),
+            # An anime's shown title (AN-705).
+            "display_title": app.providers.mal.get_english_title(node),
         }
 
     def _parse_mal_date(self, date_str):

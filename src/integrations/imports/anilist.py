@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 import app
+from app import anime_titles
 from app import helpers as app_helpers
 from app.models import MediaTypes, Sources, Status
 from app.providers import services
@@ -139,6 +140,7 @@ class AniListImporter:
                         media{
                             title {
                                 userPreferred
+                                english
                             }
                             coverImage {
                                 large
@@ -318,6 +320,8 @@ class AniListImporter:
         # Only the free fields: AniList's genres aren't MAL's, so the metadata fill
         # completes the Item later.
         helpers.store_free_metadata(item, self._metadata(content["media"]))
+        # AniList's English title is the shown one when MAL has none (AN-705).
+        anime_titles.store_shown_title(item, anilist=(content["media"]["title"] or {}).get("english"))
         model = apps.get_model(app_label="app", model_name=media_type)
         updated_at = (
             timezone.now()

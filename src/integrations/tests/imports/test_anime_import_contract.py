@@ -578,6 +578,30 @@ class OtherImporterTests(ImportTestCase):
         self.assertEqual((row.status, row.progress, row.pass_number), ("Completed", 12, 2))
         self.assertEqual(self.fake.count("anilist"), 0)
 
+    def test_an_705_the_mal_list_gives_mals_english_title(self):
+        title = self.fake.add(title="Shingeki no Kyojin")
+        entry = mal_entry(title, "watching", count=3)
+        entry["node"]["alternative_titles"] = {"en": "Attack on Titan", "synonyms": []}
+        self.import_mal(entry)
+        self.assertEqual(self.item_of(title).shown_title, "Attack on Titan")
+
+    def test_an_705_the_mal_list_asks_for_the_english_title_at_no_extra_request(self):
+        importer = mal.MyAnimeListImporter("someone", self.user, "new")
+        page = {"data": [], "paging": {}}
+        with mock.patch.object(services, "api_request", return_value=page) as request:
+            importer._process_media_type("anime")  # noqa: SLF001
+        self.assertEqual(request.call_count, 1)
+        self.assertIn("alternative_titles", request.call_args.kwargs["params"]["fields"])
+
+    def test_an_705_anilists_list_gives_anilists_english_title(self):
+        title = self.fake.add(title="Shingeki no Kyojin")
+        entry = anilist_entry(title, "CURRENT", count=3)
+        entry["media"]["title"]["english"] = "Attack on Titan"
+        importer = anilist.AniListImporter(None, self.user, "new", "someone")
+        importer._process_entry(entry, "anime")  # noqa: SLF001
+        helpers.bulk_create_media(importer.bulk_media, self.user, source="anilist")
+        self.assertEqual(self.item_of(title).shown_title, "Attack on Titan")
+
     def test_an_800_anilist_current_means_watching(self):
         title = self.fake.add(total=12)
         importer = anilist.AniListImporter(None, self.user, "new", "someone")
