@@ -161,12 +161,14 @@ The show's + menu offers:
 - Planning;
 - Pause;
 - Drop;
-- Rewatch when the show is finished, or Stop rewatching during a rewatch;
-- Log, for a season or the whole show; and
+- Log, for a season or the whole show;
+- Rewatch when the show is finished, or Stop rewatching during a rewatch; and
 - Remove from Library, while the show is in the library.
 
-A season's + menu offers Log Season, and Rewatch Season once that season is finished and no rewatch is in progress (TV-600).
+A season's + menu offers Log Season, then Rewatch Season once that season is finished and no rewatch is in progress (TV-600).
 An episode's + menu offers Log Episode.
+Rewatch comes after Log because it appears when the show or season finishes.
+An open menu keeps the options it opened with: a write that lands while it's open, such as a finale's tick, changes them the next time it opens, so no option moves under the user's finger.
 
 Base options stay visible whatever the status.
 Remove from Library isn't one: a show that isn't in the library has nothing to remove, so the menu leaves it out, and the server sends neither the action nor a reason for it.

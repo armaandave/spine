@@ -29,7 +29,7 @@ Read "season" in them as the title, and leave out everything about the show arou
 | --- | --- | --- |
 | Library sections | TV-002 | Watching, Planning, Paused, Dropped and Completed. Status alone decides the section. |
 | Membership and removal | TV-003 | "Remove this anime? Your 13 watched episodes will be unmarked." Unavailable while a log exists, with the reason "Delete this anime's logs first." |
-| The + menu | TV-005 | Watching, or Resume when Paused; Planning; Pause; Drop; Rewatch, or Stop rewatching during a rewatch; Log; Remove from Library while in the library. An unavailable option says why. |
+| The + menu | TV-005 | Watching, or Resume when Paused; Planning; Pause; Drop; Log; Rewatch, or Stop rewatching during a rewatch; Remove from Library while in the library. An unavailable option says why, and an open menu keeps the options it opened with. |
 | Planning | TV-006 | Only while nothing is watched. |
 | Pause and Drop | TV-007 | Pause saves at once. Drop asks "Drop this anime? Your progress will be kept." Both keep the place. Resume, or Watching on a Dropped title, continues there. |
 | Ticks | TV-100, TV-101, TV-102 | One viewing, dated now. A double tap adds nothing. Tapping a filled tick removes the latest unlogged viewing. A logged episode says "Delete your log first." |

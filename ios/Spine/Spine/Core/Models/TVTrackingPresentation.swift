@@ -288,10 +288,10 @@ nonisolated enum TVTrackingPresentation {
         }
     }
 
-    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Rewatch or Stop
-    /// Rewatching, Log, and Remove from Library for a show in the library. Base options are always listed;
-    /// unavailable ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever
-    /// the server sends.
+    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Log, Rewatch or Stop
+    /// Rewatching, and Remove from Library for a show in the library. Base options are always listed; unavailable
+    /// ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server
+    /// sends. Rewatch comes after Log because it appears when the show finishes.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
@@ -305,13 +305,13 @@ nonisolated enum TVTrackingPresentation {
         items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
         items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
         items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+        items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
             items.append(rewatch)
         }
         if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
             items.append(stop)
         }
-        items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if tv.inLibrary {
             items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
         }
@@ -335,13 +335,15 @@ nonisolated enum TVTrackingPresentation {
         if !anime.single {
             items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
             items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+        }
+        items.append(menu.item("log", "Log", "square.and.pencil", .log))
+        if !anime.single {
             if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
                 items.append(stop)
             } else if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
                 items.append(rewatch)
             }
         }
-        items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if anime.inLibrary {
             items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
         }
@@ -393,6 +395,31 @@ nonisolated enum TVTrackingPresentation {
             guard available.contains(key) || reasons[key] != nil || selected == key else { return nil }
             return item(key, title, systemImage, command)
         }
+    }
+}
+
+/// The rows an open + menu shows (TV-005): the ones it opened with. The sheet sizes to its rows and grows upward, so a
+/// row a write adds while it's open, such as Rewatch Season after a finale's tick or Remove from Library after a first
+/// tick, or a reason that comes or goes, would move the others under the finger. The menu shows the change the next
+/// time it opens.
+nonisolated struct TVMenuRows: Equatable {
+    private(set) var opened: [TVMenuItem]?
+    private(set) var committed: [TVMenuItem]?
+
+    var isCommitted: Bool { committed != nil }
+
+    func shown(live: [TVMenuItem]) -> [TVMenuItem] {
+        committed ?? opened ?? live
+    }
+
+    mutating func open(_ live: [TVMenuItem]) {
+        if opened == nil { opened = live }
+    }
+
+    /// A choice was made: the rows on screen stay while the sheet slides away.
+    mutating func commit(_ live: [TVMenuItem]) {
+        guard committed == nil else { return }
+        committed = shown(live: live)
     }
 }
 

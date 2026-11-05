@@ -917,12 +917,13 @@ final class AnimeTrackingTests: XCTestCase {
         anime.availableActions = ["pause", "drop", "rewatch", "log", "rate"]
         anime.actionReasons = ["watching": "You've watched everything that has aired.", "remove": "Delete this anime's logs first."]
         items = TVTrackingPresentation.animeMenu(for: anime)
-        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Rewatch", "Log", "Remove from Library"])
+        XCTAssertEqual(items.map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Rewatch", "Remove from Library"],
+                       "Rewatch, which appears when the title finishes, comes after Log")
         XCTAssertEqual(items.last?.reason, "Delete this anime's logs first.")
         XCTAssertEqual(items[0].reason, "You've watched everything that has aired.")
         anime.availableActions = ["pause", "drop", "stop_rewatch", "log", "rate"]
         anime.actionReasons = ["rewatch": "You're already rewatching this."]
-        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).map(\.title), ["Watching", "Planning", "Pause", "Drop", "Stop Rewatching", "Log", "Remove from Library"])
+        XCTAssertEqual(TVTrackingPresentation.animeMenu(for: anime).map(\.title), ["Watching", "Planning", "Pause", "Drop", "Log", "Stop Rewatching", "Remove from Library"])
 
         // Not in the library: nothing to remove.
         XCTAssertFalse(TVTrackingPresentation.animeMenu(for: AnimeState()).map(\.title).contains("Remove from Library"))
