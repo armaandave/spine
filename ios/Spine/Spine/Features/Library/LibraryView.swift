@@ -575,7 +575,10 @@ struct LibraryView: View {
                 SpinePageBackground()
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    // A plain stack: the list and the grid are the page's only lazy stacks, one item per row or poster.
+                    // The list nested in a lazy page stack was one item of it, and clearing a search that had left a
+                    // few rows sent the two measuring each other at 100% CPU.
+                    VStack(alignment: .leading, spacing: 0) {
                         header
                         content
                             .spineContentTransition(value: contentTransitionKey)
