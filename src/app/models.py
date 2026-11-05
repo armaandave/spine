@@ -875,8 +875,10 @@ class MediaManager(models.Manager):
         item_fields = [f.name for f in Item._meta.fields]
         if sort_filter in item_fields:
             if sort_filter == "title":
-                # Case-insensitive title sorting
-                return queryset.order_by(models.functions.Lower("item__title"))
+                from app.anime_titles import shown_title_order  # noqa: PLC0415
+
+                # Case-insensitive, by the title shown: an anime's English one (AN-705).
+                return queryset.order_by(shown_title_order())
             # Default sorting for other Item fields
             return queryset.order_by(
                 f"-item__{sort_filter}",

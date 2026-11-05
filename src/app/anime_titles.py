@@ -9,6 +9,8 @@ import logging
 import time
 
 import requests
+from django.db.models import Case, F, Q, TextField, Value, When
+from django.db.models.functions import Coalesce, Lower, NullIf
 
 from app.models import Item, MediaTypes, Sources
 from app.providers import anilist
@@ -23,6 +25,31 @@ FILL_CHUNK = 25
 FILL_PACE = 2.5
 FILL_TIMEOUT = 10
 FILL_LIMIT = 2500
+
+
+def shown_title_order(item_path="item__"):
+    """Return the shown title, lowercased, as an expression to sort by (AN-705).
+
+    Only an anime's is its stored English one; every other type sorts as before.
+    """
+    title = F(f"{item_path}title")
+    return Lower(
+        Case(
+            When(
+                **{f"{item_path}media_type": MediaTypes.ANIME.value},
+                then=Coalesce(NullIf(F(f"{item_path}display_title"), Value("")), title),
+            ),
+            default=title,
+            output_field=TextField(),
+        ),
+    )
+
+
+def title_search(query, item_path="item__"):
+    """Return a filter matching a title by its original or, for an anime, its English one (AN-705)."""
+    return Q(**{f"{item_path}title__icontains": query}) | Q(
+        **{f"{item_path}media_type": MediaTypes.ANIME.value, f"{item_path}display_title__icontains": query},
+    )
 
 
 def store_shown_title(item, *, mal=UNREAD, anilist=UNREAD):

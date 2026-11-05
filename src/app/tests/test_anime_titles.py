@@ -153,6 +153,53 @@ class PayloadTitleTests(AnimeTestCase):
         self.assertEqual(str(self.movie), "Le Samourai")
 
 
+class SearchAndSortTests(AnimeTestCase):
+    """AN-705: search finds an anime by either title, and a title sort goes by the shown one."""
+
+    def setUp(self):
+        super().setUp()
+        # Sorted by the original they'd be Aaa, Zzz; by what's shown, Alpha, Omega.
+        self.alpha = self.titled("Zzz Original", "Alpha")
+        self.omega = self.titled("Aaa Original", "Omega")
+        self.plain = self.titled("Middle", "")
+        for item in (self.alpha, self.omega, self.plain):
+            self.tick(item, 1)
+            self.log(item)
+
+    def titled(self, original, english):
+        item = self.title(title=self.fake.add(title=original, english=english or None))
+        Item.objects.filter(pk=item.pk).update(display_title=english)
+        item.refresh_from_db()
+        return item
+
+    def titles(self, url, **params):
+        response = self.api.get(url, params)
+        self.assertEqual(response.status_code, 200, getattr(response, "data", None))
+        return [summary["title"] for summary in summaries(response.data, "anime")]
+
+    def test_an_705_library_search_finds_either_title(self):
+        for query, expected in (("alph", ["Alpha"]), ("zzz orig", ["Alpha"]), ("middle", ["Middle"])):
+            with self.subTest(query=query):
+                self.assertEqual(self.titles("/api/v1/tracking/", media_type="anime", q=query), expected)
+                self.assertEqual(self.titles("/api/v1/diary/", q=query), expected)
+
+    def test_an_705_a_title_sort_goes_by_what_is_shown(self):
+        expected = ["Alpha", "Middle", "Omega"]
+        self.assertEqual(self.titles("/api/v1/tracking/", media_type="anime", sort="title"), expected)
+        self.assertEqual(self.titles("/api/v1/tracking/", media_type="anime", sort="title", direction="asc"), expected)
+        self.assertEqual(self.titles("/api/v1/tracking/", media_type="anime", sort="title", direction="desc"), expected[::-1])
+        self.assertEqual(self.titles("/api/v1/diary/", sort="title", direction="asc"), expected)
+
+    def test_an_705_lists_search_and_sort_by_it_too(self):
+        custom_list = CustomList.objects.create(owner=self.user, name="Mine")
+        for item in (self.alpha, self.omega, self.plain):
+            CustomListItem.objects.create(custom_list=custom_list, item=item)
+        url = f"/api/v1/lists/{custom_list.id}/items/"
+        with mock.patch("api.serializers.common.resolved_item_backdrop_urls", return_value=(None, None)):
+            self.assertEqual(self.titles(url, q="zzz"), ["Alpha"])
+            self.assertEqual(self.titles(url, sort="title", direction="asc"), ["Alpha", "Middle", "Omega"])
+
+
 class FillTitlesTests(AnimeTestCase):
     """AN-705: a job fills every anime Spine has no title for, from AniList in bulk."""
 

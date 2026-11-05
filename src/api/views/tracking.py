@@ -36,7 +36,7 @@ from api.services import diary as diary_service
 from api.services import filters as filter_service
 from api.services import tracking as tracking_service
 from api.views.mixins import MediaExposureMixin
-from app import anime_tracking, series_tracking, tv_tracking
+from app import anime_titles, anime_tracking, series_tracking, tv_tracking
 from app.models import BasicMedia, Episode, GameSession, MediaTypes, Status
 from streaming import filters as streaming_filters
 
@@ -82,7 +82,7 @@ class TrackingListView(MediaExposureMixin, APIView):
         filter_service.ensure_filter_metadata(queryset, request.query_params)
         queryset = filter_service.apply_item_filters(queryset, request.query_params)
         if search:
-            queryset = queryset.filter(item__title__icontains=search)
+            queryset = queryset.filter(anime_titles.title_search(search))
         queryset = filter_service.apply_rating_range(queryset, request.query_params, "score")
         queryset = filter_service.apply_watched_range(queryset, request.query_params, "end_date")
         queryset, streaming = streaming_filters.apply_service_filter(
