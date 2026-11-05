@@ -46,6 +46,7 @@ from django.db import transaction
 
 from api.services import completion as completion_service
 from api.services.filters import _runtime_minutes, update_item_filter_metadata
+from app import anime_titles
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
 from app.models import ItemCredit, MediaTypes, Sources
 
@@ -107,6 +108,9 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
         if runtime is not None:
             metadata = {**metadata, "runtime": runtime}
     update_item_filter_metadata(item, metadata)
+    if item.media_type == MediaTypes.ANIME.value and "display_title" in metadata:
+        # A MAL read: its English title, or AniList's where the page merged it (AN-705).
+        anime_titles.store_shown_title(item, mal=metadata.get("display_title"))
     if item.media_type == MediaTypes.BOOK.value:
         _store_book_pages(item, metadata)
     store_series_total(item, metadata)

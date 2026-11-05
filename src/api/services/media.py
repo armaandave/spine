@@ -57,6 +57,7 @@ from api.services.filters import (
 from api.services.item_metadata import _persist_detail_series, store_item_metadata
 from app import (
     anime_listing,
+    anime_titles,
     anime_tracking,
     config,
     music_catalog,
@@ -1447,6 +1448,13 @@ def _anime_detail(media_type, item, *, metadata, page_metadata, user):
     """
     if media_type != MediaTypes.ANIME.value or item is None:
         return None
+    # The page asked MAL and, unless it failed, AniList: they say the title (AN-705).
+    enrichment = (page_metadata or {}).get("_anilist")
+    anime_titles.store_shown_title(
+        item,
+        mal=(page_metadata or {}).get("display_title"),
+        anilist=(enrichment.get("titles") or {}).get("english") if enrichment else anime_titles.UNREAD,
+    )
     anime_listing.update_from_metadata(item, metadata)
     anime_listing.update_next_title(item, page_metadata)
     if not (user and user.is_authenticated):
@@ -1651,7 +1659,8 @@ def _enrich_anime_metadata(metadata, source):
 
     enriched = deepcopy(metadata)
     if not enriched.get("display_title"):
-        enriched["display_title"] = enrichment.get("display_title")
+        # MAL's English title, else AniList's, else the original (AN-705).
+        enriched["display_title"] = (enrichment.get("titles") or {}).get("english")
     if not backdrop_url(enriched):
         enriched["backdrop"] = enrichment.get("backdrop")
     enriched["posters"] = _dedupe_artwork(

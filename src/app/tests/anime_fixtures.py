@@ -51,6 +51,9 @@ class FakeTitle:
     last_aired: tuple | None = None
     # MAL's series order: the entries of mal.anime_series()["items"].
     series: list = field(default_factory=list)
+    # MAL's English title, and AniList's (AN-705).
+    english: str | None = None
+    anilist_english: str | None = None
 
 
 class FakeAnimeProvider:
@@ -113,7 +116,7 @@ class FakeAnimeProvider:
             "source": Sources.MAL.value,
             "media_type": MediaTypes.ANIME.value,
             "title": title.title,
-            "display_title": title.title,
+            "display_title": title.english,
             "image": "https://example.com/poster.jpg",
             "max_progress": title.total,
             "series_format": title.format,
