@@ -1,21 +1,26 @@
-"""The one calculation on anime, switched off until Phase 2.
+"""The one calculation on anime, switched off: Stats count anime's viewings (AN-704).
 
-Anime's history rows are its saves, and each says what it was (AC-2). Amount is episodes
-times the live runtime. The provider is faked: every anime save reaches it.
+The adapter reads anime's history rows as its saves. A row with a change reason says
+what it was; a row without one is read at its moment. The rows here are saved directly,
+as anime's history holds them from before docs/anime-tracking-contract.md. Amount is
+episodes times the live runtime. The provider is faked: every anime save reaches it.
 """
 
-from datetime import UTC, datetime
+import io
+from datetime import datetime
 from decimal import Decimal
 from unittest import mock
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from django.core.management import call_command
 from django.test import override_settings
 
-from api.services import tracking as tracking_service
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
-from app.models import Anime, DiaryEntry, MediaTypes, Status
-from app.services import create_diary_entry
+from app import anime_tracking
+from app.models import Anime, MediaTypes, Status
+from app.tests.anime_fixtures import AnimeTestCase
 
 ANIME = MediaTypes.ANIME.value
 NEW_YORK = "America/New_York"
@@ -26,7 +31,7 @@ Y2026 = {"start": d(2026, 1, 1), "end": d(2026, 12, 31)}
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class AnimeCalcBase(BookCalcBase):
-    """Save through the real functions, on a 12-episode anime at 24 minutes."""
+    """Save rows directly, on a 12-episode anime at 24 minutes."""
 
     def setUp(self):
         super().setUp()
@@ -52,11 +57,6 @@ class AnimeCalcBase(BookCalcBase):
         with self.on(day):
             row.progress = value
             row.save()
-
-    def log_it(self, item, day, saved_on=None, **kwargs):
-        moment = datetime(day.year, day.month, day.day, tzinfo=UTC)
-        with self.on(saved_on or day):
-            return create_diary_entry(self.owner, item, consumed_at=moment, auto_mark_consumed=True, **kwargs)
 
     def calc(self, viewer=None):
         return rows_for([self.owner], viewer or self.owner, types=[ANIME])
@@ -92,7 +92,7 @@ class AnimeCalcBase(BookCalcBase):
 
 
 class SavesTests(AnimeCalcBase):
-    """A typed number counts on its day; a drop comes off the newest."""
+    """A number saved on the row counts on its day."""
 
     def test_typed_numbers_count_on_their_days_with_their_minutes(self):
         item = self.anime()
@@ -103,13 +103,6 @@ class SavesTests(AnimeCalcBase):
         self.assertEqual(self.lines(), ["2026-01-10 watched 2", "2025-12-20 watched 3", "2025-12-01 started"])
         told = next(row for row in self.calc().rows if row.day == d(2026, 1, 10))
         self.assertEqual((int(told.told), int(told.amount), told.told_unit), (2, 2 * RUNTIME, "episode"))
-
-    def test_30_300_31_32_reads_32(self):
-        item = self.anime()
-        row = self.track(item, d(2026, 2, 1))
-        for value, day in ((30, 2), (300, 3), (31, 4), (32, 5)):
-            self.type_number(row, value, d(2026, 2, day))
-        self.assert_years(0, 32, 32)
 
     def test_no_length_is_told_and_unknown(self):
         item = self.anime(runtime=None)
@@ -132,91 +125,8 @@ class SavesTests(AnimeCalcBase):
         self.assertEqual(self.lines(), ["2026-02-02 watched 3", "2026-02-01 started"])
 
 
-class LogTests(AnimeCalcBase):
-    """A log adds what's left, on its date."""
-
-    def test_logged_whole_on_feb_1(self):
-        item = self.anime()
-        self.log_it(item, d(2026, 2, 1))
-        self.assert_years(0, 12, 12)
-        self.assertEqual(self.lines(), ["2026-02-01 log +12"])
-
-    def test_logged_again(self):
-        item = self.anime()
-        self.log_it(item, d(2026, 2, 1))
-        self.log_it(item, d(2026, 3, 1), is_rewatch=True)
-        self.assert_years(0, 24, 24)
-
-    def test_5_of_12_then_a_phone_shaped_log(self):
-        item = self.anime()
-        row = self.track(item, d(2026, 2, 1))
-        self.type_number(row, 5, d(2026, 2, 2))
-        self.log_it(item, d(2026, 2, 3))
-        self.assert_years(0, 12, 12)
-        self.assertEqual(self.lines()[0], "2026-02-03 log +7")
-
-    def test_started_dec_1_3_episodes_jan_10_log_dec_20(self):
-        """The start is first activity, so the 3 stay on January 10."""
-        item = self.anime()
-        row = self.track(item, d(2025, 12, 1))
-        self.type_number(row, 3, d(2026, 1, 10))
-        self.log_it(item, d(2025, 12, 20), saved_on=d(2026, 1, 12))
-        self.assert_years(9, 3, 12)
-
-    def test_3_episodes_then_a_log_dated_before_the_start_moves_them(self):
-        item = self.anime()
-        row = self.track(item, d(2026, 3, 1))
-        self.type_number(row, 3, d(2026, 3, 10))
-        self.log_it(item, d(2025, 12, 20), saved_on=d(2026, 3, 12))
-        self.assert_years(12, 0, 12)
-        self.assertEqual(self.lines(), ["2025-12-20 log +12"])
-
-    def test_a_log_with_no_tracking_row_adds_nothing_and_is_unknown(self):
-        """A removed row's history names no title, and a log holds no number."""
-        item = self.anime()
-        row = self.track(item, d(2026, 2, 1), progress=12, status=Status.COMPLETED.value)
-        entry = self.log_it(item, d(2026, 2, 2))
-        with self.on(d(2026, 3, 1)):
-            row.delete()
-        self.assertTrue(DiaryEntry.objects.filter(pk=entry.pk).exists())
-        self.assert_years(0, 0, 0)
-        logged = self.calc().rows[0]
-        self.assertEqual((logged.log_id, logged.known), (entry.pk, False))
-
-    def test_a_private_log_adds_nothing_for_a_stranger(self):
-        item = self.anime()
-        row = self.track(item, d(2026, 2, 1))
-        self.type_number(row, 5, d(2026, 2, 2))
-        self.log_it(item, d(2026, 2, 3), visibility="private")
-        self.assert_years(0, 12, 12)
-        self.assert_years(0, 5, 5, viewer=self.stranger)
-
-
 class MarkTests(AnimeCalcBase):
     """Marks land in the pile and never make a row (decision 11)."""
-
-    def test_the_eye_through_the_api_holds_its_length_with_no_row(self):
-        item = self.anime()
-        with self.on(d(2026, 3, 1)):
-            tracking_service.consume_media(self.owner, source=item.source, media_type=ANIME, media_id=item.media_id)
-        self.assert_years(0, 0, 12)
-        self.assertEqual(self.lines(), [])
-        pile = piled(self.calc().piles, ANIME)
-        self.assertEqual(int(pile.told), 12)
-
-    def test_marked_then_logged_holds_both(self):
-        item = self.anime()
-        with self.on(d(2026, 3, 1)):
-            tracking_service.consume_media(self.owner, source=item.source, media_type=ANIME, media_id=item.media_id)
-        self.log_it(item, d(2026, 3, 2))
-        self.assert_years(0, 12, 24)
-
-    def test_a_completed_anime_with_no_length_is_a_pile_title_with_amount_0(self):
-        item = self.anime(runtime=None)
-        with self.on(d(2026, 3, 1)):
-            tracking_service.consume_media(self.owner, source=item.source, media_type=ANIME, media_id=item.media_id)
-        pile = piled(self.calc().piles, ANIME)
-        self.assertEqual((int(pile.amount), pile.titles, pile.known), (0, {item.pk}, set()))
 
     def test_a_tracking_row_with_progress_and_no_history_sits_in_the_pile(self):
         item = self.anime()
@@ -225,7 +135,7 @@ class MarkTests(AnimeCalcBase):
 
 
 class UnstampedRowsTests(AnimeCalcBase):
-    """Rows from before the stamps, or from a rollback, have an empty reason."""
+    """Rows with no change reason: anime_tracking's, and older ones."""
 
     def clear_reasons(self, row):
         Anime.history.filter(id=row.pk).update(history_change_reason=None)
@@ -244,15 +154,6 @@ class UnstampedRowsTests(AnimeCalcBase):
         self.clear_reasons(row)
         self.assert_years(0, 0, 12)
 
-    def test_completed_within_5_seconds_after_a_log_is_that_logs(self):
-        item = self.anime()
-        entry = self.log_it(item, d(2026, 2, 1))
-        row = Anime.objects.get(user=self.owner, item=item)
-        self.clear_reasons(row)
-        Anime.history.filter(id=row.pk).update(history_date=entry.created_at)
-        self.assert_years(0, 12, 12)
-        self.assertEqual(self.lines(), ["2026-02-01 log +12"])
-
     def test_a_first_row_far_from_the_tracking_rows_creation_came_from_a_file(self):
         item = self.anime()
         row = self.track(item, d(2026, 2, 1), progress=5)
@@ -260,10 +161,33 @@ class UnstampedRowsTests(AnimeCalcBase):
         Anime.history.filter(id=row.pk).update(history_date=datetime(2024, 5, 1, tzinfo=ZoneInfo(NEW_YORK)))
         self.assert_years(0, 0, 5)
 
-    def test_each_tracking_row_is_its_own_read(self):
-        item = self.anime()
-        first = self.track(item, d(2025, 2, 1))
-        self.type_number(first, 12, d(2025, 2, 2))
-        second = self.track(item, d(2026, 2, 1))
-        self.type_number(second, 4, d(2026, 2, 2))
-        self.assert_years(12, 4, 16)
+
+class AnimeTrackingWritesTests(AnimeTestCase):
+    """Anime's own writes (app/anime_tracking.py) stamp no reason on its history rows.
+
+    The adapter reads them at their moments and is wrong for anime until it reads
+    viewings, but neither it nor the comparison may fail on them.
+    """
+
+    def test_the_adapter_and_the_comparison_read_every_kind_of_write(self):
+        watched, marked, logged, removed, imported = (self.title(total=12) for _ in range(5))
+        self.tick(watched, 1, 2, 3)
+        anime_tracking.untick(self.user, watched, 3)
+        anime_tracking.mark_watched(self.user, watched)
+        anime_tracking.start_rewatch(self.user, watched)
+        self.tick(watched, 1)
+        anime_tracking.mark_watched(self.user, marked)
+        self.log(logged)
+        self.tick(removed, 1)
+        anime_tracking.remove(self.user, removed, mutation_id=str(uuid4()))
+        anime_tracking.import_title(self.user, imported, status=Status.IN_PROGRESS.value, count=5)
+
+        calculation = rows_for([self.user], self.user, types=[ANIME])
+        self.assertEqual(
+            {row.title_id for row in calculation.rows} | piled(calculation.piles, ANIME).titles,
+            {watched.pk, marked.pk, logged.pk, imported.pk},
+        )
+        printed = io.StringIO()
+        call_command("compare_activity_numbers", user=self.user.pk, stdout=printed)
+        self.assertNotIn("failed", printed.getvalue())
+        self.assertIn(f"user {self.user.pk} anime all:", printed.getvalue())

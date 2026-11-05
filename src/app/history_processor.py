@@ -26,25 +26,42 @@ SERIES_FACT_FIELDS = {
     "read_override_previous_attempt",
     "read_override_previous_place",
 }
+# What app.anime_tracking keeps on a title to work it out; not user edits either.
+ANIME_FACT_FIELDS = {
+    "rating_source",
+    "like_source",
+    "like_is_independent",
+    "choice",
+    "choice_at",
+    "ended_choice",
+    "ended_choice_at",
+    "rewatch_started_at",
+    "pass_number",
+    "earlier_question_at",
+    "log_offered_pass",
+}
 
 
 def _is_hidden_field(field_name, media_type):
     if media_type in (MediaTypes.MANGA.value, MediaTypes.COMIC.value):
         return field_name in SERIES_FACT_FIELDS
+    if media_type == MediaTypes.ANIME.value:
+        return field_name in ANIME_FACT_FIELDS
     return media_type == MediaTypes.EPISODE.value and field_name in EPISODE_FACT_FIELDS
 
 
 def process_history_entries(history_records, media_type, media_entry_number, user):
     """Process all history records into timeline entries."""
     timeline_entries = []
-    last = history_records.first()
+    # Newest first, each with the row before it. prev_record goes by date alone, so it skips
+    # a row dated the same moment and runs out before the rows do.
+    records = list(history_records)
 
-    for _ in range(history_records.count()):
-        entry = process_history_entry((last, last.prev_record), media_type, user)
+    for record, previous in zip(records, [*records[1:], None], strict=True):
+        entry = process_history_entry((record, previous), media_type, user)
         if entry["changes"]:
             entry["media_entry_number"] = media_entry_number
             timeline_entries.append(entry)
-        last = last.prev_record
 
     return timeline_entries
 

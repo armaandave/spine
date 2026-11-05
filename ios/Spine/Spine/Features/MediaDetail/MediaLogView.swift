@@ -100,7 +100,7 @@ final class MediaLogViewModel {
         favoriteDraft = LogFavoriteDraft(ref: detail.ref, detail: detail, mediaRepository: mediaRepository)
         let sittingMinutes = detail.sittingMinutes
         storedConsumedAt = LogStartDay.date(lengthMinutes: sittingMinutes, now: now)
-        if detail.ref.isTVFamily {
+        if detail.ref.isTVFamily || detail.ref.isAnime {
             // The server works out every default when the composer opens (TV-404), apart from an episode's start day;
             // the user's own picks win.
             tvDraft = (tvComposer ?? Self.pageComposer(of: detail)).flatMap {
@@ -277,6 +277,8 @@ final class MediaLogViewModel {
     /// A season log reads "Show · Season 1" (TV-404), whether it opened from the show page, the season page or the
     /// season-finish composer; a season's detail carries the show's title.
     var selectedTitle: String {
+        // One target, the title the page shows (AN-400).
+        if detail.ref.isAnime { return detail.displayTitle }
         if let tvDraft, ["tv", "season"].contains(detail.ref.mediaType), tvDraft.target.level == .season {
             return "\(detail.title) · \(tvDraft.target.title)"
         }
@@ -284,8 +286,10 @@ final class MediaLogViewModel {
         return "\(detail.title) \(TVTrackingPresentation.seasonTitle(selectedSeasonNumber))"
     }
 
-    /// An episode page's composer is the episode's; show and season pages carry theirs on `tv`.
+    /// An episode page's composer is the episode's; show and season pages carry theirs on `tv`, an anime title on
+    /// `anime` (AN-400).
     private static func pageComposer(of detail: MediaDetail) -> TVComposer? {
+        if detail.ref.isAnime { return detail.userState?.anime?.composer }
         guard let tv = detail.userState?.tv else { return nil }
         return tv.episode?.composer ?? tv.composer
     }
@@ -432,9 +436,9 @@ final class MediaLogViewModel {
     private func saveFinishedLog() async -> Bool {
         await performSave {
             guard !selectedRef.usesCalendarLogDate || !CalendarDateCodec.isFuture(consumedAt) else {
-                throw selectedRef.isTVFamily ? MediaLogError.futureLogDate : MediaLogError.futureDate
+                throw selectedRef.isTVFamily || selectedRef.isAnime ? MediaLogError.futureLogDate : MediaLogError.futureDate
             }
-            if selectedRef.isTVFamily {
+            if selectedRef.isTVFamily || selectedRef.isAnime {
                 return try await saveTVLog()
             }
             if selectedRef.mediaType == "game" {
@@ -506,7 +510,7 @@ final class MediaLogViewModel {
         }
     }
 
-    /// A TV log: a calendar date, the target's stars, Rewatch always sent, and one mutation ID
+    /// A TV or anime log: a calendar date, the target's stars, Rewatch always sent, and one mutation ID
     /// per composer session (TV-404, TV-407, TV-504, TV-705). The response's envelope goes back to the caller.
     private func saveTVLog() async throws -> MediaLogSaveResult {
         if let target = tvDraft?.target, !target.available {
@@ -584,7 +588,9 @@ final class MediaLogViewModel {
             return true
         } catch {
             // TV errors carry user copy, including the retryable "TV details are unavailable right now".
-            let tvMessage = selectedRef.isTVFamily || selectedRef.isSeries ? (error as? APIError)?.apiErrorMessage : nil
+            let tvMessage = selectedRef.isTVFamily || selectedRef.isSeries || selectedRef.isAnime
+                ? (error as? APIError)?.apiErrorMessage
+                : nil
             errorMessage = tvMessage ?? error.localizedDescription
             if case APIError.unauthorized = error {
                 onUnauthorized()

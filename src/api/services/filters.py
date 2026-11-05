@@ -34,7 +34,7 @@ from django.utils.dateparse import parse_date
 from requests import RequestException
 from rest_framework.exceptions import ValidationError
 
-from app import exposure, user_calendar
+from app import anime_titles, exposure, user_calendar
 from app.external_ratings import RATING_SOURCES, rating_source_is_exposed
 from app.models import (
     ExternalRating,
@@ -168,7 +168,7 @@ def apply_item_filters(queryset, params, *, item_path="item__"):
     """Apply shared Item-backed filters to a queryset."""
     query = params.get("q", "").strip()
     if query:
-        queryset = queryset.filter(**{f"{item_path}title__icontains": query})
+        queryset = queryset.filter(anime_titles.title_search(query, item_path))
 
     media_types = values(params, "media_type")
     if media_types:
@@ -676,6 +676,11 @@ def order_queryset(
     if field is None:
         field = sort_fields[default_sort]
 
+    if sort == "title" and field == f"{item_path}title":
+        # By the title shown: an anime's English one (AN-705).
+        shown = anime_titles.shown_title_order(item_path)
+        title_order = shown.desc() if descending else shown.asc()
+        return queryset.order_by(title_order, "-id" if descending else "id")
     if sort == "title":
         title_order = Lower(field).desc() if descending else Lower(field).asc()
         return queryset.order_by(title_order, "-id" if descending else "id")

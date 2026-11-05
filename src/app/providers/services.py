@@ -396,6 +396,14 @@ def api_request(
     raise RuntimeError("Unreachable rate-limit retry state")
 
 
+def is_rate_limited(error):
+    """Return whether a provider read failed on a rate limit (HTTP 429), raw or wrapped."""
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    return status == requests.codes.too_many_requests
+
+
 def get_media_metadata(
     media_type,
     media_id,
@@ -405,11 +413,14 @@ def get_media_metadata(
     *,
     include_music_enrichment=True,
     include_music_related=False,
+    timeout=None,
+    retry_rate_limits=True,
 ):
     """Return the metadata for the selected media.
 
     ``include_music_related`` also fills an Apple Music album page's related sections,
-    which only album pages show.
+    which only album pages show. ``timeout`` and ``retry_rate_limits`` bound an anime's
+    read from MAL, for callers that can't wait.
     """
     if source == Sources.MANUAL.value:
         if media_type == MediaTypes.SEASON.value:
@@ -420,12 +431,18 @@ def get_media_metadata(
             media_type = MediaTypes.TV.value
         return manual.metadata(media_id, media_type)
 
+    anime_limits = {}
+    if timeout is not None:
+        anime_limits["timeout"] = timeout
+    if not retry_rate_limits:
+        anime_limits["retry_rate_limits"] = False
+
     # Defensive handling: if a season is requested without season_numbers, fall back to TV
     if media_type == MediaTypes.SEASON.value and not season_numbers:
         return tmdb.tv(media_id)
 
     metadata_retrievers = {
-        MediaTypes.ANIME.value: lambda: mal.anime(media_id),
+        MediaTypes.ANIME.value: lambda: mal.anime(media_id, **anime_limits),
         MediaTypes.MANGA.value: lambda: (
             mangaupdates.manga(media_id)
             if source == Sources.MANGAUPDATES.value

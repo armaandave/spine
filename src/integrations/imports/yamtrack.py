@@ -7,6 +7,7 @@ from django.conf import settings
 from django.utils.dateparse import parse_datetime
 
 import app
+import app.forms
 from api.services.item_metadata import store_item_metadata
 from app import config, music_catalog
 from app.models import MediaTypes, Sources

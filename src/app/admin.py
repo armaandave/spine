@@ -276,6 +276,9 @@ SpecialModels = [
     "UserMessage",
     "TVListing",
     "TVMutation",
+    "AnimeListing",
+    "AnimeMark",
+    "AnimeViewing",
 ]
 for model in app_models:
     if (

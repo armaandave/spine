@@ -28,7 +28,7 @@ from api.serializers.profile import (
     profile_payload,
 )
 from api.services import tracking as tracking_service
-from app import book_tracking, exposure, tv_tracking
+from app import anime_tracking, book_tracking, exposure, tv_tracking
 from app.curation import prime_curated_artwork
 from app.models import MediaLike, MediaTypes
 from app.providers import services as provider_services
@@ -111,6 +111,8 @@ class LikedMediaView(APIView):
         item = self._item_for_ref(serializer.validated_data["ref"], create=True)
         if tv_tracking.supports(item):
             return Response(self._tv_like(request, item, liked=True))
+        if anime_tracking.supports(item):
+            return Response(self._anime_like(request, item, liked=True))
         try:
             set_media_like(request.user, item, liked=True)
         except book_tracking.BookTrackingConflict as error:
@@ -125,6 +127,10 @@ class LikedMediaView(APIView):
         item = self._item_for_ref(serializer.validated_data["ref"], create=False)
         if item is not None and tv_tracking.supports(item):
             payload = self._tv_like(request, item, liked=False)
+            payload.pop("media")
+            return Response(payload)
+        if item is not None and anime_tracking.supports(item):
+            payload = self._anime_like(request, item, liked=False)
             payload.pop("media")
             return Response(payload)
         if item is not None:
@@ -158,6 +164,21 @@ class LikedMediaView(APIView):
             "earlier_unwatched": envelope["earlier_unwatched"],
         }
 
+    @staticmethod
+    def _anime_like(request, item, *, liked):
+        """Set a title's heart (AN-301): not started it marks, partway it's a 409."""
+        result = tracking_service._call_tv(
+            anime_tracking.set_like,
+            request.user,
+            item,
+            liked,
+            entry_point=anime_tracking.APP,
+        )
+        envelope = tracking_service.anime_envelope(result)
+        media = media_summary_from_item(item, request=request, user=request.user)
+        media["user_state"]["anime"] = envelope["anime"]
+        return {"liked": liked, "media": media, "anime": envelope["anime"], "rows": envelope["rows"]}
+
     def _item_for_ref(self, ref, *, create):
         exposure.require_media_type(ref["media_type"])
         if tv_tracking.supports(ref["media_type"]):
@@ -167,6 +188,9 @@ class LikedMediaView(APIView):
                 ref.get("season_number"),
                 ref.get("episode_number"),
             )
+        if anime_tracking.supports(ref["media_type"]):
+            # A provider it can't reach is the retryable answer, as on any anime write.
+            return tracking_service.anime_item(ref["source"], ref["media_id"], create=create)
         item = find_item(ref)
         if item is not None or not create:
             return item

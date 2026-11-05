@@ -29,14 +29,17 @@ MANGA_MATCH_FRESH_TTL = 60 * 60 * 24
 MANGA_MATCH_STALE_TTL = 60 * 60 * 24 * 30
 MANGA_MATCH_FAILURE_TTL = 60 * 5
 PERSON_TTL = 60 * 60 * 24
-ANIME_CACHE_VERSION = "v6"
+ANIME_CACHE_VERSION = "v7"
+# A search's, a related row's or a recommendation's English title comes with the read that lists it (AN-705).
+ANIME_SEARCH_CACHE_VERSION = "v2"
+ANIME_NODE_FIELDS = "{node{alternative_titles}}"
 ANIME_POSTER_CACHE_VERSION = "v1"
 ANIME_POSTER_TTL = 60 * 60 * 24 * 30
 ANIME_CAST_CACHE_VERSION = "v1"
 ANIME_CAST_FRESH_TTL = 60 * 60 * 24
 ANIME_CAST_STALE_TTL = 60 * 60 * 24 * 30
 ANIME_CAST_FAILURE_TTL = 60 * 5
-ANIME_SERIES_CACHE_VERSION = "v2"
+ANIME_SERIES_CACHE_VERSION = "v3"
 ANIME_SERIES_FRESH_TTL = 60 * 60 * 24
 ANIME_SERIES_STALE_TTL = 60 * 60 * 24 * 30
 ANIME_SERIES_FAILURE_TTL = 60 * 5
@@ -108,14 +111,16 @@ def handle_error(error):
 def search(media_type, query, page, *, preserve_ranking_fields=False, timeout=None):
     """Search for media on MyAnimeList."""
     rank_suffix = "_rank" if preserve_ranking_fields else ""
-    cache_key = f"search_{Sources.MAL.value}_{media_type}_{query}_{page}{rank_suffix}"
+    is_anime = media_type == MediaTypes.ANIME.value
+    version = f"_{ANIME_SEARCH_CACHE_VERSION}" if is_anime else ""
+    cache_key = f"search_{Sources.MAL.value}_{media_type}_{query}_{page}{rank_suffix}{version}"
     data = cache.get(cache_key)
 
     if data is None:
         url = f"{base_url}/{media_type}"
         params = {
             "q": query,
-            "fields": "media_type,mean,num_scoring_users,start_date",
+            "fields": "media_type,mean,num_scoring_users,start_date" + (",alternative_titles" if is_anime else ""),
             "limit": settings.PER_PAGE,
         }
         if settings.MAL_NSFW:
@@ -144,6 +149,7 @@ def search(media_type, query, page, *, preserve_ranking_fields=False, timeout=No
                 "rating": media["node"].get("mean"),
                 "num_scoring_users": media["node"].get("num_scoring_users"),
                 "release_date": media["node"].get("start_date"),
+                **_anime_english_title(media["node"], media_type),
             }
             for media in response
         ]
@@ -847,7 +853,11 @@ def anime(media_id, *, timeout=None, retry_rate_limits=True):
     if data is None:
         url = f"{base_url}/anime/{media_id}"
         params = {
-            "fields": f"{base_fields},num_list_users,num_episodes,average_episode_duration,studios,start_season,broadcast,source,related_anime",  # noqa: E501
+            "fields": (
+                base_fields.replace(",recommendations", f",recommendations{ANIME_NODE_FIELDS}")
+                + ",num_list_users,num_episodes,average_episode_duration,studios,start_season,broadcast,source,"
+                + f"related_anime{ANIME_NODE_FIELDS}"
+            ),
         }
 
         try:
@@ -1292,10 +1302,12 @@ def _anime_series_item(metadata, position):
     details = metadata.get("details") or {}
     start_date = details.get("start_date")
     year = str(start_date)[:4] if start_date else None
+    media_format = metadata.get("series_format") or details.get("format")
+    episodes = details.get("episodes")
     subtitle = " · ".join(
         value
         for value in (
-            metadata.get("series_format") or details.get("format"),
+            media_format,
             year,
             f"{details['episodes']} episodes" if details.get("episodes") else None,
         )
@@ -1311,6 +1323,8 @@ def _anime_series_item(metadata, position):
         "release_date": start_date,
         "subtitle": subtitle or None,
         "position": position,
+        # A title whose total is one, or a movie with no total (AN-002).
+        "single": episodes == 1 or (not episodes and str(media_format or "").strip().lower() == "movie"),
     }
 
 
@@ -3483,6 +3497,7 @@ def get_related(related_medias, media_type):
                 "media_type": media_type,
                 "image": get_image_url(media["node"]),
                 **({"relation": relation} if (relation := _mal_relation(media)) else {}),
+                **_anime_english_title(media["node"], media_type),
             }
             for media in related_medias
         ]
@@ -3494,6 +3509,14 @@ def get_related(related_medias, media_type):
                 _cache_manga_poster(result["media_id"], result["image"])
         return results
     return []
+
+
+def _anime_english_title(node, media_type):
+    """Return a MAL node's English title as its display title, for an anime with one (AN-705)."""
+    if media_type != MediaTypes.ANIME.value:
+        return {}
+    english = get_english_title(node)
+    return {"display_title": english} if english else {}
 
 
 def _mal_relation(media):

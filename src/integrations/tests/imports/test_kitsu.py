@@ -60,12 +60,13 @@ class ImportKitsu(TestCase):
             self.user,
             "new",
         )
-        self.assertEqual(imported_counts[MediaTypes.ANIME.value], 6)
+        # One record per title; a rewatch is a finished earlier pass (AN-800).
+        self.assertEqual(imported_counts[MediaTypes.ANIME.value], 5)
         # One record per series; a reread is a finished attempt (MC-400).
         self.assertEqual(imported_counts[MediaTypes.MANGA.value], 5)
         self.assertEqual(warning_message, "")
 
-        self.assertEqual(Anime.objects.count(), 6)
+        self.assertEqual(Anime.objects.count(), 5)
         self.assertEqual(Manga.objects.count(), 5)
         self.assertEqual(
             Anime.objects.get(item__title="Test Anime 2").history.first().history_date,

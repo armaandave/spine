@@ -18,6 +18,7 @@ class WebhookProviderMocksMixin:
             patch("integrations.webhooks.movie.app.providers.tmdb.movie"),
             patch("integrations.webhooks.anime.app.providers.mal.anime"),
             patch("app.models.providers.services.get_media_metadata"),
+            patch("app.providers.anilist.anime_episodes", return_value={}),
             patch(
                 "integrations.webhooks.anime_mappings.fetch_mapping_data",
                 return_value={},
@@ -149,7 +150,7 @@ class WebhookProviderMocksMixin:
         }
 
     @staticmethod
-    def _mock_mal_anime(media_id):
+    def _mock_mal_anime(media_id, **_kwargs):
         metadata = {
             437: {"title": "Perfect Blue", "max_progress": 1},
             52991: {"title": "Frieren: Beyond Journey's End", "max_progress": 28},

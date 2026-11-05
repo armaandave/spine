@@ -74,6 +74,69 @@ query ($malIds: [Int]) {
 }
 """
 
+# What AniList calls a title that isn't finished or still to come.
+ANIME_UNDER_WAY = ("RELEASING", "HIATUS", "CANCELLED")
+# How a read fails: an error from the provider, a timeout, or an answer of the wrong shape.
+READ_FAILURES = (
+    services.ProviderAPIError,
+    requests.exceptions.RequestException,
+    AttributeError,
+    KeyError,
+    TypeError,
+    ValueError,
+)
+ANIME_EPISODES_QUERY = """
+query ($malIds: [Int], $page: Int) {
+  Page(page: $page, perPage: 25) {
+    pageInfo {
+      hasNextPage
+    }
+    media(idMal_in: $malIds, type: ANIME) {
+      id
+      idMal
+      status
+      title {
+        english
+      }
+      startDate {
+        year
+        month
+        day
+      }
+      nextAiringEpisode {
+        episode
+        airingAt
+      }
+      airingSchedule(notYetAired: true, perPage: 50) {
+        nodes {
+          episode
+          airingAt
+        }
+      }
+      streamingEpisodes {
+        title
+        thumbnail
+      }
+      relations {
+        edges {
+          relationType
+          node {
+            startDate {
+              year
+              month
+              day
+            }
+            streamingEpisodes {
+              title
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 STUDIO_ANIME_QUERY = """
 query (
   $studioId: Int!
@@ -711,6 +774,199 @@ def anime_series_nodes(mal_ids, *, timeout=REQUEST_TIMEOUT):
                     "series_links": _series_links(node),
                 }
     return results
+
+
+def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
+    """Return what AniList says about MAL anime IDs' episodes, by MAL ID as text.
+
+    One request per 25 titles, never one per episode, and one more for those on a break.
+    Each value is {"next": {"episode", "airing_at"} or None, "schedule": {episode: airing
+    Unix seconds}, "episodes": {episode: {"title", "image"}}}, and for a title on a break
+    "last_aired": {"episode", "airing_at"} or None. A title AniList doesn't have is left out.
+    A title whose read failed has None, so a failure costs only the titles it was for.
+    """
+
+    def post(params):
+        return services.api_request(
+            "ANILIST",
+            "POST",
+            API_URL,
+            params=params,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=timeout or REQUEST_TIMEOUT,
+            retry_rate_limits=retry_rate_limits,
+        )
+
+    ids = sorted({int(value) for value in mal_ids if str(value).isdigit()})
+    results = {}
+    for offset in range(0, len(ids), 25):
+        chunk = ids[offset : offset + 25]
+        on_a_break = {}
+        page = 1
+        try:
+            while True:
+                response = post({"query": ANIME_EPISODES_QUERY, "variables": {"malIds": chunk, "page": page}})
+                connection = (response.get("data") or {}).get("Page") or {}
+                for media in connection.get("media") or []:
+                    if media.get("idMal"):
+                        results[str(media["idMal"])] = _anime_episodes(media)
+                        if _is_on_a_break(media):
+                            on_a_break[int(media["id"])] = str(media["idMal"])
+                # A full page reports a next one even with nothing left to ask for.
+                answered = all(str(mal_id) in results for mal_id in chunk)
+                if answered or not (connection.get("pageInfo") or {}).get("hasNextPage"):
+                    break
+                page += 1
+        except READ_FAILURES:
+            # AniList is down or hanging, so the chunks still to come aren't asked either.
+            logger.warning("AniList can't be read for %s titles", len(ids) - offset, exc_info=True)
+            results.update(dict.fromkeys(on_a_break.values()))
+            for mal_id in ids[offset:]:
+                results.setdefault(str(mal_id))
+            break
+        if on_a_break:
+            try:
+                answers = post({"query": _last_aired_query(on_a_break)})["data"]
+                for anilist_id, mal_id in on_a_break.items():
+                    results[mal_id]["last_aired"] = _last_aired(answers, anilist_id)
+            except READ_FAILURES:
+                # Without it a title on a break would read as one with no schedule at all,
+                # so its copy is better kept.
+                logger.warning("AniList's last aired entries can't be read", exc_info=True)
+                results.update(dict.fromkeys(on_a_break.values()))
+    return results
+
+
+ANIME_TITLES_QUERY = """
+query ($malIds: [Int]) {
+  Page(page: 1, perPage: 25) {
+    media(idMal_in: $malIds, type: ANIME) {
+      idMal
+      title {
+        english
+      }
+    }
+  }
+}
+"""
+
+
+def anime_english_titles(mal_ids, *, timeout=None):
+    """Return {MAL ID as text: AniList's English title or None} for up to 25 titles at once.
+
+    A title AniList doesn't have is left out. A failed request raises, a rate limit at once:
+    the job that reads this holds up a worker.
+    """
+    ids = [int(value) for value in mal_ids if str(value).isdigit()][:25]
+    response = services.api_request(
+        "ANILIST",
+        "POST",
+        API_URL,
+        params={"query": ANIME_TITLES_QUERY, "variables": {"malIds": ids}},
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        timeout=timeout or REQUEST_TIMEOUT,
+        retry_rate_limits=False,
+    )
+    return {
+        str(media["idMal"]): (media.get("title") or {}).get("english") or None
+        for media in response["data"]["Page"]["media"]
+        if media.get("idMal")
+    }
+
+
+def _is_on_a_break(media):
+    """Return whether a title is under way with nothing named next (AN-100)."""
+    return (
+        media.get("status") in ANIME_UNDER_WAY
+        and media.get("id")
+        and not media.get("nextAiringEpisode")
+        and not (media.get("airingSchedule") or {}).get("nodes")
+    )
+
+
+def _last_aired_query(anilist_ids):
+    """Return one query for each title's last schedule entry that has aired.
+
+    A title's own airingSchedule lists from its first episode, 25 at a time, so a long
+    runner's last entry takes the schedule's own query.
+    """
+    aliases = " ".join(
+        f"a{anilist_id}: Page(page: 1, perPage: 1) {{ airingSchedules(mediaId: {anilist_id}, "
+        "notYetAired: false, sort: EPISODE_DESC) { episode airingAt } }"
+        for anilist_id in anilist_ids
+    )
+    return f"query {{ {aliases} }}"
+
+
+def _last_aired(answers, anilist_id):
+    entries = (answers.get(f"a{anilist_id}") or {}).get("airingSchedules") or []
+    if not entries or not entries[0].get("episode") or not entries[0].get("airingAt"):
+        return None
+    return {"episode": entries[0]["episode"], "airing_at": entries[0]["airingAt"]}
+
+
+def _anime_episodes(media):
+    next_airing = media.get("nextAiringEpisode") or {}
+    schedule = {
+        node["episode"]: node["airingAt"]
+        for node in (media.get("airingSchedule") or {}).get("nodes") or []
+        if node.get("episode") and node.get("airingAt")
+    }
+    episodes = {}
+    own_list = () if _list_is_an_earlier_titles(media) else media.get("streamingEpisodes") or ()
+    for streaming in own_list:
+        number, title = parse_episode_title(streaming.get("title"))
+        # Order isn't guaranteed, and a title can come once per streaming site.
+        if number is not None and number not in episodes:
+            episodes[number] = {"title": title, "image": streaming.get("thumbnail") or None}
+    return {
+        "next": (
+            {"episode": next_airing["episode"], "airing_at": next_airing.get("airingAt")}
+            if next_airing.get("episode")
+            else None
+        ),
+        "schedule": schedule,
+        "episodes": episodes,
+        # The title Spine shows when MAL has no English one (AN-705).
+        "english_title": (media.get("title") or {}).get("english") or None,
+    }
+
+
+def _list_titles(media):
+    return {streaming.get("title") for streaming in media.get("streamingEpisodes") or []} - {None}
+
+
+def _started(media):
+    """Return when a title started, to compare; an unknown part sorts as late as it can."""
+    start = media.get("startDate") or {}
+    return (start.get("year") or 9999, start.get("month") or 12, start.get("day") or 31)
+
+
+def _list_is_an_earlier_titles(media):
+    """Return whether a title's episode list is one a title before it has (AN-101).
+
+    AniList files one list under every season of a series, so Kaguya-sama's second and third
+    seasons list the first's episodes. Only a prequel that came out first counts: Attack on
+    Titan's later OVA has Season 1's list and is filed as its prequel, and it's Season 1's.
+    """
+    own = _list_titles(media)
+    for edge in (media.get("relations") or {}).get("edges") or []:
+        prequel = edge.get("node") or {}
+        if edge.get("relationType") != "PREQUEL" or _started(prequel) >= _started(media):
+            continue
+        theirs = _list_titles(prequel)
+        shared = own & theirs
+        if shared and (shared == own or shared == theirs):
+            return True
+    return False
+
+
+def parse_episode_title(value):
+    """Return (episode number, title) from AniList's "Episode 5 - Title", or (None, "")."""
+    match = re.match(r"^\s*(?:episode|ep\.?)\s*(\d+)\b[\s\-–—:.]*(.*)$", str(value or ""), re.IGNORECASE)
+    if match is None:
+        return None, ""
+    return int(match.group(1)), match.group(2).strip()
 
 
 def studio_anime_ids(

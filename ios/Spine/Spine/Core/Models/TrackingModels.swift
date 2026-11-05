@@ -105,6 +105,9 @@ struct TrackingState: Codable, Equatable {
     var tv: TVShowState? = nil
     /// A manga's or a comic's reading state: the book's shape, plus its total (MC-000). Read it through `reading`.
     var series: BookTrackingState? = nil
+    /// An anime title's list state, from stored values (AN-700, AN-701). Nil for other media types, or when it can't be
+    /// read: one bad state doesn't cost Home's rail every other title.
+    @LossyAnimeValue var anime: AnimeState? = nil
 
     init(
         trackingId: Int,
@@ -126,7 +129,8 @@ struct TrackingState: Codable, Equatable {
         book: BookTrackingState? = nil,
         game: GameTrackingState? = nil,
         tv: TVShowState? = nil,
-        series: BookTrackingState? = nil
+        series: BookTrackingState? = nil,
+        anime: AnimeState? = nil
     ) {
         self.trackingId = trackingId
         self.status = status
@@ -148,6 +152,7 @@ struct TrackingState: Codable, Equatable {
         self.game = game
         self.tv = tv
         self.series = series
+        self.anime = anime
     }
 
     /// The reading state of a book, a manga or a comic.
@@ -176,7 +181,8 @@ struct TrackingState: Codable, Equatable {
             book: book,
             game: game,
             tv: tv,
-            series: series
+            series: series,
+            anime: anime
         )
     }
 }

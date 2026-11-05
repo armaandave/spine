@@ -32,6 +32,7 @@ class EmbyWebhookTests(TestCase):
             patch("integrations.webhooks.movie.app.providers.tmdb.movie"),
             patch("integrations.webhooks.anime.app.providers.mal.anime"),
             patch("app.models.providers.services.get_media_metadata"),
+            patch("app.providers.anilist.anime_episodes", return_value={}),
             patch(
                 "integrations.webhooks.tv.anime_mappings.fetch_mapping_data",
                 return_value={},
@@ -136,7 +137,7 @@ class EmbyWebhookTests(TestCase):
         }
         return {"title": titles[media_id], "image": f"{media_id}.jpg", "max_progress": 1}
 
-    def _mock_mal_anime(self, media_id):
+    def _mock_mal_anime(self, media_id, **_kwargs):
         metadata = {
             437: {"title": "Perfect Blue", "max_progress": 1},
             52991: {"title": "Frieren: Beyond Journey's End", "max_progress": 28},

@@ -97,6 +97,17 @@ nonisolated enum TVTrackingPresentation {
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
+    /// The `YYYY-MM-DD` a show or an anime title started on `calendar`. A tick starts it at a moment, whose day is the
+    /// user's, not the first ten characters of what the server sends. A log's day is already a day: it comes plain or at
+    /// UTC midnight, and keeps it (TV-407).
+    static func startDay(_ value: String, calendar: Calendar = .autoupdatingCurrent) -> String {
+        guard value.contains("T"), let moment = FeaturedDate.parse(value) else { return String(value.prefix(10)) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        if utc.startOfDay(for: moment) == moment { return calendarString(moment, calendar: utc) }
+        return calendarString(moment, calendar: calendar)
+    }
+
     /// The `YYYY-MM-DD` of `date` on `calendar`.
     static func calendarString(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
@@ -277,10 +288,10 @@ nonisolated enum TVTrackingPresentation {
         }
     }
 
-    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Rewatch or Stop
-    /// Rewatching, Log, and Remove from Library for a show in the library. Base options are always listed;
-    /// unavailable ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever
-    /// the server sends.
+    /// The show's + menu: Watching (Resume in its place when Paused), Planning, Pause, Drop, Log, Rewatch or Stop
+    /// Rewatching, and Remove from Library for a show in the library. Base options are always listed; unavailable
+    /// ones carry the server's reason. A show that isn't in the library has nothing to remove, whatever the server
+    /// sends. Rewatch comes after Log because it appears when the show finishes.
     static func showMenu(for tv: TVShowState) -> [TVMenuItem] {
         var items: [TVMenuItem] = []
         let menu = MenuSource(available: tv.availableActions, reasons: tv.actionReasons, selected: tv.selectedAction)
@@ -294,14 +305,46 @@ nonisolated enum TVTrackingPresentation {
         items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
         items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
         items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+        items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
             items.append(rewatch)
         }
         if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
             items.append(stop)
         }
-        items.append(menu.item("log", "Log", "square.and.pencil", .log))
         if tv.inLibrary {
+            items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
+        }
+        return items
+    }
+
+    /// An anime title's + menu (TV-005, AN-000): the show's, with Rewatch or Stop Rewatching as one row. A single has
+    /// Planning, Log and Remove from Library (AN-002).
+    static func animeMenu(for anime: AnimeState) -> [TVMenuItem] {
+        let menu = MenuSource(available: anime.availableActions, reasons: anime.actionReasons, selected: anime.selectedAction)
+        var items: [TVMenuItem] = []
+        if !anime.single {
+            if anime.status == "Paused" {
+                items.append(menu.optionalItem("resume", "Resume", "play.fill", .action(.resume))
+                    ?? menu.item("watching", "Resume", "play.fill", .action(.watching)))
+            } else {
+                items.append(menu.item("watching", "Watching", "play.fill", .action(.watching)))
+            }
+        }
+        items.append(menu.item("planning", "Planning", "bookmark", .action(.planning)))
+        if !anime.single {
+            items.append(menu.item("pause", "Pause", "pause.fill", .action(.pause)))
+            items.append(menu.item("drop", "Drop", "xmark", .confirmDrop))
+        }
+        items.append(menu.item("log", "Log", "square.and.pencil", .log))
+        if !anime.single {
+            if let stop = menu.optionalItem("stop_rewatch", "Stop Rewatching", "stop.fill", .action(.stopRewatch)) {
+                items.append(stop)
+            } else if let rewatch = menu.optionalItem("rewatch", "Rewatch", "arrow.counterclockwise", .action(.rewatch)) {
+                items.append(rewatch)
+            }
+        }
+        if anime.inLibrary {
             items.append(menu.item("remove", "Remove from Library", "trash", .confirmRemove))
         }
         return items
@@ -352,6 +395,31 @@ nonisolated enum TVTrackingPresentation {
             guard available.contains(key) || reasons[key] != nil || selected == key else { return nil }
             return item(key, title, systemImage, command)
         }
+    }
+}
+
+/// The rows an open + menu shows (TV-005): the ones it opened with. The sheet sizes to its rows and grows upward, so a
+/// row a write adds while it's open, such as Rewatch Season after a finale's tick or Remove from Library after a first
+/// tick, or a reason that comes or goes, would move the others under the finger. The menu shows the change the next
+/// time it opens.
+nonisolated struct TVMenuRows: Equatable {
+    private(set) var opened: [TVMenuItem]?
+    private(set) var committed: [TVMenuItem]?
+
+    var isCommitted: Bool { committed != nil }
+
+    func shown(live: [TVMenuItem]) -> [TVMenuItem] {
+        committed ?? opened ?? live
+    }
+
+    mutating func open(_ live: [TVMenuItem]) {
+        if opened == nil { opened = live }
+    }
+
+    /// A choice was made: the rows on screen stay while the sheet slides away.
+    mutating func commit(_ live: [TVMenuItem]) {
+        guard committed == nil else { return }
+        committed = shown(live: live)
     }
 }
 

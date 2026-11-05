@@ -295,8 +295,9 @@ class MALExportImporterTests(TestCase):
         rewatch = Anime.objects.get(user=self.user, item__media_id="457")
         self.assertEqual(rewatch.status, Status.IN_PROGRESS.value)
         self.assertEqual(rewatch.progress, 5)
+        # A finish date further out than a time zone isn't real (AN-800).
         future = Anime.objects.get(user=self.user, item__media_id="9253")
-        self.assertEqual(future.end_date, datetime(2099, 1, 1, tzinfo=UTC))
+        self.assertIsNone(future.end_date)
 
     def test_diary_only_for_completed_dated_entries(self, *_mocks):
         self._import()
@@ -397,8 +398,8 @@ class MALExportImporterTests(TestCase):
         )
         Anime.objects.bulk_create(
             [
+                # One record per title (AN-800).
                 Anime(user=self.user, item=bebop, status=Status.PLANNING.value),
-                Anime(user=self.user, item=bebop, status=Status.COMPLETED.value),
                 Anime(user=self.user, item=untouched, status=Status.DROPPED.value),
             ],
         )

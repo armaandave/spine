@@ -39,6 +39,7 @@ NAMING = {
     "api/services/activity_rows.py",
     "api/services/stats_scope.py",
     "api/services/tracking.py",
+    "app/anime_tracking.py",
     "app/book_tracking.py",
     "app/game_tracking.py",
     "app/management/commands/compare_activity_numbers.py",
@@ -53,6 +54,7 @@ NAMING = {
 # Every place a progress change is written.
 WRITERS = {
     "api/services/tracking.py": ["ProgressChange.objects.create"],
+    "app/anime_tracking.py": ["ProgressChange.objects.create"],
     "app/book_tracking.py": ["ProgressChange.objects.create"],
     "app/game_tracking.py": ["ProgressChange.objects.create"],
     "app/series_tracking.py": ["ProgressChange.objects.create"],
@@ -284,7 +286,8 @@ class WriterDayTests(TestCase):
                 series_tracking.update_progress(user, item, value=5)
                 self.assertEqual(self.days(user, item), [day, day])
 
-    def test_an_anime_start_and_save_through_the_generic_writer(self):
+    def test_an_anime_start_and_save_through_the_tracking_service(self):
+        """The service hands anime to app/anime_tracking.py: Watching, then ticks."""
         for user, day in ((self.new_york, DEC_31), (self.tokyo, JAN_1)):
             item = self.item(MediaTypes.ANIME.value)
             Anime.objects.create(user=user, item=item, status=Status.PLANNING.value)

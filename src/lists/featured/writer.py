@@ -173,6 +173,7 @@ def _metadata_match(match):
         title=match.title or metadata.get("title") or metadata.get("name") or "",
         image=match.image or metadata.get("image") or settings.IMG_NONE,
         total_pages=match.total_pages or metadata.get("max_progress") or metadata.get("total_pages"),
+        display_title=match.display_title or metadata.get("display_title") or "",
     )
 
 
@@ -310,6 +311,7 @@ def _new_item(entry, match):
         image=image,
         release_year=_safe_year(match.year or entry.year),
         total_pages=match.total_pages if match.media_type == MediaTypes.BOOK.value else None,
+        display_title=match.display_title if match.media_type == MediaTypes.ANIME.value else "",
     )
 
 

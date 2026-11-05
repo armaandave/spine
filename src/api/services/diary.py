@@ -15,7 +15,13 @@ from api.serializers.common import (
     user_summary,
 )
 from api.services import tracking as tracking_service
-from app import series_tracking, single_weight, tv_tracking, user_calendar
+from app import (
+    anime_tracking,
+    series_tracking,
+    single_weight,
+    tv_tracking,
+    user_calendar,
+)
 from app.models import Item, MediaLike, MediaTypes, Sources, Tag, TVListing
 from app.providers import services as provider_services
 from app.services import create_diary_entry, update_diary_entry
@@ -43,6 +49,13 @@ def tv_write_payload(tv_write, data, *, created):
     if "season_episodes" in envelope:
         payload["season_episodes"] = envelope["season_episodes"]
     return payload
+
+
+def anime_write_payload(anime_write, *, created):
+    """Return the anime keys a log's create or update response adds."""
+    envelope = tracking_service.anime_envelope(anime_write)
+    keys = ("anime", "rows", "finished", "earlier_unwatched") if created else ("anime", "rows")
+    return {key: envelope[key] for key in keys}
 
 
 def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
@@ -112,6 +125,10 @@ def diary_payload(entry, request=None, viewer=None, *, include_tv_log=False):
 
         snapshot = entry.progress_snapshot or {}
         payload.update({"game_playthrough_id": session.pk if session else None, "total_minutes": snapshot.get("total_minutes"), "percentage": game_tracking.whole_percentage(snapshot.get("percentage")), "percentage_exact": snapshot.get("percentage")})
+    if include_tv_log and anime_tracking.supports(entry.item):
+        # What the log covers and would unmark, for its owner only (TV-406).
+        owner = viewer is not None and viewer.is_authenticated and viewer.pk == entry.user_id
+        payload["anime_log"] = anime_tracking.log_info(entry) if owner else None
     return payload
 
 
@@ -280,11 +297,13 @@ def create_entry(user, data):
     return entry
 
 
-def _create_entry(user, data):
+def _create_entry(user, data):  # noqa: C901
     """Create a diary entry from API payload."""
     ref = data["ref"]
     if tv_tracking.supports(ref["media_type"]):
         return _create_tv_entry(user, data)
+    if anime_tracking.supports(ref["media_type"]):
+        return _create_anime_entry(user, data)
     metadata = provider_services.get_media_metadata(
         ref["media_type"],
         ref["media_id"],
@@ -472,6 +491,59 @@ def _create_tv_entry(user, data):
     return entry
 
 
+def _create_anime_entry(user, data):
+    """Save an anime log through anime_tracking.create_log (AN-400, AN-900).
+
+    auto_mark_consumed is ignored: every log means finished. A date or datetime becomes
+    the user's calendar date, and a future one is a 400. Installed builds send a
+    datetime and no mutation ID; they get the server's rules but no log screen
+    (LEGACY_APP).
+    """
+    ref = data["ref"]
+    item = tracking_service.anime_item(ref["source"], ref["media_id"])
+    consumed_at = data.get("consumed_at")
+    installed_build = isinstance(consumed_at, datetime) and not data.get("mutation_id")
+    result = tracking_service._call_tv(
+        anime_tracking.create_log,
+        user,
+        item,
+        consumed_at=consumed_at,
+        rating=_stored_rating(data.get("rating"), ref["media_type"]),
+        review=data.get("review", ""),
+        liked=data.get("liked"),
+        is_rewatch=data.get("is_rewatch"),
+        tags=data.get("tags") or [],
+        review_title=data.get("review_title", ""),
+        contains_spoilers=data.get("contains_spoilers", False),
+        visibility=data.get("visibility", "public"),
+        entry_point=anime_tracking.LEGACY_APP if installed_build else anime_tracking.APP,
+        mutation_id=data.get("mutation_id"),
+    )
+    entry = result.entry
+    if entry is None:
+        # A repeated mutation whose log has since been deleted.
+        raise NotFound
+    entry.anime_write = result
+    return entry
+
+
+def _update_anime_entry(entry, data, tags):
+    """Edit an anime log through anime_tracking.update_log (TV-405, TV-407)."""
+    payload = {key: value for key, value in data.items() if key in TV_LOG_FIELDS}
+    if "rating" in payload:
+        payload["rating"] = _stored_rating(payload["rating"], entry.item.media_type)
+    result = tracking_service._call_tv(
+        anime_tracking.update_log,
+        entry,
+        payload,
+        tags=tags,
+        entry_point=anime_tracking.APP,
+    )
+    updated = result.entry or entry
+    updated.anime_write = result
+    return updated
+
+
 def _update_tv_entry(entry, data, tags):
     """Edit a TV log through tv_tracking.update_log (TV-405, TV-407, TV-501, TV-502)."""
     payload = {key: value for key, value in data.items() if key in TV_LOG_FIELDS}
@@ -507,6 +579,8 @@ def _update_entry(entry, data, tags):
     """Apply an update's log fields through the media type's own rules."""
     if tv_tracking.supports(entry.item):
         return _update_tv_entry(entry, data, tags)
+    if anime_tracking.supports(entry.item):
+        return _update_anime_entry(entry, data, tags)
     if single_weight.uses_half_star_rating(entry.item):
         try:
             if "rating" in data:

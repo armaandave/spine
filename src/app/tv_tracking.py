@@ -128,6 +128,13 @@ MSG_NO_DATES = "Progress and dates are worked out from what you watched."
 MSG_SEASON_CHOICE = "Pause, drop or plan the show instead."
 MSG_NOT_TV = "This isn't a TV show, season or episode."
 MSG_NOT_YOURS = "You can only change your own logs."
+MSG_LOG_FIRST = "Log this first."
+
+# What stars and the heart do at a level, sent as opinion_action (TV-303, TV-304): mark
+# something not started, need a log when it's partway, or only save.
+OPINION_MARK = "mark"
+OPINION_LOG = "log"
+OPINION_SAVE = "save"
 
 TV_WRITE_ONLY_FIELDS = (
     "progress",
@@ -188,6 +195,13 @@ class TVLogBlocks(TVConflict):
     """An untick, eye, Remove or season delete that a log blocks (API 409)."""
 
     default_code = "tv_log_blocks"
+
+
+class TVLogFirst(TVConflict):
+    """Stars or a heart set directly on something partway (TV-304): log it first."""
+
+    def __init__(self, message=MSG_LOG_FIRST, code=None, extra=None):
+        super().__init__(message, code, extra)
 
 
 class TVStateChanged(TVConflict):
@@ -1277,9 +1291,18 @@ def _raw_delete(queryset):
     return queryset._raw_delete(queryset.db)
 
 
+def _locked_tv(user, show_item):
+    """Lock and return the user's TV row, and only it (TV-705).
+
+    Meta's ordering would join the show and the user, and FOR UPDATE would lock those
+    too, so one person's write would hold up everyone else's on the same show.
+    """
+    return TV.objects.select_for_update(of=("self",)).filter(user=user, item=show_item).order_by("pk").first()
+
+
 def _create_tv(user, show_item):
     """Create the user's TV row (inside the lock). Return (tv, created)."""
-    existing = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+    existing = _locked_tv(user, show_item)
     if existing is not None:
         return existing, False
     snapshots = DiaryEntry.objects.filter(_family(show_item), user=user).values_list(
@@ -1437,7 +1460,7 @@ def _run_locked(
     season_number,
     episode_number,
 ):
-    tv = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+    tv = _locked_tv(user, show_item)
     if mutation_id is not None:
         replay = _replay(user, show_item, mutation_id, action)
         if replay is not None:
@@ -1844,7 +1867,7 @@ def reconcile_show(tv, *, entry_point, listing=None):
 
 def _lock_and_reconcile(tv_id, *, entry_point, listing=None):
     with _writing(), transaction.atomic():
-        tv = TV.objects.select_for_update().select_related("item", "user").filter(pk=tv_id).first()
+        tv = TV.objects.select_for_update(of=("self",)).select_related("item", "user").filter(pk=tv_id).first()
         if tv is None or (tv.legacy_pending and entry_point not in WORKING_OUT):
             return None
         before = (tv.status, tv.up_next_season, tv.up_next_episode, tv.caught_up)
@@ -3289,14 +3312,52 @@ def delete_season_tracking(user, show_item, season_number, *, entry_point=APP, m
 # ---------------------------------------------------------------------------------
 
 
+def _opinion_action(calc, season_number):
+    """Return what stars or a heart do at this level now (TV-303, TV-304).
+
+    Nothing aired, or the eye filled (finished or caught up): they only save. Not started:
+    they mark it. Started with the eye empty, which is partway: they need its log.
+    """
+    if season_number is None:
+        aired, eye_filled, started = bool(calc.regular_aired), calc.all_watched, calc.started
+    else:
+        season = calc.seasons.get(season_number)
+        aired = bool(season and season.aired)
+        eye_filled = bool(season and season.all_watched)
+        started = bool(season and season.started)
+    if not aired or eye_filled:
+        return OPINION_SAVE
+    return OPINION_LOG if started else OPINION_MARK
+
+
+def _apply_opinion_action(ctx, season_number, *, unchanged):
+    """Do what setting stars or a heart does at this level; return the mark's outcome.
+
+    unchanged is True when the value is already set, which refuses nothing. Imports never
+    open anything, so on something partway they only set the value (TV-800).
+    """
+    action = _opinion_action(ctx.calc, season_number)
+    if action == OPINION_LOG and not unchanged and ctx.entry_point != IMPORT:
+        raise TVLogFirst
+    if action == OPINION_MARK:
+        return _mark_for_opinion(ctx, season_number)
+    return {"changed": False}
+
+
 def _mark_for_opinion(ctx, season_number):
-    """Mark an unstarted show (season None) or one of its seasons for stars or a heart."""
+    """Mark an unstarted show (season None) or season for stars or a heart (TV-303).
+
+    A season can be unstarted in a started show; TV-107 then asks about the earlier
+    episodes whether or not the show's first write has been made (TV-303, A-30).
+    """
     calc = ctx.calc
     positions = _level_positions(calc, season_number)
     target = None
+    first = None
     if season_number is not None and season_number >= 1 and positions:
         target = positions[0]
-    return _do_mark(ctx, positions, target=target)
+        first = True
+    return _do_mark(ctx, positions, target=target, first=first)
 
 
 def _opinion_row(ctx, season_number, *, create):
@@ -3308,13 +3369,6 @@ def _opinion_row(ctx, season_number, *, create):
     if row is None and create:
         row = ctx.season_row(season_number, status=PLANNING)
     return row
-
-
-def _level_aired(calc, season_number):
-    if season_number is None:
-        return bool(calc.regular_aired)
-    season = calc.seasons.get(season_number)
-    return bool(season and season.aired)
 
 
 def _stars_unavailable(calc, season_number):
@@ -3342,8 +3396,12 @@ def _do_set_rating(ctx, season_number, rating):
         reason = _stars_unavailable(calc, season_number)
         if reason is not None:
             raise TVConflict(reason)
-        if not calc.started:
-            outcome = _mark_for_opinion(ctx, season_number)
+        current = _opinion_row(ctx, season_number, create=False)
+        outcome = _apply_opinion_action(
+            ctx,
+            season_number,
+            unchanged=current is not None and current.score == rating,
+        )
     row = _opinion_row(ctx, season_number, create=rating is not None)
     if row is None:
         return outcome
@@ -3363,10 +3421,11 @@ def _do_set_rating(ctx, season_number, rating):
 def set_rating(user, item, rating, *, entry_point=APP, mutation_id=None):
     """Set or clear the stars of a show or season (TV-303, TV-304, TV-501).
 
-    rating is the 0-10 wire value (whole 1-10 from the app and API) or None. On a show
-    the user hasn't started, stars mark the show (or that season) watched in the same
-    step; on a started show they are opinion only. Direct stars are independent of any
-    log and create rating activity (SW-401).
+    rating is the 0-10 wire value (whole 1-10 from the app and API) or None. Not started,
+    stars mark that show or season watched in the same step; partway they are refused
+    (TVLogFirst), because the log screen sets them; finished or caught up they only save.
+    Clearing is only that. Direct stars are independent of any log and create rating
+    activity (SW-401).
     """
     rating = _validate_rating(rating, entry_point)
     show_item = _resolve_show_item(item)
@@ -3406,8 +3465,8 @@ def _do_set_like(ctx, level, season_number, episode_number, liked, item_id):
             outcome["changed"] = True
             ctx.changed = True
         return outcome
-    if liked and not calc.started and _level_aired(calc, season_number):
-        outcome = _mark_for_opinion(ctx, season_number)
+    if liked:
+        outcome = _apply_opinion_action(ctx, season_number, unchanged=ctx.facts.liked(level, season_number))
     row = ctx.tv if season_number is None else ctx.facts.seasons.get(season_number)
     if row is not None and row.pk is not None:
         if season_number is None:
@@ -3434,9 +3493,9 @@ def _do_set_like(ctx, level, season_number, episode_number, liked, item_id):
 def set_like(user, item, liked, *, entry_point=APP, mutation_id=None):
     """Turn the heart of a show, season or episode on or off (TV-303 to TV-305, TV-501).
 
-    On a show the user hasn't started, a heart on the show or a season marks it
-    watched; an episode heart marks an aired episode with no viewing in any pass
-    watched. Otherwise a heart is opinion only, and turning it off never unmarks.
+    On a show or season not started, a heart marks it watched; partway it is refused
+    (TVLogFirst); finished or caught up it only saves. An episode heart marks an aired
+    episode with no viewing in any pass watched. Turning it off is only that.
     """
     liked = bool(liked)
     show_item = _resolve_show_item(item)
@@ -3548,6 +3607,9 @@ def apply_written_state(user, item, data, *, entry_point, mutation_id=None):
 def _quiet(function):
     try:
         return function()
+    except TVLogFirst:
+        # The refusal is the answer here too: the web shows it (TV-304).
+        raise
     except (TVConflict, TVInvalid) as error:
         logger.info("Ignored a TV written value: %s", getattr(error, "message", error))
         return None
@@ -4156,7 +4218,7 @@ def reconcile_imported(user, show_items, *, overwritten_show_item_ids=()):
         try:
             items = _all_items(show_item, listing, user)
             with _writing(), transaction.atomic():
-                tv = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+                tv = _locked_tv(user, show_item)
                 if tv is None:
                     continue
                 fresh = show_item.pk in overwritten or (tv.reconciled_at is None and tv.state_version == 0)
@@ -4345,7 +4407,7 @@ def _hook_reconcile(tv_id, removed_seasons=()):
 def _lock_and_reconcile_after_removal(tv_id, season_numbers):
     """A viewing deleted outside this module: apply TV-205, TV-208 and TV-003, then reconcile."""
     with _writing(), transaction.atomic():
-        tv = TV.objects.select_for_update().select_related("item", "user").filter(pk=tv_id).first()
+        tv = TV.objects.select_for_update(of=("self",)).select_related("item", "user").filter(pk=tv_id).first()
         if tv is None or tv.legacy_pending:
             return
         listing = tv_listing.stored_listing(tv.item)
@@ -4780,6 +4842,7 @@ class _View:
                 "eye": self.eye(season_number),
                 "available_actions": actions,
                 "action_reasons": reasons,
+                "opinion_action": _opinion_action(calc, season_number),
             },
         )
         return payload
@@ -4922,6 +4985,7 @@ class _View:
                 "eye": self.eye(None),
                 "available_actions": actions,
                 "action_reasons": reasons,
+                "opinion_action": _opinion_action(calc, None),
                 "composer": self.composer(page_level, page_season, page_episode),
                 "season": self.season_state(page_season) if page_level == SEASON else None,
                 "episode": (
@@ -4953,6 +5017,7 @@ class _View:
             "eye",
             "available_actions",
             "action_reasons",
+            "opinion_action",
             "composer",
             "season",
             "episode",
@@ -5350,6 +5415,7 @@ __all__ = [
     "TVDetailsUnavailable",
     "TVInvalid",
     "TVLogBlocks",
+    "TVLogFirst",
     "TVStateChanged",
     "WriteResult",
     "apply_legacy_rule",

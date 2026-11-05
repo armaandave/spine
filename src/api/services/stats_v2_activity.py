@@ -37,6 +37,7 @@ from api.services.stats_scope import day_string, media_type_bucket, union_ids
 from app import exposure
 from app.models import (
     TV,
+    AnimeViewing,
     Book,
     BookSession,
     ComicAttempt,
@@ -193,7 +194,7 @@ def _type_details(scope):
         return details
     if media_type == MediaTypes.ANIME.value:
         anime = stats_time.type_time(scope, media_type)
-        return [_detail("episodes", "Episodes watched", anime.progress, approximate=anime.approximate)]
+        return [_detail("episodes", "Episodes watched", anime.progress)]
     if media_type == MediaTypes.BOOK.value:
         return [
             _detail("reads", "Reads", _reads_or_completions(scope, Book)),
@@ -310,6 +311,17 @@ def _undated_fact_rule(scope):
         if media_type in types:
             marker = model.objects.filter(user=owner, item_id=OuterRef("item_id"), direct_consumption=True)
             rules.append(Q(item__media_type=media_type, is_rewatch=True) & Q(Exists(marker)))
+
+    if MediaTypes.ANIME.value in types:
+        # As a TV season log: a mark's fill created before the log (AN-400, TV-404).
+        anime_fills = AnimeViewing.objects.filter(
+            anime__user=owner,
+            anime__item_id=OuterRef("item_id"),
+            kind=AnimeViewing.Kind.FILL,
+            diary_entry__isnull=True,
+            created_at__lt=OuterRef("created_at"),
+        )
+        rules.append(Q(item__media_type=MediaTypes.ANIME.value, is_rewatch=True) & Q(Exists(anime_fills)))
 
     if MediaTypes.TV.value in types:
         mark_fills = Episode.objects.filter(

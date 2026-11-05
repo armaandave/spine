@@ -122,6 +122,7 @@ from api.views.streaming import (
     StreamingRegionsView,
 )
 from api.views.tracking import (
+    AnimeRowsView,
     BookCompleteView,
     BookJourneyView,
     BookProgressView,
@@ -246,6 +247,7 @@ urlpatterns = [
     ),
     path("companies/<str:source>/<str:company_id>/games/", CompanyGamesView.as_view(), name="api-company-games"),
     path("tracking/", TrackingListView.as_view(), name="api-tracking-list"),
+    path("tracking/<str:source>/anime/<str:media_id>/rows/", AnimeRowsView.as_view(), name="api-anime-rows"),
     path("tracking/<str:source>/tv/<str:media_id>/start/", TVStartView.as_view(), name="api-tv-start"),
     path("tracking/<str:source>/tv/<str:media_id>/seasons/<int:season_number>/start/", SeasonStartView.as_view(), name="api-season-start"),
     path("tracking/<str:source>/tv/<str:media_id>/seasons/<int:season_number>/watch/", SeasonWatchView.as_view(), name="api-season-watch"),

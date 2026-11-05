@@ -120,7 +120,8 @@ class AnimeStudioAPITests(TestCase):
         self.assertIsNone(response.data["previous"])
         self.assertIn("page=2", response.data["next"])
         anime = response.data["results"][0]
-        self.assertEqual(anime["title"], "Shingeki no Kyojin")
+        # An anime goes by its English title everywhere (AN-705).
+        self.assertEqual(anime["title"], "Attack on Titan")
         self.assertEqual(anime["display_title"], "Attack on Titan")
         self.assertEqual(anime["poster_url"], "https://example.com/aot.jpg")
         self.assertEqual(

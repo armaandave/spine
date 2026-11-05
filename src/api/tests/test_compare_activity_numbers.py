@@ -156,15 +156,17 @@ class CompareTests(BookCalcBase):
 class YearsOnlyTheOldCounterHasTests(CompareTests):
     """A mark leaving a year moves its amount to the pile: All Time can't show that."""
 
-    def test_an_anime_marked_in_2025(self):
+    def test_an_anime_marked_in_2025_is_in_no_year_on_either_side(self):
+        """Anime's counter already leaves a mark's fills out of every year (AN-704)."""
         item = self.item(MediaTypes.ANIME.value, "marked", title="marked")
         self.set_item(item, runtime_minutes=24)
         row = self.tracking(Anime, item, status=Status.COMPLETED.value, progress=12)
+        self.anime_mark(row, range(1, 13))
         self.history(row, 0, datetime(2025, 3, 1, 17, tzinfo=UTC), kind="+")
         self.history(row, 12, datetime(2025, 3, 2, 17, tzinfo=UTC))
-        type(row).history.model.objects.filter(id=row.id).update(history_change_reason="mark")
-        line = self.line(self.compare(), f"user {self.owner.pk} anime 2025:")
-        self.assertIn("value=288->0", line)
+        lines = self.compare()
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} anime 2025:")])
+        self.assertIn("value=288->288", self.line(lines, f"user {self.owner.pk} anime all:"))
 
     def test_a_game_whose_hours_read_a_year_its_rows_left(self):
         item = self.item(MediaTypes.GAME.value, "moved", title="moved")

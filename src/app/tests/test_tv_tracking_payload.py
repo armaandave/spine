@@ -33,6 +33,7 @@ SHOW_DETAIL_KEYS = [
     "eye",
     "available_actions",
     "action_reasons",
+    "opinion_action",
     "composer",
     "season",
     "episode",
@@ -77,6 +78,7 @@ SEASON_DETAIL_KEYS = SEASON_CARD_KEYS | {
     "eye",
     "available_actions",
     "action_reasons",
+    "opinion_action",
 }
 EPISODE_KEYS = {
     "season_number",
@@ -313,9 +315,10 @@ class TV404ComposerTests(TVTrackingTestCase):
     def test_tv_404_stars_and_heart_prefill_from_the_targets_own_values(self):
         show = self.make_show({1: 2}, status="Returning Series")
         self.tick(show, 1, 1)
-        tv_tracking.set_rating(self.user, show, 9)
-        tv_tracking.set_rating(self.user, self.season_item(show, 1), 6)
-        tv_tracking.set_like(self.user, self.season_item(show, 1), True)
+        # An import sets a value partway; a direct set would be refused (TV-304, TV-800).
+        tv_tracking.set_rating(self.user, show, 9, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_rating(self.user, self.season_item(show, 1), 6, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_like(self.user, self.season_item(show, 1), True, entry_point=tv_tracking.IMPORT)
         targets = {target["id"]: target for target in self.state(show)["composer"]["targets"]}
         self.assertEqual((targets["season:1"]["rating"], targets["season:1"]["liked"]), ("6.0", True))
         self.assertEqual((targets["show"]["rating"], targets["show"]["liked"]), ("9.0", False))

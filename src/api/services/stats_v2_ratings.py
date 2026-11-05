@@ -449,7 +449,8 @@ def most_logged_queryset(scope):
     - a TV show (or an episode whose show Item doesn't exist, STAT-102) counts the
       most viewings of any one of its episodes in the scope (STAT-104: dated ones in
       a dated range, fills too in All Time; hidden viewings never), and ``last_day``
-      is its newest viewing day.
+      is its newest viewing day;
+    - an anime title counts the same way, by its own viewings (AN-704).
     """
     non_tv_logs = scope.entries.exclude(item__media_type__in=TV_ITEM_TYPES)
     repeated = non_tv_logs.values("item_id").annotate(times=Count("id")).filter(times__gte=MOST_LOGGED_MIN_TIMES)
@@ -478,6 +479,22 @@ def most_logged_queryset(scope):
             default=last_day,
             output_field=DateField(),
         )
+    if scope.counts_anime:
+        candidates.append(scope.anime_viewings.values("anime__item_id"))
+        anime_viewings = scope.anime_viewings.filter(anime__item_id=OuterRef("pk"))
+        times = Case(
+            When(media_type=MediaTypes.ANIME.value, then=_most_viewed_episode(anime_viewings, "episode_number")),
+            default=times,
+            output_field=IntegerField(),
+        )
+        last_day = Case(
+            When(
+                media_type=MediaTypes.ANIME.value,
+                then=_newest_viewing_day(scope, anime_viewings, scope.anime_viewing_day()),
+            ),
+            default=last_day,
+            output_field=DateField(),
+        )
     return (
         Item.objects.filter(id__in=union_ids(*candidates))
         .annotate(times=times, last_day=last_day)
@@ -486,16 +503,16 @@ def most_logged_queryset(scope):
     )
 
 
-def _most_viewed_episode(viewings):
+def _most_viewed_episode(viewings, episode="item_id"):
     """Return the most viewings of any one episode among ``viewings``."""
-    per_episode = viewings.values("item_id").annotate(times=Count("id")).order_by("-times").values("times")[:1]
+    per_episode = viewings.values(episode).annotate(times=Count("id")).order_by("-times").values("times")[:1]
     return Subquery(per_episode, output_field=IntegerField())
 
 
-def _newest_viewing_day(scope, viewings):
+def _newest_viewing_day(scope, viewings, day=None):
     """Return the newest viewing day among ``viewings``; fills have none."""
     newest = (
-        viewings.annotate(stats_day=scope.viewing_day())
+        viewings.annotate(stats_day=day or scope.viewing_day())
         .filter(stats_day__isnull=False)
         .order_by("-stats_day")
         .values("stats_day")[:1]

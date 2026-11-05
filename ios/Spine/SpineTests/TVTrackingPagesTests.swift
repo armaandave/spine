@@ -254,6 +254,30 @@ final class TVTrackingPagesTests: XCTestCase {
         XCTAssertEqual(composer.finished.composer.initialTarget?.id, "season:1")
     }
 
+    func testTV403LogChosenWhileTheFinalesTickIsOnItsWayWaitsAndOpensNothingOverTheComposer() async throws {
+        // The season page's + Log waits for the write queue and opens only when nothing it asked is showing.
+        holdRefreshes()
+        let page = model(Fixtures.seasonDetail(episodes: [Fixtures.episode(10)]))
+        let gate = RefreshGate()
+        heldRefreshes.append(gate)
+        tracking.gate = gate
+        tracking.responses = [.success(Fixtures.envelopeResponse(
+            episode: Fixtures.episode(10, watched: true, viewing: 3),
+            finished: Fixtures.finished(season: 1)
+        ))]
+
+        page.toggleTVEpisode(Fixtures.episode(10))
+        let log = Task { await page.settledForScreen() }
+        await gate.open()
+        let opens = await log.value
+
+        XCTAssertFalse(opens, "Log opens nothing over the finish composer")
+        XCTAssertEqual(page.tvFollowUp.composer?.finished.seasonNumber, 1)
+        page.tvFollowUp.composerDismissed()
+        let opensNow = await page.settledForScreen()
+        XCTAssertTrue(opensNow, "With nothing on its way, Log opens")
+    }
+
     func testTV403FinishingASeasonFromTheShowPagesUpNextOpensTheComposerAtOnce() async throws {
         holdRefreshes()
         let upNext = TVEpisodePointer(seasonNumber: 2, episodeNumber: 10, title: "Valar Morghulis")

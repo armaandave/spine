@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from app import tv_tracking
 from app.models import TV, Episode, MediaLike, Season
 from app.tests.test_tv_tracking_viewings import OCT_25, TVTrackingTestCase
-from app.tv_tracking import TVConflict, TVInvalid
+from app.tv_tracking import TVConflict, TVInvalid, TVLogFirst
 
 
 def rating_activities():
@@ -81,37 +81,181 @@ class TV303UnstartedShowTests(TVTrackingTestCase):
 
 
 class TV304StartedShowTests(TVTrackingTestCase):
-    """TV-304: on a started show, stars and a heart are opinion only."""
+    """TV-304: stars and a heart mean you finished what the page shows."""
 
-    def test_a_29_stars_on_a_show_at_s2_e3_are_opinion_only(self):
+    def test_a_29_stars_on_a_show_at_s2_e3_are_refused_and_change_nothing(self):
         show = self.make_show({1: 2, 2: 5})
         self.ticks(show, 1, (1, 2))
         self.ticks(show, 2, (1, 2))
         before = self.state(show)
-        tv_tracking.set_rating(self.user, show, 9)
+        self.assertEqual(before["opinion_action"], "log")
+        with self.assertRaises(TVLogFirst) as raised:
+            tv_tracking.set_rating(self.user, show, 9)
+        self.assertEqual(raised.exception.message, "Log this first.")
         after = self.state(show)
-        self.assertEqual((after["status"], after["up_next"]), (before["status"], before["up_next"]))
+        self.assertEqual((after["status"], after["up_next"], after["version"]), (before["status"], before["up_next"], before["version"]))
         self.assertEqual(len(self.viewings(show)), 4)
-        self.assertEqual(rating_activities().get().snapshot, {"rating": "9.0"})
+        self.assertIsNone(self.tv(show).score)
+        self.assertFalse(rating_activities().exists())
+
+    def test_a_29_saving_the_whole_show_log_with_the_value_marks_the_rest(self):
+        show = self.make_show({1: 2, 2: 5})
+        self.ticks(show, 1, (1, 2))
+        self.log(show, rating=9)
+        tv = self.tv(show)
+        self.assertEqual((tv.status, str(tv.score)), ("Completed", "9.0"))
+        self.assertEqual(len(self.viewings(show)), 7)
+
+    def test_a_29_a_heart_on_a_partway_season_is_refused(self):
+        show = self.make_show({1: 2, 2: 5})
+        self.ticks(show, 1, (1, 2))
+        self.ticks(show, 2, (1, 2))
+        season = self.season_item(show, 2)
+        self.assertEqual(tv_tracking.state_payload(self.user, season)["season"]["opinion_action"], "log")
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_like(self.user, season, True)
+        self.assertFalse(MediaLike.objects.filter(item=season).exists())
+        self.log(season, liked=True)
+        self.assertTrue(MediaLike.objects.filter(item=season).exists())
+        self.assertEqual(len(self.viewings(show, 2)), 5)
 
     def test_a_30_stars_on_an_unwatched_season_4_while_watching_season_2(self):
         show = self.make_show({1: 2, 2: 3, 3: 2, 4: 2})
         self.ticks(show, 1, (1, 2))
         self.tick(show, 2, 1)
-        tv_tracking.set_rating(self.user, self.season_item(show, 4), 6)
+        season_4 = self.season_item(show, 4)
+        self.assertEqual(tv_tracking.state_payload(self.user, season_4)["season"]["opinion_action"], "mark")
+        result = tv_tracking.set_rating(self.user, season_4, 6)
+        self.assertEqual(len(self.viewings(show, 4)), 2)
+        self.assertEqual(result.earlier_unwatched["question"], "Also mark S2 E2–S3 E2 watched?")
+        self.assertIsNone(result.finished)
+        season = tv_tracking.state_payload(self.user, season_4)["season"]
+        self.assertEqual((season["rating"], season["started"], season["eye"]["tap"]), ("6.0", True, "unmark_marks"))
+        tv_tracking.unmark(self.user, show, season_number=4)
         self.assertEqual(self.viewings(show, 4), [])
         state = self.state(show)
         self.assertEqual((state["up_next"]["season_number"], state["up_next"]["episode_number"]), (2, 2))
-        season = tv_tracking.state_payload(self.user, self.season_item(show, 4))["season"]
-        self.assertEqual((season["rating"], season["started"], season["status"]), ("6.0", False, None))
 
-    def test_tv_304_opinions_never_end_a_choice(self):
-        show = self.make_show({1: 3})
-        self.tick(show, 1, 1)
+    def test_tv_304_finished_or_caught_up_only_saves(self):
+        show = self.make_show({1: 2})
+        self.ticks(show, 1, (1, 2))
+        self.assertEqual(self.state(show)["opinion_action"], "save")
+        tv_tracking.set_rating(self.user, show, 5)
+        tv_tracking.set_like(self.user, show, True)
+        self.assertEqual(self.status(show), "Completed")
+        self.assertEqual(len(self.viewings(show)), 2)
+
+    def test_tv_304_caught_up_counts_as_finished_and_a_new_episode_makes_it_partway(self):
+        fake_show = self.make_show({1: [date(2026, 10, 1), OCT_25 + timedelta(days=9)]}, status="Returning Series")
+        self.tick(fake_show, 1, 1)
+        self.assertTrue(self.state(fake_show)["caught_up"])
+        self.assertEqual(self.state(fake_show)["opinion_action"], "save")
+        tv_tracking.set_rating(self.user, fake_show, 7)
+        self.assertEqual(str(self.tv(fake_show).score), "7.0")
+        self.clock.advance(days=10)
+        state = self.state(fake_show)
+        self.assertEqual(state["opinion_action"], "log")
+        self.assertEqual(str(self.tv(fake_show).score), "7.0")
+
+    def test_tv_304_only_saving_never_ends_a_choice(self):
+        show = self.make_show({1: 2})
+        self.ticks(show, 1, (1, 2))
         tv_tracking.choose(self.user, show, "Paused")
         tv_tracking.set_rating(self.user, show, 5)
         tv_tracking.set_like(self.user, self.season_item(show, 1), True)
         self.assertEqual(self.status(show), "Paused")
+
+    def test_tv_304_clearing_is_only_that_at_any_time(self):
+        show = self.make_show({1: 3})
+        tv_tracking.set_rating(self.user, show, 8)
+        tv_tracking.set_like(self.user, show, True)
+        tv_tracking.unmark(self.user, show, season_number=None)
+        self.tick(show, 1, 1)
+        tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_like(self.user, show, True, entry_point=tv_tracking.IMPORT)
+        self.assertEqual(self.state(show)["opinion_action"], "log")
+        tv_tracking.set_rating(self.user, show, None)
+        tv_tracking.set_like(self.user, show, False)
+        tv = self.tv(show)
+        self.assertEqual((tv.score, tv.status), (None, "In progress"))
+        self.assertEqual(len(self.viewings(show)), 1)
+
+    def test_tv_304_a_value_already_set_refuses_nothing(self):
+        """Stars and hearts given partway before this law stay; re-sending them is no change."""
+        show = self.make_show({1: 3})
+        self.tick(show, 1, 1)
+        tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_like(self.user, show, True, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_rating(self.user, show, 8)
+        tv_tracking.set_like(self.user, show, True)
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_rating(self.user, show, 6)
+
+    def test_tv_304_planning_paused_and_dropped_with_nothing_watched_arent_started(self):
+        for status in ("Planning", "Paused", "Dropped"):
+            show = self.make_show({1: 2})
+            tv_tracking.choose(self.user, show, status)
+            self.assertEqual(self.state(show)["opinion_action"], "mark")
+            tv_tracking.set_rating(self.user, show, 8)
+            self.assertEqual(self.status(show), "Completed")
+
+    def test_tv_304_watching_chosen_with_nothing_watched_is_partway(self):
+        show = self.make_show({1: 2})
+        tv_tracking.choose(self.user, show, "In progress")
+        self.assertEqual(self.state(show)["opinion_action"], "log")
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_rating(self.user, show, 8)
+
+    def test_tv_304_during_a_rewatch_partway_means_partway_through_it(self):
+        show = self.make_show({1: 2})
+        self.ticks(show, 1, (1, 2))
+        tv_tracking.start_rewatch(self.user, show)
+        state = self.state(show)
+        self.assertEqual(state["opinion_action"], "log")
+        self.assertTrue(next(target for target in state["composer"]["targets"] if target["id"] == "show")["is_rewatch"])
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_like(self.user, show, True)
+
+    def test_tv_304_an_installed_builds_set_is_refused_the_same_way(self):
+        show = self.make_show({1: 3})
+        self.tick(show, 1, 1)
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.LEGACY_APP)
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.apply_written_state(self.user, show, {"rating": 8}, entry_point=tv_tracking.LEGACY_APP)
+
+    def test_tv_304_the_web_gets_the_refusal_too(self):
+        show = self.make_show({1: 3})
+        self.tick(show, 1, 1)
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.apply_written_state(self.user, show, {"rating": 8}, entry_point=tv_tracking.WEB)
+
+    def test_tv_800_an_import_never_opens_anything_it_only_sets_the_value(self):
+        show = self.make_show({1: 3})
+        self.tick(show, 1, 1)
+        before = self.state(show)["watched_count"]
+        tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.IMPORT)
+        tv_tracking.set_like(self.user, show, True, entry_point=tv_tracking.IMPORT)
+        self.assertEqual(str(self.tv(show).score), "8.0")
+        self.assertEqual(self.state(show)["watched_count"], before)
+
+    def test_tv_800_an_import_marks_something_with_no_history(self):
+        show = self.make_show({1: 3})
+        tv_tracking.set_rating(self.user, show, 8, entry_point=tv_tracking.IMPORT)
+        self.assertEqual(self.status(show), "Completed")
+        self.assertEqual(len(self.viewings(show)), 3)
+
+    def test_tv_304_the_state_says_what_each_level_will_do(self):
+        show = self.make_show({1: 2, 2: 2, 3: [OCT_25 + timedelta(days=30)]})
+        self.ticks(show, 1, (1, 2))
+        self.tick(show, 2, 1)
+        state = self.state(show)
+        self.assertEqual(state["opinion_action"], "log")
+        actions = {
+            number: tv_tracking.state_payload(self.user, self.season_item(show, number))["season"]["opinion_action"]
+            for number in (1, 2, 3)
+        }
+        self.assertEqual(actions, {1: "save", 2: "log", 3: "save"})
 
     def test_tv_303_stars_when_only_specials_have_aired_follow_the_rate_action(self):
         """TV-005, TV-303: a started show takes stars as opinion once a special has aired.
@@ -140,17 +284,21 @@ class TV304StartedShowTests(TVTrackingTestCase):
         self.assertEqual((after["status"], after["watched_count"]), (started["status"], started["watched_count"]))
         self.assertEqual(len(self.viewings(show)), 1)
 
-    def test_a_40_a_special_then_a_heart_is_opinion_only(self):
+    def test_a_40_a_special_then_a_heart_opens_the_whole_show_log(self):
         """A-40: Watching, S1 E1 up next, progress unchanged, Planning unavailable."""
         show = self.make_show({0: 2, 1: 3})
         self.tick(show, 0, 1)
-        tv_tracking.set_like(self.user, show, True)
+        state = self.state(show)
+        self.assertEqual(state["opinion_action"], "log")
+        with self.assertRaises(TVLogFirst):
+            tv_tracking.set_like(self.user, show, True)
         state = self.state(show)
         self.assertEqual(state["status"], "In progress")
         self.assertEqual((state["up_next"]["season_number"], state["up_next"]["episode_number"]), (1, 1))
         self.assertEqual(state["watched_count"], 0)
         self.assertIn("planning", state["action_reasons"])
         self.assertEqual(len(self.viewings(show)), 1)
+        self.assertFalse(MediaLike.objects.filter(item=show).exists())
 
 
 class TV305EpisodeHeartTests(TVTrackingTestCase):

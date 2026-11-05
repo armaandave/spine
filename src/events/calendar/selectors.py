@@ -3,6 +3,7 @@ import logging
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
+from app.anime_listing import STALE_SETTLED
 from app.models import Item, MediaTypes, Sources
 from app.providers import services, tmdb
 from events.models import Event
@@ -79,8 +80,15 @@ def filter_items_to_fetch(items):
         & ~Q(media_type=MediaTypes.MOVIE.value, source=Sources.TMDB.value)
         & (Q(event__isnull=True) | Q(has_future_events=True))
     )
+    # MAL can raise a finished title's total long after its last event, which reopens it
+    # (AN-202), so a stored copy gets a look at least this often.
+    anime_q = Q(media_type=MediaTypes.ANIME.value) & (
+        Q(anime_listing__isnull=True)
+        | Q(anime_listing__fetched_at__isnull=True)
+        | Q(anime_listing__fetched_at__lte=now - STALE_SETTLED)
+    )
 
-    return annotated.filter(tv_q | movie_q | comic_q | other_q).distinct()
+    return annotated.filter(tv_q | movie_q | comic_q | other_q | anime_q).distinct()
 
 
 def get_tv_items_to_include(tv_items):

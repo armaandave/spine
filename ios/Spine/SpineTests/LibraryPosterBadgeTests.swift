@@ -57,7 +57,7 @@ final class LibraryPosterBadgeTests: XCTestCase {
     }
 
     func testTypesWithoutTrackingContractsHaveNoBadge() {
-        for mediaType in ["movie", "anime", "music"] {
+        for mediaType in ["movie", "music"] {
             let item = Spine.LibraryItem(
                 media: summary(mediaType),
                 tracking: TrackingState(

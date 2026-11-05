@@ -32,6 +32,8 @@ from app import book_tracking
 from app.models import (
     TV,
     Anime,
+    AnimeMark,
+    AnimeViewing,
     Book,
     BookSession,
     DiaryEntry,
@@ -97,6 +99,24 @@ class ActivityBase(StatsV2Base):
         row = model(user=self.owner, item=item, **fields)
         model.objects.bulk_create([row])
         return row
+
+    def anime_tick(self, row, number, day):
+        """Record one tick of an anime episode at noon UTC on a chosen day."""
+        return AnimeViewing.objects.create(
+            anime=row,
+            episode_number=number,
+            kind=AnimeViewing.Kind.TICK,
+            watched_on=day,
+            watched_at=datetime(day.year, day.month, day.day, 12, tzinfo=UTC),
+        )
+
+    def anime_mark(self, row, numbers):
+        """Mark these episodes watched: undated fills, as the eye writes them."""
+        mark = AnimeMark.objects.create(anime=row, origin=AnimeMark.Origin.EYE)
+        AnimeViewing.objects.bulk_create(
+            AnimeViewing(anime=row, episode_number=number, kind=AnimeViewing.Kind.FILL, mark=mark)
+            for number in numbers
+        )
 
     def history(self, row, progress, when, kind="~"):
         """Write one history row of a tracking row at a chosen time."""
@@ -262,13 +282,17 @@ class HeaderTests(ActivityBase):
         self.assertNotIn("shows_finished", year)
         self.assertNotIn("episodes", details(self.summary(YEAR_2025)))
 
-    def test_anime_episodes_are_approximate_in_a_range(self):
+    def test_anime_episodes_read_viewings_and_a_mark_lands_in_no_year(self):
         series = self.item(MediaTypes.ANIME.value, "series")
         row = self.tracking(Anime, series, progress=12, status=Status.IN_PROGRESS.value)
+        # A rise in the history is not a watch any more (AN-704).
         self.history(row, 0, datetime(2025, 1, 5, 12, tzinfo=UTC), kind="+")
         self.history(row, 12, datetime(2025, 2, 5, 12, tzinfo=UTC))
+        self.anime_mark(row, range(1, 11))
+        self.anime_tick(row, 11, date(2025, 2, 5))
+        self.anime_tick(row, 12, date(2025, 2, 6))
         year = details(self.summary(YEAR_2025, tab="anime"))["episodes"]
-        self.assertEqual((year["label"], year["value"], year["approximate"]), ("Episodes watched", 12, True))
+        self.assertEqual((year["label"], year["value"], year["approximate"]), ("Episodes watched", 2, False))
         all_time = details(self.summary(ALL_TIME, tab="anime"))["episodes"]
         self.assertEqual((all_time["value"], all_time["approximate"]), (12, False))
 
@@ -520,28 +544,45 @@ class TimeTests(ActivityBase):
         self.assertEqual(time_row(self.summary(YEAR_2025, tab="tv"), "tv")["value"], 60)
         self.assertEqual(time_row(self.summary(YEAR_2025, viewer=self.follower, tab="tv"), "tv")["value"], 30)
 
-    def test_anime_time_counts_rises_and_skips_the_creation_row(self):
+    def test_anime_time_reads_viewings_and_a_mark_lands_in_no_year(self):
         series = self.item(MediaTypes.ANIME.value, "series")
         self.set_item(series, runtime_minutes=24)
-        row = self.tracking(Anime, series, progress=10)
-        # Imported with 20 episodes in 2024: the creation row adds nothing.
+        row = self.tracking(Anime, series, progress=8)
+        # A rise in the history is not a watch any more (AN-704).
+        self.history(row, 20, datetime(2024, 6, 1, 12, tzinfo=UTC), kind="+")
+        self.history(row, 22, datetime(2025, 1, 10, 12, tzinfo=UTC))
+        self.anime_mark(row, range(1, 6))
+        self.anime_tick(row, 6, date(2024, 6, 1))
+        self.anime_tick(row, 7, date(2025, 3, 10))
+        self.anime_tick(row, 8, date(2025, 3, 11))
+
+        year = time_row(self.summary(YEAR_2025, tab="anime"), "anime")
+        self.assertEqual(
+            year,
+            {"media_type": "anime", "unit": "minutes", "value": 2 * 24, "known": 2, "total": 2, "approximate": False},
+        )
+        self.assertEqual(time_row(self.summary(YEAR_2024, tab="anime"), "anime")["value"], 24)
+        all_time = time_row(self.summary(ALL_TIME, tab="anime"), "anime")
+        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (8 * 24, 8, False))
+
+    def test_manga_time_counts_rises_and_skips_the_creation_row(self):
+        series = self.item(MediaTypes.MANGA.value, "series")
+        row = self.tracking(Manga, series, progress=10)
+        # Imported with 20 chapters in 2024: the creation row adds nothing.
         self.history(row, 20, datetime(2024, 6, 1, 12, tzinfo=UTC), kind="+")
         self.history(row, 22, datetime(2025, 1, 10, 12, tzinfo=UTC))
         self.history(row, 5, datetime(2025, 2, 10, 12, tzinfo=UTC))
         self.history(row, 10, datetime(2025, 3, 10, 12, tzinfo=UTC))
-        rewatch = self.tracking(Anime, series, progress=3)
-        self.history(rewatch, 1, datetime(2025, 4, 1, 12, tzinfo=UTC), kind="+")
-        self.history(rewatch, 3, datetime(2025, 4, 2, 12, tzinfo=UTC))
 
-        year = time_row(self.summary(YEAR_2025, tab="anime"), "anime")
-        # +2, then a drop ignored, then +5; the second watch-through +2.
+        year = time_row(self.summary(YEAR_2025, tab="manga"), "manga")
+        # +2, then a drop ignored, then +5.
         self.assertEqual(
             year,
-            {"media_type": "anime", "unit": "minutes", "value": 9 * 24, "known": 2, "total": 2, "approximate": True},
+            {"media_type": "manga", "unit": "chapters", "value": 7, "known": 1, "total": 1, "approximate": True},
         )
-        self.assertIsNone(time_row(self.summary(YEAR_2024, tab="anime"), "anime"))
-        all_time = time_row(self.summary(ALL_TIME, tab="anime"), "anime")
-        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (13 * 24, 2, False))
+        self.assertIsNone(time_row(self.summary(YEAR_2024, tab="manga"), "manga"))
+        all_time = time_row(self.summary(ALL_TIME, tab="manga"), "manga")
+        self.assertEqual((all_time["value"], all_time["total"], all_time["approximate"]), (10, 1, False))
 
     def test_manga_chapters_on_the_owners_calendar(self):
         for zone in OWNER_ZONES:
@@ -737,37 +778,40 @@ class ActivityChartTests(ActivityBase):
         ProgressChange.objects.filter(pk=row.pk).update(created_at=when)
 
     def test_each_days_progress_and_starts_are_events(self):
-        series = self.item(MediaTypes.ANIME.value, "series")
+        series = self.item(MediaTypes.MANGA.value, "series")
         # Two changes on one day are one event, on the owner's (New York) day.
-        self.change(series, 0, 2, datetime(2025, 3, 2, 15, tzinfo=UTC))
-        self.change(series, 2, 4, datetime(2025, 3, 3, 3, tzinfo=UTC))
+        self.change(series, 0, 2, datetime(2025, 3, 2, 15, tzinfo=UTC), "chapter")
+        self.change(series, 2, 4, datetime(2025, 3, 3, 3, tzinfo=UTC), "chapter")
         # A day that went back on net isn't; a day in another year is outside 2025.
-        self.change(series, 4, 5, datetime(2025, 3, 9, 15, tzinfo=UTC))
-        self.change(series, 5, 3, datetime(2025, 3, 9, 16, tzinfo=UTC))
-        self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC))
+        self.change(series, 4, 5, datetime(2025, 3, 9, 15, tzinfo=UTC), "chapter")
+        self.change(series, 5, 3, datetime(2025, 3, 9, 16, tzinfo=UTC), "chapter")
+        self.change(series, 3, 6, datetime(2024, 6, 1, 15, tzinfo=UTC), "chapter")
         # Starting a title is activity, as in the feed.
-        self.change(self.item(MediaTypes.ANIME.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
-        # A book's pages count, through a real save. TV ticks don't (its viewings are
-        # its events), but a TV start does.
+        self.change(self.item(MediaTypes.MANGA.value, "started"), 0, 1, datetime(2025, 4, 1, 15, tzinfo=UTC), "start")
+        # A book's pages count, through a real save. TV and anime ticks don't (their
+        # viewings are their events), but their starts do.
         novel = self.item(MediaTypes.BOOK.value, "novel")
         with patch("django.utils.timezone.now", return_value=datetime(2025, 3, 2, 18, tzinfo=UTC)):
             book_tracking.update_progress(self.owner, novel, progress_type="pages", value=40)
         show = self.item(MediaTypes.TV.value, "show")
         self.change(show, 0, 3, datetime(2025, 5, 5, 15, tzinfo=UTC))
         self.change(show, 0, 1, datetime(2025, 5, 6, 15, tzinfo=UTC), "start")
+        anime = self.item(MediaTypes.ANIME.value, "anime")
+        self.change(anime, 0, 3, datetime(2025, 5, 7, 15, tzinfo=UTC))
+        self.change(anime, 0, 1, datetime(2025, 5, 8, 15, tzinfo=UTC), "start")
 
         data = self.summary(YEAR_2025)
-        self.assertEqual(data["header"]["active_days"], 3)
+        self.assertEqual(data["header"]["active_days"], 4)
         self.assertEqual(data["activity"]["busiest_day"], {"date": "2025-03-02", "count": 2})
-        self.assertEqual(data["activity"]["months"][2]["by_type"], {"anime": 1, "book": 1})
-        self.assertEqual(data["activity"]["months"][4]["by_type"], {"tv": 1})
-        anime = self.summary(YEAR_2025, tab="anime")
-        self.assertEqual(anime["header"]["active_days"], 2)
+        self.assertEqual(data["activity"]["months"][2]["by_type"], {"book": 1, "manga": 1})
+        self.assertEqual(data["activity"]["months"][4]["by_type"], {"anime": 1, "tv": 1})
+        manga = self.summary(YEAR_2025, tab="manga")
+        self.assertEqual(manga["header"]["active_days"], 2)
         # The day's two changes are one event, tied with the start: the later day wins.
-        self.assertEqual(anime["activity"]["busiest_day"], {"date": "2025-04-01", "count": 1})
-        self.assertEqual(self.summary(ALL_TIME, tab="anime")["header"]["active_days"], 3)
+        self.assertEqual(manga["activity"]["busiest_day"], {"date": "2025-04-01", "count": 1})
+        self.assertEqual(self.summary(ALL_TIME, tab="manga")["header"]["active_days"], 3)
         # Progress is visible to anyone who can see the profile (AC-5).
-        self.assertEqual(self.summary(YEAR_2025, viewer=self.stranger)["header"]["active_days"], 3)
+        self.assertEqual(self.summary(YEAR_2025, viewer=self.stranger)["header"]["active_days"], 4)
 
     def test_tv_fills_and_undated_completions_are_never_events(self):
         _show, _season_item, _tv, season = self.tv_show()

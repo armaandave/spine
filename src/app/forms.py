@@ -327,18 +327,39 @@ class MangaForm(SeriesForm):
 
 
 class AnimeForm(MediaForm):
-    """Form for anime."""
-
-    def save(self, commit=True):  # noqa: FBT002
-        """Say which day the browser sent: Django read its wall clock on the server's zone."""
-        end_date = self.cleaned_data.get("end_date")
-        self.instance.form_end_day = timezone.localtime(end_date).date() if end_date else None
-        return super().save(commit)
+    """Form for anime: a save goes through the same rules as the app's (AN-900)."""
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""
 
         model = Anime
+
+    def save(self, commit=True):
+        """Apply only what the form changed, so saving notes changes nothing else."""
+        if not commit:
+            return super().save(commit=False)
+        from app import anime_tracking
+
+        is_new = self.instance.pk is None
+        payload = {"notes": self.cleaned_data.get("notes", "")}
+        if is_new or "status" in self.changed_data:
+            payload["status"] = self.cleaned_data["status"]
+        score = self.cleaned_data.get("score")
+        if (is_new and score is not None) or (not is_new and "score" in self.changed_data):
+            payload["rating"] = score or None
+        if "progress" in self.changed_data:
+            payload["progress"] = self.cleaned_data.get("progress") or 0
+            if not payload["progress"] and self.cleaned_data["status"] in anime_tracking.CHOICES:
+                # The status beside a 0 still says where the title goes (AN-900).
+                payload["status"] = self.cleaned_data["status"]
+        result = anime_tracking.apply_written_state(
+            self.instance.user,
+            self.instance.item,
+            payload,
+            entry_point=anime_tracking.WEB,
+        )
+        self.instance = result.row or self.instance
+        return self.instance
 
 
 class MovieForm(MediaForm):

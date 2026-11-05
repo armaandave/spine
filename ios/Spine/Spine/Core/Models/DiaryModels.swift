@@ -39,6 +39,14 @@ struct DiaryEntry: Codable, Identifiable {
     var seasonEpisodes: [TVEpisodeState]? = nil
     var finished: TVFinished? = nil
     var earlierUnwatched: TVEarlierUnwatched? = nil
+    /// The owner's view of an anime log: what deleting it unmarks (TV-406). Nil for others.
+    var animeLog: TVLogInfo? = nil
+    /// An anime log's create and update responses add the title's state and rows (AN-400).
+    @LossyAnimeValue var anime: AnimeState? = nil
+    @LossyAnimeValue var rows: AnimeRows? = nil
+
+    /// What deleting this log unmarks, for a TV or an anime log.
+    var trackedLog: TVLogInfo? { tvLog ?? animeLog }
 }
 
 /// A log's favorite: a song from the album's tracklist, or an episode of the show or season.

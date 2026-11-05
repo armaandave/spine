@@ -68,7 +68,7 @@ final class SeriesTrackingContractTests: XCTestCase {
             XCTAssertEqual(ref.trackingStatusLabel("Completed"), "Read")
             XCTAssertEqual(ref.repeatLabel, "Reread")
         }
-        XCTAssertEqual(LibraryShelf.available(for: "anime"), [.tracked, .planning], "Not anime")
+        XCTAssertEqual(LibraryShelf.available(for: "movie"), [.tracked, .planning], "Not movies")
     }
 
     // MC-000 (SW-006, AC-5): calendar dates, and the log's own visibility.

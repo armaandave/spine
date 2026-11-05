@@ -18,8 +18,8 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     func title(mediaType: String) -> String {
-        if mediaType == "tv" {
-            // TV-002: Watching is the display name of the shared In progress status.
+        if mediaType == "tv" || mediaType == "anime" {
+            // TV-002, AN-000: Watching is the display name of the shared In progress status.
             switch self {
             case .currentlyReading: return "Watching"
             case .didNotFinish: return "Dropped"
@@ -43,8 +43,8 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
         switch mediaType {
         case "book", "manga", "comic", "game":
             [.planning, .currentlyReading, .paused, .didNotFinish, .read]
-        case "tv":
-            // TV-002: Watching, Planning, Paused, Dropped and Completed, one card per show (TV-001).
+        case "tv", "anime":
+            // TV-002: Watching, Planning, Paused, Dropped and Completed, one card per show (TV-001) or title (AN-001).
             [.currentlyReading, .planning, .paused, .didNotFinish, .read]
         default:
             [.tracked, .planning]
@@ -53,7 +53,7 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
 
     /// Whether the type's library is split by status, one section per status, with a section picker.
     static func usesStatusShelves(_ mediaType: String) -> Bool {
-        ["book", "manga", "comic", "game", "tv"].contains(mediaType)
+        ["book", "manga", "comic", "game", "tv", "anime"].contains(mediaType)
     }
 
     /// The section a media type opens on when the current one isn't one of its sections.
@@ -62,7 +62,7 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
     }
 
     /// A section another screen asked for, for the current type. A type without that section opens its first one: the
-    /// Library link asks for Tracked, which TV, books, manga, comics and games don't have (BK-001).
+    /// Library link asks for Tracked, which TV, anime, books, manga, comics and games don't have (BK-001).
     static func resolved(_ requested: LibraryShelf, for mediaType: String) -> LibraryShelf {
         available(for: mediaType).contains(requested) ? requested : defaultShelf(for: mediaType)
     }
@@ -85,6 +85,27 @@ enum LibraryShelf: String, CaseIterable, Identifiable {
         case .paused: "Shows you pause will appear here."
         case .didNotFinish: "Shows you drop will appear here."
         case .read: "Shows you finish, or are caught up on between seasons, will appear here."
+        }
+    }
+
+    /// AN-000: each empty anime section says what appears there, as TV's do.
+    static func animeEmptyTitle(_ shelf: LibraryShelf) -> String {
+        switch shelf {
+        case .currentlyReading, .tracked: "No anime in Watching"
+        case .planning: "No anime in Planning"
+        case .paused: "No paused anime"
+        case .didNotFinish: "No dropped anime"
+        case .read: "No completed anime"
+        }
+    }
+
+    static func animeEmptyMessage(_ shelf: LibraryShelf) -> String {
+        switch shelf {
+        case .currentlyReading, .tracked: "Anime you're watching will appear here."
+        case .planning: "Anime you plan to watch will appear here."
+        case .paused: "Anime you pause will appear here."
+        case .didNotFinish: "Anime you drop will appear here."
+        case .read: "Anime you finish will appear here."
         }
     }
 
@@ -554,7 +575,11 @@ struct LibraryView: View {
                 SpinePageBackground()
 
                 ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    // A plain stack: the list and the grid are the page's only lazy stacks, one item per row or poster.
+                    // The list nested in a lazy page stack was one item of it, and clearing a search that had left a
+                    // few rows sent the two measuring each other at 100% CPU. Everything in a plain stack is built at
+                    // once, so only the rows ask for the next page, as they come near the end (`loadNextPageIfNeeded`).
+                    VStack(alignment: .leading, spacing: 0) {
                         header
                         content
                             .spineContentTransition(value: contentTransitionKey)
@@ -848,6 +873,9 @@ struct LibraryView: View {
         if viewModel.mediaType == "tv" {
             return LibraryShelf.tvEmptyTitle(viewModel.shelf)
         }
+        if viewModel.mediaType == "anime" {
+            return LibraryShelf.animeEmptyTitle(viewModel.shelf)
+        }
         let mediaName = MediaTypeTheme.theme(for: viewModel.mediaType).displayName.lowercased()
         switch viewModel.shelf {
         case .tracked:
@@ -889,6 +917,7 @@ struct LibraryView: View {
         }
         if viewModel.mediaType == "game" { return "Games with this status will appear here." }
         if viewModel.mediaType == "tv" { return LibraryShelf.tvEmptyMessage(viewModel.shelf) }
+        if viewModel.mediaType == "anime" { return LibraryShelf.animeEmptyMessage(viewModel.shelf) }
         switch viewModel.shelf {
         case .tracked:
             return "Consumed, logged, watched, read, or played media will appear here."
@@ -946,8 +975,11 @@ struct LibraryView: View {
     }
 
     private func gridAccessibilityLabel(_ item: LibraryItem) -> String {
-        guard item.media.ref.mediaType == "tv" else { return "View \(item.media.title)" }
-        return "View \(item.media.title), \(TVLibraryCard.line(for: item))"
+        switch item.media.ref.mediaType {
+        case "tv": "View \(item.media.title), \(TVLibraryCard.line(for: item))"
+        case "anime": "View \(item.media.title), \(AnimeLibraryCard.line(for: item))"
+        default: "View \(item.media.title)"
+        }
     }
 
     private func libraryList(_ items: [LibraryItem]) -> some View {
@@ -989,17 +1021,6 @@ struct LibraryView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 56)
             .spineContentTransition(value: paginationPhase)
-
-            if viewModel.hasMorePages, let last = viewModel.displayedItems.last {
-                Color.clear
-                    .frame(height: 1)
-                    .id(last.id)
-                    .onAppear {
-                        Task {
-                            await viewModel.loadNextPageIfNeeded(currentItem: last)
-                        }
-                    }
-            }
         }
     }
 
@@ -1047,8 +1068,8 @@ struct PosterBadgeLabel: View {
 }
 
 /// The short badge on a Library grid poster and a Home In progress card: where you stopped on a book, manga, comic,
-/// game or show you've started and haven't finished (BK-001, MC-006). Anything planned or finished has none, and anime
-/// has none until it has a tracking contract.
+/// game, show or anime you've started and haven't finished (BK-001, MC-006, AN-700). Anything planned or finished has
+/// none.
 enum LibraryPosterBadge {
     static let unfinishedStatuses = ["In progress", "Paused", "Dropped"]
 
@@ -1067,6 +1088,8 @@ enum LibraryPosterBadge {
         switch item.media.ref.mediaType {
         case "tv":
             return TVLibraryCard.gridBadge(for: item)
+        case "anime":
+            return item.tracking.anime.flatMap(AnimeTrackingPresentation.gridBadge(for:))
         case "book", "manga", "comic":
             guard unfinishedStatuses.contains(item.tracking.status ?? "") else { return nil }
             return item.tracking.progress?.compactDisplayText(
@@ -1117,6 +1140,22 @@ enum TVLibraryCard {
     static func statusTitle(_ status: String?) -> String {
         let shelf = LibraryShelf.available(for: "tv").first { $0.matches(status: status) }
         return shelf?.title(mediaType: "tv") ?? status ?? "Tracked"
+    }
+}
+
+/// What an anime title's Library card says (AN-700), from the list variant of its state.
+enum AnimeLibraryCard {
+    /// The section's card line, such as "E8 next · 7 of 24" or "Paused at E8", else the section's name.
+    static func line(
+        for item: LibraryItem,
+        today: Date = Date(),
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
+        if let anime = item.tracking.anime,
+           let line = AnimeTrackingPresentation.cardLine(for: anime, today: today, calendar: calendar) {
+            return line
+        }
+        return TVLibraryCard.statusTitle(item.tracking.anime?.status ?? item.tracking.status)
     }
 }
 
@@ -1223,16 +1262,17 @@ private struct LibraryListRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// TV cards say where you are (TV-700); other types show their status.
+    /// TV and anime cards say where you are (TV-700, AN-700); other types show their status.
     private var statusLine: String {
         if item.media.ref.mediaType == "tv" { return TVLibraryCard.line(for: item) }
+        if item.media.ref.isAnime { return AnimeLibraryCard.line(for: item) }
         return item.tracking.status.map(item.media.ref.trackingStatusLabel) ?? "Tracked"
     }
 
     private var metadataText: String {
         var parts: [String] = []
-        if item.media.ref.mediaType == "tv" {
-            // The show's own stars (TV-500, TV-504); counts are on the card line.
+        if item.media.ref.mediaType == "tv" || item.media.ref.isAnime {
+            // The title's own stars (TV-500, TV-504); counts are on the card line.
             if let stars = item.tracking.rating?.starCount { parts.append("\(stars) stars") }
             return parts.joined(separator: " - ")
         }

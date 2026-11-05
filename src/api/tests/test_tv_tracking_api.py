@@ -491,7 +491,7 @@ class TVActionEndpointTests(TVAPITestCase):
 
     def test_tv_504_rate_accepts_only_whole_values_from_1_to_10(self):
         show = self.make_show()
-        self.tick(show, 1, 1)
+        self.action(show, "mark_watched")
 
         for rating in (8.5, 0, 11, "eight", True):
             response = self.action(show, "rate", rating=rating)
@@ -558,7 +558,7 @@ class TVActionEndpointTests(TVAPITestCase):
         self.assertTrue(from_episode.data["tv"]["episode"]["watched"])
         self.assertEqual(from_episode.data["tv"]["composer"]["default_target"], "episode:3:1")
         # Without a page `tv` describes the show (the show page, Home and Profile).
-        self.assertIsNone(self.action(show, "rate", rating=7).data["tv"]["season"])
+        self.assertIsNone(self.action(show, "tick", season_number=1, episode_number=2).data["tv"]["season"])
 
     def test_tv_302_an_eye_undo_from_a_season_page_returns_its_episode_rows(self):
         """TV-302 case 2, TV-705: the rows show what the undo kept, before any reload.
@@ -618,16 +618,29 @@ class TVActionEndpointTests(TVAPITestCase):
             ],
         )
 
-    def test_tv_304_stars_on_a_started_show_are_opinion_only(self):
-        """A-29: stars on a show at S1 E3 change nothing else."""
+    def test_tv_304_stars_on_a_partway_show_are_refused_with_the_reason(self):
+        """A-29: stars on a show at S1 E3 are a 409, and nothing changes."""
         show = self.make_show()
         before = self.ticks(show, 1, [1, 2, 3]).data["tv"]
+        self.assertEqual(before["opinion_action"], "log")
 
         response = self.action(show, "rate", rating=6)
 
-        self.assertEqual(response.data["tracking"]["status"], "In progress")
-        self.assertEqual(response.data["tv"]["up_next"], before["up_next"])
-        self.assertEqual(response.data["tv"]["watched_count"], 3)
+        self.assert_error(response, 409, "tv_action_unavailable")
+        self.assertEqual(response.data["error"]["message"], "Log this first.")
+        after = self.detail(show).data["user_state"]["tv"]
+        self.assertEqual((after["up_next"], after["watched_count"], after["version"]), (before["up_next"], 3, before["version"]))
+        self.assertFalse(Activity.objects.filter(actor=self.user, verb="rating_updated").exists())
+
+    def test_tv_304_a_finished_shows_stars_only_save(self):
+        show = self.make_show()
+        marked = self.action(show, "mark_watched")
+        self.assertEqual(marked.data["tv"]["opinion_action"], "save")
+
+        response = self.action(show, "rate", rating=6)
+
+        self.assertEqual(response.data["tracking"]["status"], "Completed")
+        self.assertEqual(response.data["tracking"]["rating"], "6.0")
         self.assertTrue(Activity.objects.filter(actor=self.user, verb="rating_updated").exists())
 
     def test_tv_300_mark_watched_and_its_consume_alias(self):
@@ -776,16 +789,20 @@ class TVInstalledBuildEndpointTests(TVAPITestCase):
         self.tick(show, 1, 1)
         url = f"/api/v1/tracking/tmdb/season/{show.media_id}/"
 
+        partway = self.client.patch(url, {"season_number": 1, "rating": "8.0"}, format="json")
         rated = self.client.patch(url, {"season_number": 2, "rating": "8.0"}, format="json")
         half = self.client.patch(url, {"season_number": 2, "rating": "8.5"}, format="json")
 
+        # TV-304: Season 1 is partway, so the reason comes back for the app to show.
+        self.assert_error(partway, 409, "tv_action_unavailable")
+        self.assertEqual(partway.data["error"]["message"], "Log this first.")
         self.assertEqual(rated.status_code, status.HTTP_200_OK)
         self.assertEqual(rated.data["rating"], "8.0")
-        # TV-304: opinion only on a started show; the season isn't started.
-        self.assertIsNone(rated.data["status"])
-        self.assertFalse(rated.data["season"]["started"])
+        # TV-303: Season 2 isn't started, so its stars mark it.
+        self.assertTrue(rated.data["season"]["started"])
+        self.assertEqual(rated.data["season"]["state"], "watched")
         self.assert_error(half, 400, "validation_error")
-        self.assertEqual(self.watched(show), {(1, 1)})
+        self.assertTrue({(2, episode) for episode in range(1, 9)} <= self.watched(show))
 
     def test_tv_003_tracking_deletes(self):
         show = self.make_show()
@@ -813,11 +830,6 @@ class TVInstalledBuildEndpointTests(TVAPITestCase):
     def test_tracking_detail_reads(self):
         show = self.make_show()
         self.tick(show, 1, 1)
-        self.client.patch(
-            f"/api/v1/tracking/tmdb/season/{show.media_id}/",
-            {"season_number": 2, "rating": 7},
-            format="json",
-        )
 
         show_state = self.client.get(f"/api/v1/tracking/tmdb/tv/{show.media_id}/")
         season_state = self.client.get(f"/api/v1/tracking/tmdb/season/{show.media_id}/", {"season_number": 1})

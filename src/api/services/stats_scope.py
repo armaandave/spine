@@ -17,7 +17,8 @@ What a scope holds:
   in the range), ``log_day()`` and ``range_q()``;
 - viewings: ``all_viewings`` (TV viewings of the tab that aren't hidden),
   ``viewings`` (in the range: dated ones in a dated range, every one in All Time),
-  ``dated_viewings`` (those with a day), ``viewing_day()``;
+  ``dated_viewings`` (those with a day), ``viewing_day()``, and ``anime_viewings``,
+  ``dated_anime_viewings`` and ``anime_viewing_day()`` the same for anime (AN-704);
 - titles: ``title_id()`` (seasons and episodes fold to their show, STAT-102),
   ``titles()`` (STAT-105), ``events()`` (STAT-106), ``first_seen_q()`` (a title's
   first dated day falls in the range, STAT-213, STAT-214);
@@ -55,7 +56,7 @@ from api.services import activity_rows
 from api.services import filters as filter_service
 from api.services import stats as stats_service
 from app import exposure, user_calendar
-from app.models import DiaryEntry, Episode, Item, MediaTypes, Status
+from app.models import AnimeViewing, DiaryEntry, Episode, Item, MediaTypes, Status
 from social.models import Follow, FollowStatus, ProgressChange
 
 AUDIENCE_OWNER = "owner"
@@ -249,6 +250,10 @@ class StatsScope:
     @property
     def counts_tv(self):
         return MediaTypes.TV.value in self.primary_types
+
+    @property
+    def counts_anime(self):
+        return MediaTypes.ANIME.value in self.primary_types
 
     @property
     def has_collections(self):
@@ -478,6 +483,59 @@ class StatsScope:
         ]
         return (in_range & ~Q(id__in=list(moved))) | Q(id__in=moved_in)
 
+    # Anime viewings count as TV's do (AN-704): a tick on its day, a log's fills on the
+    # log's day, and a mark's fills only in All Time.
+
+    @cached_property
+    def all_anime_viewings(self):
+        """Anime viewings that aren't hidden, fills included (STAT-003, AN-704)."""
+        if not self.counts_anime:
+            return AnimeViewing.objects.none()
+        viewings = AnimeViewing.objects.filter(anime__user=self.owner).order_by()
+        if not self.is_owner:
+            viewings = viewings.filter(
+                Q(diary_entry__isnull=True) | Q(diary_entry_id__in=self.visible_entries.values("id")),
+            )
+        return viewings
+
+    @staticmethod
+    def _anime_has_day_q():
+        # Through the log itself: code from before these tables can delete a log after a
+        # rollback, and a fill it leaves behind has no day (AN-901).
+        return Q(watched_on__isnull=False) | Q(diary_entry__consumed_at__isnull=False)
+
+    def _anime_days_q(self, start_date=None, end_date=None):
+        """Match anime viewings whose day is on or between the dates; None is open."""
+        if start_date is None and end_date is None:
+            return Q()
+        watched = Q(watched_on__isnull=False)
+        if start_date is not None:
+            watched &= Q(watched_on__gte=start_date)
+        if end_date is not None:
+            watched &= Q(watched_on__lte=end_date)
+        log_days = filter_service.log_day_range_q(self.owner, start_date, end_date, "diary_entry__consumed_at")
+        return watched | (Q(watched_on__isnull=True, diary_entry__isnull=False) & log_days)
+
+    @cached_property
+    def anime_viewings(self):
+        """Anime viewings in range: dated ones, or all of them in All Time."""
+        if self.is_all_time:
+            return self.all_anime_viewings
+        return self.all_anime_viewings.filter(self._anime_days_q(self.start_date, self.end_date))
+
+    @cached_property
+    def dated_anime_viewings(self):
+        """Anime viewings in range with a day; a mark's fills have none (AN-704)."""
+        return self.anime_viewings.filter(self._anime_has_day_q())
+
+    def anime_viewing_day(self):
+        """Return an anime viewing's day: its own, or that of the log it's a fill of."""
+        return Coalesce(
+            F("watched_on"),
+            self.log_day("diary_entry__consumed_at"),
+            output_field=DateField(),
+        )
+
     # Titles
 
     @staticmethod
@@ -512,6 +570,10 @@ class StatsScope:
         """Title IDs of the shows with a dated viewing in the range."""
         return self.dated_viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id")
 
+    def anime_viewing_title_ids(self):
+        """Title IDs of the anime with a dated viewing in the range."""
+        return self.dated_anime_viewings.annotate(stats_title_id=F("anime__item_id")).values("stats_title_id")
+
     def dated_title_ids(self, start_date=None, end_date=None):
         """One subquery of the title IDs with a dated fact on or between the dates.
 
@@ -524,6 +586,9 @@ class StatsScope:
         if self.counts_tv:
             viewings = self.all_viewings.filter(self.viewing_has_day_q(), self.viewing_days_q(start_date, end_date))
             parts.append(viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id"))
+        if self.counts_anime:
+            viewings = self.all_anime_viewings.filter(self._anime_has_day_q(), self._anime_days_q(start_date, end_date))
+            parts.append(viewings.annotate(stats_title_id=F("anime__item_id")).values("stats_title_id"))
         return union_ids(*parts)
 
     def first_seen_q(self, field):
@@ -586,6 +651,8 @@ class StatsScope:
         parts = [self.log_title_ids()]
         if self.counts_tv:
             parts.append(self.viewing_title_ids())
+        if self.counts_anime:
+            parts.append(self.anime_viewing_title_ids())
         parts.extend(self.undated_completion_item_ids())
         calculated = self._calculated_title_ids()
         if calculated:
@@ -621,17 +688,30 @@ class StatsScope:
             .order_by()
         )
 
+    def anime_viewing_events(self):
+        """(day, title ID, "anime") of the dated anime viewings in the range."""
+        return (
+            self.dated_anime_viewings.annotate(
+                event_day=self.anime_viewing_day(),
+                event_title=F("anime__item_id"),
+                event_bucket=Value(MediaTypes.ANIME.value, output_field=CharField()),
+            )
+            .values_list("event_day", "event_title", "event_bucket")
+            .order_by()
+        )
+
     def progress_events(self):
         """(day, title ID, type bucket) of each day's progress and starts (STAT-106).
 
         As in the activity feed (docs/activity-contract.md, AC-1, AC-2): a title's
         recorded progress changes on one local day, kept when any unit, a start
-        included, moved forward on net. TV counts only its starts: its ticks already
-        are events, as dated viewings on the day watched.
+        included, moved forward on net. TV and anime count only their starts: their
+        ticks already are events, as dated viewings on the day watched.
         """
         calculated = {(row.day, row.title_id, row.bucket) for row in self.calculated_rows() if row.is_event}
         changes = ProgressChange.objects.filter(actor=self.owner, item__media_type__in=self.item_types).exclude(
-            Q(item__media_type__in=TV_ITEM_TYPES) & ~Q(current_progress__unit=ProgressChange.START),
+            Q(item__media_type__in=(*TV_ITEM_TYPES, MediaTypes.ANIME.value))
+            & ~Q(current_progress__unit=ProgressChange.START),
         )
         if self.calculated_types:
             changes = changes.exclude(item__media_type__in=self.calculated_types)
@@ -664,9 +744,12 @@ class StatsScope:
         Logs, dated viewings, and each day's progress and starts. Fills and undated
         completions are never events. Sorted by day, then title.
         """
-        events = self.log_events().distinct()
+        viewings = []
         if self.counts_tv:
-            events = self.log_events().union(self.viewing_events())
+            viewings.append(self.viewing_events())
+        if self.counts_anime:
+            viewings.append(self.anime_viewing_events())
+        events = self.log_events().union(*viewings) if viewings else self.log_events().distinct()
         return sorted(set(events) | self.progress_events())
 
     # Posters

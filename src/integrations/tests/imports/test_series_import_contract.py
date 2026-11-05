@@ -339,6 +339,40 @@ class KitsuImportTests(SeriesImportBase):
         self.assertEqual(DiaryEntry.objects.filter(user=self.user, item=row.item).count(), 1)
         self.assert_no_activity()
 
+    # MC-400: a reread under way means a finished read before it, on the finish date it gives.
+    def test_a_reread_under_way_with_no_count_has_a_finished_attempt_and_a_log(self):
+        importer = kitsu.KitsuImporter("1", self.user, "new")
+        metadata = {
+            "id": "100",
+            "attributes": {"canonicalTitle": "Berserk", "chapterCount": 380, "posterImage": {"medium": "https://example.com/b.jpg"}},
+            "relationships": {"mappings": {"data": [{"id": "m1"}]}},
+        }
+        mappings = {"m1": {"attributes": {"externalSite": "myanimelist/manga", "externalId": "2"}}}
+        entry = {
+            "attributes": {
+                "status": "current",
+                "progress": 3,
+                "reconsumeCount": 0,
+                "reconsuming": True,
+                "ratingTwenty": None,
+                "startedAt": None,
+                "finishedAt": "2020-05-01T12:00:00.000Z",
+                "notes": None,
+                "updatedAt": "2021-06-01T10:00:00.000Z",
+            },
+            "relationships": {"manga": {"data": {"id": "100"}}},
+        }
+        importer._process_entry(entry, "manga", {"100": metadata}, mappings)
+        from integrations.imports import helpers
+
+        helpers.bulk_create_media(importer.bulk_media, self.user, source="kitsu")
+        row = self.row("Berserk")
+        self.assertEqual(row.attempts.count(), 2)
+        self.assertEqual(row.attempts.filter(end_date=FINISHED).count(), 1)
+        logs = DiaryEntry.objects.filter(user=self.user, item=row.item)
+        self.assertEqual([log.consumed_at.date() for log in logs], [FINISHED])
+        self.assert_no_activity()
+
 
 class YamtrackImportTests(SeriesImportBase):
     """The Yamtrack CSV importer."""

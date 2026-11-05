@@ -150,15 +150,15 @@ class SavesAtMidnightTests(NewYearBase):
         self.saves_at_the_edge(save)
 
     def test_an_anime_typed_save(self):
+        """A typed number is ticks, and their save holds its day (AN-900, AN-703)."""
         item = self.item(MediaTypes.ANIME.value)
-        row = Anime.objects.create(user=self.user, item=item, status=Status.IN_PROGRESS.value, progress=0)
+        Anime.objects.create(user=self.user, item=item, status=Status.IN_PROGRESS.value, progress=0)
         values = iter((1, 2))
 
         def save():
             response = self.phone().patch(self.url(item), {"progress": next(values)}, format="json")
             self.assertEqual(response.status_code, 200, response.data)
-            newest = Anime.history.filter(id=row.pk).order_by("-history_id").first()
-            return date.fromisoformat(newest.history_change_reason.removeprefix("day:"))
+            return self.latest_day(item)
 
         with mock.patch("app.providers.services.get_media_metadata", return_value={"max_progress": 12}):
             self.saves_at_the_edge(save)

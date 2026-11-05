@@ -1,6 +1,5 @@
 import logging
 import uuid
-from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 
 from django.apps import apps
@@ -31,7 +30,7 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 import app
 import events
 import users
-from app import providers, user_calendar
+from app import providers
 from app.mixins import CalendarTriggerMixin
 from django.core.exceptions import ValidationError
 
@@ -144,6 +143,9 @@ class Item(CalendarTriggerMixin, models.Model):
     metadata_version = models.PositiveSmallIntegerField(default=0, db_default=0)
     # The last fill attempt that failed for a temporary reason; null when none did.
     metadata_attempted_at = models.DateTimeField(null=True, blank=True)
+    # An anime's shown title (AN-705): its English title, or the original when it has none.
+    # Empty until Spine has read one. Other media types never set it.
+    display_title = models.TextField(blank=True, default="", db_default="")
 
     class Meta:
         """Meta options for the model."""
@@ -229,9 +231,16 @@ class Item(CalendarTriggerMixin, models.Model):
             models.Index(fields=["media_type", "rotten_tomatoes_rating"]),
         ]
 
+    @property
+    def shown_title(self):
+        """Return the title Spine shows: an anime's English one once it has it (AN-705)."""
+        if self.media_type == MediaTypes.ANIME.value and self.display_title:
+            return self.display_title
+        return self.title
+
     def __str__(self):
         """Return the name of the item."""
-        name = self.title
+        name = self.shown_title
         if self.season_number is not None:
             name += f" S{self.season_number}"
             if self.episode_number is not None:
@@ -866,8 +875,10 @@ class MediaManager(models.Manager):
         item_fields = [f.name for f in Item._meta.fields]
         if sort_filter in item_fields:
             if sort_filter == "title":
-                # Case-insensitive title sorting
-                return queryset.order_by(models.functions.Lower("item__title"))
+                from app.anime_titles import shown_title_order  # noqa: PLC0415
+
+                # Case-insensitive, by the title shown: an anime's English one (AN-705).
+                return queryset.order_by(shown_title_order())
             # Default sorting for other Item fields
             return queryset.order_by(
                 f"-item__{sort_filter}",
@@ -1338,6 +1349,8 @@ class Media(models.Model):
             "created_at",
             # TV and Season values worked out from the facts (TV-207); they write no history.
             *TV_STATE_CACHE_FIELD_NAMES,
+            # What an anime's stored total is; the total itself is one of those values.
+            "total_is_written",
         ],
     )
 
@@ -2468,7 +2481,7 @@ class TVListing(models.Model):
 
 
 class TVMutation(models.Model):
-    """At-most-once record of a TV write that carried a mutation ID (TV-705)."""
+    """At-most-once record of a TV or anime write that carried a mutation ID (TV-705)."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     mutation_id = models.UUIDField()
@@ -2627,74 +2640,240 @@ class Manga(SeriesMedia):
 
 
 class Anime(Media):
-    """Model for anime.
+    """One person's tracking record of one anime title (docs/anime-tracking-contract.md).
 
-    The generic path writes change rows for its starts and numbers, for installed builds
-    and the old feed, but the calculation's adapter ignores them and reads the history
-    rows. So each history row says what it was in its change reason: `day:<date>`, the
-    date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no day
-    (docs/activity-contract.md, AC-2).
+    `progress` is always the distinct aired episodes watched in the current pass
+    (AN-102). AnimeViewing rows are the facts; app.anime_tracking records them and works
+    out the rest. Every NOT NULL column added for the contract has a database default,
+    so code from before them keeps saving these rows and their history (AN-901).
     """
 
     tracker = FieldTracker()
-    # What only the caller knows. The day the web form sent is the browser's, which the
-    # row can't read back from end_date. The eye is a mark whatever date it carries, and
-    # a media server's play is a real watch whatever status it reached.
-    form_end_day = None
-    is_eye = False
-    is_play = False
 
-    def save(self, *args, **kwargs):
-        """Say what this save was, before saving can turn it into something else."""
-        if not (getattr(self, "_change_reason", None) or "").startswith("log:"):
-            self._change_reason = self._save_reason()
-        super().save(*args, **kwargs)
+    # Facts: stars and heart provenance (TV-501), choices (TV-005 to TV-007, TV-203,
+    # TV-208), the rewatch and its pass (AN-600), the earlier-episodes question (TV-107)
+    # and the pass whose log screen has opened (AN-203). No database constraint on the
+    # sources: code from before them can still delete a log after a rollback (AN-901).
+    rating_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        db_constraint=False,
+    )
+    like_source = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        db_constraint=False,
+    )
+    like_is_independent = models.BooleanField(default=False, db_default=False)
+    # "", "Planning", "In progress" (Watching), "Paused" or "Dropped".
+    choice = models.CharField(max_length=20, blank=True, default="", db_default="")
+    choice_at = models.DateTimeField(null=True, blank=True)
+    ended_choice = models.CharField(max_length=20, blank=True, default="", db_default="")
+    ended_choice_at = models.DateTimeField(null=True, blank=True)
+    # Set while a rewatch is in progress; pass_number is then the rewatch's own.
+    rewatch_started_at = models.DateTimeField(null=True, blank=True)
+    # The pass new viewings and logs belong to; a rewatch starts the next one.
+    pass_number = models.PositiveIntegerField(default=1, db_default=1)
+    earlier_question_at = models.DateTimeField(null=True, blank=True)
+    log_offered_pass = models.PositiveIntegerField(null=True, blank=True)
+    # Set when the total a manual title keeps as its aired_count is a number its owner
+    # wrote or a file gave: no undo erases that (AN-100).
+    total_is_written = models.BooleanField(default=False, db_default=False)
 
-    def _save_reason(self):
-        """A typed number, a new row above 0 or at In progress, or a status move counts today.
+    # Worked out from the facts (TV-207); see TV_STATE_CACHE_FIELD_NAMES. A row with no
+    # reconciled_at has never been worked out: its stored numbers become facts at the
+    # user's first write (AN-902).
+    reconciled_at = models.DateTimeField(null=True, blank=True)
+    state_version = models.PositiveBigIntegerField(default=0, db_default=0)
+    watched_count = models.PositiveIntegerField(null=True, blank=True)
+    aired_count = models.PositiveIntegerField(null=True, blank=True)
+    up_next_episode = models.PositiveIntegerField(null=True, blank=True)
+    up_next_air_date = models.DateField(null=True, blank=True)
+    up_next_is_new = models.BooleanField(default=False, db_default=False)
+    next_air_episode = models.PositiveIntegerField(null=True, blank=True)
+    next_air_date = models.DateField(null=True, blank=True)
+    first_gap_episode = models.PositiveIntegerField(null=True, blank=True)
+    finished = models.BooleanField(default=False, db_default=False)
+    caught_up = models.BooleanField(default=False, db_default=False)
+    last_watched_on = models.DateField(null=True, blank=True)
+    last_activity_on = models.DateField(null=True, blank=True)
+    last_activity_at = models.DateTimeField(null=True, blank=True)
 
-        The eye marks. Setting Completed marks, unless the save sent a date before today:
-        the web form fills today by itself, so a typed today can't be told from it, and
-        nobody watched anything on a date past today. A media server playing the last
-        episode watched it today. Reaching the last episode by typing it is checked here
-        first, so it stays a typed number.
-        """
-        if self.is_eye:
-            return "mark"
-        today = user_calendar.today(self.user)
-        status_moved = self.tracker.has_changed("status")
-        if status_moved and self.status == Status.COMPLETED.value:
-            if self.is_play:
-                return f"day:{today}"
-            sent = (self.form_end_day or self.sent_end_day()) if self.tracker.has_changed("end_date") else None
-            return f"day:{sent}" if sent and sent < today else "mark"
-        if self.pk is None:
-            counts = self.progress > 0 or self.status == Status.IN_PROGRESS.value
-        else:
-            counts = status_moved or self.tracker.has_changed("progress")
-        return f"day:{today}" if counts else "mark"
+    class Meta:
+        """Meta options for the model."""
 
-    def sent_end_day(self):
-        """Return `end_date` as the calendar day it was sent as, or None."""
-        value = self.end_date
-        if not isinstance(value, datetime):
-            return value
-        if timezone.is_naive(value):
-            return value.date()
-        if value.utcoffset() == timedelta(0) and value.time() == time.min:
-            return value.date()
-        # A file's date arrives as midnight on the server's zone.
-        server_time = timezone.localtime(value)
-        return server_time.date() if server_time.time() == time.min else user_calendar.day_of(value, self.user)
+        ordering = ["user", "item", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "item"],
+                name="%(app_label)s_%(class)s_unique_item_user",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["next_air_date"], name="app_anime_next_air_date_idx"),
+            models.Index(
+                fields=["user", "status", "last_activity_on"],
+                name="app_anime_user_status_idx",
+            ),
+        ]
 
-    def import_reason(self):
-        """Only a Completed row's end date dates an imported number, and never a future one.
+    def mark_consumed(self):
+        """Route compatibility callers through the anime rules (AN-300)."""
+        from app.anime_tracking import WEB, mark_watched
 
-        A row's `progressed_at` and a provider's `updated_at` are when it was written,
-        never when it was watched.
-        """
-        day = self.sent_end_day() if self.status == Status.COMPLETED.value else None
-        return f"day:{day}" if day and day <= user_calendar.today(self.user) else "mark"
+        mark_watched(self.user, self.item, entry_point=WEB)
+        self.refresh_from_db()
+        return self
+
+    def increase_progress(self):
+        """A progress number means ticks: tick the next unwatched episode (AN-900)."""
+        self._move_progress(self.progress + 1)
+
+    def decrease_progress(self):
+        """A progress number means ticks: remove the latest unlogged viewing (AN-900)."""
+        self._move_progress(max(self.progress - 1, 0))
+
+    def _move_progress(self, count):
+        from app.anime_tracking import WEB, write_progress
+
+        write_progress(self.user, self.item, count, entry_point=WEB)
+        if type(self).objects.filter(pk=self.pk).exists():
+            self.refresh_from_db()
+
+
+class AnimeMark(models.Model):
+    """One mark: undated fills made by one action (AN-300, TV-301).
+
+    It ends when its last fill goes, and an ended mark counts for nothing.
+    """
+
+    class Origin(models.TextChoices):
+        """What made the mark."""
+
+        EYE = "eye", "Eye"
+        UP_TO = "up_to", "Mark watched up to here"
+        EARLIER = "earlier", "Earlier-episodes question"
+        OPINION = "opinion", "Stars or a heart"
+        IMPORT = "import", "Import"
+        STORED = "stored", "Stored number"
+
+    # No database constraint: code from before this table can still delete the tracking
+    # row after a rollback, and a mark with no row is never read (AN-901).
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="marks", db_constraint=False)
+    origin = models.CharField(max_length=8, choices=Origin, default=Origin.EYE, db_default="eye")
+    pass_number = models.PositiveIntegerField(default=1, db_default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Return the mark's origin and title."""
+        return f"{self.origin} mark of anime row {self.anime_id}"
+
+
+class AnimeViewing(models.Model):
+    """One watching of one episode (the contract's Viewing term).
+
+    A tick is dated: watched_on is its day on the user's calendar and watched_at its
+    moment. A fill is undated and belongs to the mark or log that made it (AN-400,
+    TV-301). A log can take over a single's fill and give it back when it goes, so a fill
+    can name both; while it has a log, it is the log's.
+    """
+
+    class Kind(models.TextChoices):
+        """Where a viewing came from."""
+
+        # A tap or a webhook watch (AN-801).
+        TICK = "tick", "Tick"
+        # An undated viewing a log or a mark added.
+        FILL = "fill", "Fill"
+
+    # No database constraints on anime and diary_entry: code from before this table can
+    # still delete a tracking row or a log after a rollback. A viewing with no row is never
+    # read, and one whose log is gone reads as undated (AN-901).
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name="viewings", db_constraint=False)
+    episode_number = models.PositiveIntegerField()
+    kind = models.CharField(max_length=8, choices=Kind, default=Kind.TICK, db_default="tick")
+    pass_number = models.PositiveIntegerField(default=1, db_default=1)
+    watched_on = models.DateField(null=True, blank=True)
+    watched_at = models.DateTimeField(null=True, blank=True)
+    mark = models.ForeignKey(
+        AnimeMark,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="fills",
+    )
+    # RESTRICT makes deleting a log anywhere but app.anime_tracking fail loudly instead
+    # of leaving its fills behind (TV-406).
+    diary_entry = models.ForeignKey(
+        "DiaryEntry",
+        null=True,
+        blank=True,
+        on_delete=models.RESTRICT,
+        related_name="anime_viewings",
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Meta options for the model."""
+
+        ordering = ["anime", "episode_number", "created_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["anime", "episode_number", "created_at"],
+                name="app_animeview_ep_created_idx",
+            ),
+            models.Index(fields=["watched_on"], name="app_animeview_watched_on_idx"),
+        ]
+
+    def __str__(self):
+        """Return the episode number."""
+        return f"E{self.episode_number} of anime row {self.anime_id}"
+
+
+class AnimeListing(models.Model):
+    """Stored copy of a title's total, aired count, next episode and rows (AN-100).
+
+    app.anime_listing keeps it up to date and uses it when a provider can't be reached.
+    It is what every row and count reads, so no page ever waits for AniList.
+    """
+
+    # No database constraint: code from before this table can still delete a title after a
+    # rollback (AN-901).
+    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="anime_listing", db_constraint=False)
+    # The episode count MAL lists; null when it lists none.
+    total = models.PositiveIntegerField(null=True, blank=True)
+    # MAL's status as the app shows it: "Finished", "Airing" or "Upcoming". Blank until
+    # MAL has been read; until then the row counts as no copy (AN-100).
+    provider_status = models.CharField(max_length=20, blank=True, default="", db_default="")
+    # MAL's format, such as "TV" or "Movie".
+    media_format = models.CharField(max_length=20, blank=True, default="", db_default="")
+    premiere_date = models.DateField(null=True, blank=True)
+    # The next episode AniList names and when it airs.
+    next_episode = models.PositiveIntegerField(null=True, blank=True)
+    next_air_at = models.DateTimeField(null=True, blank=True)
+    # [[number, title, image URL, airing time as Unix seconds], ...] in number order,
+    # holding only the episodes AniList says something about.
+    rows = models.JSONField(default=list, db_default=[])
+    # The title after this one in MAL's series order (AN-500): {"media_id", "source",
+    # "media_type", "title", "display_title", "image", "release_date"}, or null for none.
+    next_title = models.JSONField(null=True, blank=True)
+    series_checked_at = models.DateTimeField(null=True, blank=True)
+    # When MAL's numbers and AniList's rows were last read.
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    rows_fetched_at = models.DateTimeField(null=True, blank=True)
+    # After a failed fetch, no page tries again before this.
+    retry_after = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        """Return the title."""
+        return f"Listing for {self.item}"
 
 
 class Movie(Media):

@@ -36,11 +36,11 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
         isSingleWeight || ["book", "game"].contains(mediaType)
     }
 
-    /// Logs dated by calendar day: the single-weight, book and game types, plus TV, manga and comic logs (TV-407,
+    /// Logs dated by calendar day: the single-weight, book and game types, plus TV, anime, manga and comic logs (TV-407,
     /// MC-000). Separate from `usesCalendarConsumptionDate`, which also hides the per-entry visibility picker that
     /// these keep (AC-5).
     var usesCalendarLogDate: Bool {
-        usesCalendarConsumptionDate || isTVFamily || isSeries
+        usesCalendarConsumptionDate || isTVFamily || isAnime || isSeries
     }
 
     /// A manga or a comic: a book counted in chapters or issues (MC-000).
@@ -55,6 +55,11 @@ nonisolated struct MediaRef: Codable, Hashable, Identifiable {
 
     var isTVFamily: Bool {
         ["tv", "season", "episode"].contains(mediaType)
+    }
+
+    /// One MAL title, which works like one TV season with no show around it (AN-000).
+    var isAnime: Bool {
+        mediaType == "anime"
     }
 
     var episodeCode: String? {
@@ -980,6 +985,8 @@ struct MediaDetail: Decodable, Identifiable {
     var tvUnlistedSeasons: [TVUnlistedSeason]? = nil
     /// Tracked episodes the provider no longer lists, shown last (TV-103). Season pages only.
     var tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil
+    /// An anime title's episode rows for the viewer (AN-101). Anime pages only, signed in.
+    var animeRows: AnimeRows? = nil
 
     var id: String { ref.id }
 
@@ -1051,6 +1058,7 @@ struct MediaDetail: Decodable, Identifiable {
         case customLogoUrl
         case tvUnlistedSeasons
         case tvUnlistedEpisodes
+        case animeRows
     }
 
     init(
@@ -1096,7 +1104,8 @@ struct MediaDetail: Decodable, Identifiable {
         customBackdropUrl: String? = nil,
         customLogoUrl: String? = nil,
         tvUnlistedSeasons: [TVUnlistedSeason]? = nil,
-        tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil
+        tvUnlistedEpisodes: [TVUnlistedEpisode]? = nil,
+        animeRows: AnimeRows? = nil
     ) {
         self.ref = ref
         self.title = title
@@ -1141,6 +1150,7 @@ struct MediaDetail: Decodable, Identifiable {
         self.customLogoUrl = customLogoUrl
         self.tvUnlistedSeasons = tvUnlistedSeasons
         self.tvUnlistedEpisodes = tvUnlistedEpisodes
+        self.animeRows = animeRows
     }
 
     init(from decoder: Decoder) throws {
@@ -1193,7 +1203,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: try container.decodeIfPresent(String.self, forKey: .customBackdropUrl),
             customLogoUrl: try container.decodeIfPresent(String.self, forKey: .customLogoUrl),
             tvUnlistedSeasons: try container.decodeIfPresent([TVUnlistedSeason].self, forKey: .tvUnlistedSeasons),
-            tvUnlistedEpisodes: try container.decodeIfPresent([TVUnlistedEpisode].self, forKey: .tvUnlistedEpisodes)
+            tvUnlistedEpisodes: try container.decodeIfPresent([TVUnlistedEpisode].self, forKey: .tvUnlistedEpisodes),
+            animeRows: container.decodeLossily(AnimeRows.self, forKey: .animeRows)
         )
     }
 
@@ -1241,7 +1252,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: customBackdropUrl,
             customLogoUrl: customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1289,7 +1301,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: response.customBackdropUrl ?? response.backdropUrl,
             customLogoUrl: customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1337,7 +1350,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: customBackdropUrl,
             customLogoUrl: response.customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1385,7 +1399,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: customBackdropUrl,
             customLogoUrl: customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1433,7 +1448,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: customBackdropUrl,
             customLogoUrl: customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1485,7 +1501,8 @@ struct MediaDetail: Decodable, Identifiable {
             customBackdropUrl: customBackdropUrl,
             customLogoUrl: customLogoUrl,
             tvUnlistedSeasons: tvUnlistedSeasons,
-            tvUnlistedEpisodes: tvUnlistedEpisodes
+            tvUnlistedEpisodes: tvUnlistedEpisodes,
+            animeRows: animeRows
         )
     }
 
@@ -1631,6 +1648,8 @@ nonisolated struct UserMediaState: Codable, Hashable {
     var game: GameTrackingState?
     /// TV state of a show, season or episode page (plan section 2.3.1). Nil for other media types.
     var tv: TVShowState? = nil
+    /// An anime title's state: the detail variant on a page, the list variant in a summary. Nil for other media types.
+    var anime: AnimeState? = nil
     /// Client-only: ticks and marks the page shows before the server confirms them (TV-705). Projections set it;
     /// it is never decoded or encoded.
     var tvPending = TVPendingWatches()
@@ -1657,6 +1676,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         case series
         case game
         case tv
+        case anime
     }
 
     init(
@@ -1678,7 +1698,8 @@ nonisolated struct UserMediaState: Codable, Hashable {
         likeIsIndependent: Bool? = nil,
         book: BookTrackingState? = nil,
         game: GameTrackingState? = nil,
-        tv: TVShowState? = nil
+        tv: TVShowState? = nil,
+        anime: AnimeState? = nil
     ) {
         self.isTracked = isTracked
         self.trackingId = trackingId
@@ -1699,6 +1720,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         self.book = book
         self.game = game
         self.tv = tv
+        self.anime = anime
     }
 
     init(from decoder: Decoder) throws {
@@ -1722,6 +1744,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
             ?? container.decodeIfPresent(BookTrackingState.self, forKey: .series)
         game = try container.decodeIfPresent(GameTrackingState.self, forKey: .game)
         tv = try container.decodeIfPresent(TVShowState.self, forKey: .tv)
+        anime = container.decodeLossily(AnimeState.self, forKey: .anime)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1744,6 +1767,7 @@ nonisolated struct UserMediaState: Codable, Hashable {
         try container.encodeIfPresent(book, forKey: .book)
         try container.encodeIfPresent(game, forKey: .game)
         try container.encodeIfPresent(tv, forKey: .tv)
+        try container.encodeIfPresent(anime, forKey: .anime)
     }
 
     func replacingHasLiked(_ liked: Bool) -> UserMediaState {
@@ -1768,6 +1792,9 @@ struct MediaLikeResponse: Codable, Equatable {
     var season: TVSeasonState? = nil
     var episode: TVEpisodeState? = nil
     var earlierUnwatched: TVEarlierUnwatched? = nil
+    /// Anime likes (AN-301): the title's state after the heart, and every row when the heart marked it.
+    @LossyAnimeValue var anime: AnimeState? = nil
+    @LossyAnimeValue var rows: AnimeRows? = nil
 
     /// The heart's TV keys as a write envelope, for the follow-up coordinator and `applying(tvEnvelope:tracking:)`.
     var tvEnvelope: TVWriteEnvelope {
@@ -1776,7 +1803,9 @@ struct MediaLikeResponse: Codable, Equatable {
             season: season,
             episode: episode,
             changed: true,
-            earlierUnwatched: earlierUnwatched
+            earlierUnwatched: earlierUnwatched,
+            anime: anime ?? media?.userState?.anime,
+            rows: rows
         )
     }
 }

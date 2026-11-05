@@ -333,15 +333,17 @@ struct TVActionSheet: View {
     let items: [TVMenuItem]
     /// "Remove this show? Your 13 watched episodes will be unmarked."
     let removePrompt: String
+    /// "Drop this show? Your progress will be kept."
+    var dropPrompt = TVTrackingPresentation.dropPrompt
     let onCommand: (TVMenuItem.Command) -> Void
-    /// What the sheet showed when a choice was made, kept while it slides away so rows don't change under the
-    /// finger and a second tap is ignored.
-    @State private var committed: [TVMenuItem]?
+    /// What the sheet shows while it's open, and once a choice is made while it slides away, so rows don't change
+    /// under the finger and a second tap is ignored.
+    @State private var rows = TVMenuRows()
     @State private var confirmsDrop = false
     @State private var confirmsRemove = false
 
     var body: some View {
-        let shown = committed ?? items
+        let shown = rows.shown(live: items)
         NavigationStack {
             List {
                 Section {
@@ -361,7 +363,7 @@ struct TVActionSheet: View {
             .fitsSheetToContent()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog(TVTrackingPresentation.dropPrompt, isPresented: $confirmsDrop, titleVisibility: .visible) {
+            .confirmationDialog(dropPrompt, isPresented: $confirmsDrop, titleVisibility: .visible) {
                 Button("Drop", role: .destructive) { commit(.action(.drop)) }
                 Button("Cancel", role: .cancel) {}
             }
@@ -371,6 +373,7 @@ struct TVActionSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear { rows.open(items) }
     }
 
     private func row(_ item: TVMenuItem, role: ButtonRole? = nil) -> some View {
@@ -391,7 +394,7 @@ struct TVActionSheet: View {
     }
 
     private func tap(_ item: TVMenuItem) {
-        guard item.isAvailable, committed == nil else { return }
+        guard item.isAvailable, !rows.isCommitted else { return }
         switch item.command {
         case .confirmDrop:
             confirmsDrop = true
@@ -403,8 +406,8 @@ struct TVActionSheet: View {
     }
 
     private func commit(_ command: TVMenuItem.Command) {
-        guard committed == nil else { return }
-        committed = items
+        guard !rows.isCommitted else { return }
+        rows.commit(items)
         UISelectionFeedbackGenerator().selectionChanged()
         onCommand(command)
     }

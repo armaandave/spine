@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from app import anime_listing, anime_tracking
 from app.models import MediaTypes, Sources
 from app.providers import services
 from events.models import Event
@@ -34,11 +35,23 @@ def anilist_date_parser(start_date):
 
 
 def process_anime_bulk(items, events_bulk):
-    """Process multiple anime items and add events to the event list."""
+    """Process multiple anime items and add events to the event list.
+
+    A failed read costs only what it read: those titles' events stay as they are until
+    the next run, and the rest of the job goes on. Reads are short and never wait out a rate
+    limit, and once MAL has timed out or rate-limited the run asks it nothing more, so a
+    hung or busy provider can't hold up a worker.
+    """
     if not items:
         return
 
-    anime_data = get_anime_schedule_bulk([item.media_id for item in items])
+    reads = anime_listing.JobReads()
+    try:
+        anime_data = get_anime_schedule_bulk([item.media_id for item in items], reads=reads)
+    except anime_listing.PROVIDER_FAILURES:
+        logger.warning("AniList's schedule can't be read for the calendar job", exc_info=True)
+        refresh_tracking(items, reads)
+        return
 
     for item in items:
         episodes = anime_data.get(item.media_id)
@@ -65,7 +78,24 @@ def process_anime_bulk(items, events_bulk):
                 item.title,
                 item.media_id,
             )
-            process_other(item, events_bulk)
+            try:
+                reads.mal(lambda **limits: process_other(item, events_bulk, **limits))
+            except anime_listing.PROVIDER_FAILURES:
+                logger.warning("Can't read the releases of %s", item, exc_info=True)
+
+    refresh_tracking(items, reads)
+
+
+def refresh_tracking(items, reads=None):
+    """Refresh these titles' stored rows and work out every user's row (AN-202).
+
+    This is how a new episode or a raised total reopens a title. Never raises: the events
+    still update when a provider or a row fails.
+    """
+    try:
+        anime_tracking.refresh_after_calendar(items, reads)
+    except Exception:
+        logger.exception("Could not refresh anime tracking")
 
 
 def _collect_airing_schedule_pages(query, url, media_ids, page):
@@ -83,6 +113,8 @@ def _collect_airing_schedule_pages(query, url, media_ids, page):
             "POST",
             url,
             params={"query": query, "variables": variables},
+            timeout=anime_listing.JOB_TIMEOUT,
+            retry_rate_limits=False,
         )
 
         has_next_airing_page = False
@@ -110,16 +142,19 @@ def _collect_airing_schedule_pages(query, url, media_ids, page):
     return media_by_id, response["data"]["Page"]["pageInfo"]["hasNextPage"]
 
 
-def _get_mal_total_episodes(mal_id):
-    mal_metadata = services.get_media_metadata(
-        media_type=MediaTypes.ANIME.value,
-        media_id=mal_id,
-        source=Sources.MAL.value,
+def _get_mal_total_episodes(mal_id, reads):
+    mal_metadata = reads.mal(
+        lambda **limits: services.get_media_metadata(
+            media_type=MediaTypes.ANIME.value,
+            media_id=mal_id,
+            source=Sources.MAL.value,
+            **limits,
+        ),
     )
     return mal_metadata["max_progress"]
 
 
-def _process_anilist_media_schedule(mal_id, media):
+def _process_anilist_media_schedule(mal_id, media, reads):
     airing_schedule = media["airingSchedule"]
     total_episodes = media["episodes"]
 
@@ -146,7 +181,7 @@ def _process_anilist_media_schedule(mal_id, media):
         or not airing_schedule
         or airing_schedule[-1]["episode"] < total_episodes
     ):
-        mal_total_episodes = _get_mal_total_episodes(mal_id)
+        mal_total_episodes = _get_mal_total_episodes(mal_id, reads)
 
         if (
             mal_total_episodes
@@ -179,8 +214,9 @@ def _process_anilist_media_schedule(mal_id, media):
     return airing_schedule
 
 
-def get_anime_schedule_bulk(media_ids):
+def get_anime_schedule_bulk(media_ids, reads=None):
     """Get the airing schedule for multiple anime items from AniList API."""
+    reads = reads or anime_listing.JobReads()
     all_data = {}
     page = 1
     url = "https://graphql.anilist.co"
@@ -221,7 +257,11 @@ def get_anime_schedule_bulk(media_ids):
         )
 
         for mal_id, media in media_by_id.items():
-            airing_schedule = _process_anilist_media_schedule(mal_id, media)
+            try:
+                airing_schedule = _process_anilist_media_schedule(mal_id, media, reads)
+            except anime_listing.PROVIDER_FAILURES:
+                logger.warning("Can't work out the schedule of MAL ID %s", mal_id, exc_info=True)
+                continue
             if airing_schedule:
                 all_data[mal_id] = airing_schedule
 

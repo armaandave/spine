@@ -182,6 +182,12 @@ protocol TrackingRepository {
     func performTVAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse
     /// Continue Watching: shows in Watching with an aired up next, in the server's order (TV-701).
     func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem>
+    /// `POST tracking/{source}/anime/{id}/actions/{action}/`: TV's route with no season.
+    func performAnimeAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse
+    /// In progress for anime: titles in Watching with an aired up next, in the server's order (AN-701).
+    func continueWatchingAnime(page: String?) async throws -> PagedResponse<LibraryItem>
+    /// A title's state and rows, for Home's sheet: `GET tracking/{source}/anime/{id}/rows/` (AN-701).
+    func animeRows(ref: MediaRef) async throws -> AnimeRowsResponse
 }
 
 extension TrackingRepository {
@@ -191,6 +197,18 @@ extension TrackingRepository {
 
     func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem> {
         try await list(mediaType: "tv", page: page, status: InProgressLibraryLoader.status, query: nil)
+    }
+
+    func performAnimeAction(source _: String, mediaId _: String, action _: TVAction, request _: TVActionRequest) async throws -> TVActionResponse {
+        fatalError("Not implemented")
+    }
+
+    func continueWatchingAnime(page: String?) async throws -> PagedResponse<LibraryItem> {
+        try await list(mediaType: "anime", page: page, status: InProgressLibraryLoader.status, query: nil)
+    }
+
+    func animeRows(ref _: MediaRef) async throws -> AnimeRowsResponse {
+        fatalError("Not implemented")
     }
 
     func updateSeriesProgress(ref _: MediaRef, value _: Int, mutationId _: UUID) async throws -> TrackingState { fatalError("Not implemented") }
@@ -1226,10 +1244,34 @@ struct APITrackingRepository: TrackingRepository {
     }
 
     func continueWatching(page: String?) async throws -> PagedResponse<LibraryItem> {
+        try await continueWatching(mediaType: "tv", page: page)
+    }
+
+    func performAnimeAction(source: String, mediaId: String, action: TVAction, request: TVActionRequest) async throws -> TVActionResponse {
+        try await client.post(
+            "/tracking/\(source)/anime/\(mediaId)/actions/\(action.rawValue)/",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    func continueWatchingAnime(page: String?) async throws -> PagedResponse<LibraryItem> {
+        // A server older than this build reads the status and ignores `continue_watching` for anime.
+        try await continueWatching(mediaType: "anime", status: InProgressLibraryLoader.status, page: page)
+    }
+
+    func animeRows(ref: MediaRef) async throws -> AnimeRowsResponse {
+        try await client.get("/tracking/\(ref.source)/anime/\(ref.mediaId)/rows/", authenticated: true)
+    }
+
+    private func continueWatching(mediaType: String, status: String? = nil, page: String?) async throws -> PagedResponse<LibraryItem> {
         var query = [
-            URLQueryItem(name: "media_type", value: "tv"),
+            URLQueryItem(name: "media_type", value: mediaType),
             URLQueryItem(name: "continue_watching", value: "true"),
         ]
+        if let status {
+            query.append(URLQueryItem(name: "status", value: status))
+        }
         if let page {
             query.append(URLQueryItem(name: "page", value: page))
         }

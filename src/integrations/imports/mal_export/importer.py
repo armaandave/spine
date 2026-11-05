@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from api.services import progress_posts
 from api.services.item_metadata import store_item_metadata, store_series_total
-from app import single_weight, user_calendar
+from app import anime_tracking, single_weight, user_calendar
 from app.models import (
     Anime,
     DiaryEntry,
@@ -265,6 +265,11 @@ class MALExportImporter:
                 row._import_tags = entry.tags  # noqa: SLF001
                 row._import_source_id = f"{entry.media_type}:{entry.media_id}:finish"  # noqa: SLF001
                 bulk_media[entry.media_type].extend(_earlier_reads(entry, model, items[key], self.user, total))
+            else:
+                # Each rewatch is a finished earlier pass (AN-800), as a reread is for a
+                # manga. The log below dates what the current one fills.
+                row._anime_total = total or None  # noqa: SLF001
+                bulk_media[entry.media_type].extend(_earlier_reads(entry, model, items[key], self.user, total))
             bulk_media[entry.media_type].append(row)
             self.counts[entry.media_type] += 1
             if entry.score is not None:
@@ -287,8 +292,7 @@ class MALExportImporter:
             for entry in entries
             if entry.media_type != MediaTypes.MANGA.value
             and entry.completed_once
-            and entry.finish_date is not None
-            and entry.finish_date <= today
+            and anime_tracking.imported_day(self.user, entry.finish_date) is not None
         ]
         if not candidates:
             return
@@ -310,13 +314,14 @@ class MALExportImporter:
             source_id = f"{entry.media_type}:{entry.media_id}:finish"
             if source_id in existing_source_ids:
                 continue
-            if entry.finish_date in existing_days[item.id]:
+            finish_day = anime_tracking.imported_day(self.user, entry.finish_date)
+            if finish_day in existing_days[item.id]:
                 # A log for that day already exists (e.g. created by hand).
                 continue
             create_diary_entry(
                 self.user,
                 item,
-                consumed_at=single_weight.calendar_datetime(entry.finish_date, today=today),
+                consumed_at=single_weight.calendar_datetime(finish_day, today=today),
                 rating=entry.score,
                 review="",
                 is_rewatch=False,
@@ -327,7 +332,7 @@ class MALExportImporter:
                 update_current=False,
             )
             existing_source_ids.add(source_id)
-            existing_days[item.id].add(entry.finish_date)
+            existing_days[item.id].add(finish_day)
             self.counts["diary"] += 1
 
 
@@ -367,7 +372,7 @@ def backfill_metadata(item_ids, fetcher=fetch_mal_metadata):
 
 
 def _earlier_reads(entry, model, item, user, total):
-    """Return a manga's earlier finished reads, each another row for one record (MC-400).
+    """Return a title's earlier finished reads or passes, one row each (MC-400, AN-800).
 
     A reader on a reread has finished at least once, on the finish date the file gives.
     """

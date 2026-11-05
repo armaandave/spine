@@ -229,6 +229,30 @@ final class TVTrackingPresentationTests: XCTestCase {
         XCTAssertTrue(items.filter { ["pause", "drop", "log", "remove"].contains($0.key) }.allSatisfy(\.isAvailable))
     }
 
+    func testTV005AnOpenMenuKeepsItsRowsWhenAWriteLands() {
+        // The + menu is open on a partway show when the finale's tick lands. Rewatch would appear, and the sheet, which
+        // sizes to its rows and grows upward, would move them under the finger. They stay as they opened until the
+        // menu opens again.
+        let partway = TVShowState(inLibrary: true, status: "In progress", selectedAction: "watching", started: true,
+                                  availableActions: ["pause", "drop", "log", "remove"])
+        let finished = TVShowState(inLibrary: true, status: "Completed", started: true, finished: true,
+                                   availableActions: ["rewatch", "pause", "drop", "log", "remove"])
+        var rows = TVMenuRows()
+        rows.open(TVTrackingPresentation.showMenu(for: partway))
+        let live = TVTrackingPresentation.showMenu(for: finished)
+        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"],
+                       "No row appears or moves while the menu is open")
+        rows.commit(live)
+        XCTAssertEqual(rows.shown(live: live).map(\.key), ["watching", "planning", "pause", "drop", "log", "remove"],
+                       "Nor as it slides away after a choice")
+
+        var reopened = TVMenuRows()
+        reopened.open(live)
+        XCTAssertEqual(reopened.shown(live: live).map(\.key),
+                       ["watching", "planning", "pause", "drop", "log", "rewatch", "remove"],
+                       "The next open shows Rewatch, after Log")
+    }
+
     func testTV005ResumeRewatchAndStopRewatchAppearOnlyWhenListed() {
         // A Paused show has one row, Resume, in place of Watching (TV-005, TV-007).
         var paused = TVShowState(inLibrary: true, status: "Paused", choice: "Paused", selectedAction: "pause", started: true,
@@ -264,7 +288,8 @@ final class TVTrackingPresentationTests: XCTestCase {
                                    actionReasons: ["watching": "You've watched everything that has aired."])
         let finishedItems = TVTrackingPresentation.showMenu(for: finished)
         keys = finishedItems.map(\.key)
-        XCTAssertEqual(keys, ["watching", "planning", "pause", "drop", "rewatch", "log", "remove"])
+        XCTAssertEqual(keys, ["watching", "planning", "pause", "drop", "log", "rewatch", "remove"],
+                       "Rewatch, which appears when the show finishes, comes after Log")
         XCTAssertEqual(finishedItems.first?.reason, "You've watched everything that has aired.")
         XCTAssertFalse(finishedItems.contains { $0.key == "rate" }, "Stars live on the rail, not in the + menu.")
 

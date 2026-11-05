@@ -46,11 +46,12 @@ hearts, follows, or adding to a list.
 - The day is the phone's date when the progress was saved, stored as `saved_on`, and it
   never moves with the time zone of whoever reads it. A row from before that column
   reads its moment on the server's zone.
-- Anime's generic path writes start and progress steps, for installed builds and the
-  old feed, but the calculation's adapter ignores them and reads anime's history
-  rows. So each history row says what it was in its change reason: `day:<date>`, the
-  date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no
-  day. Only the comparison reads these yet.
+- Anime keeps its own rules (docs/anime-tracking-contract.md, AN-703): only ticks move
+  its progress steps, and choosing Watching, a tick that puts it in Watching or starting
+  a rewatch is its start, each with its `saved_on`. Stats count its viewings (AN-704).
+  The calculation's anime adapter is switched off: it reads anime's history rows, where
+  anime_tracking writes no change reason, at their moments, and only the comparison
+  runs it. It has to read viewings before anime can switch to it.
 
 ## AC-3: Newest date first
 
@@ -142,6 +143,6 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 
 ## Review status
 
-AC-2's status moves, `began_over`, `saved_on` and anime's change reasons, and AC-7's
+AC-2's status moves, `began_over` and `saved_on`, and AC-7's
 deletion of the likes and comments a removed journey, season or title leaves behind, are
 provisional until the phone test of Activity's first phase accepts them.

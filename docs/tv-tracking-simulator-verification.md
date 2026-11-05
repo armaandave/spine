@@ -5,6 +5,7 @@ Overall status: **VERIFIED; DEFECTS V-01 TO V-06 FIXED AND RE-RUN**
 Every flow below matched the laws in [the TV tracking contract](tv-tracking-contract.md) in the real Spine Dev app.
 The run found six defects. Each was fixed at its cause and its flow re-run (see [Fixes and re-run](#fixes-and-re-run)).
 V-01, the Home freeze, didn't recur on the fixed build, but it also didn't recur on the pre-fix build in the re-run, so the re-run doesn't prove that fix.
+A later run checked Log Season chosen while a season's last tick is on its way, on Home's sheet and on the season page (see [Log Season while the finale's tick is on its way](#log-season-while-the-finales-tick-is-on-its-way)).
 The record omits credentials, tokens and provider keys.
 
 ## Run metadata
@@ -216,3 +217,45 @@ Re-run runs and cleanup:
 | `7251ca6a` | Fixed simulator build (`--queue ios`) | `command_exit` 0, exit 125: one detached Xcode helper (`ibtoold`), gone when checked afterwards |
 | `5fae8e6a` | `scripts/check.sh` | `command_exit` 0, no leftovers: ruff clean, no missing migrations, 2,967 tests OK (34 skipped) |
 | `19faa943` | Full `SpineTests` on a scratch simulator (`--queue ios`) | `command_exit` 0, no leftovers, simulator deleted: 1,057 tests, 0 failures |
+
+## Log Season while the finale's tick is on its way
+
+On Home's episode sheet, ticking a season's last episode and choosing ··· → Log Season… before the answer asked for both the season-finish composer and the Log cover, and neither checked for the other: the second could open after Not now, and saving both would make two diary entries for the season (TV-403, TV-404).
+Log Season… now waits as the season page's + Log does, for the season's writes and for what they ask next, and opens nothing when the tick's answer opens the finish composer (`ContinueWatchingEpisodes.readyForLog`, `5a71b583`).
+`TVTrackingSurfacesTests.testTV403LogSeasonChosenWhileTheFinalesTickIsOnItsWayOpensOneScreenOnly` failed before the fix ("One log screen") and passes after it.
+The season page's + Log had the same collision on `myapp-main`, where it waited only for the write queue; it waits for the follow-up too since `6313000b` (`settledForScreen`), and `TVTrackingPagesTests.testTV403LogChosenWhileTheFinalesTickIsOnItsWayWaitsAndOpensNothingOverTheComposer` now pins it.
+
+| Field | Recorded value |
+| --- | --- |
+| Run | 2026-11-05, 15:11 to 15:36 EST (20:11 to 20:36 UTC) |
+| Branch | `worktree-anime` at `5a71b583` |
+| App | Debug build, Spine Dev, built with `xcodebuild build -destination 'generic/platform=iOS Simulator'` (`66c0aa85`) |
+| Simulator | Scratch iPhone 17, iOS 26.5, UDID `1C7ACF2B-6ECA-468B-A60F-E4D3480E0642`, created and deleted by the cleanup helper; hardware keyboard off |
+| Backend | `scripts/ios/local-backend.sh` from the worktree on `127.0.0.1:8001`, with a small proxy on `127.0.0.1:8002`, the app's base URL, that held each write for 7 to 9 s so a tap could land before the answer (the app gives up at 10 s); dev user `claude` |
+| Evidence | `/Users/armaandave/Library/Caches/anime/screens/`, the `T` files (paths below are relative to it) |
+
+Shows: Severance (TMDB 95396), Season 1 of 9 and Season 2 of 10, on Home; The Bear (TMDB 136315), Season 2 of 10, on its season page.
+Each season was brought to its last episode in the app with touch and hold, Mark Watched Up to Here.
+
+| Check | Result | Observed (law) | Evidence |
+| --- | --- | --- | --- |
+| Home's sheet: tick the finale, then ··· → Log Season… before the answer | PASS | Severance S1 E9 ticked at 15:20:25. Log Season 1… was chosen at 15:20:30 from the menu over the filled tick; the tick answered at 15:20:33. One screen opened, Log Season. Its ✕ (Not now) opened nothing more in 4 s, sent nothing, and the sheet moved on to Season 2, the card reading "S2 E1 next, 9 of 19" (TV-403, TV-701). | `T10-menu-open-before-the-answer.png`, `T11-one-log-screen.png`, `T12-after-not-now-nothing-more.png` |
+| Home's sheet: a plain last tick | PASS | Severance S2 E10's tick opened Log Season, "Severance · Season 2", about 3 s after the tap. ✕ opened nothing, and the sheet stayed on Season 2 with every tick filled, the show caught up (TV-403). | `T13-plain-last-tick-opens-log-season.png`, `T14-after-not-now.png` |
+| Home's sheet: ··· → Log Season… with nothing on its way | PASS | Log Season 2… opened the log screen in about 1.7 s; ✕ sent nothing (TV-404). | `T15-menu-nothing-pending.png`, `T16-log-season-opens.png` |
+| The season page: tick the finale, then + → Log Season before the answer | PASS | The Bear S2 E10 ticked at 15:33:08. With the + menu up over the filled tick, Log Season was chosen at 15:33:17; the menu closed at once with nothing opening, and the tick answered at 15:33:20. One screen opened, Log Season, "The Bear · Season 2". Its ✕ opened nothing more in 9 s and sent nothing (TV-403, TV-404). | `T28-plus-menu-up-before-the-answer.png`, `T29-menu-closed-waiting-for-the-answer.png`, `T30-one-log-screen-season-2.png`, `T31-after-close-nothing-more.png` |
+
+Not counted:
+
+- A first try on Fleabag Season 1 from Home's sheet also showed one screen and nothing after ✕, but the time of the menu tap wasn't captured, so it may have come after the answer (`T04` to `T06`).
+- Two tries on The Bear's Season 1 page. The first chose Log Season a second after the answer, because the taps ran slowly, and the answer had rebuilt the + menu under the tap: a finished season's menu reads Log Season, then Rewatch Season in the row where Log Season had been (`T20-plus-menu-before-the-answer.png`, `T33-finished-season-plus-menu.png`). The tap started a rewatch of the show (`POST .../actions/rewatch/` at 20:27:02 UTC), which this worktree's test data keeps. The second, in that rewatch, chose Log Season 3 s before the answer but while the menu was still rising, so it isn't clear the tap reached it; it too showed one screen and nothing after ✕ (`T24` to `T26`).
+- A person tapping a + menu that's open while a finale's tick lands could start a rewatch the same way. That's unchanged by this fix and left as it is.
+
+| Run | Purpose | Receipt |
+| --- | --- | --- |
+| `3da17915` | The new tests before the fix (`--queue ios`, own scratch simulator) | `command_exit` 65: the Home sheet's test failed, the season page's passed |
+| `c7eb0152` | `TVTrackingSurfacesTests`, `TVTrackingPagesTests` and `TVWriteFollowUpTests` after the fix | `command_exit` 0, 101 tests, no failures, no leftovers |
+| `66c0aa85` | Simulator build (`--queue ios`) | `command_exit` 0, exit 125: one detached Xcode helper, gone when checked afterwards |
+| `d3bbbfeb` | Local backend (`--timeout 7000`) | Stopped; cause `cancelled`, exit 143, no leftovers |
+| `7039ffa2` | The proxy | Stopped; cause `cancelled`, exit 143, no leftovers |
+| `457ed14e` | Scratch simulator (`--queue ios --lane sim`); installed, launched and held; never compiled | Stopped; cause `cancelled`, exit 143, no leftovers; simulator deleted |
+| `8e7d49ed` | The whole of SpineTests after the fix (`--queue ios`, its own scratch simulator) | `command_exit` 0, 1,590 tests, no failures, no leftovers |

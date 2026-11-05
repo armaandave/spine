@@ -14,6 +14,7 @@ from api.serializers.common import latest_progress_change_for
 from api.services import tracking as tracking_service
 from app import book_tracking, game_tracking, single_weight
 from app.models import TV, Anime, DiaryEntry, Item, MediaTypes, Sources, Status
+from app.tests.anime_fixtures import FakeAnimeProvider
 from social.models import Follow, FollowStatus, ProgressChange
 
 
@@ -415,9 +416,11 @@ class StartedActivityTests(TestCase):
         anime_item = self.item(MediaTypes.ANIME.value, source=Sources.MAL.value)
         anime = Anime.objects.create(user=self.user, item=anime_item, status=Status.PLANNING.value)
 
-        tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.IN_PROGRESS.value)
-        tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.PAUSED.value)
-        tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.IN_PROGRESS.value)
+        with FakeAnimeProvider() as fake:
+            fake.add("one", total=12)
+            tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.IN_PROGRESS.value)
+            tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.PAUSED.value)
+            tracking_service.set_status(self.user, source="mal", media_type="anime", media_id="one", status=Status.IN_PROGRESS.value)
 
         anime.refresh_from_db()
         self.assertEqual(anime.status, Status.IN_PROGRESS.value)

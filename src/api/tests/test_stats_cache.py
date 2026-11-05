@@ -24,6 +24,7 @@ from api.services import stats_cache, stats_v2_ratings
 from api.services.stats_scope import build_scope
 from api.views import stats as stats_views
 from app import (
+    anime_tracking,
     book_tracking,
     metadata_fill,
     services,
@@ -51,6 +52,7 @@ from app.models import (
     Status,
     Tag,
 )
+from app.tests.anime_fixtures import FakeAnimeProvider
 from app.tests.test_tv_tracking_viewings import TVTrackingTestCase
 from integrations import tasks as import_tasks
 from lists.models import CustomList, CustomListItem
@@ -432,13 +434,14 @@ class ExplicitBumpTests(StatsCacheBase):
 
             self.assertBumps(self.owner, fail)
 
-    def test_a_like_copied_onto_logs_with_update_bumps_the_owner(self):
+    def test_an_anime_like_written_through_its_module_bumps_the_owner(self):
+        # The row's sources are written with update(), which no signal sees (STAT-006).
         anime = self.item(MediaTypes.ANIME.value, "1", Sources.MAL.value)
-        with self.captureOnCommitCallbacks(execute=True):
-            self.log(anime)
-            MediaLike.objects.create(user=self.owner, item=anime)
-        # The like exists already, so only the update() onto logs writes.
-        self.assertBumps(self.owner, lambda: services.set_media_like(self.owner, anime, liked=True, audit=False))
+        with FakeAnimeProvider() as fake:
+            fake.add("1", total=12)
+            with self.captureOnCommitCallbacks(execute=True):
+                anime_tracking.mark_watched(self.owner, anime, entry_point=anime_tracking.WEB)
+            self.assertBumps(self.owner, lambda: services.set_media_like(self.owner, anime, liked=True, audit=False))
 
     def test_a_single_weight_like_row_written_with_update_bumps_the_owner(self):
         with self.captureOnCommitCallbacks(execute=True):

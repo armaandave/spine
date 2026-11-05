@@ -137,10 +137,14 @@ def _has_dated_event(scope, years_after):
     """
     logs = scope.entries.annotate(event_year=ExtractYear(scope.log_day()))
     viewings = scope.dated_viewings.annotate(event_year=ExtractYear(scope.viewing_day()))
+    anime_viewings = scope.dated_anime_viewings.annotate(event_year=ExtractYear(scope.anime_viewing_day()))
     if years_after is not None:
         logs = logs.filter(event_year__lte=OuterRef("release_year") + years_after)
         viewings = viewings.filter(event_year__lte=OuterRef("release_year") + years_after)
+        anime_viewings = anime_viewings.filter(event_year__lte=OuterRef("release_year") + years_after)
     condition = Exists(logs.filter(item_id=OuterRef("id")))
+    if scope.counts_anime:
+        condition = condition | Exists(anime_viewings.filter(anime__item_id=OuterRef("id")))
     if scope.counts_tv:
         # A show's title also holds its season and episode rows (STAT-102).
         condition = (

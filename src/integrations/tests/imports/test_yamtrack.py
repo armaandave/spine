@@ -1,10 +1,13 @@
+import subprocess
+import sys
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from app.models import (
     TV,
@@ -27,6 +30,21 @@ mock_path = Path(__file__).resolve().parent.parent / "mock_data"
 app_mock_path = (
     Path(__file__).resolve().parent.parent.parent.parent / "app" / "tests" / "mock_data"
 )
+
+
+class ImporterImportsTests(SimpleTestCase):
+    """The importer runs where nothing else loaded the forms: a Celery or test worker."""
+
+    def test_it_imports_the_forms_it_uses(self):
+        code = "import sys, django; django.setup(); import integrations.imports.yamtrack; print('app.forms' in sys.modules)"
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", code],
+            cwd=settings.BASE_DIR,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.stdout.split()[-1:], ["True"], result.stderr[-2000:])
 
 
 class ImportYamtrack(TestCase):

@@ -20,7 +20,7 @@ from api.tests.test_stats_v2_shape import (
     YEAR_2024,
     YEAR_2025,
 )
-from app.models import Book, DiaryEntry, Episode, MediaTypes, Movie
+from app.models import Anime, Book, DiaryEntry, Episode, MediaTypes, Movie
 from social.models import ProgressChange
 
 TV_TYPES = ["tv", "season", "episode"]
@@ -287,15 +287,9 @@ class MultiTitleDayFilterTests(DrillBase):
             self.log(self.item(MediaTypes.EPISODE.value, f"{zone}-show", season=1, episode=number), utc_day(2025, 6, 10))
         _other, other_season, _tv, _season = self.tv_show(f"{zone}-other")
         self.log(other_season, utc_day(2025, 6, 10))
-        # 9 July: a day's anime progress and a film log.
+        # 9 July: an anime tick with no log and a film log.
         series = self.item(MediaTypes.ANIME.value, f"{zone}-progress")
-        change = ProgressChange.objects.create(
-            actor=self.owner,
-            item=series,
-            previous_progress={"value": 1, "unit": "episode"},
-            current_progress={"value": 3, "unit": "episode"},
-        )
-        ProgressChange.objects.filter(pk=change.pk).update(created_at=datetime(2025, 7, 9, 12, tzinfo=local))
+        self.anime_tick(self.tracking(Anime, series), 1, date(2025, 7, 9))
         self.log(films[0], utc_day(2025, 7, 9))
         # New Year's Eve and Day: an anime moment and a film carrier on each, on the
         # owner's calendar.
@@ -337,6 +331,7 @@ class MultiTitleDayFilterTests(DrillBase):
                         self.assertEqual(len({days[entry_id] for entry_id in listed}), number)
             ProgressChange.objects.all().delete()
             Episode.objects.all().delete()
+            Anime.objects.all().delete()
             DiaryEntry.objects.all().delete()
 
     def test_a_partial_date_range_uses_the_same_days(self):

@@ -95,20 +95,10 @@ class CompletionProgressAPITests(TestCase):
         self.assertNotIn("completion", summaries_response.data["results"][0])
         self.assertEqual(library_response.data["completion"], expected)
 
-    def test_latest_repeat_status_is_canonical(self):
+    def test_a_rewatch_in_progress_isnt_completed(self):
+        # One record per title, so a rewatch reopens that record (AN-600).
         item = self.item("anime", MediaTypes.ANIME.value)
-        Anime.objects.bulk_create([
-            Anime(
-                user=self.user,
-                item=item,
-                status=Status.COMPLETED.value,
-            ),
-            Anime(
-                user=self.user,
-                item=item,
-                status=Status.IN_PROGRESS.value,
-            ),
-        ])
+        Anime.objects.bulk_create([Anime(user=self.user, item=item, status=Status.IN_PROGRESS.value)])
 
         self.assertEqual(
             completion_service.completion_for_items(self.user, [item]),

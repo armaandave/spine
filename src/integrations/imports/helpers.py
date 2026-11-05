@@ -17,7 +17,7 @@ from simple_history.utils import bulk_create_with_history, bulk_update_with_hist
 import app
 from api.services.activity_rows import log_day
 from api.services.item_metadata import is_metadata_current, store_item_metadata
-from app import book_tracking, series_tracking, single_weight, tv_tracking, user_calendar
+from app import anime_tracking, book_tracking, series_tracking, single_weight, tv_tracking, user_calendar
 from app.models import DiaryEntry, MediaTypes
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,11 @@ def cleanup_existing_media(to_delete, user):
         if series_tracking.supports(media_type):
             for source, media_ids in sources.items():
                 series_tracking.clear_for_import(user, media_type, source, media_ids)
+            continue
+
+        if anime_tracking.supports(media_type):
+            for source, media_ids in sources.items():
+                anime_tracking.clear_for_import(user, source, media_ids)
             continue
 
         for source, media_ids in sources.items():
@@ -256,20 +261,15 @@ def bulk_create_media(bulk_media_list, user, *, source="", warnings=None):
 
 
 def imported_counts(bulk_media_list):
-    """Count what an import brought in: a series once, however many reads it has (MC-400)."""
+    """Count what an import brought in: a title once, however many reads it has (MC-400, AN-800)."""
     return {
         media_type: (
-            len({row.item_id for row in rows}) if series_tracking.supports(media_type) else len(rows)
+            len({row.item_id for row in rows})
+            if series_tracking.supports(media_type) or anime_tracking.supports(media_type)
+            else len(rows)
         )
         for media_type, rows in bulk_media_list.items()
     }
-
-
-def _stamp_anime_rows(media_type, rows):
-    """Say what each imported anime row is on its history row (Anime's change reason)."""
-    if media_type == MediaTypes.ANIME.value:
-        for row in rows:
-            row._change_reason = row.import_reason()
 
 
 def _bulk_create_media(bulk_media_list, user, source, warnings):
@@ -297,6 +297,10 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
             _import_series_rows(bulk_media, user, source)
             continue
 
+        if anime_tracking.supports(media_type):
+            _import_anime_rows(bulk_media, user)
+            continue
+
         # Update references for seasons and episodes
         if media_type == MediaTypes.SEASON.value:
             logger.info("Updating references for season to existing TV shows")
@@ -307,7 +311,6 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
             )
             update_episode_references(bulk_media, user)
 
-        _stamp_anime_rows(media_type, bulk_media)
         bulk_create_with_history(
             bulk_media,
             model,
@@ -482,6 +485,33 @@ def _import_series_rows(rows, user, source):
         )
 
 
+def _import_anime_rows(rows, user):
+    """Keep one tracking record per title: a title's earlier rows are earlier passes (AN-800)."""
+    rows_by_item = defaultdict(list)
+    for row in rows:
+        rows_by_item[row.item_id].append(row)
+    for item_rows in rows_by_item.values():
+        # Old Yamtrack exports list a title's newest row first. Rows with no date stay
+        # in file order, ahead of those with one.
+        item_rows.sort(
+            key=lambda row: getattr(row, "_history_date", None) or datetime.datetime.min.replace(tzinfo=datetime.UTC),
+        )
+        *earlier, current = item_rows
+        anime_tracking.import_title(
+            user,
+            current.item,
+            status=current.status,
+            count=current.progress,
+            score=next((row.score for row in reversed(item_rows) if row.score), None),
+            notes=next((row.notes for row in reversed(item_rows) if row.notes), ""),
+            earlier=[{"count": row.progress} for row in earlier if row.status == app.models.Status.COMPLETED.value],
+            total=next((getattr(row, "_anime_total", None) for row in item_rows if getattr(row, "_anime_total", None)), None),
+            start_date=current.start_date,
+            end_date=current.end_date,
+            history_date=getattr(current, "_history_date", None),
+        )
+
+
 def bulk_update_media(bulk_media_list, fields_by_media_type, user):
     """Bulk update media objects with history tracking."""
     for media_type, bulk_media in bulk_media_list.items():
@@ -499,7 +529,6 @@ def bulk_update_media(bulk_media_list, fields_by_media_type, user):
         model = apps.get_model(app_label="app", model_name=media_type)
 
         logger.info("Bulk updating %s", media_type)
-        _stamp_anime_rows(media_type, bulk_media)
         bulk_update_with_history(
             bulk_media,
             model,

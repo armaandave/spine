@@ -75,7 +75,6 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
         // Other types are unchanged.
         XCTAssertEqual(LibraryShelf.available(for: "movie"), [.tracked, .planning])
-        XCTAssertEqual(LibraryShelf.available(for: "anime"), [.tracked, .planning])
         XCTAssertEqual(LibraryShelf.available(for: "book"), [.planning, .currentlyReading, .paused, .didNotFinish, .read])
         XCTAssertEqual(LibraryShelf.defaultShelf(for: "movie"), .tracked)
         XCTAssertEqual(LibraryShelf.defaultShelf(for: "game"), .currentlyReading)
@@ -662,6 +661,30 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E1 next · 10 of 10")
     }
 
+    func testTV403LogSeasonChosenWhileTheFinalesTickIsOnItsWayOpensOneScreenOnly() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        let opensAtOnce = await sheet.readyForLog()
+        XCTAssertTrue(opensAtOnce, "With nothing on its way, Log Season… opens")
+
+        // Tick the finale, then choose ··· Log Season… before the answer.
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionResponses = [Self.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510,
+                                                      finished: Self.finished(season: 2))]
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv)))
+        let log = Task { await sheet.readyForLog() }
+        await answer.open()
+        let opens = await log.value
+
+        XCTAssertFalse(opens, "One log screen: Log Season… opens nothing, now or after Not now")
+        XCTAssertEqual(sheet.season.tvFollowUp.composer?.finished.seasonNumber, 2, "The one the finale's tick asked for")
+    }
+
     func testTV701ARowOrOpenShowOpensItsPageOnceTheSheetHasClosed() async throws {
         let crown = Self.crown()
         let viewModel = homeViewModel()
@@ -947,10 +970,10 @@ final class TVTrackingSurfacesTests: XCTestCase {
 
     func testTV407LogDatesAreCappedAtTodayAndSentAsCalendarDates() throws {
         let now = Date(timeIntervalSince1970: 1_793_000_000)
-        for mediaType in ["tv", "season", "episode", "movie", "book"] {
+        for mediaType in ["tv", "season", "episode", "anime", "movie", "book"] {
             XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref(mediaType), now: now), now, mediaType)
         }
-        XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref("anime"), now: now), .distantFuture)
+        XCTAssertEqual(DiaryLogDateLimit.latest(for: Self.ref("boardgame"), now: now), .distantFuture)
         XCTAssertEqual(DiaryLogDateLimit.range(for: Self.ref("episode"), now: now).upperBound, now)
 
         // Editing a TV log sends the day only.
@@ -976,6 +999,8 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertTrue(diary.tvCreates.isEmpty)
 
         viewModel.select(Self.summary("anime"))
+        XCTAssertTrue(viewModel.usesCalendarDate, "AN-400")
+        viewModel.select(Self.summary("boardgame"))
         XCTAssertFalse(viewModel.usesCalendarDate)
     }
 
@@ -1030,7 +1055,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(sent["is_rewatch"] as? Bool, true)
 
         // Other types always send their toggle.
-        viewModel.select(Self.summary("anime"))
+        viewModel.select(Self.summary("movie"))
         XCTAssertEqual(viewModel.isRewatchForRequest, false)
     }
 
@@ -1079,7 +1104,7 @@ final class TVTrackingSurfacesTests: XCTestCase {
     func testOtherTypesKeepTheirDiaryCreate() async throws {
         let viewModel = DiaryCreateViewModel(diaryRepository: diary, mediaRepository: media, trackingRepository: tracking,
                                              onUnauthorized: {})
-        viewModel.select(Self.summary("anime"))
+        viewModel.select(Self.summary("boardgame"))
         await viewModel.loadRewatchDefault()
         _ = await viewModel.create()
         XCTAssertTrue(diary.tvCreates.isEmpty)

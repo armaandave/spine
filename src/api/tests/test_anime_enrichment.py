@@ -185,7 +185,8 @@ class AnimeDetailEnrichmentTests(TestCase):
                 media_id="16498",
             )
 
-        self.assertEqual(result["title"], "Shingeki no Kyojin")
+        # An anime goes by its English title everywhere, the page's title too (AN-705).
+        self.assertEqual(result["title"], "Attack on Titan")
         self.assertEqual(result["display_title"], "Attack on Titan")
         self.assertEqual(result["synopsis"], "MAL synopsis")
         self.assertEqual(result["backdrop_url"], "https://img.example/banner.jpg")

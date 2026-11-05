@@ -1000,7 +1000,10 @@ def _series_rows(model, attempt_model, unit, result, owners, viewer, titles, pil
         _collect(result, title, piles=piles)
 
 
-# Anime. Its history rows are its saves, and each says what it was (AC-2).
+# Anime, switched off: Stats count its viewings (AN-704), which this doesn't read yet.
+# Its history rows are its saves. One stamped before the anime contract says what it
+# was in its change reason; anime_tracking stamps none, so its rows are read at their
+# moments.
 
 # A log written before `log:` rows: its save follows the entry within this.
 LOG_SAVE_WINDOW = timedelta(seconds=5)
