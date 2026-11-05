@@ -837,6 +837,41 @@ def anime_episodes(mal_ids, *, timeout=None, retry_rate_limits=True):
     return results
 
 
+ANIME_TITLES_QUERY = """
+query ($malIds: [Int]) {
+  Page(page: 1, perPage: 25) {
+    media(idMal_in: $malIds, type: ANIME) {
+      idMal
+      title {
+        english
+      }
+    }
+  }
+}
+"""
+
+
+def anime_english_titles(mal_ids, *, timeout=None):
+    """Return {MAL ID as text: AniList's English title or None} for up to 25 titles at once.
+
+    A title AniList doesn't have is left out. A failed request raises.
+    """
+    ids = [int(value) for value in mal_ids if str(value).isdigit()][:25]
+    response = services.api_request(
+        "ANILIST",
+        "POST",
+        API_URL,
+        params={"query": ANIME_TITLES_QUERY, "variables": {"malIds": ids}},
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        timeout=timeout or REQUEST_TIMEOUT,
+    )
+    return {
+        str(media["idMal"]): (media.get("title") or {}).get("english") or None
+        for media in response["data"]["Page"]["media"]
+        if media.get("idMal")
+    }
+
+
 def _is_on_a_break(media):
     """Return whether a title is under way with nothing named next (AN-100)."""
     return (

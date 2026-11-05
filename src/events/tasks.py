@@ -2,7 +2,7 @@ import logging
 
 from celery import shared_task
 
-from app import anime_tracking
+from app import anime_titles, anime_tracking
 from events import notifications, tv_airing
 from events.calendar.main import fetch_releases
 
@@ -53,3 +53,11 @@ def refresh_aired_anime():
     logger.info("Starting aired anime refresh")
 
     return {"changed": anime_tracking.refresh_due_titles()}
+
+
+@shared_task(name="Fill anime titles")
+def fill_anime_titles():
+    """Fill the English title of every anime Spine has read none for (AN-705)."""
+    logger.info("Starting anime title fill")
+
+    return anime_titles.fill_missing()

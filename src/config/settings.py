@@ -701,6 +701,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Refresh aired anime",
         "schedule": 60 * 60,  # every hour; reopens anime whose next episode aired
     },
+    "fill_anime_titles": {
+        "task": "Fill anime titles",
+        "schedule": 60 * 60,  # every hour; fills English titles Spine hasn't read yet
+    },
     "send_daily_digest": {
         "task": "Send daily digest",
         "schedule": crontab(hour=DAILY_DIGEST_HOUR, minute=0),

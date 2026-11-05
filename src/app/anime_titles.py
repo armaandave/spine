@@ -5,10 +5,24 @@ Item whenever it reads either provider for the title anyway, and a job fills in 
 from AniList in bulk. Item.shown_title reads it.
 """
 
+import logging
+import time
+
+import requests
+
 from app.models import Item, MediaTypes, Sources
+from app.providers import anilist
+
+logger = logging.getLogger(__name__)
 
 # A provider this read didn't ask.
 UNREAD = object()
+# The fill job: 25 titles a request, spaced under AniList's limit of about 30 a minute,
+# and a short wait on each, as every job read has.
+FILL_CHUNK = 25
+FILL_PACE = 2.5
+FILL_TIMEOUT = 10
+FILL_LIMIT = 2500
 
 
 def store_shown_title(item, *, mal=UNREAD, anilist=UNREAD):
@@ -32,3 +46,35 @@ def store_shown_title(item, *, mal=UNREAD, anilist=UNREAD):
     if shown and shown != item.display_title:
         Item.objects.filter(pk=item.pk).update(display_title=shown)
         item.display_title = shown
+
+
+def fill_missing(*, limit=FILL_LIMIT, sleep=time.sleep):
+    """Fill the shown title of every anime Spine has read none for, from AniList (AN-705).
+
+    Tracked or not, 25 titles a request, paced. A failed request costs only its own titles,
+    which the next run asks again. A timeout ends the run, as AniList is hanging.
+    """
+    items = list(
+        Item.objects.filter(
+            media_type=MediaTypes.ANIME.value,
+            source=Sources.MAL.value,
+            display_title="",
+        ).order_by("pk")[:limit],
+    )
+    filled = 0
+    for start in range(0, len(items), FILL_CHUNK):
+        chunk = items[start : start + FILL_CHUNK]
+        if start:
+            sleep(FILL_PACE)
+        try:
+            titles = anilist.anime_english_titles([item.media_id for item in chunk], timeout=FILL_TIMEOUT)
+        except anilist.READ_FAILURES as error:
+            logger.warning("AniList's English titles can't be read for %s anime", len(chunk), exc_info=True)
+            if isinstance(error, requests.exceptions.Timeout):
+                break
+            continue
+        for item in chunk:
+            # One AniList doesn't have says no more than one with no English title.
+            store_shown_title(item, anilist=titles.get(str(item.media_id)))
+            filled += bool(item.display_title)
+    return {"waiting": len(items), "filled": filled}
