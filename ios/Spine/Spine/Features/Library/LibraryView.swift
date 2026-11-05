@@ -577,7 +577,8 @@ struct LibraryView: View {
                 ScrollView(showsIndicators: false) {
                     // A plain stack: the list and the grid are the page's only lazy stacks, one item per row or poster.
                     // The list nested in a lazy page stack was one item of it, and clearing a search that had left a
-                    // few rows sent the two measuring each other at 100% CPU.
+                    // few rows sent the two measuring each other at 100% CPU. Everything in a plain stack is built at
+                    // once, so only the rows ask for the next page, as they come near the end (`loadNextPageIfNeeded`).
                     VStack(alignment: .leading, spacing: 0) {
                         header
                         content
@@ -1020,17 +1021,6 @@ struct LibraryView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 56)
             .spineContentTransition(value: paginationPhase)
-
-            if viewModel.hasMorePages, let last = viewModel.displayedItems.last {
-                Color.clear
-                    .frame(height: 1)
-                    .id(last.id)
-                    .onAppear {
-                        Task {
-                            await viewModel.loadNextPageIfNeeded(currentItem: last)
-                        }
-                    }
-            }
         }
     }
 

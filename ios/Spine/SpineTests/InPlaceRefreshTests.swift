@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Spine
 
@@ -78,6 +79,39 @@ final class InPlaceRefreshTests: XCTestCase {
     }
 
     // MARK: Library
+
+    func testOpeningTheLibraryAsksForItsFirstPageOnly() async throws {
+        // Sixty titles a page, so no row near enough the end to ask for more is on screen as the Library opens.
+        let tracking = PagedTrackingRepository(pages: (0..<3).map { page in
+            (0..<60).map { Self.libraryItem("\(page * 60 + $0)") }
+        })
+        let suite = "InPlaceRefreshTests.library"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let library = LibraryView(
+            mediaRepository: SurfacesMediaRepository(),
+            trackingRepository: tracking,
+            diaryRepository: PagedDiaryRepository(pages: []),
+            listRepository: PagedListRepository(pages: []),
+            filterOptionsRepository: EmptyFilterOptionsRepository(),
+            mediaLensStore: MediaLensStore(defaults: defaults),
+            enabledMediaTypes: ["movie"]
+        )
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = UIHostingController(rootView: library)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+
+        for _ in 0..<100 where tracking.requestedPages.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // Long enough for every row on screen to appear and ask, and for a page that arrives to ask for the next.
+        try await Task.sleep(for: .seconds(2))
+
+        XCTAssertEqual(tracking.requestedPages, [nil], "The first page only, until the Library is scrolled near its end")
+    }
 
     func testLibraryRefreshKeepsEveryLoadedPage() async {
         let tracking = PagedTrackingRepository(pages: [
