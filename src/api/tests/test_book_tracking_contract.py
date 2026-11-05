@@ -549,16 +549,6 @@ class BookTrackingContractTests(TestCase):
         self.assertIn("progress", str(invalid_drop.data).lower())
         self.assertEqual(BookSession.objects.get(pk=journey_id).status, Status.IN_PROGRESS.value)
 
-        invalid_completion = self.complete(
-            item,
-            completion_date=self.today - timedelta(days=5),
-            mutation_id=uuid4(),
-            journey_id=journey_id,
-        )
-        self.assert_status(invalid_completion, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(DiaryEntry.objects.filter(user=self.user, item=item).exists())
-        self.assertEqual(BookSession.objects.get(pk=journey_id).status, Status.IN_PROGRESS.value)
-
         invalid_edit = self.client.patch(
             self.journey_url(item, journey_id),
             {"start_date": str(self.today - timedelta(days=3))},
@@ -580,6 +570,28 @@ class BookTrackingContractTests(TestCase):
         self.assert_status(future_completion, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(DiaryEntry.objects.filter(user=self.user, item=direct_item).exists())
         self.assertFalse(BookSession.objects.filter(related_book__item=direct_item).exists())
+
+    # BK-306: a log can carry any date up to today, and moves a start it comes before.
+    def test_a_log_dated_before_its_start_moves_the_start_and_its_delete_puts_it_back(self):
+        item = self.make_item("log-before-start")
+        self.set_status(item, Status.PLANNING.value)
+        started = self.action(item, "start", {"start_date": str(self.today - timedelta(days=5))})
+        journey_id = started.data["book"]["current_journey"]["id"]
+        logged = self.complete(
+            item,
+            completion_date=self.today - timedelta(days=9),
+            mutation_id=uuid4(),
+            journey_id=journey_id,
+        )
+        self.assert_status(logged, status.HTTP_201_CREATED)
+        session = BookSession.objects.get(pk=journey_id)
+        self.assertEqual(session.start_date.date(), self.today - timedelta(days=9))
+        self.assertEqual(session.end_date.date(), self.today - timedelta(days=9))
+        entry = DiaryEntry.objects.get(user=self.user, item=item)
+        self.assert_status(self.client.delete(f"/api/v1/diary/{entry.pk}/"), status.HTTP_204_NO_CONTENT)
+        session.refresh_from_db()
+        self.assertEqual(session.status, Status.IN_PROGRESS.value)
+        self.assertEqual(session.start_date.date(), self.today - timedelta(days=5))
 
     # BK-201, BK-203.
     def test_live_rating_and_heart_require_completion_without_preliminary_mutation(self):

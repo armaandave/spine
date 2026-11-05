@@ -40,19 +40,23 @@ hearts, follows, or adding to a list.
   or `picked back up`. It's on a book, game, show, manga or comic, never anime, and
   never from an import, a mark, a restore or Restart. It adds nothing to any number,
   and nothing shows it yet (AC-1). A book's Restart writes `began_over` on its start
-  row.
-- The day is the local day the progress was recorded. Each save also stores
-  `saved_on`, the phone's date when saved, which nothing reads yet.
+  row, and so does a reread, which opens over a finished read: deleting that log later
+  can't change where it began. A pick-up with nothing before it to carry on from, a
+  deleted attempt or an imported place, still isn't a start.
+- The day is the phone's date when the progress was saved, stored as `saved_on`, and it
+  never moves with the time zone of whoever reads it. A row from before that column
+  reads its moment on the server's zone.
 - Anime's generic path writes start and progress steps, for installed builds and the
-  old feed, but the calculation's adapter will ignore them and read anime's history
+  old feed, but the calculation's adapter ignores them and reads anime's history
   rows. So each history row says what it was in its change reason: `day:<date>`, the
   date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no
-  day. Nothing reads these yet either.
+  day. Only the comparison reads these yet.
 
 ## AC-3: Newest date first
 
 Activity is ordered by calendar day, newest first: a log by its log date, a day's
-progress by that day. Days are local, so a log at 9pm stays on its own day. Within
+progress by the day it was saved on (AC-2). Days are local, so a log at 9pm stays on its
+own day, and a save reads the same day for every viewer in every zone. Within
 one day, the most recently written comes first. When a log was posted doesn't
 matter, so backfilling old logs doesn't push them to the top: a log for 2019 sits
 at 2019.
@@ -131,8 +135,13 @@ example `"212 of 476 pages"`, `"45%"`, or `"2h 30m"`, only when they have no log
 - `object.id` of a day's progress addresses it: `/api/v1/progress/<id>/` is its page,
   with `like/` and `comments/` under it. A log uses `/api/v1/diary/<id>/like/` and
   `comments/`. `DELETE /api/v1/comments/<id>/` removes a comment.
+- Deleting a journey, attempt, playthrough or season's progress deletes the likes and
+  comments of each day it leaves with no progress. Removing a title deletes all of that
+  person's progress, likes and comments on it. Neither comes back on a later save that
+  day, and each post removed writes a `SocialAuditLog` row.
 
 ## Review status
 
-AC-2's status moves, `began_over`, `saved_on` and anime's change reasons are provisional
-until the phone test of Activity's first phase accepts them.
+AC-2's status moves, `began_over`, `saved_on` and anime's change reasons, and AC-7's
+deletion of the likes and comments a removed journey, season or title leaves behind, are
+provisional until the phone test of Activity's first phase accepts them.

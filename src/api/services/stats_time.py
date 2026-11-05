@@ -13,15 +13,13 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   Time, ``progress`` over every tracking row. Anime multiplies by its runtime.
 - Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
   Steam's imported lifetime playtime is never read (GM-500).
-- Books: pages over visible book logs (the completion snapshot's pages, else the
-  book's ``total_pages``), plus ``total_pages`` once per ``completed_manually`` book in
-  All Time.
+- Books: the calculation's rows, plus its pile in All Time.
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
-change or with progress, sessions, undated completions) with a length, out of all.
-
-A type in api.services.activity_rows.CALCULATED_TYPES reads the calculation's rows
-instead.
+change or with progress, sessions, undated completions) with a length, out of all. A
+type in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the
+calculation's rows instead of its counter. The old counters stay for the comparison
+until TV, movies and music have switched too.
 """
 
 from __future__ import annotations
@@ -141,8 +139,9 @@ def _from_rows(rows, piles, media_type):
     Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
     """
     pile = activity_rows.piled(piles, media_type)
-    titles = {row.title_id for row in rows if row.counts_title} | pile.titles
-    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known)
+    in_rows = {row.title_id for row in rows if row.counts_title}
+    titles = in_rows | (pile.titles - pile.no_amount)
+    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
     result = TypeTime(media_type)
     result.value = int(sum((row.amount for row in rows), pile.amount))
     result.known = len(titles - unknown)

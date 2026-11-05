@@ -279,6 +279,7 @@ def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
         if total_pages:
             defaults["total_pages"] = total_pages
+    # A blank page count fills from the metadata stored just below.
     item, _ = Item.objects.get_or_create(
         source=ref["source"],
         media_type=ref["media_type"],
@@ -287,9 +288,6 @@ def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
         episode_number=ref.get("episode_number"),
         defaults=defaults,
     )
-    if defaults.get("total_pages") and item.total_pages != defaults["total_pages"]:
-        item.total_pages = defaults["total_pages"]
-        item.save(update_fields=["total_pages"])
     store_item_metadata(item, metadata, persist_series=persist_series)
     return item
 

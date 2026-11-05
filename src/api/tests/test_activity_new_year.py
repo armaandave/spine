@@ -590,6 +590,34 @@ class NoHeaderTests(NewYearBase):
         self.assertEqual(Book.objects.get(user=west, item=item).completion_diary_entry.consumed_at, datetime(2026, 12, 31, tzinfo=UTC))
 
 
+class ReadThroughStatsFromTokyoTests(NewYearBase):
+    """A save's day stays put, whoever reads it from wherever (decision 3)."""
+
+    def books(self, client, year, *, path="/api/v1/stats/me/summary/"):
+        response = client.get(
+            path,
+            {"schema": "2", "start_date": f"{year}-01-01", "end_date": f"{year}-12-31", "media_type": "book"},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return next((row["value"] for row in response.json()["time"]["rows"] if row["media_type"] == "book"), 0)
+
+    def save_at(self, item, moment, value):
+        self.clock.set(moment)
+        response = self.phone().post(self.url(item, "progress/"), {"progress_type": "pages", "value": value}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_the_owner_opening_stats_in_tokyo_reads_the_year_it_was_saved_in(self):
+        book = self.item(MediaTypes.BOOK.value, total_pages=400)
+        self.clock.set(datetime(2026, 12, 1, 12, 0, tzinfo=NEW_YORK_TZ))
+        self.phone().post(self.url(book, "actions/start/"), {}, format="json")
+        self.save_at(book, datetime(2026, 12, 31, 23, 50, tzinfo=NEW_YORK_TZ), 40)
+        self.save_at(book, datetime(2027, 1, 1, 0, 10, tzinfo=NEW_YORK_TZ), 100)
+        self.clock.set(datetime(2027, 1, 2, 12, 0, tzinfo=NEW_YORK_TZ))
+        tokyo = self.phone(zone=TOKYO)
+        self.assertEqual(self.books(tokyo, 2026), 40)
+        self.assertEqual(self.books(tokyo, 2027), 60)
+
+
 # 1am in New York is 10pm the day before in Los Angeles, and 8pm in New York is 10am the
 # next day in Tokyo.
 WEST_AT_1AM = datetime(2027, 1, 1, 1, 0, tzinfo=NEW_YORK_TZ)

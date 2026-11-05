@@ -45,7 +45,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from app import single_weight, tv_listing, user_calendar
 from app.models import (
     TV,
@@ -1632,19 +1632,22 @@ def _forget_progress(ctx, season_numbers=None):
             for number in season_numbers:
                 ctx.ticks_before.pop(number, None)
                 ctx.season_rows_before.pop(number, None)
-    rows.delete()
+    progress_posts.delete_changes(ctx.user.pk, rows)
 
 
 def _forget_starts_since(ctx, since):
     """Delete the show's starts recorded since `since`, and any pick-up with them (TV-208)."""
     from social.models import ProgressChange  # noqa: PLC0415
 
-    ProgressChange.objects.filter(
-        Q(current_progress__kind=ProgressChange.START) | Q(current_progress__move=ProgressChange.PICKED_BACK_UP),
-        actor=ctx.user,
-        item=ctx.show_item,
-        created_at__gte=since,
-    ).delete()
+    progress_posts.delete_changes(
+        ctx.user.pk,
+        ProgressChange.objects.filter(
+            Q(current_progress__kind=ProgressChange.START) | Q(current_progress__move=ProgressChange.PICKED_BACK_UP),
+            actor=ctx.user,
+            item=ctx.show_item,
+            created_at__gte=since,
+        ),
+    )
 
 
 def _normalize_viewing_days(ctx):

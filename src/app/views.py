@@ -19,6 +19,7 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from api.services import stats_cache
 from api.services.item_metadata import store_item_metadata
 from app import config, exposure, game_tracking, helpers, history_processor, music_catalog, series_tracking, single_weight
 from app import statistics as stats
@@ -1248,6 +1249,7 @@ def delete_history_record(request, media_type, history_id):
             history_id=history_id,
             history_user=request.user,
         ).delete()
+        stats_cache.bump_user(request.user)
 
         logger.info(
             "Deleted history record %s",
@@ -2095,14 +2097,6 @@ def log_modal(request, source, media_type, media_id, season_number=None):
                 defaults=defaults,
             )
             store_item_metadata(item, metadata)
-            if (
-                media_type == MediaTypes.BOOK.value
-                and not created
-                and defaults.get("total_pages")
-                and item.total_pages != defaults["total_pages"]
-            ):
-                item.total_pages = defaults["total_pages"]
-                item.save(update_fields=["total_pages"])
         
     # Determine default date for logging
     default_date = user_calendar.today(request.user)
@@ -2936,14 +2930,6 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
                 defaults=defaults,
             )
             store_item_metadata(item, metadata)
-            if (
-                media_type == MediaTypes.BOOK.value
-                and not created
-                and defaults.get("total_pages")
-                and item.total_pages != defaults["total_pages"]
-            ):
-                item.total_pages = defaults["total_pages"]
-                item.save(update_fields=["total_pages"])
         logger.info(f"Item {'created' if created else 'found'}: {item}")
         
         # Create diary entry using the services function
@@ -3070,13 +3056,11 @@ def add_movie_diary_entry(request, source, media_type, media_id, season_number=N
             if review:
                 book_instance.notes = review
 
-            book_instance.completed_manually = False
-            book_instance.save(update_fields=["status", "end_date", "completed_manually"])
+            book_instance.save(update_fields=["status", "end_date"])
             logger.info(f"Book {book_instance} marked as completed for diary entry")
             if request.POST.get('book_complete', '').lower() in ('true', '1', 'yes', 'on'):
                 book_instance.completion_diary_entry = entry
-                book_instance.completed_manually = False
-                book_instance.save(update_fields=['completion_diary_entry', 'completed_manually'])
+                book_instance.save(update_fields=['completion_diary_entry'])
 
         # Return success response
         return JsonResponse({"success": True, "entry_id": entry.id})
@@ -3331,7 +3315,7 @@ def mark_book_read(request, source, media_id):
         # Get or create the item
         metadata = services.get_media_metadata(media_type, media_id, source)
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
-        item, created_item = Item.objects.get_or_create(
+        item, _ = Item.objects.get_or_create(
             media_id=media_id,
             source=source,
             media_type=media_type,
@@ -3342,9 +3326,6 @@ def mark_book_read(request, source, media_id):
             },
         )
         store_item_metadata(item, metadata)
-        if not created_item and total_pages and item.total_pages != total_pages:
-            item.total_pages = total_pages
-            item.save(update_fields=["total_pages"])
         
         from app import book_tracking
 
@@ -3381,7 +3362,7 @@ def start_reading_book(request, source, media_id):
         # Get or create the item
         metadata = services.get_media_metadata(media_type, media_id, source)
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
-        item, created_item = Item.objects.get_or_create(
+        item, _ = Item.objects.get_or_create(
             media_id=media_id,
             source=source,
             media_type=media_type,
@@ -3392,9 +3373,6 @@ def start_reading_book(request, source, media_id):
             },
         )
         store_item_metadata(item, metadata)
-        if not created_item and total_pages and item.total_pages != total_pages:
-            item.total_pages = total_pages
-            item.save(update_fields=["total_pages"])
         
         from app import book_tracking
 
@@ -3435,7 +3413,7 @@ def log_book_progress(request, source, media_id):
         # Get or create the item
         metadata = services.get_media_metadata(media_type, media_id, source)
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
-        item, created_item = Item.objects.get_or_create(
+        item, _ = Item.objects.get_or_create(
             media_id=media_id,
             source=source,
             media_type=media_type,
@@ -3446,9 +3424,6 @@ def log_book_progress(request, source, media_id):
             },
         )
         store_item_metadata(item, metadata)
-        if not created_item and total_pages and item.total_pages != total_pages:
-            item.total_pages = total_pages
-            item.save(update_fields=["total_pages"])
         
         from app import book_tracking
 
@@ -3494,7 +3469,7 @@ def log_book_completed(request, source, media_id):
         # Get or create the item
         metadata = services.get_media_metadata(media_type, media_id, source)
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
-        item, created_item = Item.objects.get_or_create(
+        item, _ = Item.objects.get_or_create(
             media_id=media_id,
             source=source,
             media_type=media_type,
@@ -3505,9 +3480,6 @@ def log_book_completed(request, source, media_id):
             },
         )
         store_item_metadata(item, metadata)
-        if not created_item and total_pages and item.total_pages != total_pages:
-            item.total_pages = total_pages
-            item.save(update_fields=["total_pages"])
         
         from uuid import uuid4
 

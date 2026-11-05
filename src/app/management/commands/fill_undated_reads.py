@@ -6,7 +6,7 @@ history row included, through book_tracking.mark_imported_read, because mark_rea
 at once on a Completed book. All Time rises and no year moves.
 
 It also prints the rest of the plan's count 10 and writes none of it: Reads with a date and
-no log, which count nowhere or only in All Time, and marks holding a date.
+no log, which count nowhere, and marks holding a date.
 
 A dry run by default. With --apply it changes rows, and it's idempotent. Counts go to
 standard error. With --apply each row's old values, all that writing the mark changes, go to

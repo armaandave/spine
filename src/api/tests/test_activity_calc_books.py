@@ -1,15 +1,15 @@
 """The one calculation on books: the numbers each decision asks for.
 
-Rows come from real tracking functions under a pinned clock on a New York server. The
-calculation is switched off in production until Phase 1, so these read it directly, and
-Stats through a patched CALCULATED_TYPES. Phase 1's sheet opens at 830, 360 and 1,540.
+Rows come from real tracking functions under a pinned clock on a New York server. Most
+read the rows directly, and StatsThroughTheSwitchTests reads Stats as the phone does.
+Phase 1's sheet opens at 830, 360 and 1,540.
 """
 
 import json
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
@@ -31,7 +31,7 @@ from api.tests.test_stats_v2_activity import (
     ActivityBase,
     details,
 )
-from app import book_tracking
+from app import book_tracking, series_tracking
 from app.models import (
     Book,
     BookSession,
@@ -39,6 +39,7 @@ from app.models import (
     ItemCredit,
     ItemFilterFacet,
     MediaTypes,
+    Sources,
     Status,
 )
 from social.models import ProgressChange
@@ -100,8 +101,8 @@ class BookCalcBase(ActivityBase):
             return book_tracking.complete(self.owner, item, completion_date=day, **kwargs)
 
     def backdate(self, entry, day):
-        """Date a log before its read began, which only Phase 1's writes can do."""
-        DiaryEntry.objects.filter(pk=entry.pk).update(consumed_at=datetime(day.year, day.month, day.day, tzinfo=UTC))
+        """Date a log before its read began, through the same edit the phone sends."""
+        book_tracking.update_completion(entry, {"consumed_at": day})
         entry.refresh_from_db()
 
     def do(self, function, item, day, *args, **kwargs):
@@ -378,7 +379,8 @@ class StopTests(BookCalcBase):
         self.save(item, 250, d(2026, 2, 5))
         self.assert_numbers(0, 250, 250)
 
-    def test_deleting_the_stopped_attempt_counts_the_new_one_whole(self):
+    def test_deleting_the_stopped_attempt_leaves_its_place_with_no_date(self):
+        """The new journey opened at 200, so it adds the rise: 200 counts on no day."""
         item = self.book("delete-first")
         self.begin(item, d(2025, 11, 1))
         self.save(item, 200, d(2025, 11, 2))
@@ -387,7 +389,7 @@ class StopTests(BookCalcBase):
         self.begin(item, d(2026, 2, 1))
         self.save(item, 250, d(2026, 2, 2))
         self.do(book_tracking.delete_journey, item, d(2026, 2, 3), old)
-        self.assert_numbers(0, 250, 250)
+        self.assert_numbers(0, 50, 250)
 
     def test_deleting_the_new_attempt_leaves_the_old_amounts(self):
         item = self.book("delete-second")
@@ -467,6 +469,76 @@ class StatusMoveTests(BookCalcBase):
         self.assertEqual(row.progress_id, saved.pk)
 
 
+class PickUpRowTests(BookCalcBase):
+    """A pick-up says so on its day, and is no start (AC-1, plan 5.2)."""
+
+    def row_on(self, item, day):
+        return next(row for row in self.calc().rows if row.title_id == item.pk and row.day == day and not row.log_id)
+
+    def assert_picked_up(self, item, day):
+        row = self.row_on(item, day)
+        self.assertEqual((row.started, row.moves), (False, [BACK]))
+        self.assertFalse(row.is_event)
+
+    def test_stopped_then_to_read_then_back_says_so(self):
+        item = self.book("through-to-read")
+        self.begin(item, d(2025, 1, 1))
+        self.save(item, 100, d(2025, 1, 2))
+        self.do(book_tracking.drop, item, d(2025, 1, 3))
+        self.do(book_tracking.assign_status, item, d(2025, 2, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 1))
+        self.assert_picked_up(item, d(2026, 1, 1))
+
+    def test_to_read_on_a_book_never_stopped_is_a_start(self):
+        item = self.book("to-read-first")
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 2))
+        row = self.row_on(item, d(2026, 1, 2))
+        self.assertEqual((row.started, row.moves), (True, []))
+
+    def test_to_read_after_a_log_is_a_reread(self):
+        item = self.book("to-read-after-log")
+        self.finish(item, d(2025, 6, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.begin(item, d(2026, 1, 2))
+        row = self.row_on(item, d(2026, 1, 2))
+        self.assertEqual((row.started, row.moves), (True, []))
+
+    def test_back_to_an_imported_place_is_no_start(self):
+        item = self.book("place")
+        Book.objects.create(user=self.owner, item=item, status=Status.DROPPED.value, progress=120)
+        self.begin(item, d(2026, 2, 1))
+        self.assert_picked_up(item, d(2026, 2, 1))
+
+    def test_back_after_its_stopped_attempt_was_deleted_is_no_start(self):
+        item = self.book("deleted")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        first = Book.objects.get(item=item).current_session_id
+        self.begin(item, d(2026, 4, 1))
+        self.do(book_tracking.delete_journey, item, d(2026, 4, 2), first)
+        self.assert_picked_up(item, d(2026, 4, 1))
+
+    def test_a_pause_and_a_resume_leave_the_journeys_own_start_a_start(self):
+        item = self.book("paused-later")
+        self.begin(item, d(2026, 1, 1))
+        self.do(book_tracking.pause, item, d(2026, 1, 2))
+        self.do(book_tracking.resume, item, d(2026, 1, 3))
+        self.assertTrue(self.row_on(item, d(2026, 1, 1)).started)
+
+    def test_a_journey_paused_before_status_rows_keeps_its_start(self):
+        """Its pause wrote no row, so resuming writes a pick-up as its first move."""
+        item = self.book("paused-before-rows")
+        self.begin(item, d(2026, 10, 28))
+        self.save(item, 100, d(2026, 10, 29))
+        book = Book.objects.get(item=item)
+        BookSession.objects.filter(pk=book.current_session_id).update(status=Status.PAUSED.value)
+        Book.objects.filter(pk=book.pk).update(status=Status.PAUSED.value)
+        self.do(book_tracking.resume, item, d(2026, 11, 1))
+        self.assertEqual(self.rows(item), ["2026-11-01 picked back up", "2026-10-29 read 100", "2026-10-28 started"])
+
+
 class BackdatedLogTests(BookCalcBase):
     """Decision 10: before the first activity everything moves; else only the rest."""
 
@@ -501,14 +573,14 @@ class BackdatedLogTests(BookCalcBase):
             ["2026-01-10 read 100", "2025-12-20 log +300", "2025-12-01 started"],
         )
 
-    def test_an_edited_journey_start_moves_no_row(self):
+    def test_an_edited_journey_start_moves_that_starts_row(self):
         item = self.book("edited-start")
         self.begin(item, d(2026, 3, 1))
         self.save(item, 100, d(2026, 3, 2))
         journey = Book.objects.get(item=item).current_session_id
         with self.on(d(2026, 3, 3)):
             book_tracking.update_journey(self.owner, item, journey, start_date=d(2025, 11, 1))
-        self.assertEqual(self.rows(), ["2026-03-02 read 100", "2026-03-01 started"])
+        self.assertEqual(self.rows(), ["2026-03-02 read 100", "2025-11-01 started"])
 
     def test_a_stop_then_a_log_dated_last_year_moves_everything(self):
         item = self.book("stop-backdate")
@@ -648,6 +720,22 @@ class OneUnitTests(BookCalcBase):
         self.save(item, 200, d(2026, 3, 2), at="11:00")
         self.assertEqual(self.told(item), [(d(2026, 3, 2), 200, "page", 200)])
 
+    def test_a_percent_beside_pages_is_unknown_whichever_reached_the_row_first(self):
+        """It has no length to read it with, as on any other day (STAT-201)."""
+        pages_first = self.book("pages-first", pages=None)
+        self.begin(pages_first, d(2026, 3, 1))
+        self.save(pages_first, 200, d(2026, 3, 2), at="10:00")
+        self.save(pages_first, 30, d(2026, 3, 2), kind="percentage", at="11:00")
+        percent_first = self.book("percent-first", pages=None)
+        self.begin(percent_first, d(2026, 3, 2))
+        self.save(percent_first, 30, d(2026, 3, 2), kind="percentage", at="10:00")
+        self.do(book_tracking.restart, percent_first, d(2026, 3, 2))
+        self.save(percent_first, 200, d(2026, 3, 2), at="11:00")
+        for item in (pages_first, percent_first):
+            with self.subTest(item=item.title):
+                row = next(row for row in self.calc().rows if row.title_id == item.pk and row.told)
+                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (200, "page", 200, False))
+
     def test_two_percents_on_one_day_still_add_up(self):
         item = self.book("percents", pages=None)
         self.begin(item, d(2026, 3, 1))
@@ -714,6 +802,16 @@ class UnusableNumberTests(BookCalcBase):
         DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": 400, "max": "abc"})
         self.assertEqual(self.rows(item), ["2026-03-05 log +300", "2026-03-02 read 100", "2026-03-01 started"])
 
+    def test_a_save_stored_as_a_percent_ignores_a_length_on_its_log_that_is_no_number(self):
+        """A save is stored as a percent only while the book has no length."""
+        item = self.book("stored-percent-no-max", pages=None)
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 25, d(2026, 3, 2), kind="percentage")
+        self.set_item(item, total_pages=400)
+        _, entry = self.finish(item, d(2026, 3, 5))
+        DiaryEntry.objects.filter(pk=entry.pk).update(progress_snapshot={"kind": "pages", "value": 400, "max": "abc"})
+        self.assertEqual(self.rows(item), ["2026-03-05 log +300", "2026-03-02 read 100", "2026-03-01 started"])
+
     def test_a_save_with_no_number_moves_nothing(self):
         for value in (None, "abc"):
             with self.subTest(value=value):
@@ -758,6 +856,73 @@ class DeleteTests(BookCalcBase):
             book_tracking.delete_completion(self.owner, entry)
         self.assert_numbers(0, 200, 200)
         self.assertEqual(Book.objects.get(item=item).status, Status.IN_PROGRESS.value)
+
+    def test_deleting_a_log_never_turns_a_reread_into_a_typo_fix(self):
+        """Stopped at 200, logged, reread to 40: that reread began at zero."""
+        item = self.book("splice")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 10))
+        self.do(book_tracking.drop, item, d(2025, 11, 15))
+        _, entry = self.finish(item, d(2025, 12, 1))
+        self.assert_numbers(400, 0, 400)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 40, d(2026, 2, 2))
+        self.assert_numbers(400, 40, 440)
+        with self.on(d(2026, 2, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(200, 40, 240)
+        self.assertEqual(
+            self.rows(),
+            [
+                "2026-02-02 read 40",
+                "2026-02-01 started",
+                "2025-11-15 stopped",
+                "2025-11-10 read 200",
+                "2025-11-01 started",
+            ],
+        )
+
+    def test_nor_does_to_read_or_paused_between_the_log_and_the_reread(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value):
+            with self.subTest(status=status):
+                item = self.book(f"between-{status}")
+                self.begin(item, d(2025, 11, 1))
+                self.save(item, 200, d(2025, 11, 10))
+                self.do(book_tracking.drop, item, d(2025, 11, 15))
+                _, entry = self.finish(item, d(2025, 12, 1))
+                self.do(book_tracking.assign_status, item, d(2026, 1, 1), status)
+                self.begin(item, d(2026, 2, 1))
+                self.save(item, 40, d(2026, 2, 2))
+                with self.on(d(2026, 2, 3)):
+                    book_tracking.delete_completion(self.owner, entry)
+                self.assertEqual(
+                    self.rows(item),
+                    [
+                        "2026-02-02 read 40",
+                        "2026-02-01 started",
+                        "2025-11-15 stopped",
+                        "2025-11-10 read 200",
+                        "2025-11-01 started",
+                    ],
+                )
+
+    def test_a_reread_over_a_mark_or_a_log_says_it_began_over(self):
+        for name, mark in (("over-log", lambda item: self.finish(item, d(2025, 12, 1))), ("over-eye", lambda item: self.do(book_tracking.mark_read, item, d(2025, 12, 1)))):
+            with self.subTest(name=name):
+                item = self.book(name)
+                mark(item)
+                self.begin(item, d(2026, 2, 1))
+                start = ProgressChange.objects.get(item=item, current_progress__kind=ProgressChange.START)
+                self.assertTrue(start.current_progress.get("began_over"))
+
+    def test_a_first_start_and_a_pick_up_do_not_say_it(self):
+        item = self.book("not-over")
+        self.begin(item, d(2026, 1, 1))
+        self.save(item, 10, d(2026, 1, 2))
+        self.do(book_tracking.drop, item, d(2026, 1, 3))
+        self.begin(item, d(2026, 1, 4))
+        starts = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START)
+        self.assertEqual([change.current_progress.get("began_over") for change in starts], [None, None])
 
     def test_deleting_a_direct_log_leaves_nothing(self):
         item = self.book("direct")
@@ -896,6 +1061,48 @@ class PileTests(BookCalcBase):
         BookSession.objects.filter(related_book__item=item).update(pages_read=120)
         self.assert_numbers(0, 0, 120)
 
+    def imported_place(self, name, place=120):
+        """Return a book at a place with no journey, as a file leaves one."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=place)
+        return item
+
+    def test_a_place_then_a_stop_then_the_eye_holds_that_place_once(self):
+        item = self.imported_place("place-stop-eye")
+        self.begin(item, d(2026, 3, 1))
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 120)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_place_a_save_a_stop_then_the_eye_holds_that_place_once(self):
+        item = self.imported_place("place-save-eye")
+        self.save(item, 125, d(2026, 3, 1))
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 5, 125)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 5, 400)
+
+    def test_a_deleted_stopped_attempt_then_a_stop_then_the_eye_is_the_length(self):
+        item = self.stopped_at_200("deleted-first")
+        first = Book.objects.get(item=item).current_session_id
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 250, d(2026, 2, 2))
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 3), first)
+        self.do(book_tracking.drop, item, d(2026, 2, 4))
+        self.assert_numbers(0, 50, 250)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.assert_numbers(0, 50, 400)
+
+    def test_stopped_with_no_saved_rows_then_the_eye_is_the_length(self):
+        item = self.book("no-rows", pages=100)
+        self.begin(item, d(2026, 3, 1))
+        BookSession.objects.filter(related_book__item=item).update(pages_read=30)
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 30)
+        self.do(book_tracking.mark_read, item, d(2026, 3, 3))
+        self.assert_numbers(0, 0, 100)
+
     def test_imports_land_where_their_dates_say(self):
         dated = self.book("imported-log")
         stopped = self.book("imported-dnf")
@@ -948,6 +1155,456 @@ class PileTests(BookCalcBase):
         item = self.book("left-out")
         self.do(book_tracking.mark_read, item, d(2026, 2, 4))
         self.assertEqual(self.calc(piles=False).piles, [])
+
+
+class AReadRowTests(BookCalcBase):
+    """A Read's progress is its length, not a place: alone it counts nowhere."""
+
+    def read_row(self, name="read-row", end_date=None):
+        """Return a Read as old Yamtrack rows left it: its length, nothing behind it."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400, end_date=end_date)
+        return item
+
+    def test_dated_or_not_it_counts_nowhere(self):
+        self.read_row("dated", end_date=datetime(2024, 5, 1, tzinfo=UTC))
+        self.read_row("undated")
+        self.assert_numbers(0, 0, 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_a_status_move_holds_every_number(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.read_row(f"move-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.assert_numbers(0, 0, 0)
+                self.assertEqual(Book.objects.get(item=item).progress, 0)
+
+    def test_currently_reading_begins_at_zero(self):
+        item = self.read_row()
+        self.begin(item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+        self.save(item, 40, d(2026, 3, 2))
+        self.assert_numbers(0, 40, 40)
+
+    def test_a_log_and_its_delete_end_where_they_began(self):
+        item = self.read_row()
+        _, entry = self.finish(item, d(2026, 3, 1))
+        self.assert_numbers(0, 400, 400)
+        with self.on(d(2026, 3, 2)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(0, 0, 0)
+
+
+class ALogWithNoJourneyDeletedTests(BookCalcBase):
+    """Your own file and old rows leave these: the read goes with its log."""
+
+    def logged(self, name="logged", **fields):
+        item = self.book(name)
+        moment = datetime(2025, 3, 1, tzinfo=UTC)
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400, end_date=moment, **fields)
+        return item, self.log(item, moment)
+
+    def delete(self, entry):
+        with self.on(d(2026, 3, 1)):
+            book_tracking.delete_completion(self.owner, entry)
+
+    def test_the_only_log_takes_its_pages_and_its_date(self):
+        item, entry = self.logged()
+        self.assert_numbers(400, 0, 400)
+        self.delete(entry)
+        self.assert_numbers(0, 0, 0)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress, book.end_date), (Status.PLANNING.value, 0, None))
+
+    def test_a_second_log_keeps_the_read_on_its_date(self):
+        item, entry = self.logged()
+        other = self.log(item, datetime(2026, 1, 5, tzinfo=UTC))
+        self.delete(entry)
+        self.assert_numbers(0, 400, 400)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.end_date), (Status.COMPLETED.value, other.consumed_at))
+
+    def test_a_mark_stays_with_no_date(self):
+        item, entry = self.logged(completed_manually=True)
+        self.assert_numbers(400, 0, 800)
+        self.delete(entry)
+        self.assert_numbers(0, 0, 400)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.end_date), (Status.COMPLETED.value, None))
+
+
+class StatusMovesAroundAMarkTests(BookCalcBase):
+    """A status move adds nothing to any number (decision 21), whenever the mark was."""
+
+    def read_after_the_eye(self, name):
+        item = self.book(name)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 2), Status.PLANNING.value)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.assert_numbers(0, 200, 600)
+        return item
+
+    def test_to_read_after_a_read_begun_after_the_eye(self):
+        item = self.read_after_the_eye("to-read")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.assert_numbers(0, 200, 600)
+
+    def test_a_heart_after_a_read_begun_after_the_eye(self):
+        item = self.read_after_the_eye("heart")
+        self.do(book_tracking.set_like, item, d(2026, 2, 4), liked=True)
+        self.assert_numbers(0, 200, 600)
+
+    def test_currently_reading_after_a_stop_to_read_and_the_eye(self):
+        item = self.book("after-the-eye")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 1, 1), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 1, 2))
+        self.assert_numbers(200, 0, 400)
+        self.do(book_tracking.assign_status, item, d(2026, 1, 3), Status.PLANNING.value)
+        self.assert_numbers(200, 0, 400)
+        self.begin(item, d(2026, 2, 1))
+        self.assert_numbers(200, 0, 400)
+
+    def test_a_mark_taken_off_and_put_on_again_goes_by_the_last_one(self):
+        item = self.book("twice")
+        self.do(book_tracking.mark_read, item, d(2026, 1, 1))
+        self.do(book_tracking.undo_read, item, d(2026, 1, 2))
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.assert_numbers(0, 200, 400)
+
+    def test_a_mark_with_no_history_row_goes_by_the_status_chain(self):
+        """Migration 0075 and the undated Reads step flag a book with no history row."""
+        item = self.book("no-history")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        Book.objects.filter(item=item).update(status=Status.COMPLETED.value, current_session=None, completed_manually=True)
+        self.assert_numbers(200, 0, 400)
+
+    def test_on_a_manga_too(self):
+        manga = self.item(MediaTypes.MANGA.value, "manga", title="manga")
+        self.set_item(manga, series_total=400)
+
+        def pile():
+            calculation = rows_for([self.owner], self.owner, types=[MediaTypes.MANGA.value])
+            return int(piled(calculation.piles, MediaTypes.MANGA.value).amount)
+
+        self.do(series_tracking.mark_read, manga, d(2026, 1, 1))
+        self.do(series_tracking.assign_status, manga, d(2026, 1, 2), Status.PLANNING.value)
+        self.do(series_tracking.start, manga, d(2026, 2, 1))
+        with self.on(d(2026, 2, 2)):
+            series_tracking.update_progress(self.owner, manga, value=200)
+        self.do(series_tracking.drop, manga, d(2026, 2, 3))
+        before = pile()
+        self.do(series_tracking.assign_status, manga, d(2026, 2, 4), Status.PLANNING.value)
+        self.assertEqual(pile(), before)
+
+
+class AMarkBetweenTwoReadsTests(BookCalcBase):
+    """A mark closes the read before it, and To Read after changes nothing (21)."""
+
+    def marked_after_a_stop(self, name):
+        item = self.book(name, pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        return item
+
+    def pile(self):
+        return piled(self.calc().piles, BOOK).amount
+
+    def test_a_log_reads_the_same_with_to_read_or_without(self):
+        direct = self.marked_after_a_stop("direct")
+        self.finish(direct, d(2026, 3, 1))
+        self.assertEqual(self.rows(direct)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 130, 200)
+        through = self.marked_after_a_stop("through")
+        self.do(book_tracking.assign_status, through, d(2026, 2, 5), Status.PLANNING.value)
+        self.finish(through, d(2026, 3, 1))
+        self.assertEqual(self.rows(through)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 260, 400)
+
+    def test_the_mark_can_come_after_to_read_too(self):
+        item = self.book("to-read-first", pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 4), Status.PLANNING.value)
+        self.do(book_tracking.mark_read, item, d(2026, 2, 5))
+        self.do(book_tracking.assign_status, item, d(2026, 2, 6), Status.PLANNING.value)
+        self.finish(item, d(2026, 3, 1))
+        self.assertEqual(self.rows(item)[0], "2026-03-01 log +100")
+        self.assert_numbers(0, 130, 200)
+
+    def test_reading_on_holds_the_pile_and_begins_at_zero(self):
+        item = self.marked_after_a_stop("read-on")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assertEqual(self.rows(item)[0], "2026-03-01 started")
+        self.save(item, 80, d(2026, 3, 2))
+        self.assert_numbers(0, 110, 180)
+        self.assertEqual(self.pile(), 70)
+        self.finish(item, d(2026, 3, 3))
+        self.assert_numbers(0, 130, 200)
+        self.assertEqual(self.pile(), 70)
+
+    def test_a_read_from_before_this_rule_reads_the_same(self):
+        """Picked up across a mark before this ship: no flag, and it held no place."""
+        item = self.marked_after_a_stop("old-shape")
+        self.do(book_tracking.assign_status, item, d(2026, 2, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        latest = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START).latest("id")
+        for field in ("previous_progress", "current_progress"):
+            getattr(latest, field).pop("began_over")
+        latest.save(update_fields=["previous_progress", "current_progress"])
+        self.assertEqual(self.pile(), 70)
+        self.assert_numbers(0, 30, 100)
+
+    def test_with_the_mark_taken_off_a_stop_carries_on_again(self):
+        item = self.book("mark-gone", pages=100)
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, 30, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 2, 4))
+        self.do(book_tracking.undo_read, item, d(2026, 2, 5))
+        self.begin(item, d(2026, 3, 1))
+        self.assertEqual(Book.objects.get(item=item).progress, 30)
+        self.save(item, 50, d(2026, 3, 2))
+        self.assert_numbers(0, 50, 50)
+
+
+class LegacyJourneyTests(BookCalcBase):
+    """What migration 0075 left: a Completed journey with no log is no reading."""
+
+    def legacy(self, item, *, marked=True, status=Status.COMPLETED.value, pages=400):
+        Book.objects.bulk_create(
+            [
+                Book(
+                    user=self.owner,
+                    item=item,
+                    status=status,
+                    completed_manually=marked,
+                    progress=pages if status == Status.COMPLETED.value else 0,
+                ),
+            ],
+        )
+        BookSession.objects.bulk_create(
+            [
+                BookSession(
+                    related_book=Book.objects.get(user=self.owner, item=item),
+                    status=Status.COMPLETED.value,
+                    origin=BookSession.Origin.LEGACY,
+                    pages_read=pages,
+                    percentage_read=100,
+                    end_date=datetime(2024, 3, 2, tzinfo=UTC),
+                ),
+            ],
+        )
+
+    def test_a_marked_book_counts_once(self):
+        self.legacy(self.book("marked"))
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_logged_book_with_an_extra_journey_counts_once(self):
+        item = self.book("logged")
+        self.legacy(item, marked=False)
+        BookSession.objects.create(
+            related_book=Book.objects.get(item=item),
+            status=Status.COMPLETED.value,
+            origin=BookSession.Origin.LEGACY,
+            pages_read=400,
+            percentage_read=100,
+            end_date=datetime(2024, 3, 2, tzinfo=UTC),
+            completion_diary_entry=self.log(item, datetime(2024, 3, 2, tzinfo=UTC)),
+        )
+        self.assertEqual(self.number(pile=True), 400)
+
+    def test_on_a_to_read_book_it_counts_nothing(self):
+        self.legacy(self.book("to-read"), marked=False, status=Status.PLANNING.value)
+        self.assert_numbers(0, 0, 0)
+
+    def test_undoing_the_mark_leaves_nothing(self):
+        item = self.book("undone")
+        self.legacy(item)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+
+
+class ImportedPlaceTests(BookCalcBase):
+    """A place with no journey sits in the pile, and stays as the opening (5.2)."""
+
+    def place(self, name="place", status=Status.IN_PROGRESS.value):
+        """Return a book at page 120 of 400 with no journey, as a file leaves one."""
+        item = self.book(name)
+        Book.objects.create(user=self.owner, item=item, status=status, progress=120)
+        return item
+
+    def test_finishing_with_no_save_between_adds_only_what_is_left(self):
+        item = self.place()
+        self.begin(item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 120)
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 280, 400)
+
+    def test_a_direct_log_adds_only_what_is_left(self):
+        item = self.place()
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 280, 400)
+        self.assertEqual(self.rows(), ["2026-03-02 log +280"])
+
+    def test_deleting_that_log_gives_the_place_back(self):
+        item = self.place()
+        _, entry = self.finish(item, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.assert_numbers(0, 0, 120)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
+
+    def test_deleting_an_attempt_opened_over_it_gives_it_back(self):
+        for status in (Status.PLANNING.value, Status.PAUSED.value, Status.DROPPED.value, Status.IN_PROGRESS.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"attempt-{status}", status)
+                self.begin(item, d(2026, 3, 1))
+                self.assertEqual(Book.objects.get(item=item).progress, 120)
+                self.do(book_tracking.delete_journey, item, d(2026, 3, 2), Book.objects.get(item=item).current_session_id)
+                self.assert_numbers(0, 0, 120)
+                book = Book.objects.get(item=item)
+                self.assertEqual((book.status, book.progress), (status, 120))
+
+    def test_with_no_page_count_it_gives_it_back_too(self):
+        item = self.book("no-count", pages=None)
+        Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value, progress=120)
+        self.begin(item, d(2026, 3, 1))
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 2), Book.objects.get(item=item).current_session_id)
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+
+    def test_it_survives_a_log_and_that_logs_delete(self):
+        item = self.place("through-a-log")
+        self.begin(item, d(2026, 3, 1))
+        journey = Book.objects.get(item=item).current_session_id
+        _, entry = self.finish(item, d(2026, 3, 2))
+        with self.on(d(2026, 3, 3)):
+            book_tracking.delete_completion(self.owner, entry)
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 4), journey)
+        self.assert_numbers(0, 0, 120)
+
+    def test_it_comes_back_after_a_stop_and_to_read_too(self):
+        item = self.place("stopped-then-gone", Status.PLANNING.value)
+        self.begin(item, d(2026, 3, 1))
+        journey = Book.objects.get(item=item).current_session_id
+        self.do(book_tracking.drop, item, d(2026, 3, 2))
+        self.do(book_tracking.assign_status, item, d(2026, 3, 3), Status.PLANNING.value)
+        self.do(book_tracking.delete_journey, item, d(2026, 3, 4), journey)
+        self.assert_numbers(0, 0, 120)
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+
+    def test_a_stopped_attempt_since_deleted_leaves_no_place_behind(self):
+        """Only a place with no journey comes back: a deleted read's pages don't."""
+        item = self.book("both-gone")
+        Book.objects.create(user=self.owner, item=item, status=Status.PLANNING.value)
+        self.begin(item, d(2026, 2, 1))
+        first = Book.objects.get(item=item).current_session_id
+        self.save(item, 200, d(2026, 2, 2))
+        self.do(book_tracking.drop, item, d(2026, 2, 3))
+        self.begin(item, d(2026, 2, 4))
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 5), first)
+        self.do(book_tracking.delete_journey, item, d(2026, 2, 6), Book.objects.get(item=item).current_session_id)
+        self.assert_numbers(0, 0, 0)
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+
+    def test_the_same_finish_on_a_series_reads_the_same(self):
+        """5.2's same-story test: a series' attempt holds its place the same way."""
+        manga = self.item(MediaTypes.MANGA.value, "same-story", title="same-story")
+        self.set_item(manga, series_total=400)
+        with self.on(d(2026, 3, 1)):
+            series_tracking.import_title(self.owner, manga, status=Status.IN_PROGRESS.value, place=120)
+        with self.on(d(2026, 3, 2)):
+            series_tracking.complete(self.owner, manga, completion_date=d(2026, 3, 2))
+        calculation = rows_for([self.owner], self.owner, types=[MediaTypes.MANGA.value])
+        rows = list_rows(calculation.rows, media_type=MediaTypes.MANGA.value)
+        self.assertEqual([int(row.amount) for row in rows], [280])
+        self.assertEqual(int(piled(calculation.piles, MediaTypes.MANGA.value).amount), 120)
+
+    def test_a_status_move_holds_it(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"move-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.assert_numbers(0, 0, 120)
+                book = Book.objects.get(item=item)
+                self.assertEqual((book.status, book.progress), (status, 120))
+                self.assertEqual(self.rows(), [])
+
+    def test_back_from_a_status_move_opens_at_it(self):
+        for status in (Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value):
+            with self.subTest(status=status):
+                Book.objects.filter(user=self.owner).delete()
+                item = self.place(f"back-{status}")
+                self.do(book_tracking.assign_status, item, d(2026, 3, 1), status)
+                self.begin(item, d(2026, 3, 2))
+                self.assertEqual(Book.objects.get(item=item).progress, 120)
+                self.save(item, 130, d(2026, 3, 3))
+                self.assert_numbers(0, 10, 130)
+
+    def test_resuming_from_paused_opens_at_it(self):
+        """The phone sends resume on a book Paused, with no journey to resume."""
+        item = self.place("resumed")
+        self.do(book_tracking.assign_status, item, d(2026, 3, 1), Status.PAUSED.value)
+        self.do(book_tracking.resume, item, d(2026, 3, 2))
+        self.assertEqual(Book.objects.get(item=item).progress, 120)
+        self.assertEqual(self.rows(), ["2026-03-02 picked back up"])
+        self.assert_numbers(0, 0, 120)
+
+    def test_the_phones_plain_status_write_holds_it(self):
+        item = self.item(BOOK, "phone-place", source=Sources.MANUAL.value, title="phone-place")
+        self.set_item(item, total_pages=400)
+        Book.objects.create(user=self.owner, item=item, status=Status.IN_PROGRESS.value, progress=120)
+        client = self.client_for(self.owner, NEW_YORK)
+        with self.on(d(2026, 3, 1)):
+            response = client.patch(f"/api/v1/tracking/manual/book/{item.media_id}/", {"status": Status.DROPPED.value}, format="json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assert_numbers(0, 0, 120)
+
+    def test_the_eye_then_undo_gives_it_back(self):
+        item = self.place()
+        self.do(book_tracking.mark_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 400)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 2))
+        self.assert_numbers(0, 0, 120)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.IN_PROGRESS.value, 120))
+
+    def test_a_status_move_on_a_marked_book_never_counts_its_length_twice(self):
+        """A mark from before the book contract holds its length in progress."""
+        item = self.book("old-mark")
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, completed_manually=True, progress=400)
+        self.do(book_tracking.assign_status, item, d(2026, 3, 1), Status.PLANNING.value)
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assert_numbers(0, 0, 400)
+
+    def test_a_journey_from_before_saves_were_recorded_still_counts_whole_on_its_log(self):
+        """Nothing says where it opened, so its log counts whole, as it always has."""
+        item = self.book("before-rows")
+        self.begin(item, d(2026, 3, 1))
+        ProgressChange.objects.filter(item=item).delete()
+        BookSession.objects.filter(related_book__item=item).update(pages_read=100)
+        self.finish(item, d(2026, 3, 2))
+        self.assert_numbers(0, 400, 400)
 
 
 class DayTests(BookCalcBase):
@@ -1110,13 +1767,7 @@ class SheetTests(SheetBase):
 
 
 class StatsThroughTheSwitchTests(SheetBase):
-    """Stats with books switched on, as Phase 1 will: read as the phone reads them."""
-
-    def setUp(self):
-        super().setUp()
-        patcher = patch.object(activity_rows, "CALCULATED_TYPES", frozenset({BOOK}))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+    """Stats with books switched on: read as the phone reads them."""
 
     def phone(self, params, *, viewer=None, tab=BOOK):
         """Return the Stats payload as JSON."""
@@ -1274,19 +1925,74 @@ class MovedViewingTests(BookCalcBase):
 class AdapterCostTests(BookCalcBase):
     """A switched-off adapter costs nothing, and one request walks once."""
 
-    def counted_adapter(self):
-        """Return a mock that counts the book adapter's calls."""
-        return patch.dict(activity_rows.ADAPTERS, {BOOK: patch.object(activity_rows, "_book_rows", wraps=activity_rows._book_rows).start()})
+    def counted_adapter(self, media_type=BOOK):
+        """Return a mock that counts one adapter's calls."""
+        counted = MagicMock(wraps=activity_rows.ADAPTERS[media_type])
+        return patch.dict(activity_rows.ADAPTERS, {media_type: counted}), counted
 
-    def test_switched_off_stats_never_walk(self):
-        self.addCleanup(patch.stopall)
-        with self.counted_adapter():
-            self.summary(ALL_TIME)
-            self.summary(YEAR_2026, tab=BOOK)
-            self.assertEqual(activity_rows.ADAPTERS[BOOK].call_count, 0)
+    def test_switched_off_adapters_never_run_on_a_stats_request(self):
+        for media_type in (MediaTypes.GAME.value, MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+            patcher, counted = self.counted_adapter(media_type)
+            with patcher:
+                self.summary(ALL_TIME)
+                self.summary(YEAR_2026, tab=BOOK)
+                self.assertEqual(counted.call_count, 0, media_type)
+
+    def test_the_walk_builds_no_book_or_save_rows(self):
+        """A Book's FieldTracker and thousands of saves were most of a Stats miss."""
+        item = self.book("cost")
+        self.begin(item, d(2026, 3, 1))
+        self.save(item, 40, d(2026, 3, 2))
+        self.do(book_tracking.drop, item, d(2026, 3, 3))
+        self.do(book_tracking.mark_read, item, d(2026, 3, 4))
+        with (
+            patch.object(Book, "from_db", side_effect=AssertionError("A Book row")),
+            patch.object(ProgressChange, "from_db", side_effect=AssertionError("A save row")),
+        ):
+            self.assert_numbers(0, 40, 400)
+
+    def assert_flat_walk(self, build, adapter=BOOK):
+        """Check the walk costs the same over 3 titles of a shape as over 33."""
+        built = 0
+        counts = []
+        for size in (3, 33):
+            while built < size:
+                build(built)
+                built += 1
+            with CaptureQueriesContext(connection) as walk:
+                rows_for([self.owner], self.owner, types=[adapter])
+            counts.append(len(walk))
+        self.assertEqual(counts[0], counts[1], counts)
+
+    def test_a_mark_then_a_reread_reads_history_once_for_every_title(self):
+        def build(number):
+            item = self.book(f"reread-{number}")
+            self.do(book_tracking.mark_read, item, d(2026, 3, 1))
+            self.begin(item, d(2026, 3, 2))
+            self.save(item, 40, d(2026, 3, 3))
+
+        self.assert_flat_walk(build)
+
+    def test_a_mark_with_a_legacy_journey_reads_history_once_for_every_title(self):
+        def build(number):
+            book = Book.objects.create(user=self.owner, item=self.book(f"legacy-{number}"), status=Status.COMPLETED.value, completed_manually=True)
+            BookSession.objects.create(related_book=book, status=Status.COMPLETED.value, origin=BookSession.Origin.LEGACY)
+
+        self.assert_flat_walk(build)
+
+    def test_a_marked_manga_with_an_attempt_reads_history_once_for_every_title(self):
+        manga = MediaTypes.MANGA.value
+
+        def build(number):
+            item = self.item(manga, f"manga-{number}", title=f"manga-{number}")
+            self.set_item(item, series_total=100)
+            self.do(series_tracking.mark_read, item, d(2026, 3, 1))
+            self.do(series_tracking.start, item, d(2026, 3, 2))
+
+        self.assert_flat_walk(build, adapter=manga)
 
     def test_one_global_request_walks_once(self):
-        self.addCleanup(patch.stopall)
-        with self.counted_adapter(), patch.object(activity_rows, "CALCULATED_TYPES", frozenset({BOOK})):
+        patcher, counted = self.counted_adapter()
+        with patcher:
             self.summary(ALL_TIME)
-            self.assertEqual(activity_rows.ADAPTERS[BOOK].call_count, 1)
+            self.assertEqual(counted.call_count, 1)

@@ -2630,7 +2630,7 @@ class Anime(Media):
     """Model for anime.
 
     The generic path writes change rows for its starts and numbers, for installed builds
-    and the old feed, but the calculation's adapter will ignore them and read the history
+    and the old feed, but the calculation's adapter ignores them and reads the history
     rows. So each history row says what it was in its change reason: `day:<date>`, the
     date it counts on; `log:<id>`, written by that log; or `mark`, which counts on no day
     (docs/activity-contract.md, AC-2).
@@ -3110,6 +3110,11 @@ class BookSession(models.Model):
         self.related_book._invalidate_progress_cache()
         super().save(*args, **kwargs)
         self.related_book._invalidate_progress_cache()
+
+    @property
+    def from_file(self):
+        """Return whether a file wrote this read: it's its own, and joins no other."""
+        return bool((self.pre_completion_progress or {}).get("from_file"))
 
 
 class Comic(SeriesMedia):

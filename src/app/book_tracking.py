@@ -8,7 +8,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
+from api.services.activity_rows import marked_moments
 from app import single_weight, user_calendar
 from app.models import (
     Book,
@@ -216,13 +217,14 @@ def _queue_statistics(user_id, value):
 
 
 def _has_completed_history(book, *, exclude_session=None):
-    sessions = book.reading_sessions.filter(
-        status=Status.COMPLETED.value,
-        completion_diary_entry__isnull=False,
-    )
+    """Return whether a Read is on record: a mark or a log, with a journey or not.
+
+    Your own file and logs from before the contract have none, and they're still reads.
+    """
+    logs = DiaryEntry.objects.filter(user=book.user, item=book.item)
     if exclude_session is not None:
-        sessions = sessions.exclude(id=exclude_session.id)
-    return book.completed_manually or sessions.exists()
+        logs = logs.exclude(id=exclude_session.completion_diary_entry_id)
+    return book.completed_manually or logs.exists()
 
 
 def _has_prior_completion(book, completed_at, *, exclude_session=None):
@@ -255,6 +257,36 @@ def _validate_journey_date(session, value, user, *, ending=False):
     return moment
 
 
+def _log_date(session, value, user):
+    """Return a log's date as a carrier (BK-306, decision 10).
+
+    A log can carry any date. The phone's own date stays no earlier than the start and
+    saves, because after a flight west today can be before them.
+    """
+    moment = _calendar_datetime(value, user)
+    day = _day(moment)
+    if day == user_calendar.today(user):
+        return _carrier(max(filter(None, (day, _day(session.start_date), session.progressed_on))))
+    return moment
+
+
+def _fit_start_to_log(session, moment):
+    """Move a start to its log's date when the log is before it (decision 10).
+
+    It goes in the same write as the end date, or the dates-ordered constraint refuses.
+    A log's date edited later brings the start back, no further than where it was. Only
+    a log finished since the start was saved remembers it, so an old-shape log keeps its
+    start unless this move changes it.
+    """
+    snapshot = session.pre_completion_progress or {}
+    original = _day(snapshot.get("journey_start_date")) or _day(session.start_date)
+    if original is None:
+        return
+    if "journey_start_date" not in snapshot and session.pre_completion_progress is not None and _day(moment) < original:
+        session.pre_completion_progress = {**snapshot, "journey_start_date": _date_string(original)}
+    session.start_date = _carrier(min(original, _day(moment)))
+
+
 @transaction.atomic
 def assign_status(user, item, status, *, start_date=None, mutation_id=None):
     """Apply one canonical direct or live book status transition."""
@@ -280,10 +312,12 @@ def assign_status(user, item, status, *, start_date=None, mutation_id=None):
     if book.status == status and book.current_session_id:
         return book
 
+    # A place with no journey stays: a status move changes no number (decision 21).
+    place = book.progress if _holds_a_place(book) else 0
     _clear_override(book)
     book.status = status
     book.current_session = None
-    book.progress = 0
+    book.progress = place
     book.start_date = None
     book.end_date = None
     book.save(
@@ -353,11 +387,16 @@ def start(user, item, *, start_date=None, mutation_id=None):
         return book
 
     picks_back_up = _picks_back_up(book)
+    began_over = _over_a_finished_read(book)
+    over_a_place = book.progress if _holds_a_place(book) else None
     started_at = _calendar_datetime(start_date or user_calendar.today(user), user)
+    pages_read, percentage_read = _opening_place(book)
     session = BookSession.objects.create(
         related_book=book,
         status=Status.IN_PROGRESS.value,
         start_date=started_at,
+        pages_read=pages_read,
+        percentage_read=percentage_read,
         origin=BookSession.Origin.LIVE,
         previous_tracked=not created,
         previous_status=None if created else book.status,
@@ -366,10 +405,84 @@ def start(user, item, *, start_date=None, mutation_id=None):
         mutation_id=mutation_id,
     )
     _set_book_from_session(book, session)
-    _record_start(user, item, session)
+    _record_start(
+        user,
+        item,
+        session,
+        **({"began_over": True} if began_over else {}),
+        **({"over_a_place": over_a_place} if over_a_place else {}),
+    )
     if picks_back_up:
         _record_status(user, item, session, ProgressChange.PICKED_BACK_UP)
     return book
+
+
+def _last_read(book):
+    """Return the last journey really read: a file's read is its own, whatever its id."""
+    for session in sorted(book.reading_sessions.all(), key=lambda journey: journey.pk, reverse=True):
+        if not session.from_file:
+            return session
+    return None
+
+
+def _holds_a_place(book):
+    """Return whether a book's progress is a place with no journey, as a file leaves (5.2).
+
+    A Read's progress is its length, not a place, unless the eye only leans on a log: that
+    adds nothing, so a place stays under it.
+    """
+    on_a_read = book.status == Status.COMPLETED.value and not book.read_override_active
+    return bool(book.progress) and not on_a_read and _last_read(book) is None
+
+
+def _marked_since(book, journey):
+    """Return whether a mark went on after this journey began, so it closed that read."""
+    if not book.completed_manually:
+        return False
+    marked_at = marked_moments(Book, [book.pk]).get(book.pk)
+    return bool(marked_at and marked_at >= journey.created_at)
+
+
+def _over_a_finished_read(book):
+    """Return whether a new journey is a reread, which begins at zero (decision 6).
+
+    A log or a mark since the last read makes one, with To Read in between or not: a status
+    move changes no number (decision 21). Its start row keeps this, because deleting that
+    log later can't change where it began.
+    """
+    if book.status == Status.COMPLETED.value:
+        return True
+    last = _last_read(book)
+    return bool(last and (last.status == Status.COMPLETED.value or _marked_since(book, last)))
+
+
+def _opening_place(book):
+    """Return where a new journey opens, as (pages, percent) (BK-305, decision 8).
+
+    Only Restart begins at zero, so a read that was stopped opens at its place, even with
+    To Read or Paused in between, and an imported place with no journey does too. Starting
+    over a Read is a reread. It's the calculation's test (activity_rows._carries_on).
+    """
+    if _over_a_finished_read(book):
+        return None, None
+    last = _last_read(book)
+    if last is None:
+        return book.progress or None, None
+    if last.status == Status.DROPPED.value:
+        return last.pages_read, last.percentage_read
+    return None, None
+
+
+def place_on_file(book):
+    """Return the place your own file's row holds for a book (SW-500).
+
+    A status move off a stopped read leaves the book's own progress at 0. The file has only
+    this column, and the journey it stopped on doesn't come back, so it says where that
+    read would open.
+    """
+    if book.progress or book.current_session_id:
+        return book.progress
+    return _opening_place(book)[0] or 0
 
 
 @transaction.atomic
@@ -581,7 +694,10 @@ def mark_read(user, item):
         raise CompletionRequired(open_journey.id)
     if book.status == Status.COMPLETED.value:
         return book
-    if _has_completed_history(book):
+    over_history = _has_completed_history(book)
+    # Over a log the eye adds nothing, so a place stays. A new mark holds it in its length.
+    place = book.progress if over_history and _holds_a_place(book) else 0
+    if over_history:
         book.read_override_active = True
         book.read_override_previous_tracked = not created
         book.read_override_previous_status = book.status
@@ -592,7 +708,7 @@ def mark_read(user, item):
         book.undated_read_previous_status = None if created else book.status
         book.undated_read_previous_session = None if created else book.current_session
         book.undated_read_previous_override = _deactivate_override(book)
-    _save_marked(book)
+    _save_marked(book, place)
     return book
 
 
@@ -607,13 +723,13 @@ def mark_imported_read(book):
     book.undated_read_previous_status = Status.PLANNING.value
     book.undated_read_previous_session = None
     book.undated_read_previous_override = _deactivate_override(book)
-    _save_marked(book)
+    _save_marked(book, 0)
 
 
-def _save_marked(book):
+def _save_marked(book, place):
     book.status = Status.COMPLETED.value
     book.current_session = None
-    book.progress = 0
+    book.progress = place
     book.start_date = None
     book.end_date = None
     book.save(
@@ -636,15 +752,41 @@ def _save_marked(book):
     )
 
 
+@transaction.atomic
+def assign_read(user, item, *, sent_day=None):
+    """Move a book to Read from the website's status form (BK-101).
+
+    It's Mark as Read, unless the form sent a date before today: the page fills in today by
+    itself, so a typed today can't be told from it, and a date before it is a read on that
+    date, as a file's is. A read under way goes through its log either way.
+    """
+    book, _ = _ensure_book(user, item)
+    open_journey = _open_session(book)
+    if open_journey:
+        raise CompletionRequired(open_journey.id)
+    if sent_day and sent_day < user_calendar.today(user):
+        return complete(user, item, completion_date=sent_day)[0]
+    return mark_read(user, item)
+
+
+def _place_before_mark(book):
+    """Return the place the mark replaced: no column holds one, so its history says.
+
+    A Read's progress is its length, not a place, and that's what the row before the
+    undated Reads step's mark holds.
+    """
+    rows = book.history.order_by("-history_id").values_list("completed_manually", "status", "progress")
+    for marked, status, progress in rows:
+        if not marked:
+            return 0 if status == Status.COMPLETED.value else progress or 0
+    return 0
+
+
 def _restore_marker_state(book):
     if book.undated_read_previous_tracked:
         book.status = book.undated_read_previous_status or Status.PLANNING.value
         book.current_session = book.undated_read_previous_session
-        book.progress = (
-            book.current_session.pages_read
-            if book.current_session and book.current_session.pages_read is not None
-            else 0
-        )
+        book.progress = (book.current_session.pages_read or 0) if book.current_session else _place_before_mark(book)
         book.start_date = book.current_session.start_date if book.current_session else None
         book.end_date = book.current_session.end_date if book.current_session else None
         book.read_override_active = book.undated_read_previous_override
@@ -665,7 +807,8 @@ def undo_read(user, item):
         book.status = book.read_override_previous_status or Status.PLANNING.value
         book.current_session = book.read_override_previous_session
         _clear_override(book)
-        book.progress = book.current_session.pages_read or 0 if book.current_session else 0
+        # With no journey, whatever it holds is the place the eye left alone.
+        book.progress = book.current_session.pages_read or 0 if book.current_session else book.progress
         book.start_date = book.current_session.start_date if book.current_session else None
         book.end_date = book.current_session.end_date if book.current_session else None
         book.save(
@@ -703,6 +846,9 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         and not book.read_override_active
     )
     restored = _restore_marker_state(book) if marker_is_current else book
+    if not marker_is_current and book.status != Status.COMPLETED.value and not book.progress and _last_read(book) is None:
+        # A status move since the mark cleared the place it replaced.
+        book.progress = _place_before_mark(book)
     book.completed_manually = False
     book.undated_read_previous_tracked = False
     book.undated_read_previous_status = None
@@ -720,6 +866,7 @@ def delete_undated_read(user, item, *, clear_current_state=True):
         return None
     fields = [
         "completed_manually",
+        "progress",
         "undated_read_previous_tracked",
         "undated_read_previous_status",
         "undated_read_previous_session",
@@ -855,8 +1002,13 @@ def complete(
     import_source_order=None,
     emit_activity=True,
     update_current=True,
+    force_direct=False,
 ):
-    """Atomically create one completion log and complete its journey."""
+    """Atomically create one completion log and complete its journey.
+
+    With force_direct, as an import asks, it's a read of its own, and says so: a file's
+    date never closes a read under way or moves its pages, then or when that read stops.
+    """
     rating = single_weight.validate_storage_rating(rating)
     completed_at = _calendar_datetime(completion_date, user)
     mutation_id = _mutation(mutation_id)
@@ -875,19 +1027,25 @@ def complete(
             return existing_book, existing_entry
     book, created = _ensure_book(user, item)
     if mutation_id:
-        prior = book.reading_sessions.filter(mutation_id=mutation_id).first()
+        prior = book.reading_sessions.filter(
+            Q(mutation_id=mutation_id) | Q(pre_completion_progress__completion_mutation_id=str(mutation_id)),
+        ).first()
         if prior and prior.completion_diary_entry_id:
             return book, prior.completion_diary_entry
 
-    session = _locked_session(book, journey_id) if journey_id else _open_session(book)
-    if journey_id and session is None:
-        raise ValidationError("Reading journey not found.")
-    if session and session.status == Status.COMPLETED.value:
-        if session.completion_diary_entry_id:
-            return book, session.completion_diary_entry
-        raise ValidationError("This journey is already completed.")
-    if session and session.status not in OPEN_STATUSES:
+    if force_direct:
         session = None
+        update_current = update_current and not _open_session(book)
+    else:
+        session = _locked_session(book, journey_id) if journey_id else _open_session(book)
+        if journey_id and session is None:
+            raise ValidationError("Reading journey not found.")
+        if session and session.status == Status.COMPLETED.value and not session.completion_diary_entry_id:
+            raise ValidationError("This journey is already completed.")
+        # A retry returned above. A stale page can name a closed journey: a read under way
+        # is what a log finishes, and with none it's a new read (BK-400).
+        if session and session.status not in OPEN_STATUSES:
+            session = _open_session(book)
 
     true_reread = _has_prior_completion(
         book,
@@ -895,7 +1053,7 @@ def complete(
         exclude_session=session,
     )
     if session:
-        completed_at = _validate_journey_date(session, completed_at, user, ending=True)
+        completed_at = _log_date(session, completed_at, user)
         session.pre_completion_status = session.status
         session.pre_completion_progress = {
             "pages_read": session.pages_read,
@@ -913,7 +1071,10 @@ def complete(
             "title_liked": MediaLike.objects.filter(user=user, item=item).exists(),
             "like_source_id": book.like_source_id,
             "like_is_independent": book.like_is_independent,
+            "journey_start_date": _date_string(session.start_date),
+            "completion_mutation_id": str(mutation_id) if mutation_id else None,
         }
+        _fit_start_to_log(session, completed_at)
     else:
         session = BookSession.objects.create(
             related_book=book,
@@ -925,6 +1086,7 @@ def complete(
             previous_session=None if created else book.current_session,
             previous_read_override=_deactivate_override(book),
             mutation_id=mutation_id,
+            pre_completion_progress=_direct_read_note(book, from_file=force_direct),
         )
 
     total_pages = item.total_pages
@@ -955,6 +1117,7 @@ def complete(
     session.save(
         update_fields=[
             "status",
+            "start_date",
             "end_date",
             "pages_read",
             "percentage_read",
@@ -967,6 +1130,7 @@ def complete(
         book.status = Status.COMPLETED.value
         book.current_session = session
         book.progress = total_pages or session.pages_read or 0
+        book.start_date = session.start_date
         book.end_date = completed_at
         book.completion_diary_entry = entry
         if rating is not None:
@@ -980,6 +1144,7 @@ def complete(
                 "status",
                 "current_session",
                 "progress",
+                "start_date",
                 "end_date",
                 "completion_diary_entry",
                 "score",
@@ -994,6 +1159,17 @@ def complete(
         _create_activity(entry)
     _queue_statistics(user.id, completed_at)
     return book, entry
+
+
+def _direct_read_note(book, *, from_file):
+    """Return what a read with no journey stands on, as its journey's note says it.
+
+    A file's read is its own. A log over a place with no journey keeps that place, so it
+    adds only what's left (decision 8) and its delete can give the place back.
+    """
+    if from_file:
+        return {"from_file": True}
+    return {"pages_read": book.progress} if _holds_a_place(book) else None
 
 
 @transaction.atomic
@@ -1015,16 +1191,13 @@ def update_completion(entry, data, *, tags=UNSET):
     previous_consumed_at = entry.consumed_at
     fields = []
     if "consumed_at" in data:
-        entry.consumed_at = _validate_journey_date(
-            session,
-            data["consumed_at"],
-            entry.user,
-            ending=True,
-        )
+        entry.consumed_at = _log_date(session, data["consumed_at"], entry.user)
+        _fit_start_to_log(session, entry.consumed_at)
         session.end_date = entry.consumed_at
-        session.save(update_fields=["end_date"])
+        session.save(update_fields=["start_date", "end_date", "pre_completion_progress"])
         fields.append("consumed_at")
         if book.current_session_id == session.id:
+            book.start_date = session.start_date
             book.end_date = entry.consumed_at
     if "rating" in data:
         previous_rating = entry.rating
@@ -1053,7 +1226,7 @@ def update_completion(entry, data, *, tags=UNSET):
         _add_tags(entry, tags)
     if like_is_source and "liked" in data:
         _set_like_row(entry.user, entry.item, entry.liked)
-    book.save(update_fields=["score", "rating_source", "end_date"])
+    book.save(update_fields=["score", "rating_source", "start_date", "end_date"])
     _update_activity(entry)
     single_weight._audit_diary(entry, "diary_updated")
     _queue_statistics(entry.user_id, previous_consumed_at)
@@ -1096,7 +1269,8 @@ def _restore_previous(book, session):
     if session.previous_tracked:
         book.status = session.previous_status or Status.PLANNING.value
         book.current_session = previous
-        book.progress = previous.pages_read or 0 if previous else 0
+        place = (session.pre_completion_progress or {}).get("pages_read")
+        book.progress = previous.pages_read or 0 if previous else place or 0
         book.start_date = previous.start_date if previous else None
         book.end_date = previous.end_date if previous else None
         book.read_override_active = session.previous_read_override
@@ -1155,16 +1329,10 @@ def _splice_session(book, session):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity
-
-    changes = ProgressChange.objects.filter(
-        actor=user,
-        item=item,
-        current_progress__journey_id=journey_id,
+    progress_posts.delete_changes(
+        user.pk,
+        ProgressChange.objects.filter(actor=user, item=item, current_progress__journey_id=journey_id),
     )
-    ids = list(changes.values_list("id", flat=True))
-    Activity.objects.filter(target_type="progress_change", target_id__in=ids).delete()
-    changes.delete()
 
 
 @transaction.atomic
@@ -1192,6 +1360,7 @@ def delete_completion(user, entry):
     entry.delete()
     _queue_statistics(user.id, consumed_at)
     if session is None:
+        _settle_read_with_no_journey(book)
         return book
     current = book.current_session_id == session.id
     restored_live_state = False
@@ -1201,6 +1370,9 @@ def delete_completion(user, entry):
         session.pages_read = snapshot.get("pages_read")
         session.percentage_read = snapshot.get("percentage_read")
         session.progressed_on = snapshot.get("progressed_on")
+        # Only when the key is there: an old-shape log never moved its start.
+        if "journey_start_date" in snapshot:
+            session.start_date = _carrier(_day(snapshot["journey_start_date"])) if snapshot["journey_start_date"] else None
         session.end_date = None
         session.completion_diary_entry = None
         session.pre_completion_status = None
@@ -1211,6 +1383,7 @@ def delete_completion(user, entry):
                 "pages_read",
                 "percentage_read",
                 "progressed_on",
+                "start_date",
                 "end_date",
                 "completion_diary_entry",
                 "pre_completion_status",
@@ -1258,7 +1431,56 @@ def delete_completion(user, entry):
         fields.append("completion_diary_entry")
         if fields:
             book.save(update_fields=fields)
+        _keep_the_eye(book)
     return book
+
+
+def _keep_the_eye(book):
+    """Make an eye that leaned on a log the mark it would have made, once no log is left.
+
+    Return whether it did. The person said it was read, and the number and your own file
+    should say so too (BK-103).
+    """
+    if not book.read_override_active or _has_completed_history(book):
+        return False
+    book.completed_manually = True
+    book.undated_read_previous_tracked = book.read_override_previous_tracked
+    book.undated_read_previous_status = book.read_override_previous_status
+    book.undated_read_previous_session = book.read_override_previous_session
+    book.undated_read_previous_override = False
+    _clear_override(book)
+    book.save(
+        update_fields=[
+            "completed_manually",
+            "undated_read_previous_tracked",
+            "undated_read_previous_status",
+            "undated_read_previous_session",
+            "undated_read_previous_override",
+            "read_override_active",
+            "read_override_previous_tracked",
+            "read_override_previous_status",
+            "read_override_previous_session",
+        ],
+    )
+    return True
+
+
+def _settle_read_with_no_journey(book):
+    """Leave a Read only what's behind it, once a log with no journey has gone (BK-404).
+
+    Your own file and old rows leave these. No record says what came before, so with no
+    other log or mark it's no longer Read, and its pages and date go too: left, that file
+    would write the log back from the date.
+    """
+    if book.status != Status.COMPLETED.value or book.current_session_id or _keep_the_eye(book):
+        return
+    latest = DiaryEntry.objects.filter(user=book.user, item=book.item).order_by("-consumed_at", "-id").first()
+    book.end_date = latest.consumed_at if latest else None
+    if not _has_completed_history(book):
+        book.status = Status.PLANNING.value
+        book.progress = 0
+        book.start_date = None
+    book.save(update_fields=["status", "progress", "start_date", "end_date"])
 
 
 @transaction.atomic
@@ -1281,6 +1503,17 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
             raise ValidationError("Journey starts cannot follow their end date.")
         session.start_date = started_at
         fields.append("start_date")
+        # A hand edit of a start is the person saying when it began, so it's first
+        # activity too (decision 10), where a log's own move isn't.
+        ProgressChange.objects.filter(
+            actor=user,
+            item=item,
+            current_progress__journey_id=session.pk,
+            current_progress__kind=ProgressChange.START,
+        ).update(saved_on=_day(started_at))
+        if "journey_start_date" in (session.pre_completion_progress or {}):
+            session.pre_completion_progress["journey_start_date"] = _date_string(started_at)
+            fields.append("pre_completion_progress")
     if end_date is not UNSET:
         session.end_date = _validate_journey_date(session, end_date, user, ending=True)
         fields.append("end_date")
@@ -1302,6 +1535,7 @@ def delete_journey(user, item, journey_id):
         return book
     if session.completion_diary_entry_id or session.status == Status.COMPLETED.value:
         raise HistoryExists("Delete the completion log instead of the completed journey.")
+    place = _opened_over(user, item, session)
     current = book.current_session_id == session.id
     if current:
         restored = _restore_previous(book, session)
@@ -1311,7 +1545,28 @@ def delete_journey(user, item, journey_id):
         _splice_session(restored, session)
     _delete_progress_history(user, item, session.id)
     session.delete()
-    return Book.objects.filter(id=book.id).first()
+    book = Book.objects.filter(id=book.id).first()
+    if book and place and not book.progress:
+        book.progress = place
+        if _holds_a_place(book):
+            book.save(update_fields=["progress"])
+        else:
+            book.progress = 0
+    return book
+
+
+def _opened_over(user, item, session):
+    """Return the place with no journey this journey opened on, which its delete gives back.
+
+    Its start row holds it: a log and that log's delete rewrite the journey's own note.
+    """
+    start_row = ProgressChange.objects.filter(
+        actor=user,
+        item=item,
+        current_progress__journey_id=session.pk,
+        current_progress__kind=ProgressChange.START,
+    ).first()
+    return start_row.current_progress.get("over_a_place") if start_row else None
 
 
 @transaction.atomic
@@ -1375,11 +1630,12 @@ def _picks_back_up(book):
     """Return whether a new journey carries on from a read that was stopped (AC-1).
 
     Paused or Did Not Finish on a book never started has nothing to pick back up. Nor has
-    one finished, whose next journey is a new read.
+    one finished, whose next journey is a new read. To Read in between changes neither,
+    as where the journey opens says (_opening_place).
     """
-    if book.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+    if book.status not in {Status.PAUSED.value, Status.DROPPED.value, Status.PLANNING.value} or _over_a_finished_read(book):
         return False
-    last = book.reading_sessions.order_by("-id").first()
+    last = _last_read(book)
     return last.status == Status.DROPPED.value if last else bool(book.progress)
 
 

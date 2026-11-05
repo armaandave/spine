@@ -9,6 +9,8 @@ from django.db import transaction
 from django.db.models import F
 from django.db.models.functions import Greatest
 
+from api.services import progress_posts
+from api.services.item_metadata import fill_book_pages
 from app import book_tracking, user_calendar
 from app.models import (
     Book,
@@ -76,7 +78,7 @@ class MarginsImporter:
 
         with transaction.atomic():
             for key, book_rows in rows_by_book.items():
-                item = self._get_or_create_item(results[key])
+                item = self._get_or_create_item(results[key], book_rows)
                 counts = self.counts.copy()
                 try:
                     # One book breaking a reading rule is reported, not the whole import.
@@ -90,7 +92,7 @@ class MarginsImporter:
         warnings = "\n".join(dict.fromkeys(self.warnings))
         return {key: count for key, count in self.counts.items() if count}, warnings or None
 
-    def _get_or_create_item(self, result):
+    def _get_or_create_item(self, result, rows):
         item = Item.objects.get_or_create(
             media_id=str(result["media_id"]),
             source=result["source"],
@@ -103,6 +105,9 @@ class MarginsImporter:
         # Only the search result's first publication year; the metadata fill
         # completes the Item later.
         helpers.store_free_metadata(item, {"first_publish_year": result.get("first_publish_year")})
+        # A mark's pile is this count, so it's here at once, not after the metadata fill.
+        file_pages = next((row.pages for row in rows if row.pages), None)
+        fill_book_pages(item, result.get("max_progress") or result.get("total_pages") or file_pages)
         return item
 
     def _import_book(self, item, rows):
@@ -156,6 +161,7 @@ class MarginsImporter:
             import_source=IMPORT_SOURCE,
             import_source_id=f"{item.source}:{item.media_id}:{row.end_date.isoformat()}",
             emit_activity=False,
+            force_direct=True,
         )
         if _start(row):
             book_tracking.update_journey(self.user, item, entry.book_journey.id, start_date=row.start_date)
@@ -183,7 +189,7 @@ class MarginsImporter:
 
     def _clear_book(self, item):
         """Delete what Spine has for this book so the file's version replaces it."""
-        from social.models import Activity, ProgressChange  # noqa: PLC0415
+        from social.models import Activity  # noqa: PLC0415
 
         entries = DiaryEntry.objects.filter(user=self.user, item=item)
         days = {consumed_at.date() for consumed_at in entries.values_list("consumed_at", flat=True)}
@@ -194,9 +200,10 @@ class MarginsImporter:
         for tag_id, count in tag_counts.items():
             Tag.objects.filter(id=tag_id).update(usage_count=Greatest(F("usage_count") - count, 0))
         Activity.objects.filter(actor=self.user, item=item).delete()
-        ProgressChange.objects.filter(actor=self.user, item=item).delete()
         MediaLike.objects.filter(user=self.user, item=item).delete()
         Book.objects.filter(user=self.user, item=item).delete()
+        # The file replaces this book, so its saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, [item])
         for day in days:
             transaction.on_commit(
                 lambda day=day: update_daily_statistics.delay(

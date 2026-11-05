@@ -45,9 +45,10 @@ from django.conf import settings
 from django.db import transaction
 
 from api.services import completion as completion_service
+from api.services import stats_cache
 from api.services.filters import _runtime_minutes, update_item_filter_metadata
 from app.mixins import collect_external_rating_item_id, collect_external_rating_item_ids
-from app.models import ItemCredit, MediaTypes, Sources
+from app.models import Book, DiaryEntry, ItemCredit, MediaTypes, Sources
 
 # The metadata rules each media type is filled under. Bump a type when what is stored
 # for it changes, so the fill revisits its Items (Item.metadata_version).
@@ -127,8 +128,6 @@ def store_item_metadata(item, metadata, *, complete=True, persist_series=True):
 
 def _store_book_pages(item, metadata):
     """Fill a book's blank page count from the provider (imports left it empty)."""
-    if item.total_pages:
-        return
     details = metadata.get("details") or {}
     for value in (
         metadata.get("total_pages"),
@@ -140,9 +139,31 @@ def _store_book_pages(item, metadata):
         except (TypeError, ValueError):
             continue
         if pages > 0:
-            item.total_pages = pages
-            item.save(update_fields=["total_pages"])
+            fill_book_pages(item, pages)
             return
+
+
+def fill_book_pages(item, pages):
+    """Fill a book's blank page count; a provider's count never replaces one.
+
+    A book's numbers are worked out from its length, so a change is everyone's who holds
+    it (STAT-006), a blank filled included.
+    """
+    if item.total_pages or not pages:
+        return
+    item.total_pages = pages
+    item.save(update_fields=["total_pages"])
+    bump_book_holders(item)
+
+
+def bump_book_holders(item):
+    """Move the stats version of everyone holding a book of a new length (STAT-006)."""
+    holders = {
+        *Book.objects.filter(item=item).values_list("user_id", flat=True),
+        *DiaryEntry.objects.filter(item=item).values_list("user_id", flat=True),
+    }
+    for user_id in holders:
+        stats_cache.bump_user(user_id)
 
 
 def store_series_total(item, metadata):

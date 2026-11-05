@@ -20,9 +20,9 @@ from api.services import activity as activity_service
 from api.services import activity_rows, stats_time
 from api.services.stats_scope import StatsScope
 from api.tests.test_activity_calc_books import BookCalcBase, d
-from app import book_tracking
+from app import book_tracking, game_tracking
 from app.management.commands.compare_activity_numbers import _qualifying_days
-from app.models import DiaryEntry, MediaTypes
+from app.models import Anime, DiaryEntry, GameSession, MediaTypes, Status
 from social.models import Comment, ContentLike, ProgressChange, ProgressPost
 
 WRITES = re.compile(r"^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", re.IGNORECASE)
@@ -57,7 +57,8 @@ class CompareTests(BookCalcBase):
         self.assertIn("value=0->285", line)
         self.assertIn("known=0->1", line)
         self.assertIn("total=0->1", line)
-        self.assertIn("titles=0->1", line)
+        # Books are switched on, so today's titles and days read the rows already.
+        self.assertIn("titles=1->1", line)
         self.assertIn("active_days=2->2", line)
         everything = self.line(lines, f"user {self.owner.pk} book all:")
         self.assertIn("value=0->285", everything)
@@ -79,13 +80,32 @@ class CompareTests(BookCalcBase):
             reader = stats_time.type_time(ranged, MediaTypes.BOOK.value)
         self.assertEqual((reader.value, reader.known, reader.total), (60, 0, 1))
 
+    def test_known_reads_every_row_and_leaves_a_marked_game_out(self):
+        """A percent, then hours, is unknown, and a mark has no hours to know."""
+        played = self.item(MediaTypes.GAME.value, "played", title="played")
+        with self.on(d(2026, 2, 1)):
+            game_tracking.start(self.owner, played)
+        with self.on(d(2026, 2, 2)):
+            game_tracking.update_progress(self.owner, played, percentage=40)
+        with self.on(d(2026, 2, 3)):
+            game_tracking.update_progress(self.owner, played, total_minutes=300)
+        marked = self.item(MediaTypes.GAME.value, "marked", title="marked")
+        with self.on(d(2026, 2, 4)):
+            game_tracking.mark_completed(self.owner, marked)
+        line = self.line(self.compare(), f"user {self.owner.pk} game all:")
+        self.assertRegex(line, r"known=\d+->0 total=\d+->1 titles=\d+->2 ")
+
     def test_a_year_todays_code_counts_and_the_rows_leave_empty_gets_its_line(self):
-        """A save a later fix took back to nothing: its pill would go at the switch."""
+        """A save a later fix took back to nothing: its pill would go at the switch.
+
+        Books have switched, so their today reads the rows: this is them before it.
+        """
         item = self.book("taken-back")
         self.begin(item, d(2023, 3, 1))
         self.save(item, 100, d(2024, 3, 1))
         self.save(item, 0, d(2025, 3, 1))
-        lines = self.compare()
+        with patch.object(activity_rows, "CALCULATED_TYPES", frozenset()):
+            lines = self.compare()
         self.assertIn("active_days=1->0", self.line(lines, f"user {self.owner.pk} book 2024:"))
         self.assertTrue(self.line(lines, f"user {self.owner.pk} book 2023:"))
         self.assertIn("active_days=2->1", self.line(lines, f"user {self.owner.pk} book all:"))
@@ -133,6 +153,47 @@ class CompareTests(BookCalcBase):
 
 
 @override_settings(TIME_ZONE="America/New_York")
+class YearsOnlyTheOldCounterHasTests(CompareTests):
+    """A mark leaving a year moves its amount to the pile: All Time can't show that."""
+
+    def test_an_anime_marked_in_2025(self):
+        item = self.item(MediaTypes.ANIME.value, "marked", title="marked")
+        self.set_item(item, runtime_minutes=24)
+        row = self.tracking(Anime, item, status=Status.COMPLETED.value, progress=12)
+        self.history(row, 0, datetime(2025, 3, 1, 17, tzinfo=UTC), kind="+")
+        self.history(row, 12, datetime(2025, 3, 2, 17, tzinfo=UTC))
+        type(row).history.model.objects.filter(id=row.id).update(history_change_reason="mark")
+        line = self.line(self.compare(), f"user {self.owner.pk} anime 2025:")
+        self.assertIn("value=288->0", line)
+
+    def test_a_game_whose_hours_read_a_year_its_rows_left(self):
+        item = self.item(MediaTypes.GAME.value, "moved", title="moved")
+        with self.on(d(2026, 2, 10)):
+            game_tracking.start(self.owner, item)
+            game_tracking.update_progress(self.owner, item, total_minutes=3000)
+        GameSession.objects.filter(related_game__item=item).update(minutes_updated_on=d(2025, 12, 20))
+        line = self.line(self.compare(), f"user {self.owner.pk} game 2025:")
+        self.assertIn("value=3000->0", line)
+
+    def test_a_game_whose_hours_a_later_fix_took_back_keeps_their_year(self):
+        """Only today's events name 2024: the session's own date moved on to the fix."""
+        item = self.item(MediaTypes.GAME.value, "taken-back", title="taken-back")
+        with self.on(d(2023, 3, 1)):
+            game_tracking.start(self.owner, item)
+        with self.on(d(2024, 3, 1)):
+            game_tracking.update_progress(self.owner, item, total_minutes=100)
+        with self.on(d(2025, 3, 1)):
+            game_tracking.update_progress(self.owner, item, total_minutes=0)
+        line = self.line(self.compare(), f"user {self.owner.pk} game 2024:")
+        self.assertIn("active_days=1->0", line)
+
+    def test_a_year_holding_nothing_either_way_prints_nothing(self):
+        self.seed_a_known_difference()
+        lines = self.compare()
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} book 2025:")])
+        self.assertFalse([line for line in lines if line.startswith(f"user {self.owner.pk} anime 2")])
+
+
 class CountTwoTests(CompareTests):
     """Count 2: progress posts by class (plan 5.8)."""
 

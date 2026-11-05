@@ -35,18 +35,19 @@ RELATED = "progress_changes"
 NAMING = {
     "api/serializers/common.py",
     "api/services/activity.py",
+    "api/services/progress_posts.py",
     "api/services/activity_rows.py",
     "api/services/stats_scope.py",
     "api/services/tracking.py",
     "app/book_tracking.py",
     "app/game_tracking.py",
     "app/management/commands/compare_activity_numbers.py",
+    "app/management/commands/fill_picked_up_books.py",
     "app/management/commands/fill_progress_days.py",
     "app/management/commands/flag_past_restarts.py",
     "app/music_move.py",
     "app/series_tracking.py",
     "app/tv_tracking.py",
-    "integrations/imports/margins/importer.py",
     "social/models.py",
 }
 # Every place a progress change is written.

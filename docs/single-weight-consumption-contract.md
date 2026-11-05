@@ -444,8 +444,15 @@ so standalone rating rows are not shown.
 - An imported consumed item without a date creates completed, undated tracking
   with direct consumption.
 - An imported diary row creates a dated diary entry and ensures tracking.
+- A book row marked Completed with a date is a dated diary entry too, with a source
+  identity, unless the title has a log that day or the row says it's an undated mark.
+  A book row marked Completed with no date is the undated mark, from every source.
 - An imported diary rating remains attached to its diary entry.
 - Imports do not emit social feed activity.
+- Your own export coming back in overwrite mode leaves a book's All Time alone, except
+  where one row per book can't say it: the pages of a read stopped under a later Read, and
+  of an attempt a Restart closed, have no column to come back in, so All Time falls by
+  them. A stopped read since moved to To Read or Paused says its place in that row.
 
 Imports may use bulk implementation paths, but their final state must be
 indistinguishable from state created under this contract.
@@ -535,3 +542,9 @@ may change without editing this document, but behavior that contradicts a law
 requires an explicit product decision and contract update first.
 
 Behavior omitted from this working contract is not implicitly decided.
+
+## Review status
+
+SW-500's dated book rows, what your own export can't bring back, and a Read with no date
+staying unflagged on a title that has a log (your own export coming back), are provisional
+until the phone test of Activity's first phase accepts them.

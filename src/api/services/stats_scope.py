@@ -635,15 +635,15 @@ class StatsScope:
         )
         if self.calculated_types:
             changes = changes.exclude(item__media_type__in=self.calculated_types)
-        if not self.is_all_time:
-            changes = changes.filter(
-                created_at__gte=datetime.combine(self.start_date, time.min, tzinfo=self.zone),
-                created_at__lt=datetime.combine(self.end_date + timedelta(days=1), time.min, tzinfo=self.zone),
-            )
         units = activity_service.UNITS
+        # A save counts on its fixed day; an older row reads the owner's calendar.
+        changes = changes.annotate(
+            event_day=Coalesce("saved_on", TruncDate("created_at", tzinfo=self.zone), output_field=DateField()),
+        )
+        if not self.is_all_time:
+            changes = changes.filter(event_day__gte=self.start_date, event_day__lte=self.end_date)
         rows = (
             changes.annotate(
-                event_day=TruncDate("created_at", tzinfo=self.zone),
                 event_title=self.title_id(),
                 event_bucket=media_type_bucket("item__media_type"),
                 delta=Cast(KT("current_progress__value"), FloatField())

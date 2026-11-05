@@ -20,6 +20,7 @@ from django.test import override_settings
 
 from api.services import stats_cache
 from api.tests.test_activity_calc_books import BookCalcBase, d
+from api.tests.test_stats_v2_activity import ALL_TIME, YEAR_2025, YEAR_2026
 from app import book_tracking
 from app.models import Book, BookSession, Game, MediaTypes, Status
 from social.models import ProgressChange
@@ -203,6 +204,20 @@ class UndatedReadsTests(StepBase):
         self.assertFalse(book.completed_manually)
         self.assert_numbers(0, 0, 0)
 
+    def test_undoing_a_read_that_held_its_length_leaves_no_place(self):
+        """The row before the step's mark still says 400, and that's its length."""
+        item = self.book("held-length")
+        Book.objects.create(user=self.owner, item=item, status=Status.COMPLETED.value, progress=400)
+        run("fill_undated_reads", apply=True)
+        self.assert_numbers(0, 0, 400)
+        self.do(book_tracking.undo_read, item, d(2026, 3, 1))
+        self.assert_numbers(0, 0, 0)
+        book = Book.objects.get(item=item)
+        self.assertEqual((book.status, book.progress), (Status.PLANNING.value, 0))
+        self.begin(item, d(2026, 3, 2))
+        self.assertEqual(Book.objects.get(item=item).progress, 0)
+        self.assertEqual(self.rows(item), ["2026-03-02 started"])
+
     def test_turning_the_eye_off_afterward_leaves_what_it_leaves_on_any_mark(self):
         kept = {"score": 8, "notes": "Loved it"}
         eyed = self.the_same_book_marked_by_the_eye("eyed", **kept)
@@ -366,3 +381,180 @@ class PastRestartsTests(StepBase):
         self.assertEqual(BookSession.objects.filter(related_book__item__media_type=MediaTypes.BOOK.value).count(), 2)
         _, err = run("flag_past_restarts")
         self.assertIn(f"per account: {{{self.owner.pk}: 1}}", err)
+
+
+class PickedUpBooksTests(StepBase):
+    """Decision 60: books stopped and picked up before Phase 1 get their place back."""
+
+    def picked_up_before(self, name="old", value=200, kind="pages", pages=400):
+        """Write a pick-up as it was before a new journey opened at its place."""
+        item = self.book(name, pages=pages)
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, value, d(2025, 11, 2), kind=kind)
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.begin(item, d(2026, 4, 1))
+        journey = Book.objects.get(item=item).current_session
+        BookSession.objects.filter(pk=journey.pk).update(pages_read=None, percentage_read=None)
+        Book.objects.filter(item=item).update(progress=0)
+        return item, journey
+
+    def payloads(self):
+        """Return Stats' whole payload as the phone reads it, each year and All Time."""
+        return [self.summary(params, tab="book") for params in (YEAR_2025, YEAR_2026, ALL_TIME)]
+
+    def test_a_dry_run_changes_nothing_and_counts_per_account(self):
+        _item, journey = self.picked_up_before()
+        _, err = run("fill_picked_up_books")
+        self.assertIn(f"count 15, books picked up with no place: 1, per account: {{{self.owner.pk}: 1}}", err)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+
+    def test_apply_gives_a_page_place_back_and_a_second_run_changes_nothing(self):
+        item, journey = self.picked_up_before()
+        out, _ = run("fill_picked_up_books", apply=True)
+        self.assertEqual(json.loads(out), {"journey": journey.pk, "pages_read": None, "percentage_read": None})
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(Book.objects.get(item=item).progress, 200)
+        out, err = run("fill_picked_up_books", apply=True)
+        self.assertEqual(out, "")
+        self.assertIn("no place: 0", err)
+
+    def test_apply_gives_a_percent_place_back(self):
+        _item, journey = self.picked_up_before("percent", value=25, kind="percentage", pages=None)
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+        self.assertEqual(float(journey.percentage_read), 25.0)
+
+    def test_no_number_and_no_row_changes(self):
+        self.picked_up_before()
+        rows = ProgressChange.objects.count()
+        before = self.payloads()
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.payloads(), before)
+        self.assertEqual(ProgressChange.objects.count(), rows)
+
+    def test_a_percent_place_changes_no_number_either(self):
+        """Decision 51: every Stats payload reads alike with and without the copy."""
+        self.picked_up_before("percent-stats", value=25, kind="percentage", pages=None)
+        before = self.payloads()
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.payloads(), before)
+
+    def test_a_restart_and_a_reread_keep_their_zero(self):
+        restarted = self.book("restarted")
+        self.begin(restarted, d(2026, 3, 1))
+        self.save(restarted, 100, d(2026, 3, 2))
+        self.do(book_tracking.restart, restarted, d(2026, 3, 3))
+        reread = self.book("reread")
+        self.finish(reread, d(2026, 3, 1))
+        self.begin(reread, d(2026, 3, 2))
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
+    def test_a_mark_in_between_keeps_its_zero(self):
+        item = self.book("mark-between")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.drop, item, d(2025, 11, 3))
+        self.do(book_tracking.mark_read, item, d(2025, 11, 4))
+        self.do(book_tracking.assign_status, item, d(2025, 11, 5), Status.PLANNING.value)
+        self.begin(item, d(2026, 4, 1))
+        start_row = ProgressChange.objects.filter(item=item, current_progress__kind=ProgressChange.START).latest("id")
+        for field in ("previous_progress", "current_progress"):
+            getattr(start_row, field).pop("began_over")
+        start_row.save(update_fields=["previous_progress", "current_progress"])
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
+    def blank(self, item):
+        """Empty the journey just picked up, as before one opened at its place."""
+        journey = Book.objects.get(item=item).current_session
+        BookSession.objects.filter(pk=journey.pk).update(pages_read=None, percentage_read=None)
+        Book.objects.filter(item=item).update(progress=0)
+        return journey
+
+    def test_a_restart_with_no_reading_then_a_pick_up_changes_no_number(self):
+        """Stopped at 200, Restart, stopped with nothing read, back: it began at 0."""
+        item = self.book("chain")
+        self.begin(item, d(2025, 11, 1))
+        self.save(item, 200, d(2025, 11, 2))
+        self.do(book_tracking.restart, item, d(2025, 11, 3))
+        self.do(book_tracking.drop, item, d(2025, 11, 4))
+        self.begin(item, d(2026, 4, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        _, err = run("fill_picked_up_books", apply=True)
+        self.assertIn("no place: 0", err)
+        self.assertEqual(self.numbers(), before)
+        journey.refresh_from_db()
+        self.assertIsNone(journey.pages_read)
+
+    def test_a_pick_up_a_restart_a_stop_and_a_pick_up_changes_no_number(self):
+        item = self.book("over-a-restart")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.begin(item, d(2025, 6, 1))
+        self.blank(item)
+        self.do(book_tracking.restart, item, d(2025, 6, 2))
+        self.do(book_tracking.drop, item, d(2025, 6, 3))
+        self.begin(item, d(2026, 5, 1))
+        self.blank(item)
+        before = self.numbers()
+        self.assertEqual(before, {"2025": 200, "2026": 0, "all_time": 200})
+        run("fill_picked_up_books", apply=True)
+        self.assertEqual(self.numbers(), before)
+
+    def test_two_pick_ups_with_nothing_read_between_walk_back_to_the_place(self):
+        item = self.book("twice-back")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.begin(item, d(2025, 6, 1))
+        self.blank(item)
+        self.do(book_tracking.drop, item, d(2025, 6, 2))
+        self.begin(item, d(2026, 5, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(self.numbers(), before)
+
+    def test_a_file_between_the_stop_and_the_pick_up_is_walked_past(self):
+        item = self.book("past-a-file")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        with self.on(d(2025, 6, 1)):
+            book_tracking.complete(self.owner, item, completion_date=d(2024, 1, 1), update_current=False, force_direct=True)
+        self.begin(item, d(2026, 5, 1))
+        journey = self.blank(item)
+        before = self.numbers()
+        run("fill_picked_up_books", apply=True)
+        journey.refresh_from_db()
+        self.assertEqual(journey.pages_read, 200)
+        self.assertEqual(self.numbers(), before)
+
+    def test_a_read_after_a_log_keeps_its_zero(self):
+        item = self.book("after-a-log")
+        self.begin(item, d(2025, 5, 1))
+        self.save(item, 200, d(2025, 5, 2))
+        self.do(book_tracking.drop, item, d(2025, 5, 3))
+        self.finish(item, d(2025, 6, 1))
+        self.begin(item, d(2026, 5, 1))
+        ProgressChange.objects.filter(item=item, current_progress__began_over=True).delete()
+        self.blank(item)
+        _, err = run("fill_picked_up_books")
+        self.assertIn("no place: 0", err)
+
+    def test_the_owners_version_moves(self):
+        self.picked_up_before()
+        key = stats_cache.user_version_key(self.owner.pk)
+        with self.captureOnCommitCallbacks(execute=True):
+            setattr(connection, stats_cache.PENDING_ATTR, (None, None))
+            before = cache.get(key)
+            run("fill_picked_up_books", apply=True)
+        self.assertNotEqual(cache.get(key), before)
