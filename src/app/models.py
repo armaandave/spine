@@ -143,6 +143,9 @@ class Item(CalendarTriggerMixin, models.Model):
     metadata_version = models.PositiveSmallIntegerField(default=0, db_default=0)
     # The last fill attempt that failed for a temporary reason; null when none did.
     metadata_attempted_at = models.DateTimeField(null=True, blank=True)
+    # An anime's shown title (AN-705): its English title, or the original when it has none.
+    # Empty until Spine has read one. Other media types never set it.
+    display_title = models.TextField(blank=True, default="", db_default="")
 
     class Meta:
         """Meta options for the model."""
@@ -227,6 +230,13 @@ class Item(CalendarTriggerMixin, models.Model):
             models.Index(fields=["media_type", "imdb_rating"]),
             models.Index(fields=["media_type", "rotten_tomatoes_rating"]),
         ]
+
+    @property
+    def shown_title(self):
+        """Return the title Spine shows: an anime's English one once it has it (AN-705)."""
+        if self.media_type == MediaTypes.ANIME.value and self.display_title:
+            return self.display_title
+        return self.title
 
     def __str__(self):
         """Return the name of the item."""

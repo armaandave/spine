@@ -85,6 +85,38 @@ class AN901RollbackInsertTests(TestCase):
         )
 
 
+class AN705DisplayTitleTests(TestCase):
+    """AN-705: 0096 adds the English title with a default, so old inserts still save."""
+
+    def test_an_705_an_old_insert_saves_with_no_english_title(self):
+        old = MigrationExecutor(connection).loader.project_state([("app", "0095_anime_tracking")]).apps
+        insert_like_old_code(
+            old.get_model("app", "Item"),
+            media_id="9",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Shingeki no Kyojin",
+            image="https://example.com/p.jpg",
+        )
+        item = Item.objects.get(media_id="9", media_type=MediaTypes.ANIME.value)
+        self.assertEqual((item.display_title, item.shown_title), ("", "Shingeki no Kyojin"))
+
+    def test_an_705_an_anime_shows_its_english_title_and_other_types_their_own(self):
+        anime = make_item("10")
+        anime.display_title = "Attack on Titan"
+        self.assertEqual(anime.shown_title, "Attack on Titan")
+        movie = Item(source=Sources.TMDB.value, media_type=MediaTypes.MOVIE.value, media_id="1", title="Le Samourai", display_title="The Samurai")
+        self.assertEqual(movie.shown_title, "Le Samourai")
+
+    def test_an_705_the_migration_only_adds(self):
+        from importlib import import_module
+
+        from django.db.migrations import operations
+
+        migration = import_module("app.migrations.0096_item_display_title").Migration
+        self.assertTrue(all(isinstance(operation, operations.AddField) for operation in migration.operations))
+
+
 class AN001OneRecordTests(TestCase):
     """AN-001: one tracking record per person and title."""
 
