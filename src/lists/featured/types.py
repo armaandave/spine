@@ -115,6 +115,7 @@ class Match:
     year: int | None = None
     total_pages: int | None = None
     known_for_department: str = ""  # people only
+    display_title: str = ""  # an anime's English title, when MAL's record was read (AN-705)
 
     @property
     def ref(self):

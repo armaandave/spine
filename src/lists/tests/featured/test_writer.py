@@ -148,6 +148,23 @@ class WriterTests(FeaturedTestCase):
         self.assertEqual(sync.unresolved[0]["key"], "tmdb:movie:404")
         self.assertIn("metadata lookup failed", sync.unresolved[0]["reason"])
 
+    def test_an_anime_fetched_for_its_art_keeps_mals_english_title(self):
+        entries = [
+            entry(1, "", media_type="anime", ids={"mal": "16498"}),
+            entry(2, "", media_type="anime", ids={"mal": "20"}),
+        ]
+
+        def metadata(media_type, media_id, source, *args, **kwargs):
+            english = "Attack on Titan" if media_id == "16498" else None
+            return {"title": f"Original {media_id}", "display_title": english, "image": "https://cdn.myanimelist.net/p.jpg"}
+
+        with patch("app.providers.services.get_media_metadata", side_effect=metadata) as get_metadata:
+            self.run_list(make_definition(media_types=("anime",)), entries)
+        self.assertEqual(get_metadata.call_count, 2, "No request beyond the one for the art")
+        titan = Item.objects.get(media_type="anime", media_id="16498")
+        self.assertEqual((titan.title, titan.shown_title), ("Original 16498", "Attack on Titan"))
+        self.assertEqual(Item.objects.get(media_type="anime", media_id="20").display_title, "", "The fill job asks AniList")
+
     def test_every_entry_note_is_stored_per_item(self):
         entries = [
             entry(1, "A", media_type="movie", ids={"tmdb": "1"}, image="https://x/1.jpg", note="Winner · Best Picture"),
