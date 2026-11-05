@@ -303,6 +303,12 @@ final class ContinueWatchingEpisodes: Identifiable {
         return state.availableActions.contains("log_season")
     }
 
+    /// Whether Log Season… can open: once the season's writes have settled, as on its page (TV-404), and not over what
+    /// they asked next, the earlier-episodes question or the finale's Log Season, so one log screen opens (TV-107, TV-403).
+    func readyForLog() async -> Bool {
+        await season.settledForScreen()
+    }
+
     /// A row's tick: ticks the episode, or unticks a ticked one, as on the season page (TV-100, TV-102).
     func toggle(_ episode: TVEpisodeState) {
         failureTitle = season.tvIsWatched(episode) ? Self.untickFailureTitle : Self.tickFailureTitle
@@ -589,9 +595,8 @@ private struct ContinueWatchingEpisodesSheet: View {
 
     /// Log Season… opens the season page's composer once the season's writes have settled, as on its page (TV-404).
     private func openLog() {
-        let season = episodes.season
         Task {
-            guard await season.settled() else { return }
+            guard await episodes.readyForLog() else { return }
             isLogPresented = true
         }
     }

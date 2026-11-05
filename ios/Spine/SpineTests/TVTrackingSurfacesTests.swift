@@ -661,6 +661,30 @@ final class TVTrackingSurfacesTests: XCTestCase {
         XCTAssertEqual(Self.line(viewModel.inProgressItems[0]), "S3 E1 next · 10 of 10")
     }
 
+    func testTV403LogSeasonChosenWhileTheFinalesTickIsOnItsWayOpensOneScreenOnly() async throws {
+        let crown = Self.crown(watched: 9, upNext: (2, 10))
+        let viewModel = homeViewModel()
+        viewModel.inProgressItems = [crown]
+        let sheet = try await openLoadedSheet(viewModel, for: crown, season: Self.crownSeason(2, watched: 9))
+        let opensAtOnce = await sheet.readyForLog()
+        XCTAssertTrue(opensAtOnce, "With nothing on its way, Log Season… opens")
+
+        // Tick the finale, then choose ··· Log Season… before the answer.
+        holdDetails()
+        let answer = RefreshGate()
+        heldGates.append(answer)
+        tracking.actionGate = answer
+        tracking.actionResponses = [Self.tickResponse(upNext: (3, 1), watched: 10, ticked: (2, 10), viewingId: 510,
+                                                      finished: Self.finished(season: 2))]
+        sheet.toggle(try XCTUnwrap(sheet.season.tvEpisodeState(sheet.rows[9].tv)))
+        let log = Task { await sheet.readyForLog() }
+        await answer.open()
+        let opens = await log.value
+
+        XCTAssertFalse(opens, "One log screen: Log Season… opens nothing, now or after Not now")
+        XCTAssertEqual(sheet.season.tvFollowUp.composer?.finished.seasonNumber, 2, "The one the finale's tick asked for")
+    }
+
     func testTV701ARowOrOpenShowOpensItsPageOnceTheSheetHasClosed() async throws {
         let crown = Self.crown()
         let viewModel = homeViewModel()
