@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django import forms
 from django.conf import settings
+from django.utils import timezone
 
 from app import config
 from app.models import (
@@ -20,6 +21,7 @@ from app.models import (
     Season,
     Sources,
     DiaryEntry,
+    Status,
 )
 
 
@@ -300,8 +302,9 @@ class SeriesForm(MediaForm):
         from app import series_tracking
 
         attempt = self.instance.current_attempt if self.instance else None
+        # The day the browser sent: Django read its wall clock on the server's zone.
         dates = {
-            field: self.cleaned_data[field]
+            field: timezone.localtime(self.cleaned_data[field]).date()
             for field in ("start_date", "end_date")
             if field in self.changed_data and self.cleaned_data.get(field)
         }
@@ -397,7 +400,9 @@ class GameForm(MediaForm):
         if "score" in self.changed_data:
             payload["rating"] = single_weight.rating_from_wire(self.cleaned_data.get("score")) if self.public_rating_scale else self.cleaned_data.get("score")
         if "start_date" in self.changed_data:
-            payload["start_date"] = self.cleaned_data.get("start_date")
+            # The day the browser sent: Django read its wall clock on the server's zone.
+            start_date = self.cleaned_data.get("start_date")
+            payload["start_date"] = timezone.localtime(start_date).date() if start_date else None
         if "end_date" in self.changed_data and self.cleaned_data.get("end_date"):
             raise forms.ValidationError("Edit completion dates through the completion log.")
         self.instance = game_tracking.apply_tracking_state(self.instance.user, self.instance.item, **payload)
@@ -418,6 +423,37 @@ class GameForm(MediaForm):
 
 class BookForm(MediaForm):
     """Form for books."""
+
+    def save(self, commit=True):
+        """A move to or off Read goes through the book's rules, as the phone's does (BK-101).
+
+        A Read's progress is its length, so leaving one can't write the posted number onto
+        the row as a place.
+        """
+        status = self.cleaned_data["status"]
+        is_new = self.instance.pk is None
+        moved = is_new or "status" in self.changed_data
+        finished = status == Status.COMPLETED.value
+        off_a_read = not is_new and self.initial.get("status") == Status.COMPLETED.value
+        if not commit or not moved or not (finished or off_a_read):
+            return super().save(commit)
+        from app import book_tracking
+
+        user, item = self.instance.user, self.instance.item
+        if finished:
+            book = book_tracking.assign_read(user, item, sent_day=self._sent_end_day())
+        else:
+            book = book_tracking.assign_status(user, item, status, start_date=self.cleaned_data.get("start_date"))
+        book.score = self.cleaned_data.get("score")
+        book.notes = self.cleaned_data.get("notes", "")
+        book.save(update_fields=["score", "notes"])
+        self.instance = book
+        return book
+
+    def _sent_end_day(self):
+        """Return the day the browser sent: Django read its wall clock on the server's zone."""
+        end_date = self.cleaned_data.get("end_date")
+        return timezone.localtime(end_date).date() if end_date and "end_date" in self.changed_data else None
 
     class Meta(MediaForm.Meta):
         """Bind form to model."""

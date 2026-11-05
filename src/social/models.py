@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
+from app import user_calendar
+
 
 class FollowStatus(models.TextChoices):
     """Status values for one-way follow relationships."""
@@ -161,6 +163,18 @@ class ProgressChange(models.Model):
     # Starting a title is recorded as a step from 0 to 1 of this kind, so activity can
     # show "started reading" before any progress. It isn't progress itself.
     START = "start"
+    # Rows that say what happened, not how far: a status move (paused, stopped, picked
+    # back up), a retype of the same number, a title added to Planning. They hold value
+    # 0 in previous and current, so they add nothing to any number.
+    STATUS = "status"
+    TOUCH = "touch"
+    PLANNING = "planning"
+    # What installed builds must never get as their latest progress change.
+    NOT_PROGRESS = (START, STATUS, TOUCH, PLANNING)
+    # What a status row says (AC-1).
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    PICKED_BACK_UP = "picked back up"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -175,6 +189,10 @@ class ProgressChange(models.Model):
     previous_progress = models.JSONField()
     current_progress = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+    # The phone's date when this was saved (docs/activity-contract.md, AC-2). Set by
+    # each writer, never in save(): fixtures create a row and then move its created_at.
+    # Empty only on rows written by code from before this column.
+    saved_on = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -201,6 +219,29 @@ class ProgressChange(models.Model):
             item=item,
             previous_progress=snapshot(0),
             current_progress=snapshot(1),
+            saved_on=user_calendar.today(actor),
+        )
+
+    @classmethod
+    def record_status(cls, actor, item, move, **context):
+        """Record a status move the person chose; a journey id or such rides along.
+
+        It holds value 0 in previous and current and adds nothing to any number.
+        """
+        snapshot = {
+            "kind": cls.STATUS,
+            "value": 0,
+            "max": None,
+            "unit": cls.STATUS,
+            "move": move,
+            **context,
+        }
+        return cls.objects.create(
+            actor=actor,
+            item=item,
+            previous_progress=snapshot,
+            current_progress=snapshot,
+            saved_on=user_calendar.today(actor),
         )
 
 

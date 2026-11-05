@@ -16,12 +16,13 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   over every tracking row.
 - Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
   Steam's imported lifetime playtime is never read (GM-500).
-- Books: pages over visible book logs (the completion snapshot's pages, else the
-  book's ``total_pages``), plus ``total_pages`` once per ``completed_manually`` book in
-  All Time.
+- Books: the calculation's rows, plus its pile in All Time.
 
 ``known`` and ``total`` count the things counted (logs, viewings, tracking rows with a
-change or with progress, sessions, undated completions) with a length, out of all.
+change or with progress, sessions, undated completions) with a length, out of all. A
+type in api.services.activity_rows.CALCULATED_TYPES counts titles, and reads the
+calculation's rows instead of its counter. The old counters stay for the comparison
+until TV, movies and music have switched too.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ from django.db.models import (
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce, NullIf
 
+from api.services import activity_rows
 from app import exposure
 from app.models import Anime, AnimeViewing, Book, Game, GameSession, Item, MediaTypes
 
@@ -100,7 +102,17 @@ def type_time(scope, media_type):
     """Return one type's TypeTime in the scope's range, computed once per scope."""
     cache = scope.__dict__.setdefault(_CACHE_KEY, {})
     if media_type not in cache:
-        cache[media_type] = _COUNTERS[media_type](scope, media_type)
+        if media_type in activity_rows.CALCULATED_TYPES:
+            calculation = scope.calculation()
+            rows = activity_rows.in_range(
+                calculation.rows,
+                media_type=media_type,
+                start_date=scope.start_date,
+                end_date=scope.end_date,
+            )
+            cache[media_type] = _from_rows(rows, calculation.piles if scope.is_all_time else [], media_type)
+        else:
+            cache[media_type] = _COUNTERS[media_type](scope, media_type)
     return cache[media_type]
 
 
@@ -123,6 +135,23 @@ def hours_total(rows):
         "leaves_out": [media_type for media_type in exposed if media_type not in HOURS_TYPES],
         "approximate": any(row.approximate for row in parts),
     }
+
+
+def _from_rows(rows, piles, media_type):
+    """Add up one type's rows and undated piles.
+
+    Everything is a plain int: a Decimal renders as 360.0, which the app reads as 0.
+    """
+    pile = activity_rows.piled(piles, media_type)
+    in_rows = {row.title_id for row in rows if row.counts_title}
+    titles = in_rows | (pile.titles - pile.no_amount)
+    unknown = {row.title_id for row in rows if row.counts_title and not row.known} | (pile.titles - pile.known - pile.no_amount)
+    result = TypeTime(media_type)
+    result.value = int(sum((row.amount for row in rows), pile.amount))
+    result.known = len(titles - unknown)
+    result.total = len(titles)
+    result.progress = int(sum((row.told for row in rows if row.told_unit == activity_rows.EPISODE), pile.told))
+    return result
 
 
 # Counters, one per type.

@@ -30,6 +30,7 @@ from app import (
     single_weight,
     tv_listing,
     tv_tracking,
+    user_calendar,
 )
 from app.models import (
     TV,
@@ -765,6 +766,7 @@ def _record_progress_change(user, media, previous_progress):
         item=media.item,
         previous_progress=previous_progress,
         current_progress=current_progress,
+        saved_on=user_calendar.today(user),
     )
     Activity.objects.create(
         actor=user,

@@ -45,7 +45,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from app import single_weight, tv_listing, user_calendar
 from app.models import (
     TV,
@@ -1577,6 +1577,7 @@ def _progress_change(ctx, item_id, *, previous, current):
         item_id=item_id,
         previous_progress=snapshot(*previous),
         current_progress=snapshot(*current),
+        saved_on=user_calendar.day_of(ctx.now, ctx.user),
     )
 
 
@@ -1597,6 +1598,46 @@ def _record_start(ctx):
         ProgressChange.record_start(ctx.user, ctx.show_item)
 
 
+def _was_started(ctx):
+    """Return whether the person started this show: a start row, a viewing or a log.
+
+    A mark's fills aren't starting it, though they count as recorded.
+    """
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    return (
+        bool(ctx.facts.logs)
+        or any(viewing.kind != FILL for viewing in ctx.facts.viewings)
+        or ProgressChange.objects.filter(
+            actor=ctx.user,
+            item=ctx.show_item,
+            current_progress__kind=ProgressChange.START,
+        ).exists()
+    )
+
+
+def _record_status_move(ctx, status):
+    """Record the person choosing Paused, Dropped or picking the show back up (AC-1).
+
+    A show never started has nothing to stop or pick back up. A tick that ends a pause is
+    just the tick. Webhooks, imports and jobs choose nothing here.
+    """
+    from social.models import ProgressChange  # noqa: PLC0415
+
+    if ctx.entry_point not in (APP, LEGACY_APP, WEB) or status == ctx.status_before:
+        return
+    if status == PAUSED:
+        move = ProgressChange.PAUSED
+    elif status == DROPPED:
+        move = ProgressChange.STOPPED
+    elif status == WATCHING and ctx.status_before in (PAUSED, DROPPED):
+        move = ProgressChange.PICKED_BACK_UP
+    else:
+        return
+    if _was_started(ctx):
+        ProgressChange.record_status(ctx.user, ctx.show_item, move)
+
+
 def _forget_progress(ctx, season_numbers=None):
     """Delete the show's recorded starts and progress, or only some seasons' (AC-2)."""
     from social.models import ProgressChange  # noqa: PLC0415
@@ -1614,19 +1655,22 @@ def _forget_progress(ctx, season_numbers=None):
             for number in season_numbers:
                 ctx.ticks_before.pop(number, None)
                 ctx.season_rows_before.pop(number, None)
-    rows.delete()
+    progress_posts.delete_changes(ctx.user.pk, rows)
 
 
 def _forget_starts_since(ctx, since):
-    """Delete the show's starts recorded since `since`."""
+    """Delete the show's starts recorded since `since`, and any pick-up with them (TV-208)."""
     from social.models import ProgressChange  # noqa: PLC0415
 
-    ProgressChange.objects.filter(
-        actor=ctx.user,
-        item=ctx.show_item,
-        current_progress__kind=ProgressChange.START,
-        created_at__gte=since,
-    ).delete()
+    progress_posts.delete_changes(
+        ctx.user.pk,
+        ProgressChange.objects.filter(
+            Q(current_progress__kind=ProgressChange.START) | Q(current_progress__move=ProgressChange.PICKED_BACK_UP),
+            actor=ctx.user,
+            item=ctx.show_item,
+            created_at__gte=since,
+        ),
+    )
 
 
 def _normalize_viewing_days(ctx):
@@ -3109,6 +3153,7 @@ def _do_choose(ctx, status, *, quiet=False):
     ctx.set_tv(**values)
     ctx.changed = True
     ctx.may_start = status == WATCHING
+    _record_status_move(ctx, status)
     return {"changed": True}
 
 

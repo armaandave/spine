@@ -80,7 +80,7 @@ class YamtrackImporter:
                 raise MediaImportUnexpectedError(error_msg) from error
 
         helpers.cleanup_existing_media(self.to_delete, self.user)
-        helpers.bulk_create_media(self.bulk_media, self.user, source="yamtrack")
+        helpers.bulk_create_media(self.bulk_media, self.user, source="yamtrack", warnings=self.warnings)
 
         deduplicated_messages = "\n".join(dict.fromkeys(self.warnings))
         return helpers.imported_counts(self.bulk_media), deduplicated_messages
@@ -165,6 +165,8 @@ class YamtrackImporter:
         )
 
         if form.is_valid():
+            if media_type == MediaTypes.BOOK.value:
+                form.instance.completed_manually = (row.get("completed_manually") or "").lower() == "true"
             if media_type == MediaTypes.GAME.value:
                 # CSV progress is retained as legacy data, never a new attempt.
                 value = str(row["progress"]).replace("h ", ":").removesuffix("min")

@@ -100,7 +100,8 @@ Run from the feature worktree unless a step says otherwise.
    - `docker logs --since 10m spine 2>&1 | grep -iE 'error|traceback'` shows nothing new.
    - If the ship carries a one-time data step ("One-time data steps", below), run it
      now. The user's ship request covers it, except a part the step says waits for
-     the user's request.
+     the user's request. Where the step's section says so, run its dry run and send the
+     user its count first; that message, not step 5's, is the one to say stop to.
    - Once music albums have moved to Apple Music, one moved album's page answers 200
      with `ref.source` `apple_music`.
 9. **Build,** only if the push changed the iOS app; otherwise skip to step 10. If
@@ -130,6 +131,96 @@ Run from the feature worktree unless a step says otherwise.
 
 Some ships carry a data step that has to run once, right after their deploy is verified
 (Workflow A, step 8). Each one says which ship carries it.
+
+### Activity's preparatory ship: each save's day
+
+The ship that adds `src/social/migrations/0005_progresschange_saved_on.py` stores each
+save's day and records status moves, with the calculation in switched off, so nothing you'd
+see changes. Migration `0005` fills the new column on its own and writes only that column,
+so it's additive. Its message (Workflow A, step 5) says that some refusals become successes
+here, which is safe on installed code: a save, a Stop or a Restart from a phone a few seconds
+ahead or after flying west; a game's Start dated a day ahead; a log or a log's date edit on
+the phone's own date after flying west, on a book, game, manga or comic; and a date that was
+ahead only of the server's calendar, on an account east of it.
+
+**Each step below waits for the user's request; the ship request doesn't cover it.** The
+ship message (step 5) names each as waiting. It can't print a count yet, because the dry runs
+need the deployed code: the wrapper stops until `0005` is applied. Armaan's yes on these two
+is on record (Activity plan, decision 49), and that yes is the request, so each runs after
+the deploy unless he says stop to the counts message below, and only if its count finds any.
+
+1. **Dry runs and the counts message,** after the deploy is verified (step 8):
+   `scripts/activity-steps-production.sh undated-reads` and
+   `scripts/activity-steps-production.sh past-restarts`. Each prints counts only. Send him a
+   short message with every count they print and what `--apply` will do. The first also prints
+   Reads with a date and no log, and marked books and games holding an `end_date`: no step
+   writes those, and nothing later repairs the dated Reads, so say so if any exist. If the
+   undated Reads and past Restarts counts are both zero, the steps are done. Otherwise wait
+   10 minutes before `--apply`, and don't run it if he says stop.
+2. **Undated imported Reads,** only if the count isn't zero:
+   `scripts/activity-steps-production.sh undated-reads --apply`. Goodreads and StoryGraph
+   Reads with no date, no log and no mark become marks, on every account. All Time rises and
+   no year moves. Turning the eye off on one later keeps the book at To Read with its notes,
+   and clears its rating, as on any mark.
+3. **Past Restarts,** only if the count isn't zero:
+   `scripts/activity-steps-production.sh past-restarts --apply`. That start row gets
+   `began_over`. It's an upper bound: at most 3 across accounts.
+
+The wrapper takes a verified `pg_dump` first and keeps the old ids and values in a 600 file
+in `~/projects/spine-backups/`, never on the container's disk or under `/yamtrack/media`.
+
+**The checks, which change no data.** `docker exec spine python manage.py
+compare_activity_numbers` prints today's number beside the calculation's, per account. Its
+`count 14` line must read `empty_saved_on={}`: a writer that forgets its day fails silently.
+Run it after the deploy, and again with `--since <the deploy's moment>` after the first real
+save of each type. Then bring Armaan the comparison, from a run made after steps 2 and 3, or
+once both their counts are zero: before them it reads unflagged Restarts as typo fixes and
+leaves out the undated Reads. A step that meets a bad row prints `failed` on its own line, the
+rest still report, and the command exits non-zero at the end; bring him those lines too.
+
+Remove this section once Phase 1 has shipped.
+
+### Activity's Phase 1: the pages
+
+Books read the calculation (`CALCULATED_TYPES`). No migration. Its message (Workflow A, step
+5) says a refusal becomes a success here, which is safe on installed code: a book log dated
+before its journey's start. These keep their type and change meaning, and installed builds
+decode them and never show them: a book's `known` and `total` count titles, `years.first` and
+`header.titles` count reading with no log, and a book's `progress` after a pick-up is its
+place (BK-305).
+
+**The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
+run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 1 sheet.
+The default of 4 hours can run out mid-sheet, and the phone would read another database with no
+warning.
+
+**Before you say this is ready to ship:** the speed gate must have passed on this branch (plan
+5.2, against section 6's limits): a Stats miss on Global and Books, All Time and one year,
+median of 5, on a throwaway Postgres, under 1.5 seconds and under 2 times today's. This phase
+is the first ship that makes `CALCULATED_TYPES` non-empty, so it's the ship that gate guards.
+
+Then run `docker exec spine python manage.py compare_activity_numbers` and read each account's
+`book` lines. The plan pins Books 2026 at about 5,182 and All Time at about 59,483 on account
+1, and Books 2025 at 3,762. If the real number differs, it doesn't ship until that's explained.
+Read count 2 too, the `count 2 class` lines. If class b or c isn't zero, the likes repair goes
+with this ship, so it doesn't ship until that's written, with its test first (plan 5.8).
+
+**Each step below waits for the user's request; the ship request doesn't cover it.** The ship
+message (step 5) names each as waiting. It can't print count 15 yet, because that dry run needs
+the deployed code. Armaan's yes is on record (Activity plan, decisions 50 and 60), and that yes
+is the request, so each runs after the deploy unless he says stop to the counts message below,
+and only if its count finds any.
+
+1. **Books already picked up,** after the deploy is verified (step 8):
+   `scripts/activity-steps-production.sh picked-up-books` prints count 15. Send him a short
+   message with the count and what `--apply` will do. If it's zero, the step is done. Otherwise
+   wait 10 minutes, then `--apply`, and don't run it if he says stop. Those journeys get the
+   place they stopped at. No number and no row changes.
+2. **Likes repair.** Read count 2 again just after this deploy. If classes b and c are zero both
+   times, there's nothing to do and no repair code was written. If they only turn up on this
+   second read, the repair goes with the next ship, as its own change, with its test first.
+
+Remove this section once Phase 2 has shipped.
 
 ### The metadata fill, with the ship that adds `src/app/migrations/0091_itemcredit.py`
 
@@ -204,6 +295,19 @@ Remove this section once the production fill has finished.
   container, if it's reversible, or restoring its
   `~/projects/spine-backups/pre-deploy-<run>.dump`, which loses every write since. Both
   need the user's yes.
+- **Each save's day (`social` `0005`).** Old code writes no `saved_on`, and reads rows
+  through its own zone until the next ship. It has neither of these commands nor the steps'
+  wrapper, so after the ship that brings this code back, run
+  `docker exec spine python manage.py fill_progress_days`, then
+  `compare_activity_numbers --since <the roll-forward's moment>`, whose `count 14` line
+  must read `empty_saved_on={}` (it isn't empty before the fill). Never run
+  `migrate social 0004` after real saves exist: it deletes each save's phone date. A
+  Restart made during a rollback has no `began_over` and reads as a typo fix, so run
+  `scripts/activity-steps-production.sh past-restarts` for rows since the rollback and flag
+  any with the user's yes. Status moves made during a rollback never show. A
+  `git revert -m 1` re-ship must keep the migration's file name,
+  `0005_progresschange_saved_on`, or `migrate` re-adds an existing column and
+  `entrypoint.sh` (`set -e`) stops the container, which CI's empty database can't catch.
 - **App.** Installed builds can't be recalled. Expire the bad TestFlight build and ship
   a fixed one.
 

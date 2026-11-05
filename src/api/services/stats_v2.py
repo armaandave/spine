@@ -86,5 +86,6 @@ def first_year(scope):
         days.append(everything.dated_viewings.aggregate(first=Min(everything.viewing_day()))["first"])
     if everything.counts_anime:
         days.append(everything.dated_anime_viewings.aggregate(first=Min(everything.anime_viewing_day()))["first"])
+    days.extend(row.day for row in everything.calculated_rows() if row.counts_title)
     days = [day for day in days if day is not None]
     return min(days).year if days else None

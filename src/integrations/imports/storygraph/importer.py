@@ -4,6 +4,8 @@ from collections import defaultdict
 from django.conf import settings
 from django.db import transaction
 
+from api.services import progress_posts
+from api.services.item_metadata import fill_book_pages
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.services import create_diary_entry
 from integrations.imports import helpers
@@ -43,8 +45,12 @@ class StoryGraphImporter:
         return dict(self.counts), warnings or None
 
     def _cleanup(self):
-        Book.objects.filter(user=self.user).delete()
+        books = Book.objects.filter(user=self.user)
+        items = list(Item.objects.filter(pk__in=books.values("item_id")))
+        books.delete()
         DiaryEntry.objects.filter(user=self.user, item__media_type=MediaTypes.BOOK.value).delete()
+        # The file replaces these books, so their saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, items)
 
     def _import_row(self, row, result):
         if row.status is None:
@@ -87,14 +93,13 @@ class StoryGraphImporter:
             "title": result.get("title") or row.title or str(result["media_id"]),
             "image": result.get("image") or settings.IMG_NONE,
         }
-        if total_pages:
-            defaults["total_pages"] = total_pages
         item = Item.objects.update_or_create(
             media_id=str(result["media_id"]),
             source=source,
             media_type=MediaTypes.BOOK.value,
             defaults=defaults,
         )[0]
+        fill_book_pages(item, total_pages)
         # Only the search result's first publication year; the metadata fill
         # completes the Item later.
         helpers.store_free_metadata(item, {"first_publish_year": result.get("first_publish_year")})
@@ -103,6 +108,8 @@ class StoryGraphImporter:
     def _create_book(self, item, row):
         read_dates = [read_date.end for read_date in row.read_dates]
         end_date = max(read_dates) if row.status == Status.COMPLETED.value and read_dates else None
+        # A Read with no date is the undated mark, with the same pile as the eye's.
+        undated_read = row.status == Status.COMPLETED.value and not read_dates
         return Book.objects.create(
             user=self.user,
             item=item,
@@ -111,7 +118,8 @@ class StoryGraphImporter:
             end_date=end_date,
             score=row.rating,
             notes=self._notes(row),
-            completed_manually=False,
+            completed_manually=undated_read,
+            undated_read_previous_tracked=undated_read,
         )
 
     def _import_diary_entries(self, item, row, *, update_current):
@@ -121,7 +129,7 @@ class StoryGraphImporter:
         latest_date = max(read_date.end for read_date in row.read_dates)
         latest_entry = None
         for index, read_date in enumerate(sorted(row.read_dates, key=lambda date: date.end)):
-            if self._diary_for_date(item, read_date.end):
+            if helpers.book_log_on(self.user, item, read_date.end.date()):
                 continue
             is_latest = read_date.end == latest_date
             entry = create_diary_entry(
@@ -133,18 +141,12 @@ class StoryGraphImporter:
                 is_rewatch=index > 0,
                 tags=row.tags if is_latest else [],
                 update_current=update_current and is_latest,
+                force_direct=True,
             )
             self.counts["diary"] += 1
             if is_latest:
                 latest_entry = entry
         return latest_entry
-
-    def _diary_for_date(self, item, consumed_at):
-        return DiaryEntry.objects.filter(
-            user=self.user,
-            item=item,
-            consumed_at__date=consumed_at.date(),
-        ).first()
 
     def _notes(self, row):
         lines = ["Imported from StoryGraph"]

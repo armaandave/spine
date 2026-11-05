@@ -32,7 +32,7 @@ from datetime import date, datetime, timedelta
 from django.db import IntegrityError, transaction
 from simple_history.utils import bulk_update_with_history
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from app import anime_listing, single_weight, user_calendar
 from app.anime_listing import AnimeDetailsUnavailable, Listing
 from app.models import (
@@ -968,6 +968,7 @@ def _reconcile(ctx):  # noqa: C901
             item=ctx.item,
             previous_progress=_progress_snapshot(calc.watched_count - moved, cache["aired_count"]),
             current_progress=_progress_snapshot(calc.watched_count, cache["aired_count"]),
+            saved_on=user_calendar.day_of(ctx.now, ctx.user),
         )
 
     anything = bool(ctx.changed or ctx.dirty or cache_changes or ctx.created)
@@ -1050,21 +1051,24 @@ def _record_start(ctx):
 
 
 def _forget_progress(ctx):
-    """Delete the title's recorded starts and progress (AC-2)."""
+    """Delete the title's recorded starts and progress, and the posts they leave empty (AC-7)."""
     from social.models import ProgressChange  # noqa: PLC0415
 
-    ProgressChange.objects.filter(actor=ctx.user, item=ctx.item).delete()
+    progress_posts.delete_changes(ctx.user.pk, ProgressChange.objects.filter(actor=ctx.user, item=ctx.item))
 
 
 def _forget_starts_since(ctx, since):
     from social.models import ProgressChange  # noqa: PLC0415
 
-    ProgressChange.objects.filter(
-        actor=ctx.user,
-        item=ctx.item,
-        current_progress__kind=ProgressChange.START,
-        created_at__gte=since,
-    ).delete()
+    progress_posts.delete_changes(
+        ctx.user.pk,
+        ProgressChange.objects.filter(
+            actor=ctx.user,
+            item=ctx.item,
+            current_progress__kind=ProgressChange.START,
+            created_at__gte=since,
+        ),
+    )
 
 
 def _clear_opinions(ctx):
@@ -2575,13 +2579,15 @@ def _rebuild_kept_logs(ctx):
 
 def clear_for_import(user, source, media_ids):
     """Overwrite replaces these titles' viewings, marks and choices; logs survive (AN-800)."""
-    from social.models import Activity, ProgressChange  # noqa: PLC0415
+    from social.models import Activity  # noqa: PLC0415
 
     rows = Anime.objects.filter(user=user, item__source=source, item__media_id__in=media_ids)
-    item_ids = list(rows.values_list("item_id", flat=True))
+    items = [row.item for row in rows.select_related("item")]
     rows.delete()
-    Activity.objects.filter(actor=user, item_id__in=item_ids, verb="rating_updated", target_type="tracking").delete()
-    ProgressChange.objects.filter(actor=user, item_id__in=item_ids).delete()
+    Activity.objects.filter(actor=user, item__in=items, verb="rating_updated", target_type="tracking").delete()
+    # The import re-creates the rows in this transaction, so it forgets their saves, posts,
+    # likes and comments itself (AC-7).
+    progress_posts.forget_titles(user.pk, items)
 
 
 # ---------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.fields.json import KT
-from django.db.models.functions import Cast, Concat, TruncDate, TruncDay
+from django.db.models.functions import Cast, Coalesce, Concat, TruncDate, TruncDay
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -44,7 +44,7 @@ from api.serializers.common import (
     user_summary,
 )
 from api.services import diary as diary_service
-from app import exposure, single_weight, tv_tracking
+from app import exposure, single_weight, tv_tracking, user_calendar
 from app.curation import prime_curated_artwork
 from app.models import (
     TV,
@@ -297,15 +297,30 @@ def _visible_logs(queryset, *, follows):
     )
 
 
+def saved_day():
+    """Return a save's fixed day (AC-2), which every viewer reads alike.
+
+    A row from before saved_on reads its moment in one named zone: the viewer's would
+    put one person's likes on two days.
+    """
+    return Coalesce(
+        "saved_on",
+        TruncDate("created_at", tzinfo=user_calendar.server_tz()),
+        output_field=DateField(),
+    )
+
+
 def _progress_days(changes):
     """Group progress changes into one row per person, title, and day.
 
     A show's and its seasons' changes count toward the show. Each unit's net change is
-    summed, and a day that didn't move forward is left out.
+    summed, and a day that didn't move forward is left out. Only rows in a counted unit
+    enter the group: a status move can't change a day's id or its place in the order.
     """
     return (
-        changes.annotate(
-            day=TruncDate("created_at", tzinfo=timezone.get_current_timezone()),
+        changes.filter(current_progress__unit__in=UNITS)
+        .annotate(
+            day=saved_day(),
             title_key=Case(
                 When(
                     item__media_type__in=SHOW_TYPES,
@@ -426,7 +441,7 @@ def progress_day(viewer, progress_id):
         )
         .filter(
             title_key=_title_key(change.item),
-            day=timezone.localtime(change.created_at).date(),
+            day=change.saved_on or change.created_at.astimezone(user_calendar.server_tz()).date(),
         )
         .order_by("day")
         .first()

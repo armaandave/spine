@@ -1,4 +1,4 @@
-"""Likes and comments on a log or a day's progress (activity contract AC-6)."""
+"""Likes and comments on a log or a day's progress (activity contract AC-7)."""
 
 from datetime import UTC, datetime
 from decimal import Decimal

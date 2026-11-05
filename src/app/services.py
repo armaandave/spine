@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db import transaction
 
 from api.services import stats_cache
+from app import user_calendar
 from app.models import DiaryEntry, Item, Media, MediaLike, MediaTypes, Status
 from app.tasks import update_daily_statistics
 
@@ -131,6 +132,7 @@ def create_diary_entry(
     emit_activity=True,
     update_current=True,
     mutation_id=None,
+    force_direct=False,
     **game_fields,
 ) -> DiaryEntry:
     """
@@ -146,6 +148,7 @@ def create_diary_entry(
         is_rewatch: Whether this is a rewatch
         auto_mark_consumed: Whether to also mark the media as consumed
         tags: List of tag names to attach to the entry
+        force_direct: For a book, a read of its own, as an import's date is
     
     Returns:
         The created DiaryEntry instance
@@ -213,7 +216,7 @@ def create_diary_entry(
         _, entry = book_tracking.complete(
             user,
             item,
-            completion_date=consumed_at or timezone.localdate(),
+            completion_date=consumed_at or user_calendar.today(user),
             rating=rating,
             review=review,
             liked=liked,
@@ -227,6 +230,7 @@ def create_diary_entry(
             import_source_order=import_source_order,
             emit_activity=emit_activity,
             update_current=update_current,
+            force_direct=force_direct,
         )
         return entry
 
@@ -235,7 +239,7 @@ def create_diary_entry(
         _, entry = series_tracking.complete(
             user,
             item,
-            completion_date=consumed_at or timezone.localdate(),
+            completion_date=consumed_at or user_calendar.today(user),
             rating=rating,
             review=review,
             liked=liked,

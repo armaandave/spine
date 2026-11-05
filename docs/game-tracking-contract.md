@@ -191,6 +191,7 @@ Dropping a tracked playthrough records today in the user's local timezone as its
 Show that date in Play History and allow users to edit it later.
 The date cannot be in the future or before the playthrough's start date, if known.
 Use the same date limits when Restart from Beginning closes the previous attempt as Dropped.
+A sent date equal to the phone's today is never refused: after a flight west today can fall before the start or the latest save, so the stored date stays no earlier than those. A date one day ahead caps at today. Any other date keeps the refusal. A save's own date follows the same rule, and the save keeps the phone's date as its day.
 
 A directly assigned Dropped status without a playthrough remains undated under GM-009.
 
@@ -200,6 +201,7 @@ A playthrough started through Playing requires a start date, defaulted under GM-
 Users can correct that date but cannot clear it.
 The date cannot be in the future or after the attempt's first recorded progress, completion, or drop date.
 Apply these limits when editing the start date.
+A date the phone sends when starting, one day ahead, caps at today (GM-013).
 
 A directly logged past completion can keep an unknown start date under GM-214.
 If the user supplies a start date, apply the same date limits.
@@ -440,6 +442,7 @@ The new log form defaults to today.
 Users can choose any date that is not in the future.
 If the playthrough has a start date, completion cannot precede that date.
 Apply these limits when creating or editing a completion log.
+A date equal to the phone's today is never refused: after a flight west today can fall before the start, so the log lands on the start.
 
 Progress-update dates do not restrict the completion date.
 Users can log a past completion even after recording more playtime.
@@ -714,6 +717,8 @@ Implementation must also retain the inherited rating, heart, privacy, activity, 
 Check the media page, progress editor, diary editor, library sections, and profile surfaces for consistent results.
 
 ## Review status
+
+GM-013's and GM-213's rule for the phone's own date, and GM-014's cap on a start, are provisional until the phone test of Activity's first phase accepts them.
 
 The product interview is complete for this scope.
 Shared behavior is inherited under GM-000; game-specific decisions and their acceptance cases are recorded above.

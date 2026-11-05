@@ -279,6 +279,7 @@ def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
         total_pages = metadata.get("total_pages") or metadata.get("max_progress")
         if total_pages:
             defaults["total_pages"] = total_pages
+    # A blank page count fills from the metadata stored just below.
     item, _ = Item.objects.get_or_create(
         source=ref["source"],
         media_type=ref["media_type"],
@@ -287,9 +288,6 @@ def get_or_create_item_from_metadata(ref, metadata, *, persist_series=True):
         episode_number=ref.get("episode_number"),
         defaults=defaults,
     )
-    if defaults.get("total_pages") and item.total_pages != defaults["total_pages"]:
-        item.total_pages = defaults["total_pages"]
-        item.save(update_fields=["total_pages"])
     store_item_metadata(item, metadata, persist_series=persist_series)
     return item
 
@@ -397,7 +395,7 @@ def prime_collection_items(items, user, *, media_by_item=None):
             actor=user,
             item_id__in=item_ids,
         )
-        .exclude(current_progress__kind=ProgressChange.START)
+        .exclude(current_progress__kind__in=ProgressChange.NOT_PROGRESS)
         .annotate(
             viewer_row=Window(
                 RowNumber(),
@@ -1328,7 +1326,7 @@ def latest_progress_change_for(media):
     user = media.related_season.user if media.item.media_type == MediaTypes.EPISODE.value else media.user
     return (
         ProgressChange.objects.filter(actor=user, item=media.item)
-        .exclude(current_progress__kind=ProgressChange.START)
+        .exclude(current_progress__kind__in=ProgressChange.NOT_PROGRESS)
         .order_by("-created_at", "-id")
         .first()
     )

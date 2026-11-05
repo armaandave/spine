@@ -11,6 +11,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from api.services import progress_posts
+from api.services.item_metadata import fill_book_pages
 from app.models import Book, DiaryEntry, Item, MediaTypes, Sources, Status
 from app.providers import hardcover, openlibrary, services
 from app.providers.search_rank import normalize_search_text
@@ -251,11 +253,15 @@ class GoodReadsImporter:
         return dict(self.counts), warnings or None
 
     def _cleanup(self):
+        books = Book.objects.filter(user=self.user)
+        items = list(Item.objects.filter(pk__in=books.values("item_id")))
         DiaryEntry.objects.filter(
             user=self.user,
             item__media_type=MediaTypes.BOOK.value,
         ).delete()
-        Book.objects.filter(user=self.user).delete()
+        books.delete()
+        # The file replaces these books, so their saves and likes don't come back.
+        progress_posts.forget_titles(self.user.pk, items)
 
     def _import_row(self, row, result):
         label = row.title or f"Goodreads row {row.index}"
@@ -319,11 +325,9 @@ class GoodReadsImporter:
         if image and item.image != image:
             item.image = image
             update_fields.append("image")
-        if total_pages and item.total_pages is None:
-            item.total_pages = total_pages
-            update_fields.append("total_pages")
         if update_fields:
             item.save(update_fields=update_fields)
+        fill_book_pages(item, total_pages)
         # Only the first publication year, which the export or search result carries;
         # the metadata fill completes the Item later.
         helpers.store_free_metadata(
@@ -334,6 +338,7 @@ class GoodReadsImporter:
 
     def _create_book(self, item, row):
         history_date = row.date_read or row.date_added
+        undated_read = row.status == Status.COMPLETED.value and row.date_read is None
         book = Book(
             user=self.user,
             item=item,
@@ -342,7 +347,9 @@ class GoodReadsImporter:
             end_date=row.date_read if row.status == Status.COMPLETED.value else None,
             score=row.rating,
             notes=self._notes(row),
-            completed_manually=False,
+            # A Read with no date is the undated mark, with the same pile as the eye's.
+            completed_manually=undated_read,
+            undated_read_previous_tracked=undated_read,
         )
         if history_date:
             book._history_date = history_date
@@ -367,11 +374,7 @@ class GoodReadsImporter:
                 )
             return None, False
 
-        existing = DiaryEntry.objects.filter(
-            user=self.user,
-            item=item,
-            consumed_at__date=row.date_read.date(),
-        ).first()
+        existing = helpers.book_log_on(self.user, item, row.date_read.date())
         if existing:
             return existing, False
 
@@ -384,6 +387,7 @@ class GoodReadsImporter:
             is_rewatch=row.read_count > 1,
             tags=row.bookshelves,
             update_current=update_current,
+            force_direct=True,
         )
         if row.contains_spoilers:
             entry.contains_spoilers = True

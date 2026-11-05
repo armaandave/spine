@@ -26,7 +26,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from api.services import stats_cache
+from api.services import progress_posts, stats_cache
 from api.services.item_metadata import store_series_total
 from app import single_weight, user_calendar
 from app.book_tracking import BookTrackingConflict, HistoryExists, _mutation
@@ -44,6 +44,7 @@ from app.models import (
 )
 from app.providers import comicvine
 from app.tasks import update_daily_statistics
+from social.models import ProgressChange
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,13 @@ def _user_day(user, value):
     if isinstance(value, datetime) and not single_weight.is_calendar_datetime(value):
         value = user_calendar.day_of(value, user)
     return single_weight.calendar_datetime(value, today=_today(user)).date()
+
+
+def _sent_day(user, value):
+    """Return the date a phone sent for a save or a Stop; a day ahead caps at today."""
+    if isinstance(value, datetime) and not single_weight.is_calendar_datetime(value):
+        value = user_calendar.day_of(value, user)
+    return single_weight.sent_day(value, _today(user))
 
 
 def _carrier(day):
@@ -268,12 +276,19 @@ def _begin(row, *, created, status=Status.IN_PROGRESS.value, **fields):
     )
 
 
-def _validate_end(attempt, day):
-    """BK-306: an end can't predate the attempt's start or latest saved number."""
+def _closing_day(user, attempt, day):
+    """BK-306: return an end, which can't predate the attempt's start or latest saved number.
+
+    The phone's own date is never refused: after a flight west today can be before them,
+    so the stored date stays no earlier than those.
+    """
+    if day == _today(user):
+        return max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
     if attempt.start_date and day < attempt.start_date:
         raise ValidationError("An end date can't be before the attempt's start date.")
     if attempt.progressed_on and day < attempt.progressed_on:
         raise ValidationError("An end date can't be before the latest progress update.")
+    return day
 
 
 def _queue_statistics(user_id, day):
@@ -369,6 +384,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
             current.status = Status.IN_PROGRESS.value
             current.save(update_fields=["status"])
             _set_row_from_attempt(row, current)
+            _record_status(user, item, current, ProgressChange.PICKED_BACK_UP)
         return row
     if row.status == Status.COMPLETED.value:
         if has_more(row):
@@ -378,6 +394,7 @@ def start(user, item, *, start_date=None, mutation_id=None):
     # stays as it is, and a read that was carrying on goes on carrying on.
     stopped = row.current_attempt if row.status == Status.DROPPED.value else None
     place = row.progress if row.status in {*OPEN_STATUSES, Status.DROPPED.value} else 0
+    picks_back_up = _picks_back_up(row)
     attempt = _begin(
         row,
         created=created,
@@ -389,6 +406,8 @@ def start(user, item, *, start_date=None, mutation_id=None):
     )
     _set_row_from_attempt(row, attempt)
     _record_start(user, item, attempt)
+    if picks_back_up:
+        _record_status(user, item, attempt, ProgressChange.PICKED_BACK_UP)
     return row
 
 
@@ -458,6 +477,7 @@ def pause(user, item):
     if attempt.status == Status.IN_PROGRESS.value:
         attempt.status = Status.PAUSED.value
         attempt.save(update_fields=["status"])
+        _record_status(user, item, attempt, ProgressChange.PAUSED)
     _set_row_from_attempt(row, attempt)
     return row
 
@@ -469,12 +489,11 @@ def drop(user, item, *, end_date=None):
     attempt = _open_attempt(row) if row else None
     if attempt is None:
         return assign_status(user, item, Status.DROPPED.value)
-    day = _user_day(user, end_date or _today(user))
-    _validate_end(attempt, day)
+    attempt.end_date = _closing_day(user, attempt, _sent_day(user, end_date or _today(user)))
     attempt.status = Status.DROPPED.value
-    attempt.end_date = day
     attempt.save(update_fields=["status", "end_date"])
     _set_row_from_attempt(row, attempt)
+    _record_status(user, item, attempt, ProgressChange.STOPPED)
     return row
 
 
@@ -490,14 +509,12 @@ def restart(user, item, *, start_date=None, end_date=None, mutation_id=None):
     old = _open_attempt(row)
     if old is None:
         raise ValidationError("Only a current or paused attempt can be restarted.")
-    day = _user_day(user, end_date or _today(user))
-    _validate_end(old, day)
+    old.end_date = _closing_day(user, old, _sent_day(user, end_date or _today(user)))
     old.status = Status.DROPPED.value
-    old.end_date = day
     old.save(update_fields=["status", "end_date"])
     new = row.attempts.create(
         status=Status.IN_PROGRESS.value,
-        start_date=_user_day(user, start_date or _today(user)),
+        start_date=_sent_day(user, start_date or _today(user)),
         origin=SeriesAttempt.Origin.LIVE,
         previous_tracked=True,
         previous_status=Status.DROPPED.value,
@@ -562,8 +579,11 @@ def _save_place(user, item, place, progressed_on, *, mutation_id=None):
         # A retry after a lost answer: that save's log screen still opens (MC-100).
         row.opens_log = True
         return row
-    day = _user_day(user, progressed_on or _today(user))
-    if attempt.start_date and day < attempt.start_date:
+    day = _sent_day(user, progressed_on or _today(user))
+    if day == _today(user):
+        # Never refused: after a flight west today can be before the start or last save.
+        day = max(filter(None, (day, attempt.start_date, attempt.progressed_on)))
+    elif attempt.start_date and day < attempt.start_date:
         raise ValidationError("Progress updates can't be before the attempt's start date.")
     previous = _attempt_progress(attempt, row.item)
     attempt.place = place
@@ -933,7 +953,7 @@ def complete(
 
     fallback_place = row.progress
     if attempt:
-        _validate_end(attempt, day)
+        day = _closing_day(user, attempt, day)
         attempt.pre_completion_status = attempt.status
         attempt.pre_completion = {
             "place": attempt.place,
@@ -1033,7 +1053,7 @@ def update_completion(entry, data, *, tags=UNSET):
     if "consumed_at" in data:
         day = _user_day(entry.user, data["consumed_at"])
         if attempt:
-            _validate_end(attempt, day)
+            day = _closing_day(entry.user, attempt, day)
             attempt.end_date = day
             attempt.save(update_fields=["end_date"])
             if entry.consumed_at != _carrier(day):
@@ -1166,16 +1186,10 @@ def _splice(row, attempt):
 
 
 def _delete_progress_history(user, item, journey_id):
-    from social.models import Activity, ProgressChange
-
-    changes = ProgressChange.objects.filter(
-        actor=user,
-        item=item,
-        current_progress__journey_id=journey_id,
+    progress_posts.delete_changes(
+        user.pk,
+        ProgressChange.objects.filter(actor=user, item=item, current_progress__journey_id=journey_id),
     )
-    ids = list(changes.values_list("id", flat=True))
-    Activity.objects.filter(target_type="progress_change", target_id__in=ids).delete()
-    changes.delete()
 
 
 @transaction.atomic
@@ -1291,10 +1305,22 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
             raise ValidationError("A start date can't follow the end date.")
         attempt.start_date = day
         fields.append("start_date")
+        if day:
+            # A hand edit of a start is the person saying when it began, so it's first
+            # activity too (decision 10), where a log's own move isn't.
+            ProgressChange.objects.filter(
+                actor=user,
+                item=item,
+                current_progress__journey_id=attempt.pk,
+                current_progress__kind=ProgressChange.START,
+            ).update(saved_on=day)
+            # Stats read that day, and neither this write nor an attempt the title has
+            # moved on from saves a row that bumps.
+            stats_cache.bump_user(user.pk)
     if end_date is not UNSET:
         day = _user_day(user, end_date) if end_date is not None else None
         if day:
-            _validate_end(attempt, day)
+            day = _closing_day(user, attempt, day)
         attempt.end_date = day
         fields.append("end_date")
     if fields:
@@ -1332,11 +1358,9 @@ def remove_tracking(user, item):
         return None
     if any(_is_real_history(attempt) for attempt in row.attempts.all()) or _has_logs(row):
         raise HistoryExists(HISTORY_MESSAGE)
-    from social.models import ProgressChange
-
     MediaLike.objects.filter(user=user, item=item).delete()
-    ProgressChange.objects.filter(actor=user, item=item).delete()
     row.delete()
+    progress_posts.forget_titles(user.pk, [item])
     return None
 
 
@@ -1582,19 +1606,10 @@ def import_title(
 def clear_for_import(user, media_type, source, media_ids):
     """Overwrite replaces these series and their imported logs; hand-made logs stay."""
     rows = MODELS[media_type].objects.filter(user=user, item__source=source, item__media_id__in=media_ids)
-    item_ids = list(rows.values_list("item_id", flat=True))
+    items = [row.item for row in rows.select_related("item")]
     rows.delete()
-    DiaryEntry.objects.filter(user=user, item_id__in=item_ids).exclude(import_source="").delete()
-    forget_progress(user, item_ids)
-
-
-def forget_progress(user, item_ids):
-    """The attempts these numbers belonged to are gone, so the feed drops them too."""
-    from social.models import Activity, ProgressChange
-
-    changes = ProgressChange.objects.filter(actor=user, item_id__in=item_ids)
-    Activity.objects.filter(target_type="progress_change", target_id__in=changes.values("id")).delete()
-    changes.delete()
+    DiaryEntry.objects.filter(user=user, item__in=items).exclude(import_source="").delete()
+    progress_posts.forget_titles(user.pk, items)
 
 
 # A comic's new issue
@@ -1653,13 +1668,14 @@ def new_issue_out(item, *, start_date=None, previous_total=None):
 
 
 def _record_progress_change(user, item, previous, current):
-    from social.models import Activity, ProgressChange
+    from social.models import Activity
 
     change = ProgressChange.objects.create(
         actor=user,
         item=item,
         previous_progress=previous,
         current_progress=current,
+        saved_on=_today(user),
     )
     Activity.objects.create(
         actor=user,
@@ -1673,9 +1689,28 @@ def _record_progress_change(user, item, previous, current):
 
 def _record_start(user, item, attempt):
     """Record a new attempt; deleting the attempt drops it with its numbers."""
-    from social.models import ProgressChange
-
     ProgressChange.record_start(user, item, journey_id=attempt.pk)
+
+
+def _picks_back_up(row):
+    """Return whether a new attempt carries on from a read that was stopped.
+
+    Paused or Did Not Finish on a series never started has nothing to pick back up. Nor
+    has one finished, whose next attempt is a new read.
+    """
+    if row.status not in {Status.PAUSED.value, Status.DROPPED.value}:
+        return False
+    last = row.attempts.order_by("-id").first()
+    return last.status == Status.DROPPED.value if last else bool(row.progress)
+
+
+def _record_status(user, item, attempt, move):
+    """Record a status move the person chose.
+
+    Keep Reading and a new issue record none (MC-200, MC-202). Nor do imports, marks,
+    restores or Restart (AC-1).
+    """
+    ProgressChange.record_status(user, item, move, journey_id=attempt.pk)
 
 
 # What the app reads

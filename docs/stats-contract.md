@@ -72,7 +72,7 @@ Rows of types the server doesn't expose never appear anywhere in Stats.
 ### STAT-002: Everyone allowed to see the profile sees the same stats
 
 The gate is `can_view_user_profile` and doesn't change: a private account needs an accepted follow, and a block either way returns 404.
-Anyone who passes the gate sees the same stats the owner sees, including time from TV ticks, game sessions and book progress, "right now" counts, collections, and All Time Highest rated with titles rated but never logged.
+Anyone who passes the gate sees the same stats the owner sees, including time from TV ticks, game sessions and book saves, "right now" counts, collections, and All Time Highest rated with titles rated but never logged.
 No section is withheld because of who is asking.
 
 ### STAT-003: Only the owner's explicit choices filter what others see
@@ -91,7 +91,7 @@ Other viewers get `null` and `false`.
 
 ### STAT-005: Days are on the owner's calendar for every viewer
 
-Every day boundary in Stats (log days, range edges, events, streaks, "today") uses the owner's calendar.
+Every day boundary in Stats (log days, range edges, events, streaks, "today") uses the owner's calendar. A save counts on the day it stored when it was saved, whichever zone reads it (AC-2).
 A viewer in another timezone sees the same days and the same numbers.
 There is no timezone parameter.
 The owner's own requests carry their app's zone in `X-Spine-Timezone`, which is the owner's calendar under `app.user_calendar`; another viewer's header never changes the owner's days.
@@ -99,7 +99,7 @@ The owner's own requests carry their app's zone in `X-Spine-Timezone`, which is 
 ### STAT-006: A write shows on the next request
 
 Stats responses may be cached.
-A change the owner makes (a log, a tick, a status, a rating or like, a session, a list or its items, or a setting), or a collaborator makes to one of the owner's lists, shows in the owner's stats on the next request, for every viewer.
+A change the owner makes (a log, a tick, a status, a rating or like, a session, a list or its items, or a setting), or a collaborator makes to one of the owner's lists, shows in the owner's stats on the next request, for every viewer. So does a book's page count arriving, from a provider or edited in admin, or a history row deleted on the web.
 Changes that come from elsewhere, such as the metadata fill or a featured list sync, can take up to an hour to appear.
 
 ## Counting
@@ -149,13 +149,15 @@ Anime viewings count the same way (AN-704): a tick on its day, a log's fills on 
 The `titles` of a scope are the distinct titles of:
 
 1. its visible logs;
-2. shows and anime with a dated viewing in the range that isn't hidden; and
-3. in All Time only, undated completions: titles consumed with no log at all, of any visibility:
+2. shows and anime with a dated viewing in the range that isn't hidden;
+3. books read in the range: an amount, a percent or a log on a day in it, whether or not the read finished; and
+4. in All Time only, undated completions: titles consumed with no log at all, of any visibility:
    - movies and music: the direct-consumption marker;
    - books and games: `completed_manually`;
    - TV, anime, manga and comics: the latest tracking row is Completed.
+   Books count every title with anything undated, a place with no journey included.
 
-A title counts once however many of these it has.
+A title counts once however many of these it has. A start with no reading is an event (STAT-106), not a title that year.
 
 ### STAT-106: An event is one title on one day
 
@@ -164,6 +166,7 @@ A day's progress is the owner's recorded progress changes on a title in one loca
 TV and anime count only their starts this way: their ticks already are events, as dated viewings on the day watched.
 Three episodes of one show watched on one day are one event, and so are a manga's chapters read and logged on one day.
 Fills and undated completions are never events.
+A book's events are its rows with an amount, a percent, a real start or a log, on the day each stored. A status move adds no event, and neither does a pick-up with no reading, a typo fixed to nothing, or a mark.
 Events drive active days, streaks, "Days with 2+ titles", the activity charts and the busiest day and month.
 
 ### STAT-107: Reads and completions always add the undated fact in All Time
@@ -261,13 +264,15 @@ It is a fact like the streak itself, so every viewer gets it.
 | Manga | chapters | Sum of positive progress changes dated in the range. | Sum of `progress` over every manga tracking row. | Always in a dated range. |
 | Comic | issues | As manga. | As manga. | Always in a dated range. |
 | Game | minutes | Sum of `GameSession.total_minutes` for sessions whose `minutes_updated_on`, or else `end_date`, is in the range. | Sum over every session. | Always in a dated range. |
-| Book | pages | Sum over visible book logs in the range of the pages in the completion snapshot, else the book's `total_pages`. | The same over every visible book log, plus `total_pages` once for each book with `completed_manually`. | Never. |
+| Book | pages | What each save and log added on a day in the range (below). | Every year added up, plus each book's undated pile. | Never. |
 | Music | minutes | Sum of the album's runtime over visible logs in the range. | The same over every visible log, plus each undated completed album once. | Never. |
 
 A progress change is the difference between one history row (`HistoricalManga`, `HistoricalComic`) and the previous row of the same tracking row, ordered by `history_date`, dated by its `history_date` on the owner's calendar.
 Only increases count. The row that created the tracking row is never a change, so an imported row adds nothing to the year it was imported.
 Steam's imported lifetime playtime is never added (GM-500).
-Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them.
+Each row reports `known` and `total`: how many of the things it counted (logs, viewings, tracking rows or sessions, plus undated completions) had a length, out of all of them. On books they count titles: how many in the range have a known length, out of all of them. A percent with no page count, and a log with no length anywhere, are the unknown ones.
+
+Books read `api.services.activity_rows`, the same calculation the Activity list reads, so a list adds up to its number. Saves are read in the order they were saved. A rise adds to that save's fixed day, and a drop comes off the newest amounts first, even last year's. A log adds what's left, on its own date, up to the length on its snapshot, else `total_pages`, else the last typed page. A log dated before its read's first activity takes all of that read's amounts onto its date (BK-306). Stopped and picked back up is one read; only Restart begins at zero. A reread counts again. A place with no journey, and `completed_manually`'s `total_pages` less what the read before the mark holds, sit in the undated pile: All Time only, never a row and never in a year. A finish on such a place adds only what's left. A file's read is its own: it joins no read beside it, so its date moves none of that read's pages (BK-306).
 
 ### STAT-202: Total hours adds up the types counted in minutes
 
@@ -357,7 +362,7 @@ The app titles this section "By year", because its Logs switch doesn't go by rel
 - `recent`: released 1 to 7 years earlier;
 - `older`: released 8 or more years earlier.
 
-Titles without a release year, and undated completions, aren't counted there.
+Titles without a release year, and undated completions, aren't counted there. Nor is a book with reading and no log in the range: it counts in the rows above and not on this card, so on a year with reading and no logs the card hides itself.
 
 ### STAT-210: A type tab shows that type's own genre names
 
@@ -663,6 +668,8 @@ GET /api/v1/users/{username}/stats/summary/?schema=2&start_date=…&end_date=…
 }
 ```
 
+`years.first` is the earliest year holding something the viewer can count: a log, a dated viewing, or a book's day with an amount or percent. A mark never makes a year.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schema_version` | int | Always `2`. The legacy payload sends `1`. |
@@ -671,7 +678,7 @@ GET /api/v1/users/{username}/stats/summary/?schema=2&start_date=…&end_date=…
 | `range.is_all_time` | bool | |
 | `media_type` | string or null | The tab: null on Global. |
 | `audience` | string | `owner`, `follower` or `public`. |
-| `years.first` | int or null | The year of the earliest log day or dated viewing the viewer can count, of any type; null when there is none. |
+| `years.first` | int or null | The year of the earliest log day, dated viewing or book day with an amount or percent the viewer can count, of any type; null when there is none. A mark never makes one. |
 | `years.current` | int | Today's year on the owner's calendar. |
 | `media_types[]` | array | One row per exposed primary type the owner has turned on in Media & Preferences, in `primary_media_types()` order, whatever the tab, with that type's `titles` (STAT-105) and `logs` (STAT-103) in the range. The app builds its type picker from it. A type the owner turned off has no row, yet Global still counts it. |
 
@@ -1124,7 +1131,7 @@ A type tab, or one type's part of a bar on Global, adds that type's media types:
 | List ring, collection | Opens the list or the series page, not the diary. |
 | Most logged "Show all", Highest rated "Show all", Collections "Show all" | The show-all endpoints (STAT-310). |
 
-The diary lists logs, so a row counted in titles can open more logs than its number, and titles counted only as undated completions don't appear.
+The diary lists logs, so a row counted in titles can open more logs than its number, and titles counted only as undated completions don't appear. A year with reading and no log opens an empty diary from its book counts until Activity's list opens them.
 A title row with no log in the range opens an empty diary: an All Time Highest rated title rated without a log, or a Top list title logged only in another year. The payload doesn't say whether a title has a log in the range, so the row can't tell in advance.
 
 ### STAT-402: Only a list's owner writes its tags
@@ -1184,7 +1191,7 @@ The v2 `media_types` key has a different shape from the legacy one; clients read
 
 ### STAT-903: Expand, then contract
 
-Every change here is additive: new keys, new parameters, new endpoints and new nullable or defaulted fields.
+Every change here is additive: new keys, new parameters, new endpoints and new nullable or defaulted fields. Some keep their type and change meaning, which installed builds decode and never show: a book's `known` and `total` count titles, and `years.first` and `header.titles` count reading with no log.
 The legacy payload, `list_progress`, `series_progress` and the web-chart keys are removed only in a later contract step, after installed builds no longer read them.
 
 ## Acceptance scenarios
@@ -1248,6 +1255,8 @@ Writing the laws settled details those decisions leave open. These are provision
 - **Header details (STAT-200).** The list of per-type details and their labels, and that "right now" TV counts appear only in All Time.
 - **Specials (STAT-104).** Viewings of specials count in time, events and episodes watched.
 - **Group keys and labels (STAT-211).** The keys are fixed here; the labels follow the plan ("Thriller & Crime", "Music & Musicals"). Milestone 1 built them in `api.services.genre_groups` (`GROUPS`).
+
+Activity's first phase (2026-11-03) moved books onto one calculation. STAT-005's fixed day for a save, STAT-006's page count arriving, STAT-105, STAT-106, STAT-201's book row with `known` and `total`, `years.first` reading a book's day (STAT-302) and New vs older leaving out a book with no log (STAT-209) are provisional until its phone test accepts them. Every other type keeps its row here until its own phase.
 
 Round 2 (2026-10-29: drills, range progress, milestones within a range) settled these details the round 2 plan left open; they are provisional too:
 

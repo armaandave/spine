@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from collections import defaultdict
+from decimal import ROUND_HALF_UP
 
 from cryptography.fernet import Fernet
 from django.apps import apps
@@ -14,9 +15,10 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 import app
+from api.services.activity_rows import log_day
 from api.services.item_metadata import is_metadata_current, store_item_metadata
-from app import anime_tracking, series_tracking, single_weight, tv_tracking
-from app.models import MediaTypes
+from app import anime_tracking, book_tracking, series_tracking, single_weight, tv_tracking, user_calendar
+from app.models import DiaryEntry, MediaTypes
 
 logger = logging.getLogger(__name__)
 
@@ -249,9 +251,12 @@ def reconcile_imported_tv(bulk_media_list, user):
     )
 
 
-def bulk_create_media(bulk_media_list, user, *, source=""):
-    """Bulk create all media objects; `source` names the import on any logs it writes."""
-    _bulk_create_media(bulk_media_list, user, source)
+def bulk_create_media(bulk_media_list, user, *, source="", warnings=None):
+    """Bulk create all media objects; `source` names the import on any logs it writes.
+
+    What a row couldn't keep as it stood goes on `warnings`, when the import has a list.
+    """
+    _bulk_create_media(bulk_media_list, user, source, [] if warnings is None else warnings)
     reconcile_imported_tv(bulk_media_list, user)
 
 
@@ -267,7 +272,7 @@ def imported_counts(bulk_media_list):
     }
 
 
-def _bulk_create_media(bulk_media_list, user, source=""):
+def _bulk_create_media(bulk_media_list, user, source, warnings):
     """Bulk create each media type's rows as the importer built them."""
     for media_type, bulk_media in bulk_media_list.items():
         if not bulk_media:
@@ -284,6 +289,9 @@ def _bulk_create_media(bulk_media_list, user, source=""):
         if media_type == MediaTypes.GAME.value:
             _import_game_rows(bulk_media, user)
             continue
+
+        if media_type == MediaTypes.BOOK.value:
+            bulk_media = _import_book_rows(bulk_media, user, source, warnings)
 
         if series_tracking.supports(media_type):
             _import_series_rows(bulk_media, user, source)
@@ -338,6 +346,83 @@ def _import_single_weight_rows(rows, user, model):
         if notes and tracking.notes != notes:
             tracking.notes = notes
             tracking.save(update_fields=["notes"])
+
+
+def book_log_on(user, item, day):
+    """Return this title's log on a calendar day, or None (SW-504).
+
+    It reads a log's day as the calculation does: a UTC-midnight carrier as stored, and an
+    old log's real moment on the owner's calendar. Read any other way, the evening's log
+    is on another day, and a file comes back as a second read.
+    """
+    zone = user_calendar.calendar_tz(user)
+    for entry in DiaryEntry.objects.filter(user=user, item=item):
+        if log_day(entry.consumed_at, zone) == day:
+            return entry
+    return None
+
+
+def _log_rating(row, warnings):
+    """Return a file's score as a log's rating, which holds only half stars.
+
+    One off them rounds to the nearest, as a bad row is reported rather than stopping the
+    import (docs/media-imports.md gives 8.5 as an example).
+    """
+    if row.score in (None, 0) or row.score in single_weight.STORAGE_RATINGS:
+        return row.score
+    rounded = max(row.score.to_integral_value(rounding=ROUND_HALF_UP), 1)
+    warnings.append(f"{row.item.title}: a score of {row.score} isn't a half star, so its log holds {rounded}")
+    return rounded
+
+
+def _import_book_rows(rows, user, source, warnings):
+    """Log the dated reads of a file's book rows, and return the rows left to create.
+
+    A dated Read lands on its date as a log, unless the title has a log that day: that's
+    your own file coming back (SW-504). A Read with no date, or a row already marked, is
+    the undated mark, whatever date it holds: eye taps from before the book contract can
+    still hold one. A Read with no date on a title with a log isn't: the eye over a log
+    writes that row, and the log already says it was read.
+    """
+    plain = []
+    for row in rows:
+        day = _read_day(row, user)
+        if row.status != app.models.Status.COMPLETED.value or row.completed_manually or day is None:
+            if row.status == app.models.Status.COMPLETED.value and (
+                row.completed_manually or not DiaryEntry.objects.filter(user=user, item=row.item).exists()
+            ):
+                row.completed_manually = True
+                row.undated_read_previous_tracked = True
+            plain.append(row)
+            continue
+        if book_log_on(user, row.item, day):
+            plain.append(row)
+            continue
+        _, entry = book_tracking.complete(
+            user,
+            row.item,
+            completion_date=day,
+            rating=_log_rating(row, warnings),
+            import_source=source,
+            import_source_id=f"{row.item.source}:{row.item.media_id}:{day.isoformat()}",
+            emit_activity=False,
+            force_direct=True,
+        )
+        start = row.start_date and user_calendar.day_of(row.start_date, user)
+        if start and start <= day:
+            book_tracking.update_journey(user, row.item, entry.book_journey.id, start_date=start)
+        if row.notes:
+            app.models.Book.objects.filter(user=user, item=row.item).update(notes=row.notes)
+    return plain
+
+
+def _read_day(row, user):
+    """Return the day a file's row says it was read; a day still to come isn't one."""
+    if row.end_date is None:
+        return None
+    moment = row.end_date
+    day = moment.date() if single_weight.is_calendar_datetime(moment) else user_calendar.day_of(moment, user)
+    return day if day <= user_calendar.today(user) else None
 
 
 def _import_game_rows(rows, user):

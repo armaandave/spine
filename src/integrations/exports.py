@@ -4,7 +4,7 @@ import logging
 from django.apps import apps
 from django.db.models import Field, Prefetch
 
-from app import helpers
+from app import book_tracking, helpers
 from app.models import Episode, Item, MediaTypes, Season, Status
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,7 @@ def generate_rows(user):
             "episodes",
             queryset=Episode.objects.select_related("item"),
         ),
+        MediaTypes.BOOK.value: "reading_sessions",
     }
 
     # Yield data rows
@@ -166,6 +167,8 @@ def track_value(media, media_type, field):
             return ""
         if media.rewatch_started_at is not None and field in ("status", "progress"):
             return anime_rewatch_value(media, field)
+    if media_type == MediaTypes.BOOK.value and field == "progress":
+        return book_tracking.place_on_file(media)
     if media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value):
         if field in TV_EMPTY_COLUMNS:
             return ""
