@@ -79,7 +79,8 @@ SERIES_NOT_EXPORTED = frozenset({"undated_read_previous_place", "read_override_p
 # columns.
 ITEM_METADATA_FILL_FIELD_NAMES = frozenset({"metadata_version", "metadata_attempted_at"})
 # A manga's or comic's total comes from its provider, so the CSV keeps today's columns.
-ITEM_NOT_EXPORTED = ITEM_METADATA_FILL_FIELD_NAMES | {"series_total"}
+# An anime's English title stays out too: the title column keeps the original (AN-705).
+ITEM_NOT_EXPORTED = ITEM_METADATA_FILL_FIELD_NAMES | {"series_total", "display_title"}
 
 
 class Echo:

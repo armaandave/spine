@@ -40,6 +40,7 @@ from app.models import (
     AnimeMark,
     AnimeViewing,
     DiaryEntry,
+    Item,
     MediaLike,
     MediaTypes,
     Sources,
@@ -2697,7 +2698,7 @@ class _View:
         return {
             "id": TITLE,
             "level": TITLE,
-            "title": self.item.title,
+            "title": self.item.shown_title,
             "date": _iso(date_override or self.today),
             "rating": _api_rating(self.row.score) if self.in_library else None,
             "liked": bool(self.facts.liked),
@@ -2905,12 +2906,27 @@ def _next_title_payload(user, stored, today):
         "source": source,
         "media_type": MediaTypes.ANIME.value,
         "media_id": media_id,
-        "title": stored.get("display_title") or stored.get("title") or "",
+        "title": _next_title_shown(stored, copy_of_next),
         "image_url": stored.get("image"),
         "has_aired": _next_title_has_aired(stored, today, copy_of_next),
         # A single has no rows, so Home's sheet doesn't move on to it (AN-501).
         "single": copy_of_next.is_single if copy_of_next is not None else bool(stored.get("single")),
     }
+
+
+def _next_title_shown(stored, copy_of_next):
+    """Return the next title's English one Spine has stored, else MAL's series order's (AN-705)."""
+    if copy_of_next is not None:
+        item = copy_of_next.item
+    else:
+        item = Item.objects.filter(
+            source=stored.get("source") or Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            media_id=stored.get("media_id"),
+        ).first()
+    if item is not None and item.display_title:
+        return item.shown_title
+    return stored.get("display_title") or stored.get("title") or ""
 
 
 def _next_title_copy(stored):

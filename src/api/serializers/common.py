@@ -316,7 +316,8 @@ def media_summary_from_item(
         ) if user else None
     return {
         "ref": media_ref_from_item(item),
-        "title": item.title,
+        "title": item.shown_title,
+        **_anime_display_title(item.media_type, item.display_title),
         "subtitle": None,
         "overview": None,
         **artwork,
@@ -332,6 +333,13 @@ def media_summary_from_item(
         "custom_backdrop_url": custom_backdrop_url,
         "user_state": user_state_for_item(user, item) if user and include_user_state else None,
     }
+
+
+def _anime_display_title(media_type, display_title):
+    """Return an anime's English title under the key its page has sent (AN-705)."""
+    if media_type == MediaTypes.ANIME.value and display_title:
+        return {"display_title": display_title}
+    return {}
 
 
 def prime_collection_items(items, user, *, media_by_item=None):
@@ -526,6 +534,15 @@ def media_summary_from_provider(
     if saved_poster:
         # Match list cards: the saved poster, not the provider's current one.
         artwork = {**artwork, "image_url": saved_poster, "poster_url": saved_poster}
+    title = payload.get("title") or payload.get("name") or ""
+    display_title = payload.get("display_title")
+    if media_type == MediaTypes.ANIME.value:
+        # The English title Spine has stored for it, else the provider's (AN-705).
+        stored = getattr(item, "display_title", "") or ""
+        if stored and stored != item.title:
+            display_title = stored
+        display_title = display_title or stored or None
+        title = display_title or title
     return {
         "ref": {
             "item_id": item.id if item else None,
@@ -535,12 +552,8 @@ def media_summary_from_provider(
             "season_number": season_number,
             "episode_number": episode_number,
         },
-        "title": payload.get("title") or payload.get("name") or "",
-        **(
-            {"display_title": payload["display_title"]}
-            if payload.get("display_title")
-            else {}
-        ),
+        "title": title,
+        **({"display_title": display_title} if display_title else {}),
         **({"relation": payload["relation"]} if payload.get("relation") else {}),
         # "explicit" or "clean", for Apple Music albums that Apple rates.
         **(

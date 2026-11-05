@@ -1660,7 +1660,8 @@ def _enrich_anime_metadata(metadata, source):
     enriched = deepcopy(metadata)
     if not enriched.get("display_title"):
         # MAL's English title, else AniList's, else the original (AN-705).
-        enriched["display_title"] = (enrichment.get("titles") or {}).get("english")
+        titles = enrichment.get("titles")
+        enriched["display_title"] = titles.get("english") if titles else enrichment.get("display_title")
     if not backdrop_url(enriched):
         enriched["backdrop"] = enrichment.get("backdrop")
     enriched["posters"] = _dedupe_artwork(

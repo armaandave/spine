@@ -240,7 +240,7 @@ class Item(CalendarTriggerMixin, models.Model):
 
     def __str__(self):
         """Return the name of the item."""
-        name = self.title
+        name = self.shown_title
         if self.season_number is not None:
             name += f" S{self.season_number}"
             if self.episode_number is not None:

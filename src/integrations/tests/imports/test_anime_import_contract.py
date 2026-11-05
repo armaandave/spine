@@ -984,8 +984,16 @@ class ExportTests(AnimeTestCase):
 
     def test_an_802_the_new_fields_arent_columns(self):
         header = next(iter(exports.generate_rows(self.user)))
-        for name in ("pass_number", "log_offered_pass", "choice", "reconciled_at", "up_next_episode", "total_is_written"):
+        for name in ("pass_number", "log_offered_pass", "choice", "reconciled_at", "up_next_episode", "total_is_written", "display_title"):
             self.assertNotIn(name, header)
+
+    def test_an_705_the_export_keeps_the_original_title(self):
+        item = self.title(total=2)
+        Item.objects.filter(pk=item.pk).update(display_title="The English One")
+        self.tick(item, 1)
+        rows = list(exports.generate_rows(self.user))
+        self.assertIn(item.title, rows[1])
+        self.assertNotIn("The English One", "".join(rows))
 
     def test_an_802_a_round_trip_keeps_counts_shelves_and_stars(self):
         finished = self.title(total=3)
