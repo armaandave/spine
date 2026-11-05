@@ -1291,9 +1291,18 @@ def _raw_delete(queryset):
     return queryset._raw_delete(queryset.db)
 
 
+def _locked_tv(user, show_item):
+    """Lock and return the user's TV row, and only it (TV-705).
+
+    Meta's ordering would join the show and the user, and FOR UPDATE would lock those
+    too, so one person's write would hold up everyone else's on the same show.
+    """
+    return TV.objects.select_for_update(of=("self",)).filter(user=user, item=show_item).order_by("pk").first()
+
+
 def _create_tv(user, show_item):
     """Create the user's TV row (inside the lock). Return (tv, created)."""
-    existing = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+    existing = _locked_tv(user, show_item)
     if existing is not None:
         return existing, False
     snapshots = DiaryEntry.objects.filter(_family(show_item), user=user).values_list(
@@ -1451,7 +1460,7 @@ def _run_locked(
     season_number,
     episode_number,
 ):
-    tv = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+    tv = _locked_tv(user, show_item)
     if mutation_id is not None:
         replay = _replay(user, show_item, mutation_id, action)
         if replay is not None:
@@ -1814,7 +1823,7 @@ def reconcile_show(tv, *, entry_point, listing=None):
 
 def _lock_and_reconcile(tv_id, *, entry_point, listing=None):
     with _writing(), transaction.atomic():
-        tv = TV.objects.select_for_update().select_related("item", "user").filter(pk=tv_id).first()
+        tv = TV.objects.select_for_update(of=("self",)).select_related("item", "user").filter(pk=tv_id).first()
         if tv is None or (tv.legacy_pending and entry_point not in WORKING_OUT):
             return None
         before = (tv.status, tv.up_next_season, tv.up_next_episode, tv.caught_up)
@@ -4164,7 +4173,7 @@ def reconcile_imported(user, show_items, *, overwritten_show_item_ids=()):
         try:
             items = _all_items(show_item, listing, user)
             with _writing(), transaction.atomic():
-                tv = TV.objects.select_for_update().filter(user=user, item=show_item).first()
+                tv = _locked_tv(user, show_item)
                 if tv is None:
                     continue
                 fresh = show_item.pk in overwritten or (tv.reconciled_at is None and tv.state_version == 0)
@@ -4353,7 +4362,7 @@ def _hook_reconcile(tv_id, removed_seasons=()):
 def _lock_and_reconcile_after_removal(tv_id, season_numbers):
     """A viewing deleted outside this module: apply TV-205, TV-208 and TV-003, then reconcile."""
     with _writing(), transaction.atomic():
-        tv = TV.objects.select_for_update().select_related("item", "user").filter(pk=tv_id).first()
+        tv = TV.objects.select_for_update(of=("self",)).select_related("item", "user").filter(pk=tv_id).first()
         if tv is None or tv.legacy_pending:
             return
         listing = tv_listing.stored_listing(tv.item)
