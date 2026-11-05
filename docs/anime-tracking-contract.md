@@ -317,6 +317,15 @@ An anime counts as a show does (STAT-201's TV row, STAT-104):
 
 Each viewing's length is the title's runtime.
 
+### AN-705: An anime goes by its English title
+
+Wherever Spine names an anime, it uses MAL's English title, else AniList's English title, else the original.
+That's every card, row, list, log, feed item, search result and page the app shows, installed builds included, and the text of a calendar event or a release notification. Where no English title exists, the original stays.
+
+Spine stores the title whenever it reads MAL or AniList for that anime anyway, and an hourly job reads the rest from AniList, 25 titles at a time.
+Search finds an anime by either title, and a title sort goes by the one shown.
+The CSV export keeps the original title, and imports still match titles by ID.
+
 ## Imports, webhooks and export
 
 ### AN-800: Imports end in the state the app would produce
