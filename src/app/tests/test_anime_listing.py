@@ -93,6 +93,17 @@ class AniListParsingTests(SimpleTestCase):
         self.assertEqual(sorted(result["episodes"]), [129, 130])
         self.assertEqual(result["episodes"][129]["image"], "https://example.com/129.jpg")
 
+    def test_an_705_anilists_english_title_comes_back_at_no_extra_request(self):
+        answer = copy.deepcopy(ATTACK_ON_TITAN)
+        answer["data"]["Page"]["media"][0]["title"] = {"english": "Attack on Titan"}
+        with mock.patch.object(services, "api_request", return_value=answer) as request:
+            result = anilist.anime_episodes(["16498"])["16498"]
+        self.assertEqual(result["english_title"], "Attack on Titan")
+        self.assertEqual(request.call_count, 1)
+        none = copy.deepcopy(ATTACK_ON_TITAN)
+        with mock.patch.object(services, "api_request", return_value=none):
+            self.assertIsNone(anilist.anime_episodes(["16498"])["16498"]["english_title"])
+
     def test_an_101_a_finished_title_has_no_schedule(self):
         with mock.patch.object(services, "api_request", return_value=copy.deepcopy(ATTACK_ON_TITAN)):
             result = anilist.anime_episodes(["16498"])["16498"]

@@ -171,6 +171,7 @@ class FakeAnimeProvider:
                     for number, values in title.episodes.items()
                 },
             }
+            results[str(media_id)]["english_title"] = title.anilist_english
             if title.last_aired:
                 results[str(media_id)]["last_aired"] = {
                     "episode": title.last_aired[0],

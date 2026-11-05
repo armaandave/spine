@@ -95,6 +95,9 @@ query ($malIds: [Int], $page: Int) {
       id
       idMal
       status
+      title {
+        english
+      }
       startDate {
         year
         month
@@ -887,6 +890,8 @@ def _anime_episodes(media):
         ),
         "schedule": schedule,
         "episodes": episodes,
+        # The title Spine shows when MAL has no English one (AN-705).
+        "english_title": (media.get("title") or {}).get("english") or None,
     }
 
 

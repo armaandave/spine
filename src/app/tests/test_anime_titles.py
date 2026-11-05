@@ -2,6 +2,7 @@
 
 from unittest import mock
 
+from app import anime_listing, anime_tracking
 from app.models import Item
 from app.providers import anilist
 from app.tests.anime_fixtures import AnimeTestCase
@@ -10,6 +11,32 @@ from app.tests.anime_fixtures import AnimeTestCase
 def enrichment(english):
     """Return AniList's page enrichment for a title with this English title, or none."""
     return {"titles": {"english": english, "romaji": "Shingeki no Kyojin", "native": "進撃の巨人"}}
+
+
+class RefreshTitleTests(AnimeTestCase):
+    """AN-705: the copy's reads store it too, at no extra request."""
+
+    def test_an_705_the_job_stores_mals_english_title(self):
+        item = self.title(title=self.fake.add(title="Shingeki no Kyojin", english="Attack on Titan", anilist_english="AniList's"))
+        anime_tracking.refresh_after_calendar([item])
+        self.assertEqual(Item.objects.get(pk=item.pk).display_title, "Attack on Titan")
+
+    def test_an_705_with_none_on_mal_a_first_open_stores_anilists(self):
+        item = self.title(title=self.fake.add(title="Shingeki no Kyojin", anilist_english="Attack on Titan"))
+        anime_listing.get_listing(item)
+        self.assertEqual(Item.objects.get(pk=item.pk).display_title, "Attack on Titan")
+
+    def test_an_705_with_mal_down_anilists_only_fills_what_isnt_known(self):
+        title = self.fake.add(title="Shingeki no Kyojin", english="Attack on Titan", anilist_english="AniList's")
+        item = self.title(title=title)
+        anime_listing.get_listing(item)
+        self.clock.advance(days=8)
+        self.fake.fail("mal")
+        anime_tracking.refresh_after_calendar([item])
+        self.assertEqual(Item.objects.get(pk=item.pk).display_title, "Attack on Titan")
+
+    def test_an_705_the_query_asks_for_the_english_title(self):
+        self.assertIn("english", anilist.ANIME_EPISODES_QUERY)
 
 
 class StoreTitleTests(AnimeTestCase):
@@ -39,6 +66,7 @@ class StoreTitleTests(AnimeTestCase):
 
     def test_an_705_with_anilist_down_and_none_on_mal_nothing_is_stored_yet(self):
         item = self.title(title=self.fake.add(title="Shingeki no Kyojin"))
+        self.fake.fail("anilist")
         self.open_page(item)
         self.assertEqual(item.display_title, "")
 

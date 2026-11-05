@@ -25,7 +25,7 @@ import requests
 from django.db import IntegrityError, transaction
 from django.utils.dateparse import parse_date
 
-from app import user_calendar
+from app import anime_titles, user_calendar
 from app.models import AnimeListing, Item, MediaTypes, Sources
 from app.providers import anilist, mal, services
 from app.tv_listing import TVDetailsUnavailable
@@ -508,6 +508,11 @@ def _save(item, *, numbers, episodes, now, failed=False):
         fields.append("retry_after")
     if fields:
         row.save(update_fields=fields)
+    anime_titles.store_shown_title(
+        item,
+        mal=numbers.get("display_title") if numbers is not None else anime_titles.UNREAD,
+        anilist=episodes.get("english_title") if episodes is not None else anime_titles.UNREAD,
+    )
     row.item = item
     return row
 
