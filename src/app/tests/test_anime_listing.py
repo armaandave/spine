@@ -20,6 +20,7 @@ from events.calendar.selectors import filter_items_to_fetch
 from events.models import Event
 
 REAL_ANIME_EPISODES = anilist.anime_episodes
+REAL_API_REQUEST = services.api_request
 ATTACK_ON_TITAN = {
     "data": {
         "Page": {
@@ -945,6 +946,54 @@ class CalendarJobTests(AnimeTestCase):
         self.assertEqual(episodes.call_args.kwargs["timeout"], anime_listing.JOB_TIMEOUT)
         self.assertTrue(all(call.kwargs["timeout"] == anime_listing.JOB_TIMEOUT for call in numbers.call_args_list))
         self.assertGreater(numbers.call_count, 0)
+
+    def test_an_202_no_read_of_the_job_waits_out_a_rate_limit(self):
+        """A worker runs one task at a time: a 429 fails at once, as a hang times out."""
+        moment = int(self.clock.moment.timestamp())
+        no_total = self.title(total=None, status="Airing")
+        no_schedule = self.title(total=12, status="Airing")
+        media = [
+            {
+                "idMal": int(no_total.media_id),
+                "endDate": {"year": None, "month": None, "day": None},
+                "episodes": None,
+                "airingSchedule": {"nodes": [{"episode": 3, "airingAt": moment}]},
+            },
+        ]
+        answer = {"data": {"Page": {"pageInfo": {"hasNextPage": False}, "media": media}}}
+        with (
+            mock.patch.object(services, "api_request", return_value=answer) as schedule,
+            mock.patch.object(anilist, "anime_episodes", wraps=anilist.anime_episodes) as episodes,
+            mock.patch.object(mal, "anime", wraps=mal.anime) as numbers,
+        ):
+            calendar_anime.process_anime_bulk([no_total, no_schedule], [])
+        self.assertFalse(schedule.call_args.kwargs["retry_rate_limits"])
+        self.assertFalse(episodes.call_args.kwargs["retry_rate_limits"])
+        # A total, the releases, then each title's numbers.
+        self.assertEqual(numbers.call_count, 4)
+        self.assertTrue(all(call.kwargs["retry_rate_limits"] is False for call in numbers.call_args_list))
+
+    def test_an_202_a_rate_limited_anilist_costs_the_job_no_wait(self):
+        items = [self.title(total=2) for _ in range(2)]
+        limited = mock.Mock(status_code=429, headers={"Retry-After": "60"}, text="")
+        limited.raise_for_status.side_effect = requests.exceptions.HTTPError(response=limited)
+        with (
+            mock.patch.object(services, "api_request", REAL_API_REQUEST),
+            mock.patch.object(anilist, "anime_episodes", REAL_ANIME_EPISODES),
+            mock.patch.object(services.session, "post", return_value=limited) as request,
+            mock.patch.object(services.time, "sleep") as wait,
+        ):
+            calendar_anime.process_anime_bulk(items, [])
+        wait.assert_not_called()
+        self.assertEqual(request.call_count, 2, "The schedule, then the episodes, each asked once")
+
+    def test_an_202_a_rate_limited_mal_costs_one_quick_read_in_a_run(self):
+        """As a hang does: a 429 is MAL's own, not one title's refusal."""
+        items = [self.title(total=2) for _ in range(3)]
+        with mock.patch.object(mal, "anime", side_effect=ProviderDown(status_code=429)) as read:
+            anime_tracking.refresh_after_calendar(items)
+        self.assertEqual(read.call_count, 1)
+        self.assertFalse(read.call_args.kwargs["retry_rate_limits"])
 
     def test_an_202_refreshing_asks_anilist_once_for_many_titles(self):
         items = [self.title(total=2) for _ in range(3)]

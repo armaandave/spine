@@ -38,8 +38,9 @@ def process_anime_bulk(items, events_bulk):
     """Process multiple anime items and add events to the event list.
 
     A failed read costs only what it read: those titles' events stay as they are until
-    the next run, and the rest of the job goes on. Reads are short, and once MAL has timed
-    out the run asks it nothing more, so a hung provider can't hold up a worker.
+    the next run, and the rest of the job goes on. Reads are short and never wait out a rate
+    limit, and once MAL has timed out or rate-limited the run asks it nothing more, so a
+    hung or busy provider can't hold up a worker.
     """
     if not items:
         return
@@ -78,7 +79,7 @@ def process_anime_bulk(items, events_bulk):
                 item.media_id,
             )
             try:
-                reads.mal(lambda timeout: process_other(item, events_bulk, timeout=timeout))
+                reads.mal(lambda **limits: process_other(item, events_bulk, **limits))
             except anime_listing.PROVIDER_FAILURES:
                 logger.warning("Can't read the releases of %s", item, exc_info=True)
 
@@ -113,6 +114,7 @@ def _collect_airing_schedule_pages(query, url, media_ids, page):
             url,
             params={"query": query, "variables": variables},
             timeout=anime_listing.JOB_TIMEOUT,
+            retry_rate_limits=False,
         )
 
         has_next_airing_page = False
@@ -142,11 +144,11 @@ def _collect_airing_schedule_pages(query, url, media_ids, page):
 
 def _get_mal_total_episodes(mal_id, reads):
     mal_metadata = reads.mal(
-        lambda timeout: services.get_media_metadata(
+        lambda **limits: services.get_media_metadata(
             media_type=MediaTypes.ANIME.value,
             media_id=mal_id,
             source=Sources.MAL.value,
-            timeout=timeout,
+            **limits,
         ),
     )
     return mal_metadata["max_progress"]

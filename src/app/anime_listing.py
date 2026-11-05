@@ -64,19 +64,30 @@ class AnimeDetailsUnavailable(TVDetailsUnavailable):
 
 
 class JobReads:
-    """One run of the calendar job's MAL reads: short, and none once MAL has timed out."""
+    """One run of the calendar job's MAL reads: short, never waiting out a rate limit, and
+    none once MAL has timed out or rate-limited the run. A worker runs one task at a time.
+    """
 
     def __init__(self):
         self.mal_timed_out = False
+        self.mal_rate_limited = False
 
     def mal(self, read):
-        """Return read(timeout); after a timeout, the rest of the run asks MAL nothing."""
+        """Return read(timeout=..., retry_rate_limits=False); after a timeout or a rate limit,
+        the rest of the run asks MAL nothing.
+        """
         if self.mal_timed_out:
             raise requests.exceptions.Timeout("MAL has already timed out in this run")
+        if self.mal_rate_limited:
+            raise requests.exceptions.RequestException("MAL has already rate-limited this run")
         try:
-            return read(JOB_TIMEOUT)
+            return read(timeout=JOB_TIMEOUT, retry_rate_limits=False)
         except requests.exceptions.Timeout:
             self.mal_timed_out = True
+            raise
+        except PROVIDER_FAILURES as error:
+            if services.is_rate_limited(error):
+                self.mal_rate_limited = True
             raise
 
 
@@ -407,14 +418,18 @@ def refresh(items, reads=None):
     now = user_calendar.now()
     episodes_by_id = None
     try:
-        episodes_by_id = anilist.anime_episodes([item.media_id for item in items], timeout=JOB_TIMEOUT)
+        episodes_by_id = anilist.anime_episodes(
+            [item.media_id for item in items],
+            timeout=JOB_TIMEOUT,
+            retry_rate_limits=False,
+        )
     except PROVIDER_FAILURES:
         logger.warning("AniList can't be read for the calendar job; keeping stored rows")
     listings = {}
     for item in items:
         numbers = None
         try:
-            numbers = reads.mal(lambda timeout: mal.anime(item.media_id, timeout=timeout))
+            numbers = reads.mal(lambda **limits: mal.anime(item.media_id, **limits))
         except PROVIDER_FAILURES:
             logger.warning("MAL can't be read for %s; keeping its numbers", item)
         episodes = None
@@ -446,7 +461,7 @@ def _refresh_next_title(row, numbers, now, reads):
     next_title = None
     if any(relation.get("relation") in {"Prequel", "Sequel"} for relation in relations):
         try:
-            series = reads.mal(lambda _timeout: mal.anime_series(row.item.media_id))
+            series = reads.mal(lambda **_limits: mal.anime_series(row.item.media_id))
         except (requests.exceptions.RequestException, services.ProviderAPIError):
             logger.warning("MAL's series order can't be read for %s", row.item)
             return

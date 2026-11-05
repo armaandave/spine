@@ -13,7 +13,7 @@ from django.db.models import Case, F, Q, TextField, Value, When
 from django.db.models.functions import Coalesce, Lower, NullIf
 
 from app.models import Item, MediaTypes, Sources
-from app.providers import anilist
+from app.providers import anilist, services
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,8 @@ def fill_missing(*, limit=FILL_LIMIT, sleep=time.sleep):
     """Fill the shown title of every anime Spine has read none for, from AniList (AN-705).
 
     Tracked or not, 25 titles a request, paced. A failed request costs only its own titles,
-    which the next run asks again. A timeout ends the run, as AniList is hanging.
+    which the next run asks again. A timeout or a rate limit ends the run, as AniList is
+    hanging or asking us to wait: a worker runs one task at a time.
     """
     items = list(
         Item.objects.filter(
@@ -97,7 +98,7 @@ def fill_missing(*, limit=FILL_LIMIT, sleep=time.sleep):
             titles = anilist.anime_english_titles([item.media_id for item in chunk], timeout=FILL_TIMEOUT)
         except anilist.READ_FAILURES as error:
             logger.warning("AniList's English titles can't be read for %s anime", len(chunk), exc_info=True)
-            if isinstance(error, requests.exceptions.Timeout):
+            if isinstance(error, requests.exceptions.Timeout) or services.is_rate_limited(error):
                 break
             continue
         for item in chunk:

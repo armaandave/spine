@@ -396,6 +396,14 @@ def api_request(
     raise RuntimeError("Unreachable rate-limit retry state")
 
 
+def is_rate_limited(error):
+    """Return whether a provider read failed on a rate limit (HTTP 429), raw or wrapped."""
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    return status == requests.codes.too_many_requests
+
+
 def get_media_metadata(
     media_type,
     media_id,

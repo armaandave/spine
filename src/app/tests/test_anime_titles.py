@@ -13,6 +13,8 @@ from lists.models import CustomList, CustomListItem
 from app.tests.anime_fixtures import AnimeTestCase
 from app.tests.tv_fixtures import ProviderDown
 
+REAL_API_REQUEST = services.api_request
+
 
 def enrichment(english):
     """Return AniList's page enrichment for a title with this English title, or none."""
@@ -266,6 +268,20 @@ class FillTitlesTests(AnimeTestCase):
         with mock.patch.object(services, "api_request", side_effect=requests.exceptions.Timeout) as request:
             anime_titles.fill_missing(sleep=lambda _: None)
         self.assertEqual(request.call_count, 1)
+
+    def test_an_705_a_rate_limit_ends_the_run_without_waiting(self):
+        """A worker runs one task at a time, so AniList's minute is the next hourly run's."""
+        self.anime(*range(1, 31))
+        limited = mock.Mock(status_code=429, headers={"Retry-After": "60"}, text="")
+        limited.raise_for_status.side_effect = requests.exceptions.HTTPError(response=limited)
+        with (
+            mock.patch.object(services, "api_request", REAL_API_REQUEST),
+            mock.patch.object(services.session, "post", return_value=limited) as request,
+            mock.patch.object(services.time, "sleep") as wait,
+        ):
+            result = anime_titles.fill_missing(sleep=lambda _: None)
+        self.assertEqual((request.call_count, wait.call_count, result["filled"]), (1, 0, 0))
+        self.assertEqual(Item.objects.filter(media_type="anime", display_title="").count(), 30)
 
     def test_an_705_it_never_asks_for_other_types_manual_titles_or_ones_it_has(self):
         Item.objects.create(source="tmdb", media_type="movie", media_id="1", title="A film", image="https://example.com/p.jpg")

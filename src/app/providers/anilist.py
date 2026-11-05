@@ -854,7 +854,8 @@ query ($malIds: [Int]) {
 def anime_english_titles(mal_ids, *, timeout=None):
     """Return {MAL ID as text: AniList's English title or None} for up to 25 titles at once.
 
-    A title AniList doesn't have is left out. A failed request raises.
+    A title AniList doesn't have is left out. A failed request raises, a rate limit at once:
+    the job that reads this holds up a worker.
     """
     ids = [int(value) for value in mal_ids if str(value).isdigit()][:25]
     response = services.api_request(
@@ -864,6 +865,7 @@ def anime_english_titles(mal_ids, *, timeout=None):
         params={"query": ANIME_TITLES_QUERY, "variables": {"malIds": ids}},
         headers={"Accept": "application/json", "Content-Type": "application/json"},
         timeout=timeout or REQUEST_TIMEOUT,
+        retry_rate_limits=False,
     )
     return {
         str(media["idMal"]): (media.get("title") or {}).get("english") or None

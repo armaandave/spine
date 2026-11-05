@@ -12,7 +12,7 @@ from .helpers import date_parser
 logger = logging.getLogger(__name__)
 
 
-def process_other(item, events_bulk, *, timeout=None):
+def process_other(item, events_bulk, *, timeout=None, retry_rate_limits=True):
     """Process other types of items and add events to the event list."""
     logger.info("Fetching releases for %s", item)
     try:
@@ -21,6 +21,7 @@ def process_other(item, events_bulk, *, timeout=None):
             item.media_id,
             item.source,
             timeout=timeout,
+            retry_rate_limits=retry_rate_limits,
         )
     except services.ProviderAPIError:
         logger.warning(
