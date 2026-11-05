@@ -125,7 +125,9 @@ BOOK_DETAIL_CACHE_VERSION = "v1"
 MOVIE_DETAIL_CACHE_VERSION = "v1"
 EPISODE_DETAIL_CACHE_VERSION = "v1"
 MUSIC_DETAIL_CACHE_VERSION = "v4"
-ANIME_DETAIL_CACHE_VERSION = "v6"
+ANIME_DETAIL_CACHE_VERSION = "v7"
+# An anime search's rows carry MAL's English titles (AN-705).
+ANIME_SEARCH_CACHE_VERSION = "v1"
 MANGA_DETAIL_CACHE_VERSION = "v1"
 PERSON_PREPARATION_LOCK_TIMEOUT = 60 * 15
 DETAIL_RATING_PREPARATION_LOCK_TIMEOUT = 60
@@ -179,6 +181,8 @@ def _search_cache_key(*, media_type, source, query, page, preserve_ranking_field
     cache_version = (
         MUSIC_SEARCH_CACHE_VERSION
         if media_type == MediaTypes.MUSIC.value
+        else f"{SEARCH_CACHE_VERSION}-anime-{ANIME_SEARCH_CACHE_VERSION}"
+        if media_type == MediaTypes.ANIME.value
         else SEARCH_CACHE_VERSION
     )
     rank_suffix = ":rank" if preserve_ranking_fields else ""

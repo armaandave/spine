@@ -3,6 +3,8 @@
 from unittest import mock
 
 import requests
+from django.core.cache import cache
+from django.test import TestCase
 
 from app import anime_listing, anime_titles, anime_tracking
 from app.models import Item, MediaLike
@@ -379,3 +381,82 @@ class StoreTitleTests(AnimeTestCase):
         for item in (movie, manual):
             anime_titles.store_shown_title(item, mal="English", anilist="English")
             self.assertEqual(Item.objects.get(pk=item.pk).display_title, "")
+
+
+def mal_node(media_id, title, english):
+    """Return a MAL node as a search, a related row or a recommendation lists it, with its alternative titles."""
+    return {
+        "id": media_id,
+        "title": title,
+        "alternative_titles": {"en": english, "synonyms": [], "ja": ""},
+        "main_picture": {"large": f"https://img.example/{media_id}.jpg"},
+    }
+
+
+class ProviderRowTitleTests(TestCase):
+    """AN-705: MAL's rows for other anime carry MAL's English title, from the read that lists them."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
+    def test_an_705_search_rows_read_mals_english_title(self):
+        from app.providers import mal
+
+        response = {"data": [
+            {"node": mal_node(18397, "Shingeki no Kyojin OVA", "Attack on Titan OAD")},
+            {"node": mal_node(21843, "Shingeki no Bahamut: Genesis", "")},
+        ]}
+        with mock.patch("app.providers.mal.services.api_request", return_value=response) as request:
+            rows = {row["media_id"]: row for row in mal.search("anime", "Shingeki", 1)["results"]}
+        self.assertEqual(rows[18397]["display_title"], "Attack on Titan OAD")
+        self.assertEqual(rows[18397]["title"], "Shingeki no Kyojin OVA", "The original stays the title it's ranked by")
+        self.assertNotIn("display_title", rows[21843], "With no English title on MAL, the original shows")
+        self.assertEqual(request.call_count, 1, "No request beyond the search")
+        self.assertIn("alternative_titles", request.call_args.kwargs["params"]["fields"])
+
+        manga = {"data": [{"node": mal_node(23390, "Shingeki no Kyojin", "Attack on Titan")}]}
+        with mock.patch("app.providers.mal.services.api_request", return_value=manga) as request:
+            rows = mal.search("manga", "Shingeki", 1)["results"]
+        self.assertNotIn("display_title", rows[0], "A manga keeps its title")
+        self.assertNotIn("alternative_titles", request.call_args.kwargs["params"]["fields"])
+
+    def test_an_705_related_and_recommended_anime_read_mals_english_title(self):
+        from app.providers import mal
+
+        detail = {
+            **mal_node(16498, "Shingeki no Kyojin", "Attack on Titan"),
+            "pictures": [],
+            "media_type": "tv",
+            "start_date": "2013-04-07",
+            "end_date": "2013-09-29",
+            "synopsis": "Synopsis",
+            "status": "finished_airing",
+            "genres": [],
+            "mean": 8.5,
+            "num_scoring_users": 100,
+            "num_list_users": 250,
+            "num_episodes": 25,
+            "average_episode_duration": 1440,
+            "studios": [{"id": 1, "name": "Wit Studio"}],
+            "start_season": {"year": 2013, "season": "spring"},
+            "source": "manga",
+            "related_anime": [
+                {"node": mal_node(18397, "Shingeki no Kyojin OVA", "Attack on Titan OAD"), "relation_type": "side_story"},
+            ],
+            "recommendations": [
+                {"node": mal_node(28623, "Koutetsujou no Kabaneri", "Kabaneri of the Iron Fortress")},
+                {"node": mal_node(20787, "Black Bullet", None)},
+            ],
+        }
+        with mock.patch("app.providers.mal.services.api_request", return_value=detail) as request:
+            result = mal.anime("16498")
+        self.assertEqual(result["related"]["relations"][0]["display_title"], "Attack on Titan OAD")
+        recommendations = result["related"]["recommendations"]
+        self.assertEqual(recommendations[0]["display_title"], "Kabaneri of the Iron Fortress")
+        self.assertNotIn("display_title", recommendations[1])
+        fields = request.call_args.kwargs["params"]["fields"]
+        self.assertIn("related_anime{node{alternative_titles}}", fields)
+        self.assertIn("recommendations{node{alternative_titles}}", fields)
+        self.assertNotIn(",recommendations,", f"{fields},", "Asked once, with the nested title")
+        self.assertEqual(request.call_count, 1, "No request beyond the page's")
