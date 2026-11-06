@@ -53,7 +53,12 @@ FILL = Episode.Kind.FILL.value
 
 
 def repair_moment():
-    """Return when the TV repair first wrote a fill: only viewings before it can be taps."""
+    """Return when the TV repair first wrote a fill: only viewings before it can be taps.
+
+    It's the earliest fill still there, on any account. Were that fill removed, the cutoff
+    would move later and let in newer ticks; the rest of the test and --max still guard
+    that, and the dry run comes first.
+    """
     return Episode.objects.filter(kind=FILL).aggregate(at=Min("created_at"))["at"]
 
 
