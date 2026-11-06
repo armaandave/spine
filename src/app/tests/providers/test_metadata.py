@@ -266,7 +266,7 @@ class Metadata(TestCase):
         self.assertEqual(mock_api_request.call_count, 2)
 
     @patch("app.providers.tmdb.services.api_request")
-    def test_title_logo_prefers_language_then_votes(self, mock_api_request):
+    def test_title_logo_prefers_language_then_widest(self, mock_api_request):
         """Test TMDB title logo selection."""
         cache.clear()
         mock_api_request.return_value = {
@@ -313,6 +313,58 @@ class Metadata(TestCase):
             },
         )
         self.assertEqual(mock_api_request.call_count, 1)
+
+    @patch("app.providers.tmdb.services.api_request")
+    def test_title_logo_picks_widest_sharp_logo_over_votes(self, mock_api_request):
+        """The default logo is the widest readable one, skipping blurry, hairline and SVG files."""
+        cache.clear()
+
+        def logo(path, width, height, votes):
+            return {
+                "file_path": path,
+                "width": width,
+                "height": height,
+                "aspect_ratio": round(width / height, 3),
+                "vote_average": votes,
+                "vote_count": 1,
+                "iso_639_1": "en",
+            }
+
+        mock_api_request.return_value = {
+            "logos": [
+                logo("/vector.svg", 61, 24, 9),
+                logo("/stacked.png", 1000, 800, 8),
+                logo("/two-lines.png", 3270, 1299, 5),
+                logo("/one-line.png", 4903, 1608, 1),
+                logo("/tiny-wide.png", 400, 50, 1),
+                logo("/hairline.png", 1991, 79, 1),
+            ],
+        }
+
+        logos = tmdb.get_title_logos("631842", MediaTypes.MOVIE.value)
+        default = tmdb.get_title_logo("631842", MediaTypes.MOVIE.value)
+
+        self.assertTrue(all(not entry["url"].endswith(".svg") for entry in logos))
+        self.assertEqual(default["url"], "https://image.tmdb.org/t/p/w500/one-line.png")
+
+    @patch("app.providers.tmdb.services.api_request")
+    def test_title_logo_uses_small_logos_when_nothing_sharp(self, mock_api_request):
+        """A title with only small logos still gets its widest one."""
+        cache.clear()
+        mock_api_request.return_value = {
+            "logos": [
+                {"file_path": "/square.png", "width": 300, "height": 300, "aspect_ratio": 1,
+                 "vote_average": 5, "vote_count": 1, "iso_639_1": "en"},
+                {"file_path": "/wide.png", "width": 400, "height": 100, "aspect_ratio": 4,
+                 "vote_average": 1, "vote_count": 1, "iso_639_1": "en"},
+                {"file_path": "/only.svg", "width": 60, "height": 10, "aspect_ratio": 6,
+                 "vote_average": 9, "vote_count": 9, "iso_639_1": "en"},
+            ],
+        }
+
+        logo = tmdb.get_title_logo("1", MediaTypes.MOVIE.value)
+
+        self.assertEqual(logo["url"], "https://image.tmdb.org/t/p/w500/wide.png")
 
     @patch("app.providers.tmdb.services.api_request")
     def test_title_logos_return_all_languages_sorted_and_cached(self, mock_api_request):

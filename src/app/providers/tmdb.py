@@ -1882,7 +1882,7 @@ def get_title_logos(media_id, media_type):
     if media_type not in [MediaTypes.MOVIE.value, MediaTypes.TV.value]:
         raise ValueError("Title logos are only available for movies and TV shows")
 
-    cache_key = f"{Sources.TMDB.value}_{media_type}_logos_{media_id}_v1"
+    cache_key = f"{Sources.TMDB.value}_{media_type}_logos_{media_id}_v2"
     data = cache.get(cache_key)
     if data is None:
         url = f"{base_url}/{media_type}/{media_id}/images"
@@ -1902,6 +1902,9 @@ def get_title_logos(media_id, media_type):
         logos = []
         for logo in response.get("logos", []):
             file_path = logo["file_path"]
+            if file_path.lower().endswith(".svg"):
+                # TMDB serves SVG logos as raw SVG at every size; the app can't draw them.
+                continue
             logos.append(
                 {
                     "url": f"https://image.tmdb.org/t/p/w500{file_path}",
@@ -1931,8 +1934,20 @@ def get_title_logos(media_id, media_type):
     return data
 
 
+TITLE_LOGO_MIN_WIDTH = 500
+# The app draws title logos in a box about 360pt wide and 48pt+ tall, so a
+# logo wider than this only gets shorter on screen.
+TITLE_LOGO_WIDEST_READABLE = 7.5
+
+
+def _logo_fit(logo):
+    """Rank logos by width up to the readable limit, then thinner is worse."""
+    shape = logo["width"] / logo["height"] if logo["height"] else logo["aspect_ratio"] or 0
+    return min(shape, TITLE_LOGO_WIDEST_READABLE) - max(0, shape - TITLE_LOGO_WIDEST_READABLE)
+
+
 def get_title_logo(media_id, media_type):
-    """Return the best localized title logo for a movie or TV show."""
+    """Return the widest sharp localized title logo for a movie or TV show."""
     logos = get_title_logos(media_id, media_type)
     lang = getattr(settings, "TMDB_LANG", "en") or "en"
     candidates = [logo for logo in logos if logo.get("language") == lang]
@@ -1940,7 +1955,10 @@ def get_title_logo(media_id, media_type):
         candidates = [logo for logo in logos if logo.get("language") is None]
     if not candidates:
         return None
-    logo = candidates[0]
+    # Wide logos read best at the capped logo height; skip blurry ones when a
+    # sharp one exists. Candidates are already in vote order for ties.
+    sharp = [logo for logo in candidates if logo["width"] >= TITLE_LOGO_MIN_WIDTH]
+    logo = max(sharp or candidates, key=_logo_fit)
     return {
         "url": logo["url"],
         "width": logo["width"],
