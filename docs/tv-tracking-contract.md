@@ -628,6 +628,7 @@ The log adds a new viewing on its own date instead when either of these holds:
 - the user turns Rewatch on outside a rewatch that covers the episode.
 
 During a rewatch that covers the episode, the toggle never stops a claim.
+Editing the switch later decides again, as saving the log that way would have, from what was recorded before the log: turned off, the log gives up its own viewing for the tick it would claim, or for the watch already there; turned on, it adds its own viewing on its date, and a tick it claimed goes back to being a tick. A mark the log keeps stays its watch with either switch.
 Ticking and then logging an episode therefore counts one viewing, and the log creates one feed item.
 A review that sits on a watch it didn't add keeps that watch: the last viewing under it can't be unticked (TV-102), and a mark under it stays when the mark is undone (TV-302) or when a season log holding it goes (TV-400).
 An episode log never reopens a finished season or show (TV-603).

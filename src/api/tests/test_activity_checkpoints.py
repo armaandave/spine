@@ -938,6 +938,32 @@ class Phase3SheetTests(CheckpointBase):
         self.tv_action("T8", "mark_earlier", **{"from": question["from"], "to": question["to"]})
         self.assert_type(TV_TAB, h(13), h(11), h(35))
 
+    def test_tv_reviews_with_the_switch_edited(self):
+        """TV-402: editing a review's switch counts as saving it that way."""
+        review = self.tv_log("T1", episode=2)
+        self.assertFalse(self.is_rewatch(review), "A review after a season log opens off")
+        self.flip(review, on=True)
+        self.assert_type(TV_TAB, h(10), h(1), h(11))
+        self.flip(review, on=False)
+        self.assert_type(TV_TAB, h(10), None, h(10))
+        self.assertEqual(self.active_days(YEAR_2026, TV_TAB), 1)
+        self.tick("T2", 1)
+        ticked = self.tv_log("T2", episode=1, rewatch=True)
+        self.assert_type(TV_TAB, h(10), h(2), h(12))
+        self.flip(ticked, on=False)
+        self.assert_type(TV_TAB, h(10), h(1), h(11))
+        self.flip(ticked, on=True)
+        self.assert_type(TV_TAB, h(10), h(2), h(12))
+        self.tv_action("T7", "mark_up_to", season_number=1, episode_number=1)
+        self.assert_type(TV_TAB, h(10), h(2), h(13))
+        marked = self.tv_log("T7", episode=1)
+        self.assertTrue(self.is_rewatch(marked), "A marked episode's review opens on")
+        self.assert_type(TV_TAB, h(10), h(3), h(14))
+        self.flip(marked, on=False)
+        self.assert_type(TV_TAB, h(10), h(3), h(13))
+        self.flip(marked, on=True)
+        self.assert_type(TV_TAB, h(10), h(3), h(14))
+
     def test_movies(self):
         self.assert_type(MOVIE, None, None, None)
         self.eye(MOVIE, "F2")

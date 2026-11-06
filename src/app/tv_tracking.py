@@ -3985,6 +3985,8 @@ def update_log(entry, data, *, tags=None, entry_point=APP):
                 watched_on=new_day,
                 end_date=_start_of_day(new_day, user),
             )
+        if "is_rewatch" in fields and level == EPISODE:
+            _decide_switch_again(ctx, locked, (season_number, episode_number))
         if level == SHOW and ctx.tv is not None:
             ctx.flush_tv()
             single_weight.update_current_from_source_log(ctx.tv, locked, fields, previous_rating=previous_rating)
@@ -4010,6 +4012,55 @@ def update_log(entry, data, *, tags=None, entry_point=APP):
         season_number=season_number,
         episode_number=episode_number,
     )
+
+
+def _decide_switch_again(ctx, entry, position):
+    """An edited switch on an episode log decides again what saving it would (TV-402).
+
+    Only a log saved outside a rewatch that covers it can change: inside one, the switch
+    never stops a claim. Off, it gives up its own viewing for the tick it would claim, or
+    for the watch already there; on, it adds its own viewing in place of a claimed tick.
+    Either way it reads as if saved that way: that viewing sits just after the log was
+    recorded, and only viewings recorded before the log count. A mark it keeps is its
+    watch with either switch.
+    """
+    rewatch = ctx.calc.rewatch
+    if _rewatch_covers(ctx.calc, EPISODE, position[0]) and entry.created_at >= rewatch.started_at:
+        return
+    held = [viewing for viewing in ctx.facts.viewings if viewing.entry_id == entry.pk]
+    if any(viewing.kind == FILL for viewing in held):
+        return
+    own = [viewing for viewing in held if viewing.kind == LOG]
+    if entry.is_rewatch:
+        if own:
+            return
+        claimed = [viewing.id for viewing in held if viewing.kind == TICK]
+        Episode.objects.filter(pk__in=claimed).update(diary_entry=None)
+        day = _log_day_of(entry.consumed_at, ctx.user)
+        viewing = Episode.objects.create(
+            item_id=entry.item_id,
+            related_season=ctx.season_row(position[0]),
+            kind=LOG,
+            watched_on=day,
+            end_date=_start_of_day(day, ctx.user),
+            diary_entry=entry,
+        )
+        Episode.objects.filter(pk=viewing.pk).update(created_at=entry.created_at + timedelta(microseconds=1))
+    else:
+        earlier = [
+            viewing
+            for viewing in ctx.facts.viewings
+            if viewing.pos == position and viewing.entry_id != entry.pk and viewing.created_at < entry.created_at
+        ]
+        if not own or not earlier:
+            # With nothing watched before it, the log adds its viewing either way.
+            return
+        ticks = [viewing for viewing in earlier if viewing.kind == TICK and viewing.entry_id is None]
+        ctx.delete_viewings(own)
+        if ticks:
+            claim = max(ticks, key=lambda viewing: (viewing.created_at, viewing.id or 0))
+            Episode.objects.filter(pk=claim.id).update(diary_entry=entry)
+    ctx.changed = True
 
 
 def _keeping_log(ctx, viewing, deleted_id, calc):

@@ -206,6 +206,123 @@ class ReviewTests(TVCalcBase):
             tv_tracking.untick(self.user, show, 1, 1)
 
 
+class ReviewSwitchEditTests(TVCalcBase):
+    """TV-402: an episode log's edited switch decides again, as saving it would."""
+
+    def marked_review(self, *, on):
+        show = self.show(3)
+        self.on(date(2025, 6, 1))
+        tv_tracking.mark_up_to(self.user, show, 1, 1)
+        self.on(date(2026, 2, 1))
+        return show, self.log(self.episode(show, 1, 1), is_rewatch=on)
+
+    def test_a_marked_episodes_review_saved_on_then_flipped_off_dates_the_mark(self):
+        """Decision 59, by an edit: off dates the same watch."""
+        _show, review = self.marked_review(on=True)
+        self.assert_minutes(2026, E, 2 * E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, E, E)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, E, 2 * E)
+
+    def test_a_marked_episodes_review_saved_off_then_flipped_on_is_a_second_watch(self):
+        show, review = self.marked_review(on=False)
+        self.assert_minutes(2026, E, E)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, E, 2 * E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, E, E)
+        with self.assertRaises(tv_tracking.TVLogBlocks):
+            tv_tracking.untick(self.user, show, 1, 1)
+
+    def test_a_review_after_a_season_log_flipped_on_then_off(self):
+        """Decision 14, by an edit: on is a watch, off adds nothing."""
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.log(self.season(show))
+        self.on(date(2026, 2, 2))
+        review = self.log(self.episode(show, 1, 1))
+        self.assertFalse(review.is_rewatch)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, 4 * E, 4 * E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, 3 * E, 3 * E)
+        self.assertFalse(Episode.objects.filter(diary_entry=review).exists())
+
+    def test_a_ticks_review_saved_on_then_flipped_off_claims_the_tick(self):
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.tick(show, 1)
+        self.on(date(2026, 2, 2))
+        review = self.log(self.episode(show, 1, 1), is_rewatch=True)
+        self.assert_minutes(2026, 2 * E, 2 * E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, E, E)
+        self.assertEqual(
+            list(Episode.objects.filter(diary_entry=review).values_list("kind", flat=True)),
+            [Episode.Kind.TICK],
+            "The tick is the log's own",
+        )
+        days = sorted(row.day for row in list_rows(rows_for([self.user], self.user, types=[TV]).rows) if row.told)
+        self.assertEqual(days, [date(2026, 2, 1)], "and keeps its day")
+        self.flip(review, on=True)
+        self.assert_minutes(2026, 2 * E, 2 * E)
+
+    def test_a_ticks_review_saved_off_then_flipped_on_adds_a_watch(self):
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.tick(show, 1)
+        self.on(date(2026, 2, 2))
+        review = self.log(self.episode(show, 1, 1), is_rewatch=False)
+        self.assert_minutes(2026, E, E)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, 2 * E, 2 * E)
+        days = sorted(row.day for row in list_rows(rows_for([self.user], self.user, types=[TV]).rows) if row.told)
+        self.assertEqual(days, [date(2026, 2, 1), date(2026, 2, 2)])
+
+    def test_a_review_flipped_on_between_two_season_logs_is_still_one_rewatch(self):
+        """Decision 61 holds when the review's switch is edited: 270, not 315."""
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        self.log(self.season(show))
+        self.on(date(2026, 2, 2))
+        review = self.log(self.episode(show, 1, 2), is_rewatch=False)
+        self.on(date(2026, 2, 3))
+        self.log(self.season(show), is_rewatch=True)
+        self.assert_minutes(2026, 6 * E, 6 * E)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, 6 * E, 6 * E)
+
+    def test_a_first_watch_review_counts_once_with_either_switch(self):
+        show = self.show(3)
+        self.on(date(2026, 2, 1))
+        review = self.log(self.episode(show, 1, 1))
+        self.assertFalse(review.is_rewatch)
+        self.flip(review, on=True)
+        self.assert_minutes(2026, E, E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, E, E)
+        self.assertEqual(Episode.objects.filter(diary_entry=review, kind=Episode.Kind.LOG).count(), 1)
+
+    def test_during_a_rewatch_that_covers_it_the_switch_never_stops_the_claim(self):
+        show = self.show(3)
+        self.on(date(2025, 5, 1))
+        self.log(self.season(show))
+        self.on(date(2026, 3, 1))
+        self.clock.advance(minutes=1)
+        tv_tracking.start_rewatch(self.user, show, season_number=1)
+        self.tick(show, 1)
+        review = self.log(self.episode(show, 1, 1))
+        self.assertTrue(review.is_rewatch)
+        self.assert_minutes(2026, E, 4 * E)
+        self.flip(review, on=False)
+        self.assert_minutes(2026, E, 4 * E)
+        self.assertEqual(
+            list(Episode.objects.filter(diary_entry=review).values_list("kind", flat=True)),
+            [Episode.Kind.TICK],
+        )
+
+
 class RewatchSwitchTests(TVCalcBase):
     """Decisions 14, 38 and 48: the switch decides what a season log adds."""
 
