@@ -46,7 +46,9 @@ from social.models import Follow, FollowStatus, ProgressChange, Visibility
 
 # The types Stats reads through this calculation. Every other type's readers use their
 # old counters.
-CALCULATED_TYPES = frozenset({MediaTypes.BOOK.value, MediaTypes.ANIME.value})
+CALCULATED_TYPES = frozenset(
+    {MediaTypes.BOOK.value, MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value},
+)
 
 PROGRESS = "progress"
 LOG = "log"

@@ -354,12 +354,12 @@ class StatsV2ContractConformanceTests(StatsV2Base):
         # The conformance test above only means something when sections aren't empty.
         data = self.payload(self.owner, YEAR_2025)
         self.assertGreater(data["header"]["titles"], 0)
-        # Manga and comic time in a year comes from progress history, which bulk-created
-        # rows don't have; All Time reads their progress. Anime's 2025 log fills nothing
-        # on a title already at 12, so it's a title with no minutes (STAT-201).
-        self.assertEqual({row["media_type"] for row in data["time"]["rows"]}, set(PRIMARY) - {"manga", "comic"})
-        anime = next(row for row in data["time"]["rows"] if row["media_type"] == "anime")
-        self.assertEqual((anime["value"], anime["known"], anime["total"]), (0, 1, 1))
+        # Each 2025 log is a title that year (STAT-201). Anime's fills nothing on a
+        # title already at 12, so it adds no minutes. The manga and comic logs have no
+        # attempt and their series no total, so nothing says how far they got.
+        self.assertEqual({row["media_type"] for row in data["time"]["rows"]}, set(PRIMARY))
+        rows = {row["media_type"]: (row["value"], row["known"], row["total"]) for row in data["time"]["rows"]}
+        self.assertEqual((rows["anime"], rows["manga"], rows["comic"]), ((0, 1, 1), (0, 0, 1), (0, 0, 1)))
         all_time_rows = self.payload(self.owner, ALL_TIME)["time"]["rows"]
         self.assertEqual([row["media_type"] for row in all_time_rows], PRIMARY)
         self.assertEqual(data["top"]["source"], "list")

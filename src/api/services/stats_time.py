@@ -9,10 +9,11 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   the episode's runtime, else its season's, else its show's.
 - Anime: the calculation's rows, which read its viewings as this module's
   ``_anime_runtime`` does (AN-704), plus its pile in All Time.
-- Manga and comics: in a dated range, positive progress changes between consecutive
-  history rows of one tracking row, dated by ``history_date`` on the owner's calendar;
-  the row that created the tracking row is never a change. In All Time, ``progress``
-  over every tracking row.
+- Manga and comics: the calculation's rows, plus its pile in All Time. ``_progress``
+  still counts them for the comparison: in a dated range, positive progress changes
+  between consecutive history rows of one tracking row, dated by ``history_date`` on the
+  owner's calendar, the creation row never a change; in All Time, ``progress`` over
+  every tracking row.
 - Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
   Steam's imported lifetime playtime is never read (GM-500).
 - Books: the calculation's rows, plus its pile in All Time.

@@ -1931,12 +1931,14 @@ class AdapterCostTests(BookCalcBase):
         return patch.dict(activity_rows.ADAPTERS, {media_type: counted}), counted
 
     def test_switched_off_adapters_never_run_on_a_stats_request(self):
-        for media_type in (MediaTypes.GAME.value, MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+        for media_type in activity_rows.ADAPTERS:
             patcher, counted = self.counted_adapter(media_type)
             with patcher:
                 self.summary(ALL_TIME)
                 self.summary(YEAR_2026, tab=BOOK)
-                self.assertEqual(counted.call_count, 0, media_type)
+                # A switched-on one runs once a request, however many sections ask.
+                expected = 2 if media_type in activity_rows.CALCULATED_TYPES else 0
+                self.assertEqual(counted.call_count, expected, media_type)
 
     def test_the_walk_builds_no_book_or_save_rows(self):
         """A Book's FieldTracker and thousands of saves were most of a Stats miss."""

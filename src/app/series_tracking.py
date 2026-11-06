@@ -291,6 +291,29 @@ def _closing_day(user, attempt, day):
     return day
 
 
+def _log_closing_day(user, attempt, day):
+    """Return a log's end, moving the attempt's start back to it when it's earlier.
+
+    A log can carry any date (decision 10): dated before the attempt's start, the start
+    moves to the log's date, in the same write as the end or the dates-ordered
+    constraint refuses. A log's date edited later brings the start back, no further than
+    where it was. Only a log finished since the start was kept in `pre_completion`
+    remembers it, so an old-shape log keeps its start unless this move changes it. The
+    phone's own date stays no earlier than the start and saves, as `_closing_day` keeps
+    it, because after a flight west today can be before them.
+    """
+    if day == _today(user):
+        return _closing_day(user, attempt, day)
+    snapshot = attempt.pre_completion or {}
+    original = date.fromisoformat(snapshot["start_date"]) if snapshot.get("start_date") else attempt.start_date
+    if original is None:
+        return day
+    if "start_date" not in snapshot and attempt.pre_completion is not None and day < original:
+        attempt.pre_completion = {**snapshot, "start_date": _date_string(original)}
+    attempt.start_date = min(original, day)
+    return day
+
+
 def _queue_statistics(user_id, day):
     transaction.on_commit(
         lambda: update_daily_statistics.delay(user_id=user_id, date_str=day.isoformat()),
@@ -953,17 +976,19 @@ def complete(
 
     fallback_place = row.progress
     if attempt:
-        day = _closing_day(user, attempt, day)
         attempt.pre_completion_status = attempt.status
         attempt.pre_completion = {
             "place": attempt.place,
             "progressed_on": _date_string(attempt.progressed_on),
+            # Decision 10 can move the start back to the log; deleting it restores this.
+            "start_date": _date_string(attempt.start_date),
             "row_score": str(row.score) if row.score is not None else None,
             "rating_source_id": row.rating_source_id,
             "title_liked": MediaLike.objects.filter(user=user, item=item).exists(),
             "like_source_id": row.like_source_id,
             "like_is_independent": row.like_is_independent,
         }
+        day = _log_closing_day(user, attempt, day)
         fallback_place = attempt.place
     else:
         attempt = _begin(
@@ -1006,6 +1031,7 @@ def complete(
     attempt.save(
         update_fields=[
             "status",
+            "start_date",
             "end_date",
             "place",
             "pre_completion_status",
@@ -1053,9 +1079,9 @@ def update_completion(entry, data, *, tags=UNSET):
     if "consumed_at" in data:
         day = _user_day(entry.user, data["consumed_at"])
         if attempt:
-            day = _closing_day(entry.user, attempt, day)
+            day = _log_closing_day(entry.user, attempt, day)
             attempt.end_date = day
-            attempt.save(update_fields=["end_date"])
+            attempt.save(update_fields=["start_date", "end_date", "pre_completion"])
             if entry.consumed_at != _carrier(day):
                 _move_log_rise(row, attempt, day, entry.user)
         entry.consumed_at = _carrier(day)
@@ -1075,8 +1101,9 @@ def update_completion(entry, data, *, tags=UNSET):
     if row:
         row_fields = []
         if attempt and row.current_attempt_id == attempt.pk and "consumed_at" in data:
+            row.start_date = _carrier(attempt.start_date)
             row.end_date = entry.consumed_at
-            row_fields.append("end_date")
+            row_fields.extend(["start_date", "end_date"])
         if "rating" in data:
             if rating_is_source:
                 row.score = entry.rating
@@ -1226,6 +1253,9 @@ def delete_completion(user, entry):
         attempt.place = snapshot.get("place", attempt.place)
         progressed_on = snapshot.get("progressed_on")
         attempt.progressed_on = date.fromisoformat(progressed_on) if progressed_on else None
+        if "start_date" in snapshot:
+            # Only a log that kept it can say where its read began (decision 10).
+            attempt.start_date = date.fromisoformat(snapshot["start_date"]) if snapshot["start_date"] else None
         attempt.end_date = None
         attempt.completion_diary_entry = None
         attempt.completion_mutation_id = None
@@ -1305,6 +1335,10 @@ def update_journey(user, item, journey_id, *, start_date=UNSET, end_date=UNSET):
             raise ValidationError("A start date can't follow the end date.")
         attempt.start_date = day
         fields.append("start_date")
+        if "start_date" in (attempt.pre_completion or {}):
+            # A start set by hand is where the read began, whatever the log moved.
+            attempt.pre_completion = {**attempt.pre_completion, "start_date": _date_string(day)}
+            fields.append("pre_completion")
         if day:
             # A hand edit of a start is the person saying when it began, so it's first
             # activity too (decision 10), where a log's own move isn't.
