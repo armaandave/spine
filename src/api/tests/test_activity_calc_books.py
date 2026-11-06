@@ -36,6 +36,7 @@ from app.models import (
     Book,
     BookSession,
     DiaryEntry,
+    Item,
     ItemCredit,
     ItemFilterFacet,
     MediaTypes,
@@ -1920,6 +1921,29 @@ class MovedViewingTests(BookCalcBase):
         viewing = self.viewing(self.season, self.episode, kind="fill")
         self.assertEqual(list(build_scope(self.owner, self.owner, ALL_TIME).dated_viewings), [])
         self.assertEqual(list(self.scope(ALL_TIME, {viewing.pk: d(2025, 12, 20)}).dated_viewings), [viewing])
+
+
+class FirstSeenTests(BookCalcBase):
+    """A calculated type's progress dates its title, as it counts it (STAT-213)."""
+
+    def test_progress_with_no_log_dates_its_title_in_every_calculated_type(self):
+        from app import game_tracking
+
+        book = self.book("read")
+        self.do(book_tracking.start, book, d(2026, 3, 1))
+        self.do(book_tracking.update_progress, book, d(2026, 3, 2), progress_type="pages", value=50)
+        manga = self.item(MediaTypes.MANGA.value, "manga", title="manga")
+        self.do(series_tracking.start, manga, d(2026, 3, 1))
+        self.do(series_tracking.update_progress, manga, d(2026, 3, 2), value=5)
+        game = self.item(MediaTypes.GAME.value, "game", title="game")
+        self.do(game_tracking.start, game, d(2026, 3, 1))
+        self.do(game_tracking.update_progress, game, d(2026, 3, 2), total_minutes=60)
+        for item in (book, manga, game):
+            with self.subTest(media_type=item.media_type):
+                scope = build_scope(self.owner, self.owner, {**YEAR_2026, "media_type": item.media_type})
+                in_2026 = Item.objects.filter(id__in=scope.dated_title_ids(d(2026, 1, 1), d(2026, 12, 31)))
+                before = Item.objects.filter(id__in=scope.dated_title_ids(None, d(2025, 12, 31)))
+                self.assertEqual((item in in_2026, item in before), (True, False))
 
 
 class AdapterCostTests(BookCalcBase):
