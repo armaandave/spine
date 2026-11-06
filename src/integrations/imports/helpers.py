@@ -374,13 +374,16 @@ def _dated_plays(rows, user, source):
 def _import_plays(user, latest, plays, model, source, warnings):
     """Log a title's dated plays, except on a day it's logged already, and return its tracking."""
     item = latest.item
-    if not model.objects.filter(user=user, item=item).exists():
-        # Created as a log would create it, so its first history row keeps the file's date.
-        tracking = model(user=user, item=item, status=app.models.Status.COMPLETED.value, progress=1)
+    tracking = model.objects.filter(user=user, item=item).first() or model(user=user, item=item)
+    if tracking.pk is None or tracking.status != app.models.Status.COMPLETED.value:
+        # Completed as a log leaves it, even when every play is logged already, with the
+        # file's date on that history row.
+        tracking.status = app.models.Status.COMPLETED.value
+        tracking.progress = 1
         history_date = getattr(latest, "_history_date", None)
         if history_date is not None:
             tracking._history_date = history_date  # noqa: SLF001
-        tracking.save(force_insert=True)
+        tracking.save()
     logs = [
         {
             "consumed_at": day,
