@@ -83,6 +83,7 @@ from app.tv_tracking import (
     _mutation_uuid,
     _parse_log_day,
     _raw_delete,
+    _record_status_move,
     _set_like_row,
     _set_rating_activity,
     _short_date,
@@ -1561,40 +1562,8 @@ def _do_choose(ctx, status, *, quiet=False):
     ctx.set_row(**values)
     ctx.changed = True
     ctx.may_start = status == WATCHING
-    _record_status_move(ctx, status)
+    _record_status_move(ctx, status, ctx.item)
     return {"changed": True}
-
-
-def _record_status_move(ctx, status):
-    """Record the person choosing Paused, Dropped or picking the title back up (AN-703).
-
-    As TV-703: a title never started has nothing to stop or pick back up, a tick that
-    ends a pause is just the tick, and webhooks, imports and jobs choose nothing here. It
-    adds nothing to any number (activity contract AC-1).
-    """
-    from social.models import ProgressChange  # noqa: PLC0415
-
-    if ctx.entry_point not in (APP, LEGACY_APP, WEB) or status == ctx.status_before:
-        return
-    if status == PAUSED:
-        move = ProgressChange.PAUSED
-    elif status == DROPPED:
-        move = ProgressChange.STOPPED
-    elif status == WATCHING and ctx.status_before in (PAUSED, DROPPED):
-        move = ProgressChange.PICKED_BACK_UP
-    else:
-        return
-    started = (
-        bool(ctx.facts.logs)
-        or any(viewing.kind != FILL for viewing in ctx.facts.viewings)
-        or ProgressChange.objects.filter(
-            actor=ctx.user,
-            item=ctx.item,
-            current_progress__kind=ProgressChange.START,
-        ).exists()
-    )
-    if started:
-        ProgressChange.record_status(ctx.user, ctx.item, move)
 
 
 def choose(user, item, status, *, entry_point=APP, mutation_id=None):
