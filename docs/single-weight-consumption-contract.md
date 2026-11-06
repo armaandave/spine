@@ -493,6 +493,10 @@ When the source omits it, Spine derives the default by processing rows in
 consumption-date and source order under SW-010. Prior local diary history and
 direct consumption count as prior consumption when deriving the value.
 
+A Letterboxd row's blank Rewatch is a stated No, not an omission: only a real Yes
+saves a rewatch. A blank in `reviews.csv` never overwrites the same row's Yes in
+`diary.csv`. Rows already saved keep the value they were saved with.
+
 ### SW-504: Reimporting the same source record is idempotent
 
 Spine skips a diary row that it has already imported from the same identifiable
