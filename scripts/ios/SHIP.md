@@ -240,7 +240,11 @@ a mark or a stored number becomes an All Time title.
 **Before the phone test:** run `docker exec spine python manage.py compare_activity_numbers`
 again and read each account's `game`, `anime`, `manga` and `comic` lines, with count 13 (manga,
 comic and anime rows per account, plan 5.12), because anime shipped after Phase 1's count. Bring
-Armaan every difference on a real row before he tests.
+Armaan every difference on a real row before he tests. This run is on the deployed Phase 1
+code, and only it means anything for these four types: once this ship is deployed, their
+`titles` and `active_days` columns read the calculation on both sides, so a run after the
+deploy agrees with itself there. Don't rerun it then and read those as agreement; only `value`,
+`known` and `total` still come from the old counters.
 
 **The phone test comes first.** Serve the branch with `scripts/ios/test-backend.sh use 12`, then
 run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 2 sheet.
