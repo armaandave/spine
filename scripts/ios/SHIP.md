@@ -200,6 +200,9 @@ which installed builds decode and never show as numbers:
 - A Letterboxd file's blank Rewatch now saves No (decision 57). Logs already saved keep theirs.
 - A dated film or album play in a Yamtrack or Simkl file now imports as a log on its date
   (decision 47). IMDb rows stay undated marks.
+- An imported play with no Rewatch value (Trakt, Yamtrack, Simkl) is a rewatch only after a
+  log on its day or before, not after a later one (decision 38), and a Trakt film play lands
+  on its owner's day, not the UTC date. Logs already saved keep theirs.
 - `known` and `total` stay episodes on TV, watches on movies and listens on music, and a marked
   film or album whose first log has Rewatch on now counts as a second watch or listen.
 
@@ -231,16 +234,18 @@ throwaway Postgres, under 1.5 seconds and under 2 times today's.
 run `scripts/ios/seed-activity-checkpoint.sh seed` and work through the plan's Phase 3 sheet.
 `add-t4` and `add-t6` are its two Mac steps.
 
-**Each step below waits for the user's request; the ship request doesn't cover it.** The ship
-message (step 5) names it as waiting. Armaan's yes is on record (decision 49), and that yes is
-the request, so it runs after the deploy unless he says stop to the message below.
+**Only these read-only steps run without asking, after the deploy; nothing below writes.** The
+ship message (step 5) names them. Armaan's yes is on record (decision 49), and that yes is the
+request for these two looks, unless he says stop to the message below. It is never a request
+for `old-eye-taps --apply`: that needs his own yes, given after he has seen the dry run.
 
-1. **Old eye taps,** after the deploy is verified (step 8):
+1. **Old eye taps, dry run only,** after the deploy is verified (step 8):
    `scripts/activity-steps-production.sh old-eye-taps` prints each account's taps and
-   episodes, per year with minutes. **Expect 0:** count 11 found every non-fill viewing on
-   every account to be a tick (account 1's 21, account 5's 22, account 6's 14). If it finds
-   none, the step is done: say so in the ship report. If it finds any, don't run `--apply`:
-   bring him the dry run, since it disagrees with count 11.
+   episodes, per year with minutes, and changes nothing. **Expect 0:** count 11 found every
+   non-fill viewing on every account to be a tick (account 1's 21, account 5's 22, account
+   6's 14). If it finds none, the step is done: say so in the ship report. Any other number
+   stops the ship here, even 17 or fewer: never run `--apply`, and bring him the dry run,
+   since it disagrees with count 11.
 2. **The closing look,** after step 1: `docker exec spine python manage.py
    compare_activity_numbers`. Read each account's `tv`, `movie` and `music` lines: `value`,
    `known` and `total` are the old counters beside the calculation, on the same live lengths.
