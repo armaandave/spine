@@ -10,14 +10,15 @@ A tap is 2 or more episodes of one season of one show, with no log of their own,
 before the TV repair (the earliest fill's moment, when the new code first wrote one), all
 within 2 seconds, with nothing of another show in that window: imported plays sharing a
 moment are real dates. When the account's quick watch date isn't Release Date, the group
-must also share one end_date, which that writer stamped; a group that doesn't stays a
-tick. On a Release Date account each episode had its own end_date, so the group must sit
+must also share one end_date, which that writer stamped as the minute it saved; a group
+that doesn't, or whose end_date isn't its save's moment, as a date-only import's isn't,
+stays a tick. On a Release Date account each episode had its own end_date, so the group must sit
 within 50 milliseconds instead, as one bulk insert does: two quick taps are further apart.
 A group saved within a minute after a season or show log covering it is that old
 website log's own episodes, and stays: decision 43 dates it by its log.
 
 For each tap it writes kind fill with no watched_on and no end_date, removes the show's
-start row on the tap's day, works the show out again with no network so its last
+start row on the tap's day unless a tick or log of the show is left on that day, works the show out again with no network so its last
 watched day drops the tap, and bumps the owner's Stats. A later reconcile leaves a fill
 undated, so a second run finds nothing.
 
@@ -39,7 +40,7 @@ from django.db.models import Min, Q
 
 from api.services import progress_posts, stats_cache
 from app import tv_tracking, user_calendar
-from app.models import TV, DiaryEntry, Episode, MediaTypes
+from app.models import TV, DiaryEntry, Episode, Item, MediaTypes
 from social.models import ProgressChange
 from users.models import QuickWatchDateChoices
 
@@ -47,6 +48,7 @@ WINDOW = timedelta(seconds=2)
 BULK = timedelta(milliseconds=50)
 EXPECTED = 17
 LOG_SAVE = timedelta(seconds=60)
+STAMP = timedelta(minutes=2)
 FILL = Episode.Kind.FILL.value
 
 
@@ -131,7 +133,7 @@ def tap_groups(user, repair):
         for group in by_season.values():
             if len({viewing.episode for viewing in group}) < 2:
                 continue
-            if not release_date and len({viewing.end_date for viewing in group}) > 1:
+            if not release_date and (len({viewing.end_date for viewing in group}) > 1 or not _stamped(group)):
                 continue
             if release_date and group[-1].created_at - group[0].created_at > BULK:
                 continue
@@ -139,6 +141,33 @@ def tap_groups(user, repair):
                 continue
             groups.append(group)
     return groups
+
+
+def _stamped(group):
+    """Return whether each end_date is its save's moment, as the old eye stamped it.
+
+    The old eye wrote the minute it saved, so a date-only import's shared date isn't one.
+    """
+    return all(
+        viewing.end_date is None or timedelta(0) <= viewing.created_at - viewing.end_date <= STAMP
+        for viewing in group
+    )
+
+
+def _still_watched(user, show_id, days):
+    """Return the days in `days` the show still has a viewing or a log on, after the taps go."""
+    show = Item.objects.get(pk=show_id)
+    found = set()
+    for viewing in Episode.objects.filter(related_season__user=user, related_season__related_tv__item_id=show_id).exclude(kind=FILL):
+        found.add(_day(viewing, user))
+    for consumed_at in DiaryEntry.objects.filter(
+        user=user,
+        item__source=show.source,
+        item__media_id=show.media_id,
+        item__media_type__in=(MediaTypes.TV.value, MediaTypes.SEASON.value),
+    ).values_list("consumed_at", flat=True):
+        found.add(user_calendar.day_of(consumed_at, user))
+    return found & days
 
 
 def _day(viewing, user):
@@ -211,12 +240,14 @@ class Command(BaseCommand):
             Episode.objects.filter(pk__in=viewing_ids).update(kind=FILL, watched_on=None, end_date=None)
             show_id = group[0].show_id
             days = {_day(viewing, user) for viewing in group} | {user_calendar.day_of(viewing.created_at, user) for viewing in group}
+            # A tick or log of the show on that day may have written the start: it stays.
+            kept = _still_watched(user, show_id, days)
             starts = [
                 change
                 for change in ProgressChange.objects.filter(actor=user, item_id=show_id).filter(
                     Q(current_progress__kind=ProgressChange.START) | Q(current_progress__unit=ProgressChange.START),
                 )
-                if (change.saved_on or user_calendar.day_of(change.created_at, user)) in days
+                if (change.saved_on or user_calendar.day_of(change.created_at, user)) in days - kept
             ]
             for change in starts:
                 self.stdout.write(

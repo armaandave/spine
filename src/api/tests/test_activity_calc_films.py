@@ -137,7 +137,7 @@ class FilmTests(FilmCalcBase):
         self.watches(1, 2)
 
     def test_an_import_with_no_rewatch_value_dates_the_marked_watch(self):
-        """Trakt sends no Rewatch: its first play over a mark saves off, so it dates that watch."""
+        """Trakt sends no Rewatch: its first play over a mark saves off and dates it."""
         self.eye()
         rows = [
             {"source_id": "a", "consumed_at": date(2026, 2, 1), "is_rewatch": None},

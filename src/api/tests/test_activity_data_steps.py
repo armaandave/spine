@@ -734,6 +734,45 @@ class OldEyeTapsTests(StepBase):
         self.assertFalse(starts.exists())
         self.assertIsNone(TV.objects.get(user=self.owner, item=self.tapped).last_watched_on)
 
+    def test_a_real_tick_on_the_taps_day_keeps_the_start_row(self):
+        """The start came from the morning's tick, which stays, so the start stays."""
+        with self.on(d(2025, 3, 1), at="09:00"):
+            tv_tracking.tick(self.owner, self.tapped, 1, 1)
+        with self.on(d(2025, 3, 1), at="20:00"):
+            for number in (2, 3):
+                tv_tracking.tick(self.owner, self.tapped, 1, number)
+        self.repair()
+        starts = ProgressChange.objects.filter(actor=self.owner, item=self.tapped, current_progress__kind="start")
+        self.assertEqual(starts.count(), 1)
+        _out, err = self.step()
+        self.assertIn("1 taps, 2 episodes (2025: 2 = 90 min)", err)
+        self.step(apply=True)
+        self.assertEqual(
+            self.kinds(self.tapped),
+            [(Episode.Kind.TICK, d(2025, 3, 1)), (Episode.Kind.FILL, None), (Episode.Kind.FILL, None)],
+        )
+        self.assertEqual(starts.count(), 1)
+
+    def test_a_date_only_import_of_one_season_stays_dated(self):
+        """The old eye stamped the minute it saved; an import's date isn't that."""
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2)
+        Episode.objects.filter(related_season__related_tv__item=self.tapped).update(
+            end_date=datetime(2023, 5, 1, tzinfo=UTC), watched_on=d(2023, 5, 1),
+        )
+        self.repair()
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def test_a_log_on_the_taps_day_keeps_the_start_row(self):
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        DiaryEntry.objects.create(user=self.owner, item=self.tapped, consumed_at=datetime(2025, 3, 1, 17, tzinfo=UTC))
+        self.repair()
+        starts = ProgressChange.objects.filter(actor=self.owner, item=self.tapped, current_progress__kind="start")
+        self.assertEqual(starts.count(), 1)
+        self.step(apply=True)
+        self.assertEqual(starts.count(), 1)
+
     def test_a_single_tick_a_shared_window_and_an_old_logs_own_episodes_stay(self):
         self.tap(self.tapped, d(2025, 3, 1), 1)
         other, logged = self.show(), self.show()
