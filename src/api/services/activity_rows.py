@@ -302,6 +302,10 @@ class Title:
             row = self._day(amount.day)
             row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
         if unit == PERCENT:
+            # A game's hours and percent are apart (GM-100): a day with its hours told
+            # is known. A book's percent is the same place as its pages, so it isn't.
+            if row.told_unit == MINUTE:
+                return
             row.known = False
             # A row tells one unit (AC-2), and an amount wins over a percent.
             if row.told_unit not in ("", PERCENT):
@@ -309,6 +313,8 @@ class Title:
         else:
             if row.told_unit == PERCENT:
                 row.told = ZERO
+                if unit == MINUTE:
+                    row.known = True
             if self.unit == EPISODE:
                 row.amount += amount.value * (self.length or 0)
                 row.known = row.known and bool(self.length)

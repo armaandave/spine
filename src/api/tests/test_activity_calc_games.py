@@ -8,8 +8,11 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
+from rest_framework.test import APIClient
+
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
+from api.tests.test_stats_v2_activity import YEAR_2026, time_row
 from app import game_tracking
 from app.models import DiaryEntry, Game, GameSession, MediaTypes, Status
 from social.models import ProgressChange
@@ -143,7 +146,7 @@ class GameStoriesTests(GameCalcBase):
         self.assertEqual((row.counts_title, row.known, row.told_unit), (True, False, "percent"))
 
     def test_playtime_and_a_percent_on_one_day_tell_the_playtime(self):
-        """AC-2 for either order, and the percent is unknown as on any other day."""
+        """AC-2 for either order: that day's hours are told, so the day is known (decision 20)."""
         hours_first = self.game("hours-first")
         self.begin(hours_first, d(2026, 2, 1))
         self.save(hours_first, h(5), d(2026, 2, 2))
@@ -155,7 +158,42 @@ class GameStoriesTests(GameCalcBase):
         for item in (hours_first, percent_first):
             with self.subTest(item=item.title):
                 row = next(row for row in self.calc().rows if row.title_id == item.pk and row.told)
-                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (h(5), "minute", h(5), False))
+                self.assertEqual((row.told, row.told_unit, row.amount, row.known), (h(5), "minute", h(5), True))
+
+    def test_a_log_with_hours_and_a_percent_is_known(self):
+        """GM-310's 40 hours and 65 percent: the hours are its length."""
+        item = self.game("both")
+        self.begin(item, d(2026, 2, 1))
+        _, entry = self.finish(item, d(2026, 2, 2), total_minutes=h(40), percentage=65)
+        row = next(row for row in self.calc().rows if row.log_id == entry.pk)
+        self.assertEqual((row.amount, row.known), (h(40), True))
+
+    def test_a_percent_on_a_day_with_no_hours_stays_unknown(self):
+        """That day's play has no hours, so the game's hours aren't all known."""
+        item = self.game("next-day")
+        self.begin(item, d(2026, 2, 1))
+        self.save(item, h(3), d(2026, 2, 2))
+        self.percent(item, 20, d(2026, 2, 3))
+        row = next(row for row in self.calc().rows if row.day == d(2026, 2, 3))
+        self.assertEqual((row.told_unit, row.known), ("percent", False))
+
+    def test_the_sheet_saving_hours_and_a_percent_together_counts_every_hour(self):
+        """Edit Playthrough sends both fields; the number says no note under 3 hours."""
+        item = self.game("together")
+        self.begin(item, d(2026, 2, 1))
+        playthrough = GameSession.objects.get(related_game__item=item)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        with self.on(d(2026, 2, 2)):
+            response = client.patch(
+                f"/api/v1/tracking/{item.source}/game/{item.media_id}/playthroughs/{playthrough.pk}/",
+                {"total_minutes": h(3), "percentage": 20, "progressed_on": "2026-02-02"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        with self.on(d(2026, 11, 5)):
+            row = time_row(self.summary(YEAR_2026, tab=GAME), GAME)
+        self.assertEqual((row["value"], row["known"], row["total"], row["approximate"]), (h(3), 1, 1, False))
 
     def test_steams_lifetime_never_adds(self):
         item = self.game()
