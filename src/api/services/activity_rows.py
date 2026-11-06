@@ -228,15 +228,15 @@ class Reading:
 class Title:
     """One person's rows on one title: one a day, each log beside them, and the pile."""
 
-    def __init__(self, actor_id, item, bucket, unit, *, length=None):
+    def __init__(self, actor_id, item_id, bucket, unit, *, length=None):
         """Start with nothing; `unit` is what its amounts are told in.
 
         With a `length`, each one told is worth that many in the tab's unit: an anime's
         episode, in minutes. Told units with no length are unknown and add no amount.
         """
         self.actor_id = actor_id
-        self.item_id = item.pk
-        self.title_key = f"item:{item.pk}"
+        self.item_id = item_id
+        self.title_key = f"item:{item_id}"
         self.bucket = bucket
         self.unit = unit
         self.length = length
@@ -591,7 +591,7 @@ def _read_before_mark(marked_at, recorded_id, current_id, journeys, by_journey):
 
 
 def _book_title(actor_id, item, book, sessions, saves, entries, zone, marked_at):
-    title = Title(actor_id, item, MediaTypes.BOOK.value, PAGE)
+    title = Title(actor_id, item.pk, MediaTypes.BOOK.value, PAGE)
     total = item.total_pages or None
     by_session = _walk_journeys(title, sessions, saves, total, zone, marked_at)
     # A log with no journey behind it is a whole read on its own date.
@@ -712,9 +712,11 @@ def _who_sees(owners, viewer):
     return sees
 
 
-def _logs_by_title(owners, media_type, only):
+def _logs_by_title(owners, media_type, only, *, with_item=True):
+    """Return each title's logs, with their Items unless `with_item` is False."""
+    entries = DiaryEntry.objects.filter(user__in=owners, item__media_type=media_type, **only).order_by("id")
     logs = defaultdict(list)
-    for entry in DiaryEntry.objects.filter(user__in=owners, item__media_type=media_type, **only).select_related("item").order_by("id"):
+    for entry in entries.select_related("item") if with_item else entries:
         logs[entry.user_id, entry.item_id].append(entry)
     return logs
 
@@ -780,8 +782,8 @@ def _settle_gap(reading, session, entry, day_of_log):
         reading.counted.move_to(total, None, None)
 
 
-def _game_title(actor_id, item, game, sessions, saves, entries, zone):
-    title = Title(actor_id, item, MediaTypes.GAME.value, MINUTE)
+def _game_title(actor_id, item_id, game, sessions, saves, entries, zone):
+    title = Title(actor_id, item_id, MediaTypes.GAME.value, MINUTE)
     for session in sessions:
         _walk_playthrough(title, session, saves.get(session.pk, []), zone)
     for entry in entries:
@@ -823,9 +825,7 @@ def _game_rows(result, owners, _viewer, titles, piles):
         .order_by("id")
     ):
         sessions[session.owner_id, session.title_id].append(session)
-    entries = defaultdict(list)
-    for entry in DiaryEntry.objects.filter(user__in=owners, item__media_type=MediaTypes.GAME.value, **only).order_by("id"):
-        entries[entry.user_id, entry.item_id].append(entry)
+    entries = _logs_by_title(owners, MediaTypes.GAME.value, only, with_item=False)
     games = {}
     for fields in Game.objects.filter(user__in=owners, legacy_archived=False, **only).values(
         "user_id",
@@ -836,11 +836,10 @@ def _game_rows(result, owners, _viewer, titles, piles):
         game = SimpleNamespace(**fields)
         games[game.user_id, game.item_id] = game
     keys = {*sessions, *entries, *games}
-    items = Item.objects.only("id").in_bulk({item_id for _actor_id, item_id in keys})
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
     for key in keys:
         actor_id, item_id = key
-        title = _game_title(actor_id, items[item_id], games.get(key), sessions[key], changes, entries[key], zones[actor_id])
+        title = _game_title(actor_id, item_id, games.get(key), sessions[key], changes, entries[key], zones[actor_id])
         _collect(result, title, piles=piles)
 
 
@@ -912,7 +911,7 @@ def _log_on_read(title, reading, entry, total, zone, sees):
 
 
 def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees, marked_at):  # noqa: C901, PLR0912, PLR0915
-    title = Title(actor_id, item, item.media_type, unit)
+    title = Title(actor_id, item.pk, item.media_type, unit)
     total = item.series_total or None
     marked = bool(row and row.completed_manually)
     reading = None
@@ -1057,7 +1056,7 @@ def _place_viewings(reading, viewings, live, sees, *, own):
 
 def _anime_title(actor_id, item, tracking_rows, viewings, logs, changes, zone, sees, *, own):
     """Fold one person's anime title into rows (AN-704)."""
-    title = Title(actor_id, item, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
+    title = Title(actor_id, item.pk, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
     for entry in logs:
         if sees(entry):
             title.add_log(entry, log_day(entry.consumed_at, zone), known=bool(tracking_rows and title.length))
