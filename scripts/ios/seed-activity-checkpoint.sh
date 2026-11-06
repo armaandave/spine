@@ -5,7 +5,7 @@
 #   scripts/ios/seed-activity-checkpoint.sh [seed|add-k-l|add-s|add-u|add-r|
 #                                            like-from-tokyo|friend-starts-over|print-rows|
 #                                            new-issue-c2|add-g6|add-g8|add-m4|add-q|
-#                                            add-game-2023]
+#                                            add-game-2023|add-t4|add-t6]
 #
 # Run it from the feature worktree the test backend is serving ("use"). It clears the dev
 # user's tracking, logs, saves, likes, comments, lists and follows, so it refuses to run

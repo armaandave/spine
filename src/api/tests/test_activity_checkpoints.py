@@ -813,6 +813,175 @@ class Phase2SheetTests(CheckpointBase):
         self.assertEqual((games["titles"], games["logs"], games["active_days"]), (0, 0, 1))
 
 
+TV_TAB = MediaTypes.TV.value
+MOVIE = MediaTypes.MOVIE.value
+MUSIC = MediaTypes.MUSIC.value
+
+
+class Phase3SheetTests(CheckpointBase):
+    """Phase 3's sheet: TV, movies and music, and anime's Rewatch switch, row by row."""
+
+    measure = Phase2SheetTests.measure
+    value = Phase2SheetTests.value
+    assert_type = Phase2SheetTests.assert_type
+    assert_type_adds_up = Phase2SheetTests.assert_type_adds_up
+    url = Phase2SheetTests.url
+    send = Phase2SheetTests.send
+    note = Phase2SheetTests.note
+    is_nothing_yet = Phase2SheetTests.is_nothing_yet
+
+    def tv_url(self, name, suffix=""):
+        return f"/api/v1/tracking/manual/tv/{seed.media_id(name)}/{suffix}"
+
+    def tv_action(self, name, action, **body):
+        body["mutation_id"] = str(uuid4())
+        return self.step(self.send, "post", self.tv_url(name, f"actions/{action}/"), body)
+
+    def tick(self, name, *numbers):
+        result = None
+        for number in numbers:
+            result = self.tv_action(name, "tick", season_number=1, episode_number=number)
+        return result
+
+    def tv_log(self, name, *, episode=None, day=TODAY, rewatch=None):
+        """Send the log screen's save: the switch as it opens sends no is_rewatch."""
+        ref = {
+            "source": "manual",
+            "media_type": MediaTypes.EPISODE.value if episode else MediaTypes.SEASON.value,
+            "media_id": seed.media_id(name),
+            "season_number": 1,
+            "episode_number": episode,
+        }
+        body = {"ref": ref, "consumed_at": day.isoformat(), "mutation_id": str(uuid4())}
+        if rewatch is not None:
+            body["is_rewatch"] = rewatch
+        return self.step(self.send, "post", "/api/v1/diary/", body, 201)["id"]
+
+    def log_of(self, media_type, name, *, rewatch):
+        """Send a film's or album's log as DiaryCreateView does: the switch is sent."""
+        ref = {"source": "manual", "media_type": media_type, "media_id": seed.media_id(name)}
+        body = {"ref": ref, "consumed_at": TODAY.isoformat(), "is_rewatch": rewatch}
+        return self.step(self.send, "post", "/api/v1/diary/", body, 201)["id"]
+
+    def flip(self, entry_id, *, on):
+        self.step(self.send, "patch", f"/api/v1/diary/{entry_id}/", {"is_rewatch": on})
+
+    def eye(self, media_type, name):
+        body = {"mutation_id": str(uuid4())}
+        self.step(self.send, "post", self.url(media_type, name, "actions/consume/"), body)
+
+    def is_rewatch(self, entry_id):
+        return DiaryEntry.objects.get(pk=entry_id).is_rewatch
+
+    def active_days(self, params, tab):
+        return self.stats(params, tab=tab)["header"]["active_days"]
+
+    def test_tv(self):  # noqa: PLR0915
+        self.assert_type(TV_TAB, h(10), None, h(10))
+        self.assertTrue(self.is_nothing_yet(YEAR_2026, TV_TAB))
+        again = self.tv_log("T1")
+        self.assertTrue(self.is_rewatch(again), "A season log exists, so the switch opens on")
+        self.assert_type(TV_TAB, h(10), h(10), h(20))
+        self.flip(again, on=False)
+        self.assert_type(TV_TAB, h(10), None, h(10))
+        self.assertEqual(self.active_days(YEAR_2026, TV_TAB), 1, "1 active day")
+        self.flip(again, on=True)
+        self.step(self.delete_log, again)
+        self.assert_type(TV_TAB, h(10), None, h(10))
+        self.assertTrue(self.is_nothing_yet(YEAR_2026, TV_TAB))
+        review = self.tv_log("T1", episode=2)
+        self.assertFalse(self.is_rewatch(review), "A review after a season log opens off")
+        self.assert_type(TV_TAB, h(10), None, h(10))
+        self.assertEqual(self.active_days(YEAR_2026, TV_TAB), 1)
+        self.tick("T2", 1, 2)
+        self.assert_type(TV_TAB, h(10), h(2), h(12))
+        self.tv_action("T3", "mark_watched", season_number=1)
+        self.assert_type(TV_TAB, h(10), h(2), h(16))
+        first = self.tv_log("T3", rewatch=False)
+        self.assert_type(TV_TAB, h(10), h(6), h(16))
+        second = self.tv_log("T3", rewatch=True)
+        self.assert_type(TV_TAB, h(10), h(10), h(20))
+        self.step(self.delete_log, second)
+        self.step(self.delete_log, first)
+        self.assert_type(TV_TAB, h(10), h(2), h(16))
+        self.step(seed.add_t4)
+        self.assert_type(TV_TAB, h(10), h(5), h(19))
+        backdated = self.tv_log("T4", day=date(2025, 12, 20))
+        self.assertFalse(self.is_rewatch(backdated))
+        self.assert_type(TV_TAB, h(15), h(2), h(21))
+        self.step(self.delete_log, backdated)
+        self.assert_type(TV_TAB, h(10), h(5), h(19))
+        self.tv_action("T5", "mark_watched", season_number=1)
+        self.assert_type(TV_TAB, h(10), h(5), h(21))
+        marked = self.tv_log("T5")
+        self.assertTrue(self.is_rewatch(marked), "Only marks under it, so it opens on")
+        self.assert_type(TV_TAB, h(10), h(7), h(23))
+        self.assertFalse(self.is_rewatch(self.tv_log("T5", episode=1)))
+        self.assert_type(TV_TAB, h(10), h(7), h(23))
+        self.step(seed.add_t6)
+        self.assert_type(TV_TAB, h(13), h(10), h(29))
+        finish = self.tv_log("T6")
+        self.assertTrue(self.is_rewatch(finish))
+        self.assert_type(TV_TAB, h(13), h(10), h(29))
+        self.tv_action("T7", "mark_up_to", season_number=1, episode_number=3)
+        self.assert_type(TV_TAB, h(13), h(10), h(32))
+        question = self.tick("T8", 3)["earlier_unwatched"]
+        self.tv_action("T8", "mark_earlier", **{"from": question["from"], "to": question["to"]})
+        self.assert_type(TV_TAB, h(13), h(11), h(35))
+
+    def test_movies(self):
+        self.assert_type(MOVIE, None, None, None)
+        self.eye(MOVIE, "F2")
+        self.assert_type(MOVIE, None, None, h(2))
+        entry = self.log_of(MOVIE, "F2", rewatch=True)
+        self.assert_type(MOVIE, None, h(2), h(4))
+        self.flip(entry, on=False)
+        self.assert_type(MOVIE, None, h(2), h(2))
+        self.step(self.delete_log, entry)
+        self.assert_type(MOVIE, None, None, h(2))
+        first = self.log_of(MOVIE, "F2", rewatch=False)
+        self.assert_type(MOVIE, None, h(2), h(2))
+        second = self.log_of(MOVIE, "F2", rewatch=True)
+        self.assert_type(MOVIE, None, h(4), h(4))
+        self.assertEqual(self.note(ALL_TIME, MOVIE), (2, 2), "2 watches, not 3")
+        self.step(self.delete_log, first)
+        self.assert_type(MOVIE, None, h(2), h(4))
+        self.step(self.delete_log, second)
+        self.assert_type(MOVIE, None, None, h(2))
+        self.log_of(MOVIE, "F", rewatch=False)
+        self.assert_type(MOVIE, None, h(2), h(4))
+
+    def test_music(self):
+        self.eye(MUSIC, "P")
+        self.assert_type(MUSIC, None, None, h(1))
+        entry = self.log_of(MUSIC, "P", rewatch=True)
+        self.assert_type(MUSIC, None, h(1), h(2))
+        self.flip(entry, on=False)
+        self.assert_type(MUSIC, None, h(1), h(1))
+        self.step(self.delete_log, entry)
+        self.assert_type(MUSIC, None, None, h(1))
+
+    def test_anime_logged_again_with_the_switch_as_it_opens(self):
+        """Decision 62: anime's switch counts as a TV season log's."""
+        body = {
+            "ref": {"source": "manual", "media_type": ANIME, "media_id": seed.media_id("AN")},
+            "consumed_at": TODAY.isoformat(),
+            "mutation_id": str(uuid4()),
+        }
+        entry = self.step(self.send, "post", "/api/v1/diary/", body, 201)["id"]
+        self.assertTrue(self.is_rewatch(entry))
+        self.assert_type(ANIME, None, 24 * seed.ANIME_MINUTES, 24 * seed.ANIME_MINUTES)
+        self.flip(entry, on=False)
+        self.assert_type(ANIME, None, 12 * seed.ANIME_MINUTES, 12 * seed.ANIME_MINUTES)
+        self.step(self.delete_log, entry)
+        self.assert_type(ANIME, None, 12 * seed.ANIME_MINUTES, 12 * seed.ANIME_MINUTES)
+
+
+@override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
+class Phase3SheetOnUTCTests(Phase3SheetTests):
+    """The test backend's settings resolve to UTC, so the phone test runs there."""
+
+
 @override_settings(TIME_ZONE="UTC", CACHES=LOCMEM, STATS_CACHE_ENABLED=True)
 class Phase2SheetOnUTCTests(Phase2SheetTests):
     """The test backend's settings resolve to UTC, so the phone test runs there."""
