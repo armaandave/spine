@@ -274,8 +274,10 @@ the request, so it runs after the deploy unless he says stop to the message belo
 
 1. **Old eye taps,** after the deploy is verified (step 8):
    `scripts/activity-steps-production.sh old-eye-taps` prints each account's taps and
-   episodes, per year with minutes (expected at most 17 episodes, all on account 1). Send him a
-   short message with those and what `--apply` will do. If it finds none, the step is done.
+   episodes, per year with minutes (expected at most 17 episodes, all on account 1). Compare
+   that count first: above 17, stop and bring him the dry run, since `--apply` refuses it.
+   Send him a short message with those and what `--apply` will do. If it finds none, the step
+   is done.
    Otherwise wait 10 minutes, then `scripts/activity-steps-production.sh old-eye-taps --apply`,
    and don't run it if he says stop. Those episodes become marks with no date: their year
    falls and All Time holds, and the show's start row on that day goes.

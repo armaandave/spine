@@ -8,14 +8,15 @@ lands on disk: the wrapper keeps old values from standard output.
 import io
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.db import connection
+from django.db.models import F
 from django.test import override_settings
 
 from api.services import stats_cache
@@ -35,6 +36,7 @@ from app.models import (
 )
 from app.tests.tv_fixtures import make_manual_show
 from social.models import ProgressChange
+from users.models import QuickWatchDateChoices
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "activity-steps"}}
 
@@ -760,3 +762,40 @@ class OldEyeTapsTests(StepBase):
         _out, err = self.step(apply=True)
         self.assertIn("0 episodes in all", err)
         self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def release_date_account(self):
+        self.owner.quick_watch_date = QuickWatchDateChoices.RELEASE_DATE
+        self.owner.save(update_fields=["quick_watch_date"])
+
+    def test_on_a_release_date_account_one_bulk_write_is_a_tap(self):
+        self.release_date_account()
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2, 3)
+        self.repair()
+        self.step(apply=True)
+        self.assertEqual(self.kinds(self.tapped), [(Episode.Kind.FILL, None)] * 3)
+
+    def test_on_a_release_date_account_two_quick_ticks_stay_ticks(self):
+        """Two taps half a second apart are real ticks, not one bulk write."""
+        self.release_date_account()
+        self.tap(self.tapped, d(2025, 3, 1), 1, 2)
+        Episode.objects.filter(related_season__related_tv__item=self.tapped, item__episode_number=2).update(
+            created_at=F("created_at") + timedelta(milliseconds=500),
+        )
+        self.repair()
+        _out, err = self.step(apply=True)
+        self.assertIn("0 episodes in all", err)
+        self.assertEqual({kind for kind, _day in self.kinds(self.tapped)}, {Episode.Kind.TICK})
+
+    def test_apply_refuses_more_episodes_than_expected(self):
+        shows = [self.show() for _ in range(6)]
+        for number, show in enumerate(shows, start=1):
+            self.tap(show, d(2025, 3, number), 1, 2, 3)
+        self.repair()
+        before = [self.kinds(show) for show in shows]
+        with self.assertRaisesMessage(CommandError, "18 episodes"):
+            self.step(apply=True)
+        self.assertEqual([self.kinds(show) for show in shows], before)
+        _out, err = self.step()
+        self.assertIn("18 episodes in all (expected at most 17)", err)
+        self.step(apply=True, max=18)
+        self.assertEqual({kind for show in shows for kind, _day in self.kinds(show)}, {Episode.Kind.FILL})

@@ -11,7 +11,9 @@ before the TV repair (the earliest fill's moment, when the new code first wrote 
 within 2 seconds, with nothing of another show in that window: imported plays sharing a
 moment are real dates. When the account's quick watch date isn't Release Date, the group
 must also share one end_date, which that writer stamped; a group that doesn't stays a
-tick. A group saved within a minute after a season or show log covering it is that old
+tick. On a Release Date account each episode had its own end_date, so the group must sit
+within 50 milliseconds instead, as one bulk insert does: two quick taps are further apart.
+A group saved within a minute after a season or show log covering it is that old
 website log's own episodes, and stays: decision 43 dates it by its log.
 
 For each tap it writes kind fill with no watched_on and no end_date, removes the show's
@@ -19,8 +21,9 @@ start row on the tap's day, works the show out again with no network so its last
 watched day drops the tap, and bumps the owner's Stats. A later reconcile leaves a fill
 undated, so a second run finds nothing.
 
-A dry run by default, printing counts per account and year. With --apply the old values
-go to standard output as JSON lines, for the host wrapper to keep outside the container
+A dry run by default, printing counts per account and year. --apply refuses when it finds
+more episodes than --max (17, what count 11 found), so a wider match stops for a look. With
+--apply the old values go to standard output as JSON lines, for the host wrapper to keep outside the container
 (scripts/activity-steps-production.sh); counts go to standard error.
 """
 
@@ -29,7 +32,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Min, Q
@@ -41,6 +44,8 @@ from social.models import ProgressChange
 from users.models import QuickWatchDateChoices
 
 WINDOW = timedelta(seconds=2)
+BULK = timedelta(milliseconds=50)
+EXPECTED = 17
 LOG_SAVE = timedelta(seconds=60)
 FILL = Episode.Kind.FILL.value
 
@@ -128,6 +133,8 @@ def tap_groups(user, repair):
                 continue
             if not release_date and len({viewing.end_date for viewing in group}) > 1:
                 continue
+            if release_date and group[-1].created_at - group[0].created_at > BULK:
+                continue
             if _own_save(group, logs):
                 continue
             groups.append(group)
@@ -156,16 +163,24 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--apply", action="store_true", help="Change the rows.")
+        parser.add_argument(
+            "--max",
+            type=int,
+            default=EXPECTED,
+            help=f"Refuse --apply above this many episodes (default {EXPECTED}).",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
         repair = repair_moment()
         self.stderr.write(f"old eye taps: the TV repair's first fill was saved {repair}")
         found = 0
+        taps = []
         for user in get_user_model().objects.order_by("pk"):
             groups = tap_groups(user, repair)
             if not groups:
                 continue
+            taps.append((user, groups))
             years = Counter()
             minutes = Counter()
             for group in groups:
@@ -177,11 +192,14 @@ class Command(BaseCommand):
             episodes = sum(len(group) for group in groups)
             found += episodes
             self.stderr.write(f"old eye taps: user {user.pk}: {len(groups)} taps, {episodes} episodes ({counted})")
-            if options["apply"]:
-                self._undate(user, groups)
-        self.stderr.write(f"old eye taps: {found} episodes in all (expected at most 17)")
+        self.stderr.write(f"old eye taps: {found} episodes in all (expected at most {EXPECTED})")
         if not options["apply"]:
             self.stderr.write("dry run: nothing changed")
+            return
+        if found > options["max"]:
+            raise CommandError(f"old eye taps: {found} episodes is more than {options['max']}; nothing changed")
+        for user, groups in taps:
+            self._undate(user, groups)
 
     def _undate(self, user, groups):
         shows = set()
