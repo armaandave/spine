@@ -770,7 +770,10 @@ def complete(
     session.completion_diary_entry = entry
     session.completion_mutation_id = mutation_id
     session.save()
-    _record_linked_changes(user, item, session, before, entry)
+    if not import_source:
+        # A file's log records no progress (AC-1, SW-500): its hours land on its date
+        # as the playthrough's total.
+        _record_linked_changes(user, item, session, before, entry)
     single_weight._replace_tags(entry, tags or [])
     if update_current:
         single_weight.couple_current_to_log(game, entry)

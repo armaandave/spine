@@ -512,6 +512,24 @@ class GameImportTests(GameCalcBase):
         self.assertEqual(self.number(pile=True), h(30))
         self.assertFalse(Game.objects.get(user=self.owner, item=item).completed_manually)
 
+    def test_an_import_writes_no_progress_and_its_log_counts_on_its_date(self):
+        """AC-1, SW-500: a file's log writes no change saved on the day it was imported."""
+        from app import game_imports
+
+        filed = self.game("filed")
+        self.import_row(filed, end_date=datetime(2025, 6, 1, tzinfo=UTC), progress=h(30))
+        direct = self.game("direct")
+        with self.on(d(2026, 10, 20)):
+            game_imports.import_logs(
+                self.owner,
+                direct,
+                [{"consumed_at": d(2025, 7, 1), "source_id": "one", "total_minutes": h(5), "percentage": 80}],
+                source="hltb",
+            )
+        self.assertFalse(ProgressChange.objects.filter(actor=self.owner).exists())
+        self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), h(35))
+        self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 0)
+
     def test_the_same_file_twice_adds_nothing(self):
         item = self.game("twice")
         for _ in range(2):
