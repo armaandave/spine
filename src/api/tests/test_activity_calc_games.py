@@ -6,6 +6,8 @@ functions under a pinned clock on a New York server.
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 from uuid import uuid4
 
 from rest_framework.test import APIClient
@@ -13,8 +15,11 @@ from rest_framework.test import APIClient
 from api.services.activity_rows import list_rows, piled, rows_for
 from api.tests.test_activity_calc_books import BookCalcBase, d
 from api.tests.test_stats_v2_activity import YEAR_2026, time_row
+from api.tests.test_stats_v2_shape import ALL_TIME
 from app import game_tracking
 from app.models import DiaryEntry, Game, GameSession, MediaTypes, Status
+from integrations import exports
+from integrations.imports import yamtrack
 from social.models import ProgressChange
 
 GAME = MediaTypes.GAME.value
@@ -470,6 +475,39 @@ class GameImportTests(GameCalcBase):
         self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
         self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), 0)
         self.assertEqual(self.lines(), [])
+
+    def legacy_mark_file(self, item):
+        """Mark a game finished as 0078 leaves an old one, with its date and hours; export it."""
+        with self.on(d(2026, 1, 10)):
+            game_tracking.mark_completed(self.owner, item)
+        Game.objects.filter(user=self.owner, item=item).update(end_date=datetime(2026, 3, 1, 5, tzinfo=UTC), progress=h(10))
+        self.assertTrue(Game.objects.get(user=self.owner, item=item).completed_manually)
+        return "".join(exports.generate_rows(self.owner)).encode()
+
+    def from_file(self, payload, mode):
+        with self.on(d(2026, 10, 20)), patch("app.models.Item.fetch_releases"), patch("app.signals.update_daily_statistics.delay"):
+            yamtrack.importer(BytesIO(payload), self.owner, mode)
+
+    def numbers_and_days(self):
+        year = self.summary(YEAR_2026, tab=GAME)
+        row = time_row(year, GAME)
+        all_time = self.summary(ALL_TIME, tab=GAME)
+        return (row and row["value"], year["header"]["active_days"], time_row(all_time, GAME)["value"], all_time["header"]["active_days"])
+
+    def test_spines_own_file_brings_a_marked_game_back_as_a_mark(self):
+        """A mark is never activity: its date and hours stay out of 2026, whichever mode."""
+        for mode in ("new", "overwrite"):
+            with self.subTest(mode=mode):
+                item = self.game(f"legacy-{mode}")
+                payload = self.legacy_mark_file(item)
+                before = self.numbers_and_days()
+                if mode == "new":
+                    Game.objects.filter(user=self.owner, item=item).delete()
+                self.from_file(payload, mode)
+                self.assertFalse(DiaryEntry.objects.filter(user=self.owner, item=item).exists())
+                self.assertTrue(Game.objects.get(user=self.owner, item=item).completed_manually)
+                self.assertEqual(self.numbers_and_days(), before)
+                Game.objects.filter(user=self.owner, item=item).delete()
 
     def test_an_undated_finished_row_stays_a_mark(self):
         item = self.game("undated")
