@@ -147,6 +147,30 @@ final class StatsSectionsRankingTests: XCTestCase {
         XCTAssertEqual(StatsHeaderSection.counts(for: header, mediaType: "game", time: time)[2].label, "Active days")
     }
 
+    func testTheMeasureCarriesItsNoteAndATabWithNoneFootnotesIt() {
+        let header = StatsHeader(titles: 5, logs: 0, activeDays: 6, longestDailyStreak: 2, details: [])
+        let books = StatsTime(rows: [StatsTimeRow(mediaType: "book", unit: "pages", value: 360, known: 4, total: 5, approximate: false)], hoursTotal: nil)
+        let measure = StatsHeaderSection.counts(for: header, mediaType: "book", time: books)[2]
+        XCTAssertEqual(measure.label, "Pages")
+        XCTAssertEqual(measure.value, 360)
+        XCTAssertEqual(measure.note, "Based on 4 of 5 books")
+        XCTAssertNil(StatsHeaderSection.countsFootnote(header, mediaType: "book", time: books), "The note sits under its number")
+
+        // A percent with no page count: no measure, so Active days keeps the slot and the
+        // note goes under the card.
+        let percent = StatsTime(rows: [StatsTimeRow(mediaType: "book", unit: "pages", value: 0, known: 0, total: 1, approximate: false)], hoursTotal: nil)
+        XCTAssertEqual(StatsHeaderSection.counts(for: header, mediaType: "book", time: percent)[2].label, "Active days")
+        XCTAssertEqual(StatsHeaderSection.countsFootnote(header, mediaType: "book", time: percent), "Based on 0 of 1 book")
+        XCTAssertNil(StatsHeaderSection.countsFootnote(header, mediaType: nil, time: percent), "Global's Time rows carry theirs")
+
+        let known = StatsTime(rows: [Self.timeRow("book", "pages", 360)], hoursTotal: nil)
+        XCTAssertNil(StatsHeaderSection.counts(for: header, mediaType: "book", time: known)[2].note)
+    }
+
+    func testTheFilteredDiarySaysWhatItCantList() {
+        XCTAssertEqual(FilteredDiaryView.emptyMessage, "Titles in progress, or marked as done, aren't listed here.")
+    }
+
     func testActiveDaysMovesIntoTheDetailsWhenTheMeasureTakesItsPlace() {
         let header = StatsHeader(titles: 40, logs: 52, activeDays: 31, longestDailyStreak: 4, details: [
             StatsHeaderDetail(key: "rewatches", label: "Rewatches", value: 3, unit: nil, approximate: false),

@@ -59,16 +59,17 @@ struct StatsTimeSection: View {
     private func typeRow(_ row: StatsTimeRow, isLast: Bool) -> some View {
         let label = MediaTypeTheme.theme(for: row.mediaType).displayName
         let value = Self.value(for: row)
+        let note = StatsChartCopy.lengthNote(row)
         if mediaType == nil, let onSelectMediaType {
             Button {
                 onSelectMediaType(row.mediaType)
             } label: {
-                StatsLabelValueRow(label: label, value: value, showsChevron: true, showsSeparator: !isLast)
+                StatsLabelValueRow(label: label, value: value, showsChevron: true, showsSeparator: !isLast, note: note)
             }
             .buttonStyle(DiaryRowButtonStyle())
             .accessibilityHint("Shows \(label) stats")
         } else {
-            StatsLabelValueRow(label: label, value: value, showsSeparator: !isLast)
+            StatsLabelValueRow(label: label, value: value, showsSeparator: !isLast, note: note)
         }
     }
 
