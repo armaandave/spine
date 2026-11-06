@@ -287,7 +287,7 @@ def _bulk_create_media(bulk_media_list, user, source, warnings):
             continue
 
         if media_type == MediaTypes.GAME.value:
-            _import_game_rows(bulk_media, user, source)
+            _import_game_rows(bulk_media, user, source, warnings)
             continue
 
         if media_type == MediaTypes.BOOK.value:
@@ -425,7 +425,7 @@ def _read_day(row, user):
     return day if day <= user_calendar.today(user) else None
 
 
-def _import_game_rows(rows, user, source):
+def _import_game_rows(rows, user, source, warnings):
     """Reconcile explicit imported game states without deleting playthroughs.
 
     A finished row with a real date is a play on that date: it becomes a log, with an
@@ -443,7 +443,7 @@ def _import_game_rows(rows, user, source):
             log = {
                 "consumed_at": day,
                 "source_id": f"{row.item.source}:{row.item.media_id}:{day.isoformat()}",
-                "rating": row.score,
+                "rating": _log_rating(row, warnings),
                 "total_minutes": row.progress or None,
             }
             start = row.start_date and user_calendar.day_of(row.start_date, user)

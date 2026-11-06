@@ -530,6 +530,21 @@ class GameImportTests(GameCalcBase):
         self.assertEqual(self.number(start=d(2025, 1, 1), end=d(2025, 12, 31)), h(35))
         self.assertEqual(self.number(start=d(2026, 1, 1), end=d(2026, 12, 31)), 0)
 
+    def test_a_score_off_the_half_stars_rounds_and_warns_rather_than_stopping(self):
+        from integrations.imports.helpers import bulk_create_media
+
+        item = self.game("half")
+        warnings = []
+        with self.on(d(2026, 10, 20)):
+            bulk_create_media(
+                {GAME: [Game(user=self.owner, item=item, status=Status.COMPLETED.value, end_date=datetime(2025, 6, 1, tzinfo=UTC), score=Decimal("8.5"))]},
+                self.owner,
+                source="hltb",
+                warnings=warnings,
+            )
+        self.assertEqual([log.rating for log in DiaryEntry.objects.filter(user=self.owner, item=item)], [Decimal(9)])
+        self.assertEqual(len(warnings), 1)
+
     def test_the_same_file_twice_adds_nothing(self):
         item = self.game("twice")
         for _ in range(2):
