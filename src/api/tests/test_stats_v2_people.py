@@ -353,9 +353,12 @@ class PeopleSectionTests(PeopleBase):
                 self.log(season)
 
         def count_queries(scope):
+            """Return (the calculation's walk, People's own queries)."""
+            with CaptureQueriesContext(connection) as walk:
+                scope.calculation()
             with CaptureQueriesContext(connection) as queries:
                 people.build_people(scope)
-            return len(queries)
+            return len(walk), len(queries)
 
         seed(3)
         small = [count_queries(self.scope(tab, dates=dates)) for tab in ("movie", "tv") for dates in ((None, None), YEAR_2025)]
@@ -363,8 +366,9 @@ class PeopleSectionTests(PeopleBase):
         large = [count_queries(self.scope(tab, dates=dates)) for tab in ("movie", "tv") for dates in ((None, None), YEAR_2025)]
 
         # The calculation's walk, which every type reads since Phase 3, costs the same
-        # however many titles there are.
+        # however many titles there are; People adds one query per role of the tab.
         self.assertEqual(small, large)
+        self.assertEqual(small, [(33, 1)] * 4)
 
 
 class PeopleEndpointTests(PeopleBase):
