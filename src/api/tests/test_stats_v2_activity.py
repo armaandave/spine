@@ -622,11 +622,12 @@ class TimeTests(ActivityBase):
         self.session(game, total_minutes=None, end_date=date(2025, 6, 1))
         self.session(game, total_minutes=60, end_date=date(2024, 6, 1))
 
+        # Known and total count games: one, whose hours are known. A year is exact.
         year = time_row(self.summary(YEAR_2025, tab="game"), "game")
-        self.assertEqual((year["value"], year["known"], year["total"], year["approximate"]), (720, 2, 3, True))
+        self.assertEqual((year["value"], year["known"], year["total"], year["approximate"]), (720, 1, 1, False))
         all_time = time_row(self.summary(ALL_TIME, tab="game"), "game")
         # Steam's imported lifetime playtime is never added (GM-500).
-        self.assertEqual((all_time["value"], all_time["known"], all_time["total"], all_time["approximate"]), (780, 3, 4, False))
+        self.assertEqual((all_time["value"], all_time["known"], all_time["total"], all_time["approximate"]), (780, 1, 1, False))
 
     def test_imported_read_books_gain_pages_when_metadata_is_filled(self):
         novel = self.item(MediaTypes.BOOK.value, "imported-read")

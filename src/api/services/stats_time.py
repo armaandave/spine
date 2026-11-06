@@ -14,8 +14,10 @@ aggregates in SQL: one or two queries per type, whatever the size of the library
   between consecutive history rows of one tracking row, dated by ``history_date`` on the
   owner's calendar, the creation row never a change; in All Time, ``progress`` over
   every tracking row.
-- Games: ``GameSession.total_minutes`` on ``minutes_updated_on``, else ``end_date``.
-  Steam's imported lifetime playtime is never read (GM-500).
+- Games: the calculation's rows, plus its pile in All Time. ``_game_minutes`` still
+  counts them for the comparison: ``GameSession.total_minutes`` on
+  ``minutes_updated_on``, else ``end_date``. Steam's imported lifetime playtime is never
+  read (GM-500).
 - Books: the calculation's rows, plus its pile in All Time.
 
 ``_anime_runtime`` still counts anime viewings for the comparison: a tick on its day, a
