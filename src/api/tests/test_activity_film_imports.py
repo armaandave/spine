@@ -89,7 +89,7 @@ class YamtrackPlayTests(ImportBase):
         self.watches(2, 2)
 
     def test_a_dated_row_before_the_only_log_is_no_rewatch(self):
-        """Eye, a log off on Mar 1, then a file's older play: the first watch is the file's."""
+        """Eye, a log off on Mar 1, then a file's older play: that's the first watch."""
         self.eye()
         self.log(rewatch=False, day=date(2026, 3, 1))
         self.watches(1, 1)
@@ -130,7 +130,7 @@ class YamtrackAlbumPlayTests(YamtrackPlayTests):
 
 @override_settings(TIME_ZONE=NEW_YORK)
 class ImportedPlayOrderTests(ImportBase):
-    """A play with no Rewatch value is a rewatch only after an earlier log (decision 38).
+    """A play with no Rewatch is a rewatch only after an earlier log (decision 38).
 
     Trakt's film history comes in this way. A log on a later day doesn't make it one.
     """
@@ -166,7 +166,7 @@ class ImportedPlayOrderTests(ImportBase):
         self.assertEqual(self.rewatches(), [False, True])
 
     def test_an_old_logs_moment_is_read_on_the_owners_calendar(self):
-        """11:30 pm on Jan 10 in New York is Jan 11 in UTC; it's still the Jan 10 log."""
+        """11:30 pm on Jan 10 in New York is Jan 11 in UTC; it's still a Jan 10 log."""
         self.eye()
         DiaryEntry.objects.create(
             user=self.user,
