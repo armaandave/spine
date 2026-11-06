@@ -42,31 +42,6 @@ Reference: `spine-prd.md` (product direction; PRD still says web-first — iOS s
 
 ## 3) Repository layout
 
-```
-ios/
-├── AGENTS.md                 # this file
-├── Spine/
-│   ├── Spine.xcodeproj
-│   └── Spine/
-│       ├── App/
-│       │   └── SpineApp.swift
-    ├── Core/
-    │   ├── Models/           # Codable types — mirror API JSON shape
-    │   ├── Networking/       # APIClient, Endpoints, AuthTokenStore
-    │   ├── Design/           # colors, spacing, typography (optional)
-    │   └── Environment/      # AppEnvironment, AppConfig
-    ├── Features/
-    │   ├── Auth/
-    │   ├── Search/
-    │   ├── MediaDetail/
-    │   ├── Tracking/
-    │   ├── Diary/
-    │   ├── Profile/
-    │   ├── Lists/
-    │   └── Feed/             # after social API exists
-    └── Resources/
-```
-
 **Rules:**
 
 - Feature folders own their Views + ViewModels; shared types live in `Core/`.
@@ -79,26 +54,11 @@ ios/
 
 ### 4.1 Repository pattern (required)
 
-```swift
-protocol MediaRepository {
-    func search(query: String, mediaType: MediaType?) async throws -> [MediaSummary]
-    func detail(id: Int, mediaType: MediaType) async throws -> MediaDetail
-}
-
-struct APIMediaRepository: MediaRepository { ... }
-```
-
 - Views and ViewModels depend on **protocols**, not concrete API types.
 - Inject repositories via environment or initializer (avoid singletons except `AppEnvironment`).
 - Unit tests may use small in-test fakes; do not add app-shipped fake data layers.
 
 ### 4.2 App environment
-
-```swift
-enum AppEnvironment {
-    static var apiClient: APIClient { ... }
-}
-```
 
 - `AppRepositories.current()` always wires live API repositories.
 - API base URL comes from `AppConfig` / `SPINE_API_BASE_URL`.
@@ -119,7 +79,7 @@ enum AppEnvironment {
 
 ## 5) Backend contract (API)
 
-Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI lands.
+Design iOS models against the v1 API in the code: routes in `src/api/urls.py`, JSON shapes in `src/api/serializers/`.
 
 ### 5.1 Planned base URL
 
@@ -128,20 +88,6 @@ Design iOS models against the v1 contract; adjust when `docs/api/` or OpenAPI la
   - **Debug** is **Spine Dev** (`com.armaan.Spine.dev`, display name "Spine Dev", icon `AppIcon-Dev` with an orange DEV band). It installs next to Spine and **never talks to production**: it uses the launch environment's `SPINE_API_BASE_URL`, then the `SpineAPIBaseURL` Info.plist key (`ios/Spine/Configs/Info.plist`, from the `SPINE_API_BASE_URL` build setting, empty in Debug), then `AppConfig.localAPIBaseURL` (`http://127.0.0.1:8010`, the always-on test backend). A value naming production (its host, or port 8000 on this Mac) is ignored.
 - Test backend: `scripts/ios/test-backend.sh` keeps a backend running on this Mac at port 8010 (launchd, low priority, its own test database), serving `myapp-main`, or a branch for a few hours after `test-backend.sh use`. The Simulator reaches it as `http://127.0.0.1:8010` by default; on a phone, `scripts/ios/build-to-iphone.sh` bakes its `http://<Mac>.local:8010` address into the build (`scripts/ios/TEST_ON_IPHONE.md`). On the server Mac, `127.0.0.1:8000` is the production Docker stack, not a dev server.
 - Config via `Info.plist` or xcconfig — **never hardcode secrets**.
-
-### 5.2 v1 endpoints (target)
-
-
-| Area     | Methods                                      | Notes                          |
-| -------- | -------------------------------------------- | ------------------------------ |
-| Auth     | `POST /api/v1/auth/login`, refresh, register | JWT access + refresh           |
-| Search   | `GET /api/v1/media/search`                   | Query + `media_type`           |
-| Media    | `GET /api/v1/media/{type}/{id}`              | Metadata + user tracking state |
-| Tracking | `PUT /api/v1/tracking/{type}/{id}`           | Status, rating, progress       |
-| Diary    | CRUD `/api/v1/diary/`                        |                                |
-| Profile  | `GET/PATCH /api/v1/me/`                      |                                |
-| Lists    | CRUD `/api/v1/lists/`                        | after core tracking            |
-
 
 ### 5.3 Auth
 
@@ -223,22 +169,6 @@ Rules:
 ---
 
 ## 10) Getting started (human + agent)
-
-### Create the Xcode project (once)
-
-1. Xcode → New Project → iOS **App**
-2. Product Name: **Spine**, Interface: **SwiftUI**, Language: **Swift**
-3. Save into `**spine/ios/`** (creates `ios/Spine.xcodeproj`)
-4. Set bundle ID: e.g. `app.spine.ios` (placeholder until domain finalized)
-
-### First implementation order
-
-1. `AppEnvironment` + `APIClient` + `APIMediaRepository`
-2. `Core/Models` — `MediaType`, `MediaSummary`, `TrackingStatus`, `DiaryEntry`
-3. `Features/Search` — search UI against live API
-4. `Features/MediaDetail` — detail from API
-5. `Features/Diary` — list from API
-6. Tab shell + navigation
 
 ### Run
 
@@ -339,7 +269,7 @@ When adding an iOS feature that needs data:
 
 1. Check if Django already has the domain logic in `src/app/` or `src/users/`.
 2. If no API exists, **open a backend task** to add DRF endpoint — don’t call Django HTML views from iOS.
-3. Propose JSON shape in `docs/api/` (create when first endpoint is added) before locking Swift models.
+3. Settle the JSON shape before locking Swift models.
 
 Agent working **only on iOS** should note API gaps in the PR/summary, not silently invent undocumented endpoints.
 
