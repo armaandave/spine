@@ -154,6 +154,9 @@ class StatsScope:
         # The calculation's full result, shared with sibling scopes: one Global request
         # asks for it many times.
         self._calculations = {} if calculations is None else calculations
+        # The comparison reads the old counters as they read before any log moved a
+        # viewing (compare_activity_numbers).
+        self.ignore_moves = False
 
     # Who
 
@@ -349,7 +352,7 @@ class StatsScope:
         A mark's fill a Rewatch-off first log dates, and a tick a backdated log takes
         (decisions 38 and 43). Most watched and release ages read viewings by day.
         """
-        if media_type not in activity_rows.CALCULATED_TYPES:
+        if self.ignore_moves or media_type not in activity_rows.CALCULATED_TYPES:
             return {}
         return {
             viewing_id: day for (bucket, viewing_id), day in self.calculation().moved.items() if bucket == media_type

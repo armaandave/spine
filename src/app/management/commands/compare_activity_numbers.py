@@ -33,13 +33,15 @@ from api.services import stats_v2_activity as activity
 from api.services.stats_scope import StatsScope
 from api.services.stats_v2 import build_stats_v2
 from app import user_calendar
-from app.models import MediaTypes
-from social.models import Comment, ContentLike, ProgressChange, ProgressPost
+from app.models import Episode, MediaTypes
+from social.models import Comment, ContentLike, FollowStatus, ProgressChange, ProgressPost
 
 # The furthest any zone is from UTC, in hours: a viewer's day on a save's moment.
 ZONE_HOURS_AHEAD = 14
 ZONE_HOURS_BEHIND = 12
 POST_CLASSES = ("a", "b", "c", "d")
+# The rail's page, which the feed's first walk is timed against.
+FEED_PAGE = 24
 
 
 class Command(BaseCommand):
@@ -114,8 +116,26 @@ class Command(BaseCommand):
         stats_ms = self._guarded(f"user {user.pk} stats", _stats_ms, scope)
         stats = "failed" if stats_ms is None else f"{stats_ms:.0f}"
         self._say(f"user {user.pk}: walk_ms={walk_ms:.0f} walk_queries={len(queries)} stats_ms={stats}")
+        self._guarded(f"user {user.pk} feed", self._feed, user)
         for media_type in activity_rows.ADAPTERS:
             self._type(user, scope.with_media_type(media_type), media_type, calculation)
+
+    def _feed(self, user):
+        """Time Home's walk for one who follows anyone: the plan's gate before Phase 4."""
+        following = list(
+            get_user_model().objects.filter(
+                follower_edges__from_user=user,
+                follower_edges__status=FollowStatus.ACCEPTED,
+            ),
+        )
+        if not following:
+            return
+        started = time.perf_counter()
+        with CaptureQueriesContext(connection) as queries:
+            rows = activity_rows.rows_for(following, user, types=activity_rows.ADAPTERS, piles=False).rows
+            page = sorted(rows, key=lambda row: row.sort_key, reverse=True)[:FEED_PAGE]
+        feed_ms = (time.perf_counter() - started) * 1000
+        self._say(f"user {user.pk} feed: following={len(following)} rows={len(page)} feed_ms={feed_ms:.0f} feed_queries={len(queries)}")
 
     def _type(self, user, scope, media_type, calculation):
         rows = [row for row in calculation.rows if row.bucket == media_type]
@@ -142,7 +162,9 @@ class Command(BaseCommand):
                 counts=counts,
             )
 
-        today = stats_time._COUNTERS[media_type](scope, media_type)
+        before = scope._sibling()
+        before.ignore_moves = True
+        today = stats_time._COUNTERS[media_type](before, media_type)
         pile = activity_rows.piled(calculation.piles if scope.is_all_time else [], media_type)
         titles = listed(activity_rows.TITLES)
         title_ids = {row.title_id for row in titles} | pile.titles
@@ -222,6 +244,10 @@ def _old_counter_years(scope, media_type, zone):
     if media_type == MediaTypes.GAME.value:
         days = stats_time.scope_game_sessions(scope).annotate(stats_day=Coalesce("minutes_updated_on", "end_date"))
         return {day.year for day in days.values_list("stats_day", flat=True) if day}
+    if media_type == MediaTypes.TV.value:
+        # A tick a backdated log takes leaves its own year, and only that year shows it.
+        days = Episode.objects.filter(related_season__user=scope.owner, watched_on__isnull=False)
+        return {day.year for day in days.values_list("watched_on", flat=True)}
     if media_type in stats_time.PROGRESS_TYPES:
         model = apps.get_model("app", media_type)
         rows = model.history.model.objects.filter(id__in=model.objects.filter(user=scope.owner).values("id"))
