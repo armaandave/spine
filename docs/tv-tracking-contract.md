@@ -1027,6 +1027,8 @@ A one-time repair brings existing data under this contract:
 Statuses change where today's stored status disagrees with these laws.
 For example, shows with only logs appear in the Library, and empty "Started" seasons leave Home.
 
+The repair left the old eye's taps as dated ticks: before this contract the eye wrote a season's remaining episodes as viewings, in one bulk write, dated that day. A one-time step (`manage.py undate_old_eye_taps`, `scripts/activity-steps-production.sh old-eye-taps`; decision 49) turns them into a mark's fills, undated, so they leave their years and All Time holds (TV-301). A tap is 2 or more episodes of one season with no log of their own, saved before the repair's first fill, within 2 seconds, with no other show in that window, and sharing one end date unless the account's quick watch date is Release Date. Episodes an old website log wrote within a minute of itself stay ticks, and the show's start row on a tap's day goes with the tap. A tap that wrote a single episode can't be told from a tick, so it stays dated.
+
 ### TV-802: A webhook play isn't a watch
 
 Plex, Jellyfin and Emby events follow the app's rules:
