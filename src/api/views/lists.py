@@ -38,6 +38,7 @@ from api.serializers.lists import (
 )
 from api.services import completion as completion_service
 from api.services import filters as filter_service
+from api.services import list_browse
 from api.services import media as media_service
 from api.services.social import set_like
 from app import exposure
@@ -175,6 +176,7 @@ def list_payload(
         "visibility": custom_list.visibility,
         "is_ranked": custom_list.is_ranked,
         "list_type": custom_list.list_type,
+        "media_types": custom_list.media_types(),
         "owner": user_summary(custom_list.owner, request=request),
         "collaborators": [
             user_summary(user, request=request) for user in custom_list.collaborators.all()
@@ -497,6 +499,7 @@ class ListsView(APIView):
         query = request.query_params.get("q", "")
         if query:
             lists = lists.filter(Q(name__icontains=query) | Q(description__icontains=query))
+        lists = list_browse.apply(lists, request.query_params)
         return Response(
             {
                 "count": lists.count(),
@@ -557,7 +560,10 @@ class ListsView(APIView):
 
 
 class TaggedListsView(APIView):
-    """One user's lists with a tag, as far as the viewer may see them, A to Z."""
+    """One user's lists with a tag, as far as the viewer may see them.
+
+    A to Z unless the request asks for another sort.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -577,12 +583,15 @@ class TaggedListsView(APIView):
         owner = get_object_or_404(get_user_model(), username=username)
         # Tags are a JSON list, so the match runs here: the same on SQLite and Postgres,
         # and Unicode-aware. Only the ID and tags of the owner's tagged lists are read.
-        rows = (
-            _lists_visible_to(request.user, owner)
-            .exclude(tags=[])
-            .order_by(Lower("name"), "id")
-            .values_list("id", "tags")
-        )
+        tagged = _lists_visible_to(request.user, owner).exclude(tags=[])
+        # Every type unless asked: older apps send no list_type here.
+        list_type = request.query_params.get("list_type") or "all"
+        if list_type != "all":
+            tagged = tagged.filter(list_type=_list_type_query(request))
+        rows = list_browse.apply(
+            tagged.order_by(Lower("name"), "id"),
+            request.query_params,
+        ).values_list("id", "tags")
         list_ids = [list_id for list_id, tags in rows if _has_tag(tags, tag)]
         paginator = StandardResultsSetPagination()
         page_ids = paginator.paginate_queryset(list_ids, request, view=self)

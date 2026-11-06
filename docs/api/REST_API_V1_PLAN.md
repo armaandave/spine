@@ -299,6 +299,32 @@ change additive for older native clients. Summaries include `preview_people`
 always present and empty when its surrounding response includes previews or
 entries.
 
+All summary and detail payloads add `media_types`: the distinct media types a
+media list holds, in display order (`movie`, `tv`, `anime`, `manga`, `game`,
+`book`, `comic`, `music`). Seasons and episodes count as `tv`. Clients show
+one type's icon, both icons for two, and a globe for three or more. It is `[]`
+for an empty list and for a people list.
+
+`GET /api/v1/lists/` (with or without a membership `ref`/`person_ref`),
+`GET /api/v1/users/{username}/lists/` and `GET /api/v1/lists/tagged/` take
+optional sort and filter parameters:
+
+- `sort`: `updated` (last edited: renamed, items added, removed or
+  reordered), `name`, `created`, `items` (the count the list's label shows:
+  visible items, or people for a people list) or `likes`. Ties go A to Z by
+  name, then by creation.
+- `direction`: `asc` or `desc`. Without it, `name` is A to Z and every other
+  sort is newest or most first.
+- `media_type`: a primary media type the server exposes. Keeps media lists
+  holding only that type; seasons and episodes count as `tv`. Empty, mixed and
+  people lists are left out.
+- `visibility`: `public`, `unlisted` or `private`.
+- `list_type` on `/lists/tagged/`: `media`, `people` or `all` (the default).
+
+Without `sort` the order is unchanged (A to Z by name), so older clients see
+no difference. The iOS app sends `sort=updated` by default, and Add to List
+always does. An unknown value returns `400`.
+
 A people entry is a stored provider snapshot:
 
 ```json

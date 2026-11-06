@@ -15,6 +15,7 @@ from api.pagination import StandardResultsSetPagination
 from api.serializers.common import SERIES_TYPES, media_summary_from_item
 from api.services import activity as activity_service
 from api.services import diary as diary_service
+from api.services import list_browse
 from api.services import stats as stats_service
 from api.views.diary import DiaryListView
 from api.views.lists import _list_type_query, _lists_visible_to, list_payload
@@ -104,6 +105,7 @@ class UserListsView(APIView):
         query = request.query_params.get("q", "")
         if query:
             lists = lists.filter(Q(name__icontains=query) | Q(description__icontains=query))
+        lists = list_browse.apply(lists, request.query_params)
         return Response(
             {
                 "count": lists.count(),

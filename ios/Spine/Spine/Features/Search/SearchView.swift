@@ -797,7 +797,11 @@ private struct FeaturedListsDiscovery: View {
                                 ProfileListRow(list: list)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("\(list.name), \(list.itemsCount.formatted()) items")
+                            .accessibilityLabel(
+                                [list.name, list.mediaTypesLabel, "\(list.itemsCount.formatted()) items"]
+                                    .compactMap { $0 }
+                                    .joined(separator: ", ")
+                            )
                             .accessibilityHint("Opens list")
                         }
                         .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))

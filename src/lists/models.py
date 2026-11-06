@@ -4,7 +4,15 @@ from django.db import models
 from django.db.models import Prefetch, Q
 from django.utils.text import slugify
 
-from app.models import Item
+from app import exposure
+from app.models import Item, MediaTypes
+
+
+def list_media_type(media_type):
+    """Return the media type a list counts an item as: seasons and episodes are TV."""
+    if media_type in (MediaTypes.SEASON.value, MediaTypes.EPISODE.value):
+        return MediaTypes.TV.value
+    return media_type
 
 
 class CustomListManager(models.Manager):
@@ -177,6 +185,22 @@ class CustomList(models.Model):
         if not self.slug:
             self.slug = slugify(self.name)[:255]
         super().save(*args, **kwargs)
+
+    def media_types(self):
+        """Return the media types the list holds, in display order."""
+        if self.list_type != self.ListType.MEDIA:
+            return []
+        held = {
+            list_media_type(media_type)
+            for media_type in self.items.order_by()
+            .values_list("media_type", flat=True)
+            .distinct()
+        }
+        return [
+            media_type
+            for media_type in exposure.primary_media_types()
+            if media_type in held
+        ]
 
     def user_can_view(self, user):
         """Check if the user can view the list."""

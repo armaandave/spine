@@ -643,6 +643,8 @@ private struct ProfileTagRow: View {
 @Observable
 private final class ProfileListsViewModel {
     var lists: [CustomListSummary] = []
+    /// The sort and filters, shared with every page of lists.
+    var browse = ListBrowseStore.load()
     var isLoading = true
     var isSaving = false
     var errorMessage: String?
@@ -671,11 +673,7 @@ private final class ProfileListsViewModel {
         }
 
         do {
-            let loadedLists = if let username {
-                try await listRepository.lists(ownedBy: username)
-            } else {
-                try await listRepository.list()
-            }
+            let loadedLists = try await listRepository.lists(ownedBy: username, browse: browse)
             guard generation == requestGeneration else { return }
             lists = loadedLists
             hasLoaded = true
@@ -688,6 +686,25 @@ private final class ProfileListsViewModel {
                 onUnauthorized()
             }
         }
+    }
+
+    /// Remembers the new sort and filters and loads the lists they pick.
+    func browseChanged() {
+        ListBrowseStore.save(browse)
+        Task { await load() }
+    }
+
+    /// Picks up a choice made on another page of lists while this one was covered.
+    func syncBrowse() {
+        let saved = ListBrowseStore.load()
+        guard saved != browse else { return }
+        browse = saved
+        Task { await load() }
+    }
+
+    /// Whether a filter, not just the sort, narrows the lists.
+    var isFiltered: Bool {
+        browse.listType != nil || browse.effectiveMediaType != nil || (username == nil && browse.visibility != nil)
     }
 
     func create(_ request: CustomListWriteRequest) async -> Bool {
@@ -800,6 +817,12 @@ struct ProfileListsView: View {
                                 .frame(maxWidth: .infinity, minHeight: 320)
                         } else if let error = viewModel.errorMessage, viewModel.lists.isEmpty {
                             DiaryStateCard(title: "Could not load lists", systemImage: "exclamationmark.triangle", message: error)
+                        } else if viewModel.lists.isEmpty, viewModel.isFiltered {
+                            DiaryStateCard(
+                                title: "No matching lists",
+                                systemImage: "line.3.horizontal.decrease.circle",
+                                message: "No lists match these filters."
+                            )
                         } else if viewModel.lists.isEmpty {
                             DiaryStateCard(
                                 title: "No lists yet",
@@ -825,6 +848,15 @@ struct ProfileListsView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ListFilterButton(
+                    state: $viewModel.browse,
+                    showsVisibility: isOwnProfile,
+                    profileRepository: profileRepository
+                ) {
+                    viewModel.browseChanged()
+                }
+            }
             if isOwnProfile {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -841,6 +873,9 @@ struct ProfileListsView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
+        }
+        .onAppear {
+            viewModel.syncBrowse()
         }
         .fullScreenCover(item: $presentedForm, onDismiss: openCreatedListIfNeeded) { mode in
             ListComposerView(
@@ -981,6 +1016,10 @@ struct ProfileListRow: View {
 
                 Spacer(minLength: 0)
 
+                ListMediaTypeIcons(mediaTypes: list.mediaTypes)
+                    .opacity(0.52)
+                    .padding(.top, 3)
+
                 Text(countLabel)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.52))
@@ -1053,7 +1092,7 @@ extension CustomListSummary {
     }
 
     var accessibilityLabel: String {
-        "\(name), \(countLabel)"
+        [name, mediaTypesLabel, countLabel].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
@@ -2034,6 +2073,9 @@ struct ProfileListDetailView: View {
                 Text(detailCountLabel(list))
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(.white.opacity(0.72))
+
+                ListMediaTypeIcons(mediaTypes: list.mediaTypes, size: 12)
+                    .opacity(0.72)
 
                 if list.listType == .people {
                     Text("People")
