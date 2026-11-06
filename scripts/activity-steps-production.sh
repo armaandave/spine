@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Run one of Activity's one-time data steps on production.
 #
-# Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books> [--apply]
+# Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books|twerp> [--apply]
 #   undated-reads    undated imported Reads become marks (manage.py fill_undated_reads)
 #   past-restarts    past book Restarts get their flag (manage.py flag_past_restarts)
 #   picked-up-books  books already picked up get their place back (manage.py fill_picked_up_books)
+#   twerp            Twerp, a Read on account 1 with no log, gets the eye (manage.py mark_twerp)
 #
 # Without --apply it's a dry run that prints counts. With --apply it first writes a verified
 # pg_dump, then keeps the step's old ids and values in a 600 file beside the dump. They
@@ -30,13 +31,14 @@ case "$step" in
   undated-reads) command=fill_undated_reads ;;
   past-restarts) command=flag_past_restarts ;;
   picked-up-books) command=fill_picked_up_books ;;
-  *) die "Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books> [--apply]" ;;
+  twerp) command=mark_twerp ;;
+  *) die "Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books|twerp> [--apply]" ;;
 esac
 apply=false
 if [[ "${2:-}" == "--apply" ]]; then
   apply=true
 elif [[ -n "${2:-}" ]]; then
-  die "Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books> [--apply]"
+  die "Usage: scripts/activity-steps-production.sh <undated-reads|past-restarts|picked-up-books|twerp> [--apply]"
 fi
 
 [[ -d "$repo_dir/.git" ]] || die "Missing deployed repository: $repo_dir"

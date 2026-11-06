@@ -411,13 +411,7 @@ class InheritedRulesTests(SeriesContractBase):
             "current_journey"
         ]["id"]
         self.save(item, 3)
-        early = self.log(
-            item,
-            journey_id=journey_id,
-            day=self.today - timedelta(days=6),
-            expected=status.HTTP_400_BAD_REQUEST,
-        )
-        self.assertIn("error", early.data)
+        # A log may predate the start (decision 10): DiaryDateTests below.
         late_start = self.client.patch(
             self.url(item, f"journeys/{journey_id}/"),
             {"start_date": str(self.today + timedelta(days=1))},
@@ -561,12 +555,26 @@ class InheritedRulesTests(SeriesContractBase):
         self.assertEqual(edited.status_code, status.HTTP_200_OK, edited.data)
         self.assertEqual(self.row(item).attempts.get().end_date, day)
         self.assertEqual(self.row(item).end_date.date(), day)
-        refused = self.client.patch(
-            f"/api/v1/diary/{logged.data['diary_entry']['id']}/",
-            {"consumed_at": str(self.today - timedelta(days=20))},
-            format="json",
-        )
-        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
+        # Before the start, the start moves with it (decision 10), and back no further.
+        earlier = self.today - timedelta(days=20)
+        moved = self.client.patch(f"/api/v1/diary/{logged.data['diary_entry']['id']}/", {"consumed_at": str(earlier)}, format="json")
+        self.assertEqual(moved.status_code, status.HTTP_200_OK, moved.data)
+        self.assertEqual(self.row(item).attempts.get().start_date, earlier)
+        back = self.client.patch(f"/api/v1/diary/{logged.data['diary_entry']['id']}/", {"consumed_at": str(day)}, format="json")
+        self.assertEqual(back.status_code, status.HTTP_200_OK, back.data)
+        self.assertEqual(self.row(item).attempts.get().start_date, self.today - timedelta(days=9))
+
+    def test_a_log_dated_before_its_start_moves_the_start_and_its_delete_puts_it_back(self):
+        item = self.manga()
+        started = self.today - timedelta(days=5)
+        journey_id = self.action(item, "start", start_date=str(started)).data["series"]["current_journey"]["id"]
+        self.save(item, 3)
+        early = self.today - timedelta(days=6)
+        logged = self.log(item, journey_id=journey_id, day=early)
+        self.assertEqual(self.row(item).attempts.get().start_date, early)
+        self.assertEqual(self.row(item).start_date.date(), early)
+        self.client.delete(f"/api/v1/diary/{logged.data['diary_entry']['id']}/")
+        self.assertEqual(self.row(item).attempts.get().start_date, started)
 
     # MC-000 (BK-404): a direct log's deletion restores what was before it.
     def test_deleting_a_direct_log_restores_what_was_there(self):
@@ -1767,13 +1775,14 @@ class UndoneWritesTests(CountingDaysBase):
         scope = build_scope(self.user, self.user, {"start_date": "2026-01-01", "end_date": "2026-12-31", "schema": "2"})
         self.assertEqual(stats_time.type_time(scope, "manga").value, 0)
 
-    def test_a_log_dated_before_a_saved_number_still_counts_after_it(self):
+    def test_a_log_dated_before_the_reads_first_save_takes_the_whole_read(self):
+        # Decision 10: dated before the read's first activity, everything moves there.
         self.write_at(self.at(20, 12), self.action, self.item, "start")
         self.write_at(self.at(20, 13), self.save, self.item, 30)
         self.write_at(self.at(20, 14), self.action, self.item, "drop")
         self.write_at(self.at(21, 12), self.log, self.item, day=date(2026, 3, 1))
-        self.assertEqual(self.counted("2026-10-20"), 380, "What the log adds follows the number, on its day")
-        self.assertEqual(self.counted("2026-03-01"), 0)
+        self.assertEqual(self.counted("2026-03-01"), 380)
+        self.assertEqual(self.counted("2026-10-20"), 0)
         self.assertEqual(self.counted("2026-10-21"), 0)
 
     def test_editing_a_logs_date_moves_its_count(self):

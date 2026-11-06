@@ -17,16 +17,17 @@ commit.
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from functools import partial
 from types import SimpleNamespace
 
-from django.db.models import F
+from django.db.models import F, Q
 
 from app import user_calendar
 from app.models import (
     Anime,
+    AnimeViewing,
     Book,
     BookSession,
     Comic,
@@ -45,7 +46,15 @@ from social.models import Follow, FollowStatus, ProgressChange, Visibility
 
 # The types Stats reads through this calculation. Every other type's readers use their
 # old counters.
-CALCULATED_TYPES = frozenset({MediaTypes.BOOK.value})
+CALCULATED_TYPES = frozenset(
+    {
+        MediaTypes.BOOK.value,
+        MediaTypes.ANIME.value,
+        MediaTypes.MANGA.value,
+        MediaTypes.COMIC.value,
+        MediaTypes.GAME.value,
+    },
+)
 
 PROGRESS = "progress"
 LOG = "log"
@@ -219,15 +228,15 @@ class Reading:
 class Title:
     """One person's rows on one title: one a day, each log beside them, and the pile."""
 
-    def __init__(self, actor_id, item, bucket, unit, *, length=None):
+    def __init__(self, actor_id, item_id, bucket, unit, *, length=None):
         """Start with nothing; `unit` is what its amounts are told in.
 
         With a `length`, each one told is worth that many in the tab's unit: an anime's
         episode, in minutes. Told units with no length are unknown and add no amount.
         """
         self.actor_id = actor_id
-        self.item_id = item.pk
-        self.title_key = f"item:{item.pk}"
+        self.item_id = item_id
+        self.title_key = f"item:{item_id}"
         self.bucket = bucket
         self.unit = unit
         self.length = length
@@ -278,21 +287,31 @@ class Title:
             row.last_at = max(filter(None, (row.last_at, note.at)))
             row.progress_id = min(filter(None, (row.progress_id, *(note.change_ids or note.status_ids))), default=None)
 
-    def _take_amount(self, amount, unit):
-        if not amount.value:
-            return
+    def _amount_row(self, amount):
+        """Return the row an amount lands on, or None if it went to the pile."""
         if amount.log_id:
-            row = self.logs[amount.log_id]
-        elif amount.day is None:
+            return self.logs[amount.log_id]
+        if amount.day is None:
             if self.unit == EPISODE:
                 self.add_told_to_pile(amount.value)
             else:
                 self.add_to_pile(amount.value)
+            return None
+        row = self._day(amount.day)
+        row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
+        return row
+
+    def _take_amount(self, amount, unit):
+        if not amount.value:
             return
-        else:
-            row = self._day(amount.day)
-            row.last_at = max(filter(None, (row.last_at, amount.at)), default=None)
+        row = self._amount_row(amount)
+        if row is None:
+            return
         if unit == PERCENT:
+            # A game's hours and percent are apart (GM-100): a day with its hours told
+            # is known. A book's percent is the same place as its pages, so it isn't.
+            if row.told_unit == MINUTE:
+                return
             row.known = False
             # A row tells one unit (AC-2), and an amount wins over a percent.
             if row.told_unit not in ("", PERCENT):
@@ -300,6 +319,8 @@ class Title:
         else:
             if row.told_unit == PERCENT:
                 row.told = ZERO
+                if unit == MINUTE:
+                    row.known = True
             if self.unit == EPISODE:
                 row.amount += amount.value * (self.length or 0)
                 row.known = row.known and bool(self.length)
@@ -570,7 +591,7 @@ def _read_before_mark(marked_at, recorded_id, current_id, journeys, by_journey):
 
 
 def _book_title(actor_id, item, book, sessions, saves, entries, zone, marked_at):
-    title = Title(actor_id, item, MediaTypes.BOOK.value, PAGE)
+    title = Title(actor_id, item.pk, MediaTypes.BOOK.value, PAGE)
     total = item.total_pages or None
     by_session = _walk_journeys(title, sessions, saves, total, zone, marked_at)
     # A log with no journey behind it is a whole read on its own date.
@@ -691,9 +712,11 @@ def _who_sees(owners, viewer):
     return sees
 
 
-def _logs_by_title(owners, media_type, only):
+def _logs_by_title(owners, media_type, only, *, with_item=True):
+    """Return each title's logs, with their Items unless `with_item` is False."""
+    entries = DiaryEntry.objects.filter(user__in=owners, item__media_type=media_type, **only).order_by("id")
     logs = defaultdict(list)
-    for entry in DiaryEntry.objects.filter(user__in=owners, item__media_type=media_type, **only).select_related("item").order_by("id"):
+    for entry in entries.select_related("item") if with_item else entries:
         logs[entry.user_id, entry.item_id].append(entry)
     return logs
 
@@ -727,17 +750,16 @@ def _walk_playthrough(title, session, saves, zone):  # noqa: C901
             reading.touch(day, change, move=saved["move"])
         elif kind == ProgressChange.TOUCH:
             reading.touch(day, change)
-        elif kind == "minutes" and entry and saved.get("log_id") == entry.pk:
-            before = len(reading.counted.amounts)
-            reading.counted.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
-            for amount in reading.counted.amounts[before:]:
-                amount.log_id = entry.pk
-        elif kind == "minutes":
-            reading.touch(day, change)
-            reading.counted.move_to(Decimal(str(saved["value"])), day, change.created_at)
-        elif kind == "percentage" and not (entry and saved.get("log_id") == entry.pk):
-            reading.touch(day, change)
-            reading.percents.move_to(Decimal(str(saved["value"])), day, change.created_at)
+        elif kind in ("minutes", "percentage"):
+            position = reading.counted if kind == "minutes" else reading.percents
+            if entry and saved.get("log_id") == entry.pk:
+                before = len(position.amounts)
+                position.move_to(Decimal(str(saved["value"])), day_of_log, change.created_at)
+                for amount in position.amounts[before:]:
+                    amount.log_id = entry.pk
+            else:
+                reading.touch(day, change)
+                position.move_to(Decimal(str(saved["value"])), day, change.created_at)
     if not logged:
         reading.finish(entry.pk, day_of_log, entry.created_at, None)
     if session.total_minutes is not None and Decimal(session.total_minutes) != reading.counted.value:
@@ -760,8 +782,8 @@ def _settle_gap(reading, session, entry, day_of_log):
         reading.counted.move_to(total, None, None)
 
 
-def _game_title(actor_id, item, game, sessions, saves, entries, zone):
-    title = Title(actor_id, item, MediaTypes.GAME.value, MINUTE)
+def _game_title(actor_id, item_id, game, sessions, saves, entries, zone):
+    title = Title(actor_id, item_id, MediaTypes.GAME.value, MINUTE)
     for session in sessions:
         _walk_playthrough(title, session, saves.get(session.pk, []), zone)
     for entry in entries:
@@ -780,40 +802,44 @@ def _game_title(actor_id, item, game, sessions, saves, entries, zone):
 def _game_rows(result, owners, _viewer, titles, piles):
     """Add games' rows. Game logs show to every viewer (AC-5), so all read alike."""
     only = {} if titles is None else {"item__in": titles}
+    # Plain values and no Game rows, as books read: a Game's FieldTracker was most of
+    # this walk, and every Stats miss runs it.
     changes = defaultdict(list)
-    for change in ProgressChange.objects.filter(
-        actor__in=owners,
-        item__media_type=MediaTypes.GAME.value,
-        **only,
-    ).order_by("id"):
-        playthrough_id = change.current_progress.get("playthrough_id")
+    for pk, created_at, saved_on, current in (
+        ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.GAME.value, **only)
+        .order_by("id")
+        .values_list("pk", "created_at", "saved_on", "current_progress")
+    ):
+        playthrough_id = current.get("playthrough_id")
         if playthrough_id is not None:
-            changes[playthrough_id].append(change)
+            changes[playthrough_id].append(_Save(pk, created_at, saved_on, {}, current))
     sessions = defaultdict(list)
-    items = {}
     for session in (
         GameSession.objects.filter(
             related_game__user__in=owners,
             related_game__legacy_archived=False,
             **({} if titles is None else {"related_game__item__in": titles}),
         )
-        .select_related("completion_diary_entry", "related_game__item")
+        .annotate(owner_id=F("related_game__user_id"), title_id=F("related_game__item_id"))
+        .select_related("completion_diary_entry")
         .order_by("id")
     ):
-        game = session.related_game
-        sessions[game.user_id, game.item_id].append(session)
-        items[game.item_id] = game.item
-    entries = _logs_by_title(owners, MediaTypes.GAME.value, only)
-    for (_, item_id), logs in entries.items():
-        items[item_id] = logs[0].item
+        sessions[session.owner_id, session.title_id].append(session)
+    entries = _logs_by_title(owners, MediaTypes.GAME.value, only, with_item=False)
     games = {}
-    for game in Game.objects.filter(user__in=owners, legacy_archived=False, **only).select_related("item"):
+    for fields in Game.objects.filter(user__in=owners, legacy_archived=False, **only).values(
+        "user_id",
+        "item_id",
+        "progress",
+        "completed_manually",
+    ):
+        game = SimpleNamespace(**fields)
         games[game.user_id, game.item_id] = game
-        items[game.item_id] = game.item
+    keys = {*sessions, *entries, *games}
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
-    for key in {*sessions, *entries, *games}:
+    for key in keys:
         actor_id, item_id = key
-        title = _game_title(actor_id, items[item_id], games.get(key), sessions[key], changes, entries[key], zones[actor_id])
+        title = _game_title(actor_id, item_id, games.get(key), sessions[key], changes, entries[key], zones[actor_id])
         _collect(result, title, piles=piles)
 
 
@@ -885,7 +911,7 @@ def _log_on_read(title, reading, entry, total, zone, sees):
 
 
 def _series_title(actor_id, item, row, attempts, saves, entries, unit, zone, sees, marked_at):  # noqa: C901, PLR0912, PLR0915
-    title = Title(actor_id, item, item.media_type, unit)
+    title = Title(actor_id, item.pk, item.media_type, unit)
     total = item.series_total or None
     marked = bool(row and row.completed_manually)
     reading = None
@@ -1000,160 +1026,64 @@ def _series_rows(model, attempt_model, unit, result, owners, viewer, titles, pil
         _collect(result, title, piles=piles)
 
 
-# Anime, switched off: Stats count its viewings (AN-704), which this doesn't read yet.
-# Its history rows are its saves. One stamped before the anime contract says what it
-# was in its change reason; anime_tracking stamps none, so its rows are read at their
-# moments.
+# Anime: docs/anime-tracking-contract.md, AN-704. Its viewings are its saves, as a
+# show's are: a tick on its day, a log's fills on that log's day, a mark's fills in the
+# pile. No position fold is needed: an untick deletes its viewing and lowering removes
+# the newest unlogged ones, so a drop already comes off the newest (decision 5).
 
-# A log written before `log:` rows: its save follows the entry within this.
-LOG_SAVE_WINDOW = timedelta(seconds=5)
-
-
-def _anime_reason(row):
-    """Return (the day it counts on, the log that wrote it, whether it's stamped)."""
-    reason = row.history_change_reason or ""
-    if reason.startswith("day:"):
-        return date.fromisoformat(reason[4:]), None, True
-    if reason.startswith("log:"):
-        return None, int(reason[4:]), True
-    return None, None, reason == "mark"
+# What the calculation reads of a viewing.
+VIEWING_FIELDS = ("anime_id", "watched_on", "watched_at", "diary_entry_id", "created_at")
 
 
-def _unstamped_anime_row(row, first, tracking, zone, logs):
-    """Read a row from before the stamps, or written during a rollback.
+def _place_viewings(reading, viewings, live, sees, *, own):
+    """Give each viewing its day: a tick's own, else its log's, else none (AN-704).
 
-    Returns (day, log id). Completed is a mark, because web, API and rollback marks
-    write it with no stamp, unless it follows a log. A first row far from the tracking
-    row's own creation came from a file, and a file's numbers have no day.
+    A viewing of a log the viewer can't see adds nothing anywhere. One whose log is gone
+    has no day (AN-901), and only its owner still holds it, as All Time does today.
     """
-    if first and tracking is not None and abs(row.history_date - tracking.created_at) > timedelta(days=1):
-        return None, None
-    if row.status == Status.COMPLETED.value:
-        for entry in logs:
-            if timedelta(0) <= row.history_date - entry.created_at <= LOG_SAVE_WINDOW:
-                return None, entry.pk
-        return None, None
-    return row.history_date.astimezone(zone).date(), None
-
-
-@dataclass
-class _HistoryMoment:
-    """What a read needs of a save, for an anime's history row: it has no change id."""
-
-    created_at: datetime
-    pk: None = None
-
-
-class _AnimeFold:
-    """One person's anime title, its saves and logs in the order they were written."""
-
-    def __init__(self, title, logs, zone, sees):
-        self.title = title
-        self.zone = zone
-        self.sees = sees
-        self.live = {entry.pk: entry for entry in logs}
-        self.handled = set()
-        self.reading = None
-        self.finished = False
-
-    def log(self, entry, target):
-        """Add what's left on a log's date; with nothing left when finished, a new read.
-
-        A log writes more than one row, and a later one can hold the rise.
-        """
-        first = entry.pk not in self.handled
-        self.handled.add(entry.pk)
-        if not self.sees(entry):
-            self.reading.counted.value = max(self.reading.counted.value, target)
-            return
-        day = log_day(entry.consumed_at, self.zone)
-        if first:
-            self.title.add_log(entry, day, known=bool(self.title.length))
-            if self.finished and target and self.reading.counted.value >= target:
-                self.title.take(self.reading)
-                self.reading = Reading()
-        self.reading.finish(entry.pk, day, entry.created_at, target)
-        self.finished = True
-
-    def new_read(self):
-        if self.reading:
-            self.title.take(self.reading)
-        self.reading = Reading()
-        self.finished = False
-
-    def save(self, row, day, status_before, *, first):
-        rise = Decimal(row.progress) - self.reading.counted.value
-        moment = _HistoryMoment(row.history_date)
-        if rise > 0:
-            self.reading.counted.move_to(Decimal(row.progress), day, row.history_date)
-            if day:
-                self.finished = False
-                self.reading.touch(day, moment)
-            else:
-                self.finished = True
-        elif rise < 0:
-            self.reading.counted.move_to(Decimal(row.progress), None, None)
-            self.finished = False
-        if day and row.status == Status.IN_PROGRESS.value and status_before != Status.IN_PROGRESS.value:
-            # A pick-up isn't a start. Anime shows no paused or stopped rows (AC-1).
-            real = first or status_before not in (Status.PAUSED.value, Status.DROPPED.value)
-            self.reading.touch(day, moment, started=real)
-
-
-def _anime_title(actor_id, item, tracking_rows, history, logs, zone, sees):  # noqa: C901, PLR0912
-    title = Title(actor_id, item, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
-    fold = _AnimeFold(title, logs, zone, sees)
-    live_rows = {row.pk: row for row in tracking_rows}
-    rows = [row for row in history if row.history_type != "-"]
-    reasons = {}
-    seen = set()
-    for row in rows:
-        day, log_id, stamped = _anime_reason(row)
-        if not stamped:
-            day, log_id = _unstamped_anime_row(row, row.id not in seen, live_rows[row.id], zone, logs)
-        seen.add(row.id)
-        reasons[row.history_id] = (day, log_id)
-    linked = {log_id for _day, log_id in reasons.values()} - {None}
-    events = [((row.history_date, 0, row.history_id), row) for row in rows]
-    events += [((entry.created_at, 1, entry.pk), entry) for entry in logs if entry.pk not in linked]
-    events.sort(key=lambda event: event[0])
-    fold.new_read()
-    status_before = {}
-    current = None
-    for _, event in events:
-        if isinstance(event, DiaryEntry):
-            fold.log(event, fold.reading.counted.value)
+    for viewing in viewings:
+        entry = live.get(viewing.diary_entry_id)
+        if viewing.diary_entry_id is not None and not (sees(entry) if entry else own):
             continue
-        first = event.id not in status_before
-        if event.id != current:
-            if current is not None:
-                fold.new_read()
-            current = event.id
-        day, log_id = reasons[event.history_id]
-        if log_id is None:
-            fold.save(event, day, status_before.get(event.id), first=first)
-        elif log_id in fold.live:
-            fold.log(fold.live[log_id], Decimal(event.progress))
-        status_before[event.id] = event.status
-    title.take(fold.reading)
-    # A tracking row with progress and no history at all has no day to read.
+        at = viewing.watched_at or viewing.created_at
+        if viewing.watched_on is not None:
+            reading.counted.amounts.append(Amount(viewing.watched_on, Decimal(1), at))
+        elif entry is not None:
+            reading.counted.amounts.append(Amount(None, Decimal(1), at, entry.pk))
+        else:
+            reading.counted.amounts.append(Amount(None, Decimal(1), None))
+
+
+def _anime_title(actor_id, item, tracking_rows, viewings, logs, changes, zone, sees, *, own):
+    """Fold one person's anime title into rows (AN-704)."""
+    title = Title(actor_id, item.pk, MediaTypes.ANIME.value, EPISODE, length=Decimal(item.runtime_minutes or 0))
+    for entry in logs:
+        if sees(entry):
+            title.add_log(entry, log_day(entry.consumed_at, zone), known=bool(tracking_rows and title.length))
+    reading = Reading()
+    _place_viewings(reading, viewings, {entry.pk: entry for entry in logs}, sees, own=own)
+    for change in changes:
+        saved = change.current_progress
+        if saved.get("kind") == ProgressChange.STATUS:
+            reading.touch(saved_day(change, zone), change, move=saved["move"])
+        else:
+            # A start: choosing Watching, a tick that put it in Watching, or a rewatch.
+            reading.touch(saved_day(change, zone), change, started=True)
+    title.take(reading)
+    with_viewings = {viewing.anime_id for viewing in viewings}
     for row in tracking_rows:
-        if row.progress and row.pk not in status_before:
+        if row.progress and row.pk not in with_viewings:
+            # A stored number with no viewings counts in All Time, as it always has.
             title.add_told_to_pile(Decimal(row.progress))
-    if not tracking_rows:
-        # A removed row's history names no title, so nothing says how far this log got.
-        for entry in logs:
-            if sees(entry):
-                title.add_log(entry, log_day(entry.consumed_at, zone), known=False)
-    elif not title.in_pile and not logs and any(row.status == Status.COMPLETED.value for row in tracking_rows):
-        # Marked with no number: a title in All Time with nothing to add (STAT-105).
+    if not title.in_pile and not with_viewings and any(row.status == Status.COMPLETED.value for row in tracking_rows):
+        # Completed with nothing watched: a title in All Time with no length to know.
         title.in_pile = True
         title.pile_known = False
     return title
 
 
 def _anime_rows(result, owners, viewer, titles, piles):
-    """Add anime's rows. Its start rows are for installed builds, and aren't read."""
+    """Add anime's rows: its viewings, logs, starts and status moves."""
     only = {} if titles is None else {"item__in": titles}
     tracking = defaultdict(list)
     items = {}
@@ -1161,17 +1091,50 @@ def _anime_rows(result, owners, viewer, titles, piles):
         tracking[row.user_id, row.item_id].append(row)
         items[row.item_id] = row.item
     owner_of = {row.pk: key for key, rows in tracking.items() for row in rows}
-    history = defaultdict(list)
-    for row in Anime.history.model.objects.filter(id__in=list(owner_of)).order_by("history_date", "history_id"):
-        history[owner_of[row.id]].append(row)
+    viewings = defaultdict(list)
+    for fields in (
+        AnimeViewing.objects.filter(
+            anime__user__in=owners,
+            **({} if titles is None else {"anime__item__in": titles}),
+        )
+        .order_by("id")
+        .values(*VIEWING_FIELDS)
+    ):
+        viewing = SimpleNamespace(**fields)
+        # A viewing with no row is never read (AN-901).
+        if viewing.anime_id in owner_of:
+            viewings[owner_of[viewing.anime_id]].append(viewing)
+    changes = defaultdict(list)
+    for pk, actor_id, item_id, created_at, saved_on, current in (
+        ProgressChange.objects.filter(actor__in=owners, item__media_type=MediaTypes.ANIME.value, **only)
+        # A start row names its kind in its unit too, as the old readers read it.
+        .filter(
+            Q(current_progress__kind__in=(ProgressChange.START, ProgressChange.STATUS))
+            | Q(current_progress__unit=ProgressChange.START),
+        )
+        .order_by("id")
+        .values_list("pk", "actor_id", "item_id", "created_at", "saved_on", "current_progress")
+    ):
+        changes[actor_id, item_id].append(_Save(pk, created_at, saved_on, {}, current))
     logs = _logs_by_title(owners, MediaTypes.ANIME.value, only)
     for (_, item_id), entries in logs.items():
         items[item_id] = entries[0].item
     zones = {owner.pk: user_calendar.calendar_tz(owner) for owner in owners}
     sees = _who_sees(owners, viewer)
+    viewer_id = viewer.pk if viewer is not None and viewer.is_authenticated else None
     for key in {*tracking, *logs}:
         actor_id, item_id = key
-        title = _anime_title(actor_id, items[item_id], tracking[key], history[key], logs[key], zones[actor_id], sees)
+        title = _anime_title(
+            actor_id,
+            items[item_id],
+            tracking[key],
+            viewings[key],
+            logs[key],
+            changes[key] if key in tracking else [],
+            zones[actor_id],
+            sees,
+            own=actor_id == viewer_id,
+        )
         _collect(result, title, piles=piles)
 
 

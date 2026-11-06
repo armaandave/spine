@@ -351,7 +351,7 @@ class FlightWestTests(NewYearBase):
         self.post(self.west, self.game, "progress/", expected=400, total_minutes=60, progressed_on=str(DEC_30))
         self.post(self.west, self.book, "progress/", expected=400, progress_type="pages", value=40, progressed_on=str(DEC_30))
         self.post(self.west, self.manga, "progress/", expected=400, value=5, progressed_on=str(DEC_30))
-        self.post(self.west, self.game, "complete/", expected=400, completion_date=str(DEC_30), mutation_id=str(uuid4()))
+        # A log dated before the start moves the start instead (decision 10, GM-213).
 
 
 @override_settings(TIME_ZONE=NEW_YORK)

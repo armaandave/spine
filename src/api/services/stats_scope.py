@@ -256,6 +256,11 @@ class StatsScope:
         return MediaTypes.ANIME.value in self.primary_types
 
     @property
+    def anime_reads_viewings(self):
+        """Return whether anime's titles and events read viewings, not the rows."""
+        return self.counts_anime and MediaTypes.ANIME.value not in activity_rows.CALCULATED_TYPES
+
+    @property
     def has_collections(self):
         return self.media_type in COLLECTION_TABS
 
@@ -577,18 +582,28 @@ class StatsScope:
     def dated_title_ids(self, start_date=None, end_date=None):
         """One subquery of the title IDs with a dated fact on or between the dates.
 
-        A dated fact is a visible log of the tab, or a dated viewing that isn't hidden
-        (STAT-104). Either date may be None for an open end. A mark's fills and undated
-        completions have no day, so they never date a title.
+        A dated fact is a visible log of the tab, a dated viewing that isn't hidden
+        (STAT-104), or a calculated type's counted row. Either date may be None for an
+        open end. A mark's fills and undated completions have no day, so they never date
+        a title.
         """
         logs = self.all_entries.filter(filter_service.log_day_range_q(self.owner, start_date, end_date))
         parts = [logs.annotate(stats_title_id=self.title_id()).values("stats_title_id")]
         if self.counts_tv:
             viewings = self.all_viewings.filter(self.viewing_has_day_q(), self.viewing_days_q(start_date, end_date))
             parts.append(viewings.annotate(stats_title_id=self.title_id()).values("stats_title_id"))
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             viewings = self.all_anime_viewings.filter(self._anime_has_day_q(), self._anime_days_q(start_date, end_date))
             parts.append(viewings.annotate(stats_title_id=F("anime__item_id")).values("stats_title_id"))
+        if self.calculated_types:
+            # A calculated type's rows date its titles as they count them: an anime's
+            # viewings, and any type's progress with no log.
+            dated = {
+                row.title_id
+                for row in activity_rows.in_range(self.calculation().rows, start_date=start_date, end_date=end_date)
+                if row.bucket in self.calculated_types and row.counts_title
+            }
+            parts.append(Item.objects.filter(id__in=dated).values("id"))
         return union_ids(*parts)
 
     def first_seen_q(self, field):
@@ -651,7 +666,7 @@ class StatsScope:
         parts = [self.log_title_ids()]
         if self.counts_tv:
             parts.append(self.viewing_title_ids())
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             parts.append(self.anime_viewing_title_ids())
         parts.extend(self.undated_completion_item_ids())
         calculated = self._calculated_title_ids()
@@ -747,7 +762,7 @@ class StatsScope:
         viewings = []
         if self.counts_tv:
             viewings.append(self.viewing_events())
-        if self.counts_anime:
+        if self.anime_reads_viewings:
             viewings.append(self.anime_viewing_events())
         events = self.log_events().union(*viewings) if viewings else self.log_events().distinct()
         return sorted(set(events) | self.progress_events())

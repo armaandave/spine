@@ -166,7 +166,7 @@ class YamtrackImporter:
         )
 
         if form.is_valid():
-            if media_type == MediaTypes.BOOK.value:
+            if media_type in (MediaTypes.BOOK.value, MediaTypes.GAME.value):
                 form.instance.completed_manually = (row.get("completed_manually") or "").lower() == "true"
             if media_type == MediaTypes.GAME.value:
                 # CSV progress is retained as legacy data, never a new attempt.

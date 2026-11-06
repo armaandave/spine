@@ -36,6 +36,7 @@ from app.models import (
     Book,
     BookSession,
     DiaryEntry,
+    Item,
     ItemCredit,
     ItemFilterFacet,
     MediaTypes,
@@ -1922,6 +1923,29 @@ class MovedViewingTests(BookCalcBase):
         self.assertEqual(list(self.scope(ALL_TIME, {viewing.pk: d(2025, 12, 20)}).dated_viewings), [viewing])
 
 
+class FirstSeenTests(BookCalcBase):
+    """A calculated type's progress dates its title, as it counts it (STAT-213)."""
+
+    def test_progress_with_no_log_dates_its_title_in_every_calculated_type(self):
+        from app import game_tracking
+
+        book = self.book("read")
+        self.do(book_tracking.start, book, d(2026, 3, 1))
+        self.do(book_tracking.update_progress, book, d(2026, 3, 2), progress_type="pages", value=50)
+        manga = self.item(MediaTypes.MANGA.value, "manga", title="manga")
+        self.do(series_tracking.start, manga, d(2026, 3, 1))
+        self.do(series_tracking.update_progress, manga, d(2026, 3, 2), value=5)
+        game = self.item(MediaTypes.GAME.value, "game", title="game")
+        self.do(game_tracking.start, game, d(2026, 3, 1))
+        self.do(game_tracking.update_progress, game, d(2026, 3, 2), total_minutes=60)
+        for item in (book, manga, game):
+            with self.subTest(media_type=item.media_type):
+                scope = build_scope(self.owner, self.owner, {**YEAR_2026, "media_type": item.media_type})
+                in_2026 = Item.objects.filter(id__in=scope.dated_title_ids(d(2026, 1, 1), d(2026, 12, 31)))
+                before = Item.objects.filter(id__in=scope.dated_title_ids(None, d(2025, 12, 31)))
+                self.assertEqual((item in in_2026, item in before), (True, False))
+
+
 class AdapterCostTests(BookCalcBase):
     """A switched-off adapter costs nothing, and one request walks once."""
 
@@ -1931,12 +1955,14 @@ class AdapterCostTests(BookCalcBase):
         return patch.dict(activity_rows.ADAPTERS, {media_type: counted}), counted
 
     def test_switched_off_adapters_never_run_on_a_stats_request(self):
-        for media_type in (MediaTypes.GAME.value, MediaTypes.ANIME.value, MediaTypes.MANGA.value, MediaTypes.COMIC.value):
+        for media_type in activity_rows.ADAPTERS:
             patcher, counted = self.counted_adapter(media_type)
             with patcher:
                 self.summary(ALL_TIME)
                 self.summary(YEAR_2026, tab=BOOK)
-                self.assertEqual(counted.call_count, 0, media_type)
+                # A switched-on one runs once a request, however many sections ask.
+                expected = 2 if media_type in activity_rows.CALCULATED_TYPES else 0
+                self.assertEqual(counted.call_count, expected, media_type)
 
     def test_the_walk_builds_no_book_or_save_rows(self):
         """A Book's FieldTracker and thousands of saves were most of a Stats miss."""

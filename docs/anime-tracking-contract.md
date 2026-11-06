@@ -304,6 +304,7 @@ Marks and fills are never activity.
 Starting a title is activity: choosing Watching, a tick that puts it in Watching, or starting a rewatch.
 A log is one item on its calendar day, separate from that day's start or progress (AC-2).
 Imports and webhooks' marks start nothing.
+Choosing Paused or Dropped, and choosing Watching from either, records the move once the title was started, as TV-703 does; a tick that ends a pause is just the tick. A move adds nothing to any number and shows nowhere yet (AC-1).
 
 ### AN-704: Stats read viewings
 
@@ -316,6 +317,7 @@ An anime counts as a show does (STAT-201's TV row, STAT-104):
 - A stored progress number with no viewings counts as it does today, in All Time only.
 
 Each viewing's length is the title's runtime.
+Stats read these viewings through the activity calculation (`api.services.activity_rows`, the activity contract's AC-2), so each number is the same, and `known` and `total` count titles (STAT-201).
 
 ### AN-705: An anime goes by its English title
 

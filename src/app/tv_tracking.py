@@ -1598,8 +1598,8 @@ def _record_start(ctx):
         ProgressChange.record_start(ctx.user, ctx.show_item)
 
 
-def _was_started(ctx):
-    """Return whether the person started this show: a start row, a viewing or a log.
+def _was_started(ctx, title):
+    """Return whether the person started this title: a start row, a viewing or a log.
 
     A mark's fills aren't starting it, though they count as recorded.
     """
@@ -1610,17 +1610,18 @@ def _was_started(ctx):
         or any(viewing.kind != FILL for viewing in ctx.facts.viewings)
         or ProgressChange.objects.filter(
             actor=ctx.user,
-            item=ctx.show_item,
+            item=title,
             current_progress__kind=ProgressChange.START,
         ).exists()
     )
 
 
-def _record_status_move(ctx, status):
-    """Record the person choosing Paused, Dropped or picking the show back up (AC-1).
+def _record_status_move(ctx, status, title):
+    """Record the person choosing Paused, Dropped or picking the title back up (AC-1).
 
-    A show never started has nothing to stop or pick back up. A tick that ends a pause is
-    just the tick. Webhooks, imports and jobs choose nothing here.
+    `title` is the show, or an anime's own Item (AN-703). A title never started has
+    nothing to stop or pick back up. A tick that ends a pause is just the tick. Webhooks,
+    imports and jobs choose nothing here.
     """
     from social.models import ProgressChange  # noqa: PLC0415
 
@@ -1634,8 +1635,8 @@ def _record_status_move(ctx, status):
         move = ProgressChange.PICKED_BACK_UP
     else:
         return
-    if _was_started(ctx):
-        ProgressChange.record_status(ctx.user, ctx.show_item, move)
+    if _was_started(ctx, title):
+        ProgressChange.record_status(ctx.user, title, move)
 
 
 def _forget_progress(ctx, season_numbers=None):
@@ -3153,7 +3154,7 @@ def _do_choose(ctx, status, *, quiet=False):
     ctx.set_tv(**values)
     ctx.changed = True
     ctx.may_start = status == WATCHING
-    _record_status_move(ctx, status)
+    _record_status_move(ctx, status, ctx.show_item)
     return {"changed": True}
 
 
